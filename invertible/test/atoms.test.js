@@ -62,3 +62,23 @@ test('a single equation that cannot be isolated is torn and scanned', () => {
   const r = defineRelation({ name: 'xexp', ports: ['x', 'y'], eqs: ['y = x * exp(x)'] });
   close(first(r, { y: Math.E }).x, 1);
 });
+
+test('fall: distance = speed·t + ½·g·t² solved for t, including the degenerate cases', () => {
+  const fall = defineRelation({
+    name: 'fall', ports: ['distance', 'speed', 'gravity', 'time'], eqs: ['half = 0.5'],
+    uses: [
+      { rel: product(2), bind: { a: 'speed', b: 'time', product: 'drift' } },
+      { rel: product(4), bind: { a: 'half', b: 'gravity', c: 'time', d: 'time', product: 'drop' } },
+      { rel: sum(2), bind: { a: 'drift', b: 'drop', total: 'distance' } },
+    ],
+  });
+  const times = (v) => [...results(fall, v)].map((r) => r.values.time).sort((a, b) => a - b);
+  assert.deepEqual(times({ distance: 1, speed: 0, gravity: 0.5 }), [-2, 2]); // speed exactly 0
+  assert.deepEqual(times({ distance: 0, speed: 0, gravity: 9.81 }), [0]); // double root at 0
+  const [t] = times({ distance: -2, speed: 2, gravity: 1 }); // double root at −2
+  assert.ok(Math.abs(t + 2) < 1e-6);
+  // nothing moves: every time works, so time is free, not a list of roots
+  const all = [...results(fall, { distance: 0, speed: 0, gravity: 0 })];
+  assert.equal(all.length, 1);
+  assert.ok(all[0].free.includes('time'));
+});
