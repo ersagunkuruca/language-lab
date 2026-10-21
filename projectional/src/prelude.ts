@@ -5,7 +5,7 @@
 import type { Code, Id } from "./model.ts";
 import type { Names } from "./presentation.ts";
 
-const ops = ["add", "sub", "mul", "div", "neg", "sqrt", "pow"] as const;
+const ops = ["add", "sub", "mul", "div", "neg", "sqrt", "pow", "sin", "cos", "exp", "log"] as const;
 export type Op = (typeof ops)[number];
 
 export const B = Object.fromEntries(ops.map((op) => [op, `builtin.${op}`])) as Record<Op, Id>;
@@ -23,6 +23,10 @@ export const preludeNames: Names = {
   [B.neg]: "negate",
   [B.sqrt]: "square root",
   [B.pow]: "power",
+  [B.sin]: "sin",
+  [B.cos]: "cos",
+  [B.exp]: "exp",
+  [B.log]: "log",
 };
 
 export const impl: Record<Op, (...xs: number[]) => number> = {
@@ -33,4 +37,8 @@ export const impl: Record<Op, (...xs: number[]) => number> = {
   neg: (a) => -a,
   sqrt: (a) => Math.sqrt(a),
   pow: (a, b) => a ** b,
+  sin: Math.sin,
+  cos: Math.cos,
+  exp: Math.exp,
+  log: Math.log,
 };

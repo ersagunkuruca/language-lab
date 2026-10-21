@@ -36,6 +36,8 @@ export function evaluate(code: Code, id: Id, env: Map<Id, Value> = new Map(), de
       }
       case "binder": throw new Error(`unbound binder ${id}`);
       case "hole": throw new Error("the program has a hole here");
+      case "network":
+      case "part": throw new Error("a network has no fixed direction; run it with the solver (src/relational.ts)");
     }
   };
   return ev(id, env);

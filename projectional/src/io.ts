@@ -13,6 +13,7 @@ import type { Code } from "./model.ts";
 import { merge } from "./model.ts";
 import { layer, type Names, type Presentation, type Style } from "./presentation.ts";
 import { prelude, preludeNames } from "./prelude.ts";
+import { relationNames, relationPrelude } from "./relational.ts";
 
 const read = <T>(path: string, fallback?: T): T => {
   if (!existsSync(path)) {
@@ -25,12 +26,12 @@ const read = <T>(path: string, fallback?: T): T => {
 export const root = new URL("..", import.meta.url).pathname;
 
 export function loadCode(dir: string): Code {
-  return merge(prelude, read<Code>(join(dir, "code.json")));
+  return merge(prelude, relationPrelude, read<Code>(join(dir, "code.json")));
 }
 
 export function loadPresentation(dir: string, opts: { names: string[]; style: string }): Presentation {
   return {
-    names: layer<Names>(preludeNames, ...opts.names.map((n) => read<Names>(join(dir, `names.${n}.json`)))),
+    names: layer<Names>(preludeNames, relationNames, ...opts.names.map((n) => read<Names>(join(dir, `names.${n}.json`)))),
     comments: read(join(dir, "comments.json"), {}),
     hints: read(join(dir, "hints.json"), {}),
     style: read<Style>(join(root, "styles", `${opts.style}.json`)),

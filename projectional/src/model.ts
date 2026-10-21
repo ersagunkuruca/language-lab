@@ -18,7 +18,14 @@ export type Node =
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.
-  | { id: Id; kind: "hole" };
+  | { id: Id; kind: "hole" }
+  // A network is a function without a direction: external ports (params),
+  // internal wires, and parts wired to them. Which ports are inputs is decided
+  // when it is used, by a solver. Params and wires are binders.
+  | { id: Id; kind: "network"; params: Id[]; wires: Id[]; parts: Id[] }
+  // One node in a network: a builtin, relation or def, with each of its ports
+  // bound to a wire. fn === null makes it a constant with `value`.
+  | { id: Id; kind: "part"; fn: Id | null; value?: number; bind: Record<string, Id> };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -49,6 +56,7 @@ export function children(n: Node): Id[] {
     case "call": return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "def": return n.body ? [n.body] : [];
+    case "network": return [...n.params, ...n.wires, ...n.parts];
     default: return [];
   }
 }
@@ -71,11 +79,12 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      if (node.kind !== "ref" || seen.has(node.target)) continue;
-      const t = code.nodes[node.target];
+      const target = node.kind === "ref" ? node.target : node.kind === "part" ? node.fn : null;
+      if (!target || seen.has(target)) continue;
+      const t = code.nodes[target];
       if (t.kind === "def" || t.kind === "builtin") {
-        seen.add(node.target);
-        visit(node.target);
+        seen.add(target);
+        visit(target);
       }
     }
   };

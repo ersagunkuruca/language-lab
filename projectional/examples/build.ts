@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { Builder } from "../src/builder.ts";
 import { save, root } from "../src/io.ts";
 import { B, prelude } from "../src/prelude.ts";
+import { R, relationPrelude } from "../src/relational.ts";
+import { merge } from "../src/model.ts";
 
 const out = (dir: string, files: Record<string, unknown>) => {
   const d = join(root, "examples", dir);
@@ -56,5 +58,32 @@ const out = (dir: string, files: Record<string, unknown>) => {
     "names.descriptive.json": descriptive,
     "comments.json": comments,
     "hints.json": hints,
+  });
+}
+
+// Networks: functions without a direction. Which ports are known is chosen
+// when they're used (layout.json holds the editor's current choice).
+{
+  const k = new Builder(merge(prelude, relationPrelude));
+  const toPolar = k.def("to polar");
+  {
+    const [x, y, angle, length] = ["x", "y", "angle", "length"].map((n) => k.binder(n));
+    k.define(toPolar, k.network([x, y, angle, length], [], [k.part(R.polar, { x, y, r: length, θ: angle })]));
+  }
+  const rotate = k.def("rotate");
+  {
+    const [x, y, turn, x2, y2] = ["x", "y", "turn", "x′", "y′"].map((n) => k.binder(n));
+    const [length, angle, angle2] = ["length", "angle", "angle′"].map((n) => k.binder(n));
+    k.define(rotate, k.network([x, y, turn, x2, y2], [length, angle, angle2], [
+      k.part(R.polar, { x, y, r: length, θ: angle }),
+      k.part(B.add, { 0: angle, 1: turn, out: angle2 }),
+      k.part(R.polar, { x: x2, y: y2, r: length, θ: angle2 }),
+    ]));
+  }
+  const ports = (d: string) => (k.code.nodes[(k.code.nodes[d] as { body: string }).body] as { params: string[] }).params;
+  out("vectors", {
+    "code.json": k.code,
+    "names.default.json": k.names,
+    "layout.json": { positions: {}, known: { [toPolar]: ports(toPolar).slice(0, 2), [rotate]: ports(rotate).slice(0, 3) } },
   });
 }
