@@ -19,13 +19,21 @@ import phyCode from "../examples/physics/code.json" with { type: "json" };
 import phyNames from "../examples/physics/names.default.json" with { type: "json" };
 import phyComments from "../examples/physics/comments.json" with { type: "json" };
 import phyLayout from "../examples/physics/layout.json" with { type: "json" };
+import queensCode from "../examples/queens/code.json" with { type: "json" };
+import queensNames from "../examples/queens/names.default.json" with { type: "json" };
+import queensComments from "../examples/queens/comments.json" with { type: "json" };
+import algebraCode from "../examples/algebra/code.json" with { type: "json" };
+import algebraNames from "../examples/algebra/names.default.json" with { type: "json" };
+import algebraComments from "../examples/algebra/comments.json" with { type: "json" };
+import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import graphStyle from "../styles/graph.json" with { type: "json" };
 import { evaluate } from "../src/eval.ts";
 import { hashDef } from "../src/hash.ts";
-import { get, merge, parentOf, type Code, type Id, type Node, type NodeData } from "../src/model.ts";
+import { get, merge, parentOf, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../src/model.ts";
+import { showType as showTypeOf } from "../src/lang/types.ts";
 import { check, CLASSES, type Problem } from "../src/check.ts";
 import * as E from "../src/edits.ts";
 import { formatUnit, infer, NAMED, portTerm, type Inference, type Unit } from "../src/units.ts";
@@ -36,6 +44,10 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
+import { std, stdNames } from "../src/lang/std.ts";
+import { renderBlocks } from "../src/lang/render.ts";
+import { runMain, showValue } from "../src/lang/run.ts";
+import * as T from "./typed.ts";
 
 // ---------------------------------------------------------------- state
 
@@ -53,7 +65,12 @@ interface Layout {
   expanded: Id[];
 }
 
+type Program = "numbers" | "queens" | "algebra";
+
 interface Doc {
+  program: Program;
+  // Typed programs (src/lang/) get the typed block view and palette.
+  typed: boolean;
   code: Code;
   names: Record<Layer, Names>;
   comments: Comments;
@@ -70,16 +87,32 @@ interface UI {
   text: TextView;
   touched: string[];
   note: string;
-  mode: null | "wrap" | "replace" | "add";
+  mode: null | "wrap" | "replace" | "add" | "split" | "case";
   query: string;
   args: Record<Id, string>;
   refused: boolean;
+  output: { def: Id; lines: string[]; error?: string } | null;
+  caseFields: Id[];
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
-const STORE = "projectional-editor-v3";
+const STORE = "projectional-editor-v4";
+
+const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
+  program, typed: true,
+  code: merge(prelude, relationPrelude, std, code),
+  names: { short: names, descriptive: {} },
+  comments, hints: {},
+  layout: { positions: {}, known: {}, expanded: [] },
+});
+
+const initialFor = (program: Program): Doc =>
+  program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
+  : program === "algebra" ? typedDoc("algebra", algebraCode as Code, algebraNames, algebraComments)
+  : initial();
 
 const initial = (): Doc => ({
+  program: "numbers", typed: false,
   code: merge(prelude, relationPrelude, quadCode as Code, vecCode as Code, phyCode as Code),
   names: { short: { ...quadShort, ...vecNames, ...phyNames }, descriptive: quadDescriptive },
   comments: { ...quadComments, ...phyComments },
@@ -87,13 +120,16 @@ const initial = (): Doc => ({
   layout: { positions: {}, known: { ...(vecLayout as { known: Record<Id, Id[]> }).known, ...(phyLayout as { known: Record<Id, Id[]> }).known }, expanded: [] },
 });
 
+// One document per example program; switching keeps each one's edits.
+let docs: Partial<Record<Program, Doc>> = {};
 let doc: Doc = initial();
 try {
-  const saved = localStorage.getItem(STORE);
-  if (saved) doc = JSON.parse(saved);
+  const saved = JSON.parse(localStorage.getItem(STORE) ?? "null");
+  if (saved?.docs && saved.current) { docs = saved.docs; doc = docs[saved.current as Program] ?? doc; }
 } catch {}
 
-const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === "fall") ?? doc.code.defs[0];
+const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative" };
+const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === START[doc.program]) ?? doc.code.defs[0];
 
 const ui: UI = {
   def: startDef(),
@@ -108,6 +144,8 @@ const ui: UI = {
   query: "",
   args: {},
   refused: false,
+  output: null,
+  caseFields: [],
 };
 
 // Sensible starting values for the physics example: thrown down at 5 m/s.
@@ -154,7 +192,42 @@ function apply(e: E.Edit, note: string, extra: Partial<Doc> = {}, touched = ["co
 }
 
 function save() {
-  try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch {}
+  docs[doc.program] = doc;
+  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs })); } catch {}
+}
+
+function switchProgram(p: Program) {
+  if (p === doc.program) return;
+  save();
+  doc = docs[p] ?? initialFor(p);
+  undo.length = 0;
+  redo.length = 0;
+  ui.def = startDef();
+  ui.back = [];
+  ui.selected = null;
+  ui.mode = null;
+  ui.output = null;
+  ui.touched = [];
+  ui.refused = false;
+  ui.note = doc.typed
+    ? "A typed program. Hover anything for its type; click a hole for a palette of only what fits there."
+    : "Drag from a port: the ports it can legally reach light up, the rest say why not.";
+  save();
+  render();
+}
+
+function applyT(e: T.TEdit): boolean {
+  if (!e.ok) {
+    ui.note = `Refused: ${e.reason}. Nothing changed.`;
+    ui.touched = [];
+    ui.refused = true;
+    render();
+    return false;
+  }
+  if (e.select) ui.selected = e.select;
+  const short = e.names;
+  commit({ code: e.code, names: { ...doc.names, short: short } }, ["code.json", "names.short.json"], e.note);
+  return true;
 }
 
 function travel(from: Doc[], to: Doc[], label: string) {
@@ -184,6 +257,14 @@ function unitsOf(def: Id): Inference | null {
   if (!m.has(def)) { try { m.set(def, infer(doc.code, def)); } catch { m.set(def, null); } }
   return m.get(def)!;
 }
+// Type inference for typed programs, once per version of the code.
+const typedInfo = new WeakMap<Code, T.Info>();
+function typesOf(): T.Info | null {
+  if (!doc.typed) return null;
+  let i = typedInfo.get(doc.code);
+  if (!i) { try { i = T.infer(doc.code, pres().names); typedInfo.set(doc.code, i); } catch { return null; } }
+  return i;
+}
 const checked = new WeakMap<Code, Problem[]>();
 function problems(): Problem[] {
   let ps = checked.get(doc.code);
@@ -196,7 +277,7 @@ const network = () => get(doc.code, (node(ui.def) as { body: Id }).body, "networ
 const known = (): Id[] => (doc.layout.known[ui.def] ?? []).filter((p) => network().params.includes(p));
 
 const pres = (names: Names = {}, comments: Comments = doc.comments): Presentation => ({
-  names: layer<Names>(preludeNames, relationNames, doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
+  names: layer<Names>(preludeNames, relationNames, stdNames, doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
   comments,
   hints: doc.hints,
   style: { ...styles[ui.style], quote: undefined },
@@ -1320,6 +1401,217 @@ function textPanel(namer: Namer, p: Presentation, s: Solved | null): HTMLElement
   return h("pre", { class: "text" }, txt);
 }
 
+
+// ---------------------------------------------------------------- typed programs
+
+const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
+
+function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
+  const id = ui.selected;
+  if (!id || !node(id)) return h("div", { class: "empty" }, "Nothing selected. Click anything in the blocks; a hole (□) opens a palette of what fits.");
+  const n = node(id);
+  const names = p.names;
+  const out = h("div", { class: "insp" });
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind" }, kindLabel(id)), h("code", { class: "nid" }, id.length > 10 ? id.slice(0, 10) + "…" : id)));
+  const t = T.typeOf(info, id, names);
+  const hole = info.holes.get(id);
+  if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
+  else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
+  const err = info.errors.find((e) => e.id === id);
+  if (err) out.append(h("p", { class: "status-line bad" }, err.message));
+
+  const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
+  if (callee && callee !== ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`)));
+
+  if (n.kind === "binder" || n.kind === "def" || n.kind === "variant") {
+    const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
+    const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
+    input.addEventListener("change", () => rename(id, input.value));
+    out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${ui.layer}.json`), input));
+  }
+
+  if (hole) out.append(fillPalette(id, info, names));
+
+  if (n.kind === "lit") {
+    const input = h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" }) as HTMLInputElement;
+    input.addEventListener("change", () => applyT(T.setLit(doc.code, doc.names.short, info, id, input.value)));
+    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
+  }
+
+  const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
+  if (isExprNode) {
+    const splittable = T.scopeAt(doc.code, ui.def, id).filter((b) => T.dataTypeOf(doc.code, info, b));
+    out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
+      h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
+      splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
+    if (ui.mode === "split") {
+      const list = h("div", { class: "opts" });
+      for (const b of splittable) {
+        const ty = T.dataTypeOf(doc.code, info, b)!;
+        const r = T.splitOn(doc.code, doc.names.short, info, id, b);
+        const btn = h("button", { class: `opt${r.ok ? "" : " no"}`, type: "button", disabled: !r.ok, title: r.ok ? undefined : `Can't: ${r.reason}` },
+          h("span", { class: "opt-l" }, namer.name(b)), h("span", { class: "opt-d" }, r.ok ? `one case per ${names[ty] ?? "variant"}` : `can't: ${r.reason}`));
+        if (r.ok) btn.addEventListener("click", () => applyT(r));
+        list.append(btn);
+      }
+      out.append(h("p", { class: "hint" }, "Replaces this with a match on the variable you pick: one arm per case of its type, each starting as a copy of what's here."), list);
+    }
+  }
+
+  // Data types: add a case. Every fold and match over the type gets a hole
+  // arm for it, so nothing is left without the new case.
+  const typeDef = n.kind === "def" && defBody(id)?.kind === "typedef" ? id : n.kind === "variant" ? info.owner.get(id) ?? null : null;
+  if (typeDef) out.append(addCasePanel(typeDef, info, names));
+
+  const ta = h("textarea", { id: "f-comment", rows: "2", placeholder: "Add a note to this node" }) as HTMLTextAreaElement;
+  ta.value = doc.comments[id] ?? "";
+  ta.addEventListener("change", () => setComment(id, ta.value));
+  out.append(h("label", { class: "field", for: "f-comment" }, h("span", {}, "Comment · comments.json"), ta));
+  return out;
+}
+
+const typeName = (info: T.Info, t: Parameters<T.Info["subst"]["zonk"]>[0], names: Names) => showTypeOf(info.subst.zonk(t), names);
+
+function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, string] {
+  const nm = (id: Id) => names[id] ?? id;
+  switch (f.kind) {
+    case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : "definitions"];
+    case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
+    case "lit": return [f.of === "number" ? "a number" : "a text", f.of === "number" ? "Number" : "Text", "literals"];
+    case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
+    default: return [`${f.kind} ${nm(f.on)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}`, "case analysis"];
+  }
+}
+
+function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
+  const q = ui.query.trim().toLowerCase();
+  const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: fillLabel(f, info, names) }));
+  const shown = all.filter(({ l }) => !q || l.some((s) => s.toLowerCase().includes(q)));
+  const input = h("input", { id: "f-query", type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
+  input.addEventListener("input", () => {
+    ui.query = input.value;
+    const at = input.selectionStart;
+    render();
+    const again = document.getElementById("f-query") as HTMLInputElement | null;
+    again?.focus();
+    if (again && at !== null) again.setSelectionRange(at, at);
+  });
+  const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0])); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && shown[0]) run(shown[0]); });
+  const list = h("div", { class: "opts palette" });
+  let group = "";
+  for (const x of shown.slice(0, 40)) {
+    if (x.l[2] !== group) { group = x.l[2]; list.append(h("div", { class: "pal-g" }, group)); }
+    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, x.l[0]), h("span", { class: "opt-d" }, x.l[1]));
+    b.addEventListener("click", () => run(x));
+    list.append(b);
+  }
+  if (!shown.length) list.append(h("p", { class: "hint" }, "Nothing that fits matches."));
+  return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
+}
+
+function addCasePanel(type: Id, info: T.Info, names: Names): HTMLElement {
+  const td = get(doc.code, defBody(type)!.id, "typedef");
+  // Field types to pick from: the ones this type already uses.
+  const fieldTypes = new Map<string, Id>();
+  const tt = (tid: Id): string => {
+    const t = node(tid);
+    if (t.kind === "tfun") return `(${t.params.map(tt).join(", ")}) -> ${tt(t.result)}`;
+    const r = t as NodeOf<"tref">;
+    return [names[r.target] ?? r.target, ...r.args.map(tt)].join(" ");
+  };
+  for (const v of td.variants) for (const f of get(doc.code, v, "variant").fields) {
+    const k = tt(get(doc.code, f, "field").type);
+    if (!fieldTypes.has(k)) fieldTypes.set(k, get(doc.code, f, "field").type);
+  }
+  const nameIn = h("input", { id: "f-case", type: "text", placeholder: "name of the new case", autocomplete: "off" }) as HTMLInputElement;
+  const chips = h("div", { class: "chips" });
+  ui.caseFields.forEach((tid, i) => {
+    const b = h("button", { class: "chip-btn on", type: "button", title: "Remove this field" }, `${tt(tid)} ×`);
+    b.addEventListener("click", () => { ui.caseFields.splice(i, 1); render(); });
+    chips.append(b);
+  });
+  for (const [label, tid] of fieldTypes) {
+    const b = h("button", { class: "chip-btn", type: "button" }, `+ ${label}`);
+    b.addEventListener("click", () => { ui.caseFields.push(tid); render(); });
+    chips.append(b);
+  }
+  const go = h("button", { class: "btn", type: "button" }, "Add the case");
+  go.addEventListener("click", () => {
+    const fields = ui.caseFields.map((tid, i) => ({ name: ui.caseFields.length > 1 ? ["left", "right", "third"][i] ?? `field ${i + 1}` : "of", type: tid }));
+    if (applyT(T.addCase(doc.code, doc.names.short, info, type, nameIn.value, fields))) ui.caseFields = [];
+  });
+  nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
+  return h("div", {}, h("div", { class: "sub-head" }, `Add a case to ${names[type] ?? "this type"}`),
+    h("p", { class: "hint" }, "Every match and fold over this type gets an arm for it with a hole to fill, so no case can be missing."),
+    h("label", { class: "field", for: "f-case" }, h("span", {}, "Name"), nameIn),
+    h("div", { class: "hint" }, "Fields:"), chips, h("div", { class: "acts" }, go));
+}
+
+function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
+  const box = h("div", { class: "run" });
+  const t = info.typeOf.get(ui.def);
+  const z = t ? info.subst.zonk(t) : null;
+  const action = z?.t === "fn" && z.params.length === 0;
+  const main = doc.code.defs.find((d) => doc.names.short[d] === "main");
+  if (!action) {
+    box.append(h("p", { class: "hint" }, "Only an action (no inputs) runs on its own."),
+      main ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": main }, "Open main") : "");
+    return box;
+  }
+  box.append(h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
+  if (ui.output?.def === ui.def) {
+    box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || "(no output)"));
+    if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
+  }
+  return box;
+}
+
+function runTyped(info: T.Info) {
+  const lines: string[] = [];
+  let error: string | undefined;
+  try {
+    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line) });
+    const shown = showValue(v, doc.code, pres().names);
+    if (shown !== "unit") lines.push(`→ ${shown}`);
+  } catch (e) { error = (e as Error).message; }
+  ui.output = { def: ui.def, lines, error };
+  render();
+}
+
+// The kinds of error in a typed program, and what stops each one.
+const TYPED_CLASSES: { key: string; title: string; how: string }[] = [
+  { key: "-", title: "Syntax, unknown names, name clashes", how: "impossible: no text; references are ids" },
+  { key: "-", title: "Wrong number of arguments", how: "impossible: a call gets one hole per input" },
+  { key: "type", title: "Type mismatches", how: "prevented: the palette only offers what fits, and edits that add one are refused" },
+  { key: "-", title: "Missing cases", how: "impossible: arms come from the type; adding a case adds arms" },
+  { key: "-", title: "null / undefined", how: "impossible: there is no null; absence is the Choice effect" },
+  { key: "effect", title: "Unhandled effects", how: "checked: effect rows; main can only print" },
+  { key: "diverge", title: "Might not terminate", how: "inferred: recursion on a smaller part is total, the rest carries Diverge" },
+  { key: "hole", title: "Holes", how: "allowed while editing; each knows its type" },
+  { key: "runtime", title: "Domain errors", how: "only found by running: ÷ 0 fails in evaluate, √ of a negative is NaN" },
+];
+
+function typedChecks(namer: Namer, info: T.Info): HTMLElement {
+  const def = node(ui.def) as NodeOf<"def">;
+  const mine = new Set(def.body ? subtree(doc.code, def.body) : []);
+  const errs = info.errors.filter((e) => mine.has(e.id) || e.id === ui.def);
+  const holes = [...info.holes.keys()].filter((k) => mine.has(k));
+  const box = h("div", { class: "checks" });
+  for (const c of TYPED_CLASSES) {
+    const items = c.key === "type" ? errs.filter((e) => !/performs/.test(e.message)) : c.key === "effect" ? errs.filter((e) => /performs/.test(e.message))
+      : c.key === "hole" ? holes.map((id) => ({ id, message: `needs ${typeName(info, info.holes.get(id)!.expected, pres().names)}` })) : [];
+    const div = c.key === "diverge" && info.divergent.has(ui.def);
+    const bad = (c.key === "type" || c.key === "effect") && items.length;
+    const state = bad ? "bad" : items.length || div ? "gap" : c.key === "runtime" ? "later" : "ok";
+    box.append(h("div", { class: `chk ${state}` },
+      h("span", { class: "chk-n" }, div ? "∞" : items.length ? String(items.length) : state === "later" ? "…" : "0"),
+      h("span", { class: "chk-t" }, c.title, h("small", {}, div ? "this definition carries Diverge: run it under with fuel" : c.how))));
+    for (const x of items.slice(0, 4)) box.append(h("button", { class: "chk-item", type: "button", "data-act": "goto-node", "data-target": x.id }, `${node(x.id)?.kind === "hole" ? "□" : namer.name(x.id)}: ${x.message}`));
+  }
+  return box;
+}
+
 // ---------------------------------------------------------------- frame
 
 function seg(name: string, value: string, options: [string, string][]) {
@@ -1345,13 +1637,23 @@ function render() {
   const focused = document.activeElement?.id;
   const net = isNetwork(ui.def);
   const solved = net ? solveCurrent() : null;
+  const info = typesOf();
+  const typed = !!info && !net;
+  if (info) T.setDisplayNames(p.names);
 
   const defTabs = h("div", { class: "seg", role: "group", "aria-label": "Definition" },
-    ...doc.code.defs.filter((d) => defBody(d)).map((d) => h("button", { type: "button", class: d === ui.def ? "on" : "", "data-def": d },
-      isNetwork(d) ? h("span", { class: "netmark", title: "network" }, "◇ ") : null, new Namer(doc.code, p, d).name(d))));
+    ...doc.code.defs.filter((d) => defBody(d) && !d.startsWith("std.")).map((d) => h("button", { type: "button", class: d === ui.def ? "on" : "", "data-def": d },
+      isNetwork(d) ? h("span", { class: "netmark", title: "network" }, "◇ ") : defBody(d)?.kind === "typedef" ? h("span", { class: "netmark", title: "data type" }, "▤ ") : null, p.names[d] ?? d)));
 
   const values = solved?.canonical ?? null;
-  const main = net
+  const main = typed
+    ? [
+      h("section", { class: "panel p-blocks wide" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
+        h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, blocksPres(), info, ui.def, ui.selected))),
+      h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"), h("small", {}, "the same tree, printed")),
+        h("pre", { class: "text" }, (() => { try { return renderBlocks(doc.code, blocksPres(), info, ui.def); } catch (e) { return (e as Error).message; } })())),
+    ]
+    : net
     ? [
       h("section", { class: "panel p-net" }, h("h2", {}, `${namer.name(ui.def)} `, h("small", {}, "drag between ports to wire; drag a wired port into empty space to unwire")), networkEditor(namer, p, values)),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "Derived program"), seg("text", ui.text, [["program", "For these inputs"], ["equations", "Equations"]])), textPanel(namer, p, solved)),
@@ -1366,6 +1668,7 @@ function render() {
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
+        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"]]),
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         defTabs,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
@@ -1375,12 +1678,12 @@ function render() {
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset" }, "Reset")))),
     h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
-    h("main", { class: `grid${net ? " is-net" : ""}` },
+    h("main", { class: `grid${net ? " is-net" : typed ? " is-typed" : ""}` },
       ...main,
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Selected"), inspector(namer, p)),
-        h("section", { class: "panel" }, h("h2", {}, "Run"), net ? netRunPanel(namer, solved!) : exprRunPanel(namer)),
-        h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), checksPanel(namer)),
+        h("section", { class: "panel" }, h("h2", {}, "Selected"), typed ? typedInspector(namer, p, info!) : inspector(namer, p)),
+        h("section", { class: "panel" }, h("h2", {}, "Run"), typed ? typedRunPanel(namer, info!) : net ? netRunPanel(namer, solved!) : exprRunPanel(namer)),
+        h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), typed ? typedChecks(namer, info!) : checksPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Files"), filesPanel()))),
   );
   document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });
@@ -1391,6 +1694,7 @@ document.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
   const set = t.closest<HTMLElement>("[data-set]");
   if (set) {
+    if (set.dataset.set === "program") return switchProgram(set.dataset.value as Program);
     const k = set.dataset.set as "layer" | "style" | "text";
     (ui as unknown as Record<string, string>)[k] = set.dataset.value!;
     if (k !== "text") { ui.touched = []; ui.note = k === "layer" ? "Switched names layer. Same code, different words." : "Switched notation. Same code, different symbols and precedence."; }
@@ -1403,7 +1707,7 @@ document.addEventListener("click", (e) => {
     const a = act.dataset.act;
     if (a === "undo") return travel(undo, redo, "Undid");
     if (a === "redo") return travel(redo, undo, "Redid");
-    if (a === "reset") { undo.push(doc); doc = initial(); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
+    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { const d = ui.back.pop()!; ui.def = d; ui.selected = null; ui.mode = null; ui.note = "Back."; ui.text = isNetwork(d) ? "program" : "let"; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
@@ -1412,6 +1716,9 @@ document.addEventListener("click", (e) => {
     if (a === "add-port") return addPort();
     if (a === "wrap" || a === "replace" || a === "add") { ui.mode = ui.mode === a ? null : a; ui.query = ""; render(); document.getElementById("f-query")?.focus(); return; }
     if (a === "delete") return removeSelected();
+    if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
+    if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
+    if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
     return;
   }
   const hit = t.closest<HTMLElement>(".blocks-wrap [data-id]");
