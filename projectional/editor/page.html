@@ -327,7 +327,12 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .dia { fill: var(--var-ln); stroke: var(--var-ln); cursor: pointer; }
 .tgraph .inp { fill: var(--panel); stroke: var(--wire); stroke-width: 2; cursor: crosshair; }
 .tgraph .outp { fill: var(--wire); }
-.tgraph .src { fill: var(--var-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.tgraph .src { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.guide { margin: 0 16px 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.guide-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px 18px; }
+.guide-item { display: flex; gap: 10px; align-items: flex-start; }
+.guide-item svg { flex: none; }
+.guide-item p { margin: 2px 0 0; font-size: 13px; line-height: 1.4; }
 .tgraph .reroute { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
 .tgraph .reroute.silent { fill: var(--panel); stroke: var(--let-ln); stroke-width: 1.5; cursor: default; }
 .tgraph .reroute.sel { stroke: var(--accent); stroke-width: 3; }

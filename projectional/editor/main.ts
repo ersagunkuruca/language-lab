@@ -1531,6 +1531,40 @@ function select(id: Id | null) {
   render();
 }
 
+// ---------------------------------------------------------------- guide
+//
+// Every graph uses the same few things, so they're explained once, each with
+// a sample drawn with the graph's own styles. One word per thing, used
+// everywhere: if two things look the same, they are the same.
+
+const GUIDE_SEEN = "projectional-guide-seen";
+let guideOpen = (() => { try { return !localStorage.getItem(GUIDE_SEEN); } catch { return true; } })();
+
+function guide(): HTMLElement {
+  const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph" }); r.append(...els); return r; };
+  const box = (x: number, label: string, cls = "cn") => [svg("rect", { x, y: 6, width: 56, height: 28, rx: 7, class: cls }), text(x + 28, 25, label, "cl")];
+  const wire = (x1: number, x2: number, y = 20, cls = "tw") => svg("path", { d: `M${x1},${y} C${(x1 + x2) / 2},${y} ${(x1 + x2) / 2},${y} ${x2},${y}`, class: cls });
+  const items: [string, SVGElement, string][] = [
+    ["Node", pic(80, ...box(12, "add"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 5, class: "outp" })),
+      "Something that computes a value: a function call, an if, a match, a fold, a relation. Inputs are the hollow circles on its left, its output is the filled circle on its right."],
+    ["Wire", pic(80, wire(10, 70), svg("circle", { cx: 10, cy: 20, r: 4, class: "outp" }), svg("circle", { cx: 70, cy: 20, r: 5, class: "inp" })),
+      "Carries a value from an output to an input. Drag from an output or a dot onto an input to make one; drag an input's wire into empty space to remove it."],
+    ["Dot", pic(80, svg("path", { d: "M22,24 C46,24 46,10 72,10", class: "tw use" }), svg("path", { d: "M22,24 C46,24 46,36 72,36", class: "tw use" }), svg("circle", { cx: 16, cy: 24, r: 6, class: "reroute" }), text(16, 12, "a", "dotl")),
+      "Where a value starts and branches out to every place that uses it. A function's parameters are dots on its frame's left edge; a dot on a wire is a let. Click any wire to put a dot on it; select a dot to name it, or leave it unnamed (•1)."],
+    ["Frame", pic(80, svg("rect", { x: 4, y: 3, width: 72, height: 34, rx: 9, class: "rg lam" }), text(12, 15, "(x) =>", "rt", "start"), svg("circle", { cx: 4, cy: 26, r: 6, class: "reroute" })),
+      "A function that hasn't been called yet: its parameters are the dots on its left, what it gives back leaves on its right. Each case of an if, match or fold is a frame wired into that node."],
+    ["Hole", pic(80, svg("rect", { x: 10, y: 8, width: 56, height: 24, rx: 12, class: "pill hole" }), text(38, 24, "□", "pl")),
+      "A value not filled in yet. It knows its type; select it and the side panel lists only what fits. The program runs until it reaches one."],
+    ["Badge", pic(80, svg("rect", { x: 12, y: 2, width: 56, height: 36, rx: 7, class: "cn eff" }), text(40, 13, "Choice", "badge"), text(40, 31, "fail", "cl")),
+      "The effects a node has. Choice: it can give several answers, or none. Console: it prints. Diverge: it might not finish. “handles Choice” marks a node that takes care of it, so the effect stops there."],
+    ["Relation", pic(80, ...box(12, "polar", "cn rel"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 6, class: "reroute" })),
+      "A node with no fixed direction, like x² + y² = r². You choose which ports you give it (inputs, left) and it solves for the rest (dots, right). In a network you choose by marking outer ports as known."],
+  ];
+  return h("section", { class: "guide", "aria-label": "Guide" },
+    h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
+    h("p", { class: "hint" }, "Drag a node to move it (that only changes layout.json). Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."));
+}
+
 function render() {
   view = buildView();
   const app = document.getElementById("app")!;
@@ -1584,7 +1618,9 @@ function render() {
         h("div", { class: "seg" },
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
-          h("button", { type: "button", "data-act": "reset" }, "Reset")))),
+          h("button", { type: "button", "data-act": "reset" }, "Reset")),
+        h("button", { class: `btn${guideOpen ? " on" : ""}`, type: "button", "data-act": "guide" }, guideOpen ? "Hide the guide" : "Guide"))),
+    ...(guideOpen ? [guide()] : []),
     h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
     h("main", { class: `grid${net ? " is-net" : typed ? " is-typed" : ""}` },
       ...main,
@@ -1627,6 +1663,7 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
+    if (a === "guide") { guideOpen = !guideOpen; try { localStorage.setItem(GUIDE_SEEN, "1"); } catch {} return render(); }
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }
