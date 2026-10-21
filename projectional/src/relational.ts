@@ -4,9 +4,9 @@
 // part of the code; it's chosen per use, and the solver derives the program
 // for that choice. Inverting a function means choosing different ports.
 
-import { analyze, defineRelation, evaluate as solveRelation, examples } from "../../invertible/src/index.js";
+import { analyze, balance, defineRelation, evaluate as solveRelation, examples, ratio, view } from "../../invertible/src/index.js";
 import { call, num, v } from "../../invertible/src/expr.js";
-import type { Code, Id, Node } from "./model.ts";
+import type { Code, Id, Node, NodeOf } from "./model.ts";
 import { freshId, get } from "./model.ts";
 import type { Names } from "./presentation.ts";
 import { B, impl } from "./prelude.ts";
@@ -22,10 +22,21 @@ export const RELATIONS = {
   ohm: examples.ohm,
 } as Record<string, Relation>;
 
-export const R = Object.fromEntries(Object.keys(RELATIONS).map((op) => [op, `builtin.${op}`])) as Record<string, Id>;
+// Variadic atoms. There is no + node and no − node: a sum is one balance,
+// a + b + … = total, and which symbol it shows depends on which port is
+// unknown (see `atomViews`). It grows: there is always one spare addend port,
+// and connecting it adds a term. product is the same with ×.
+export const VARIADIC = { sum: { total: "total", make: balance }, product: { total: "product", make: ratio } } as const;
+export const isVariadic = (code: Code, fn: Id | null): fn is Id => {
+  const t = fn ? code.nodes[fn] : null;
+  return t?.kind === "builtin" && t.op in VARIADIC;
+};
+const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+
+export const R = Object.fromEntries([...Object.keys(RELATIONS), ...Object.keys(VARIADIC)].map((op) => [op, `builtin.${op}`])) as Record<string, Id>;
 
 export const relationPrelude: Code = {
-  nodes: Object.fromEntries(Object.keys(RELATIONS).map((op) => [R[op], { id: R[op], kind: "builtin", op } as Node])),
+  nodes: Object.fromEntries([...Object.keys(RELATIONS), ...Object.keys(VARIADIC)].map((op) => [R[op], { id: R[op], kind: "builtin", op } as Node])),
   defs: [],
 };
 
@@ -38,14 +49,23 @@ export const relationNames: Names = {
   [`${R.sumDiff}#c`]: "a + b",
   [`${R.sumDiff}#d`]: "a − b",
   [R.ohm]: "Ohm's law",
+  [R.sum]: "sum",
+  [R.product]: "product",
 };
 
 const isOp = (op: string): op is keyof typeof impl => op in impl;
 
 // The ports a part gets when it uses `fn`. Keys are what `part.bind` uses.
-export function portsOf(code: Code, fn: Id | null): string[] {
+// A variadic part's ports depend on what's connected (`bind`): every addend
+// up to the last connected one, one spare, and the total.
+export function portsOf(code: Code, fn: Id | null, bind: Record<string, Id> = {}): string[] {
   if (fn === null) return ["out"];
   const t = code.nodes[fn];
+  if (t.kind === "builtin" && t.op in VARIADIC) {
+    const used = Object.keys(bind).map((k) => LETTERS.indexOf(k)).filter((i) => i >= 0);
+    const n = Math.max(1, ...used) + 2;
+    return [...LETTERS.slice(0, n), VARIADIC[t.op as keyof typeof VARIADIC].total];
+  }
   if (t.kind === "builtin") {
     if (isOp(t.op)) return [...Array.from({ length: impl[t.op].length }, (_, i) => String(i)), "out"];
     return RELATIONS[t.op]?.ports ?? [];
@@ -136,6 +156,10 @@ export function networkRelation(code: Code, defId: Id, without?: Id): Relation {
       continue;
     }
     const t = code.nodes[part.fn];
+    if (t.kind === "builtin" && t.op in VARIADIC) {
+      uses.push(atomUse(code, part));
+      continue;
+    }
     if (t.kind === "builtin" && isOp(t.op)) {
       const n = impl[t.op].length;
       eqs.push({ lhs: v(w("out")), rhs: call(t.op, ...Array.from({ length: n }, (_, i) => v(w(String(i))))) });
@@ -146,6 +170,20 @@ export function networkRelation(code: Code, defId: Id, without?: Id): Relation {
     uses.push({ rel, bind: Object.fromEntries(rel.ports.map((p: string) => [p, w(p)])) });
   }
   return define({ name: defId, ports: net.params, eqs, uses });
+}
+
+// A variadic part as a balance over the addends that are connected. Unbound
+// addends aren't terms at all; an unbound total is an unknown like any other.
+function atomRelation(code: Code, part: NodeOf<"part">): Relation & { atom?: unknown } {
+  const op = (code.nodes[part.fn!] as { op: keyof typeof VARIADIC }).op;
+  const { total, make } = VARIADIC[op];
+  const terms = Object.keys(part.bind).filter((k) => k !== total).sort();
+  return (make as unknown as (l: string[], r: string[], name: string) => Relation)(terms, [total], `${op}${terms.length}`);
+}
+
+function atomUse(code: Code, part: NodeOf<"part">) {
+  const rel = atomRelation(code, part);
+  return { rel, bind: Object.fromEntries(rel.ports.map((p) => [p, part.bind[p] ?? `${part.id}:${p}`])) };
 }
 
 // ---------------------------------------------------------------- solving
@@ -197,10 +235,28 @@ export function partDirections(code: Code, defId: Id, known: Id[]): Record<Id, P
       const a = analyze(rel, known);
       determined = new Set([...known, ...rel.vars.filter((x: string) => !a.plan.unknown.includes(x))]);
     } catch {}
-    out[pid] = Object.fromEntries(portsOf(code, part.fn).map((k) => {
+    out[pid] = Object.fromEntries(portsOf(code, part.fn, part.bind).map((k) => {
       const wire = part.bind[k];
       return [k, !wire ? "free" : determined.has(wire) ? "in" : "out"];
     }));
+  }
+  return out;
+}
+
+// How each sum or product part should be drawn for this choice of known
+// ports: the symbol (+, −, neg, ×, ÷, 1/x) and the formula it computes, keyed
+// by the port it computes. Undefined for a part with no single unknown.
+export function atomViews(code: Code, defId: Id, dirs: Record<Id, PortDirection>): Record<Id, { port: string; symbol: string; text: string } | undefined> {
+  const net = get(code, get(code, defId, "def").body!, "network");
+  const out: Record<Id, { port: string; symbol: string; text: string } | undefined> = {};
+  for (const pid of net.parts) {
+    const part = get(code, pid, "part");
+    if (!isVariadic(code, part.fn)) continue;
+    const rel = atomRelation(code, part);
+    const known = rel.ports.filter((p) => dirs[pid]?.[p] === "in");
+    const v = (view as (r: unknown, k: string[]) => Record<string, { symbol: string; text: string }> | null)(rel, known) ?? {};
+    const [port] = Object.keys(v);
+    out[pid] = port ? { port, ...v[port] } : undefined;
   }
   return out;
 }
@@ -210,7 +266,15 @@ export function partDirections(code: Code, defId: Id, known: Id[]): Record<Id, P
 // Rewrite an expression def as a network with the same meaning: calls become
 // parts (keeping their ids, so names and comments stay attached), each
 // intermediate value becomes a wire, and the result becomes an extra port.
-export function toNetwork(code: Code, defId: Id, resultName = "result"): { code: Code; names: Names } {
+const ATOMS: Record<string, (args: Id[], out: Id, zero: () => Id) => { fn: Id; bind: Record<string, Id> }> = {
+  add: ([a, b], out) => ({ fn: R.sum, bind: { a, b, total: out } }),
+  sub: ([a, b], out) => ({ fn: R.sum, bind: { a: out, b, total: a } }),
+  neg: ([a], out, zero) => ({ fn: R.sum, bind: { a, b: out, total: zero() } }),
+  mul: ([a, b], out) => ({ fn: R.product, bind: { a, b, product: out } }),
+  div: ([a, b], out) => ({ fn: R.product, bind: { a: out, b, product: a } }),
+};
+
+export function toNetwork(code: Code, defId: Id, resultName = "result", atoms = true): { code: Code; names: Names } {
   const def = get(code, defId, "def");
   const lam = get(code, def.body!, "lambda");
   const nodes: Record<Id, Node> = { ...code.nodes };
@@ -227,6 +291,13 @@ export function toNetwork(code: Code, defId: Id, resultName = "result"): { code:
     nodes[id] = { id, kind: "binder" };
     wires.push(id);
     return id;
+  };
+  const zero = (): Id => {
+    const w = newWire();
+    const pid = freshId();
+    nodes[pid] = { id: pid, kind: "part", fn: null, value: 0, bind: { out: w } };
+    parts.push(pid);
+    return w;
   };
 
   // Returns the wire carrying expression `id`'s value. `into` asks for the
@@ -250,6 +321,15 @@ export function toNetwork(code: Code, defId: Id, resultName = "result"): { code:
       if (fn.kind !== "ref") throw new Error("can't convert a computed function");
       const args = n.args.map((a) => wire(a));
       const out = into ?? newWire();
+      // Arithmetic becomes the two atoms: +, − and neg are one sum seen from
+      // different ports, × and ÷ one product.
+      const op = (code.nodes[fn.target] as { op?: string }).op;
+      const atom = atoms && op ? ATOMS[op]?.(args, out, zero) : undefined;
+      if (atom) {
+        nodes[id] = { id, kind: "part", fn: atom.fn, bind: atom.bind };
+        parts.push(id);
+        return out;
+      }
       const keys = portsOf(code, fn.target);
       const bind: Record<string, Id> = { out };
       args.forEach((a, i) => (bind[keys[i]] = a));

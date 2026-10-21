@@ -21,7 +21,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
     switch (n.kind) {
       case "lit": return ["lit", n.value];
       case "hole": return ["hole"];
-      case "binder": binders.set(id, binders.size); return ["bind"];
+      case "binder": binders.set(id, binders.size); return n.unit ? ["bind", unitKey(n.unit)] : ["bind"];
       case "ref": {
         const t = code.nodes[n.target];
         if (t.kind === "binder") {
@@ -39,7 +39,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
         const callee = n.fn ? code.nodes[n.fn] : null;
         const body = callee?.kind === "def" && callee.body ? code.nodes[callee.body] : null;
         const params = body && (body.kind === "lambda" || body.kind === "network") ? body.params : [];
-        const fn = !callee ? ["const", n.value] : callee.kind === "builtin" ? ["builtin", callee.op] : ["def", hashDef(code, n.fn!, memo, stack)];
+        const fn = !callee ? ["const", n.value, ...(n.unit ? [unitKey(n.unit)] : [])] : callee.kind === "builtin" ? ["builtin", callee.op] : ["def", hashDef(code, n.fn!, memo, stack)];
         const ports = Object.entries(n.bind)
           .map(([k, w]) => [params.includes(k) ? `p${params.indexOf(k)}` : k, binders.get(w)] as const)
           .sort(([a], [b]) => (a < b ? -1 : 1));
@@ -56,6 +56,10 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
   memo.set(defId, h);
   return h;
 }
+
+// Units are part of the meaning: a length and a time with the same number are
+// different values. Sorted so key order doesn't matter.
+const unitKey = (u: Record<string, number | undefined>) => Object.entries(u).filter(([, e]) => e).sort(([a], [b]) => (a < b ? -1 : 1));
 
 // Plain-JS 64-bit FNV-1a so this runs unchanged in the browser editor. Fine
 // for a prototype; a real codebase would want a cryptographic hash.
