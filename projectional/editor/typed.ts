@@ -401,6 +401,25 @@ export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: 
   return guardTyped(info, collect(next), nn, value, "Removed the dot: the value is back on its one wire.");
 }
 
+// Drag a node's output onto another input: the value gets a dot (or uses
+// the one it has) and the input is wired from it. The first step is the
+// same for every input, so the editor checks each one against `prepare`.
+export function prepareShare(code: Code, names: Names, info: Info, defId: Id, from: Id): { dot: Id; code: Code; names: Names; info: Info } | { reason: string } {
+  const owner = lets(code, defId).find((l) => l.args.includes(from));
+  if (owner) return { dot: (code.nodes[owner.fn] as NodeOf<"lambda">).params[owner.args.indexOf(from)], code, names, info };
+  const r = addDot(code, names, info, defId, from);
+  if (!r.ok) return { reason: r.reason };
+  return { dot: r.select!, code: r.code, names: r.names, info: infer(r.code, { ...display, ...r.names }) };
+}
+
+export function share(code: Code, names: Names, info: Info, defId: Id, from: Id, slot: Id): TEdit {
+  const p = prepareShare(code, names, info, defId, from);
+  if ("reason" in p) return { ok: false, reason: p.reason };
+  if (slot === from) return { ok: false, reason: "that's where it already goes" };
+  const r = useVar(p.code, p.names, p.info, defId, p.dot, slot);
+  return r.ok ? { ...r, select: p.dot, note: "Shared it: the value now has a dot, wired to both inputs." } : r;
+}
+
 export function addCase(code: Code, names: Names, info: Info, type: Id, name: string, fields: { name: string; type: Id }[]): TEdit {
   if (!name.trim()) return { ok: false, reason: "a case needs a name" };
   const before = new Set(info.holes.keys());

@@ -1569,6 +1569,14 @@ function graphHooks(info: T.Info) {
     use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
     clear: (slot: Id) => void applyT(T.toHole(doc.code, doc.names.short, info, slot)),
     addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
+    canShare: (from: Id) => {
+      const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
+      if ("reason" in p) return () => p.reason;
+      return (slot: Id) => { if (slot === from) return "that's where it already goes"; const r = T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot); return r.ok ? null : r.reason; };
+    },
+    share: (from: Id, slot: Id) => void applyT(T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
+    offsets: Object.fromEntries(Object.entries(doc.layout.positions).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
+    moved: (id: Id, off: Pos) => commit({ layout: { ...doc.layout, positions: { ...doc.layout.positions, [lkey(id)]: off } } }, ["layout.json"], "Moved a node. Where it sits lives in layout.json; the code is untouched."),
   };
 }
 
@@ -1672,7 +1680,7 @@ function render() {
   const values = solved?.canonical ?? null;
   const main = typed
     ? [
-      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "click a wire to put a dot on it, drag from a dot or variable onto an input to use it there, drag an input's wire away to leave a hole")),
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "drag a node to move it; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole")),
         h("div", { class: "graph-wrap" }, typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info!)))),
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
         h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),

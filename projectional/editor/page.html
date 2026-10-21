@@ -299,8 +299,10 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph { font: 12px var(--font-code); touch-action: none; }
 .tgraph .tw { fill: none; stroke: var(--wire); stroke-width: 1.6; }
 .tgraph .tw.fan { stroke-dasharray: 3 3; opacity: .7; }
-.tgraph .tw.pending { stroke: var(--accent); stroke-dasharray: 5 4; pointer-events: none; }
-.tgraph .tw.pending.bad { stroke: var(--hot); }
+.wire-pending { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 5 4; pointer-events: none; }
+.wire-pending.bad { stroke: var(--hot); }
+.tgraph [data-move] { cursor: move; }
+.tgraph .outp[data-out] { cursor: crosshair; }
 .tgraph .rg { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
 .tgraph .rg.def { fill: none; stroke: var(--def-ln); }
 .tgraph .rg.lam { fill: var(--def-bg); fill-opacity: .35; stroke: var(--def-ln); stroke-dasharray: 4 3; }
