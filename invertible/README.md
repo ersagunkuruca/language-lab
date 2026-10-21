@@ -7,7 +7,7 @@ follows every branch of any multi-valued inverse, and marks one answer as
 canonical.
 
 ```
-npm test                         # 19 tests, no dependencies (Node 20+)
+npm test                         # 24 tests, no dependencies (Node 20+)
 python3 -m http.server           # then open http://localhost:8000/ for the demo page
 ```
 
@@ -143,6 +143,24 @@ spelling parses back to `v`; and `canonicalize` is idempotent.
   VAE/GAN observation) could plug in as a primitive with a numeric-only
   inverse, the way Newton does now.
 
+## Embedding in a node editor
+
+`src/index.js` is the API for hosting relation nodes in a graph editor:
+
+```js
+import { defineRelation, analyze, evaluate, directions, checkWiring, examples } from './src/index.js';
+
+analyze(examples.polar, ['x', 'y'])       // derived program: steps as text + expression trees
+evaluate(examples.polar, { x: 3, y: 4 })  // canonical solution + every branch
+directions(examples.polar)                // [['x','y'], ['x','r'], ...] minimal input choices
+checkWiring(examples.polar, ['x', 'r'], ['θ'])  // inputs wired in, outputs wired out: ok?
+```
+
+Ports wired from the enclosing function's inputs are `known`; ports wired
+towards its outputs are `wanted`. A whole graph is a relation too: list its
+nodes in `uses` with `bind` mapping node ports to wire names, and solving the
+graph backwards inverts every node inside it.
+
 ## Layout
 
 ```
@@ -152,6 +170,7 @@ src/linear.js     exact rational elimination for linear blocks
 src/relation.js   relations, composition, planning, running, describing plans
 src/examples.js   sumDiff, polar, sin, x², Ohm, rotate, temperature
 src/syntax.js     bidirectional URL syntax
+src/index.js      embedding API (analyze, evaluate, directions, checkWiring)
 index.html        interactive demo
 test/             node:test suites
 ```
