@@ -125,7 +125,7 @@ export function toSolverExpr(code: Code, id: Id, env: Map<Id, Expr> = new Map())
 
 const cache = new WeakMap<Code, Map<string, Relation>>();
 
-function defRelation(code: Code, defId: Id): Relation {
+export function defRelation(code: Code, defId: Id): Relation {
   const def = get(code, defId, "def");
   const body = def.body ? code.nodes[def.body] : null;
   if (body?.kind === "network") return networkRelation(code, defId);

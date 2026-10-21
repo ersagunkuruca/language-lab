@@ -195,3 +195,25 @@ test("the block view shows if, folds and lets, with the inferred type on top", (
   assert.match(type, /^type expression\n {2}\| number\(value: Number\)\n {2}\| x\n/);
   void baseNames;
 });
+
+test("relations: a direction is chosen at the use site, and its effect is inferred", () => {
+  const p = load("relations");
+  const info = infer(p.code, p.pres.names);
+  assert.deepEqual(info.errors, []);
+  assert.equal(typeOf(p, info, "split"), "(Number, Number) -> Pair Number Number");
+  assert.equal(typeOf(p, info, "missing addend"), "(Number, Number) -> Number");
+  assert.equal(typeOf(p, info, "to polar"), "(Number, Number) -[Choice]-> Pair Number Number");
+  assert.equal(typeOf(p, info, "square roots"), "(Number) -> List Number");
+  assert.deepEqual(run(p.code, info, p.named("main")), [
+    "split(10, 4) = 7, 3",
+    "missing addend(3, 10) = 7",
+    "to polar(0, 2), canonical = 2, 1.570796327",
+    "square roots(9) = 3 -3",
+    "square roots(−1) = []",
+  ]);
+  // Polar given only x: not enough to solve, and the checker says so.
+  const toPolar = get(p.code, get(p.code, p.named("to polar"), "def").body!, "lambda");
+  const solve = get(p.code, toPolar.body, "solve");
+  const code = replace(p.code, solve.id, () => ({ ...solve, given: { x: solve.given.x } }));
+  assert.ok(infer(code, p.pres.names).errors.some((e) => /needs 1 more known port/.test(e.message)));
+});

@@ -48,7 +48,11 @@ export type Node =
   | { id: Id; kind: "fold"; scrutinee: Id; arms: Id[] }
   // binds: one binder per field. results (fold only): a binder for each
   // recursive field's folded value, null for the others.
-  | { id: Id; kind: "arm"; variant: Id; binds: Id[]; results: (Id | null)[]; body: Id };
+  | { id: Id; kind: "arm"; variant: Id; binds: Id[]; results: (Id | null)[]; body: Id }
+  // A relation used in one direction inside an expression (src/lang/solve.ts):
+  // `given` ports get their values from expressions, `binds` ports are solved
+  // for and bound to binders in scope in `body`. Choice when not unique.
+  | { id: Id; kind: "solve"; fn: Id; given: Record<string, Id>; binds: Record<string, Id>; body: Id };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -88,6 +92,7 @@ export function children(n: Node): Id[] {
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
+    case "solve": return [...Object.values(n.given), ...Object.values(n.binds), n.body];
     default: return [];
   }
 }
@@ -111,7 +116,7 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      let target = node.kind === "ref" ? node.target : node.kind === "part" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      let target = node.kind === "ref" ? node.target : node.kind === "part" || node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
       if (target && owner.has(target)) target = owner.get(target)!;
       if (!target || seen.has(target)) continue;
       const t = code.nodes[target];
@@ -157,7 +162,7 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
     } else if (n.kind === "lambda" && n.body === id) return { parent: n.id, slot: "body" };
     else if ((n.kind === "match" || n.kind === "fold") && n.scrutinee === id) return { parent: n.id, slot: "scrutinee" };
     else if (n.kind === "match" && n.otherwise === id) return { parent: n.id, slot: "otherwise" };
-    else if (n.kind === "arm" && n.body === id) return { parent: n.id, slot: "body" };
+    else if ((n.kind === "arm" || n.kind === "solve") && n.body === id) return { parent: n.id, slot: "body" };
     else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
   }
   return null;

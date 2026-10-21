@@ -12,9 +12,10 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { dependencies, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { fillHole } from "./refactor.ts";
+import { planSolve } from "./solve.ts";
 import { SIGS } from "./std.ts";
 import {
-  DIVERGE, EffectError, freeVars, instantiate, NUMBER, showType as showT, STRING, Subst, TypeError,
+  CHOICE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -222,12 +223,37 @@ export function infer(code: Code, names: Names = {}): Info {
       case "fold":
         t = cases(n, env, row);
         break;
+      case "solve":
+        t = solveType(n, env, row);
+        break;
       default:
         err(id, `a ${n?.kind ?? "missing node"} is not an expression`);
         t = s.fresh();
     }
     info.typeOf.set(id, t);
     return t;
+  }
+
+  // A relation used in one direction: given ports are numbers, solved ports
+  // are numbers bound in the body, and Choice unless the answer is unique.
+  function solveType(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row): Type {
+    for (const g of Object.values(n.given)) unifyAt(g, num, expr(g, env, row), "a given port");
+    const inner = new Map(env);
+    for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
+    try {
+      const p = planSolve(code, n);
+      const ports = p.rel.ports;
+      for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
+      if (p.status !== "solved") err(n.id, `${nm(n.fn)} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
+      else if (!p.unique) {
+        try { s.unifyRow(row, { effs: [CHOICE], tail: s.next++ }); }
+        catch (e) { if (e instanceof EffectError) err(n.id, `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`); else throw e; }
+      }
+    } catch (e) {
+      if (e instanceof TypeError) throw e;
+      err(n.id, (e as Error).message);
+    }
+    return expr(n.body, inner, row);
   }
 
   function callee(n: NodeOf<"call">): string {
@@ -290,6 +316,7 @@ function kids(n: Node): Id[] {
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [n.body];
+    case "solve": return [...Object.values(n.given), n.body];
     default: return [];
   }
 }
