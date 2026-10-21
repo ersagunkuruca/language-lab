@@ -14,6 +14,7 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
     switch (n.kind) {
       case "lit": r = atom(typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value)); break;
       case "ref": r = atom(namer.name(n.target)); break;
+      case "hole": r = atom("□"); break;
       case "lambda": r = lambdaText(code, namer, n.params, expr(n.body)); break;
       case "call": {
         const args = n.args.map(expr);

@@ -27,6 +27,7 @@ export function renderGraph(code: Code, pres: Presentation, defId: Id): string {
     const n = code.nodes[id];
     switch (n.kind) {
       case "lit": return declare(key(id), `[${q(String(n.value))}]`);
+      case "hole": return declare(key(id), `[${q("□")}]`);
       case "ref": {
         const t = code.nodes[n.target];
         return t.kind === "binder"

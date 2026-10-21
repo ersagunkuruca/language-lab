@@ -4,7 +4,6 @@
 // independently, with different ids and different names, get the same hash,
 // and renaming anything never changes it.
 
-import { createHash } from "node:crypto";
 import type { Code, Id } from "./model.ts";
 
 type Canon = unknown[];
@@ -21,6 +20,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
     const n = code.nodes[id];
     switch (n.kind) {
       case "lit": return ["lit", n.value];
+      case "hole": return ["hole"];
       case "binder": binders.set(id, binders.size); return ["bind"];
       case "ref": {
         const t = code.nodes[n.target];
@@ -39,8 +39,19 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
 
   // An extern has no content to hash, so its identity is its id.
   const body = def.body === null ? ["extern", defId] : canon(def.body);
-  const h = createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16);
+  const h = fnv1a64(JSON.stringify(body));
   stack.delete(defId);
   memo.set(defId, h);
   return h;
+}
+
+// Plain-JS 64-bit FNV-1a so this runs unchanged in the browser editor. Fine
+// for a prototype; a real codebase would want a cryptographic hash.
+function fnv1a64(s: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(s)) {
+    h ^= BigInt(byte);
+    h = (h * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, "0");
 }

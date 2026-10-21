@@ -1,8 +1,6 @@
 // The semantic core. A program is a flat map of nodes keyed by opaque IDs.
 // Nothing in here knows about names, glyphs, comments, layout or text.
 
-import { randomBytes } from "node:crypto";
-
 export type Id = string;
 
 export type Node =
@@ -17,7 +15,10 @@ export type Node =
   // A top-level definition. body === null declares an extern (an opaque value
   // or function we can talk about but not look inside).
   | { id: Id; kind: "def"; body: Id | null }
-  | { id: Id; kind: "builtin"; op: string };
+  | { id: Id; kind: "builtin"; op: string }
+  // A hole: an expression not written yet. Programs with holes still render,
+  // hash and can be edited; they just can't be evaluated through the hole.
+  | { id: Id; kind: "hole" };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -32,7 +33,8 @@ export interface Code {
 }
 
 export function freshId(): Id {
-  return randomBytes(4).toString("hex");
+  const b = crypto.getRandomValues(new Uint8Array(4));
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {
@@ -87,6 +89,43 @@ export function replace(code: Code, id: Id, build: (code: Code) => NodeData): Co
   const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
   next.nodes[id] = { ...build(next), id } as Node;
   return next;
+}
+
+// Where `id` hangs in the tree: its parent and the slot it occupies.
+export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?: number } | null {
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind === "call") {
+      if (n.fn === id) return { parent: n.id, slot: "fn" };
+      const i = n.args.indexOf(id);
+      if (i >= 0) return { parent: n.id, slot: "args", index: i };
+    } else if (n.kind === "lambda" && n.body === id) return { parent: n.id, slot: "body" };
+    else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
+  }
+  return null;
+}
+
+// Semantic edit: put a different node in the slot `id` occupies. The old
+// subtree keeps its ids (so it can be moved elsewhere, e.g. into a wrapper).
+export function swapIn(code: Code, id: Id, replacement: Id): Code {
+  const at = parentOf(code, id);
+  if (!at) throw new Error(`${id} has no parent`);
+  const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const p = { ...next.nodes[at.parent] } as Record<string, unknown>;
+  if (at.slot === "args") {
+    const args = [...(p.args as Id[])];
+    args[at.index!] = replacement;
+    p.args = args;
+  } else p[at.slot] = replacement;
+  next.nodes[at.parent] = p as unknown as Node;
+  return next;
+}
+
+// Drop nodes no def or builtin can reach (after deletes and replacements).
+export function collect(code: Code): Code {
+  const keep = new Set<Id>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "builtin") keep.add(n.id);
+  for (const d of code.defs) for (const id of subtree(code, d)) keep.add(id);
+  return { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
 }
 
 export function merge(...codes: Code[]): Code {

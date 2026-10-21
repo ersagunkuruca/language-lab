@@ -35,6 +35,7 @@ export function evaluate(code: Code, id: Id, env: Map<Id, Value> = new Map(), de
         return f(...n.args.map((a) => ev(a, env)));
       }
       case "binder": throw new Error(`unbound binder ${id}`);
+      case "hole": throw new Error("the program has a hole here");
     }
   };
   return ev(id, env);

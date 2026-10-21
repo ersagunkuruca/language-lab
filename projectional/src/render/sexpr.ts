@@ -12,6 +12,7 @@ export function renderSexpr(code: Code, pres: Presentation, defId: Id): string {
   const expr = (id: Id): string => {
     const n = code.nodes[id];
     switch (n.kind) {
+      case "hole": return "□";
       case "lit": return typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value);
       case "ref": return pres.style.notation[n.target]?.glyph ?? namer.name(n.target);
       case "lambda": return `(λ (${n.params.map((p) => namer.name(p)).join(" ")}) ${expr(n.body)})`;

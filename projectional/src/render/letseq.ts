@@ -33,6 +33,7 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
     switch (n.kind) {
       case "lit":
       case "ref":
+      case "hole":
         return operand(id);
       case "lambda":
         // A lambda passed as a value: no sensible way to flatten it into the
@@ -56,6 +57,7 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
     const n = code.nodes[id];
     if (n.kind === "lit") return notes.mark(id, atom(typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value)));
     if (n.kind === "ref") return notes.mark(id, atom(namer.name(n.target)));
+    if (n.kind === "hole") return notes.mark(id, atom("□"));
     const r = step(id);
     if (n.kind === "lambda") return r;
     const t = namer.temp(id);

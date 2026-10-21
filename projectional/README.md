@@ -158,6 +158,27 @@ story for free: a "package" is the dependency closure of a def
 namespaces and package names become presentation (a names layer that
 assigns paths), not something the compiler has to resolve.
 
+## The editor
+
+`editor/dist/index.html` is a self-contained browser editor over the same
+core (open it directly, or rebuild with `npm install && npm run build-editor`).
+It never shows editable source text. You select nodes and use gestures:
+
+- **Blocks** (Scratch-like) and a **graph** sit side by side as two views of
+  one tree, with selection shared between them. Graph positions you drag are
+  saved to `layout.json`, which is just another side table.
+- **Rename** a variable, definition or step. Naming a step is the same as
+  extracting it in the let view; clearing the name inlines it.
+- **Wrap in…** a function, searched by *any* of its names or glyphs
+  (`*`, `·`, `×`, `multiply` and `mul` all find the same node).
+- **Replace with…** a variable in scope, another definition or a number;
+  **Delete** leaves a hole `□`, and holes still render and hash.
+- A **Files** panel shows which file each gesture touched, plus the meaning
+  hash, so you can see that renames, comments, notation and layout never
+  move it. A **Run** panel evaluates the definition live.
+
+Edits are kept in your browser's local storage; Reset brings the example back.
+
 ## Mapping back to the original ideas
 
 | idea | where it lives here |
@@ -201,11 +222,11 @@ every non-semantic thing in independent, mergeable side tables.
 2. **Order in the let view.** For pure code, any topological order of the
    steps is equivalent, so the order could be a presentation choice too.
    Effects would pin it.
-3. **Editing through a view.** Every view here is read-only. An editor needs
-   each view's gestures (extract step, inline step, wrap in call, rename) to
-   map onto tree edits; typing would be a structured input method, not a
-   parser. Finding things to reference still uses names, so aliases (`*`,
-   `·`, `×` for one function) become a search problem.
+3. **Editing through a view.** The editor maps a first set of gestures
+   (rename, name/inline step, wrap, replace, delete) onto tree edits. Typing
+   would be a structured input method, not a parser, and is not tried yet.
+   Finding things to reference still uses names, so aliases (`*`, `·`, `×`
+   for one function) become a search problem, which the wrap picker shows.
 4. **Orphaned side-table entries** when a node is deleted, and merging two
    people's side tables. Since everything is keyed by id, merges are
    per-node rather than per-line, which should be much nicer than text.
@@ -224,6 +245,7 @@ src/hash.ts           name- and id-free content hash
 src/render/           namer (display names + disambiguation), nested,
                       let, sexpr, graph views
 src/demo.ts           the walkthrough
+editor/               browser editor (main.ts, page.html, build.ts, dist/)
 examples/build.ts     regenerates the example programs (new random ids)
 test/core.test.ts
 ```
