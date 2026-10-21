@@ -73,17 +73,17 @@ button { font: inherit; color: inherit; }
   grid-template-rows: auto 1fr; grid-template-areas: "blocks graph side" "text text side"; align-items: start; }
 .p-blocks { grid-area: blocks; } .p-graph { grid-area: graph; } .p-text { grid-area: text; } .p-net { grid-area: net; }
 .grid.is-net { grid-template-areas: "net net side" "text text side"; }
-.grid.is-typed { grid-template-areas: "blocks blocks side" "text text side"; }
+.grid.is-typed { grid-template-areas: "graph graph side" "blocks text side"; }
 .side { grid-area: side; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 @media (max-width: 1100px) {
   .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "blocks blocks" "graph side" "text side"; }
   .grid.is-net { grid-template-areas: "net net" "text side"; }
-  .grid.is-typed { grid-template-areas: "blocks blocks" "text side"; }
+  .grid.is-typed { grid-template-areas: "graph graph" "blocks blocks" "text side"; }
 }
 @media (max-width: 720px) {
   .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "blocks" "side" "graph" "text"; }
   .grid.is-net { grid-template-areas: "net" "side" "text"; }
-  .grid.is-typed { grid-template-areas: "blocks" "side" "text"; }
+  .grid.is-typed { grid-template-areas: "graph" "blocks" "side" "text"; }
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
 .panel h2 { margin: 0 0 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
@@ -294,6 +294,42 @@ textarea { resize: vertical; }
 .palette { max-height: 340px; }
 .pal-g { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 8px 2px; }
 pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
+
+/* typed graph */
+.tgraph { font: 12px var(--font-code); touch-action: none; }
+.tgraph .tw { fill: none; stroke: var(--wire); stroke-width: 1.6; }
+.tgraph .tw.fan { stroke-dasharray: 3 3; opacity: .7; }
+.tgraph .tw.pending { stroke: var(--accent); stroke-dasharray: 5 4; pointer-events: none; }
+.tgraph .tw.pending.bad { stroke: var(--hot); }
+.tgraph .rg { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.tgraph .rg.def { fill: none; stroke: var(--def-ln); }
+.tgraph .rg.lam { fill: var(--def-bg); fill-opacity: .35; stroke: var(--def-ln); stroke-dasharray: 4 3; }
+.tgraph .rg.let { fill: var(--let-bg); fill-opacity: .35; stroke: var(--let-ln); stroke-dasharray: 4 3; }
+.tgraph .rg.match, .tgraph .rg.fold { fill: var(--var-bg); fill-opacity: .25; stroke: var(--var-ln); }
+.tgraph .rg.arm { fill: var(--panel); stroke: var(--var-ln); stroke-opacity: .6; }
+.tgraph .rg.sel, .tgraph .cn.sel, .tgraph .pill.sel, .tgraph .dia.sel, .tgraph .src.sel { stroke: var(--accent); stroke-width: 3; }
+.tgraph .rt { fill: var(--muted); font: italic 11px var(--font-ui); }
+.tgraph .cn { fill: var(--op-bg); stroke: var(--op-ln); stroke-width: 1.5; cursor: pointer; }
+.tgraph .cn.eff { fill: var(--hot-soft); stroke: var(--hot); }
+.tgraph .cn.handler { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 2; }
+.tgraph .cn.err, .tgraph .pill.err { stroke: var(--hot); stroke-width: 3; }
+.tgraph .cl { fill: var(--fg); font-size: 13px; font-weight: 500; pointer-events: none; }
+.tgraph .badge { fill: var(--hot); font: 600 9.5px var(--font-ui); letter-spacing: .02em; pointer-events: none; }
+.tgraph .pill { stroke-width: 1.4; cursor: pointer; }
+.tgraph .pill.var { fill: var(--var-bg); stroke: var(--var-ln); cursor: grab; }
+.tgraph .pill.lit { fill: var(--lit-bg); stroke: var(--lit-ln); }
+.tgraph .pill.con { fill: var(--var-bg); stroke: var(--var-ln); stroke-dasharray: 2 2; }
+.tgraph .pill.fnref { fill: var(--def-bg); stroke: var(--def-ln); }
+.tgraph .pill.hole { fill: var(--hot-soft); stroke: var(--hot); stroke-dasharray: 4 3; }
+.tgraph .pl { fill: var(--fg); pointer-events: none; }
+.tgraph .dia { fill: var(--var-ln); stroke: var(--var-ln); cursor: pointer; }
+.tgraph .inp { fill: var(--panel); stroke: var(--wire); stroke-width: 2; cursor: crosshair; }
+.tgraph .outp { fill: var(--wire); }
+.tgraph .src { fill: var(--var-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.tgraph .portl { fill: var(--var-ln); font-size: 11px; pointer-events: none; }
+.tgraph.dragging .cannot { opacity: .25; }
+.tgraph.dragging .inp.can, .tgraph.dragging .pill.can { stroke: var(--accent); stroke-width: 3.5; }
+.tgraph .why { fill: var(--hot); font: 600 12px var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .file, .status, .meaning { transition: background-color .4s; }
