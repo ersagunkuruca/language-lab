@@ -274,12 +274,29 @@ function tearRoots(s, env, ks, tol, range, maxRoots) {
       return { r: l - r, scale: 1 + Math.abs(l) + Math.abs(r), e };
     };
     const roots = [];
+    const accept = (x) => {
+      const fx = f(x);
+      if (Number.isFinite(fx.r) && Math.abs(fx.r) <= 1e-7 * fx.scale &&
+          !roots.some((r) => Math.abs(r.x - x) <= 1e-7 * (1 + Math.abs(x)))) {
+        roots.push({ x, env: fx.e, path: combo.map((c, j) => ({ x: s.inner[j].x, branch: c.bi, ...c.a })) });
+      }
+    };
     const umax = Math.asinh(range), N = 1600;
-    let x0 = -range, f0 = f(x0);
-    for (let n = 1; n <= N; n++) {
-      const x1 = Math.sinh(-umax + (2 * umax * n) / N), f1 = f(x1);
-      if (Number.isFinite(f0.r) && Number.isFinite(f1.r) && (f0.r === 0 || f0.r * f1.r < 0)) {
-        let a = x0, b = x1, fa = f0.r;
+    const xs = Array.from({ length: N + 1 }, (_, n) => Math.sinh(-umax + (2 * umax * n) / N));
+    const fs = xs.map((x) => f(x).r);
+    // residual identically zero (0·t + 0·t² = 0): every value works, so the
+    // block's unknowns are free rather than an endless list of roots
+    const finite = xs.map((x, n) => [x, fs[n]]).filter(([, r]) => Number.isFinite(r));
+    if (finite.length > N / 2 && finite.every(([x, r]) => Math.abs(r) <= 1e-12 * f(x).scale)) {
+      return [{ env, path: [], freeVars: s.xs }];
+    }
+    for (let n = 0; n < N; n++) {
+      const [x0, x1, f0, f1] = [xs[n], xs[n + 1], fs[n], fs[n + 1]];
+      if (!Number.isFinite(f0) || !Number.isFinite(f1)) continue;
+      if (f0 === 0) { accept(x0); continue; }
+      if (f0 * f1 < 0) {
+        // sign change: bisect
+        let a = x0, b = x1, fa = f0;
         for (let it = 0; it < 200 && a !== b; it++) {
           const m = (a + b) / 2, fm = f(m).r;
           if (!Number.isFinite(fm)) break;
@@ -287,14 +304,22 @@ function tearRoots(s, env, ks, tol, range, maxRoots) {
           if (fa * fm < 0) b = m; else { a = m; fa = fm; }
           if (Math.abs(b - a) <= 1e-15 * (1 + Math.abs(a))) break;
         }
-        const x = (a + b) / 2, fx = f(x);
-        if (Number.isFinite(fx.r) && Math.abs(fx.r) <= 1e-7 * fx.scale &&
-            !roots.some((r) => Math.abs(r.x - x) <= 1e-9 * (1 + Math.abs(x)))) {
-          roots.push({ x, env: fx.e, path: combo.map((c, j) => ({ x: s.inner[j].x, branch: c.bi, ...c.a })) });
+        accept((a + b) / 2);
+      } else if (n > 0 && Number.isFinite(fs[n - 1]) && Math.abs(f0) < Math.abs(fs[n - 1]) && Math.abs(f0) <= Math.abs(f1)) {
+        // no sign change but |f| dips: a double root (t² = 0) touches zero
+        // without crossing it. Minimise |f| around the dip and keep it if it
+        // reaches zero.
+        let a = xs[n - 1], b = x1;
+        const g = 0.6180339887498949;
+        for (let it = 0; it < 200 && b - a > 1e-300; it++) {
+          const c = b - g * (b - a), d = a + g * (b - a);
+          const fc = Math.abs(f(c).r), fd = Math.abs(f(d).r);
+          if (!(fc <= fd)) a = c; else b = d;
         }
+        accept((a + b) / 2);
       }
-      x0 = x1; f0 = f1;
     }
+    if (fs[N] === 0) accept(xs[N]);
     // closest to zero first; periodic residuals have endless roots, keep a few
     out.push(...roots.sort((p, q) => Math.abs(p.x) - Math.abs(q.x)).slice(0, maxRoots));
   }
@@ -363,7 +388,9 @@ export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess 
       }
       if (s.xs.every((x) => f.has(x) || ok(e[x]))) go(i + 1, e, path, f);
     } else if (s.type === 'tear') {
-      for (const r of tearRoots(s, env, ks, tol, tearRange, maxRoots)) go(i + 1, r.env, [...path, ...r.path], free);
+      for (const r of tearRoots(s, env, ks, tol, tearRange, maxRoots)) {
+        go(i + 1, r.env, [...path, ...r.path], r.freeVars ? new Set([...free, ...r.freeVars]) : free);
+      }
     } else if (s.type === 'newton') {
       const x = newton(s, env, guess);
       if (x) go(i + 1, { ...env, ...Object.fromEntries(s.xs.map((u, j) => [u, x[j]])) }, path, free);
