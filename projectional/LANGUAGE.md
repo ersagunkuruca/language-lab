@@ -202,6 +202,35 @@ mechanism covers:
   solver branch is one choice. That join isn't made in code yet; it's the
   obvious next step.
 
+## Relations inside programs: `solve`
+
+A `solve` node uses a relation in the direction chosen where it's used.
+The relation can be a network def, an expression def, `polar`, the variadic
+`sum`/`product` atoms, or a numeric builtin read as `out = f(…)`. The node's
+`given` ports are computed by expressions. Its `binds` ports are solved for
+and bound to binders the body can use, all from the same solution, so several
+outputs stay consistent with each other (`src/lang/solve.ts`,
+`examples/relations`):
+
+```
+‹to polar› : (Number, Number) -[Choice]-> Pair Number Number
+‹to polar›(x, y) =
+  solve polar(x = x, y = y) for length, angle
+    pair(length, angle)
+
+‹square roots› : (Number) -> List Number
+‹square roots›(y) = all(() => solve square(result = y) for x → x)
+```
+
+The effect comes from the solver's static `direction()`. Exactly one answer
+that can't fail is pure: the missing addend of a `sum`, for instance. Several
+answers, or possibly none, is `Choice`, a lazy stream with the canonical
+answer first. A direction that the given ports don't determine is a checked
+error ("needs 1 more known port"). So `square` read backwards gives both
+roots of 9 under `all`, none for −1, and `2` under `first`. That's the
+"x² = 4 has a canonical answer" idea from the original pitch, written as a
+program.
+
 ## The errors, class by class
 
 "Never a syntax error again" holds by construction. Below is every other
@@ -310,9 +339,6 @@ back into the group being hashed is named by its position.
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
-- **Relations as Choice functions.** Wrap `results(rel, known)` from
-  `invertible/` as a builtin, so `x² = 4` solved for `x` is
-  `one of(2, −2)` with 2 first.
 - **User-defined effects and handlers.** The evaluator's stream model handles
   `Choice` naturally. General handlers with resumable continuations need a
   CPS evaluator.

@@ -60,6 +60,16 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
       }
       case "tfun": return ["tfun", n.params.map(canon), canon(n.result)];
       case "match": return ["match", canon(n.scrutinee), n.arms.map(canon), n.otherwise ? canon(n.otherwise) : null];
+      case "solve": {
+        const t = code.nodes[n.fn];
+        const fn = t.kind === "builtin" ? ["builtin", t.op] : stack.has(n.fn) ? ["rec", [...stack].indexOf(n.fn)] : ["def", hashDef(code, n.fn, memo, stack)];
+        const body = t.kind === "def" && t.body ? code.nodes[t.body] : null;
+        const params = body && (body.kind === "lambda" || body.kind === "network") ? body.params : [];
+        const key = (k: string) => (params.includes(k) ? `p${params.indexOf(k)}` : k);
+        const given = Object.entries(n.given).map(([k, e]) => [key(k), canon(e)] as const).sort(([a], [b]) => (a < b ? -1 : 1));
+        const binds = Object.entries(n.binds).map(([k, b]) => [key(k), canon(b)] as const).sort(([a], [b]) => (a < b ? -1 : 1));
+        return ["solve", fn, given, binds, canon(n.body)];
+      }
       case "fold": return ["fold", canon(n.scrutinee), n.arms.map(canon)];
       case "arm": return ["arm", part(n.variant), n.binds.map(canon), n.results.map((r) => (r ? canon(r) : null)), canon(n.body)];
       default: throw new Error(`unexpected ${n.kind}`);

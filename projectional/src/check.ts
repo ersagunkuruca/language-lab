@@ -147,6 +147,13 @@ export function checkDef(code: Code, defId: Id): Problem[] {
           if (n.kind === "match" && n.otherwise) walk(n.otherwise, scope);
           return;
         }
+        case "solve": {
+          for (const g of Object.values(n.given)) walk(g, scope);
+          const bound = Object.values(n.binds);
+          for (const b of bound) enter(b);
+          walk(n.body, new Set([...scope, ...bound]));
+          return;
+        }
         default: err(id, "shape", `a ${n.kind} can't appear in an expression`);
       }
     };

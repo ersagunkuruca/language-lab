@@ -11,6 +11,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
+import { portLabel } from "../relational.ts";
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showType } from "./types.ts";
@@ -42,7 +43,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
     const n = node(id);
-    if (n.kind === "match" || n.kind === "fold" || isLet(n)) return true;
+    if (n.kind === "match" || n.kind === "fold" || n.kind === "solve" || isLet(n)) return true;
     if (n.kind === "call") return [n.fn, ...n.args].some(tall);
     if (n.kind === "lambda") return tall(n.body);
     return false;
@@ -146,6 +147,17 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
         leave([...arm.binds, ...results]);
       }
       if (n.kind === "match" && n.otherwise) out.push(...hang(n.otherwise, ind + "  ", "otherwise → "));
+      return out;
+    }
+    if (n.kind === "solve") {
+      // solve polar(x = …, y = …) for length, angle as r, θ
+      const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
+      const given = Object.entries(n.given).map(([k, e]) => `${label(k)} = ${inline(e).text}`).join(", ");
+      const bound = Object.values(n.binds);
+      enter(bound);
+      const wanted = Object.entries(n.binds).map(([k, b]) => (nameOf(b) === label(k) ? label(k) : `${label(k)} as ${nameOf(b)}`)).join(", ");
+      const out = [`${ind}${lead}solve ${nameOf(n.fn)}(${given}) for ${wanted}`, ...block(n.body, ind + "  ", "")];
+      leave(bound);
       return out;
     }
     if (n.kind === "lambda") {

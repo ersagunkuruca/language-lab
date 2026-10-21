@@ -13,6 +13,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
+import { planSolve, solutions } from "./solve.ts";
 import { CONS, FALSE, NIL, S, STD_IMPL, TRUE, UNIT_V } from "./std.ts";
 import { CONSOLE, DIVERGE } from "./types.ts";
 
@@ -137,6 +138,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           }
         };
         for (const v of ev(n.scrutinee, env)) yield* fold(v);
+        return;
+      }
+      case "solve": {
+        const keys = Object.keys(n.given);
+        const rel = planSolve(code, n).rel;
+        for (const vals of each(keys.map((k) => n.given[k]), env)) {
+          for (const sol of solutions(rel, Object.fromEntries(keys.map((k, i) => [k, vals[i] as number])))) {
+            // A port the equations leave free has no value: not a solution.
+            if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
+            yield* ev(n.body, bind(env, Object.values(n.binds), Object.keys(n.binds).map((k) => sol[k]!)));
+          }
+        }
         return;
       }
       case "hole": throw new Error("the program reached a hole");

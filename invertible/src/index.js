@@ -12,7 +12,7 @@
 // one go. That way inverting the surrounding function inverts every node in it.
 
 import { relation, plan, run, stream, describe, shortfall, showEq } from './relation.js';
-import { show, evaluate as evalExpr } from './expr.js';
+import { show, evaluate as evalExpr, vars } from './expr.js';
 
 export { show, showEq };
 export * as examples from './examples.js';
@@ -82,6 +82,67 @@ export function take(iterable, n) {
   if (n <= 0) return out;
   for (const x of iterable) if (out.push(x) >= n) break;
   return out;
+}
+
+// ---- one direction as a typed thing ----------------------------------------
+// direction(rel, known) answers "what is this relation when these ports are
+// inputs?" statically, before any values exist, in terms a type system can use:
+//
+//   { kind: 'function', inputs, outputs, multiplicity, canFail, run, all }
+//       Every output is determined. multiplicity is 'one' when every step
+//       has a single branch, else 'many' (sqrt, asin, a torn quadratic): that
+//       is a Choice effect. canFail is true when some input values give no
+//       result (division, sqrt, log, asin, a consistency check, a numeric
+//       search): that is a Fail effect. run(values) is the canonical result
+//       (first) or null; all(values) is the lazy results stream.
+//
+//   { kind: 'underdetermined', inputs, need, completions, with }
+//       The known ports don't pin the rest down: `need` more ports must be
+//       chosen, a continuum, not a list to enumerate. completions lists the
+//       minimal sets of extra ports that would make it a function, and
+//       with(extra) returns that direction. A caller that wants Choice here
+//       should treat the extra ports as parameters, not enumerate them.
+const PARTIAL = new Set(['div', 'sqrt', 'log', 'asin', 'acos', 'pow']);
+const isConst = (e, ok) => e.k === 'num' && ok(e.v);
+// Division by a nonzero constant and whole non-negative powers can't fail.
+const partialOp = (e) => PARTIAL.has(e.f) &&
+  !(e.f === 'div' && isConst(e.args[1], (x) => x !== 0)) &&
+  !(e.f === 'pow' && isConst(e.args[1], (x) => Number.isInteger(x) && x >= 0));
+const partialIn = (e) => e.k === 'call' && (partialOp(e) || e.args.some(partialIn));
+
+export function direction(rel, known, opts = {}) {
+  const a = analyze(rel, known, opts);
+  const inputs = [...known];
+  if (a.status !== 'solved') {
+    const free = a.freePorts;
+    const completions = [];
+    const pick = (start, acc) => {
+      if (acc.length === a.needMore) {
+        if (!plan(rel, [...known, ...acc], opts).freePorts.length) completions.push(acc);
+        return;
+      }
+      for (let i = start; i < free.length; i++) pick(i + 1, [...acc, free[i]]);
+    };
+    pick(0, []);
+    return { kind: 'underdetermined', inputs, need: a.needMore, completions, with: (extra) => direction(rel, [...known, ...extra], opts) };
+  }
+  const steps = a.plan.steps;
+  const branchy = (s) => (s.type === 'solve' && (s.branches.length > 1 || s.branches.some((b) => b.params.length))) || s.type === 'tear';
+  const exprs = steps.flatMap((s) =>
+    s.type === 'solve' ? s.branches.map((b) => b.expr)
+      : s.type === 'linear' ? Object.values(s.exprs)
+        : s.type === 'tear' ? s.inner.flatMap((i) => i.branches.map((b) => b.expr)) : []);
+  const canFail = steps.some((s) => s.type === 'check' || s.type === 'tear' || s.type === 'newton' ||
+    (s.branches ?? []).some((b) => b.guards.length)) || exprs.some(partialIn);
+  return {
+    kind: 'function',
+    inputs,
+    outputs: rel.ports.filter((p) => !known.includes(p)),
+    multiplicity: steps.some(branchy) ? 'many' : 'one',
+    canFail,
+    run: (values) => first(rel, values, opts),
+    all: (values) => results(rel, values, opts),
+  };
 }
 
 // For a node in an editor: are the outputs it is wired to determined by the

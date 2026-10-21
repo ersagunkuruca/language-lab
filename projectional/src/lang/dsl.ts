@@ -81,6 +81,14 @@ export class Lang extends Builder {
     ]);
   }
 
+  // Use relation `fn` in one direction: `given` ports from expressions, the
+  // `want` ports solved for and bound (by the given display names) in body.
+  solve(fn: Id, given: Record<string, Id>, want: Record<string, string>, body: (b: Record<string, Id>) => Id): Id {
+    const binds = Object.fromEntries(Object.entries(want).map(([k, name]) => [k, this.binder(name)]));
+    const g = Object.fromEntries(Object.entries(given).map(([k, e]) => [k, this.x(e)]));
+    return this.add({ kind: "solve", fn, given: g, binds, body: this.x(body(binds)) });
+  }
+
   hole(): Id {
     return this.add({ kind: "hole" });
   }

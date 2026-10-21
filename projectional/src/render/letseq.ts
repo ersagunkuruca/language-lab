@@ -37,6 +37,7 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
         return operand(id);
       case "match":
       case "fold":
+      case "solve":
         // Arms have their own scopes; shown nested rather than flattened.
         return inline(id);
       case "lambda":
