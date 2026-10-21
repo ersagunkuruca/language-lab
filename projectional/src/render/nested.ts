@@ -34,6 +34,12 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
         r = atom(`${n.kind} ${expr(n.scrutinee).text} { ${arms.join("; ")} }`);
         break;
       }
+      case "solve": {
+        const given = Object.entries(n.given).map(([k, e]) => `${k} = ${expr(e).text}`).join(", ");
+        const wanted = Object.values(n.binds).map((b) => namer.name(b)).join(", ");
+        r = atom(`solve ${namer.name(n.fn)}(${given}) for ${wanted} → ${expr(n.body).text}`);
+        break;
+      }
       default: throw new Error(`unexpected ${n.kind} in expression`);
     }
     return notes.mark(id, r);

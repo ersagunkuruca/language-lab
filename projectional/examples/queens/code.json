@@ -1,1612 +1,1612 @@
 {
   "nodes": {
-    "13670531": {
-      "id": "13670531",
-      "kind": "ref",
-      "target": "builtin.print"
-    },
-    "17381502": {
-      "id": "17381502",
-      "kind": "ref",
-      "target": "ce6a99ad"
-    },
-    "28216732": {
-      "id": "28216732",
-      "kind": "match",
-      "scrutinee": "6b84865f",
-      "arms": [
-        "3388b09a"
-      ],
-      "otherwise": "d1dd6239"
-    },
-    "31662295": {
-      "id": "31662295",
-      "kind": "ref",
-      "target": "dc7f43fa"
-    },
-    "32904973": {
-      "id": "32904973",
-      "kind": "call",
-      "fn": "67df1f78",
-      "args": [
-        "dd1f940a"
-      ]
-    },
-    "42969018": {
-      "id": "42969018",
-      "kind": "call",
-      "fn": "45482a86",
-      "args": [
-        "6e108193",
-        "3ef1ab78"
-      ]
-    },
-    "56743283": {
-      "id": "56743283",
+    "11243526": {
+      "id": "11243526",
       "kind": "lambda",
-      "params": [
-        "92ecd02d"
-      ],
-      "body": "32904973"
+      "params": [],
+      "body": "d64b7dab"
     },
-    "97870268": {
-      "id": "97870268",
-      "kind": "binder"
-    },
-    "d67b2b7c": {
-      "id": "d67b2b7c",
-      "kind": "def",
-      "body": "5c724be1"
-    },
-    "3223f49a": {
-      "id": "3223f49a",
-      "kind": "binder"
-    },
-    "9a635c75": {
-      "id": "9a635c75",
-      "kind": "binder"
-    },
-    "c2c6c0a5": {
-      "id": "c2c6c0a5",
+    "54426099": {
+      "id": "54426099",
       "kind": "ref",
-      "target": "3223f49a"
+      "target": "builtin.oneOf"
     },
-    "4be137d2": {
-      "id": "4be137d2",
+    "58820919": {
+      "id": "58820919",
+      "kind": "call",
+      "fn": "869ecb4e",
+      "args": [
+        "fcb4feb6",
+        "8b5449df"
+      ]
+    },
+    "73369475": {
+      "id": "73369475",
       "kind": "ref",
       "target": "std.unit.unit"
     },
-    "6c2b7766": {
-      "id": "6c2b7766",
+    "74530485": {
+      "id": "74530485",
+      "kind": "fold",
+      "scrutinee": "bfc4eebf",
+      "arms": [
+        "0b656680",
+        "b4adfba1"
+      ]
+    },
+    "74756460": {
+      "id": "74756460",
+      "kind": "ref",
+      "target": "462acc24"
+    },
+    "80560874": {
+      "id": "80560874",
+      "kind": "call",
+      "fn": "e65ab60a",
+      "args": [
+        "084be20f",
+        "3e36e94e"
+      ]
+    },
+    "86800176": {
+      "id": "86800176",
+      "kind": "ref",
+      "target": "5c2ef955"
+    },
+    "6a73b038": {
+      "id": "6a73b038",
+      "kind": "def",
+      "body": "e88aac24"
+    },
+    "d898524e": {
+      "id": "d898524e",
+      "kind": "binder"
+    },
+    "9f471530": {
+      "id": "9f471530",
+      "kind": "binder"
+    },
+    "8a63952e": {
+      "id": "8a63952e",
+      "kind": "ref",
+      "target": "d898524e"
+    },
+    "6764722a": {
+      "id": "6764722a",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "4be137d2"
+      "body": "73369475"
     },
-    "dc7f43fa": {
-      "id": "dc7f43fa",
+    "5c2ef955": {
+      "id": "5c2ef955",
       "kind": "binder"
     },
-    "70b96db2": {
-      "id": "70b96db2",
+    "bee499fc": {
+      "id": "bee499fc",
       "kind": "binder"
     },
-    "4f210660": {
-      "id": "4f210660",
+    "279e1453": {
+      "id": "279e1453",
       "kind": "ref",
-      "target": "9a635c75"
+      "target": "9f471530"
     },
-    "89f71972": {
-      "id": "89f71972",
+    "85e844d5": {
+      "id": "85e844d5",
       "kind": "call",
-      "fn": "4f210660",
+      "fn": "279e1453",
       "args": [
-        "31662295"
+        "86800176"
       ]
     },
-    "bc6c6143": {
-      "id": "bc6c6143",
+    "0e036058": {
+      "id": "0e036058",
       "kind": "ref",
-      "target": "d67b2b7c"
+      "target": "6a73b038"
     },
-    "112dfeaf": {
-      "id": "112dfeaf",
+    "9ab8bc28": {
+      "id": "9ab8bc28",
       "kind": "ref",
-      "target": "70b96db2"
+      "target": "bee499fc"
     },
-    "f0081085": {
-      "id": "f0081085",
+    "cee6e043": {
+      "id": "cee6e043",
       "kind": "ref",
-      "target": "9a635c75"
+      "target": "9f471530"
     },
-    "1dbd22df": {
-      "id": "1dbd22df",
+    "14d7d479": {
+      "id": "14d7d479",
       "kind": "call",
-      "fn": "bc6c6143",
+      "fn": "0e036058",
       "args": [
-        "112dfeaf",
-        "f0081085"
+        "9ab8bc28",
+        "cee6e043"
       ]
     },
-    "3af42cd1": {
-      "id": "3af42cd1",
+    "ddc27170": {
+      "id": "ddc27170",
       "kind": "binder"
     },
-    "95cdc622": {
-      "id": "95cdc622",
+    "29266ca0": {
+      "id": "29266ca0",
       "kind": "lambda",
       "params": [
-        "3af42cd1"
+        "ddc27170"
       ],
-      "body": "1dbd22df"
+      "body": "14d7d479"
     },
-    "c1f11d6c": {
-      "id": "c1f11d6c",
+    "dc40af68": {
+      "id": "dc40af68",
       "kind": "call",
-      "fn": "95cdc622",
+      "fn": "29266ca0",
       "args": [
-        "89f71972"
+        "85e844d5"
       ]
     },
-    "eaa44e8a": {
-      "id": "eaa44e8a",
+    "9885d939": {
+      "id": "9885d939",
       "kind": "arm",
       "variant": "std.list.cons",
       "binds": [
-        "dc7f43fa",
-        "70b96db2"
+        "5c2ef955",
+        "bee499fc"
       ],
       "results": [
         null,
         null
       ],
-      "body": "c1f11d6c"
+      "body": "dc40af68"
     },
-    "129c3db2": {
-      "id": "129c3db2",
+    "5b089625": {
+      "id": "5b089625",
       "kind": "match",
-      "scrutinee": "c2c6c0a5",
+      "scrutinee": "8a63952e",
       "arms": [
-        "6c2b7766",
-        "eaa44e8a"
+        "6764722a",
+        "9885d939"
       ],
       "otherwise": null
     },
-    "5c724be1": {
-      "id": "5c724be1",
+    "e88aac24": {
+      "id": "e88aac24",
       "kind": "lambda",
       "params": [
-        "3223f49a",
-        "9a635c75"
+        "d898524e",
+        "9f471530"
       ],
-      "body": "129c3db2"
+      "body": "5b089625"
     },
-    "71fca71e": {
-      "id": "71fca71e",
+    "767afe64": {
+      "id": "767afe64",
       "kind": "def",
-      "body": "c51a7c47"
+      "body": "125547cd"
     },
-    "e0adaf7e": {
-      "id": "e0adaf7e",
+    "389b1c2c": {
+      "id": "389b1c2c",
       "kind": "binder"
     },
-    "4fb761e7": {
-      "id": "4fb761e7",
+    "9249536a": {
+      "id": "9249536a",
       "kind": "binder"
     },
-    "1a2f6e9e": {
-      "id": "1a2f6e9e",
+    "86d18d84": {
+      "id": "86d18d84",
       "kind": "ref",
-      "target": "e0adaf7e"
+      "target": "389b1c2c"
     },
-    "da7af7dc": {
-      "id": "da7af7dc",
+    "624396ef": {
+      "id": "624396ef",
       "kind": "ref",
       "target": "std.list.nil"
     },
-    "05a08f47": {
-      "id": "05a08f47",
+    "44c9ea39": {
+      "id": "44c9ea39",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "da7af7dc"
+      "body": "624396ef"
     },
-    "1118b1e1": {
-      "id": "1118b1e1",
+    "d8e56f97": {
+      "id": "d8e56f97",
       "kind": "binder"
     },
-    "ce6a99ad": {
-      "id": "ce6a99ad",
+    "65ca8f28": {
+      "id": "65ca8f28",
       "kind": "binder"
     },
-    "28c49579": {
-      "id": "28c49579",
+    "9f801c9c": {
+      "id": "9f801c9c",
       "kind": "ref",
-      "target": "4fb761e7"
+      "target": "9249536a"
     },
-    "622cd798": {
-      "id": "622cd798",
+    "b8779ba1": {
+      "id": "b8779ba1",
       "kind": "ref",
-      "target": "1118b1e1"
+      "target": "d8e56f97"
     },
-    "6e108193": {
-      "id": "6e108193",
+    "812d8604": {
+      "id": "812d8604",
       "kind": "call",
-      "fn": "28c49579",
+      "fn": "9f801c9c",
       "args": [
-        "622cd798"
+        "b8779ba1"
       ]
     },
-    "8e69e52b": {
-      "id": "8e69e52b",
+    "869ecb4e": {
+      "id": "869ecb4e",
       "kind": "ref",
-      "target": "71fca71e"
+      "target": "767afe64"
     },
-    "32a6b249": {
-      "id": "32a6b249",
+    "fcb4feb6": {
+      "id": "fcb4feb6",
       "kind": "ref",
-      "target": "4fb761e7"
+      "target": "65ca8f28"
     },
-    "3ef1ab78": {
-      "id": "3ef1ab78",
-      "kind": "call",
-      "fn": "8e69e52b",
-      "args": [
-        "17381502",
-        "32a6b249"
-      ]
+    "8b5449df": {
+      "id": "8b5449df",
+      "kind": "ref",
+      "target": "9249536a"
     },
-    "45482a86": {
-      "id": "45482a86",
+    "82bf3722": {
+      "id": "82bf3722",
       "kind": "ref",
       "target": "std.list.cons"
     },
-    "30c9c13b": {
-      "id": "30c9c13b",
+    "7cd630ea": {
+      "id": "7cd630ea",
+      "kind": "call",
+      "fn": "82bf3722",
+      "args": [
+        "812d8604",
+        "58820919"
+      ]
+    },
+    "24f9d82a": {
+      "id": "24f9d82a",
       "kind": "arm",
       "variant": "std.list.cons",
       "binds": [
-        "1118b1e1",
-        "ce6a99ad"
+        "d8e56f97",
+        "65ca8f28"
       ],
       "results": [
         null,
         null
       ],
-      "body": "42969018"
+      "body": "7cd630ea"
     },
-    "4cbd9a89": {
-      "id": "4cbd9a89",
+    "3764315d": {
+      "id": "3764315d",
       "kind": "match",
-      "scrutinee": "1a2f6e9e",
+      "scrutinee": "86d18d84",
       "arms": [
-        "05a08f47",
-        "30c9c13b"
+        "44c9ea39",
+        "24f9d82a"
       ],
       "otherwise": null
     },
-    "c51a7c47": {
-      "id": "c51a7c47",
+    "125547cd": {
+      "id": "125547cd",
       "kind": "lambda",
       "params": [
-        "e0adaf7e",
-        "4fb761e7"
+        "389b1c2c",
+        "9249536a"
       ],
-      "body": "4cbd9a89"
+      "body": "3764315d"
     },
-    "317736f4": {
-      "id": "317736f4",
+    "dd10e8f4": {
+      "id": "dd10e8f4",
       "kind": "def",
-      "body": "6e96076f"
+      "body": "1c86efdf"
     },
-    "39aaac4a": {
-      "id": "39aaac4a",
+    "5cadfc46": {
+      "id": "5cadfc46",
       "kind": "binder"
     },
-    "901e5a58": {
-      "id": "901e5a58",
+    "7d393cf0": {
+      "id": "7d393cf0",
       "kind": "binder"
     },
-    "231ec463": {
-      "id": "231ec463",
+    "13c70e0a": {
+      "id": "13c70e0a",
       "kind": "ref",
       "target": "builtin.oneOf"
     },
-    "f4f0a47f": {
-      "id": "f4f0a47f",
+    "b9e260a0": {
+      "id": "b9e260a0",
       "kind": "ref",
-      "target": "39aaac4a"
+      "target": "5cadfc46"
     },
-    "2bdcaa42": {
-      "id": "2bdcaa42",
+    "20c9ccf9": {
+      "id": "20c9ccf9",
       "kind": "call",
-      "fn": "231ec463",
+      "fn": "13c70e0a",
       "args": [
-        "f4f0a47f"
+        "b9e260a0"
       ]
     },
-    "097b9e50": {
-      "id": "097b9e50",
+    "e9115ad9": {
+      "id": "e9115ad9",
       "kind": "binder"
     },
-    "8f43166b": {
-      "id": "8f43166b",
+    "79a94186": {
+      "id": "79a94186",
       "kind": "ref",
-      "target": "901e5a58"
+      "target": "7d393cf0"
     },
-    "7938884a": {
-      "id": "7938884a",
+    "3f5d4654": {
+      "id": "3f5d4654",
       "kind": "ref",
-      "target": "097b9e50"
+      "target": "e9115ad9"
     },
-    "44fa71ed": {
-      "id": "44fa71ed",
+    "7a26cf84": {
+      "id": "7a26cf84",
       "kind": "call",
-      "fn": "8f43166b",
+      "fn": "79a94186",
       "args": [
-        "7938884a"
+        "3f5d4654"
       ]
     },
-    "975e2dec": {
-      "id": "975e2dec",
+    "c11d0033": {
+      "id": "c11d0033",
       "kind": "ref",
       "target": "builtin.fail"
     },
-    "1cbbec11": {
-      "id": "1cbbec11",
+    "1ce1ede5": {
+      "id": "1ce1ede5",
       "kind": "call",
-      "fn": "975e2dec",
+      "fn": "c11d0033",
       "args": []
     },
-    "2057c1a5": {
-      "id": "2057c1a5",
+    "4ee1dd91": {
+      "id": "4ee1dd91",
       "kind": "ref",
-      "target": "097b9e50"
+      "target": "e9115ad9"
     },
-    "865b4ce3": {
-      "id": "865b4ce3",
+    "e293c335": {
+      "id": "e293c335",
       "kind": "arm",
       "variant": "std.bool.true",
       "binds": [],
       "results": [],
-      "body": "2057c1a5"
+      "body": "4ee1dd91"
     },
-    "aafaedf0": {
-      "id": "aafaedf0",
+    "ad723c08": {
+      "id": "ad723c08",
       "kind": "arm",
       "variant": "std.bool.false",
       "binds": [],
       "results": [],
-      "body": "1cbbec11"
+      "body": "1ce1ede5"
     },
-    "50bc6df1": {
-      "id": "50bc6df1",
+    "02790ec1": {
+      "id": "02790ec1",
       "kind": "match",
-      "scrutinee": "44fa71ed",
+      "scrutinee": "7a26cf84",
       "arms": [
-        "865b4ce3",
-        "aafaedf0"
+        "e293c335",
+        "ad723c08"
       ],
       "otherwise": null
     },
-    "72df80ef": {
-      "id": "72df80ef",
+    "a787de25": {
+      "id": "a787de25",
       "kind": "lambda",
       "params": [
-        "097b9e50"
+        "e9115ad9"
       ],
-      "body": "50bc6df1"
+      "body": "02790ec1"
     },
-    "75ef4c22": {
-      "id": "75ef4c22",
+    "997cb90d": {
+      "id": "997cb90d",
       "kind": "call",
-      "fn": "72df80ef",
+      "fn": "a787de25",
       "args": [
-        "2bdcaa42"
+        "20c9ccf9"
       ]
     },
-    "a0ef3a88": {
-      "id": "a0ef3a88",
+    "60525de6": {
+      "id": "60525de6",
       "kind": "lambda",
       "params": [],
-      "body": "75ef4c22"
+      "body": "997cb90d"
     },
-    "658c36d3": {
-      "id": "658c36d3",
+    "b120d0cc": {
+      "id": "b120d0cc",
       "kind": "ref",
       "target": "builtin.all"
     },
-    "078e29b0": {
-      "id": "078e29b0",
+    "2864586e": {
+      "id": "2864586e",
       "kind": "call",
-      "fn": "658c36d3",
+      "fn": "b120d0cc",
       "args": [
-        "a0ef3a88"
+        "60525de6"
       ]
     },
-    "6e96076f": {
-      "id": "6e96076f",
+    "1c86efdf": {
+      "id": "1c86efdf",
       "kind": "lambda",
       "params": [
-        "39aaac4a",
-        "901e5a58"
+        "5cadfc46",
+        "7d393cf0"
       ],
-      "body": "078e29b0"
+      "body": "2864586e"
     },
-    "444d6de3": {
-      "id": "444d6de3",
+    "4af9f250": {
+      "id": "4af9f250",
       "kind": "def",
-      "body": "41a82243"
+      "body": "a6250d56"
     },
-    "be240ed1": {
-      "id": "be240ed1",
+    "7190d446": {
+      "id": "7190d446",
       "kind": "binder"
     },
-    "83e935be": {
-      "id": "83e935be",
+    "bfc4eebf": {
+      "id": "bfc4eebf",
       "kind": "ref",
-      "target": "be240ed1"
+      "target": "7190d446"
     },
-    "f26b2c6b": {
-      "id": "f26b2c6b",
+    "4e5fbbc6": {
+      "id": "4e5fbbc6",
       "kind": "lit",
       "value": ""
     },
-    "4bcf1600": {
-      "id": "4bcf1600",
+    "0b656680": {
+      "id": "0b656680",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "f26b2c6b"
+      "body": "4e5fbbc6"
     },
-    "c24c61e0": {
-      "id": "c24c61e0",
+    "53a2fd48": {
+      "id": "53a2fd48",
       "kind": "binder"
     },
-    "a91f61a1": {
-      "id": "a91f61a1",
+    "fe52a2a7": {
+      "id": "fe52a2a7",
       "kind": "binder"
     },
-    "cc8b3f73": {
-      "id": "cc8b3f73",
+    "c9dc08bd": {
+      "id": "c9dc08bd",
       "kind": "binder"
     },
-    "15c0da16": {
-      "id": "15c0da16",
+    "4f24e2f0": {
+      "id": "4f24e2f0",
       "kind": "ref",
       "target": "builtin.show"
     },
-    "3db0e4e1": {
-      "id": "3db0e4e1",
+    "65106ac6": {
+      "id": "65106ac6",
       "kind": "ref",
-      "target": "c24c61e0"
+      "target": "53a2fd48"
     },
-    "a899ef69": {
-      "id": "a899ef69",
+    "c8a07731": {
+      "id": "c8a07731",
       "kind": "call",
-      "fn": "15c0da16",
+      "fn": "4f24e2f0",
       "args": [
-        "3db0e4e1"
+        "65106ac6"
       ]
     },
-    "9f991a87": {
-      "id": "9f991a87",
+    "22ecd806": {
+      "id": "22ecd806",
       "kind": "lit",
       "value": " "
     },
-    "70be3c09": {
-      "id": "70be3c09",
+    "48d1aa99": {
+      "id": "48d1aa99",
       "kind": "ref",
       "target": "builtin.concat"
     },
-    "d3dcb3c8": {
-      "id": "d3dcb3c8",
+    "50dcf584": {
+      "id": "50dcf584",
       "kind": "call",
-      "fn": "70be3c09",
+      "fn": "48d1aa99",
       "args": [
-        "a899ef69",
-        "9f991a87"
+        "c8a07731",
+        "22ecd806"
       ]
     },
-    "204273ef": {
-      "id": "204273ef",
+    "a5421320": {
+      "id": "a5421320",
       "kind": "ref",
       "target": "builtin.concat"
     },
-    "d8d6c226": {
-      "id": "d8d6c226",
+    "2f8e7902": {
+      "id": "2f8e7902",
       "kind": "ref",
-      "target": "cc8b3f73"
+      "target": "c9dc08bd"
     },
-    "d1dd6239": {
-      "id": "d1dd6239",
+    "ce9b1a5f": {
+      "id": "ce9b1a5f",
       "kind": "call",
-      "fn": "204273ef",
+      "fn": "a5421320",
       "args": [
-        "d3dcb3c8",
-        "d8d6c226"
+        "50dcf584",
+        "2f8e7902"
       ]
     },
-    "6b84865f": {
-      "id": "6b84865f",
+    "e49cec95": {
+      "id": "e49cec95",
       "kind": "ref",
-      "target": "a91f61a1"
+      "target": "fe52a2a7"
     },
-    "75475fc7": {
-      "id": "75475fc7",
+    "da7316b8": {
+      "id": "da7316b8",
       "kind": "ref",
       "target": "builtin.show"
     },
-    "b4466083": {
-      "id": "b4466083",
+    "fb0f9484": {
+      "id": "fb0f9484",
       "kind": "ref",
-      "target": "c24c61e0"
+      "target": "53a2fd48"
     },
-    "e742db62": {
-      "id": "e742db62",
+    "e8fa69e7": {
+      "id": "e8fa69e7",
       "kind": "call",
-      "fn": "75475fc7",
+      "fn": "da7316b8",
       "args": [
-        "b4466083"
+        "fb0f9484"
       ]
     },
-    "3388b09a": {
-      "id": "3388b09a",
+    "3f5122c1": {
+      "id": "3f5122c1",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "e742db62"
+      "body": "e8fa69e7"
     },
-    "772e48ab": {
-      "id": "772e48ab",
+    "3ea69d08": {
+      "id": "3ea69d08",
+      "kind": "match",
+      "scrutinee": "e49cec95",
+      "arms": [
+        "3f5122c1"
+      ],
+      "otherwise": "ce9b1a5f"
+    },
+    "b4adfba1": {
+      "id": "b4adfba1",
       "kind": "arm",
       "variant": "std.list.cons",
       "binds": [
-        "c24c61e0",
-        "a91f61a1"
+        "53a2fd48",
+        "fe52a2a7"
       ],
       "results": [
         null,
-        "cc8b3f73"
+        "c9dc08bd"
       ],
-      "body": "28216732"
+      "body": "3ea69d08"
     },
-    "235bc055": {
-      "id": "235bc055",
-      "kind": "fold",
-      "scrutinee": "83e935be",
-      "arms": [
-        "4bcf1600",
-        "772e48ab"
-      ]
-    },
-    "41a82243": {
-      "id": "41a82243",
+    "a6250d56": {
+      "id": "a6250d56",
       "kind": "lambda",
       "params": [
-        "be240ed1"
+        "7190d446"
       ],
-      "body": "235bc055"
+      "body": "74530485"
     },
-    "e7471ce2": {
-      "id": "e7471ce2",
+    "2e6aff65": {
+      "id": "2e6aff65",
       "kind": "def",
-      "body": "838d245b"
+      "body": "c511820b"
     },
-    "eeb05452": {
-      "id": "eeb05452",
+    "23736ed0": {
+      "id": "23736ed0",
       "kind": "binder"
     },
-    "d03fc23f": {
-      "id": "d03fc23f",
+    "4a7acbcc": {
+      "id": "4a7acbcc",
       "kind": "binder"
     },
-    "51b9a2dd": {
-      "id": "51b9a2dd",
+    "3c9221af": {
+      "id": "3c9221af",
       "kind": "ref",
-      "target": "d03fc23f"
+      "target": "4a7acbcc"
     },
-    "8f72378f": {
-      "id": "8f72378f",
+    "4e74c9a8": {
+      "id": "4e74c9a8",
+      "kind": "binder"
+    },
+    "9089a403": {
+      "id": "9089a403",
       "kind": "ref",
       "target": "std.bool.true"
     },
-    "f4eadc88": {
-      "id": "f4eadc88",
+    "588c580a": {
+      "id": "588c580a",
       "kind": "lambda",
       "params": [
-        "97870268"
+        "4e74c9a8"
       ],
-      "body": "8f72378f"
+      "body": "9089a403"
     },
-    "880d48f8": {
-      "id": "880d48f8",
+    "f91c247d": {
+      "id": "f91c247d",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "f4eadc88"
+      "body": "588c580a"
     },
-    "f96f8faa": {
-      "id": "f96f8faa",
+    "d0d6e129": {
+      "id": "d0d6e129",
       "kind": "binder"
     },
-    "ce9d97e8": {
-      "id": "ce9d97e8",
+    "62721a2b": {
+      "id": "62721a2b",
       "kind": "binder"
     },
-    "230457ef": {
-      "id": "230457ef",
+    "c7072903": {
+      "id": "c7072903",
       "kind": "binder"
     },
-    "25f278a0": {
-      "id": "25f278a0",
+    "458c4ad6": {
+      "id": "458c4ad6",
       "kind": "binder"
     },
-    "000222a9": {
-      "id": "000222a9",
+    "e65ab60a": {
+      "id": "e65ab60a",
       "kind": "ref",
       "target": "builtin.equal"
     },
-    "eff718df": {
-      "id": "eff718df",
+    "084be20f": {
+      "id": "084be20f",
       "kind": "ref",
-      "target": "f96f8faa"
+      "target": "d0d6e129"
     },
-    "23bc44e4": {
-      "id": "23bc44e4",
+    "3e36e94e": {
+      "id": "3e36e94e",
       "kind": "ref",
-      "target": "eeb05452"
+      "target": "23736ed0"
     },
-    "1e89147d": {
-      "id": "1e89147d",
-      "kind": "call",
-      "fn": "000222a9",
-      "args": [
-        "eff718df",
-        "23bc44e4"
-      ]
-    },
-    "b14974bf": {
-      "id": "b14974bf",
+    "bdda6de5": {
+      "id": "bdda6de5",
       "kind": "ref",
       "target": "builtin.not"
     },
-    "8e10f648": {
-      "id": "8e10f648",
+    "009532cc": {
+      "id": "009532cc",
       "kind": "call",
-      "fn": "b14974bf",
+      "fn": "bdda6de5",
       "args": [
-        "1e89147d"
+        "80560874"
       ]
     },
-    "e74eabd2": {
-      "id": "e74eabd2",
+    "caa1b795": {
+      "id": "caa1b795",
       "kind": "ref",
       "target": "builtin.sub"
     },
-    "b20789ad": {
-      "id": "b20789ad",
+    "09f640d4": {
+      "id": "09f640d4",
       "kind": "ref",
-      "target": "f96f8faa"
+      "target": "d0d6e129"
     },
-    "625d49c7": {
-      "id": "625d49c7",
+    "cc0a2210": {
+      "id": "cc0a2210",
       "kind": "ref",
-      "target": "eeb05452"
+      "target": "23736ed0"
     },
-    "3d4aa696": {
-      "id": "3d4aa696",
+    "046ddfcc": {
+      "id": "046ddfcc",
       "kind": "call",
-      "fn": "e74eabd2",
+      "fn": "caa1b795",
       "args": [
-        "b20789ad",
-        "625d49c7"
+        "09f640d4",
+        "cc0a2210"
       ]
     },
-    "5f94ad64": {
-      "id": "5f94ad64",
+    "1076915c": {
+      "id": "1076915c",
       "kind": "ref",
       "target": "builtin.abs"
     },
-    "159d26ea": {
-      "id": "159d26ea",
+    "0607aa9e": {
+      "id": "0607aa9e",
       "kind": "call",
-      "fn": "5f94ad64",
+      "fn": "1076915c",
       "args": [
-        "3d4aa696"
+        "046ddfcc"
       ]
     },
-    "c083fe48": {
-      "id": "c083fe48",
+    "0de75bd4": {
+      "id": "0de75bd4",
       "kind": "ref",
       "target": "builtin.equal"
     },
-    "cc1bd7a1": {
-      "id": "cc1bd7a1",
+    "61f1abca": {
+      "id": "61f1abca",
       "kind": "ref",
-      "target": "25f278a0"
+      "target": "458c4ad6"
     },
-    "b1816327": {
-      "id": "b1816327",
+    "6d6f8d63": {
+      "id": "6d6f8d63",
       "kind": "call",
-      "fn": "c083fe48",
+      "fn": "0de75bd4",
       "args": [
-        "159d26ea",
-        "cc1bd7a1"
+        "0607aa9e",
+        "61f1abca"
       ]
     },
-    "97791cd6": {
-      "id": "97791cd6",
+    "f7048ca3": {
+      "id": "f7048ca3",
       "kind": "ref",
       "target": "builtin.not"
     },
-    "6c41b343": {
-      "id": "6c41b343",
+    "2619050e": {
+      "id": "2619050e",
       "kind": "call",
-      "fn": "97791cd6",
+      "fn": "f7048ca3",
       "args": [
-        "b1816327"
+        "6d6f8d63"
       ]
     },
-    "df3a4569": {
-      "id": "df3a4569",
+    "fa1cf434": {
+      "id": "fa1cf434",
       "kind": "ref",
       "target": "builtin.and"
     },
-    "e0e07b23": {
-      "id": "e0e07b23",
+    "3fac98a5": {
+      "id": "3fac98a5",
       "kind": "call",
-      "fn": "df3a4569",
+      "fn": "fa1cf434",
       "args": [
-        "8e10f648",
-        "6c41b343"
+        "009532cc",
+        "2619050e"
       ]
     },
-    "373ee5ae": {
-      "id": "373ee5ae",
+    "c7ba3911": {
+      "id": "c7ba3911",
       "kind": "lit",
       "value": 1
     },
-    "e94948dd": {
-      "id": "e94948dd",
+    "1f8c369c": {
+      "id": "1f8c369c",
       "kind": "ref",
       "target": "builtin.add"
     },
-    "ec62ce97": {
-      "id": "ec62ce97",
+    "28f4608c": {
+      "id": "28f4608c",
       "kind": "ref",
-      "target": "25f278a0"
+      "target": "458c4ad6"
     },
-    "0934537e": {
-      "id": "0934537e",
+    "b85eecdb": {
+      "id": "b85eecdb",
       "kind": "call",
-      "fn": "e94948dd",
+      "fn": "1f8c369c",
       "args": [
-        "ec62ce97",
-        "373ee5ae"
+        "28f4608c",
+        "c7ba3911"
       ]
     },
-    "40b90a9d": {
-      "id": "40b90a9d",
+    "9ba9c7e8": {
+      "id": "9ba9c7e8",
       "kind": "ref",
-      "target": "230457ef"
+      "target": "c7072903"
     },
-    "08a00bf4": {
-      "id": "08a00bf4",
+    "126f6bc5": {
+      "id": "126f6bc5",
       "kind": "call",
-      "fn": "40b90a9d",
+      "fn": "9ba9c7e8",
       "args": [
-        "0934537e"
+        "b85eecdb"
       ]
     },
-    "fda4ef99": {
-      "id": "fda4ef99",
+    "e4c59f66": {
+      "id": "e4c59f66",
       "kind": "ref",
       "target": "builtin.and"
     },
-    "5c3c146e": {
-      "id": "5c3c146e",
+    "87bb935b": {
+      "id": "87bb935b",
       "kind": "call",
-      "fn": "fda4ef99",
+      "fn": "e4c59f66",
       "args": [
-        "e0e07b23",
-        "08a00bf4"
+        "3fac98a5",
+        "126f6bc5"
       ]
     },
-    "3b463353": {
-      "id": "3b463353",
+    "854e2829": {
+      "id": "854e2829",
       "kind": "lambda",
       "params": [
-        "25f278a0"
+        "458c4ad6"
       ],
-      "body": "5c3c146e"
+      "body": "87bb935b"
     },
-    "40597f27": {
-      "id": "40597f27",
+    "5b785cf9": {
+      "id": "5b785cf9",
       "kind": "arm",
       "variant": "std.list.cons",
       "binds": [
-        "f96f8faa",
-        "ce9d97e8"
+        "d0d6e129",
+        "62721a2b"
       ],
       "results": [
         null,
-        "230457ef"
+        "c7072903"
       ],
-      "body": "3b463353"
+      "body": "854e2829"
     },
-    "384f9e49": {
-      "id": "384f9e49",
+    "190c7b93": {
+      "id": "190c7b93",
       "kind": "fold",
-      "scrutinee": "51b9a2dd",
+      "scrutinee": "3c9221af",
       "arms": [
-        "880d48f8",
-        "40597f27"
+        "f91c247d",
+        "5b785cf9"
       ]
     },
-    "84cd7afc": {
-      "id": "84cd7afc",
+    "b5d246fb": {
+      "id": "b5d246fb",
       "kind": "lit",
       "value": 1
     },
-    "0e2328c5": {
-      "id": "0e2328c5",
+    "c0ca8964": {
+      "id": "c0ca8964",
       "kind": "call",
-      "fn": "384f9e49",
+      "fn": "190c7b93",
       "args": [
-        "84cd7afc"
+        "b5d246fb"
       ]
     },
-    "838d245b": {
-      "id": "838d245b",
+    "c511820b": {
+      "id": "c511820b",
       "kind": "lambda",
       "params": [
-        "eeb05452",
-        "d03fc23f"
+        "23736ed0",
+        "4a7acbcc"
       ],
-      "body": "0e2328c5"
+      "body": "c0ca8964"
     },
-    "686288ea": {
-      "id": "686288ea",
+    "462acc24": {
+      "id": "462acc24",
       "kind": "def",
-      "body": "277f4158"
+      "body": "c600c1fa"
     },
-    "1781c86e": {
-      "id": "1781c86e",
+    "bf053b00": {
+      "id": "bf053b00",
       "kind": "binder"
     },
-    "c0e41af4": {
-      "id": "c0e41af4",
+    "2096f207": {
+      "id": "2096f207",
       "kind": "ref",
       "target": "builtin.range"
     },
-    "c905cf4c": {
-      "id": "c905cf4c",
+    "69bfe358": {
+      "id": "69bfe358",
       "kind": "ref",
-      "target": "1781c86e"
+      "target": "bf053b00"
     },
-    "54dddcd8": {
-      "id": "54dddcd8",
+    "8db05eef": {
+      "id": "8db05eef",
       "kind": "call",
-      "fn": "c0e41af4",
+      "fn": "2096f207",
       "args": [
-        "c905cf4c"
+        "69bfe358"
       ]
     },
-    "f30316a9": {
-      "id": "f30316a9",
+    "a56e9526": {
+      "id": "a56e9526",
       "kind": "ref",
       "target": "std.list.nil"
     },
-    "51fb905c": {
-      "id": "51fb905c",
+    "b59a38ac": {
+      "id": "b59a38ac",
       "kind": "arm",
       "variant": "std.list.nil",
       "binds": [],
       "results": [],
-      "body": "f30316a9"
+      "body": "a56e9526"
     },
-    "5a837065": {
-      "id": "5a837065",
+    "e1c63431": {
+      "id": "e1c63431",
       "kind": "binder"
     },
-    "0fb04dbf": {
-      "id": "0fb04dbf",
+    "ee4a5211": {
+      "id": "ee4a5211",
       "kind": "binder"
     },
-    "8b5fd72b": {
-      "id": "8b5fd72b",
+    "7857c9b6": {
+      "id": "7857c9b6",
       "kind": "binder"
     },
-    "d6fef4b3": {
-      "id": "d6fef4b3",
+    "1e9e5896": {
+      "id": "1e9e5896",
       "kind": "ref",
       "target": "builtin.range"
     },
-    "d09d8e36": {
-      "id": "d09d8e36",
+    "ededd7d0": {
+      "id": "ededd7d0",
       "kind": "ref",
-      "target": "1781c86e"
+      "target": "bf053b00"
     },
-    "d3be357b": {
-      "id": "d3be357b",
+    "69d125af": {
+      "id": "69d125af",
       "kind": "call",
-      "fn": "d6fef4b3",
+      "fn": "1e9e5896",
       "args": [
-        "d09d8e36"
+        "ededd7d0"
       ]
     },
-    "d4f2ce74": {
-      "id": "d4f2ce74",
-      "kind": "ref",
-      "target": "builtin.oneOf"
-    },
-    "e4364563": {
-      "id": "e4364563",
+    "a6ac690e": {
+      "id": "a6ac690e",
       "kind": "call",
-      "fn": "d4f2ce74",
+      "fn": "54426099",
       "args": [
-        "d3be357b"
+        "69d125af"
       ]
     },
-    "f5eadf7c": {
-      "id": "f5eadf7c",
+    "269fa18e": {
+      "id": "269fa18e",
       "kind": "binder"
     },
-    "8e249317": {
-      "id": "8e249317",
+    "28690c91": {
+      "id": "28690c91",
       "kind": "ref",
-      "target": "e7471ce2"
+      "target": "2e6aff65"
     },
-    "40273a87": {
-      "id": "40273a87",
+    "6561ae76": {
+      "id": "6561ae76",
       "kind": "ref",
-      "target": "f5eadf7c"
+      "target": "269fa18e"
     },
-    "deb6f2c1": {
-      "id": "deb6f2c1",
+    "9960baf4": {
+      "id": "9960baf4",
       "kind": "ref",
-      "target": "8b5fd72b"
+      "target": "7857c9b6"
     },
-    "82e55933": {
-      "id": "82e55933",
+    "911d9bd1": {
+      "id": "911d9bd1",
       "kind": "call",
-      "fn": "8e249317",
+      "fn": "28690c91",
       "args": [
-        "40273a87",
-        "deb6f2c1"
+        "6561ae76",
+        "9960baf4"
       ]
     },
-    "fce90d3f": {
-      "id": "fce90d3f",
+    "e644d079": {
+      "id": "e644d079",
       "kind": "ref",
       "target": "std.list.cons"
     },
-    "3009d84a": {
-      "id": "3009d84a",
+    "c1bade10": {
+      "id": "c1bade10",
       "kind": "ref",
-      "target": "f5eadf7c"
+      "target": "269fa18e"
     },
-    "f56ab0e0": {
-      "id": "f56ab0e0",
+    "cdee544d": {
+      "id": "cdee544d",
       "kind": "ref",
-      "target": "8b5fd72b"
+      "target": "7857c9b6"
     },
-    "455ef447": {
-      "id": "455ef447",
+    "1ff3e18b": {
+      "id": "1ff3e18b",
       "kind": "call",
-      "fn": "fce90d3f",
+      "fn": "e644d079",
       "args": [
-        "3009d84a",
-        "f56ab0e0"
+        "c1bade10",
+        "cdee544d"
       ]
     },
-    "bae192d3": {
-      "id": "bae192d3",
+    "c1cf2738": {
+      "id": "c1cf2738",
       "kind": "ref",
       "target": "builtin.fail"
     },
-    "5726fa98": {
-      "id": "5726fa98",
+    "d7a407b0": {
+      "id": "d7a407b0",
       "kind": "call",
-      "fn": "bae192d3",
+      "fn": "c1cf2738",
       "args": []
     },
-    "e3078384": {
-      "id": "e3078384",
+    "5c2583cb": {
+      "id": "5c2583cb",
       "kind": "arm",
       "variant": "std.bool.true",
       "binds": [],
       "results": [],
-      "body": "455ef447"
+      "body": "1ff3e18b"
     },
-    "a2f7ca82": {
-      "id": "a2f7ca82",
+    "b06fbf63": {
+      "id": "b06fbf63",
       "kind": "arm",
       "variant": "std.bool.false",
       "binds": [],
       "results": [],
-      "body": "5726fa98"
+      "body": "d7a407b0"
     },
-    "fc8e595b": {
-      "id": "fc8e595b",
+    "7f93fa03": {
+      "id": "7f93fa03",
       "kind": "match",
-      "scrutinee": "82e55933",
+      "scrutinee": "911d9bd1",
       "arms": [
-        "e3078384",
-        "a2f7ca82"
+        "5c2583cb",
+        "b06fbf63"
       ],
       "otherwise": null
     },
-    "374dc28b": {
-      "id": "374dc28b",
+    "80ef0da9": {
+      "id": "80ef0da9",
       "kind": "lambda",
       "params": [
-        "f5eadf7c"
+        "269fa18e"
       ],
-      "body": "fc8e595b"
+      "body": "7f93fa03"
     },
-    "7a29218c": {
-      "id": "7a29218c",
+    "a63188b7": {
+      "id": "a63188b7",
       "kind": "call",
-      "fn": "374dc28b",
+      "fn": "80ef0da9",
       "args": [
-        "e4364563"
+        "a6ac690e"
       ]
     },
-    "51fbe22d": {
-      "id": "51fbe22d",
+    "5a1e997c": {
+      "id": "5a1e997c",
       "kind": "arm",
       "variant": "std.list.cons",
       "binds": [
-        "5a837065",
-        "0fb04dbf"
+        "e1c63431",
+        "ee4a5211"
       ],
       "results": [
         null,
-        "8b5fd72b"
+        "7857c9b6"
       ],
-      "body": "7a29218c"
+      "body": "a63188b7"
     },
-    "5fdfe65d": {
-      "id": "5fdfe65d",
+    "bd431f1c": {
+      "id": "bd431f1c",
       "kind": "fold",
-      "scrutinee": "54dddcd8",
+      "scrutinee": "8db05eef",
       "arms": [
-        "51fb905c",
-        "51fbe22d"
+        "b59a38ac",
+        "5a1e997c"
       ]
     },
-    "277f4158": {
-      "id": "277f4158",
+    "c600c1fa": {
+      "id": "c600c1fa",
       "kind": "lambda",
       "params": [
-        "1781c86e"
+        "bf053b00"
       ],
-      "body": "5fdfe65d"
+      "body": "bd431f1c"
     },
-    "e83e1259": {
-      "id": "e83e1259",
+    "dac33e2c": {
+      "id": "dac33e2c",
       "kind": "def",
-      "body": "3c63bf8d"
+      "body": "6f5b4a5e"
     },
-    "4296c00c": {
-      "id": "4296c00c",
+    "e210dd5a": {
+      "id": "e210dd5a",
       "kind": "lit",
       "value": "first solution for 8: "
     },
-    "26d662d1": {
-      "id": "26d662d1",
+    "dde8fe54": {
+      "id": "dde8fe54",
       "kind": "lit",
       "value": 8
     },
-    "a17271ed": {
-      "id": "a17271ed",
-      "kind": "ref",
-      "target": "686288ea"
-    },
-    "9becb622": {
-      "id": "9becb622",
+    "9acb8bc0": {
+      "id": "9acb8bc0",
       "kind": "call",
-      "fn": "a17271ed",
+      "fn": "74756460",
       "args": [
-        "26d662d1"
+        "dde8fe54"
       ]
     },
-    "297c5414": {
-      "id": "297c5414",
+    "638c51b5": {
+      "id": "638c51b5",
       "kind": "lambda",
       "params": [],
-      "body": "9becb622"
+      "body": "9acb8bc0"
     },
-    "d26a3881": {
-      "id": "d26a3881",
+    "d64b7dab": {
+      "id": "d64b7dab",
       "kind": "ref",
       "target": "std.list.nil"
     },
-    "2ae21280": {
-      "id": "2ae21280",
-      "kind": "lambda",
-      "params": [],
-      "body": "d26a3881"
-    },
-    "99dcb072": {
-      "id": "99dcb072",
+    "9f6f4491": {
+      "id": "9f6f4491",
       "kind": "ref",
       "target": "builtin.first"
     },
-    "384357e9": {
-      "id": "384357e9",
+    "43e24287": {
+      "id": "43e24287",
       "kind": "call",
-      "fn": "99dcb072",
+      "fn": "9f6f4491",
       "args": [
-        "297c5414",
-        "2ae21280"
+        "638c51b5",
+        "11243526"
       ]
     },
-    "fc968e1d": {
-      "id": "fc968e1d",
+    "00a2cb01": {
+      "id": "00a2cb01",
       "kind": "ref",
-      "target": "444d6de3"
+      "target": "4af9f250"
     },
-    "74f62f7f": {
-      "id": "74f62f7f",
+    "1ccffff3": {
+      "id": "1ccffff3",
       "kind": "call",
-      "fn": "fc968e1d",
+      "fn": "00a2cb01",
       "args": [
-        "384357e9"
+        "43e24287"
       ]
     },
-    "364a5bae": {
-      "id": "364a5bae",
+    "b828909a": {
+      "id": "b828909a",
       "kind": "ref",
       "target": "builtin.concat"
     },
-    "1361fcb5": {
-      "id": "1361fcb5",
+    "256e1a58": {
+      "id": "256e1a58",
       "kind": "call",
-      "fn": "364a5bae",
+      "fn": "b828909a",
       "args": [
-        "4296c00c",
-        "74f62f7f"
+        "e210dd5a",
+        "1ccffff3"
       ]
     },
-    "b583ab17": {
-      "id": "b583ab17",
+    "a85a85f8": {
+      "id": "a85a85f8",
       "kind": "ref",
       "target": "builtin.print"
     },
-    "2035bcbd": {
-      "id": "2035bcbd",
+    "30fb4090": {
+      "id": "30fb4090",
       "kind": "call",
-      "fn": "b583ab17",
+      "fn": "a85a85f8",
       "args": [
-        "1361fcb5"
+        "256e1a58"
       ]
     },
-    "092850a4": {
-      "id": "092850a4",
+    "fda332e9": {
+      "id": "fda332e9",
       "kind": "lit",
       "value": "solutions for 8: "
     },
-    "b415632d": {
-      "id": "b415632d",
+    "cccd7e5a": {
+      "id": "cccd7e5a",
       "kind": "lit",
       "value": 8
     },
-    "f999d740": {
-      "id": "f999d740",
+    "b1e17259": {
+      "id": "b1e17259",
       "kind": "ref",
-      "target": "686288ea"
+      "target": "462acc24"
     },
-    "5bffec57": {
-      "id": "5bffec57",
+    "3b02ca61": {
+      "id": "3b02ca61",
       "kind": "call",
-      "fn": "f999d740",
+      "fn": "b1e17259",
       "args": [
-        "b415632d"
+        "cccd7e5a"
       ]
     },
-    "5994263f": {
-      "id": "5994263f",
+    "f63d009d": {
+      "id": "f63d009d",
       "kind": "lambda",
       "params": [],
-      "body": "5bffec57"
+      "body": "3b02ca61"
     },
-    "ebd71a68": {
-      "id": "ebd71a68",
+    "7b985ffa": {
+      "id": "7b985ffa",
       "kind": "ref",
       "target": "builtin.count"
     },
-    "921d7587": {
-      "id": "921d7587",
+    "886af1da": {
+      "id": "886af1da",
       "kind": "call",
-      "fn": "ebd71a68",
+      "fn": "7b985ffa",
       "args": [
-        "5994263f"
+        "f63d009d"
       ]
     },
-    "a1341600": {
-      "id": "a1341600",
+    "c9f242bb": {
+      "id": "c9f242bb",
       "kind": "ref",
       "target": "builtin.show"
     },
-    "c3de7ccf": {
-      "id": "c3de7ccf",
+    "0d930494": {
+      "id": "0d930494",
       "kind": "call",
-      "fn": "a1341600",
+      "fn": "c9f242bb",
       "args": [
-        "921d7587"
+        "886af1da"
       ]
     },
-    "13f0d67c": {
-      "id": "13f0d67c",
+    "2af7c97b": {
+      "id": "2af7c97b",
       "kind": "ref",
       "target": "builtin.concat"
     },
-    "2d6afe0e": {
-      "id": "2d6afe0e",
+    "177fbd5c": {
+      "id": "177fbd5c",
       "kind": "call",
-      "fn": "13f0d67c",
+      "fn": "2af7c97b",
       "args": [
-        "092850a4",
-        "c3de7ccf"
+        "fda332e9",
+        "0d930494"
       ]
     },
-    "5fa9fd24": {
-      "id": "5fa9fd24",
+    "d124ff8c": {
+      "id": "d124ff8c",
       "kind": "ref",
       "target": "builtin.print"
     },
-    "65e2b58d": {
-      "id": "65e2b58d",
+    "d8f04145": {
+      "id": "d8f04145",
       "kind": "call",
-      "fn": "5fa9fd24",
+      "fn": "d124ff8c",
       "args": [
-        "2d6afe0e"
+        "177fbd5c"
       ]
     },
-    "38a5ac8b": {
-      "id": "38a5ac8b",
+    "0b276e64": {
+      "id": "0b276e64",
       "kind": "lit",
       "value": "all solutions for 6:"
     },
-    "2e6918de": {
-      "id": "2e6918de",
+    "0185418e": {
+      "id": "0185418e",
       "kind": "ref",
       "target": "builtin.print"
     },
-    "dd1f940a": {
-      "id": "dd1f940a",
+    "e82f52a2": {
+      "id": "e82f52a2",
       "kind": "call",
-      "fn": "2e6918de",
+      "fn": "0185418e",
       "args": [
-        "38a5ac8b"
+        "0b276e64"
       ]
     },
-    "623e4b7a": {
-      "id": "623e4b7a",
+    "ad58c5db": {
+      "id": "ad58c5db",
       "kind": "lit",
       "value": 6
     },
-    "cc0852f9": {
-      "id": "cc0852f9",
+    "0875b3dd": {
+      "id": "0875b3dd",
       "kind": "ref",
-      "target": "686288ea"
+      "target": "462acc24"
     },
-    "4a03cb12": {
-      "id": "4a03cb12",
+    "d2b4c94e": {
+      "id": "d2b4c94e",
       "kind": "call",
-      "fn": "cc0852f9",
+      "fn": "0875b3dd",
       "args": [
-        "623e4b7a"
+        "ad58c5db"
       ]
     },
-    "50a96898": {
-      "id": "50a96898",
+    "5d8f7838": {
+      "id": "5d8f7838",
       "kind": "lambda",
       "params": [],
-      "body": "4a03cb12"
+      "body": "d2b4c94e"
     },
-    "b564f595": {
-      "id": "b564f595",
+    "f557d8bd": {
+      "id": "f557d8bd",
       "kind": "ref",
       "target": "builtin.all"
     },
-    "236028cb": {
-      "id": "236028cb",
+    "c99c219f": {
+      "id": "c99c219f",
       "kind": "call",
-      "fn": "b564f595",
+      "fn": "f557d8bd",
       "args": [
-        "50a96898"
+        "5d8f7838"
       ]
     },
-    "f4bb7cb8": {
-      "id": "f4bb7cb8",
+    "3a84b172": {
+      "id": "3a84b172",
       "kind": "binder"
     },
-    "379adfff": {
-      "id": "379adfff",
+    "a0e4852d": {
+      "id": "a0e4852d",
       "kind": "lit",
       "value": "  "
     },
-    "f22c02bd": {
-      "id": "f22c02bd",
+    "0db842cd": {
+      "id": "0db842cd",
       "kind": "ref",
-      "target": "444d6de3"
+      "target": "4af9f250"
     },
-    "133ab97a": {
-      "id": "133ab97a",
+    "f51c6384": {
+      "id": "f51c6384",
       "kind": "ref",
-      "target": "f4bb7cb8"
+      "target": "3a84b172"
     },
-    "548958be": {
-      "id": "548958be",
+    "4220beef": {
+      "id": "4220beef",
       "kind": "call",
-      "fn": "f22c02bd",
+      "fn": "0db842cd",
       "args": [
-        "133ab97a"
+        "f51c6384"
       ]
     },
-    "a9a91c16": {
-      "id": "a9a91c16",
+    "d248686d": {
+      "id": "d248686d",
       "kind": "ref",
       "target": "builtin.concat"
     },
-    "1e8a0118": {
-      "id": "1e8a0118",
+    "4d127012": {
+      "id": "4d127012",
       "kind": "call",
-      "fn": "a9a91c16",
+      "fn": "d248686d",
       "args": [
-        "379adfff",
-        "548958be"
+        "a0e4852d",
+        "4220beef"
       ]
     },
-    "1b87cd5a": {
-      "id": "1b87cd5a",
-      "kind": "call",
-      "fn": "13670531",
-      "args": [
-        "1e8a0118"
-      ]
-    },
-    "bd294ec9": {
-      "id": "bd294ec9",
-      "kind": "lambda",
-      "params": [
-        "f4bb7cb8"
-      ],
-      "body": "1b87cd5a"
-    },
-    "f58e75dc": {
-      "id": "f58e75dc",
-      "kind": "ref",
-      "target": "d67b2b7c"
-    },
-    "ff6f6be8": {
-      "id": "ff6f6be8",
-      "kind": "call",
-      "fn": "f58e75dc",
-      "args": [
-        "236028cb",
-        "bd294ec9"
-      ]
-    },
-    "e1f5d770": {
-      "id": "e1f5d770",
-      "kind": "lit",
-      "value": "even numbers below 10: "
-    },
-    "7d92dbc4": {
-      "id": "7d92dbc4",
-      "kind": "lit",
-      "value": 10
-    },
-    "e9c8e9b0": {
-      "id": "e9c8e9b0",
-      "kind": "ref",
-      "target": "builtin.range"
-    },
-    "ab79ce61": {
-      "id": "ab79ce61",
-      "kind": "call",
-      "fn": "e9c8e9b0",
-      "args": [
-        "7d92dbc4"
-      ]
-    },
-    "9969f3d3": {
-      "id": "9969f3d3",
-      "kind": "binder"
-    },
-    "e678ccf5": {
-      "id": "e678ccf5",
-      "kind": "lit",
-      "value": 2
-    },
-    "bf8c0d7d": {
-      "id": "bf8c0d7d",
-      "kind": "ref",
-      "target": "builtin.mod"
-    },
-    "82a4d0f5": {
-      "id": "82a4d0f5",
-      "kind": "ref",
-      "target": "9969f3d3"
-    },
-    "cb131780": {
-      "id": "cb131780",
-      "kind": "call",
-      "fn": "bf8c0d7d",
-      "args": [
-        "82a4d0f5",
-        "e678ccf5"
-      ]
-    },
-    "2577ad3c": {
-      "id": "2577ad3c",
-      "kind": "lit",
-      "value": 0
-    },
-    "89938bc4": {
-      "id": "89938bc4",
-      "kind": "ref",
-      "target": "builtin.equal"
-    },
-    "1f9c1695": {
-      "id": "1f9c1695",
-      "kind": "call",
-      "fn": "89938bc4",
-      "args": [
-        "cb131780",
-        "2577ad3c"
-      ]
-    },
-    "e346ecbc": {
-      "id": "e346ecbc",
-      "kind": "lambda",
-      "params": [
-        "9969f3d3"
-      ],
-      "body": "1f9c1695"
-    },
-    "a5cfc84c": {
-      "id": "a5cfc84c",
-      "kind": "ref",
-      "target": "317736f4"
-    },
-    "c0603f29": {
-      "id": "c0603f29",
-      "kind": "call",
-      "fn": "a5cfc84c",
-      "args": [
-        "ab79ce61",
-        "e346ecbc"
-      ]
-    },
-    "faff5c3d": {
-      "id": "faff5c3d",
-      "kind": "ref",
-      "target": "444d6de3"
-    },
-    "9701d6a6": {
-      "id": "9701d6a6",
-      "kind": "call",
-      "fn": "faff5c3d",
-      "args": [
-        "c0603f29"
-      ]
-    },
-    "6c453eaa": {
-      "id": "6c453eaa",
-      "kind": "ref",
-      "target": "builtin.concat"
-    },
-    "39c92c00": {
-      "id": "39c92c00",
-      "kind": "call",
-      "fn": "6c453eaa",
-      "args": [
-        "e1f5d770",
-        "9701d6a6"
-      ]
-    },
-    "6abf3c7f": {
-      "id": "6abf3c7f",
+    "1e2584c6": {
+      "id": "1e2584c6",
       "kind": "ref",
       "target": "builtin.print"
     },
-    "dda9b729": {
-      "id": "dda9b729",
+    "2fc2a95e": {
+      "id": "2fc2a95e",
       "kind": "call",
-      "fn": "6abf3c7f",
+      "fn": "1e2584c6",
       "args": [
-        "39c92c00"
+        "4d127012"
       ]
     },
-    "8ed24ffb": {
-      "id": "8ed24ffb",
-      "kind": "binder"
-    },
-    "c662f1ab": {
-      "id": "c662f1ab",
+    "941c1d17": {
+      "id": "941c1d17",
       "kind": "lambda",
       "params": [
-        "8ed24ffb"
+        "3a84b172"
       ],
-      "body": "dda9b729"
+      "body": "2fc2a95e"
     },
-    "84a7aec6": {
-      "id": "84a7aec6",
+    "48bcd17f": {
+      "id": "48bcd17f",
+      "kind": "ref",
+      "target": "6a73b038"
+    },
+    "452d7e65": {
+      "id": "452d7e65",
       "kind": "call",
-      "fn": "c662f1ab",
+      "fn": "48bcd17f",
       "args": [
-        "ff6f6be8"
+        "c99c219f",
+        "941c1d17"
       ]
     },
-    "bf60012f": {
-      "id": "bf60012f",
+    "8b56878b": {
+      "id": "8b56878b",
+      "kind": "lit",
+      "value": "even numbers below 10: "
+    },
+    "2304fcc1": {
+      "id": "2304fcc1",
+      "kind": "lit",
+      "value": 10
+    },
+    "ff66da1e": {
+      "id": "ff66da1e",
+      "kind": "ref",
+      "target": "builtin.range"
+    },
+    "d6dcbde8": {
+      "id": "d6dcbde8",
+      "kind": "call",
+      "fn": "ff66da1e",
+      "args": [
+        "2304fcc1"
+      ]
+    },
+    "888acd88": {
+      "id": "888acd88",
       "kind": "binder"
     },
-    "67df1f78": {
-      "id": "67df1f78",
+    "5a7682fa": {
+      "id": "5a7682fa",
+      "kind": "lit",
+      "value": 2
+    },
+    "73c43726": {
+      "id": "73c43726",
+      "kind": "ref",
+      "target": "builtin.mod"
+    },
+    "cad4f14f": {
+      "id": "cad4f14f",
+      "kind": "ref",
+      "target": "888acd88"
+    },
+    "ce4e41b2": {
+      "id": "ce4e41b2",
+      "kind": "call",
+      "fn": "73c43726",
+      "args": [
+        "cad4f14f",
+        "5a7682fa"
+      ]
+    },
+    "306e1d6f": {
+      "id": "306e1d6f",
+      "kind": "lit",
+      "value": 0
+    },
+    "5f54040f": {
+      "id": "5f54040f",
+      "kind": "ref",
+      "target": "builtin.equal"
+    },
+    "6dcc59de": {
+      "id": "6dcc59de",
+      "kind": "call",
+      "fn": "5f54040f",
+      "args": [
+        "ce4e41b2",
+        "306e1d6f"
+      ]
+    },
+    "caceef62": {
+      "id": "caceef62",
       "kind": "lambda",
       "params": [
-        "bf60012f"
+        "888acd88"
       ],
-      "body": "84a7aec6"
+      "body": "6dcc59de"
     },
-    "92ecd02d": {
-      "id": "92ecd02d",
-      "kind": "binder"
+    "735d93e2": {
+      "id": "735d93e2",
+      "kind": "ref",
+      "target": "dd10e8f4"
     },
-    "0f2bc5a7": {
-      "id": "0f2bc5a7",
+    "716f9a54": {
+      "id": "716f9a54",
       "kind": "call",
-      "fn": "56743283",
+      "fn": "735d93e2",
       "args": [
-        "65e2b58d"
+        "d6dcbde8",
+        "caceef62"
       ]
     },
-    "bd048e5a": {
-      "id": "bd048e5a",
+    "8323cd6f": {
+      "id": "8323cd6f",
+      "kind": "ref",
+      "target": "4af9f250"
+    },
+    "2b5e8853": {
+      "id": "2b5e8853",
+      "kind": "call",
+      "fn": "8323cd6f",
+      "args": [
+        "716f9a54"
+      ]
+    },
+    "da6c307e": {
+      "id": "da6c307e",
+      "kind": "ref",
+      "target": "builtin.concat"
+    },
+    "b5e3ed20": {
+      "id": "b5e3ed20",
+      "kind": "call",
+      "fn": "da6c307e",
+      "args": [
+        "8b56878b",
+        "2b5e8853"
+      ]
+    },
+    "bd87e6c2": {
+      "id": "bd87e6c2",
+      "kind": "ref",
+      "target": "builtin.print"
+    },
+    "f1b098a9": {
+      "id": "f1b098a9",
+      "kind": "call",
+      "fn": "bd87e6c2",
+      "args": [
+        "b5e3ed20"
+      ]
+    },
+    "af224d94": {
+      "id": "af224d94",
       "kind": "binder"
     },
-    "0d804d2c": {
-      "id": "0d804d2c",
+    "3265be8e": {
+      "id": "3265be8e",
       "kind": "lambda",
       "params": [
-        "bd048e5a"
+        "af224d94"
       ],
-      "body": "0f2bc5a7"
+      "body": "f1b098a9"
     },
-    "09ae512b": {
-      "id": "09ae512b",
+    "7b5f5360": {
+      "id": "7b5f5360",
       "kind": "call",
-      "fn": "0d804d2c",
+      "fn": "3265be8e",
       "args": [
-        "2035bcbd"
+        "452d7e65"
       ]
     },
-    "3c63bf8d": {
-      "id": "3c63bf8d",
+    "fcf43c23": {
+      "id": "fcf43c23",
+      "kind": "binder"
+    },
+    "e512aabd": {
+      "id": "e512aabd",
+      "kind": "lambda",
+      "params": [
+        "fcf43c23"
+      ],
+      "body": "7b5f5360"
+    },
+    "df3d0441": {
+      "id": "df3d0441",
+      "kind": "call",
+      "fn": "e512aabd",
+      "args": [
+        "e82f52a2"
+      ]
+    },
+    "9c4dff55": {
+      "id": "9c4dff55",
+      "kind": "binder"
+    },
+    "cc94cf93": {
+      "id": "cc94cf93",
+      "kind": "lambda",
+      "params": [
+        "9c4dff55"
+      ],
+      "body": "df3d0441"
+    },
+    "a29ea7da": {
+      "id": "a29ea7da",
+      "kind": "call",
+      "fn": "cc94cf93",
+      "args": [
+        "d8f04145"
+      ]
+    },
+    "f6aafd35": {
+      "id": "f6aafd35",
+      "kind": "binder"
+    },
+    "94308f0e": {
+      "id": "94308f0e",
+      "kind": "lambda",
+      "params": [
+        "f6aafd35"
+      ],
+      "body": "a29ea7da"
+    },
+    "9d780da4": {
+      "id": "9d780da4",
+      "kind": "call",
+      "fn": "94308f0e",
+      "args": [
+        "30fb4090"
+      ]
+    },
+    "6f5b4a5e": {
+      "id": "6f5b4a5e",
       "kind": "lambda",
       "params": [],
-      "body": "09ae512b"
+      "body": "9d780da4"
     }
   },
   "defs": [
-    "d67b2b7c",
-    "71fca71e",
-    "317736f4",
-    "444d6de3",
-    "e7471ce2",
-    "686288ea",
-    "e83e1259"
+    "6a73b038",
+    "767afe64",
+    "dd10e8f4",
+    "4af9f250",
+    "2e6aff65",
+    "462acc24",
+    "dac33e2c"
   ]
 }

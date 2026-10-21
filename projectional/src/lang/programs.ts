@@ -5,6 +5,7 @@ import type { Id } from "../model.ts";
 import { B } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { CONS, FIRST, NIL, PAIR_V, S, SECOND } from "./std.ts";
+import { R } from "../relational.ts";
 
 // Loops without loops: list helpers every program here can use. `each` and
 // `map` recurse on the tail they took apart, so the checker sees they end;
@@ -242,4 +243,45 @@ export function algebra() {
   )))));
 
   return { code: k.code, names: k.names, type: E, defs: { ...lib, evaluate, derivative, constant, simplify, parenthesize: wrap, display, newton, root, samples, main } };
+}
+
+// ---------------------------------------------------------------- relations
+// Relations as functions with a direction picked at the use site. Whether a
+// direction is pure or a Choice is inferred from the solver's plan.
+
+export function relations() {
+  const k = new Lang();
+  const lib = library(k);
+  const pair = (a: Id, b: Id) => k.call(PAIR_V, a, b);
+  const showPair = (p: Id) => k.text(k.call(S.show, k.call(FIRST, p)), k.lit(", "), k.call(S.show, k.call(SECOND, p)));
+
+  // Linear: one answer, so no Choice in the type.
+  const split = k.def("split");
+  k.define(split, k.fn(["sum", "difference"], (c, d) => k.solve(R.sumDiff, { c, d }, { a: "a", b: "b" }, ({ a, b }) => pair(a, b))));
+
+  // Also linear, through the variadic sum atom: the missing addend.
+  const missing = k.def("missing addend");
+  k.define(missing, k.fn(["known", "total"], (a, t) => k.solve(R.sum, { a, total: t }, { b: "b" }, ({ b }) => b)));
+
+  // Polar has two branches (and k·2π): Choice.
+  const toPolar = k.def("to polar");
+  k.define(toPolar, k.fn(["x", "y"], (x, y) => k.solve(R.polar, { x, y }, { r: "length", θ: "angle" }, ({ r, θ }) => pair(r, θ))));
+
+  // An ordinary function, read backwards: x · x = y has two answers.
+  const square = k.def("square");
+  const sq = k.fn(["x"], (x) => k.call(B.mul, x, x));
+  k.define(square, sq);
+  const param = (k.code.nodes[sq] as { params: Id[] }).params[0];
+  const roots = k.def("square roots");
+  k.define(roots, k.fn(["y"], (y) => k.call(S.all, k.thunk(() => k.solve(square, { out: y }, { [param]: "x" }, ({ [param]: x }) => x)))));
+
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.text(k.lit("split(10, 4) = "), showPair(k.call(S.first, k.thunk(() => k.call(split, k.lit(10), k.lit(4))), k.thunk(() => pair(k.lit(0), k.lit(0))))))),
+    k.call(S.print, k.text(k.lit("missing addend(3, 10) = "), k.call(S.show, k.call(missing, k.lit(3), k.lit(10))))),
+    k.call(S.print, k.text(k.lit("to polar(0, 2), canonical = "), showPair(k.call(S.first, k.thunk(() => k.call(toPolar, k.lit(0), k.lit(2))), k.thunk(() => pair(k.lit(0), k.lit(0))))))),
+    k.call(S.print, k.text(k.lit("square roots(9) = "), k.call(lib.showNumbers, k.call(roots, k.lit(9))))),
+    k.call(S.print, k.text(k.lit("square roots(−1) = ["), k.call(lib.showNumbers, k.call(roots, k.lit(-1))), k.lit("]"))),
+  )));
+  return { code: k.code, names: k.names, defs: { split, missing, toPolar, square, roots, main } };
 }

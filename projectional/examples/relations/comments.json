@@ -1,0 +1,5 @@
+{
+  "67d9efab": "Linear elimination gives one answer, so the type has no Choice.",
+  "9f56b748": "Two branches for the angle and length (plus 2πk): the type says Choice, first picks the canonical one.",
+  "7ce57c87": "square read backwards: x · x = y. all collects both roots, and none for a negative y."
+}

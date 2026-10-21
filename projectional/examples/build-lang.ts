@@ -5,9 +5,14 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { root, save } from "../src/io.ts";
-import { algebra, queens } from "../src/lang/programs.ts";
+import { algebra, queens, relations } from "../src/lang/programs.ts";
 
 const comments: Record<string, Record<string, string>> = {
+  relations: {
+    split: "Linear elimination gives one answer, so the type has no Choice.",
+    "to polar": "Two branches for the angle and length (plus 2πk): the type says Choice, first picks the canonical one.",
+    "square roots": "square read backwards: x · x = y. all collects both roots, and none for a negative y.",
+  },
   queens: {
     queens: "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
     safe: "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
@@ -22,7 +27,7 @@ const comments: Record<string, Record<string, string>> = {
   },
 };
 
-for (const [dir, build] of [["queens", queens], ["algebra", algebra]] as const) {
+for (const [dir, build] of [["queens", queens], ["algebra", algebra], ["relations", relations]] as const) {
   const p = build();
   const d = join(root, "examples", dir);
   mkdirSync(d, { recursive: true });
