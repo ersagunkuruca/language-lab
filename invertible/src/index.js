@@ -103,7 +103,12 @@ export function take(iterable, n) {
 //       with(extra) returns that direction. A caller that wants Choice here
 //       should treat the extra ports as parameters, not enumerate them.
 const PARTIAL = new Set(['div', 'sqrt', 'log', 'asin', 'acos', 'pow']);
-const partialIn = (e) => e.k === 'call' && (PARTIAL.has(e.f) || e.args.some(partialIn));
+const isConst = (e, ok) => e.k === 'num' && ok(e.v);
+// Division by a nonzero constant and whole non-negative powers can't fail.
+const partialOp = (e) => PARTIAL.has(e.f) &&
+  !(e.f === 'div' && isConst(e.args[1], (x) => x !== 0)) &&
+  !(e.f === 'pow' && isConst(e.args[1], (x) => Number.isInteger(x) && x >= 0));
+const partialIn = (e) => e.k === 'call' && (partialOp(e) || e.args.some(partialIn));
 
 export function direction(rel, known, opts = {}) {
   const a = analyze(rel, known, opts);
