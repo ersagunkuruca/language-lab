@@ -946,21 +946,27 @@ function solverPrinter(namer: Namer, p: Presentation) {
   return { expr: (e: SExpr) => show(e)[0], name: varName };
 }
 
-interface Step { kind: string; raw: { type: string; x?: string; xs?: string[]; eq?: { lhs: SExpr; rhs: SExpr }; eqs?: { lhs: SExpr; rhs: SExpr }[]; branches?: { expr: SExpr; params: string[]; guards: SExpr[] }[]; exprs?: Record<string, SExpr> } }
+type Eq = { lhs: SExpr; rhs: SExpr };
+interface RawStep { type: string; x?: string; xs?: string[]; eq?: Eq; eqs?: Eq[]; branches?: { expr: SExpr; params: string[]; guards: SExpr[] }[]; exprs?: Record<string, SExpr>; tear?: string; residual?: Eq; inner?: RawStep[] }
+interface Step { kind: string; raw: RawStep }
 
 function programText(namer: Namer, p: Presentation, steps: Step[]): string {
   const pr = solverPrinter(namer, p);
-  const eq = (e: { lhs: SExpr; rhs: SExpr }) => `${pr.expr(e.lhs)} = ${pr.expr(e.rhs)}`;
-  return steps.map(({ raw: s }) => {
-    if (s.type === "check") return `check  ${eq(s.eq!)}`;
+  const eq = (e: Eq) => `${pr.expr(e.lhs)} = ${pr.expr(e.rhs)}`;
+  const line = (s: RawStep, pad = ""): string => {
+    if (s.type === "check") return `${pad}check  ${eq(s.eq!)}`;
     if (s.type === "solve") {
       const params = [...new Set(s.branches!.flatMap((b) => b.params))];
       const alts = s.branches!.map((b) => pr.expr(b.expr) + (b.guards.length ? `  if ${b.guards.map((g) => `${pr.expr(g)} ≥ 0`).join(", ")}` : ""));
-      return `${pr.name(s.x!)} = ${alts.join("\n      or  ")}${params.length ? `      (${params.map(pr.name).join(", ")} any integer)` : ""}`;
+      return `${pad}${pr.name(s.x!)} = ${alts.join(`\n${pad}      or  `)}${params.length ? `      (${params.map(pr.name).join(", ")} any integer)` : ""}`;
     }
-    if (s.type === "linear") return s.xs!.map((x) => `${pr.name(x)} = ${pr.expr(s.exprs![x])}`).join("\n");
-    return `${s.xs!.map(pr.name).join(", ")} ≈ solve numerically { ${s.eqs!.map(eq).join(" ; ")} }`;
-  }).join("\n");
+    if (s.type === "linear") return s.xs!.map((x) => `${pad}${pr.name(x)} = ${pr.expr(s.exprs![x])}`).join("\n");
+    // Tearing: guess one unknown, compute the rest from it, then search the
+    // guess for values that make the one leftover equation hold.
+    if (s.type === "tear") return [`${pad}guess ${pr.name(s.tear!)}`, ...s.inner!.map((st) => line(st, pad + "  ")), `${pad}keep the ${pr.name(s.tear!)} where ${eq(s.residual!)}`].join("\n");
+    return `${pad}${s.xs!.map(pr.name).join(", ")} ≈ solve numerically { ${s.eqs!.map(eq).join(" ; ")} }`;
+  };
+  return steps.map(({ raw }) => line(raw)).join("\n");
 }
 
 function equationsText(namer: Namer, p: Presentation): string {
@@ -1228,8 +1234,8 @@ function netRunPanel(namer: Namer, s: Solved): HTMLElement {
   const wanted = net.params.filter((p) => !ks.includes(p));
   if (s.error) box.append(h("p", { class: "status-line bad" }, s.error));
   else if (s.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known. Make ${s.needMore || "more"} more port${s.needMore === 1 ? "" : "s"} known.`));
-  else if (!s.solutions.length) box.append(h("p", { class: "status-line bad" }, s.steps.some((x) => x.raw.type === "newton")
-    ? "No solution found. Part of this direction is solved numerically, and it didn't converge from any starting point it tried."
+  else if (!s.solutions.length) box.append(h("p", { class: "status-line bad" }, s.steps.some((x) => x.raw.type === "newton" || x.raw.type === "tear")
+    ? "No solution found. Part of this direction is found by numeric search, and the search came up empty. Often that means there is none (for example, a root the + branch can't produce)."
     : "No solution: the known values contradict each other, or need a complex number."));
   else {
     box.append(h("div", { class: "sub-head" }, "Solved"));

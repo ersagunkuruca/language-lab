@@ -46,6 +46,8 @@ test("an expression def becomes a network that agrees with it and also runs back
   const [a, b, c, result] = ports(code, rootDef);
   close(solveNetwork(code, rootDef, { [a]: 1, [b]: -3, [c]: 2 }).canonical![result], forward);
   close(solveNetwork(code, rootDef, { [a]: 1, [c]: 2, [result]: forward }).canonical![b], -3);
+  // needs the nonlinear block torn and searched, not a lucky Newton start
+  close(solveNetwork(code, rootDef, { [a]: 1, [c]: 0.5, [result]: 1 }).canonical![b], -1.5);
   // calls became parts with the same ids, so names and comments still apply
   const parts = get(code, get(code, rootDef, "def").body!, "network").parts;
   assert.ok(parts.some((p) => quad.nodes[p]?.kind === "call"));
