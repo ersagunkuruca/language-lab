@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
-import { collect, freshId, replace } from "../src/model.ts";
+import { collect, freshId, replace, swapIn } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -304,6 +304,101 @@ export function useVar(code: Code, names: Names, info: Info, defId: Id, binder: 
   if (!scopeAt(code, defId, slot).includes(binder)) return { ok: false, reason: `${display[binder] ?? names[binder] ?? "it"} isn't in scope here` };
   const next = collect(replace(code, slot, () => ({ kind: "ref", target: binder })));
   return guardTyped(info, next, names, slot, `Wired ${display[binder] ?? names[binder] ?? "the variable"} in. Same as picking it from the palette: by id, type-checked.`);
+}
+
+// ---------------------------------------------------------------- dots
+//
+// A let is a dot on a wire, as in a node editor: one value, branching to
+// every place that uses it. In the tree that is `let b = value in body`,
+// where the binder b *is* the dot: the shared output. Its name lives in
+// names.json like any other, so it can have none; then the views show a
+// handle (•1, •2) that is never stored.
+
+const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
+  const out: NodeOf<"call">[] = [];
+  const def = code.nodes[defId] as NodeOf<"def">;
+  const stack = def.body ? [def.body] : [];
+  while (stack.length) {
+    const n = code.nodes[stack.pop()!];
+    if (!n) continue;
+    if (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda") out.push(n);
+    if (n.kind === "call") stack.push(...[...n.args, n.fn].reverse());
+    else if (n.kind === "lambda") stack.push(n.body);
+    else if (n.kind === "match" || n.kind === "fold") stack.push(...(n.kind === "match" && n.otherwise ? [n.otherwise] : []), ...[...n.arms].reverse(), n.scrutinee);
+    else if (n.kind === "arm") stack.push(n.body);
+  }
+  return out;
+};
+
+export const isDot = (code: Code, defId: Id, b: Id) => lets(code, defId).some((l) => (code.nodes[l.fn] as NodeOf<"lambda">).params.includes(b));
+
+// Display handles for dots without a name, in reading order.
+export function dotHandles(code: Code, defId: Id, names: Names): Names {
+  const out: Names = {};
+  let k = 0;
+  for (const l of lets(code, defId)) for (const p of (code.nodes[l.fn] as NodeOf<"lambda">).params) if (names[p] === undefined) out[p] = `•${++k}`;
+  return out;
+}
+
+export const usesOf = (code: Code, b: Id): Id[] => Object.values(code.nodes).filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
+
+// Put a dot on the wire out of `slot`: its value moves to a dot at the start
+// of the innermost body around it (a function's, a case's, a let's), where
+// everything after can reach it, and the wire runs from the dot to where the
+// value was. Nothing in scope changes on the way up: only bodies bind names.
+export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id): TEdit {
+  const cur = code.nodes[slot];
+  if (!cur) return { ok: false, reason: "nothing there" };
+  if (cur.kind === "hole") return { ok: false, reason: "a hole has no value to share yet" };
+  if (cur.kind === "ref" && code.nodes[cur.target]?.kind === "binder") return { ok: false, reason: "that wire already comes from a variable: drag from it instead" };
+  const walk = (n: Id, r: Id): Id | null => {
+    if (n === slot) return r;
+    const x = code.nodes[n];
+    switch (x?.kind) {
+      case "lambda": return walk(x.body, x.body);
+      case "call": for (const c of [x.fn, ...x.args]) { const f = walk(c, r); if (f) return f; } return null;
+      case "match": case "fold": {
+        const f = walk(x.scrutinee, r);
+        if (f) return f;
+        for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, ab); if (g) return g; }
+        return x.kind === "match" && x.otherwise ? walk(x.otherwise, x.otherwise) : null;
+      }
+      default: return null;
+    }
+  };
+  const def = code.nodes[defId] as NodeOf<"def">;
+  const at = def.body ? walk(def.body, def.body) : null;
+  if (!at) return { ok: false, reason: "that isn't inside this definition" };
+  const dot = freshId(), use = freshId(), lam = freshId(), let_ = freshId();
+  // Point the body's parent at the let first, then the value's at the use,
+  // so each node has exactly one parent when the next swap looks.
+  let next = swapIn(code, at, let_);
+  if (at !== slot) next = swapIn(next, slot, use);
+  next.nodes[dot] = { id: dot, kind: "binder" };
+  next.nodes[use] = { id: use, kind: "ref", target: dot };
+  next.nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: at === slot ? use : at };
+  next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [slot] };
+  return guardTyped(info, next, names, dot, "Put a dot on that wire. Drag from the dot to any input it can reach to use the same value there; naming it is optional.");
+}
+
+// The reverse: a dot with one wire out goes back to being a plain wire.
+export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id): TEdit {
+  const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));
+  if (!l) return { ok: false, reason: "that isn't a dot" };
+  const uses = usesOf(code, dot);
+  if (uses.length === 0) return { ok: false, reason: "nothing reads this dot; it is there for what its value does. Clear the value to drop it" };
+  if (uses.length > 1) return { ok: false, reason: `it feeds ${uses.length} places; disconnect all but one first` };
+  const lam = code.nodes[l.fn] as NodeOf<"lambda">;
+  const i = lam.params.indexOf(dot);
+  const value = l.args[i];
+  let next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  next.nodes[lam.id] = { ...lam, params: lam.params.filter((_, j) => j !== i) };
+  next.nodes[l.id] = { ...l, args: l.args.filter((_, j) => j !== i) };
+  next = swapIn(next, uses[0], value);
+  if (lam.params.length === 1) next = swapIn(next, l.id, (next.nodes[lam.id] as NodeOf<"lambda">).body);
+  const nn = { ...names };
+  delete nn[dot];
+  return guardTyped(info, collect(next), nn, value, "Removed the dot: the value is back on its one wire.");
 }
 
 export function addCase(code: Code, names: Names, info: Info, type: Id, name: string, fields: { name: string; type: Id }[]): TEdit {

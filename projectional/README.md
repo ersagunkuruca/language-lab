@@ -216,15 +216,28 @@ adds a hole arm to every match and fold over it, and `main` runs in the
 page. Any edit that would add a type error is refused with the reason.
 
 They have a node view too (`editor/typedGraph.ts`): calls are nodes, a
-variable is a pill, and functions, lets and each case of a match or fold
-are regions whose variables are ports on the left edge. Calls that bring in
-an effect carry a badge (Choice, Console, Diverge), and handlers (`first`,
+variable is a pill, and functions and each case of a match or fold are
+regions whose variables are ports on the left edge. Calls that bring in an
+effect carry a badge (Choice, Console, Diverge), and handlers (`first`,
 `all`, `count`, `with fuel`) are marked with the effect they remove.
 Dragging a variable onto an input uses it there (refused, with the reason,
 if it's out of scope or the wrong type); dragging an input's wire into
-empty space leaves a hole. A tree can't share a value between two inputs
-without a name, so wiring a node's output into a second input isn't a
-gesture: that would be "introduce a let", a refactoring.
+empty space leaves a hole.
+
+A let is a dot on a wire, like a reroute dot in Blender's node editor: the
+value flows into the dot and a wire runs from the dot to every place that
+uses it. Click any wire to put a dot on it; drag from the dot to another
+input to share the value there. The dot can carry a name, and needn't:
+an unnamed one shows as `•1`, `•2` in every view, a handle that is never
+stored. Removing a dot with one wire out puts the value back on that wire.
+In the code the dot is the let's binder, `((b) => body)(value)`: the binder
+is exactly "this output, used in these places", and its name was always
+optional, living in names.json like every other name. So nothing in the
+core changed. The value moves to the start of the innermost body around it
+(a function's, a case's, a let's), where every later input can reach it;
+only bodies bind names, so nothing changes scope on the way. The one thing
+a dataflow picture can't show is order, so a step done only for its effect
+(`_ = print(…)`) is a hollow dot nothing reads, in the column of steps.
 
 The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/

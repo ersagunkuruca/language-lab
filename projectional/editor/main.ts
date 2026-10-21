@@ -1406,6 +1406,8 @@ function textPanel(namer: Namer, p: Presentation, s: Solved | null): HTMLElement
 // ---------------------------------------------------------------- typed programs
 
 const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
+// Typed views: unnamed dots get a handle (•1, •2) for display only.
+const typedPres = (): Presentation => { const p = blocksPres(); return { ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } }; };
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   const id = ui.selected;
@@ -1429,6 +1431,15 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
     input.addEventListener("change", () => rename(id, input.value));
     out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${ui.layer}.json`), input));
+  }
+
+  // A dot: a let's binder, the shared output of its value.
+  if (n.kind === "binder" && T.isDot(doc.code, ui.def, id)) {
+    const k = T.usesOf(doc.code, id).length;
+    const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id);
+    out.append(h("div", { class: "sub-head" }, "Dot · code.json"),
+      h("p", { class: "hint" }, `${k === 0 ? "Nothing reads it: it is a step done for its effect." : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
+      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
   }
 
   if (hole) out.append(fillPalette(id, info, names));
@@ -1557,6 +1568,7 @@ function graphHooks(info: T.Info) {
     canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
     clear: (slot: Id) => void applyT(T.toHole(doc.code, doc.names.short, info, slot)),
+    addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
   };
 }
 
@@ -1660,12 +1672,12 @@ function render() {
   const values = solved?.canonical ?? null;
   const main = typed
     ? [
-      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "drag a variable onto an input to use it there; drag an input's wire away to leave a hole")),
-        h("div", { class: "graph-wrap" }, typedGraph(doc.code, blocksPres(), info, ui.def, graphHooks(info!)))),
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "click a wire to put a dot on it, drag from a dot or variable onto an input to use it there, drag an input's wire away to leave a hole")),
+        h("div", { class: "graph-wrap" }, typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info!)))),
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
-        h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, blocksPres(), info, ui.def, ui.selected))),
+        h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"), h("small", {}, "the same tree, printed")),
-        h("pre", { class: "text" }, (() => { try { return renderBlocks(doc.code, blocksPres(), info, ui.def); } catch (e) { return (e as Error).message; } })())),
+        h("pre", { class: "text" }, (() => { try { return renderBlocks(doc.code, typedPres(), info, ui.def); } catch (e) { return (e as Error).message; } })())),
     ]
     : net
     ? [
@@ -1695,7 +1707,7 @@ function render() {
     h("main", { class: `grid${net ? " is-net" : typed ? " is-typed" : ""}` },
       ...main,
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Selected"), typed ? typedInspector(namer, p, info!) : inspector(namer, p)),
+        h("section", { class: "panel" }, h("h2", {}, "Selected"), typed ? typedInspector(namer, typedPres(), info!) : inspector(namer, p)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), typed ? typedRunPanel(namer, info!) : net ? netRunPanel(namer, solved!) : exprRunPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), typed ? typedChecks(namer, info!) : checksPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Files"), filesPanel()))),
@@ -1733,6 +1745,7 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
+    if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }
   const hit = t.closest<HTMLElement>(".blocks-wrap [data-id]");

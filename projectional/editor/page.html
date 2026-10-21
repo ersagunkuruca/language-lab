@@ -326,6 +326,19 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .inp { fill: var(--panel); stroke: var(--wire); stroke-width: 2; cursor: crosshair; }
 .tgraph .outp { fill: var(--wire); }
 .tgraph .src { fill: var(--var-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.tgraph .reroute { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.tgraph .reroute.silent { fill: var(--panel); stroke: var(--let-ln); stroke-width: 1.5; cursor: default; }
+.tgraph .reroute.sel { stroke: var(--accent); stroke-width: 3; }
+.tgraph .dotl { fill: var(--fg); font: 600 11px var(--font-code); pointer-events: none; }
+.tgraph .dotl.anon { fill: var(--muted); font-weight: 400; }
+.tgraph .tw.use { stroke: var(--let-ln); stroke-width: 1.8; pointer-events: none; }
+.tgraph .tw.use.lit { stroke: var(--accent); stroke-width: 2.6; }
+.tgraph .use-hit, .tgraph .edge-hit { fill: none; stroke: transparent; stroke-width: 10; pointer-events: stroke; }
+.tgraph .use-hit { stroke-width: 6; }
+.tgraph .use-hit { cursor: pointer; }
+.tgraph .edge-hit, .tgraph .tw[data-edge] { cursor: copy; }
+.tgraph .edge-hit:hover + .tw, .tgraph .tw[data-edge]:hover { stroke: var(--accent); stroke-width: 2.4; }
+.tgraph .inp.use { fill: var(--let-ln); stroke: var(--let-ln); }
 .tgraph .portl { fill: var(--var-ln); font-size: 11px; pointer-events: none; }
 .tgraph.dragging .cannot { opacity: .25; }
 .tgraph.dragging .inp.can, .tgraph.dragging .pill.can { stroke: var(--accent); stroke-width: 3.5; }
