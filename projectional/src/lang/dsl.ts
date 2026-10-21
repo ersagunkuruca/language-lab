@@ -93,7 +93,7 @@ export class Lang extends Builder {
     return parts.reduce((a, b) => this.call(S.concat, a, b));
   }
 
-  get unit() { return this.x(UNIT_V); }
+  get unitValue() { return this.x(UNIT_V); }
   get true() { return this.x(TRUE); }
   get false() { return this.x(FALSE); }
 }

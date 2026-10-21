@@ -12,7 +12,7 @@ import { CONS, FIRST, NIL, PAIR_V, S, SECOND } from "./std.ts";
 function library(k: Lang) {
   const each = k.def("for each");
   k.define(each, k.fn(["list", "action"], (xs, f) => k.match(xs, [
-    { variant: NIL, names: [], body: () => k.unit },
+    { variant: NIL, names: [], body: () => k.unitValue },
     { variant: CONS, names: ["item", "rest"], body: ([h, t]) => k.seq(k.call(f, h), k.call(each, t, f)) },
   ])));
 
