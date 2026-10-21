@@ -51,6 +51,12 @@ test('direction: a relation with chosen inputs as a typed function or an underde
   assert.equal(add.canFail, false);
   assert.equal(add.run({ a: 2, b: 3 }).total, 5);
 
+  // halving a constant can't fail: the elimination inverse is still pure
+  const sd = direction(ex.sumDiff, ['c', 'd']);
+  assert.equal(sd.canFail, false);
+  assert.equal(sd.multiplicity, 'one');
+  assert.equal(direction(ex.square, ['x']).canFail, false); // x^2
+
   const root = direction(ex.square, ['y']);
   assert.equal(root.multiplicity, 'many');
   assert.equal(root.canFail, true);
