@@ -1,0 +1,9 @@
+{
+  "name": "invertible",
+  "private": true,
+  "type": "module",
+  "description": "Relations instead of functions: pick which ports are known and the solver derives the rest.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
