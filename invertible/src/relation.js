@@ -74,7 +74,10 @@ function* combinations(arr, k, start = 0, acc = []) {
 // Strategy, in order of preference:
 //   1. an equation with one unknown: isolate it (closed form, maybe branches)
 //   2. a square block of equations, linear in its unknowns: eliminate exactly
-//   3. a square nonlinear block: Newton's method using symbolic derivatives
+//   3. a square nonlinear block that can be torn: guess one unknown, solve
+//      the rest from it in closed form, root-find the one leftover equation
+//      by scanning (finds every root in range, on every branch)
+//   4. any other square nonlinear block: Newton with symbolic derivatives
 // Equations whose variables are all known become checks, which is how
 // redundant equations pick the right branch of a multi-valued inverse.
 export function plan(rel, known, { numeric = true } = {}) {
@@ -82,7 +85,63 @@ export function plan(rel, known, { numeric = true } = {}) {
   let rem = rel.eqs.slice();
   const steps = [];
   let kCount = 0;
-  const unknownsOf = (eq) => [...vars(eq.rhs, vars(eq.lhs))].filter((n) => !K.has(n));
+  let tCount = 0;
+  const unknownsIn = (eq, S) => [...vars(eq.rhs, vars(eq.lhs))].filter((n) => !S.has(n));
+  const unknownsOf = (eq) => unknownsIn(eq, K);
+
+  // the cheapest equation with exactly one unknown (w.r.t. S) to isolate
+  function bestIsolation(eqs, S) {
+    let best = null;
+    for (const eq of eqs) {
+      const u = unknownsIn(eq, S);
+      if (u.length !== 1) continue;
+      const t0 = tCount;
+      const branches = isolate(eq, u[0], () => `#t${tCount++}`);
+      if (!branches) continue;
+      const score = branches.length * 10 + (tCount - t0) * 5 + (eq.law ? 1 : 0);
+      if (!best || score < best.score) best = { score, eq, x: u[0], branches };
+    }
+    return best;
+  }
+
+  // turn a chosen isolation into a step, giving branch parameters stable names k1, k2, ...
+  function solveStep(best) {
+    const names = {};
+    const fix = (e) => {
+      for (const n of vars(e)) if (n.startsWith('#t') && !(n in names)) names[n] = v(`#k${++kCount}`);
+      return substitute(e, names);
+    };
+    const branches = best.branches.map((b) => ({
+      expr: fix(b.expr),
+      guards: b.guards.map(fix),
+      params: b.params.map((p) => names[p]?.name ?? p),
+    }));
+    return { type: 'solve', x: best.x, eq: best.eq, branches };
+  }
+
+  // Tearing: guess one unknown of the block, compute the others from it in
+  // closed form, and leave a single residual equation to root-find in 1-D.
+  function tear(eqs, us) {
+    let best = null;
+    for (const x of us) {
+      const S = new Set([...K, x]);
+      let left = eqs.slice();
+      const inner = [];
+      for (let pick; (pick = bestIsolation(left, S));) {
+        inner.push(pick);
+        S.add(pick.x);
+        left = left.filter((e) => e !== pick.eq);
+      }
+      if (left.length !== 1 || !us.every((u) => S.has(u))) continue;
+      const cost = inner.reduce((c, p) => c * p.branches.length, 1);
+      if (!best || cost < best.cost) best = { cost, x, inner, residual: left[0] };
+    }
+    if (!best) return null;
+    return {
+      type: 'tear', xs: us, eqs, tear: best.x, residual: best.residual,
+      inner: best.inner.map(solveStep),
+    };
+  }
 
   for (;;) {
     rem = rem.filter((eq) => {
@@ -92,36 +151,16 @@ export function plan(rel, known, { numeric = true } = {}) {
     });
     if (rel.vars.every((n) => K.has(n))) break;
 
-    let best = null;
-    for (const eq of rem) {
-      const u = unknownsOf(eq);
-      if (u.length !== 1) continue;
-      let t = 0;
-      const branches = isolate(eq, u[0], () => `#t${t++}`);
-      if (!branches) continue;
-      const score = branches.length * 10 + t * 5 + (eq.law ? 1 : 0);
-      if (!best || score < best.score) best = { score, eq, x: u[0], branches };
-    }
+    const best = bestIsolation(rem, K);
     if (best) {
-      // give the branch parameters stable names k1, k2, ...
-      const names = {};
-      const fix = (e) => {
-        for (const n of vars(e)) if (n.startsWith('#t') && !(n in names)) names[n] = v(`#k${++kCount}`);
-        return substitute(e, names);
-      };
-      const branches = best.branches.map((b) => ({
-        expr: fix(b.expr),
-        guards: b.guards.map(fix),
-        params: b.params.map((p) => names[p]?.name ?? p),
-      }));
-      steps.push({ type: 'solve', x: best.x, eq: best.eq, branches });
+      steps.push(solveStep(best));
       K.add(best.x);
       rem = rem.filter((e) => e !== best.eq);
       continue;
     }
 
     let block = null;
-    outer: for (const mode of numeric ? ['linear', 'newton'] : ['linear']) {
+    outer: for (const mode of numeric ? ['linear', 'tear', 'newton'] : ['linear']) {
       // Laws are redundant with the defining equations, so they never count
       // towards a square block (that would fake an extra degree of freedom).
       const defining = rem.filter((eq) => !eq.law);
@@ -132,6 +171,9 @@ export function plan(rel, known, { numeric = true } = {}) {
           if (mode === 'linear') {
             const sol = solveLinear(eqs, us);
             if (sol) { block = { type: 'linear', xs: us, eqs, exprs: sol }; break outer; }
+          } else if (mode === 'tear') {
+            block = tear(eqs, us);
+            if (block) break outer;
           } else {
             const residuals = eqs.map((eq) => simplify({ k: 'call', f: 'sub', args: [eq.lhs, eq.rhs] }));
             const jac = residuals.map((r) => us.map((u) => derive(r, u)));
@@ -199,6 +241,61 @@ function newton(step, env, guess) {
   return null;
 }
 
+// Every combination of inner branches (and k values) is its own 1-D function
+// of the tear variable. Scan each over [−range, range] on a sinh-spaced grid
+// (dense near 0, sparse far out), bisect every sign change, and keep the
+// roots whose residual is actually ~0 (sign changes across poles are not roots).
+function tearRoots(s, env, ks, tol, range, maxRoots) {
+  const combos = [[]];
+  for (const st of s.inner) {
+    const next = [];
+    for (const c of combos) st.branches.forEach((b, bi) => {
+      for (const a of assignments(b.params, ks)) next.push([...c, { bi, a }]);
+    });
+    combos.splice(0, combos.length, ...next);
+  }
+  const out = [];
+  for (const combo of combos) {
+    const f = (x) => {
+      const e = { ...env, [s.tear]: x };
+      for (let j = 0; j < s.inner.length; j++) {
+        const st = s.inner[j], b = st.branches[combo[j].bi];
+        const ee = { ...e, ...combo[j].a };
+        const val = evaluate(b.expr, ee);
+        if (!Number.isFinite(val) || !b.guards.every((g) => evaluate(g, ee) >= -tol)) return { r: NaN };
+        e[st.x] = val;
+      }
+      const l = evaluate(s.residual.lhs, e), r = evaluate(s.residual.rhs, e);
+      return { r: l - r, scale: 1 + Math.abs(l) + Math.abs(r), e };
+    };
+    const roots = [];
+    const umax = Math.asinh(range), N = 1600;
+    let x0 = -range, f0 = f(x0);
+    for (let n = 1; n <= N; n++) {
+      const x1 = Math.sinh(-umax + (2 * umax * n) / N), f1 = f(x1);
+      if (Number.isFinite(f0.r) && Number.isFinite(f1.r) && (f0.r === 0 || f0.r * f1.r < 0)) {
+        let a = x0, b = x1, fa = f0.r;
+        for (let it = 0; it < 200 && a !== b; it++) {
+          const m = (a + b) / 2, fm = f(m).r;
+          if (!Number.isFinite(fm)) break;
+          if (fm === 0) { a = b = m; break; }
+          if (fa * fm < 0) b = m; else { a = m; fa = fm; }
+          if (Math.abs(b - a) <= 1e-15 * (1 + Math.abs(a))) break;
+        }
+        const x = (a + b) / 2, fx = f(x);
+        if (Number.isFinite(fx.r) && Math.abs(fx.r) <= 1e-7 * fx.scale &&
+            !roots.some((r) => Math.abs(r.x - x) <= 1e-9 * (1 + Math.abs(x)))) {
+          roots.push({ x, env: fx.e, path: combo.map((c, j) => ({ x: s.inner[j].x, branch: c.bi, ...c.a })) });
+        }
+      }
+      x0 = x1; f0 = f1;
+    }
+    // closest to zero first; periodic residuals have endless roots, keep a few
+    out.push(...roots.sort((p, q) => Math.abs(p.x) - Math.abs(q.x)).slice(0, maxRoots));
+  }
+  return out;
+}
+
 const clean = (x) => {
   if (Math.abs(x) < 1e-12) return 0;
   return +x.toPrecision(12);
@@ -208,7 +305,7 @@ const clean = (x) => {
 // 0, 1, −1, ..., ±window. Every complete, consistent assignment is a solution;
 // the first one found (canonical branch of every step, k = 0 where possible)
 // is the canonical solution.
-export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess = {} } = {}) {
+export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess = {}, tearRange = 1000, maxRoots = 8 } = {}) {
   const ks = kOrder(window);
   const seen = new Set();
   const solutions = [];
@@ -239,6 +336,8 @@ export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess 
       const e = { ...env };
       for (const x of s.xs) e[x] = evaluate(s.exprs[x], env);
       if (s.xs.every((x) => ok(e[x]))) go(i + 1, e, path);
+    } else if (s.type === 'tear') {
+      for (const r of tearRoots(s, env, ks, tol, tearRange, maxRoots)) go(i + 1, r.env, [...path, ...r.path]);
     } else if (s.type === 'newton') {
       const x = newton(s, env, guess);
       if (x) go(i + 1, { ...env, ...Object.fromEntries(s.xs.map((u, j) => [u, x[j]])) }, path);
@@ -293,6 +392,14 @@ export function describe(p, rel) {
       return {
         kind: 'linear', xs: s.xs,
         text: s.xs.map((x) => `${x} = ${show(s.exprs[x])}`).join('\n'),
+        from: s.eqs.map(showEq).join(' ; '),
+      };
+    }
+    if (s.type === 'tear') {
+      const inner = s.inner.map((st) => `${st.x} = ${st.branches.map((b) => show(b.expr)).join('  or  ')}`);
+      return {
+        kind: 'tear', xs: s.xs, tear: s.tear,
+        text: `guess ${s.tear}; ${inner.join('; ')}\nscan ${s.tear} for roots of ${showEq(s.residual)}`,
         from: s.eqs.map(showEq).join(' ; '),
       };
     }

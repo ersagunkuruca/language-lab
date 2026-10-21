@@ -7,7 +7,7 @@ follows every branch of any multi-valued inverse, and marks one answer as
 canonical.
 
 ```
-npm test                         # 24 tests, no dependencies (Node 20+)
+npm test                         # 25 tests, no dependencies (Node 20+)
 python3 -m http.server           # then open http://localhost:8000/ for the demo page
 ```
 
@@ -42,10 +42,16 @@ compilers do with acausal equations (matching + BLT/Tarjan ordering, then
    using each primitive's own inverse table (`src/expr.js`, `FN[f].inv`).
 2. **Eliminate.** A square block that is linear in its unknowns is solved
    exactly, and the result is a printable expression (`src/linear.js`).
-3. **Newton.** A square nonlinear block is solved numerically, with the
-   Jacobian obtained by symbolic differentiation of the same trees. It finds
-   one root, not the whole solution set, and the plan says so.
-4. **Check.** An equation whose variables are all known becomes a check. This
+3. **Tear.** A square nonlinear block is torn: guess one unknown, compute
+   the others from it in closed form (step 1), and the one equation left over
+   becomes a 1-D residual. Every branch combination is scanned over a wide
+   range and each sign change is bisected, so it finds every root in range
+   (both roots of a quadratic, both `r = ±5` families of polar without its
+   law), and domain errors like `sqrt` of a negative just mark gaps.
+4. **Newton.** Anything else square and nonlinear is solved numerically,
+   with the Jacobian from symbolic differentiation of the same trees. It
+   finds one root, not the whole solution set, and the plan says so.
+5. **Check.** An equation whose variables are all known becomes a check. This
    is how redundant equations choose between branches (below).
 
 ## Multi-valued inverses: branches + a canonical choice
@@ -87,8 +93,9 @@ A law is a fact the solver can't derive itself. In general that derivation is
 nonlinear elimination: a Gröbner basis of `{x − rC, y − rS, C² + S² − 1}` would
 produce `x² + y² = r²`. Instead, laws are written down and the tests check
 every law numerically against the defining equations. Without the law
-(`polarNoLaw`) the solver falls back to Newton and finds one root, sometimes
-the `r < 0` one, which shows why the law is worth having.
+(`polarNoLaw`) the solver tears the block (guess θ, `r = x / cos θ`, scan
+for `y = r·sin θ`): it still finds every solution, but numerically, where
+the law gives a closed form.
 
 ### Composition runs backwards for free
 
