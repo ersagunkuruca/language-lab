@@ -1,7 +1,7 @@
 {
-  "a7d75076": "Total over the tree (a fold), but division by zero is a failure: the type says Choice.",
-  "b807fecf": "The fold binds each part and its derivative, so the product and quotient rules read like the textbook.",
-  "6d4287e8": "first(() => …, () => …) is pattern matching by choice: try treating both sides as constants, else fall back.",
-  "72f42d8a": "Nothing here gets smaller, so the checker can't see that it ends. Its type carries Diverge.",
-  "bfcbe609": "with fuel gives up after 100 steps: Diverge becomes Choice, which a caller can handle with first."
+  "a4bcb7e5": "Total over the tree (a fold), but division by zero is a failure: the type says Choice.",
+  "082fbe9a": "The fold binds each part and its derivative, so the product and quotient rules read like the textbook.",
+  "cbee6d40": "first(() => …, () => …) is pattern matching by choice: try treating both sides as constants, else fall back.",
+  "6fa9e6e9": "Nothing here gets smaller, so the checker can't see that it ends. Its type carries Diverge.",
+  "c34d143b": "with fuel gives up after 100 steps: Diverge becomes Choice, which a caller can handle with first."
 }

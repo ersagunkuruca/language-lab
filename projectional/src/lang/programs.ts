@@ -277,7 +277,7 @@ export function relations() {
 
   const main = k.def("main");
   k.define(main, k.thunk(() => k.seq(
-    k.call(S.print, k.text(k.lit("split(10, 4) = "), showPair(k.call(S.first, k.thunk(() => k.call(split, k.lit(10), k.lit(4))), k.thunk(() => pair(k.lit(0), k.lit(0))))))),
+    k.call(S.print, k.text(k.lit("split(10, 4) = "), showPair(k.call(split, k.lit(10), k.lit(4))))),
     k.call(S.print, k.text(k.lit("missing addend(3, 10) = "), k.call(S.show, k.call(missing, k.lit(3), k.lit(10))))),
     k.call(S.print, k.text(k.lit("to polar(0, 2), canonical = "), showPair(k.call(S.first, k.thunk(() => k.call(toPolar, k.lit(0), k.lit(2))), k.thunk(() => pair(k.lit(0), k.lit(0))))))),
     k.call(S.print, k.text(k.lit("square roots(9) = "), k.call(lib.showNumbers, k.call(roots, k.lit(9))))),

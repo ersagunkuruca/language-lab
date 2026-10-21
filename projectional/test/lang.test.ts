@@ -200,6 +200,7 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   const p = load("relations");
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
+  assert.equal(typeOf(p, info, "split"), "(Number, Number) -> Pair Number Number");
   assert.equal(typeOf(p, info, "missing addend"), "(Number, Number) -> Number");
   assert.equal(typeOf(p, info, "to polar"), "(Number, Number) -[Choice]-> Pair Number Number");
   assert.equal(typeOf(p, info, "square roots"), "(Number) -> List Number");
