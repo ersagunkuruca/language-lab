@@ -217,9 +217,11 @@ page. Any edit that would add a type error is refused with the reason.
 
 Every definition is drawn on one canvas (`editor/canvas.ts`): typed
 programs, plain expressions and networks alike, with the same gestures.
-In tree code (`editor/typedGraph.ts`) calls are nodes, and functions and each
-case of a match or fold are frames whose variables are sources on the left
-edge. There are no variable pills: every use of a variable is a wire from
+In tree code (`editor/typedGraph.ts`) calls are nodes and functions are
+frames whose variables are sources on the left edge. `if`, `match` and
+`fold` are ordinary nodes too: the value, then one function per case of its
+type, whose parameters are that case's fields (and, for a fold, the parts
+already folded). There are no variable pills: every use of a variable is a wire from
 its source, so a value used twice visibly fans out. Calls that bring in an
 effect carry a badge (Choice, Console, Diverge), and handlers (`first`,
 `all`, `count`, `with fuel`) are marked with the effect they remove.
