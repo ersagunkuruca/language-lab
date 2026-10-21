@@ -193,30 +193,30 @@ textarea { resize: vertical; }
 .net-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .legend { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--muted); font-size: 12px; margin-left: auto; }
 .lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 2px solid var(--wire); }
-.lg.in { background: var(--accent); border-color: var(--accent); }
-.lg.out { background: var(--panel); border-color: var(--hot); }
+.lg.in { background: var(--panel); border-color: var(--wire); }
+.lg.out { background: var(--let-ln); border-color: var(--let-ln); }
 .lg.free { background: var(--panel); border-style: dashed; }
 .graph.net { touch-action: none; }
 .nb { cursor: grab; }
+/* Network nodes use the same look as every other graph: a node is green,
+   a given port is a hollow input, a solved port is a filled dot, and an
+   outer port is a dot (known) or a result (unknown) with its label. */
 .nb .body { fill: var(--op-bg); stroke: var(--op-ln); stroke-width: 1.5; }
-.nb.rel .body { fill: var(--let-bg); stroke: var(--let-ln); }
-.nb.def .body { fill: var(--def-bg); stroke: var(--def-ln); }
 .nb.const .body { fill: var(--lit-bg); stroke: var(--lit-ln); }
-.nb.ext .body { fill: var(--var-bg); stroke: var(--var-ln); }
-.nb.ext.out .body { fill: var(--panel); stroke-dasharray: 5 3; }
+.nb.ext .body { fill: transparent; stroke: none; }
 .nb.sel .body { stroke: var(--accent); stroke-width: 3; }
+.nb.ext.sel .body { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .nb .lbl { fill: var(--fg); font-size: 13px; font-weight: 500; }
-.nb .sub { fill: var(--accent); font: italic 11px var(--font-ui); }
+.nb .sub { fill: var(--muted); font: italic 11px var(--font-ui); }
 .nb .val { fill: var(--accent); font-size: 12px; font-family: var(--font-code); }
-.nb .sep { stroke: var(--ln, var(--line)); opacity: .5; }
-.plbl { fill: var(--muted); font-size: 11px; }
-.plbl.in { fill: var(--fg); }
-.plbl.out { fill: var(--hot); }
+.nb .sep { display: none; }
+.plbl { fill: var(--var-ln); font-size: 11px; }
 .dot { fill: var(--panel); stroke: var(--wire); stroke-width: 2; stroke-dasharray: 3 2; cursor: crosshair; }
 .dot.bound { stroke-dasharray: none; }
-.dot.in { fill: var(--accent); stroke: var(--accent); }
-.dot.out { fill: var(--panel); stroke: var(--hot); }
-.nb.ext .dot { fill: var(--var-ln); stroke: var(--var-ln); }
+.dot.in { fill: var(--panel); stroke: var(--wire); }
+.dot.out { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; }
+.nb.ext.in .dot { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; }
+.nb.ext.out .dot { fill: var(--panel); stroke: var(--wire); stroke-width: 2; }
 .dot:hover { stroke-width: 3.5; }
 .wire.sel { stroke: var(--accent); stroke-width: 3; }
 .wire.pending { stroke: var(--accent); stroke-dasharray: 5 4; }
@@ -237,7 +237,6 @@ textarea { resize: vertical; }
 .alt { font-family: var(--font-code); font-size: 12px; padding: 2px 0 2px 12px; }
 
 /* error prevention */
-.nb.atom .body { fill: var(--op-bg); stroke: var(--op-ln); stroke-width: 2; }
 .nb.atom .lbl { font-size: 16px; }
 .punit { fill: var(--def-ln); color: var(--def-ln); font: 500 10px var(--font-code); }
 .nb .val.unit { fill: var(--def-ln); }

@@ -830,7 +830,7 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
   const bar = h("div", { class: "net-bar" },
     h("button", { class: `btn${ui.mode === "add" ? " on" : ""}`, type: "button", "data-act": "add" }, "Add node…"),
     h("button", { class: "btn", type: "button", "data-act": "add-port" }, "Add outer port"),
-    h("span", { class: "legend" }, h("i", { class: "lg in" }), "input to the node", h("i", { class: "lg out" }), "solved by the node", h("i", { class: "lg free" }), "unconnected", h("span", { class: "punit" }, "m/s"), "inferred unit"));
+    h("span", { class: "legend" }, h("i", { class: "lg in" }), "given to the node", h("i", { class: "lg out" }), "solved by the node", h("i", { class: "lg free" }), "not connected", h("span", { class: "punit" }, "m/s"), "inferred unit"));
   return h("div", {}, bar, ui.mode === "add" ? picker(null, namer) : null, h("div", { class: "graph-wrap" }, root));
 }
 
