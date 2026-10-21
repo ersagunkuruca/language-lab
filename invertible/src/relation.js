@@ -40,7 +40,7 @@ export const showEq = (eq) => `${show(eq.lhs)} = ${show(eq.rhs)}`;
 // at a time, using each primitive's own inverse table. Multi-valued inverses
 // multiply out into branches.
 function peel(e, target, x, fresh) {
-  if (e.k === 'var') return [{ expr: simplify(target), params: [], guards: [] }];
+  if (e.k === 'var') return [{ expr: simplify(target), params: [], guards: [], free: [] }];
   const i = e.args.findIndex((a) => countVar(a, x) > 0);
   const out = [];
   for (const br of FN[e.f].inv[i](target, e.args, fresh)) {
@@ -49,6 +49,7 @@ function peel(e, target, x, fresh) {
         expr: inner.expr,
         params: [...br.params, ...inner.params],
         guards: [...br.guards.map(simplify), ...inner.guards],
+        free: [...br.free, ...inner.free],
       });
     }
   }
@@ -56,13 +57,14 @@ function peel(e, target, x, fresh) {
 }
 
 function isolate(eq, x, fresh) {
+  eq = { ...eq, lhs: simplify(eq.lhs), rhs: simplify(eq.rhs) };
   const inL = countVar(eq.lhs, x), inR = countVar(eq.rhs, x);
   if (inL + inR === 1) {
     const [e, target] = inL ? [eq.lhs, eq.rhs] : [eq.rhs, eq.lhs];
     return peel(e, target, x, fresh);
   }
   const lin = solveLinear([eq], [x]);
-  return lin ? [{ expr: simplify(lin[x]), params: [], guards: [] }] : null;
+  return lin ? [{ expr: simplify(lin[x]), params: [], guards: [], free: [] }] : null;
 }
 
 function* combinations(arr, k, start = 0, acc = []) {
@@ -114,6 +116,7 @@ export function plan(rel, known, { numeric = true } = {}) {
     const branches = best.branches.map((b) => ({
       expr: fix(b.expr),
       guards: b.guards.map(fix),
+      free: (b.free ?? []).map((g) => g.map(fix)),
       params: b.params.map((p) => names[p]?.name ?? p),
     }));
     return { type: 'solve', x: best.x, eq: best.eq, branches };
@@ -164,7 +167,9 @@ export function plan(rel, known, { numeric = true } = {}) {
       // Laws are redundant with the defining equations, so they never count
       // towards a square block (that would fake an extra degree of freedom).
       const defining = rem.filter((eq) => !eq.law);
-      for (let size = 2; size <= Math.min(defining.length, 6); size++) {
+      // (a single equation can be torn too: x·sin(x) = y has one unknown
+      // that can't be isolated, so guess it and scan)
+      for (let size = mode === 'tear' ? 1 : 2; size <= Math.min(defining.length, 6); size++) {
         for (const eqs of combinations(defining, size)) {
           const us = [...new Set(eqs.flatMap(unknownsOf))];
           if (us.length !== size) continue;
@@ -311,41 +316,84 @@ export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess 
   const solutions = [];
   const ok = (x) => Number.isFinite(x);
 
-  function go(i, env, path) {
+  // `free` holds variables the equations leave unconstrained (0·x = 0).
+  // Anything computed from a free variable is free too, and checks that
+  // involve one are satisfiable, so they pass.
+  const touches = (e, free) => free.size > 0 && [...vars(e)].some((n) => free.has(n));
+
+  function go(i, env, path, free) {
     if (solutions.length >= limit) return;
     if (i === p.steps.length) {
-      const sol = Object.fromEntries(rel.ports.filter((n) => n in env).map((n) => [n, clean(env[n])]));
-      const key = Object.values(sol).map((x) => Math.round(x * 1e8)).join();
-      if (!seen.has(key)) { seen.add(key); solutions.push({ values: sol, env, path }); }
+      const ports = rel.ports.filter((n) => n in env || free.has(n));
+      const sol = Object.fromEntries(ports.map((n) => [n, free.has(n) ? null : clean(env[n])]));
+      const key = Object.values(sol).map((x) => (x === null ? 'free' : Math.round(x * 1e8))).join();
+      if (!seen.has(key)) {
+        seen.add(key);
+        solutions.push({ values: sol, env, path, free: ports.filter((n) => free.has(n)) });
+      }
       return;
     }
     const s = p.steps[i];
+    const withFree = (x) => new Set([...free, x]);
     if (s.type === 'check') {
+      if (touches(s.eq.lhs, free) || touches(s.eq.rhs, free)) return go(i + 1, env, path, free);
       const l = evaluate(s.eq.lhs, env), r = evaluate(s.eq.rhs, env);
-      if (ok(l) && ok(r) && Math.abs(l - r) <= tol * (1 + Math.abs(l) + Math.abs(r))) go(i + 1, env, path);
+      if (ok(l) && ok(r) && Math.abs(l - r) <= tol * (1 + Math.abs(l) + Math.abs(r))) go(i + 1, env, path, free);
     } else if (s.type === 'solve') {
-      s.branches.forEach((b, bi) => {
+      for (const [bi, b] of s.branches.entries()) {
+        const isFree = touches(b.expr, free) || b.free.some((g) =>
+          g.every((e) => !touches(e, free) && Math.abs(evaluate(e, env)) <= tol));
+        if (isFree) {
+          go(i + 1, env, [...path, { x: s.x, branch: bi, free: true }], withFree(s.x));
+          return; // one free answer covers every branch
+        }
         for (const a of assignments(b.params, ks)) {
           const e = { ...env, ...a };
           const x = evaluate(b.expr, e);
           if (!ok(x) || !b.guards.every((g) => evaluate(g, e) >= -tol)) continue;
-          go(i + 1, { ...env, [s.x]: x }, [...path, { x: s.x, branch: bi, ...a }]);
+          go(i + 1, { ...env, [s.x]: x }, [...path, { x: s.x, branch: bi, ...a }], free);
         }
-      });
+      }
     } else if (s.type === 'linear') {
       const e = { ...env };
-      for (const x of s.xs) e[x] = evaluate(s.exprs[x], env);
-      if (s.xs.every((x) => ok(e[x]))) go(i + 1, e, path);
+      let f = free;
+      for (const x of s.xs) {
+        if (touches(s.exprs[x], free)) f = new Set([...f, x]);
+        else e[x] = evaluate(s.exprs[x], env);
+      }
+      if (s.xs.every((x) => f.has(x) || ok(e[x]))) go(i + 1, e, path, f);
     } else if (s.type === 'tear') {
-      for (const r of tearRoots(s, env, ks, tol, tearRange, maxRoots)) go(i + 1, r.env, [...path, ...r.path]);
+      for (const r of tearRoots(s, env, ks, tol, tearRange, maxRoots)) go(i + 1, r.env, [...path, ...r.path], free);
     } else if (s.type === 'newton') {
       const x = newton(s, env, guess);
-      if (x) go(i + 1, { ...env, ...Object.fromEntries(s.xs.map((u, j) => [u, x[j]])) }, path);
+      if (x) go(i + 1, { ...env, ...Object.fromEntries(s.xs.map((u, j) => [u, x[j]])) }, path, free);
     }
   }
 
-  go(0, { ...values }, []);
+  go(0, { ...values }, [], new Set());
   return solutions;
+}
+
+// All solutions as a lazy, ordered, possibly infinite stream: Verse/Icon
+// style multiple results. Order is canonical first, then by growing |k|
+// (k = 0, then ±1, then ±2 …), so every solution of a periodic family is
+// reached eventually and a consumer takes as many as it wants. An empty
+// stream is failure. The stream ends when a level adds nothing new.
+export function* stream(rel, p, values, opts = {}) {
+  const branchesOf = (s) => s.branches ?? (s.inner ?? []).flatMap((i) => i.branches);
+  const periodic = p.steps.some((s) => branchesOf(s).some((b) => b.params.length));
+  const seen = new Set();
+  for (let level = 0; ; level++) {
+    let fresh = 0;
+    for (const sol of run(rel, p, values, { ...opts, window: level, limit: Infinity })) {
+      const key = Object.values(sol.values).map((x) => (x === null ? 'free' : Math.round(x * 1e8))).join();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fresh++;
+      yield sol;
+    }
+    if (!periodic || (level > 0 && !fresh) || level >= (opts.maxLevel ?? 1e4)) return;
+  }
 }
 
 // How many more ports must be known before the plan is complete?

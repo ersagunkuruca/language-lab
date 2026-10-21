@@ -34,10 +34,12 @@ export const abs = f1('abs');
 const isNum = (e, x) => e.k === 'num' && (x === undefined || e.v === x);
 
 // A branch is one way to undo a primitive: the value for the argument, any
-// integer parameters it is indexed by (e.g. the k in asin(y) + 2πk), and
-// guards (expressions that must be >= 0 for the branch to be valid).
+// integer parameters it is indexed by (e.g. the k in asin(y) + 2πk), guards
+// (expressions that must be >= 0 for the branch to be valid), and `free`
+// conditions: groups of expressions that, when all zero, leave the argument
+// unconstrained (0·x = 0 holds for every x, so x is free, not NaN).
 // The first branch of every inverse is the canonical one.
-const branch = (expr, { params = [], guards = [] } = {}) => ({ expr, params, guards });
+const branch = (expr, { params = [], guards = [], free = [] } = {}) => ({ expr, params, guards, free });
 
 // Each primitive declares how to evaluate itself, how to print itself, how to
 // undo itself in each argument (`inv[i](y, args, fresh)` returns the branches
@@ -56,12 +58,12 @@ export const FN = {
   },
   mul: {
     eval: (a, b) => a * b, infix: '·', prec: 2,
-    inv: [(y, [, b]) => [branch(div(y, b))], (y, [a]) => [branch(div(y, a))]],
+    inv: [(y, [, b]) => [branch(div(y, b), { free: [[b, y]] })], (y, [a]) => [branch(div(y, a), { free: [[a, y]] })]],
     d: [([, b]) => b, ([a]) => a],
   },
   div: {
     eval: (a, b) => a / b, infix: '/', prec: 2,
-    inv: [(y, [, b]) => [branch(mul(y, b))], (y, [a]) => [branch(div(a, y))]],
+    inv: [(y, [, b]) => [branch(mul(y, b))], (y, [a]) => [branch(div(a, y), { free: [[a, y]] })]],
     d: [([, b]) => div(num(1), b), ([a, b]) => neg(div(a, pow(b, num(2))))],
   },
   neg: {
@@ -211,6 +213,7 @@ export function simplify(e) {
       break;
     case 'mul':
       if (isNum(a, 0) || isNum(b, 0)) return num(0);
+      if (show(a) === show(b)) return pow(a, num(2)); // x·x → x^2, so it can be undone
       if (isNum(a, 1)) return b;
       if (isNum(b, 1)) return a;
       if (isNum(a, -1)) return simplify(neg(b));

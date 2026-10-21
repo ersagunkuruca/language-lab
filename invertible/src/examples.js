@@ -1,4 +1,5 @@
 import { relation } from './relation.js';
+import { balance, ratio } from './atoms.js';
 
 // c = a + b, d = a − b. Know any two ports, get the other two.
 export const sumDiff = relation({
@@ -58,4 +59,18 @@ export const temperature = relation({
   eqs: ['F = C * 9 / 5 + 32', 'K = C + 273.15'],
 });
 
-export const ALL = { sumDiff, polar, polarNoLaw, sine, square, exponential, sineDouble, ohm, rotate, temperature };
+// The discriminant D = b² − 4ac built only from the two atoms. There is no
+// minus and no square anywhere: b·b = bb and 4·a·c = q are ratios, and
+// D + q = bb is a balance. Solving for c, a or b runs the same nodes backwards.
+export const discriminant = relation({
+  name: 'discriminant',
+  ports: ['a', 'b', 'c', 'D'],
+  eqs: ['four = 4'],
+  uses: [
+    { rel: ratio(['x', 'y'], ['p']), bind: { x: 'b', y: 'b', p: 'bb' } },
+    { rel: ratio(['x', 'y', 'z'], ['p']), bind: { x: 'four', y: 'a', z: 'c', p: 'q' } },
+    { rel: balance(['x', 'y'], ['z']), bind: { x: 'D', y: 'q', z: 'bb' } },
+  ],
+});
+
+export const ALL = { sumDiff, polar, polarNoLaw, sine, square, exponential, sineDouble, ohm, rotate, temperature, discriminant };
