@@ -8,7 +8,8 @@
 import type { Code, Id, Node, NodeData, NodeOf } from "./model.ts";
 import { collect, freshId, get, swapIn } from "./model.ts";
 import { check, errors, key, type Problem } from "./check.ts";
-import { compatible, portTerm, type Unit } from "./units.ts";
+import { compatible, formatUnit, infer, portTerm, type Unit } from "./units.ts";
+import { isVariadic } from "./relational.ts";
 import { impl } from "./prelude.ts";
 
 export type Edit = { ok: true; code: Code; select?: Id; created?: Id } | { ok: false; reason: string };
@@ -134,7 +135,14 @@ export function connect(code: Code, def: Id, a: PortRef, b: PortRef): Edit {
   // Say which units collided rather than where the solver noticed.
   const term = (p: PortRef) => ("ext" in p ? p.ext : portTerm(code, p.part, p.key));
   const why = compatible(code, def, term(a), term(b));
-  return refuse(why.reason ?? r.reason);
+  if (why.reason) return refuse(why.reason);
+  // A new factor on a product doesn't meet anything; it changes the
+  // product's unit, and that is what clashes.
+  const spare = [a, b].find((p): p is { part: Id; key: string } => !("ext" in p) && !wireOf(code, p) && isVariadic(code, partAt(code.nodes, p.part).fn));
+  const other = spare === a ? b : a;
+  const ua = infer(code, def).unit(term(other));
+  if (spare) return refuse(`another factor${ua ? ` of ${formatUnit(ua)}` : ""} would change the product's unit, and what it's wired to can't take that`);
+  return refuse(r.reason);
 }
 
 function join(code: Code, def: Id, a: PortRef, b: PortRef): Edit {

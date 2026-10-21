@@ -15,16 +15,23 @@ import quadHints from "../examples/quadratic/hints.json" with { type: "json" };
 import vecCode from "../examples/vectors/code.json" with { type: "json" };
 import vecNames from "../examples/vectors/names.default.json" with { type: "json" };
 import vecLayout from "../examples/vectors/layout.json" with { type: "json" };
+import phyCode from "../examples/physics/code.json" with { type: "json" };
+import phyNames from "../examples/physics/names.default.json" with { type: "json" };
+import phyComments from "../examples/physics/comments.json" with { type: "json" };
+import phyLayout from "../examples/physics/layout.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import graphStyle from "../styles/graph.json" with { type: "json" };
 import { evaluate } from "../src/eval.ts";
 import { hashDef } from "../src/hash.ts";
-import { collect, freshId, get, merge, parentOf, swapIn, type Code, type Id, type Node, type NodeData } from "../src/model.ts";
+import { get, merge, parentOf, type Code, type Id, type Node, type NodeData } from "../src/model.ts";
+import { check, CLASSES, type Problem } from "../src/check.ts";
+import * as E from "../src/edits.ts";
+import { formatUnit, infer, NAMED, portTerm, type Inference, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { impl, prelude, preludeNames } from "../src/prelude.ts";
-import { partDirections, portLabel, portsOf, relationNames, relationPrelude, RELATIONS, solveNetwork, toNetwork, type PortDirection } from "../src/relational.ts";
+import { atomViews, isVariadic, partDirections, portLabel, portsOf, relationNames, relationPrelude, RELATIONS, solveNetwork, toNetwork, VARIADIC, type PortDirection } from "../src/relational.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
@@ -66,17 +73,18 @@ interface UI {
   mode: null | "wrap" | "replace" | "add";
   query: string;
   args: Record<Id, string>;
+  refused: boolean;
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
-const STORE = "projectional-editor-v2";
+const STORE = "projectional-editor-v3";
 
 const initial = (): Doc => ({
-  code: merge(prelude, relationPrelude, quadCode as Code, vecCode as Code),
-  names: { short: { ...quadShort, ...vecNames }, descriptive: quadDescriptive },
-  comments: quadComments,
+  code: merge(prelude, relationPrelude, quadCode as Code, vecCode as Code, phyCode as Code),
+  names: { short: { ...quadShort, ...vecNames, ...phyNames }, descriptive: quadDescriptive },
+  comments: { ...quadComments, ...phyComments },
   hints: quadHints,
-  layout: { positions: {}, known: (vecLayout as { known: Record<Id, Id[]> }).known, expanded: [] },
+  layout: { positions: {}, known: { ...(vecLayout as { known: Record<Id, Id[]> }).known, ...(phyLayout as { known: Record<Id, Id[]> }).known }, expanded: [] },
 });
 
 let doc: Doc = initial();
@@ -85,7 +93,7 @@ try {
   if (saved) doc = JSON.parse(saved);
 } catch {}
 
-const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === "to polar") ?? doc.code.defs[0];
+const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === "fall") ?? doc.code.defs[0];
 
 const ui: UI = {
   def: startDef(),
@@ -95,11 +103,24 @@ const ui: UI = {
   style: "math",
   text: "program",
   touched: [],
-  note: "Drag from a port to another port to connect them. Drag a connected port into empty space to disconnect it.",
+  note: "Drag from a port: the ports it can legally reach light up, the rest say why not. Drag a connected port into empty space to disconnect it.",
   mode: null,
   query: "",
   args: {},
+  refused: false,
 };
+
+// Sensible starting values for the physics example: thrown down at 5 m/s.
+{
+  const fall = doc.code.defs.find((d) => doc.names.short[d] === "fall");
+  const d = fall ? doc.code.nodes[fall] : null;
+  const b = d?.kind === "def" && d.body ? doc.code.nodes[d.body] : null;
+  if (b?.kind === "network") b.params.forEach((port, i) => (ui.args[port] = ["29.62", "5", "9.81", "2"][i]));
+  const period = doc.code.defs.find((d) => doc.names.short[d] === "period");
+  const pd = period ? doc.code.nodes[period] : null;
+  const lam = pd?.kind === "def" && pd.body ? doc.code.nodes[pd.body] : null;
+  if (lam?.kind === "lambda") lam.params.forEach((x, i) => (ui.args[x] = ["1", "9.81"][i]));
+}
 
 const undo: Doc[] = [];
 const redo: Doc[] = [];
@@ -112,8 +133,24 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.note = note;
   ui.mode = null;
   ui.query = "";
+  ui.refused = false;
   save();
   render();
+}
+
+// Every change to code.json goes through edits.ts, which refuses an edit
+// that would introduce an error. A refusal changes nothing and says why.
+function apply(e: E.Edit, note: string, extra: Partial<Doc> = {}, touched = ["code.json"]): boolean {
+  if (!e.ok) {
+    ui.note = `Refused: ${e.reason}. Nothing changed.`;
+    ui.touched = [];
+    ui.refused = true;
+    render();
+    return false;
+  }
+  if (e.select) ui.selected = e.select;
+  commit({ code: e.code, ...extra }, touched, note);
+  return true;
 }
 
 function save() {
@@ -138,6 +175,21 @@ function travel(from: Doc[], to: Doc[], label: string) {
 // ---------------------------------------------------------------- helpers
 
 const node = (id: Id) => doc.code.nodes[id];
+
+// Unit inference and the checker, once per version of the code.
+const inferred = new WeakMap<Code, Map<Id, Inference | null>>();
+function unitsOf(def: Id): Inference | null {
+  let m = inferred.get(doc.code);
+  if (!m) inferred.set(doc.code, (m = new Map()));
+  if (!m.has(def)) { try { m.set(def, infer(doc.code, def)); } catch { m.set(def, null); } }
+  return m.get(def)!;
+}
+const checked = new WeakMap<Code, Problem[]>();
+function problems(): Problem[] {
+  let ps = checked.get(doc.code);
+  if (!ps) checked.set(doc.code, (ps = check(doc.code)));
+  return ps;
+}
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 const isNetwork = (d: Id) => defBody(d)?.kind === "network";
 const network = () => get(doc.code, (node(ui.def) as { body: Id }).body, "network");
@@ -213,19 +265,6 @@ function aliases(id: Id): string[] {
   for (const s of [...Object.values(styles), graphStyle as unknown as Style]) out.push(s.notation[id]?.glyph);
   if (n?.kind === "builtin") out.push(n.op);
   return [...new Set(out.filter((x): x is string => !!x))];
-}
-
-function arity(id: Id): number {
-  const n = node(id);
-  if (n.kind === "builtin") return impl[n.op as keyof typeof impl]?.length ?? 1;
-  const b = defBody(id);
-  return b?.kind === "lambda" ? b.params.length : 1;
-}
-
-function add(code: Code, data: NodeData): Id {
-  const id = freshId();
-  code.nodes[id] = { id, ...data } as Node;
-  return id;
 }
 
 const isExpr = (n: Node) => n.kind === "lit" || n.kind === "ref" || n.kind === "call" || n.kind === "lambda" || n.kind === "hole";
@@ -313,32 +352,19 @@ function setComment(id: Id, value: string) {
 }
 
 function setLiteral(id: Id, raw: string) {
-  const v = Number(raw);
-  const n = node(id);
-  const code = { nodes: { ...doc.code.nodes }, defs: doc.code.defs };
-  if (n.kind === "part") code.nodes[id] = { ...n, value: Number.isFinite(v) ? v : 0 };
-  else code.nodes[id] = { id, kind: "lit", value: raw.trim() !== "" && Number.isFinite(v) ? v : raw };
-  commit({ code }, ["code.json"], "Changed a constant. That is a change in meaning, so the hash moved.");
+  apply(E.setLiteral(doc.code, id, raw), "Changed a constant. That is a change in meaning, so the hash moved.");
 }
 
 function wrap(sel: Id, fn: Id) {
-  // Point the parent at the new call first, so `sel` has exactly one parent
-  // when we look it up.
-  const call = freshId();
-  const code = swapIn(doc.code, sel, call);
-  const n = arity(fn);
-  const args = [sel, ...Array.from({ length: Math.max(0, n - 1) }, () => add(code, { kind: "hole" }))];
-  code.nodes[call] = { id: call, kind: "call", fn: add(code, { kind: "ref", target: fn }), args };
-  ui.selected = n > 1 ? args[1] : call;
-  commit({ code }, ["code.json"], `Wrapped in ${aliases(fn)[0]}. The wrapped part kept its ids, so its names and comments came along.`);
+  apply(E.wrap(doc.code, sel, fn), `Wrapped in ${aliases(fn)[0]}. One slot per parameter, so the arity is right by construction; the wrapped part kept its ids.`);
 }
 
 function replaceWith(sel: Id, data: NodeData, label: string) {
-  let code = { nodes: { ...doc.code.nodes }, defs: doc.code.defs };
-  const id = add(code, data);
-  code = collect(swapIn(code, sel, id));
-  ui.selected = id;
-  commit({ code }, ["code.json"], label);
+  apply(E.replaceWith(doc.code, sel, data), label);
+}
+
+function setUnit(id: Id, unit: Unit | null) {
+  apply(E.setUnit(doc.code, id, unit), unit ? `Declared ${formatUnit(unit)}. Units are part of the meaning, so the hash moved; everything wired to it now has to agree.` : "Cleared the declared unit; it's inferred from the wiring again.");
 }
 
 function toggleExpand(callId: Id) {
@@ -373,108 +399,33 @@ function convertToNetwork() {
 
 // ---------------------------------------------------------------- gestures: networks
 
-type PortRef = { part: Id; key: string } | { ext: Id };
+type PortRef = E.PortRef;
 const portId = (p: PortRef) => ("ext" in p ? `ext|${p.ext}` : `${p.part}|${p.key}`);
 const parsePort = (s: string): PortRef => {
   const [a, b] = s.split("|");
   return a === "ext" ? { ext: b } : { part: a, key: b };
 };
 
-// Networks are edited on a copy of the nodes, then tidied: a wire with fewer
-// than two ends is removed.
-function editNetwork(fn: (nodes: Record<Id, Node>, net: { params: Id[]; wires: Id[]; parts: Id[] }) => void, note: string, touched = ["code.json"]) {
-  const nodes = { ...doc.code.nodes };
-  const old = network();
-  const net = { params: [...old.params], wires: [...old.wires], parts: [...old.parts] };
-  fn(nodes, net);
-  const ends = new Map<Id, number>();
-  for (const pid of net.parts) for (const w of Object.values((nodes[pid] as { bind: Record<string, Id> }).bind)) ends.set(w, (ends.get(w) ?? 0) + 1);
-  for (const w of [...net.wires]) {
-    if ((ends.get(w) ?? 0) >= 2) continue;
-    net.wires = net.wires.filter((x) => x !== w);
-    for (const pid of net.parts) {
-      const p = nodes[pid] as Extract<Node, { kind: "part" }>;
-      if (Object.values(p.bind).includes(w)) nodes[pid] = { ...p, bind: Object.fromEntries(Object.entries(p.bind).filter(([, x]) => x !== w)) };
-    }
-  }
-  nodes[old.id] = { id: old.id, kind: "network", ...net };
-  commit({ code: collect({ nodes, defs: doc.code.defs }) }, touched, note);
-}
-
-const wireOf = (p: PortRef, nodes = doc.code.nodes): Id | undefined =>
-  "ext" in p ? p.ext : (nodes[p.part] as Extract<Node, { kind: "part" }>).bind[p.key];
+const wireOf = (p: PortRef, code = doc.code): Id | undefined => E.wireOf(code, p);
 
 function connect(a: PortRef, b: PortRef) {
-  const wa = wireOf(a), wb = wireOf(b);
-  if (wa && wa === wb) return;
-  if ("ext" in a && "ext" in b) {
-    ui.note = "Two outer ports can't be joined directly. Put a node between them.";
-    return render();
-  }
-  editNetwork((nodes, net) => {
-    const bindPart = (p: PortRef, w: Id) => {
-      if ("ext" in p) return;
-      const part = nodes[p.part] as Extract<Node, { kind: "part" }>;
-      nodes[p.part] = { ...part, bind: { ...part.bind, [p.key]: w } };
-    };
-    if (wa && wb) {
-      // Merging two wires: keep an outer port if one is involved.
-      const [keep, drop] = net.params.includes(wb) ? [wb, wa] : [wa, wb];
-      if (net.params.includes(drop)) { ui.note = "Both wires already end at outer ports; disconnect one first."; return; }
-      for (const pid of net.parts) {
-        const p = nodes[pid] as Extract<Node, { kind: "part" }>;
-        if (Object.values(p.bind).includes(drop)) nodes[pid] = { ...p, bind: Object.fromEntries(Object.entries(p.bind).map(([k, w]) => [k, w === drop ? keep : w])) };
-      }
-      net.wires = net.wires.filter((w) => w !== drop);
-    } else if (wa || wb) {
-      bindPart(wa ? b : a, (wa ?? wb)!);
-    } else {
-      const w = add({ nodes, defs: [] }, { kind: "binder" });
-      net.wires.push(w);
-      bindPart(a, w);
-      bindPart(b, w);
-    }
-  }, "Connected. Wires are ids in code.json; the solver works out which way values flow.");
+  apply(E.connect(doc.code, ui.def, a, b), "Connected. Wires are ids in code.json; the solver works out which way values flow.");
 }
 
 function disconnect(p: PortRef) {
   if (!wireOf(p)) return;
-  editNetwork((nodes, net) => {
-    if ("ext" in p) {
-      for (const pid of net.parts) {
-        const part = nodes[pid] as Extract<Node, { kind: "part" }>;
-        nodes[pid] = { ...part, bind: Object.fromEntries(Object.entries(part.bind).filter(([, w]) => w !== p.ext)) };
-      }
-    } else {
-      const part = nodes[p.part] as Extract<Node, { kind: "part" }>;
-      const bind = { ...part.bind };
-      delete bind[p.key];
-      nodes[p.part] = { ...part, bind };
-    }
-  }, "Disconnected.");
+  apply(E.disconnect(doc.code, ui.def, p), "Disconnected.");
 }
 
 function addPart(fn: Id | null, value?: number) {
-  let id = "";
-  editNetwork((nodes, net) => {
-    id = add({ nodes, defs: [] }, value === undefined ? { kind: "part", fn, bind: {} } : { kind: "part", fn, bind: {}, value });
-    net.parts.push(id);
-  }, `Added ${fn ? labelOf(fn) : String(value)}. Drag from its ports to wire it in.`);
-  ui.selected = id;
-  render();
+  apply(E.addPart(doc.code, ui.def, fn, value), `Added ${fn ? labelOf(fn) : String(value)}. Drag from its ports to wire it in.`);
 }
 
 function addPort() {
-  let id = "";
   const n = network().params.length + 1;
-  editNetwork((nodes, net) => {
-    id = add({ nodes, defs: [] }, { kind: "binder" });
-    net.params.push(id);
-  }, "Added an outer port. Make it known to feed a value in, or leave it unknown to read one out.", ["code.json", "names.short.json"]);
-  doc.names.short = { ...doc.names.short, [id]: `port ${n}` };
-  ui.selected = id;
-  save();
-  render();
+  const e = E.addPort(doc.code, ui.def);
+  if (e.ok) apply(e, "Added an outer port. Make it known to feed a value in, or leave it unknown to read one out.",
+    { names: { ...doc.names, short: { ...doc.names.short, [e.created!]: `port ${n}` } } }, ["code.json", "names.short.json"]);
 }
 
 function removeSelected() {
@@ -483,25 +434,8 @@ function removeSelected() {
   const n = node(id);
   if (isNetwork(ui.def)) {
     const net = network();
-    if (n.kind === "part") return editNetwork((_, nn) => { nn.parts = nn.parts.filter((x) => x !== id); }, "Deleted the node.");
-    if (net.params.includes(id)) {
-      return editNetwork((nodes, nn) => {
-        nn.params = nn.params.filter((x) => x !== id);
-        for (const pid of nn.parts) {
-          const p = nodes[pid] as Extract<Node, { kind: "part" }>;
-          nodes[pid] = { ...p, bind: Object.fromEntries(Object.entries(p.bind).filter(([, w]) => w !== id)) };
-        }
-      }, "Removed the outer port.");
-    }
-    if (net.wires.includes(id)) {
-      return editNetwork((nodes, nn) => {
-        nn.wires = nn.wires.filter((x) => x !== id);
-        for (const pid of nn.parts) {
-          const p = nodes[pid] as Extract<Node, { kind: "part" }>;
-          nodes[pid] = { ...p, bind: Object.fromEntries(Object.entries(p.bind).filter(([, w]) => w !== id)) };
-        }
-      }, "Removed the wire.");
-    }
+    const what = n.kind === "part" ? "Deleted the node." : net.params.includes(id) ? "Removed the outer port." : "Removed the wire.";
+    if (n.kind === "part" || net.params.includes(id) || net.wires.includes(id)) { ui.selected = null; apply(E.remove(doc.code, ui.def, id), what); }
     return;
   }
   if (isExpr(n) && n.kind !== "hole" && !view.origin.has(id)) replaceWith(id, { kind: "hole" }, "Deleted. A hole keeps the shape; fill it from the Fill… picker.");
@@ -732,7 +666,7 @@ function exprGraph(namer: Namer, p: Presentation): SVGSVGElement {
 
 // ---------------------------------------------------------------- render: network editor
 
-interface NBox { key: string; id: Id; title: string; sub?: string; cls: string; left: string[]; right: string[]; value?: string }
+interface NBox { key: string; id: Id; title: string; sub?: string; cls: string; left: string[]; right: string[]; value?: string; unit?: string }
 
 const PW = (b: NBox, label: (k: string) => string) => {
   const side = (ks: string[]) => Math.max(0, ...ks.map((k) => label(k).length));
@@ -740,38 +674,55 @@ const PW = (b: NBox, label: (k: string) => string) => {
 };
 const PH = (b: NBox) => 30 + Math.max(1, b.left.length, b.right.length) * 20 + (b.sub ? 12 : 0);
 
+// "a = total − b" with the wires' names in place of the port keys.
+function atomFormula(namer: Namer, p: Presentation, part: Extract<Node, { kind: "part" }>, atom: { port: string; text: string }): string {
+  const name = (k: string) => (part.bind[k] ? wireName(namer, p, part.bind[k]) : k);
+  return `${name(atom.port)} = ${atom.text.replace(/\b(total|product|[a-z])\b/g, name)}`;
+}
+
 function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number> | null): HTMLElement {
   const net = network();
   const knownSet = new Set(known());
   let dirs: Record<Id, PortDirection> = {};
   try { dirs = partDirections(doc.code, ui.def, [...knownSet]); } catch {}
+  let views: ReturnType<typeof atomViews> = {};
+  try { views = atomViews(doc.code, ui.def, dirs); } catch {}
+  const inf = unitsOf(ui.def);
+  const unitAt = (term: string) => { const u = inf?.unit(term); return u ? formatUnit(u) : ""; };
 
   const plabel = (fn: Id | null, key: string) => portLabel(doc.code, p.names, fn, key);
   const boxes: NBox[] = [];
   const labelFor = new Map<string, (k: string) => string>();
+  const sizeLabel = new Map<string, (k: string) => string>();
 
   for (const port of net.params) {
     const isIn = knownSet.has(port);
     const v = values?.[port];
-    boxes.push({ key: port, id: port, title: namer.name(port), cls: `ext ${isIn ? "in" : "out"}`, left: isIn ? [] : ["·"], right: isIn ? ["·"] : [], value: v === undefined ? undefined : fmt(v) });
+    const u = unitAt(port);
+    boxes.push({ key: port, id: port, title: namer.name(port), cls: `ext ${isIn ? "in" : "out"}`, left: isIn ? [] : ["·"], right: isIn ? ["·"] : [], value: v === undefined ? undefined : fmt(v) + (u && u !== "1" ? ` ${u}` : ""), unit: v === undefined ? u : undefined });
     labelFor.set(port, () => "");
   }
   for (const pid of net.parts) {
     const part = node(pid) as Extract<Node, { kind: "part" }>;
-    const keys = portsOf(doc.code, part.fn);
+    const keys = portsOf(doc.code, part.fn, part.bind);
     const d = dirs[pid] ?? {};
     // Unconnected ports sit where they usually would: results right, and for
     // relations the second half of the ports right.
     const isRel = part.fn !== null && !!RELATIONS[(node(part.fn) as { op?: string }).op ?? ""];
-    const usual = (k: string) => k === "out" || (isRel && keys.indexOf(k) >= keys.length / 2);
+    const usual = (k: string) => k === "out" || k === "total" || k === "product" || (isRel && keys.indexOf(k) >= keys.length / 2);
     const isOut = (k: string) => d[k] === "out" || ((d[k] ?? "free") === "free" && usual(k));
-    const title = part.fn === null ? String(part.value ?? 0) : p.style.notation[part.fn]?.glyph ?? namer.name(part.fn);
+    // A sum has no fixed symbol: it shows +, − or neg for the port it
+    // computes, so flipping which outer ports are known redraws it.
+    const atom = isVariadic(doc.code, part.fn) ? views[pid] : undefined;
+    const atomGlyph = isVariadic(doc.code, part.fn) ? (atom?.symbol ?? ((node(part.fn!) as { op: string }).op === "sum" ? "Σ" : "Π")) : null;
+    const title = part.fn === null ? String(part.value ?? 0) + (part.unit ? ` ${formatUnit(part.unit)}` : "") : atomGlyph ?? p.style.notation[part.fn]?.glyph ?? namer.name(part.fn);
     boxes.push({
-      key: pid, id: pid, title, sub: p.names[pid],
-      cls: `part ${part.fn === null ? "const" : node(part.fn).kind === "def" ? "def" : RELATIONS[(node(part.fn) as { op?: string }).op ?? ""] ? "rel" : "op"}`,
+      key: pid, id: pid, title, sub: p.names[pid] ?? (atom ? atomFormula(namer, p, part, atom) : undefined),
+      cls: `part ${part.fn === null ? "const" : node(part.fn).kind === "def" ? "def" : atomGlyph ? "atom" : RELATIONS[(node(part.fn) as { op?: string }).op ?? ""] ? "rel" : "op"}`,
       left: keys.filter((k) => !isOut(k)), right: keys.filter(isOut),
     });
     labelFor.set(pid, (k) => plabel(part.fn, k));
+    sizeLabel.set(pid, (k) => { const u = unitAt(portTerm(doc.code, pid, k)); return plabel(part.fn, k) + (u && u !== "1" ? ` ${u}` : ""); });
   }
 
   // Wires: who's at each end. An end is "box key | port key".
@@ -787,7 +738,7 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
     const src = es.find((e) => { const [b, k] = e.split("|"); const bx = boxes.find((x) => x.key === b); return bx && (bx.right.includes(k)); });
     if (src) for (const e of es) if (e !== src) flow.push({ from: src.split("|")[0], to: e.split("|")[0] });
   }
-  const sized = (b: NBox) => PW(b, labelFor.get(b.key)!);
+  const sized = (b: NBox) => PW(b, sizeLabel.get(b.key) ?? labelFor.get(b.key)!);
   const inner = boxes.filter((b) => !b.cls.startsWith("ext"));
   const autoInner = rankLayout(inner, flow.filter((f) => inner.some((b) => b.key === f.from) && inner.some((b) => b.key === f.to)), sized, PH, 70);
   const extIn = boxes.filter((b) => b.cls === "ext in"), extOut = boxes.filter((b) => b.cls === "ext out");
@@ -854,8 +805,9 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
     const isExt = b.cls.startsWith("ext");
     g.append(svg("rect", { width: wdt, height: hgt, rx: isExt ? hgt / 2 : 8, class: "body" }));
     if (isExt) {
-      g.append(text(wdt / 2, hgt / 2 + (b.value ? -2 : 5), b.title, "lbl"));
-      if (b.value) g.append(text(wdt / 2, hgt / 2 + 13, `= ${b.value}`, "val"));
+      const second = b.value ? `= ${b.value}` : b.unit ? `[${b.unit}]` : "";
+      g.append(text(wdt / 2, hgt / 2 + (second ? -2 : 5), b.title, "lbl"));
+      if (second) g.append(text(wdt / 2, hgt / 2 + 13, second, b.value ? "val" : "val unit"));
     } else {
       g.append(text(wdt / 2, 20, b.title, "lbl"));
       if (b.sub) g.append(text(wdt / 2, 33, b.sub, "sub"));
@@ -869,18 +821,43 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
       const px = a.x - q.x, py = a.y - q.y;
       const dir = isExt ? "" : (dirs[b.id]?.[k] ?? "free");
       const bound = isExt || !!(node(b.id) as { bind?: Record<string, Id> }).bind?.[k];
-      if (!isExt) g.append(text(px + side * -8, py + 4, label(k), `plbl ${dir}`, side === -1 ? "start" : "end"));
+      if (!isExt) {
+        const t = text(px + side * -8, py + 4, label(k), `plbl ${dir}`, side === -1 ? "start" : "end");
+        const u = unitAt(portTerm(doc.code, b.id, k));
+        if (u && u !== "1") { const ts = svg("tspan", { class: "punit" }); ts.textContent = side === -1 ? ` ${u}` : `${u} `; side === -1 ? t.append(ts) : t.prepend(ts); }
+        g.append(t);
+      }
       const dot = svg("circle", { cx: px, cy: py, r: 6, class: `dot ${dir}${bound ? " bound" : ""}`, "data-port": isExt ? `ext|${b.id}` : `${b.id}|${k}` });
       dot.addEventListener("pointerdown", (ev) => {
         ev.stopPropagation();
         const from = parsePort(dot.getAttribute("data-port")!);
         const line = svg("path", { class: "wire pending" });
-        dragLayer.append(line);
-        drag(dot, root, maxX, ev, (dx, dy) => {
+        const why = text(0, 0, "", "why", "start");
+        dragLayer.append(line, why);
+        // Ask edits.ts about every other port before the drag starts, so
+        // the ones that would be refused can say so while you hover.
+        const verdict = new Map<Element, string | null>();
+        for (const other of root.querySelectorAll("[data-port]")) {
+          if (other === dot) continue;
+          const r = E.connect(doc.code, ui.def, from, parsePort(other.getAttribute("data-port")!));
+          verdict.set(other, r.ok ? null : r.reason);
+          other.classList.add(r.ok ? "can" : "cannot");
+        }
+        root.classList.add("dragging");
+        drag(dot, root, maxX, ev, (dx, dy, e) => {
           const ex = a.x + dx, ey = a.y + dy;
           line.setAttribute("d", `M${a.x},${a.y} C${a.x + 50 * side},${a.y} ${ex - 50 * side},${ey} ${ex},${ey}`);
+          const over = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-port]");
+          const reason = over ? verdict.get(over) : null;
+          why.textContent = reason ?? "";
+          why.setAttribute("x", String(ex + 12));
+          why.setAttribute("y", String(ey - 10));
+          line.classList.toggle("bad", !!reason);
         }, (moved, e) => {
           line.remove();
+          why.remove();
+          root.classList.remove("dragging");
+          for (const o of verdict.keys()) o.classList.remove("can", "cannot");
           if (!moved) return;
           const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-port]");
           if (target && target !== dot) connect(from, parsePort(target.getAttribute("data-port")!));
@@ -902,7 +879,7 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
   const bar = h("div", { class: "net-bar" },
     h("button", { class: `btn${ui.mode === "add" ? " on" : ""}`, type: "button", "data-act": "add" }, "Add node…"),
     h("button", { class: "btn", type: "button", "data-act": "add-port" }, "Add outer port"),
-    h("span", { class: "legend" }, h("i", { class: "lg in" }), "input to the node", h("i", { class: "lg out" }), "solved by the node", h("i", { class: "lg free" }), "unconnected"));
+    h("span", { class: "legend" }, h("i", { class: "lg in" }), "input to the node", h("i", { class: "lg out" }), "solved by the node", h("i", { class: "lg free" }), "unconnected", h("span", { class: "punit" }, "m/s"), "inferred unit"));
   return h("div", {}, bar, ui.mode === "add" ? picker(null, namer) : null, h("div", { class: "graph-wrap" }, root));
 }
 
@@ -976,6 +953,11 @@ function equationsText(namer: Namer, p: Presentation): string {
     const part = node(pid) as Extract<Node, { kind: "part" }>;
     if (part.fn === null) return `${w(part.bind.out)} = ${part.value}`;
     const t = node(part.fn);
+    if (isVariadic(doc.code, part.fn)) {
+      const { total } = VARIADIC[(t as { op: keyof typeof VARIADIC }).op];
+      const terms = Object.keys(part.bind).filter((k) => k !== total).sort().map((k) => w(part.bind[k]));
+      return `${terms.join(total === "total" ? " + " : " · ") || (total === "total" ? "0" : "1")} = ${w(part.bind[total])}`;
+    }
     const nota = p.style.notation[part.fn];
     if (t.kind === "builtin" && t.op in impl) {
       const args = portsOf(doc.code, part.fn).filter((k) => k !== "out").map((k) => w(part.bind[k]));
@@ -1060,10 +1042,13 @@ function inspector(namer: Namer, p: Presentation): HTMLElement {
   if (n.kind === "part") {
     const dirs = (() => { try { return partDirections(doc.code, ui.def, known())[id] ?? {}; } catch { return {}; } })();
     const list = h("div", { class: "ports" });
-    for (const k of portsOf(doc.code, n.fn)) {
+    const inf = unitsOf(ui.def);
+    for (const k of portsOf(doc.code, n.fn, n.bind)) {
       const w = n.bind[k];
+      const u = inf?.unit(portTerm(doc.code, id, k));
       list.append(h("div", { class: "prow" }, h("span", { class: `pdir ${dirs[k] ?? "free"}` }, dirs[k] === "in" ? "in" : dirs[k] === "out" ? "out" : "—"),
-        h("span", {}, portLabel(doc.code, p.names, n.fn, k)), h("span", { class: "pw" }, w ? namer.name(w) : "not connected")));
+        h("span", {}, portLabel(doc.code, p.names, n.fn, k), u ? h("span", { class: "punit" }, ` ${formatUnit(u)}`) : null),
+        h("span", { class: "pw" }, w ? namer.name(w) : isVariadic(doc.code, n.fn) && !Object.values(VARIADIC).some((v) => v.total === k) ? "spare: connect to add a term" : "not connected")));
     }
     out.append(h("div", { class: "sub-head" }, "Ports (direction comes from the wiring)"), list);
     if (n.fn === null) {
@@ -1086,6 +1071,9 @@ function inspector(namer: Namer, p: Presentation): HTMLElement {
       h("button", { class: "btn", type: "button", "data-act": "to-network" }, "Turn into a network"));
   }
 
+  const unitBox = unitSection(id, n);
+  if (unitBox) out.append(unitBox);
+
   const ta = h("textarea", { id: "f-comment", rows: "2", placeholder: "Add a note to this node" }) as HTMLTextAreaElement;
   ta.value = doc.comments[id] ?? "";
   ta.addEventListener("change", () => setComment(id, ta.value));
@@ -1101,10 +1089,38 @@ function inspector(namer: Namer, p: Presentation): HTMLElement {
   return out;
 }
 
+// Units: what inference says, and chips to declare one. A chip that would
+// contradict the wiring is disabled and says why, before you click it.
+const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { m: 1 }], ["s", { s: 1 }], ["kg", { kg: 1 }], ["rad", { rad: 1 }], ["A", { A: 1 }],
+  ["m/s", { m: 1, s: -1 }], ["m/s²", { m: 1, s: -2 }], ...NAMED.map(([name, u]): [string, Unit] => [name, u])];
+
+function unitSection(id: Id, n: Node): HTMLElement | null {
+  const declarable = n.kind === "binder" || (n.kind === "part" && n.fn === null);
+  const termOf = n.kind === "part" ? (n.fn === null ? n.bind.out ?? `${id}:out` : null) : id;
+  if (!termOf && !declarable) return null;
+  if (!declarable && !isExpr(n)) return null;
+  const inf = unitsOf(ui.def);
+  const u = termOf ? inf?.unit(termOf) : undefined;
+  const declared = (n as { unit?: Unit }).unit;
+  const box = h("div", {}, h("div", { class: "sub-head" }, "Unit · the type of this value"),
+    h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's wired to.` : "Free: nothing pins it down yet, so it fits anywhere."));
+  if (!declarable) return box;
+  const chips = h("div", { class: "chips" });
+  for (const [label, unit] of UNIT_CHIPS) {
+    const on = unit === null ? !declared : !!declared && formatUnit(declared) === formatUnit(unit);
+    const r = on ? { ok: true } : E.allowed(E.setUnit(doc.code, id, unit));
+    const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", disabled: !r.ok, title: r.ok ? `Declare ${label}` : `Can't: ${r.reason}` }, label);
+    if (r.ok && !on) b.addEventListener("click", () => setUnit(id, unit));
+    chips.append(b);
+  }
+  box.append(chips);
+  return box;
+}
+
 function picker(sel: Id | null, namer: Namer): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   const match = (strs: string[]) => !q || strs.some((s) => s.toLowerCase().includes(q));
-  type Opt = { label: string; detail: string; run: () => void };
+  type Opt = { label: string; detail: string; run: () => void; why?: string };
   const opts: Opt[] = [];
   const builtins = Object.values(doc.code.nodes).filter((n) => n.kind === "builtin").map((n) => n.id);
   const defs = doc.code.defs.filter((d) => d !== ui.def && defBody(d));
@@ -1121,17 +1137,23 @@ function picker(sel: Id | null, namer: Namer): HTMLElement {
   } else if (ui.mode === "wrap" && sel) {
     for (const f of [...builtins.filter((b) => (node(b) as { op: string }).op in impl), ...defs.filter((d) => !isNetwork(d))]) {
       const al = aliases(f);
-      if (match(al)) opts.push({ label: namer.name(f), detail: al.filter((a) => a !== namer.name(f)).join("  "), run: () => wrap(sel, f) });
+      if (match(al)) opts.push({ label: namer.name(f), detail: al.filter((a) => a !== namer.name(f)).join("  "), run: () => wrap(sel, f), why: refusal(E.wrap(doc.code, sel, f)) });
     }
   } else if (sel) {
     for (const b of scopeAt(sel)) {
-      if (match(aliases(b))) opts.push({ label: namer.name(b), detail: `variable ${b}`, run: () => replaceWith(sel, { kind: "ref", target: b }, `Now refers to ${namer.name(b)} by id.`) });
+      if (match(aliases(b))) opts.push({ label: namer.name(b), detail: `variable ${b}`, run: () => replaceWith(sel, { kind: "ref", target: b }, `Now refers to ${namer.name(b)} by id.`), why: refusal(E.replaceWith(doc.code, sel, { kind: "ref", target: b })) });
     }
     for (const d of defs) {
       if (isNetwork(d) || !match(aliases(d))) continue;
-      opts.push({ label: namer.name(d), detail: `definition ${d}`, run: () => replaceWith(sel, { kind: "ref", target: d }, `Now refers to ${namer.name(d)} by id.`) });
+      opts.push({ label: namer.name(d), detail: `definition ${d}`, run: () => replaceWith(sel, { kind: "ref", target: d }, `Now refers to ${namer.name(d)} by id.`), why: refusal(E.replaceWith(doc.code, sel, { kind: "ref", target: d })) });
     }
-    if (isNum) opts.unshift({ label: String(num), detail: "number", run: () => replaceWith(sel, { kind: "lit", value: num }, "Replaced with a literal.") });
+    if (isNum) opts.unshift({ label: String(num), detail: "number", run: () => replaceWith(sel, { kind: "lit", value: num }, "Replaced with a literal."), why: refusal(E.replaceWith(doc.code, sel, { kind: "lit", value: num })) });
+    // A call to anything with the right number of holes, so it can't be
+    // called with the wrong number of arguments.
+    for (const f of [...builtins.filter((b) => (node(b) as { op: string }).op in impl), ...defs.filter((d) => !isNetwork(d))]) {
+      const al = aliases(f);
+      if (q && match(al)) opts.push({ label: `${namer.name(f)}(${Array.from({ length: E.arity(doc.code, f) }, () => "□").join(", ")})`, detail: "call", run: () => apply(E.callWithHoles(doc.code, sel, f), "Replaced with a call; one hole per parameter."), why: refusal(E.callWithHoles(doc.code, sel, f)) });
+    }
     if (match(["hole", "empty", "□"])) opts.push({ label: "□", detail: "empty hole", run: () => replaceWith(sel, { kind: "hole" }, "Replaced with a hole.") });
   }
 
@@ -1145,18 +1167,46 @@ function picker(sel: Id | null, namer: Namer): HTMLElement {
     again?.focus();
     if (again && at !== null) again.setSelectionRange(at, at);
   });
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && opts[0]) opts[0].run(); if (e.key === "Escape") { ui.mode = null; render(); } });
+  // An exact name match goes first, so Enter picks what you typed.
+  const exact = (o: Opt) => (o.label.toLowerCase() === q || o.detail.toLowerCase().split(/\s+/).includes(q) ? 0 : 1);
+  opts.sort((a, b) => exact(a) - exact(b));
+  const usable = opts.filter((o) => !o.why);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && usable[0]) usable[0].run(); if (e.key === "Escape") { ui.mode = null; render(); } });
   const list = h("div", { class: "opts" });
-  opts.slice(0, 14).forEach((o) => {
-    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, o.label), h("span", { class: "opt-d" }, o.detail));
-    b.addEventListener("click", o.run);
+  [...usable, ...opts.filter((o) => o.why)].slice(0, 14).forEach((o) => {
+    const b = h("button", { class: `opt${o.why ? " no" : ""}`, type: "button", disabled: !!o.why, title: o.why ? `Can't: ${o.why}` : undefined },
+      h("span", { class: "opt-l" }, o.label), h("span", { class: "opt-d" }, o.why ? `can't: ${o.why}` : o.detail));
+    if (!o.why) b.addEventListener("click", o.run);
     list.append(b);
   });
   if (!opts.length) list.append(h("p", { class: "hint" }, "Nothing matches."));
   return h("div", { class: "picker" }, input, list);
 }
 
+const refusal = (e: E.Edit) => (e.ok ? undefined : e.reason);
+
 // ---------------------------------------------------------------- render: side panels
+
+// Every kind of error, and what happens to it here. Most can't be made at
+// all; the ones that can are listed so you can click through to them.
+function checksPanel(namer: Namer): HTMLElement {
+  const ps = problems().filter((x) => x.def === ui.def);
+  const box = h("div", { class: "checks" });
+  for (const c of CLASSES) {
+    const mine = ps.filter((x) => x.cls === c.cls);
+    const bad = mine.some((x) => x.severity === "error");
+    const state = bad ? "bad" : mine.length ? "gap" : c.cls === "runtime" ? "later" : "ok";
+    const row = h("div", { class: `chk ${state}` },
+      h("span", { class: "chk-n" }, mine.length ? String(mine.length) : state === "later" ? "…" : "0"),
+      h("span", { class: "chk-t" }, c.title, h("small", {}, c.how)));
+    box.append(row);
+    for (const x of mine.slice(0, 4)) {
+      const b = h("button", { class: "chk-item", type: "button", "data-act": "goto-node", "data-target": x.id }, `${namer.name(x.id)}: ${x.message}`);
+      box.append(b);
+    }
+  }
+  return box;
+}
 
 function filesPanel(): HTMLElement {
   const box = h("div", { class: "files" });
@@ -1186,7 +1236,8 @@ function exprRunPanel(namer: Namer): HTMLElement {
   params.forEach((b, i) => {
     const input = h("input", { id: `arg-${b}`, type: "text", inputmode: "decimal", value: vals[i], "aria-label": namer.name(b) }) as HTMLInputElement;
     input.addEventListener("change", () => { ui.args[b] = input.value; render(); });
-    row.append(h("label", { class: "arg", for: `arg-${b}` }, h("span", {}, namer.name(b)), input));
+    const pu = unitsOf(ui.def)?.unit(b);
+    row.append(h("label", { class: "arg", for: `arg-${b}` }, h("span", {}, namer.name(b), pu && Object.keys(pu).length ? h("span", { class: "punit" }, ` ${formatUnit(pu)}`) : null), input));
   });
   let result: string;
   let failed = false;
@@ -1198,6 +1249,8 @@ function exprRunPanel(namer: Namer): HTMLElement {
     result = (e as Error).message;
     failed = true;
   }
+  const u = unitsOf(ui.def)?.unit(body.kind === "lambda" ? body.body : def.body);
+  if (u && !failed && Object.keys(u).length) result += ` ${formatUnit(u)}`;
   box.append(row, h("div", { class: "result" }, h("span", {}, `${namer.name(ui.def)}(…) =`), h("code", { class: failed ? "err" : undefined }, result)));
   return box;
 }
@@ -1239,9 +1292,11 @@ function netRunPanel(namer: Namer, s: Solved): HTMLElement {
     : "No solution: the known values contradict each other, or need a complex number."));
   else {
     box.append(h("div", { class: "sub-head" }, "Solved"));
-    for (const port of wanted) box.append(h("div", { class: "result" }, h("span", {}, namer.name(port)), h("code", {}, fmt(s.canonical![port]))));
+    const inf = unitsOf(ui.def);
+    const withUnit = (port: Id, x: number) => { const u = inf?.unit(port); return fmt(x) + (u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""); };
+    for (const port of wanted) box.append(h("div", { class: "result" }, h("span", {}, namer.name(port)), h("code", {}, withUnit(port, s.canonical![port]))));
     if (s.solutions.length > 1) {
-      const alt = s.solutions.slice(1, 6).map((sol) => wanted.map((p) => `${namer.name(p)} ${fmt(sol.values[p])}`).join(", "));
+      const alt = s.solutions.slice(1, 6).map((sol) => wanted.map((p) => `${namer.name(p)} ${withUnit(p, sol.values[p])}`).join(", "));
       box.append(h("details", { class: "alts" }, h("summary", {}, `${s.solutions.length - 1} other solution${s.solutions.length > 2 ? "s" : ""} (other branches)`),
         ...alt.map((a) => h("div", { class: "alt" }, a))));
       box.append(h("p", { class: "hint" }, "The first one is canonical: every multi-valued inverse took its principal branch."));
@@ -1319,12 +1374,13 @@ function render() {
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset" }, "Reset")))),
-    h("div", { class: `status${ui.touched.length ? " live" : ""}`, role: "status" }, ui.note),
+    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
     h("main", { class: `grid${net ? " is-net" : ""}` },
       ...main,
       h("aside", { class: "side" },
         h("section", { class: "panel" }, h("h2", {}, "Selected"), inspector(namer, p)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), net ? netRunPanel(namer, solved!) : exprRunPanel(namer)),
+        h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), checksPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Files"), filesPanel()))),
   );
   document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });
