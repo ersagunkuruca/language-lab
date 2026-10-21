@@ -1,0 +1,315 @@
+<meta charset="utf-8">
+<title>Relation Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single working column. A relation node on top (ports as switches), the program the solver derived below it, then the solution set. URL lab after. */
+:root {
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --ink: #18202e;
+  --muted: #5d6779;
+  --line: #d9dee7;
+  --accent: #2c46c9;
+  --accent-soft: #e4e8fb;
+  --good: #1d7a52;
+  --warn: #a35a00;
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151d; --panel: #181e29; --ink: #e5e9f1; --muted: #98a2b5; --line: #2a3242;
+    --accent: #8fa2ff; --accent-soft: #232c4d; --good: #5fcf9b; --warn: #f0a649; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151d; --panel: #181e29; --ink: #e5e9f1; --muted: #98a2b5; --line: #2a3242;
+  --accent: #8fa2ff; --accent-soft: #232c4d; --good: #5fcf9b; --warn: #f0a649; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap: balance; }
+h1 { font-size: 2.6rem; line-height: 1.05; }
+h2 { font-size: 1.75rem; }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); }
+.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+header { display: grid; gap: 10px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button {
+  font: inherit; font-size: 0.85rem; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.node { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 16px; }
+.node-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; }
+.node-head .eqs { font-family: var(--mono); font-size: 0.9rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.eqs .law { font-style: italic; }
+.ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.port { border: 1.5px dashed var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.port.known { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.port-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.port-name { font-family: var(--mono); font-weight: 500; font-size: 1.05rem; }
+.switch {
+  font: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  border-radius: 999px; padding: 2px 9px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.port.known .switch { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.port input {
+  width: 100%; font-family: var(--mono); font-size: 0.95rem; padding: 5px 7px; border-radius: 5px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.port .out { font-family: var(--mono); font-size: 0.95rem; padding: 6px 0; font-variant-numeric: tabular-nums; min-height: 1.9em; }
+.status { font-size: 0.9rem; }
+.status.bad { color: var(--warn); }
+
+.prog { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.step { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.step .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; padding-top: 3px; }
+.kind.solve { color: var(--accent); } .kind.linear { color: var(--good); } .kind.check { color: var(--muted); } .kind.newton { color: var(--warn); }
+.step .body { min-width: 0; display: grid; gap: 2px; }
+.step .text { font-family: var(--mono); font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.step .from { font-size: 0.8rem; color: var(--muted); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; font-family: var(--mono); font-size: 0.88rem; font-variant-numeric: tabular-nums; min-width: 100%; }
+th, td { text-align: right; padding: 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--body); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+td.k { color: var(--accent); }
+tr.canon td { font-weight: 600; }
+.pill { font-family: var(--body); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--panel); }
+.row { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between; }
+.row label { font-size: 0.85rem; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.row input[type="range"] { accent-color: var(--accent); }
+
+.url-in { width: 100%; font-family: var(--mono); font-size: 0.95rem; padding: 9px 11px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.fields label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+.fields input { font-family: var(--mono); font-size: 0.9rem; padding: 5px 7px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
+.canon-url { font-family: var(--mono); font-size: 1rem; overflow-wrap: anywhere; color: var(--accent); }
+.variants { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; font-family: var(--mono); font-size: 0.84rem; color: var(--muted); }
+.variants li { overflow-wrap: anywhere; }
+.samples { display: flex; flex-wrap: wrap; gap: 6px; }
+.samples button { font-family: var(--mono); font-size: 0.78rem; padding: 3px 8px; border-radius: 5px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+section { display: grid; gap: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="label">Language Lab · invertible functions</span>
+    <h1>Relation Bench</h1>
+    <p class="lede">Each node is a relation, not a function. Switch any port to <em>known</em> and type a value; the solver derives a program for the other ports, takes every branch of each multi-valued inverse, and marks the canonical answer.</p>
+  </header>
+
+  <section>
+    <div class="tabs" id="tabs" role="toolbar" aria-label="Relations"></div>
+    <div class="node">
+      <div class="node-head">
+        <h2 id="rel-name"></h2>
+        <div class="eqs" id="rel-eqs"></div>
+      </div>
+      <div class="ports" id="ports"></div>
+      <div class="status" id="status"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="row"><span class="label">Program the solver derived for this choice of known ports</span></div>
+    <div class="prog" id="prog"></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <span class="label" id="sol-count">Solutions</span>
+      <label for="window">branch index k from −<span id="wval">1</span> to <span id="wval2">1</span>
+        <input type="range" id="window" min="0" max="3" value="1">
+      </label>
+    </div>
+    <div class="tablewrap"><table id="sols"></table></div>
+  </section>
+
+  <section>
+    <span class="label">Same problem, strings</span>
+    <h2>URL parser and printer from one description</h2>
+    <p class="lede">Parsing is many-to-one, like squaring. Printing is its inverse, and like <code>sqrt</code> it has many answers: every spelling the parser accepts. The canonical URL is the printer's first branch.</p>
+    <input class="url-in" id="url" aria-label="URL to parse" value="https://example.com/BLOG/2024/hello%20world/?SORT=top&amp;page=1&amp;utm_source=x#comments">
+    <div class="samples" id="samples"></div>
+    <div class="status" id="url-status"></div>
+    <div class="fields" id="fields"></div>
+    <div><span class="label">Canonical</span><div class="canon-url" id="canon"></div></div>
+    <div><span class="label">Other spellings that read back to the same value</span><ul class="variants" id="variants"></ul></div>
+  </section>
+</div>
+
+<script type="module">
+import { ALL } from './src/examples.js';
+import { solve, describe, shortfall } from './src/relation.js';
+import { site } from './src/syntax.js';
+import { showEq } from './src/relation.js';
+
+const PRESETS = {
+  sumDiff: { c: 10, d: 4 },
+  polar: { x: 3, y: -4 },
+  polarNoLaw: { x: 3, y: -4 },
+  sine: { y: 0.5 },
+  sineDouble: { y: 0.3 },
+  square: { y: 9 },
+  exponential: { y: 20 },
+  ohm: { P: 100, R: 4 },
+  rotate: { x2: 0, y2: 1, φ: 1.5707963267949 },
+  temperature: { F: 212 },
+};
+const LABELS = {
+  sumDiff: 'a+b, a−b', polar: 'polar', polarNoLaw: 'polar (no law)', sine: 'sin', sineDouble: 'sin 2x',
+  square: 'x²', exponential: 'exp', ohm: 'Ohm + power', rotate: 'rotate (composed)', temperature: '°C °F K',
+};
+const KIND = { solve: 'isolate', linear: 'eliminate', check: 'check', newton: 'numeric' };
+
+let current = 'sumDiff';
+let known = { ...PRESETS[current] };
+let last = null;
+const $ = (id) => document.getElementById(id);
+const fmt = (x) => (x === undefined ? '' : String(+(+x).toPrecision(8)));
+
+function renderTabs() {
+  $('tabs').innerHTML = '';
+  for (const name of Object.keys(ALL)) {
+    const b = document.createElement('button');
+    b.textContent = LABELS[name] ?? name;
+    b.setAttribute('aria-pressed', String(name === current));
+    b.onclick = () => { current = name; known = { ...PRESETS[name] }; renderTabs(); renderNode(); };
+    $('tabs').append(b);
+  }
+}
+
+function renderNode() {
+  const rel = ALL[current];
+  $('rel-name').textContent = LABELS[current] ?? current;
+  $('rel-eqs').innerHTML = rel.eqs.map((e) => `<span class="${e.law ? 'law' : ''}" title="${e.law ? 'law (follows from the equations)' : 'equation'}">${showEq(e)}</span>`).join('');
+  $('ports').innerHTML = '';
+  for (const p of rel.ports) {
+    const isKnown = p in known;
+    const el = document.createElement('div');
+    el.className = 'port' + (isKnown ? ' known' : '');
+    el.innerHTML = `<div class="port-top"><span class="port-name">${p}</span>
+      <button class="switch" aria-pressed="${isKnown}">${isKnown ? 'known' : 'solve'}</button></div>`;
+    if (isKnown) {
+      const inp = document.createElement('input');
+      inp.id = `port-${current}-${p}`; inp.inputMode = 'decimal'; inp.value = fmt(known[p]);
+      inp.setAttribute('aria-label', `value of ${p}`);
+      inp.oninput = () => { const v = parseFloat(inp.value); if (Number.isFinite(v)) { known[p] = v; compute(); } };
+      el.append(inp);
+    } else {
+      const out = document.createElement('div');
+      out.className = 'out'; out.dataset.port = p;
+      el.append(out);
+    }
+    el.querySelector('.switch').onclick = () => {
+      if (isKnown) delete known[p];
+      else known[p] = last?.canonical?.[p] ?? 1;
+      renderNode();
+    };
+    $('ports').append(el);
+  }
+  compute();
+}
+
+function compute() {
+  const rel = ALL[current];
+  const window = +$('window').value;
+  $('wval').textContent = window; $('wval2').textContent = window;
+  last = solve(rel, known, { window, limit: 40 });
+  const { plan, solutions, canonical } = last;
+
+  const st = $('status');
+  if (plan.freePorts.length) {
+    const n = shortfall(rel, Object.keys(known));
+    st.className = 'status bad';
+    st.textContent = `Underdetermined: mark ${n} more of ${plan.freePorts.join(', ')} as known.`;
+  } else if (!solutions.length) {
+    st.className = 'status bad';
+    st.textContent = 'No solution: the known values are inconsistent or outside the domain.';
+  } else {
+    st.className = 'status';
+    st.textContent = solutions.length === 1 ? 'One solution.' : `${solutions.length} solutions in this window; the first is canonical.`;
+  }
+  for (const out of document.querySelectorAll('.out')) out.textContent = canonical ? fmt(canonical[out.dataset.port]) : '—';
+
+  $('prog').innerHTML = describe(plan, rel).map((s) => `
+    <div class="step"><span class="kind ${s.kind}">${KIND[s.kind]}</span>
+      <div class="body"><div class="text">${s.text}</div>
+      ${s.kind === 'check' ? '<div class="from">redundant equation, used to discard branches</div>' : `<div class="from">from ${s.from}</div>`}</div></div>`).join('')
+    || '<div class="step"><span class="kind check">—</span><div class="body"><div class="text">nothing to derive</div></div></div>';
+
+  $('sol-count').textContent = `Solutions (${solutions.length})`;
+  const unknownPorts = rel.ports.filter((p) => !(p in known));
+  const cols = [...unknownPorts, ...rel.ports.filter((p) => p in known)];
+  $('sols').innerHTML = solutions.length ? `<thead><tr><th></th>${cols.map((c) => `<th>${c}</th>`).join('')}<th>branches taken</th></tr></thead><tbody>` +
+    solutions.map((s, i) => `<tr class="${i ? '' : 'canon'}"><td>${i ? i + 1 : '<span class="pill">canonical</span>'}</td>
+      ${cols.map((c) => `<td class="${c in known ? '' : 'k'}">${fmt(s.values[c])}</td>`).join('')}
+      <td>${s.path.map((p) => `${p.x}:${'abcdefgh'[p.branch]}${Object.entries(p).filter(([k]) => k.startsWith('#')).map(([k, v]) => ` k=${v}`).join('')}`).join(' ') || '—'}</td></tr>`).join('') + '</tbody>' : '';
+}
+$('window').oninput = compute;
+
+// ---- URL lab ----
+const FIELDS = { home: [], user: ['id'], post: ['year', 'slug', 'page', 'sort'] };
+const NUMERIC = new Set(['id', 'year', 'page']);
+let urlValue = null;
+
+function renderUrl(fromFields = false) {
+  if (!fromFields) urlValue = site.parse($('url').value);
+  const st = $('url-status');
+  if (!urlValue) {
+    st.className = 'status bad'; st.textContent = 'No route reads this URL.';
+    $('fields').innerHTML = ''; $('canon').textContent = '—'; $('variants').innerHTML = '';
+    return;
+  }
+  st.className = 'status'; st.textContent = `Route: ${urlValue.route}`;
+  if (!fromFields) {
+    $('fields').innerHTML = '';
+    for (const f of FIELDS[urlValue.route]) {
+      const l = document.createElement('label');
+      l.innerHTML = `${f}<input id="f-${f}" value="${String(urlValue[f]).replaceAll('"', '&quot;')}">`;
+      l.querySelector('input').oninput = (e) => {
+        urlValue = { ...urlValue, [f]: NUMERIC.has(f) ? Number(e.target.value) : e.target.value };
+        renderUrl(true);
+      };
+      $('fields').append(l);
+    }
+  }
+  const all = site.variants(urlValue);
+  if (!all.length) {
+    st.className = 'status bad'; st.textContent = 'This value has no URL (outside the printer’s domain).';
+    $('canon').textContent = '—'; $('variants').innerHTML = '';
+    return;
+  }
+  $('canon').textContent = all[0];
+  $('variants').innerHTML = all.slice(1, 9).map((s) => `<li></li>`).join('');
+  [...$('variants').children].forEach((li, i) => (li.textContent = all[i + 1]));
+}
+for (const s of ['/USERS/042/', '/u/7#bio', '/index.html', '/blog/2024/caf%C3%A9?page=3', '/blog/2024/x?page=abc']) {
+  const b = document.createElement('button');
+  b.textContent = s;
+  b.onclick = () => { $('url').value = s; renderUrl(); };
+  $('samples').append(b);
+}
+$('url').oninput = () => renderUrl();
+
+renderTabs();
+renderNode();
+renderUrl();
+</script>
