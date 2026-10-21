@@ -41,3 +41,25 @@ test('a graph of nodes is a relation and solves in any direction', () => {
   const back = evaluate(g, { len: fwd.len, ang: fwd.ang }).canonical;
   assert.ok(Math.abs(back.a - 3) < 1e-9 && Math.abs(back.b - 1) < 1e-9);
 });
+
+test('direction: a relation with chosen inputs as a typed function or an underdetermined family', async () => {
+  const { direction, sum, examples: ex } = await import('../src/index.js');
+  const add = direction(sum(2), ['a', 'b']);
+  assert.equal(add.kind, 'function');
+  assert.deepEqual(add.outputs, ['total']);
+  assert.equal(add.multiplicity, 'one');
+  assert.equal(add.canFail, false);
+  assert.equal(add.run({ a: 2, b: 3 }).total, 5);
+
+  const root = direction(ex.square, ['y']);
+  assert.equal(root.multiplicity, 'many');
+  assert.equal(root.canFail, true);
+  assert.deepEqual([...root.all({ y: 4 })].map((r) => r.values.x), [2, -2]);
+  assert.equal(root.run({ y: -1 }), null);
+
+  const under = direction(ex.polar, ['θ']);
+  assert.equal(under.kind, 'underdetermined');
+  assert.equal(under.need, 1);
+  assert.deepEqual(under.completions.map((c) => c.join()).sort(), ['r', 'x', 'y']);
+  assert.equal(under.with(['r']).kind, 'function');
+});
