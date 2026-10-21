@@ -36,7 +36,9 @@ import { portLabel } from "../src/relational.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
-interface L { g: SVGGElement; w: number; h: number; outY: number; id?: Id }
+// A laid-out piece: its group, how far it reaches right (w) and down (h), and
+// left (x0) and up (y0) when something inside was dragged past its origin.
+interface L { g: SVGGElement; w: number; h: number; outY: number; id?: Id; x0?: number; y0?: number }
 
 export interface GraphHooks {
   selected: Id | null;
@@ -82,11 +84,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   };
 
   const group = (): SVGGElement => s("g") as SVGGElement;
-  // Put a node where the layout says, moved by its saved offset but never
-  // above or left of its container's origin. Returns where it went.
+  // Put a node where the layout says, moved by its saved offset. Returns
+  // where it went; containers grow (in every direction) to hold it.
   const place = (l: L, x: number, y: number): Pos => {
     const o = (l.id && offsets[l.id]) || { x: 0, y: 0 };
-    const p = { x: Math.max(0, x + o.x), y: Math.max(0, y + o.y) };
+    const p = { x: x + o.x, y: y + o.y };
     l.g.setAttribute("transform", `translate(${p.x},${p.y})`);
     return p;
   };
@@ -181,7 +183,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     let y = (h - kidsH) / 2;
     const top = badge ? 14 : 0;
     const portY = (i: number) => by + top + ((bh - top) / (inputs.length + 1)) * (i + 1);
-    let w = bx + bw;
+    let w = bx + bw, x0 = 0, y0 = 0;
     kids.forEach((k, i) => {
       const d = dotOf(inputs[i]);
       if (d) uses.push({ dot: d, ref: inputs[i], el: g, x: bx, y: portY(i) });
@@ -191,6 +193,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), "", inputs[i]);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
+        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
+        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
       }
       y += k.h + gap;
     });
@@ -200,45 +204,46 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     g.append(s("text", { x: bx + bw / 2, y: by + top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
     inputs.forEach((a, i) => g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
     g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    return { g, w, h, outY: by + bh / 2 };
+    return { g, w, h, x0, y0, outY: by + bh / 2 };
   };
 
   // Binder ports on a region's left edge; the body inside; out on the right.
   const PAD = 10, HEAD = 20;
-  const ports = (g: SVGGElement, binders: Id[], y0: number) => {
-    let w = 0;
+  const portsW = (binders: Id[]) => Math.max(0, ...binders.map((b) => tw(name(b), 6.8) + 18));
+  const ports = (g: SVGGElement, binders: Id[], x: number, y0: number) => {
     binders.forEach((b, i) => {
       const y = y0 + i * 22 + 11;
-      const label = name(b);
-      g.append(titled(s("circle", { cx: 0, cy: y, r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), typeOf(b)));
-      g.append(s("text", { x: 9, y: y - 6, class: "portl" }, label));
-      dots.set(b, { el: g, x: 0, y });
-      w = Math.max(w, tw(label, 6.8) + 18);
+      g.append(titled(s("circle", { cx: x, cy: y, r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), typeOf(b)));
+      g.append(s("text", { x: x + 9, y: y - 6, class: "portl" }, name(b)));
+      dots.set(b, { el: g, x, y });
     });
-    return { w, h: binders.length * 22 };
   };
-  const frame = (g: SVGGElement, id: Id, title: string, w: number, h: number, cls: string, selectable = true) => {
-    const r = s("rect", { width: w, height: h, rx: 9, class: `rg ${cls}${sel(id)}` });
-    if (selectable) r.setAttribute("data-id", id);
+  // A frame spans (x0, y0) to (x1, y1) in its group; x0, y0 go negative when
+  // something inside was dragged up or left past where the frame began.
+  const frame = (g: SVGGElement, id: Id, title: string, x0: number, y0: number, x1: number, y1: number, cls: string) => {
+    const r = s("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 9, class: `rg ${cls}${sel(id)}`, "data-id": id });
     if (id !== defId) grab(r, id);
     titled(r, typeOf(id));
     g.prepend(r);
-    g.append(s("text", { x: 10, y: 14, class: "rt" }, title));
+    g.append(s("text", { x: x0 + 10, y: y0 + 14, class: "rt" }, title));
   };
 
   const region = (id: Id, title: string, binders: Id[], body: Id, cls: string): L => {
     const g = group();
-    const p = ports(g, binders, HEAD + 4);
+    const pw = portsW(binders), ph = binders.length * 22;
     const b = lay(body);
-    const bx = Math.max(p.w + 14, PAD), innerH = Math.max(p.h + 8, b.h);
+    const bx = Math.max(pw + 14, PAD), innerH = Math.max(ph + 8, b.h);
     const at = place(b, bx, HEAD + (innerH - b.h) / 2);
     g.append(b.g);
-    const h = Math.max(HEAD + innerH + PAD, at.y + b.h + PAD), w = Math.max(at.x + b.w + 22, tw(title, 6.6) + 20);
+    // The parameters stay on the frame's left edge, however far it grew.
+    const x0 = Math.min(0, at.x + (b.x0 ?? 0) - bx), y0 = Math.min(0, at.y + (b.y0 ?? 0) - HEAD);
+    ports(g, binders, x0, y0 + HEAD + 4);
+    const h = Math.max(y0 + HEAD + innerH + PAD, at.y + b.h + PAD), w = Math.max(at.x + b.w + 22, x0 + tw(title, 6.6) + 20);
     const outY = at.y + b.outY;
     wire(g, at.x + b.w, outY, w, outY);
-    frame(g, id, title, w, h, cls);
+    frame(g, id, title, x0, y0, w, h, cls);
     g.append(s("circle", { cx: w, cy: outY, r: 4, class: "outp" }));
-    return { g, w, h, outY, id };
+    return { g, w, h, outY, id, x0, y0 };
   };
 
   // A relation used in one direction: the given ports are inputs on the left,
@@ -269,7 +274,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     let h = Math.max(kidsH, bh);
     const bx = kids.length ? colW + 34 : 0, by = (h - bh) / 2;
     const portY = (i: number) => by + top + i * 20 + 8;
-    let w = bx + bw;
+    let w = bx + bw, x0 = 0, y0 = 0;
     let y = (h - kidsH) / 2;
     kids.forEach((k, i) => {
       const d = dotOf(inputs[i]);
@@ -280,6 +285,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), "", inputs[i]);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
+        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
+        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
       }
       y += k.h + gap;
     });
@@ -300,7 +307,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const body = lay(n.body);
     const at = place(body, bx + bw + 40 + Math.max(0, ...boundKeys.map((k) => tw(name(n.binds[k]), 6.8))), Math.max(0, (h - body.h) / 2));
     g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), outY: at.y + body.outY };
+    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outY: at.y + body.outY };
   };
 
   // A let: each value flows into its dot; wires from the dots run to the
@@ -319,7 +326,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const vals = steps.map(([, v]) => lay(v));
     const colW = Math.max(0, ...vals.map((v) => v.w));
     const labW = Math.max(0, ...steps.map(([p]) => (name(p) === "_" ? 0 : tw(name(p), 6.8) / 2))) + 26;
-    let y = 0, w = 0, h = 0;
+    let y = 0, w = 0, h = 0, x0 = 0, y0 = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
       const silent = name(b) === "_";
@@ -330,6 +337,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       wire(g, at.x + v.w, py, dotX, py);
       w = Math.max(w, dotX + labW);
       h = Math.max(h, at.y + v.h);
+      x0 = Math.min(x0, at.x + (v.x0 ?? 0));
+      y0 = Math.min(y0, at.y + (v.y0 ?? 0));
       const t = silent ? "a step done for its effect; nothing reads it" : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; select it to name it`;
       g.append(titled(s("circle", { cx: dotX, cy: py, r: silent ? 4 : 6, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b }), t));
       if (!silent) g.append(s("text", { x: dotX, y: py - 10, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
@@ -341,7 +350,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const bx = colW + 22 + labW;
     const at = place(body, bx, Math.max(0, (Math.max(valsH, body.h) - body.h) / 2));
     g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), outY: at.y + body.outY };
+    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outY: at.y + body.outY };
   };
 
   // if, match and fold are ordinary nodes: the value goes in first, then one
@@ -379,7 +388,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     let y = (h - kidsH) / 2;
     const by = (h - bh) / 2;
     const portY = (i: number) => by + 30 + i * 20;
-    let w = bx + bw;
+    let w = bx + bw, x0 = 0, y0 = 0;
     kids.forEach((k, i) => {
       const x = ins[i];
       if (x.ref) uses.push({ dot: dotOf(x.ref)!, ref: x.ref, el: g, x: bx, y: portY(i) });
@@ -389,6 +398,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), i ? "fn" : "", x.slot);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
+        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
+        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
       }
       y += k.h + gap;
     });
@@ -399,7 +410,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, x.label));
     });
     g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp" }), typeOf(id)));
-    return { g, w, h, outY: by + bh / 2 };
+    return { g, w, h, x0, y0, outY: by + bh / 2 };
   };
 
   // The definition itself: its parameters, its body, its result.
@@ -410,7 +421,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   else if (body && body.kind !== "typedef") top = lay(def.body!);
   else top = pill(defId, `type ${name(defId)}: see the blocks`, "lit");
   const M = 14;
-  const at = place(top, M + 8, M);
+  // Anything dragged above or left of the whole picture moves its origin.
+  const at = place(top, M + 8 - (top.x0 ?? 0), M - (top.y0 ?? 0));
   const W = at.x + top.w + M + 48, H = at.y + top.h + M;
   svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svgEl.setAttribute("width", String(W));
