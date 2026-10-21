@@ -12,6 +12,7 @@ import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
+import { portLabel } from "../src/relational.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -57,7 +58,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const isLet = (n: Node) => n.kind === "call" && node(n.fn).kind === "lambda";
   const tall = (id: Id): boolean => {
     const n = node(id);
-    if (n.kind === "match" || n.kind === "fold" || isLet(n)) return true;
+    if (n.kind === "match" || n.kind === "fold" || n.kind === "solve" || isLet(n)) return true;
     if (n.kind === "call") return [n.fn, ...n.args].some(tall);
     if (n.kind === "lambda") return tall(n.body);
     return false;
@@ -140,6 +141,13 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       return x(id, "blk", line(kw(`${n.kind} `), inline(n.scrutinee)[0]), indent(...arms));
     }
     if (n.kind === "lambda") return x(id, "blk", line(sep("("), ...list(n.params, bind), sep(") =>")), indent(block(n.body)));
+    if (n.kind === "solve") {
+      // solve polar(x = …, y = …) for length, angle
+      const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
+      const given = Object.entries(n.given).flatMap(([k, e], i) => [...(i ? [sep(", ")] : []), h("span", { class: "pn" }, `${label(k)} = `), inline(e)[0]]);
+      const wanted = Object.entries(n.binds).flatMap(([k, b], i) => [...(i ? [sep(", ")] : []), ...(name(b) === label(k) ? [] : [h("span", { class: "pn" }, `${label(k)} as `)]), bind(b)]);
+      return x(id, "blk", line(kw("solve "), x(n.fn, "ref fn", name(n.fn)), sep("("), ...given, sep(")"), kw(" for "), ...wanted), block(n.body));
+    }
     if (n.kind === "call") {
       const f = node(n.fn);
       if (tall(n.fn) && !n.args.some(tall)) {
@@ -242,6 +250,10 @@ export function scopeAt(code: Code, defId: Id, id: Id): Id[] {
         }
         if (x.kind === "match" && x.otherwise) walk(x.otherwise, scope);
         return;
+      case "solve":
+        Object.values(x.given).forEach((g) => walk(g, scope));
+        walk(x.body, [...scope, ...Object.values(x.binds)]);
+        return;
     }
   };
   if (def.body) walk(def.body, []);
@@ -326,6 +338,7 @@ const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
     else if (n.kind === "lambda") stack.push(n.body);
     else if (n.kind === "match" || n.kind === "fold") stack.push(...(n.kind === "match" && n.otherwise ? [n.otherwise] : []), ...[...n.arms].reverse(), n.scrutinee);
     else if (n.kind === "arm") stack.push(n.body);
+    else if (n.kind === "solve") stack.push(n.body, ...Object.values(n.given).reverse());
   }
   return out;
 };
@@ -363,6 +376,7 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
         for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, ab); if (g) return g; }
         return x.kind === "match" && x.otherwise ? walk(x.otherwise, x.otherwise) : null;
       }
+      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, x.body);
       default: return null;
     }
   };
@@ -399,6 +413,25 @@ export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: 
   const nn = { ...names };
   delete nn[dot];
   return guardTyped(info, collect(next), nn, value, "Removed the dot: the value is back on its one wire.");
+}
+
+// Drag a node's output onto another input: the value gets a dot (or uses
+// the one it has) and the input is wired from it. The first step is the
+// same for every input, so the editor checks each one against `prepare`.
+export function prepareShare(code: Code, names: Names, info: Info, defId: Id, from: Id): { dot: Id; code: Code; names: Names; info: Info } | { reason: string } {
+  const owner = lets(code, defId).find((l) => l.args.includes(from));
+  if (owner) return { dot: (code.nodes[owner.fn] as NodeOf<"lambda">).params[owner.args.indexOf(from)], code, names, info };
+  const r = addDot(code, names, info, defId, from);
+  if (!r.ok) return { reason: r.reason };
+  return { dot: r.select!, code: r.code, names: r.names, info: infer(r.code, { ...display, ...r.names }) };
+}
+
+export function share(code: Code, names: Names, info: Info, defId: Id, from: Id, slot: Id): TEdit {
+  const p = prepareShare(code, names, info, defId, from);
+  if ("reason" in p) return { ok: false, reason: p.reason };
+  if (slot === from) return { ok: false, reason: "that's where it already goes" };
+  const r = useVar(p.code, p.names, p.info, defId, p.dot, slot);
+  return r.ok ? { ...r, select: p.dot, note: "Shared it: the value now has a dot, wired to both inputs." } : r;
 }
 
 export function addCase(code: Code, names: Names, info: Info, type: Id, name: string, fields: { name: string; type: Id }[]): TEdit {

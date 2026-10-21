@@ -215,14 +215,25 @@ on a variable with one arm per case of its type, "Add a case" on a data type
 adds a hole arm to every match and fold over it, and `main` runs in the
 page. Any edit that would add a type error is refused with the reason.
 
-They have a node view too (`editor/typedGraph.ts`): calls are nodes, a
-variable is a pill, and functions and each case of a match or fold are
-regions whose variables are ports on the left edge. Calls that bring in an
+Every definition is drawn on one canvas (`editor/canvas.ts`): typed
+programs, plain expressions and networks alike, with the same gestures.
+In tree code (`editor/typedGraph.ts`) calls are nodes, and functions and each
+case of a match or fold are frames whose variables are sources on the left
+edge. There are no variable pills: every use of a variable is a wire from
+its source, so a value used twice visibly fans out. Calls that bring in an
 effect carry a badge (Choice, Console, Diverge), and handlers (`first`,
 `all`, `count`, `with fuel`) are marked with the effect they remove.
-Dragging a variable onto an input uses it there (refused, with the reason,
-if it's out of scope or the wrong type); dragging an input's wire into
-empty space leaves a hole.
+Dragging a source onto an input uses that variable there (refused, with the
+reason, if it's out of scope or the wrong type); dragging a node's output
+onto a second input shares the value by giving it a dot; dragging an
+input's wire into empty space leaves a hole. Drag a node to move it: it
+keeps an offset from the automatic layout in layout.json, frames grow to
+hold it, and it can't leave its scope. Networks move and wire the same way.
+
+A relation used inside a typed program (a `solve` node, `examples/relations`)
+is a node too: the ports it is given are inputs, the ones it solves for are
+sources on its right, all from the same solution. Its badge says whether
+that direction is pure or a Choice (several answers, or possibly none).
 
 A let is a dot on a wire, like a reroute dot in Blender's node editor: the
 value flows into the dot and a wire runs from the dot to every place that

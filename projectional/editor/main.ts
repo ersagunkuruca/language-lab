@@ -25,6 +25,9 @@ import queensComments from "../examples/queens/comments.json" with { type: "json
 import algebraCode from "../examples/algebra/code.json" with { type: "json" };
 import algebraNames from "../examples/algebra/names.default.json" with { type: "json" };
 import algebraComments from "../examples/algebra/comments.json" with { type: "json" };
+import relationsCode from "../examples/relations/code.json" with { type: "json" };
+import relationsNames from "../examples/relations/names.default.json" with { type: "json" };
+import relationsComments from "../examples/relations/comments.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -49,13 +52,13 @@ import { renderBlocks } from "../src/lang/render.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import * as T from "./typed.ts";
 import { typedGraph } from "./typedGraph.ts";
+import { connectDrag, moveDrag, type Pos } from "./canvas.ts";
 
 // ---------------------------------------------------------------- state
 
 type Layer = "short" | "descriptive";
 type StyleName = "math" | "plain" | "lisp";
 type TextView = "nested" | "let" | "sexpr" | "program" | "equations";
-type Pos = { x: number; y: number };
 
 interface Layout {
   positions: Record<string, Pos>;
@@ -66,7 +69,7 @@ interface Layout {
   expanded: Id[];
 }
 
-type Program = "numbers" | "queens" | "algebra";
+type Program = "numbers" | "queens" | "algebra" | "relations";
 
 interface Doc {
   program: Program;
@@ -97,7 +100,8 @@ interface UI {
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
-const STORE = "projectional-editor-v4";
+// v5: tree nodes keep an offset from the automatic layout, not a position.
+const STORE = "projectional-editor-v5";
 
 const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
   program, typed: true,
@@ -110,6 +114,7 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
 const initialFor = (program: Program): Doc =>
   program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
   : program === "algebra" ? typedDoc("algebra", algebraCode as Code, algebraNames, algebraComments)
+  : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
   : initial();
 
 const initial = (): Doc => ({
@@ -129,7 +134,7 @@ try {
   if (saved?.docs && saved.current) { docs = saved.docs; doc = docs[saved.current as Program] ?? doc; }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative" };
+const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative", relations: "to polar" };
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === START[doc.program]) ?? doc.code.defs[0];
 
 const ui: UI = {
@@ -218,6 +223,8 @@ function switchProgram(p: Program) {
 }
 
 function applyT(e: T.TEdit): boolean {
+  // Plain programs also have units, which only check.ts knows about.
+  if (e.ok && !doc.typed) { const g = E.guard(doc.code, e.code); if (!g.ok) e = { ok: false, reason: g.reason }; }
   if (!e.ok) {
     ui.note = `Refused: ${e.reason}. Nothing changed.`;
     ui.touched = [];
@@ -262,6 +269,13 @@ function unitsOf(def: Id): Inference | null {
 const typedInfo = new WeakMap<Code, T.Info>();
 function typesOf(): T.Info | null {
   if (!doc.typed) return null;
+  let i = typedInfo.get(doc.code);
+  if (!i) { try { i = T.infer(doc.code, pres().names); typedInfo.set(doc.code, i); } catch { return null; } }
+  return i;
+}
+// The graph draws plain programs with the same renderer, so they're
+// inferred too; network definitions are skipped by the type checker.
+function inferAny(): T.Info | null {
   let i = typedInfo.get(doc.code);
   if (!i) { try { i = T.infer(doc.code, pres().names); typedInfo.set(doc.code, i); } catch { return null; } }
   return i;
@@ -590,64 +604,6 @@ function blocks(namer: Namer, p: Presentation): HTMLElement {
 
 // ---------------------------------------------------------------- render: expression graph
 
-interface GNode { key: string; label: string; sub?: string; cls: string; select: Id; ports: number }
-interface GEdge { from: string; to: string; port: number }
-
-function exprGraphModel(namer: Namer, p: Presentation) {
-  const code = view.code;
-  const nodes = new Map<string, GNode>();
-  const edges: GEdge[] = [];
-  const put = (g: GNode) => { if (!nodes.has(g.key)) nodes.set(g.key, g); return g.key; };
-  const glyph = (t: Id) => p.style.notation[t]?.glyph ?? namer.name(t);
-
-  const source = (id: Id): string => {
-    const n = code.nodes[id];
-    switch (n.kind) {
-      case "lit": return put({ key: id, label: String(n.value), cls: "lit", select: id, ports: 0 });
-      case "hole": return put({ key: id, label: "□", cls: "hole", select: id, ports: 0 });
-      case "ref": {
-        const t = code.nodes[n.target];
-        if (t.kind === "binder") return put({ key: n.target, label: namer.name(n.target), cls: "var", select: n.target, ports: 0 });
-        return put({ key: "g" + n.target, label: glyph(n.target), cls: "def", select: n.target, ports: 0 });
-      }
-      case "lambda": return put({ key: id, label: "λ " + n.params.map((b) => namer.name(b)).join(", "), cls: "lam", select: id, ports: 0 });
-      case "call": {
-        const fn = code.nodes[n.fn];
-        if (fn.kind === "lambda") {
-          n.args.forEach((a, i) => {
-            const b = put({ key: fn.params[i], label: namer.name(fn.params[i]), cls: "var let", select: fn.params[i], ports: 1 });
-            edges.push({ from: source(a), to: b, port: 0 });
-          });
-          return source(fn.body);
-        }
-        const label = fn.kind === "ref" ? glyph(fn.target) : "apply";
-        const kind = fn.kind === "ref" && code.nodes[fn.target].kind === "def" ? "def" : "op";
-        const virt = view.origin.has(id) || view.expandedFrom.has(id) ? " virtual" : "";
-        const k = put({ key: id, label, sub: p.names[id], cls: kind + virt, select: id, ports: n.args.length });
-        n.args.forEach((a, i) => edges.push({ from: source(a), to: k, port: i }));
-        return k;
-      }
-      default: return put({ key: id, label: n.kind, cls: "lit", select: id, ports: 0 });
-    }
-  };
-
-  const def = code.nodes[ui.def];
-  if (def.kind === "def" && def.body) {
-    let body = def.body;
-    const b = code.nodes[body];
-    if (b.kind === "lambda") {
-      b.params.forEach((x) => put({ key: x, label: namer.name(x), cls: "var param", select: x, ports: 0 }));
-      body = b.body;
-    }
-    const out = put({ key: "out", label: namer.name(ui.def), cls: "out", select: ui.def, ports: 1 });
-    edges.push({ from: source(body), to: out, port: 0 });
-  }
-  return { nodes: [...nodes.values()], edges };
-}
-
-const W = (g: GNode) => Math.max(48, g.label.length * 8.5 + 26, (g.sub?.length ?? 0) * 7 + 20);
-const H = (g: GNode) => Math.max(g.sub ? 46 : 32, g.ports * 16 + 8);
-
 function rankLayout<T extends { key: string }>(items: T[], edges: { from: string; to: string }[], width: (t: T) => number, height: (t: T) => number, gap = 56): Map<string, Pos> {
   const rank = new Map<string, number>();
   const inc = (k: string) => edges.filter((e) => e.to === k).map((e) => e.from);
@@ -679,71 +635,6 @@ function savePositions(pos: Map<string, Pos>, note: string) {
   const positions = { ...doc.layout.positions };
   for (const [k, v] of pos) positions[lkey(k)] = { x: Math.round(v.x), y: Math.round(v.y) };
   commit({ layout: { ...doc.layout, positions } }, ["layout.json"], note);
-}
-
-// Pointer drag helper: calls move with the delta in SVG units, then done.
-function drag(el: Element, root: SVGSVGElement, width: number, ev: PointerEvent, move: (dx: number, dy: number, e: PointerEvent) => void, done: (moved: boolean, e: PointerEvent) => void) {
-  const start = { x: ev.clientX, y: ev.clientY };
-  const scale = root.getBoundingClientRect().width / width || 1;
-  let moved = false;
-  (el as HTMLElement).setPointerCapture?.(ev.pointerId);
-  const mv = (e: PointerEvent) => {
-    const dx = (e.clientX - start.x) / scale, dy = (e.clientY - start.y) / scale;
-    if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
-    move(dx, dy, e);
-  };
-  const up = (e: PointerEvent) => {
-    el.removeEventListener("pointermove", mv as EventListener);
-    el.removeEventListener("pointerup", up as EventListener);
-    done(moved, e);
-  };
-  el.addEventListener("pointermove", mv as EventListener);
-  el.addEventListener("pointerup", up as EventListener);
-}
-
-function exprGraph(namer: Namer, p: Presentation): SVGSVGElement {
-  const { nodes, edges } = exprGraphModel(namer, p);
-  const auto = rankLayout(nodes, edges, W, H);
-  const pos = new Map(nodes.map((n) => [n.key, doc.layout.positions[lkey(n.key)] ?? auto.get(n.key)!]));
-  const byKey = new Map(nodes.map((n) => [n.key, n]));
-  const maxX = Math.max(300, ...nodes.map((n) => pos.get(n.key)!.x + W(n))) + 20;
-  const maxY = Math.max(200, ...nodes.map((n) => pos.get(n.key)!.y + H(n))) + 20;
-  const root = svg("svg", { viewBox: `0 0 ${maxX} ${maxY}`, width: maxX, height: maxY, class: "graph" }) as SVGSVGElement;
-  const selTarget = ui.selected && view.code.nodes[ui.selected]?.kind === "ref" ? (view.code.nodes[ui.selected] as { target: Id }).target : null;
-
-  const edgeLayer = svg("g");
-  root.append(edgeLayer);
-  const drawEdges = () => {
-    edgeLayer.replaceChildren();
-    for (const e of edges) {
-      const a = byKey.get(e.from)!, b = byKey.get(e.to)!;
-      const pa = pos.get(e.from)!, pb = pos.get(e.to)!;
-      const sx = pa.x + W(a), sy = pa.y + H(a) / 2;
-      const tx = pb.x, ty = pb.y + (H(b) * (e.port + 1)) / (Math.max(1, b.ports) + 1);
-      const dx = Math.max(30, Math.abs(tx - sx) / 2);
-      edgeLayer.append(svg("path", { d: `M${sx},${sy} C${sx + dx},${sy} ${tx - dx},${ty} ${tx},${ty}`, class: "wire" }));
-      if (b.ports > 1) edgeLayer.append(text(tx - 4, ty - 4, String(e.port + 1), "port", "end"));
-    }
-  };
-  drawEdges();
-
-  for (const n of nodes) {
-    const g = svg("g", { class: `gn ${n.cls}${ui.selected === n.select || selTarget === n.select ? " sel" : ""}`, "data-id": n.select, tabindex: 0 });
-    const place = () => { const q = pos.get(n.key)!; g.setAttribute("transform", `translate(${q.x},${q.y})`); };
-    place();
-    const round = n.cls.includes("var") ? H(n) / 2 : n.cls === "out" ? 2 : 7;
-    g.append(svg("rect", { width: W(n), height: H(n), rx: round }));
-    g.append(text(W(n) / 2, n.sub ? 19 : H(n) / 2 + 5, n.label, "lbl"));
-    if (n.sub) g.append(text(W(n) / 2, 36, n.sub, "sub"));
-    g.addEventListener("pointerdown", (ev) => {
-      const orig = { ...pos.get(n.key)! };
-      drag(g, root, maxX, ev, (dx, dy) => { pos.set(n.key, { x: Math.max(0, orig.x + dx), y: Math.max(0, orig.y + dy) }); place(); drawEdges(); },
-        (moved) => moved ? savePositions(pos, "Moved a node. Positions live in layout.json; the code is untouched.") : select(n.select));
-    });
-    g.addEventListener("dblclick", () => { const d = calleeDef(n.select) ?? (node(n.select)?.kind === "def" && n.select !== ui.def ? n.select : null); if (d) openDef(d); });
-    root.append(g);
-  }
-  return root;
 }
 
 // ---------------------------------------------------------------- render: network editor
@@ -851,7 +742,6 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
   };
 
   const wireLayer = svg("g");
-  const dragLayer = svg("g");
   root.append(wireLayer);
   const drawWires = () => {
     wireLayer.replaceChildren();
@@ -912,36 +802,15 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
       const dot = svg("circle", { cx: px, cy: py, r: 6, class: `dot ${dir}${bound ? " bound" : ""}`, "data-port": isExt ? `ext|${b.id}` : `${b.id}|${k}` });
       dot.addEventListener("pointerdown", (ev) => {
         ev.stopPropagation();
+        ev.preventDefault();
         const from = parsePort(dot.getAttribute("data-port")!);
-        const line = svg("path", { class: "wire pending" });
-        const why = text(0, 0, "", "why", "start");
-        dragLayer.append(line, why);
         // Ask edits.ts about every other port before the drag starts, so
         // the ones that would be refused can say so while you hover.
-        const verdict = new Map<Element, string | null>();
-        for (const other of root.querySelectorAll("[data-port]")) {
-          if (other === dot) continue;
+        connectDrag(root, ev, "[data-port]", (other) => {
+          if (other === dot) return "that's the same port";
           const r = E.connect(doc.code, ui.def, from, parsePort(other.getAttribute("data-port")!));
-          verdict.set(other, r.ok ? null : r.reason);
-          other.classList.add(r.ok ? "can" : "cannot");
-        }
-        root.classList.add("dragging");
-        drag(dot, root, maxX, ev, (dx, dy, e) => {
-          const ex = a.x + dx, ey = a.y + dy;
-          line.setAttribute("d", `M${a.x},${a.y} C${a.x + 50 * side},${a.y} ${ex - 50 * side},${ey} ${ex},${ey}`);
-          const over = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-port]");
-          const reason = over ? verdict.get(over) : null;
-          why.textContent = reason ?? "";
-          why.setAttribute("x", String(ex + 12));
-          why.setAttribute("y", String(ey - 10));
-          line.classList.toggle("bad", !!reason);
-        }, (moved, e) => {
-          line.remove();
-          why.remove();
-          root.classList.remove("dragging");
-          for (const o of verdict.keys()) o.classList.remove("can", "cannot");
-          if (!moved) return;
-          const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-port]");
+          return r.ok ? null : r.reason;
+        }, (target) => {
           if (target && target !== dot) connect(from, parsePort(target.getAttribute("data-port")!));
           else if (!target) disconnect(from);
         });
@@ -949,14 +818,14 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
       g.append(dot);
     }
     g.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
       const orig = { ...pos.get(b.key)! };
-      drag(g, root, maxX, ev, (dx, dy) => { pos.set(b.key, { x: Math.max(0, orig.x + dx), y: Math.max(0, orig.y + dy) }); place(); drawWires(); },
+      moveDrag(root, ev, (dx, dy) => { pos.set(b.key, { x: Math.max(0, Math.round(orig.x + dx)), y: Math.max(0, Math.round(orig.y + dy)) }); place(); drawWires(); },
         (moved) => moved ? savePositions(pos, "Moved a node. Positions live in layout.json; the code is untouched.") : select(b.id));
     });
     g.addEventListener("dblclick", () => { const d = calleeDef(b.id); if (d) openDef(d); });
     root.append(g);
   }
-  root.append(dragLayer);
 
   const bar = h("div", { class: "net-bar" },
     h("button", { class: `btn${ui.mode === "add" ? " on" : ""}`, type: "button", "data-act": "add" }, "Add node…"),
@@ -1407,7 +1276,9 @@ function textPanel(namer: Namer, p: Presentation, s: Solved | null): HTMLElement
 
 const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
-const typedPres = (): Presentation => { const p = blocksPres(); return { ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } }; };
+const withHandles = (p: Presentation): Presentation => ({ ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } });
+const typedPres = (): Presentation => withHandles(blocksPres());
+const GRAPH_HINT = "drag a node to move it; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   const id = ui.selected;
@@ -1569,6 +1440,14 @@ function graphHooks(info: T.Info) {
     use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
     clear: (slot: Id) => void applyT(T.toHole(doc.code, doc.names.short, info, slot)),
     addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
+    canShare: (from: Id) => {
+      const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
+      if ("reason" in p) return () => p.reason;
+      return (slot: Id) => { if (slot === from) return "that's where it already goes"; const r = T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot); return r.ok ? null : r.reason; };
+    },
+    share: (from: Id, slot: Id) => void applyT(T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
+    offsets: Object.fromEntries(Object.entries(doc.layout.positions).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
+    moved: (id: Id, off: Pos) => commit({ layout: { ...doc.layout, positions: { ...doc.layout.positions, [lkey(id)]: off } } }, ["layout.json"], "Moved a node. Where it sits lives in layout.json; the code is untouched."),
   };
 }
 
@@ -1672,7 +1551,7 @@ function render() {
   const values = solved?.canonical ?? null;
   const main = typed
     ? [
-      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "click a wire to put a dot on it, drag from a dot or variable onto an input to use it there, drag an input's wire away to leave a hole")),
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
         h("div", { class: "graph-wrap" }, typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info!)))),
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
         h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
@@ -1686,7 +1565,10 @@ function render() {
     ]
     : [
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks"), h("div", { class: "blocks-wrap" }, blocks(namer, p))),
-      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "double-click a call to open its definition")), h("div", { class: "graph-wrap" }, exprGraph(namer, p))),
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)), h("div", { class: "graph-wrap" }, (() => {
+        const gi = inferAny();
+        return gi ? typedGraph(doc.code, withHandles(p), gi, ui.def, graphHooks(gi)) : h("p", { class: "hint" }, "This definition can't be drawn.");
+      })())),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "Text views"), seg("text", ui.text, [["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]])), textPanel(namer, p, null)),
     ];
 
@@ -1694,7 +1576,7 @@ function render() {
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
-        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"]]),
+        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"], ["relations", "Relations in programs"]]),
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         defTabs,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),

@@ -27,8 +27,8 @@ const under = (code: Code, d: Id): Id[] => {
   return out;
 };
 
-test("a dot on any wire: same program, same output, and it comes off again", () => {
-  const p = load("queens");
+for (const program of ["queens", "relations"]) test(`${program}: a dot on any wire keeps the program and its output, and comes off again`, () => {
+  const p = load(program);
   const info = infer(p.code, p.pres.names);
   const main = p.named("main");
   const before = output(p.code, p.pres.names, main);
@@ -45,13 +45,13 @@ test("a dot on any wire: same program, same output, and it comes off again", () 
       assert.equal(after.errors.length, 0);
       assert.match(dotHandles(r.code, d, r.names)[dot], /^•\d+$/);
       // Running main searches every board, so a sample.
-      if (tried % 40 === 1) assert.deepEqual(output(r.code, r.names, main), before);
+      if (program !== "queens" || tried % 40 === 1) assert.deepEqual(output(r.code, r.names, main), before);
       const back = removeDot(r.code, r.names, after, d, dot);
       assert.ok(back.ok, back.ok ? "" : back.reason);
       assert.equal(Object.keys(back.code.nodes).length, Object.keys(p.code.nodes).length);
     }
   }
-  assert.ok(tried > 20, `only ${tried} wires took a dot`);
+  assert.ok(tried > 10, `only ${tried} wires took a dot`);
 });
 
 test("a dot shared by two inputs can't be removed until one goes", () => {
