@@ -220,10 +220,11 @@ its insides can be inverted too. `partDirections` plans the network without
 one part to find which of that part's ports are already determined (inputs)
 and which it must produce (outputs).
 
-Known limitation: when a direction needs a nonlinear block solved
-numerically (the root network asked for `b`), Newton's method is tried from
-several seeded starts. It can miss solutions or report none where one exists.
-The solver thread is looking at tearing to make that exact.
+When a direction needs a nonlinear block (the root network asked for `b`),
+the solver *tears* it: it guesses one unknown, computes the others from it
+in closed form, and scans the guess for values that satisfy the one leftover
+equation, so it finds every root in range rather than one. The derived
+program shows that as "guess b … keep the b where …".
 
 ## Mapping back to the original ideas
 

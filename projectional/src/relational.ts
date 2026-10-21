@@ -156,7 +156,8 @@ export function analyzeNetwork(code: Code, defId: Id, known: Id[]) {
   return analyze(networkRelation(code, defId), known);
 }
 
-// When the plan needs Newton's method it finds one root from one starting
+// The solver tears nonlinear blocks and searches them itself; only when it
+// falls back to Newton's method does that find one root from one starting
 // point, and a bad start (sqrt of a negative) finds none. Trying a few
 // seeded random starts and pooling what they find is crude but recovers most
 // cases, sometimes with more than one root.
