@@ -7,7 +7,7 @@ follows every branch of any multi-valued inverse, and marks one answer as
 canonical.
 
 ```
-npm test                         # 25 tests, no dependencies (Node 20+)
+npm test                         # 32 tests, no dependencies (Node 20+)
 python3 -m http.server           # then open http://localhost:8000/ for the demo page
 ```
 
@@ -150,17 +150,81 @@ spelling parses back to `v`; and `canonicalize` is idempotent.
   VAE/GAN observation) could plug in as a primitive with a numeric-only
   inverse, the way Newton does now.
 
+## Is − the inverse of +? The arithmetic atoms
+
+Decision: **there is no + node.** The additive atom is the *balance*,
+`l₁ + l₂ + … = r₁ + r₂ + …` (what flows in equals what flows out:
+Kirchhoff's current law, double-entry bookkeeping). With n ports, any n − 1
+determine the last, exactly and single-valued. +, − and negate are the same
+node seen from different ports, so the symbol drawn on it is presentation,
+chosen by which ports are known:
+
+| node | known | unknown | drawn as |
+|------|-------|---------|----------|
+| `a + b = total` | a, b | total | `total = a + b` (+) |
+| `a + b = total` | total, b | a | `a = total − b` (−) |
+| `x + y = 0` | x | y | `y = −x` (negate) |
+
+`view(rel, known)` returns that symbol and formula for an editor to draw.
+
+Why the balance is the atom and not +: it has no privileged output, so its
+inverse is itself with the ports relabelled. It's variadic for free (`sum(5)`
+is one node, not four), and a graph made only of balances is linear, so
+elimination always solves it exactly. Starting from + you need − to invert
+it, and starting from − you need negate. Starting from the balance you need
+nothing else.
+
+The multiplicative atom has the same shape, the **ratio** `Π left = Π right`.
+×, ÷ and 1/x are its views. It differs in one place, zero:
+
+- `0 · x = 5` has no solution, so the result stream is empty (failure).
+- `0 · x = 0` holds for every x. The result says `x` is **free** (value
+  `null`, listed in `free`), not NaN. So "0/0" isn't an error. It's an
+  honest answer: anything.
+
+`log` maps a ratio onto a balance (`log a + log b = log c`), so exp/log is
+the bridge between the two atoms.
+
+`examples.discriminant` builds `D = b² − 4ac` from atoms only, with no minus
+and no square: `b·b = bb` and `4·a·c = q` are ratios and `D + q = bb` is a
+balance. Asking for `b` gives `±sqrt(D + 4ac)`. Asking for `c` gives
+`(b² − D) / 4a`. These are the same three nodes.
+
+## Multiple results, Verse style
+
+A relation solved in some direction is an expression with **0, 1 or many
+results**. This is the semantics of Verse's failable expressions and choice,
+and of Icon's generators:
+
+- `results(rel, values)` is the lazy, ordered stream of solutions. Canonical
+  comes first, then the other branches, then `k = ±1`, `±2`, and so on. It
+  is infinite for periodic inverses: `take(results(sine, {y: .5}), 50)` gives
+  50 distinct solutions.
+- `first(...)` is the function view: the canonical answer, or `null` for
+  failure. This is how `sqrt` and `asin` behave as ordinary functions.
+- `only(...)` succeeds only if there is exactly one result. It is a
+  uniqueness assertion: `only(square, {y: 9})` fails, `only(square, {y: 0})`
+  gives 0.
+- Failure is the empty stream, never an exception. `asin(2)`, `0·x = 5` and
+  an inconsistent overdetermined input are all just "no results".
+
+A consumer decides how many answers it wants, so "the" inverse is
+`first ∘ results`, and choosing a canonical branch is a choice of handler, not
+something built into the function.
+
 ## Embedding in a node editor
 
 `src/index.js` is the API for hosting relation nodes in a graph editor:
 
 ```js
-import { defineRelation, analyze, evaluate, directions, checkWiring, examples } from './src/index.js';
+import { defineRelation, analyze, evaluate, directions, checkWiring, results, first, only, sum, view, examples } from './src/index.js';
 
 analyze(examples.polar, ['x', 'y'])       // derived program: steps as text + expression trees
 evaluate(examples.polar, { x: 3, y: 4 })  // canonical solution + every branch
 directions(examples.polar)                // [['x','y'], ['x','r'], ...] minimal input choices
 checkWiring(examples.polar, ['x', 'r'], ['θ'])  // inputs wired in, outputs wired out: ok?
+results(examples.sine, { y: 0.5 })      // lazy stream of every solution; first()/only()
+view(sum(2), ['total', 'b'])            // { a: { symbol: '−', text: 'total − b' } }
 ```
 
 Ports wired from the enclosing function's inputs are `known`; ports wired
@@ -177,6 +241,7 @@ src/linear.js     exact rational elimination for linear blocks
 src/relation.js   relations, composition, planning, running, describing plans
 src/examples.js   sumDiff, polar, sin, x², Ohm, rotate, temperature
 src/syntax.js     bidirectional URL syntax
+src/atoms.js      balance (Σ = Σ) and ratio (Π = Π) atoms, view() symbols
 src/index.js      embedding API (analyze, evaluate, directions, checkWiring)
 index.html        interactive demo
 test/             node:test suites

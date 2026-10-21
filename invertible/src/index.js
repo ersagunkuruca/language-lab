@@ -11,11 +11,12 @@
 // mapping each node's ports to the graph's wire names, and solve the graph in
 // one go. That way inverting the surrounding function inverts every node in it.
 
-import { relation, plan, run, describe, shortfall, showEq } from './relation.js';
+import { relation, plan, run, stream, describe, shortfall, showEq } from './relation.js';
 import { show, evaluate as evalExpr } from './expr.js';
 
 export { show, showEq };
 export * as examples from './examples.js';
+export { balance, ratio, sum, product, negate, reciprocal, view } from './atoms.js';
 
 // { name, ports, eqs, laws?, uses? } — eqs/laws are strings like 'x = r * cos(θ)'
 // or { lhs, rhs } expression trees. uses: [{ rel, bind: { innerPort: outerWire } }].
@@ -48,8 +49,39 @@ export function analyze(rel, known, opts = {}) {
 export function evaluate(rel, values, opts = {}) {
   const a = analyze(rel, Object.keys(values), opts);
   if (a.status !== 'solved') return { ...a, canonical: null, solutions: [] };
-  const solutions = run(rel, a.plan, values, opts).map(({ values: v, path }) => ({ values: v, path }));
+  const solutions = run(rel, a.plan, values, opts).map(({ values: v, path, free }) => ({ values: v, path, free }));
   return { ...a, canonical: solutions[0]?.values ?? null, solutions };
+}
+
+// ---- multiple results, Verse style ----------------------------------------
+// A relation solved in some direction is an expression with 0, 1 or many
+// results. `results` is the lazy, ordered stream of them (canonical first,
+// infinite for periodic inverses); `first` is the function view (the
+// canonical branch, or null for failure); `only` succeeds only when there is
+// exactly one result. Each result is { values, path, free }: `free` lists
+// ports the equations leave unconstrained (their value is null).
+export function* results(rel, values, opts = {}) {
+  const a = analyze(rel, Object.keys(values), opts);
+  if (a.status !== 'solved') return;
+  for (const { values: v, path, free } of stream(rel, a.plan, values, opts)) yield { values: v, path, free };
+}
+
+export function first(rel, values, opts = {}) {
+  for (const r of results(rel, values, opts)) return r.values;
+  return null;
+}
+
+export function only(rel, values, opts = {}) {
+  const it = results(rel, values, opts);
+  const a = it.next(), b = it.next();
+  return !a.done && b.done ? a.value.values : null;
+}
+
+export function take(iterable, n) {
+  const out = [];
+  if (n <= 0) return out;
+  for (const x of iterable) if (out.push(x) >= n) break;
+  return out;
 }
 
 // For a node in an editor: are the outputs it is wired to determined by the
