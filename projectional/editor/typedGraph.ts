@@ -7,9 +7,9 @@
 //   a let        a dot on a wire, as in Blender's node editor: the value flows
 //                into the dot and a wire runs from it to every use. The name
 //                is an optional label (unnamed dots show a handle, •1).
-//   match, fold  a region with one sub-region per case. The thing matched on
-//                flows into a diamond, and each case's fields (and, for a fold,
-//                the already-folded parts) are ports on that case's left edge.
+//   match, fold  a node like any call: the value, then one function per case
+//                (a frame whose parameters are the case's fields and, for a
+//                fold, the already-folded parts). `if` is a match on Bool.
 //   effects      a badge on every node whose call performs one (Choice,
 //                Console, Diverge), and on handlers the effect they remove.
 //
@@ -344,45 +344,62 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), outY: at.y + body.outY };
   };
 
-  // match / fold: the value flows into a diamond, which fans out to one
-  // sub-region per case; each case's result flows to the region's output.
+  // if, match and fold are ordinary nodes: the value goes in first, then one
+  // function per case, each drawn as a frame whose parameters are that
+  // case's fields (and, for a fold, the parts already folded). Only the
+  // chosen case's function runs. A case can't be missing: there is one
+  // input per case of the type.
   const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">): L => {
-    const g = group();
-    const scr = lay(n.scrutinee);
-    const isIf = n.kind === "match" && n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
-    const arms = n.arms.map((a) => {
-      const arm = node(a) as NodeOf<"arm">;
+    const armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
+    const isIf = n.kind === "match" && armNodes.length === 2 && armNodes.every((a) => [TRUE, FALSE].includes(a.variant));
+    const type = armNodes[0] && info?.owner.get(armNodes[0].variant);
+    const title = isIf ? "if" : `${n.kind}${type ? ` ${name(type)}` : ""}`;
+    const ins: { label: string; slot?: Id; kid: L | null; ref?: Id }[] = [];
+    const sd = dotOf(n.scrutinee);
+    ins.push({ label: isIf ? "condition" : "value", slot: n.scrutinee, kid: sd ? null : lay(n.scrutinee), ref: sd ? n.scrutinee : undefined });
+    for (const arm of armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
-      const title = isIf ? (arm.variant === TRUE ? "then" : "else") : `${name(arm.variant)}${results.length ? " (with folded parts)" : ""}`;
-      return region(a, title, [...arm.binds, ...results], arm.body, "arm");
+      const params = [...arm.binds, ...results];
+      const label = isIf ? (arm.variant === TRUE ? "then" : "else") : name(arm.variant);
+      ins.push({ label, kid: region(arm.id, `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm") });
+    }
+    if (n.kind === "match" && n.otherwise) ins.push({ label: "otherwise", kid: lay(n.otherwise) });
+
+    const gap = 8;
+    const kids = ins.map((x) => x.kid ?? { g: group(), w: 0, h: 18, outY: 9 });
+    const colW = Math.max(0, ...kids.map((k) => k.w));
+    const kidsH = kids.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, kids.length - 1);
+    const lw = Math.max(0, ...ins.map((x) => tw(x.label, 6.6)));
+    const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
+    const bh = 30 + ins.length * 20;
+    let h = Math.max(kidsH, bh);
+    const bx = colW + 34;
+    const g = group();
+    // Line each input up with its case where there's room; never overlap.
+    let y = (h - kidsH) / 2;
+    const by = (h - bh) / 2;
+    const portY = (i: number) => by + 30 + i * 20;
+    let w = bx + bw;
+    kids.forEach((k, i) => {
+      const x = ins[i];
+      if (x.ref) uses.push({ dot: dotOf(x.ref)!, ref: x.ref, el: g, x: bx, y: portY(i) });
+      else {
+        const p = place(k, colW - k.w, y);
+        g.append(k.g);
+        wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), i ? "fn" : "", x.slot);
+        w = Math.max(w, p.x + k.w);
+        h = Math.max(h, p.y + k.h);
+      }
+      y += k.h + gap;
     });
-    if (n.kind === "match" && n.otherwise) arms.push(lay(n.otherwise));
-    const armW = Math.max(0, ...arms.map((a) => a.w));
-    const armsH = arms.reduce((s, a) => s + a.h, 0) + 8 * Math.max(0, arms.length - 1);
-    const innerH = Math.max(scr.h, armsH);
-    const sp = place(scr, PAD, HEAD + 4 + (innerH - scr.h) / 2);
-    g.append(scr.g);
-    const dx = Math.max(PAD + scr.w, sp.x + scr.w) + 30, dy = sp.y + scr.outY;
-    wire(g, sp.x + scr.w, dy, dx - 12, dy, "", n.scrutinee);
-    const ax = dx + 34;
-    let y = HEAD + 4 + (innerH - armsH) / 2;
-    const placed = arms.map((a) => { const p = place(a, ax, y); y += a.h + 8; return p; });
-    const w = Math.max(ax + armW, ...arms.map((a, i) => placed[i].x + a.w), sp.x + scr.w) + 26;
-    const outY = HEAD + 4 + innerH / 2;
-    arms.forEach((a, i) => {
-      const p = placed[i];
-      g.append(a.g);
-      wire(g, dx + 12, dy, p.x, p.y + 12, "fan");
-      wire(g, p.x + a.w, p.y + a.outY, w, outY);
+    g.append(titled(grab(s("rect", { x: bx, y: by, width: bw, height: bh, rx: 7, class: `cn case${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), id), typeOf(id)));
+    g.append(s("text", { x: bx + bw / 2, y: by + 19, class: "cl", "text-anchor": "middle" }, title));
+    ins.forEach((x, i) => {
+      g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: i ? "inp fn" : "inp", ...(x.slot ? { "data-slot": x.slot } : {}) }), i ? `the function for ${x.label}` : typeOf(n.scrutinee)));
+      g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, x.label));
     });
-    const bottom = Math.max(sp.y + scr.h, ...arms.map((a, i) => placed[i].y + a.h));
-    const label = isIf ? "if" : n.kind;
-    g.append(titled(grab(s("path", { d: `M${dx - 12},${dy} L${dx},${dy - 12} L${dx + 12},${dy} L${dx},${dy + 12} Z`, class: `dia${sel(id)}`, "data-id": id }), id), typeOf(id)));
-    g.append(s("circle", { cx: dx - 12, cy: dy, r: 5, class: "inp", "data-slot": n.scrutinee }));
-    const h = Math.max(HEAD + innerH + PAD + 4, bottom + PAD);
-    frame(g, id, label, w, h, n.kind);
-    g.append(s("circle", { cx: w, cy: outY, r: 4, class: "outp" }));
-    return { g, w, h, outY };
+    g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp" }), typeOf(id)));
+    return { g, w, h, outY: by + bh / 2 };
   };
 
   // The definition itself: its parameters, its body, its result.
