@@ -204,6 +204,20 @@ hash, so you can see that renames, comments, notation, layout and direction
 never move it. Edits are kept in your browser's local storage; Reset brings
 the examples back.
 
+### Typed programs in the editor
+
+The editor's program switcher has the two typed programs from `src/lang/`
+(see LANGUAGE.md): eight queens and the small algebra system. They show as
+clickable blocks (`editor/typed.ts`) with every node's inferred type on
+hover. Clicking a hole opens a palette of only the fillings that
+type-check (`fillings()`), "Split by cases" turns an expression into a match
+on a variable with one arm per case of its type, "Add a case" on a data type
+adds a hole arm to every match and fold over it, and `main` runs in the
+page. Any edit that would add a type error is refused with the reason.
+
+The editor is published by `.github/workflows/pages.yml` on every push to
+main: https://ersagunkuruca.github.io/language-lab/
+
 ## Networks in the core
 
 `src/relational.ts` adds two node kinds to the model:

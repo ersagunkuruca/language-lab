@@ -1,0 +1,309 @@
+// The editor's view of typed programs (src/lang/): blocks you click, holes
+// that know their type, and the gestures that can't produce a type error.
+//
+// Every expression is a span with its node id and its inferred type, so the
+// type of anything is a hover away. Edits are pure functions here; each is
+// checked by re-inferring the whole program and refused if it adds an error.
+
+import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
+import { freshId, replace } from "../src/model.ts";
+import type { Names, Presentation } from "../src/presentation.ts";
+import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
+import { addVariant, fillHole } from "../src/lang/refactor.ts";
+import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
+import { showType } from "../src/lang/types.ts";
+
+type Kid = HTMLElement | string | null | undefined | false;
+function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === false) continue;
+    if (v === true) el.setAttribute(k, "");
+    else el.setAttribute(k, v);
+  }
+  for (const k of kids) if (k !== null && k !== undefined && k !== false) el.append(k);
+  return el;
+}
+
+export const typeOf = (info: Info | null, id: Id, names: Names): string | null => {
+  const t = info?.typeOf.get(id);
+  return t ? showType(info!.subst.zonk(t), names) : null;
+};
+
+// ---------------------------------------------------------------- view
+
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null): HTMLElement {
+  const names = pres.names;
+  const node = (id: Id) => code.nodes[id];
+  const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
+  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showType(info!.subst.zonk(hi.expected), names) : null; };
+  const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
+
+  // Wrap a node's rendering so it can be clicked and shows its type.
+  const x = (id: Id, cls: string, ...kids: Kid[]) => {
+    const t = typeOf(info, id, names);
+    const err = errorAt.get(id);
+    return h("span", { class: `x ${cls}${selected === id ? " sel" : ""}${err ? " err" : ""}`, "data-id": id, title: err ?? (t ? `${t}` : undefined) }, ...kids);
+  };
+  const bind = (id: Id) => {
+    const t = typeOf(info, id, names);
+    return h("span", { class: `x bnd${selected === id ? " sel" : ""}`, "data-id": id, title: t ?? undefined }, name(id), t ? h("span", { class: "ty" }, `: ${t}`) : null);
+  };
+  const kw = (s: string) => h("span", { class: "kw" }, s);
+  const sep = (s: string) => h("span", { class: "pn" }, s);
+  const list = (ids: Id[], f: (id: Id) => Kid, between = ", ") => ids.flatMap((id, i) => (i ? [sep(between), f(id)] : [f(id)]));
+
+  const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
+  const isLet = (n: Node) => n.kind === "call" && node(n.fn).kind === "lambda";
+  const tall = (id: Id): boolean => {
+    const n = node(id);
+    if (n.kind === "match" || n.kind === "fold" || isLet(n)) return true;
+    if (n.kind === "call") return [n.fn, ...n.args].some(tall);
+    if (n.kind === "lambda") return tall(n.body);
+    return false;
+  };
+  const listItems = (id: Id): Id[] | null => {
+    const items: Id[] = [];
+    for (let n = node(id); ; ) {
+      if (n.kind === "ref" && n.target === NIL) return items;
+      if (n.kind !== "call" || node(n.fn).kind !== "ref" || (node(n.fn) as NodeOf<"ref">).target !== CONS) return null;
+      items.push(n.args[0]);
+      n = node(n.args[1]);
+    }
+  };
+
+  // One line, with the precedence it binds at.
+  const inline = (id: Id): [HTMLElement, number] => {
+    const n = node(id);
+    switch (n.kind) {
+      case "lit": return [x(id, "lit", typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value)), 100];
+      case "hole": return [x(id, "hole", "□", holeType(id) ? h("span", { class: "ty" }, holeType(id)!) : null), 100];
+      case "ref": {
+        const t = node(n.target);
+        const cls = t?.kind === "binder" ? "var" : t?.kind === "variant" ? "con" : t?.kind === "def" ? "def" : "fn";
+        return [x(id, `ref ${cls}`, name(n.target)), 100];
+      }
+      case "lambda": return [x(id, "lam", sep("("), ...list(n.params, bind), sep(") => "), inline(n.body)[0]), 0];
+      case "call": {
+        const items = listItems(id);
+        if (items) return [x(id, "call", sep("["), ...list(items, (i) => inline(i)[0]), sep("]")), 100];
+        const f = node(n.fn);
+        const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
+        const args = n.args.map(inline);
+        const paren = ([e, p]: [HTMLElement, number], ok: boolean): Kid[] => (ok ? [e] : [sep("("), e, sep(")")]);
+        if (nota?.fixity === "infix" && args.length === 2) {
+          const p = nota.prec ?? 5;
+          const [l, r] = args;
+          const lok = l[1] > p || (l[1] === p && nota.assoc !== "right");
+          const rok = r[1] > p || (r[1] === p && nota.assoc !== "left" && nota.assoc !== undefined);
+          return [x(id, "call", ...paren(l, lok), h("span", { class: "op x", "data-id": n.fn }, ` ${nota.glyph} `), ...paren(r, rok)), p];
+        }
+        if (nota?.fixity === "prefix" && args.length === 1) {
+          const p = nota.prec ?? 9;
+          return [x(id, "call", h("span", { class: "op x", "data-id": n.fn }, nota.glyph), ...paren(args[0], args[0][1] > p)), p];
+        }
+        const head = inline(n.fn);
+        return [x(id, "call", ...paren(head, head[1] >= 100), sep("("), ...args.flatMap((a, i) => (i ? [sep(", "), a[0]] : [a[0]])), sep(")")), 100];
+      }
+      default: return [block(id), 100];
+    }
+  };
+
+  const line = (...kids: Kid[]) => h("div", { class: "ln" }, ...kids);
+  const indent = (...kids: Kid[]) => h("div", { class: "ind" }, ...kids);
+  const hang = (head: Kid[], id: Id) => (tall(id) ? [line(...head), indent(block(id))] : [line(...head, inline(id)[0])]);
+
+  // Lines for an expression that needs them.
+  const block = (id: Id): HTMLElement => {
+    const n = node(id);
+    if (!tall(id)) return line(inline(id)[0]);
+    if (n.kind === "call" && isLet(n)) {
+      const lam = node(n.fn) as NodeOf<"lambda">;
+      return x(id, "blk let", ...lam.params.flatMap((p, i) => hang(name(p) === "_" ? [] : [bind(p), sep(" = ")], n.args[i])), block(lam.body));
+    }
+    if (n.kind === "match" && isBool(n)) {
+      const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
+      const t = arm(TRUE), f = arm(FALSE);
+      return x(id, "blk", line(kw("if "), inline(n.scrutinee)[0]),
+        h("div", { class: `ind x arm${selected === t.id ? " sel" : ""}`, "data-id": t.id }, ...hang([kw("then ")], t.body)),
+        h("div", { class: `ind x arm${selected === f.id ? " sel" : ""}`, "data-id": f.id }, ...hang([kw("else ")], f.body)));
+    }
+    if (n.kind === "match" || n.kind === "fold") {
+      const arms = n.arms.map((a) => {
+        const arm = node(a) as NodeOf<"arm">;
+        const results = arm.results.filter((r): r is Id => r !== null);
+        const pat: Kid[] = [h("span", { class: "con" }, name(arm.variant)), ...(arm.binds.length ? [sep("("), ...list(arm.binds, bind), sep(")")] : [])];
+        if (results.length) pat.push(kw(" with "), ...list(results, bind));
+        return h("div", { class: `arm x${selected === a ? " sel" : ""}`, "data-id": a }, ...hang([...pat, sep(" → ")], arm.body));
+      });
+      if (n.kind === "match" && n.otherwise) arms.push(h("div", { class: "arm" }, ...hang([kw("otherwise"), sep(" → ")], n.otherwise)));
+      return x(id, "blk", line(kw(`${n.kind} `), inline(n.scrutinee)[0]), indent(...arms));
+    }
+    if (n.kind === "lambda") return x(id, "blk", line(sep("("), ...list(n.params, bind), sep(") =>")), indent(block(n.body)));
+    if (n.kind === "call") {
+      const f = node(n.fn);
+      if (tall(n.fn) && !n.args.some(tall)) {
+        return x(id, "blk", line(kw("apply")), indent(block(n.fn)), line(kw("to "), sep("("), ...list(n.args, (a) => inline(a)[0]), sep(")")));
+      }
+      const head = f.kind === "ref" ? x(n.fn, "ref fn", name(f.target)) : inline(n.fn)[0];
+      const comma = (i: number) => (i < n.args.length - 1 ? sep(",") : null);
+      return x(id, "blk", line(head, sep("(")), indent(...n.args.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
+    }
+    return line(inline(id)[0]);
+  };
+
+  const def = node(defId) as NodeOf<"def">;
+  const body = def.body ? node(def.body) : null;
+  const out = h("div", { class: "typed" });
+  if (pres.comments[defId]) out.append(h("div", { class: "cmt" }, `-- ${pres.comments[defId]}`));
+  if (body?.kind === "typedef") {
+    out.append(line(kw("type "), x(defId, "def", name(defId)), ...body.params.map((p) => h("span", {}, " ", bind(p)))));
+    const tt = (id: Id): string => {
+      const t = node(id);
+      if (t.kind === "tfun") return `(${t.params.map(tt).join(", ")}) -> ${tt(t.result)}`;
+      const r = t as NodeOf<"tref">;
+      return [name(r.target), ...r.args.map((a) => { const s = tt(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
+    };
+    out.append(indent(...body.variants.map((v) => {
+      const fs = (node(v) as NodeOf<"variant">).fields;
+      return h("div", { class: `ln x variant${selected === v ? " sel" : ""}`, "data-id": v }, sep("| "), h("span", { class: "con" }, name(v)),
+        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", {}, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []));
+    })));
+    return out;
+  }
+  const t = typeOf(info, defId, names);
+  out.append(line(x(defId, "def", name(defId)), h("span", { class: "ty big" }, t ? ` : ${t}` : "")));
+  if (!body) return out;
+  if (body.kind === "lambda") out.append(...hang([x(defId, "def", name(defId)), sep("("), ...list(body.params, bind), sep(") = ")], body.body));
+  else out.append(...hang([x(defId, "def", name(defId)), sep(" = ")], def.body!));
+  return out;
+}
+
+// ---------------------------------------------------------------- edits
+
+export type TEdit = { ok: true; code: Code; names: Names; select?: Id; note: string } | { ok: false; reason: string };
+
+// Names for messages: the library's and the presentation's, under the
+// program's own (which are what edits change and store).
+let display: Names = {};
+export const setDisplayNames = (n: Names) => { display = n; };
+
+// Accept only if the program has no more type errors than before.
+export function guardTyped(before: Info, code: Code, names: Names, select: Id | undefined, note: string): TEdit {
+  const after = infer(code, { ...display, ...names });
+  if (after.errors.length > before.errors.length) return { ok: false, reason: after.errors.at(-1)!.message };
+  return { ok: true, code, names, select, note };
+}
+
+export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling, label: string): TEdit {
+  const e = fillHole(code, names, hole, f);
+  const n = e.code.nodes[hole];
+  // Select the first new hole, so filling continues where it should.
+  const firstHole = n.kind === "call" ? n.args.find((a) => e.code.nodes[a].kind === "hole")
+    : n.kind === "lambda" || n.kind === "match" || n.kind === "fold" ? Object.keys(e.code.nodes).find((k) => !code.nodes[k] && e.code.nodes[k].kind === "hole") : undefined;
+  return guardTyped(info, e.code, e.names, firstHole ?? hole, `Filled with ${label}.`);
+}
+
+export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
+  return guardTyped(info, replace(code, id, () => ({ kind: "hole" })), names, id, "Cleared to a hole. It knows its type: pick from the palette to fill it.");
+}
+
+export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string): TEdit {
+  const old = code.nodes[id] as NodeOf<"lit">;
+  const v = typeof old.value === "number" ? Number(raw) : raw;
+  if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
+  return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: v })), names, id, "Changed a literal.");
+}
+
+// Binders visible at `id`: lambda params, let names, arm bindings.
+export function scopeAt(code: Code, defId: Id, id: Id): Id[] {
+  const def = code.nodes[defId] as NodeOf<"def">;
+  let found: Id[] | null = null;
+  const walk = (n: Id, scope: Id[]) => {
+    if (found) return;
+    if (n === id) { found = scope; return; }
+    const x = code.nodes[n];
+    switch (x.kind) {
+      case "lambda": walk(x.body, [...scope, ...x.params]); return;
+      case "call":
+        if (code.nodes[x.fn].kind === "lambda") {
+          x.args.forEach((a) => walk(a, scope));
+          const lam = code.nodes[x.fn] as NodeOf<"lambda">;
+          if (lam.id === id) { found = scope; return; }
+          walk(lam.body, [...scope, ...lam.params]);
+        } else [x.fn, ...x.args].forEach((a) => walk(a, scope));
+        return;
+      case "match": case "fold":
+        walk(x.scrutinee, scope);
+        for (const a of x.arms) {
+          const arm = code.nodes[a] as NodeOf<"arm">;
+          if (a === id) { found = scope; return; }
+          walk(arm.body, [...scope, ...arm.binds, ...arm.results.filter((r): r is Id => r !== null)]);
+        }
+        if (x.kind === "match" && x.otherwise) walk(x.otherwise, scope);
+        return;
+    }
+  };
+  if (def.body) walk(def.body, []);
+  return found ?? [];
+}
+
+// The data type a binder holds, if it's one with cases.
+export function dataTypeOf(code: Code, info: Info, b: Id): Id | null {
+  const t = info.typeOf.get(b);
+  if (!t) return null;
+  const r = info.subst.resolve(t);
+  return r.t === "con" && [...info.owner.values()].includes(r.id) ? r.id : null;
+}
+
+// Copy a subtree with fresh ids, binders included (refs to them follow).
+function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id): Id {
+  const map = new Map<Id, Id>();
+  const go = (id: Id): Id => {
+    const n = code.nodes[id];
+    if (n.kind === "ref") return mk({ kind: "ref", target: map.get(n.target) ?? n.target });
+    if (n.kind === "binder") { const nid = mk({ kind: "binder" }); map.set(id, nid); if (names[id] !== undefined) names[nid] = names[id]; return nid; }
+    switch (n.kind) {
+      case "call": { const fn = go(n.fn); return mk({ kind: "call", fn, args: n.args.map(go) }); }
+      case "lambda": { const params = n.params.map(go); return mk({ kind: "lambda", params, body: go(n.body) }); }
+      case "match": { const s = go(n.scrutinee); const arms = n.arms.map(go); return mk({ kind: "match", scrutinee: s, arms, otherwise: n.otherwise ? go(n.otherwise) : null }); }
+      case "fold": { const s = go(n.scrutinee); return mk({ kind: "fold", scrutinee: s, arms: n.arms.map(go) }); }
+      case "arm": { const binds = n.binds.map(go); const results = n.results.map((r) => (r ? go(r) : null)); return mk({ kind: "arm", variant: n.variant, binds, results, body: go(n.body) }); }
+      default: return mk({ ...n, id: undefined } as unknown as NodeData);
+    }
+  };
+  const mk = (d: NodeData): Id => { const id = freshId(); const { id: _, ...rest } = d as NodeData & { id?: Id }; nodes[id] = { id, ...rest } as Node; return id; };
+  return go(root);
+}
+
+// Case split: replace an expression by a match on a variable, with one arm
+// per case of its type, each starting as a copy of the expression. The
+// arms come from the type, so no case is missing; each copy can then be
+// changed for its case.
+export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id): TEdit {
+  const type = dataTypeOf(code, info, on);
+  if (!type) return { ok: false, reason: "that variable's type has no cases" };
+  const nodes = { ...code.nodes };
+  const nn = { ...names };
+  const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  const mk = (d: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...d } as Node; return id; };
+  const arms = td.variants.map((v) => {
+    const binds = (code.nodes[v] as NodeOf<"variant">).fields.map((f) => { const b = mk({ kind: "binder" }); nn[b] = names[f] ?? display[f] ?? "field"; return b; });
+    return mk({ kind: "arm", variant: v, binds, results: binds.map(() => null), body: copyTree(code, nodes, nn, expr) });
+  });
+  const scrutinee = mk({ kind: "ref", target: on });
+  const next = replace({ nodes, defs: code.defs }, expr, () => ({ kind: "match", scrutinee, arms, otherwise: null }));
+  return guardTyped(info, next, nn, expr, `Split on ${names[on] ?? "it"}: one case per ${display[type] ?? names[type] ?? "variant"}, each a copy to change.`);
+}
+
+export function addCase(code: Code, names: Names, info: Info, type: Id, name: string, fields: { name: string; type: Id }[]): TEdit {
+  if (!name.trim()) return { ok: false, reason: "a case needs a name" };
+  const before = new Set(info.holes.keys());
+  const e = addVariant(code, names, type, name.trim(), fields);
+  const r = guardTyped(info, e.code, e.names, e.variant, "");
+  if (!r.ok) return r;
+  const holes = [...infer(e.code, { ...display, ...e.names }).holes.keys()].filter((k) => !before.has(k)).length;
+  return { ...r, note: `Added ${name.trim()}. ${holes ? `${holes} match${holes === 1 ? "" : "es"} and fold${holes === 1 ? "" : "s"} got a new case with a hole to fill, so none is missing a case.` : "Nothing matches on this type yet."}` };
+}
+
+export { fillings, infer, type Filling, type Info };
