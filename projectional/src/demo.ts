@@ -13,8 +13,9 @@ import { renderGraph } from "./render/graph.ts";
 import { renderLet } from "./render/letseq.ts";
 import { renderNested } from "./render/nested.ts";
 import { renderSexpr } from "./render/sexpr.ts";
+import { renderBlocks } from "./lang/render.ts";
 
-const views = { nested: renderNested, let: renderLet, sexpr: renderSexpr, graph: renderGraph };
+const views = { nested: renderNested, let: renderLet, sexpr: renderSexpr, graph: renderGraph, blocks: (c: Code, p: Presentation, d: Id) => renderBlocks(c, p, null, d) };
 const render = (code: Code, pres: Presentation, def: Id) => views[pres.style.view](code, pres, def);
 const show = (code: Code, pres: Presentation, defs: Id[]) =>
   defs.map((d) => render(code, pres, d)).join("\n\n").replace(/^/gm, "    ");

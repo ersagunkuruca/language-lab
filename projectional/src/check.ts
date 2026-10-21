@@ -49,6 +49,7 @@ const arityOf = (code: Code, fn: Id): number | null => {
   const t = code.nodes[fn];
   if (!t) return null;
   if (t.kind === "builtin") return impl[t.op as keyof typeof impl]?.length ?? null;
+  if (t.kind === "variant") return t.fields.length;
   if (t.kind === "def" && t.body) {
     const b = code.nodes[t.body];
     if (b?.kind === "lambda") return b.params.length;
@@ -74,6 +75,8 @@ export function checkDef(code: Code, defId: Id): Problem[] {
   };
 
   const body = code.nodes[def.body];
+  // Data types and everything typed are checked by src/lang/infer.ts.
+  if (body?.kind === "typedef") return out;
   if (body?.kind === "network") {
     enter(body.id);
     const declared = new Set([...body.params, ...body.wires]);
@@ -109,7 +112,7 @@ export function checkDef(code: Code, defId: Id): Problem[] {
           const t = code.nodes[n.target];
           if (!t) err(id, "scope", "refers to something that doesn't exist");
           else if (t.kind === "binder" && !scope.has(n.target)) err(id, "scope", "refers to a variable that isn't in scope here");
-          else if (t.kind !== "binder" && t.kind !== "def" && t.kind !== "builtin") err(id, "scope", `can't refer to a ${t.kind}`);
+          else if (!["binder", "def", "builtin", "variant", "field"].includes(t.kind)) err(id, "scope", `can't refer to a ${t.kind}`);
           return;
         }
         case "hole": gap(id, "hole", "not filled in yet"); return;
@@ -130,6 +133,20 @@ export function checkDef(code: Code, defId: Id): Problem[] {
           return;
         }
         case "lit": return;
+        case "match":
+        case "fold": {
+          // Each arm's binders are in scope in that arm only.
+          walk(n.scrutinee, scope);
+          for (const a of n.arms) {
+            const arm = enter(a);
+            if (arm?.kind !== "arm") { if (arm) err(a, "shape", `a ${arm.kind} can't be a case`); continue; }
+            const bound = [...arm.binds, ...arm.results.filter((r): r is Id => r !== null)];
+            for (const b of bound) enter(b);
+            walk(arm.body, new Set([...scope, ...bound]));
+          }
+          if (n.kind === "match" && n.otherwise) walk(n.otherwise, scope);
+          return;
+        }
         default: err(id, "shape", `a ${n.kind} can't appear in an expression`);
       }
     };

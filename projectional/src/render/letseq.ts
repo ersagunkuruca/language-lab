@@ -35,6 +35,10 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
       case "ref":
       case "hole":
         return operand(id);
+      case "match":
+      case "fold":
+        // Arms have their own scopes; shown nested rather than flattened.
+        return inline(id);
       case "lambda":
         // A lambda passed as a value: no sensible way to flatten it into the
         // enclosing sequence, so show it inline in nested form.

@@ -16,22 +16,23 @@ export class Builder {
     this.known = known;
   }
 
-  private add(n: NodeData): Id {
+  protected add(n: NodeData): Id {
     const id = freshId();
     this.code.nodes[id] = { id, ...n } as Node;
     return id;
   }
 
-  private kind(id: Id) {
+  protected kind(id: Id) {
     return (this.code.nodes[id] ?? this.known.nodes[id])?.kind;
   }
 
-  // Binders, defs and builtins are things you refer to; anything else is
+  // Binders, defs, builtins, constructors (variants) and projections
+  // (fields) are things you refer to; anything else is
   // already an expression. Each use gets its own ref node.
   x(id: Id): Id {
     const k = this.kind(id);
     if (!k) throw new Error(`unknown id ${id}`);
-    return k === "binder" || k === "def" || k === "builtin" ? this.add({ kind: "ref", target: id }) : id;
+    return k === "binder" || k === "def" || k === "builtin" || k === "variant" || k === "field" ? this.add({ kind: "ref", target: id }) : id;
   }
 
   lit(value: number | string): Id {

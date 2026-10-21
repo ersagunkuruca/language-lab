@@ -38,6 +38,7 @@ export function evaluate(code: Code, id: Id, env: Map<Id, Value> = new Map(), de
       case "hole": throw new Error("the program has a hole here");
       case "network":
       case "part": throw new Error("a network has no fixed direction; run it with the solver (src/relational.ts)");
+      default: throw new Error(`${n.kind} needs the typed core's evaluator (src/lang/run.ts)`);
     }
   };
   return ev(id, env);

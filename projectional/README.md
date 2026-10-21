@@ -331,6 +331,13 @@ every non-semantic thing in independent, mergeable side tables.
 6. **Recursive and mutually recursive defs** need SCC-based hashing
    (Unison's approach); `hashDef` currently refuses them.
 
+## The typed core
+
+Data types, `match`, `fold`, inferred types with effects (`Choice`,
+`Console`, `Diverge`), typed holes with a palette that can't produce a type
+error, and two real programs (eight queens, a small computer algebra system):
+see [LANGUAGE.md](LANGUAGE.md) and `npm run lang`.
+
 ## Layout
 
 ```
@@ -348,7 +355,11 @@ src/units.ts          units as types: constraints, exact inference, compatible()
 src/check.ts          every kind of error, and incomplete states
 src/edits.ts          every gesture as a pure, guarded edit
 src/demo.ts           the walkthrough
+src/lang/             the typed core: types + effects, inference, evaluator,
+                      block view, std library, example programs (LANGUAGE.md)
 editor/               browser editor (main.ts, page.html, build.ts, dist/)
 examples/build.ts     regenerates the example programs (new random ids)
-test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test)
+examples/build-lang.ts  regenerates examples/queens and examples/algebra
+test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test),
+test/lang.test.ts
 ```

@@ -27,7 +27,28 @@ export type Node =
   | { id: Id; kind: "network"; params: Id[]; wires: Id[]; parts: Id[] }
   // One node in a network: a builtin, relation or def, with each of its ports
   // bound to a wire. fn === null makes it a constant with `value` (and `unit`).
-  | { id: Id; kind: "part"; fn: Id | null; value?: number; unit?: Unit; bind: Record<string, Id> };
+  | { id: Id; kind: "part"; fn: Id | null; value?: number; unit?: Unit; bind: Record<string, Id> }
+  // Data types (src/lang/). A typedef is a def body: a sum of variants, each a
+  // product of fields. Variant and field ids are the tags and labels, so a
+  // ref to a variant is its constructor and a ref to the field of a
+  // one-variant type is its projection. Names are presentation, as always.
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[] }
+  | { id: Id; kind: "variant"; fields: Id[] }
+  | { id: Id; kind: "field"; type: Id }
+  // Type expressions, used for fields. target is a typedef's def, a builtin
+  // type (type.number, type.string) or one of the typedef's param binders.
+  | { id: Id; kind: "tref"; target: Id; args: Id[] }
+  | { id: Id; kind: "tfun"; params: Id[]; result: Id }
+  // Case analysis. There is one arm per variant (the editor makes them from
+  // the type), or arms for some and `otherwise` for the rest, so a missing
+  // case can't be written down.
+  | { id: Id; kind: "match"; scrutinee: Id; arms: Id[]; otherwise: Id | null }
+  // Structural recursion: like match, but each recursive field also gets the
+  // already-folded result (a paramorphism). Always terminates.
+  | { id: Id; kind: "fold"; scrutinee: Id; arms: Id[] }
+  // binds: one binder per field. results (fold only): a binder for each
+  // recursive field's folded value, null for the others.
+  | { id: Id; kind: "arm"; variant: Id; binds: Id[]; results: (Id | null)[]; body: Id };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -59,6 +80,14 @@ export function children(n: Node): Id[] {
     case "lambda": return [...n.params, n.body];
     case "def": return n.body ? [n.body] : [];
     case "network": return [...n.params, ...n.wires, ...n.parts];
+    case "typedef": return [...n.params, ...n.variants];
+    case "variant": return n.fields;
+    case "field": return [n.type];
+    case "tref": return n.args;
+    case "tfun": return [...n.params, n.result];
+    case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
+    case "fold": return [n.scrutinee, ...n.arms];
+    case "arm": return [...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
     default: return [];
   }
 }
@@ -78,10 +107,12 @@ export function subtree(code: Code, root: Id): Id[] {
 // all a "package" is: the closure of what a definition depends on.
 export function dependencies(code: Code, root: Id): Id[] {
   const seen = new Set<Id>();
+  const owner = ownerOfTypeParts(code);
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      const target = node.kind === "ref" ? node.target : node.kind === "part" ? node.fn : null;
+      let target = node.kind === "ref" ? node.target : node.kind === "part" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      if (target && owner.has(target)) target = owner.get(target)!;
       if (!target || seen.has(target)) continue;
       const t = code.nodes[target];
       if (t.kind === "def" || t.kind === "builtin") {
@@ -92,6 +123,20 @@ export function dependencies(code: Code, root: Id): Id[] {
   };
   visit(root);
   return [...seen];
+}
+
+// Variants and fields are referred to directly (constructors, projections);
+// this finds the def whose typedef they belong to.
+export function ownerOfTypeParts(code: Code): Map<Id, Id> {
+  const out = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "def" || !n.body || code.nodes[n.body]?.kind !== "typedef") continue;
+    for (const v of (code.nodes[n.body] as NodeOf<"typedef">).variants) {
+      out.set(v, n.id);
+      for (const f of (code.nodes[v] as NodeOf<"variant">).fields) out.set(f, n.id);
+    }
+  }
+  return out;
 }
 
 // Semantic edit: swap the node at `id` for a new subtree, keeping the id so
@@ -110,6 +155,9 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
       const i = n.args.indexOf(id);
       if (i >= 0) return { parent: n.id, slot: "args", index: i };
     } else if (n.kind === "lambda" && n.body === id) return { parent: n.id, slot: "body" };
+    else if ((n.kind === "match" || n.kind === "fold") && n.scrutinee === id) return { parent: n.id, slot: "scrutinee" };
+    else if (n.kind === "match" && n.otherwise === id) return { parent: n.id, slot: "otherwise" };
+    else if (n.kind === "arm" && n.body === id) return { parent: n.id, slot: "body" };
     else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
   }
   return null;

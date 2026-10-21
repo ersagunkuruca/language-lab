@@ -21,6 +21,19 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
         r = callText(pres, namer, code.nodes[n.fn], args, () => expr(n.fn));
         break;
       }
+      case "match":
+      case "fold": {
+        // One line per program is this view's promise, so arms go inline.
+        const arms = n.arms.map((a) => {
+          const arm = get(code, a, "arm");
+          const rs = arm.results.filter((x): x is Id => x !== null);
+          const pat = arm.binds.length ? `${namer.name(arm.variant)}(${arm.binds.map((b) => namer.name(b)).join(", ")})` : namer.name(arm.variant);
+          return `${pat}${rs.length ? ` with ${rs.map((b) => namer.name(b)).join(", ")}` : ""} → ${expr(arm.body).text}`;
+        });
+        if (n.kind === "match" && n.otherwise) arms.push(`otherwise → ${expr(n.otherwise).text}`);
+        r = atom(`${n.kind} ${expr(n.scrutinee).text} { ${arms.join("; ")} }`);
+        break;
+      }
       default: throw new Error(`unexpected ${n.kind} in expression`);
     }
     return notes.mark(id, r);

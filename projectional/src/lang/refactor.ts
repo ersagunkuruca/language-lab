@@ -1,0 +1,100 @@
+// Type-aware edits. These are the gestures that make whole classes of error
+// impossible rather than reported: a hole is filled only from fillings()
+// (so with something of the right type and arity), a case analysis is
+// created with exactly one arm per variant, and adding a variant to a type
+// adds a hole arm to every case analysis that needs one.
+
+import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
+import { freshId, ownerOfTypeParts, replace } from "../model.ts";
+import type { Names } from "../presentation.ts";
+import type { Filling } from "./infer.ts";
+
+export interface Edit { code: Code; names: Names }
+
+function adder(code: Code) {
+  const nodes = { ...code.nodes };
+  const add = (n: NodeData): Id => {
+    const id = freshId();
+    nodes[id] = { id, ...n } as Node;
+    return id;
+  };
+  return { nodes, add };
+}
+
+const variantsOf = (code: Code, def: Id) => {
+  const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  return td.variants;
+};
+
+// True if field `f` of type `def` holds the type itself (a fold folds it).
+function recursiveField(code: Code, def: Id, f: Id): boolean {
+  const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type];
+  return t.kind === "tref" && t.target === def && t.args.length === td.params.length;
+}
+
+// Arms for every variant of `def`, each with fresh binders named after the
+// fields and a hole for a body.
+function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean): Id[] {
+  return variants.map((v) => {
+    const fields = (code.nodes[v] as NodeOf<"variant">).fields;
+    const binds = fields.map((f) => { const b = add({ kind: "binder" }); names[b] = names[f] ?? "field"; return b; });
+    const results = fields.map((f) => {
+      if (!fold || !recursiveField(code, def, f)) return null;
+      const r = add({ kind: "binder" });
+      names[r] = `${names[f] ?? "field"}′`;
+      return r;
+    });
+    return add({ kind: "arm", variant: v, binds, results, body: add({ kind: "hole" }) });
+  });
+}
+
+export function fillHole(code: Code, names: Names, hole: Id, f: Filling): Edit {
+  const { nodes, add } = adder(code);
+  const nn: Names = { ...names };
+  const holes = (k: number) => Array.from({ length: k }, () => add({ kind: "hole" }));
+  let data: NodeData;
+  switch (f.kind) {
+    case "ref": data = { kind: "ref", target: f.target }; break;
+    case "call": data = { kind: "call", fn: add({ kind: "ref", target: f.target }), args: holes(f.arity) }; break;
+    case "lit": data = { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
+    case "lambda": {
+      const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = `input ${i + 1}`; return b; });
+      data = { kind: "lambda", params, body: add({ kind: "hole" }) };
+      break;
+    }
+    case "match":
+    case "fold": {
+      const scrutinee = add({ kind: "ref", target: f.on });
+      const arms = makeArms({ ...code, nodes }, add, nn, f.type, variantsOf(code, f.type), f.kind === "fold");
+      data = f.kind === "match" ? { kind: "match", scrutinee, arms, otherwise: null } : { kind: "fold", scrutinee, arms };
+      break;
+    }
+  }
+  return { code: replace({ nodes, defs: code.defs }, hole, () => data), names: nn };
+}
+
+// Add a case to a data type. Every match and fold over that type that
+// covers cases one by one gets an arm for it, with a hole for its body: the
+// program has new holes to fill, but never a missing case.
+export function addVariant(code: Code, names: Names, def: Id, name: string, fields: { name: string; type: Id }[] = []): Edit & { variant: Id } {
+  const { nodes, add } = adder(code);
+  const nn: Names = { ...names };
+  const fids = fields.map((f) => { const id = add({ kind: "field", type: f.type }); nn[id] = f.name; return id; });
+  const variant = add({ kind: "variant", fields: fids });
+  nn[variant] = name;
+  const tdId = (code.nodes[def] as NodeOf<"def">).body!;
+  const td = nodes[tdId] as NodeOf<"typedef">;
+  nodes[tdId] = { ...td, variants: [...td.variants, variant] };
+  const next: Code = { nodes, defs: code.defs };
+  const owner = ownerOfTypeParts(next);
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "match" && n.kind !== "fold") continue;
+    if (n.kind === "match" && n.otherwise) continue;
+    const first = n.arms[0] ? (code.nodes[n.arms[0]] as NodeOf<"arm">).variant : null;
+    if (!first || owner.get(first) !== def) continue;
+    const [arm] = makeArms(next, add, nn, def, [variant], n.kind === "fold");
+    nodes[n.id] = { ...n, arms: [...n.arms, arm] };
+  }
+  return { code: next, names: nn, variant };
+}
