@@ -4,6 +4,7 @@
 import type { Code, Id, Node, NodeData } from "./model.ts";
 import { freshId } from "./model.ts";
 import type { Names } from "./presentation.ts";
+import type { Unit } from "./units.ts";
 
 export class Builder {
   code: Code = { nodes: {}, defs: [] };
@@ -71,6 +72,12 @@ export class Builder {
 
   part(fn: Id | null, bind: Record<string, Id>, value?: number): Id {
     return this.add(value === undefined ? { kind: "part", fn, bind } : { kind: "part", fn, bind, value });
+  }
+
+  // Declare the unit of a binder or constant part (see units.ts).
+  unit(id: Id, unit: Unit): Id {
+    this.code.nodes[id] = { ...this.code.nodes[id], unit } as Node;
+    return id;
   }
 
   named(id: Id, name: string): Id {

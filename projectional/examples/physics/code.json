@@ -1,0 +1,221 @@
+{
+  "nodes": {
+    "11804899": {
+      "id": "11804899",
+      "kind": "part",
+      "fn": "builtin.product",
+      "bind": {
+        "a": "78b2e182",
+        "b": "4f05cbc4",
+        "c": "ca0489ff",
+        "d": "ca0489ff",
+        "product": "d3b2d82b"
+      }
+    },
+    "6d8ef328": {
+      "id": "6d8ef328",
+      "kind": "def",
+      "body": "39b1110b"
+    },
+    "f6b8bcd8": {
+      "id": "f6b8bcd8",
+      "kind": "binder",
+      "unit": {
+        "m": 1
+      }
+    },
+    "b66c3ea9": {
+      "id": "b66c3ea9",
+      "kind": "binder",
+      "unit": {
+        "m": 1,
+        "s": -1
+      }
+    },
+    "4f05cbc4": {
+      "id": "4f05cbc4",
+      "kind": "binder",
+      "unit": {
+        "m": 1,
+        "s": -2
+      }
+    },
+    "ca0489ff": {
+      "id": "ca0489ff",
+      "kind": "binder",
+      "unit": {
+        "s": 1
+      }
+    },
+    "5e7ffafd": {
+      "id": "5e7ffafd",
+      "kind": "binder"
+    },
+    "78b2e182": {
+      "id": "78b2e182",
+      "kind": "binder"
+    },
+    "d3b2d82b": {
+      "id": "d3b2d82b",
+      "kind": "binder"
+    },
+    "538596e3": {
+      "id": "538596e3",
+      "kind": "part",
+      "fn": "builtin.product",
+      "bind": {
+        "a": "b66c3ea9",
+        "b": "ca0489ff",
+        "product": "5e7ffafd"
+      }
+    },
+    "325515e1": {
+      "id": "325515e1",
+      "kind": "part",
+      "fn": null,
+      "bind": {
+        "out": "78b2e182"
+      },
+      "value": 0.5
+    },
+    "c3f389cc": {
+      "id": "c3f389cc",
+      "kind": "part",
+      "fn": "builtin.sum",
+      "bind": {
+        "a": "5e7ffafd",
+        "b": "d3b2d82b",
+        "total": "f6b8bcd8"
+      }
+    },
+    "39b1110b": {
+      "id": "39b1110b",
+      "kind": "network",
+      "params": [
+        "f6b8bcd8",
+        "b66c3ea9",
+        "4f05cbc4",
+        "ca0489ff"
+      ],
+      "wires": [
+        "5e7ffafd",
+        "78b2e182",
+        "d3b2d82b"
+      ],
+      "parts": [
+        "538596e3",
+        "325515e1",
+        "11804899",
+        "c3f389cc"
+      ]
+    },
+    "b58eab5e": {
+      "id": "b58eab5e",
+      "kind": "def",
+      "body": "4be93b9f"
+    },
+    "5bf61850": {
+      "id": "5bf61850",
+      "kind": "binder",
+      "unit": {
+        "m": 1
+      }
+    },
+    "71da2fc3": {
+      "id": "71da2fc3",
+      "kind": "binder",
+      "unit": {
+        "m": 1,
+        "s": -2
+      }
+    },
+    "a2ddc91c": {
+      "id": "a2ddc91c",
+      "kind": "lit",
+      "value": 2
+    },
+    "5a7d53d8": {
+      "id": "5a7d53d8",
+      "kind": "lit",
+      "value": 3.141592653589793
+    },
+    "05d4b8f1": {
+      "id": "05d4b8f1",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "ceab31a6": {
+      "id": "ceab31a6",
+      "kind": "call",
+      "fn": "05d4b8f1",
+      "args": [
+        "a2ddc91c",
+        "5a7d53d8"
+      ]
+    },
+    "b727e3bd": {
+      "id": "b727e3bd",
+      "kind": "ref",
+      "target": "builtin.div"
+    },
+    "da1d486a": {
+      "id": "da1d486a",
+      "kind": "ref",
+      "target": "5bf61850"
+    },
+    "73f2e69e": {
+      "id": "73f2e69e",
+      "kind": "ref",
+      "target": "71da2fc3"
+    },
+    "5137991b": {
+      "id": "5137991b",
+      "kind": "call",
+      "fn": "b727e3bd",
+      "args": [
+        "da1d486a",
+        "73f2e69e"
+      ]
+    },
+    "bbbb1094": {
+      "id": "bbbb1094",
+      "kind": "ref",
+      "target": "builtin.sqrt"
+    },
+    "4163d8aa": {
+      "id": "4163d8aa",
+      "kind": "call",
+      "fn": "bbbb1094",
+      "args": [
+        "5137991b"
+      ]
+    },
+    "58e41571": {
+      "id": "58e41571",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "56e0d611": {
+      "id": "56e0d611",
+      "kind": "call",
+      "fn": "58e41571",
+      "args": [
+        "ceab31a6",
+        "4163d8aa"
+      ]
+    },
+    "4be93b9f": {
+      "id": "4be93b9f",
+      "kind": "lambda",
+      "params": [
+        "5bf61850",
+        "71da2fc3"
+      ],
+      "body": "56e0d611"
+    }
+  },
+  "defs": [
+    "6d8ef328",
+    "b58eab5e"
+  ]
+}

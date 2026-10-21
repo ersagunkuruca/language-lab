@@ -1,13 +1,15 @@
 // The semantic core. A program is a flat map of nodes keyed by opaque IDs.
 // Nothing in here knows about names, glyphs, comments, layout or text.
 
+import type { Unit } from "./units.ts";
+
 export type Id = string;
 
 export type Node =
   | { id: Id; kind: "lit"; value: number | string }
   // A binder is the identity of a variable. It has no name; names live in the
-  // presentation layer, keyed by this id.
-  | { id: Id; kind: "binder" }
+  // presentation layer, keyed by this id. A unit, if given, is its type.
+  | { id: Id; kind: "binder"; unit?: Unit }
   // A reference points at a binder, a def or a builtin by id. Never by name.
   | { id: Id; kind: "ref"; target: Id }
   | { id: Id; kind: "call"; fn: Id; args: Id[] }
@@ -24,8 +26,8 @@ export type Node =
   // when it is used, by a solver. Params and wires are binders.
   | { id: Id; kind: "network"; params: Id[]; wires: Id[]; parts: Id[] }
   // One node in a network: a builtin, relation or def, with each of its ports
-  // bound to a wire. fn === null makes it a constant with `value`.
-  | { id: Id; kind: "part"; fn: Id | null; value?: number; bind: Record<string, Id> };
+  // bound to a wire. fn === null makes it a constant with `value` (and `unit`).
+  | { id: Id; kind: "part"; fn: Id | null; value?: number; unit?: Unit; bind: Record<string, Id> };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

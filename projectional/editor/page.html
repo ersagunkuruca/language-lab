@@ -60,7 +60,7 @@ button { font: inherit; color: inherit; }
 .brand strong { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .brand span { color: var(--muted); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
 .seg button { border: 0; background: none; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
@@ -232,6 +232,33 @@ textarea { resize: vertical; }
 .status-line.bad { background: var(--hot-soft); color: var(--hot); font-weight: 500; }
 .alts summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .alt { font-family: var(--font-code); font-size: 12px; padding: 2px 0 2px 12px; }
+
+/* error prevention */
+.nb.atom .body { fill: var(--op-bg); stroke: var(--op-ln); stroke-width: 2; }
+.nb.atom .lbl { font-size: 16px; }
+.punit { fill: var(--def-ln); color: var(--def-ln); font: 500 10px var(--font-code); }
+.nb .val.unit { fill: var(--def-ln); }
+.dragging .dot { transition: opacity .1s; }
+.dragging .dot.cannot { opacity: .25; stroke-dasharray: none; stroke: var(--hot); }
+.dragging .dot.can { stroke: var(--accent); stroke-width: 3.5; stroke-dasharray: none; }
+.wire.pending.bad { stroke: var(--hot); }
+.why { fill: var(--hot); font: 600 12px var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.wire.pending { pointer-events: none; }
+.status.refused { color: var(--hot); border-color: var(--hot); background: var(--hot-soft); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip-btn { font: 500 12px var(--font-code); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
+.chip-btn.on { background: var(--def-ln); border-color: var(--def-ln); color: var(--panel); }
+.chip-btn:disabled { opacity: .35; cursor: not-allowed; text-decoration: line-through; }
+.opt.no { opacity: .5; cursor: not-allowed; }
+.opt.no .opt-d { color: var(--hot); }
+.checks { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.chk { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: baseline; }
+.chk-n { font: 600 12px var(--font-code); text-align: center; border-radius: 4px; padding: 1px 0; background: var(--accent-soft); color: var(--accent); }
+.chk.gap .chk-n { background: var(--var-bg); color: var(--var-ln); }
+.chk.bad .chk-n { background: var(--hot); color: var(--panel); }
+.chk.later .chk-n { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+.chk-t small { display: block; color: var(--muted); font-size: 11.5px; }
+.chk-item { margin-left: 34px; text-align: left; background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .file, .status, .meaning { transition: background-color .4s; }

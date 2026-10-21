@@ -87,3 +87,44 @@ const out = (dir: string, files: Record<string, unknown>) => {
     "layout.json": { positions: {}, known: { [toPolar]: ports(toPolar).slice(0, 2), [rotate]: ports(rotate).slice(0, 3) } },
   });
 }
+
+// Units as types. A falling object as a network: distance = speed·time +
+// ½·gravity·time². The outer ports declare units; every wire inside gets its
+// unit by inference, and a connection that would mix them is refused.
+// A pendulum's period as an expression: only the inputs have units, and the
+// result comes out in seconds.
+{
+  const k = new Builder(merge(prelude, relationPrelude));
+  const fall = k.def("fall");
+  const comments: Record<string, string> = {};
+  {
+    const [distance, speed, gravity, time] = ["distance", "speed", "gravity", "time"].map((n) => k.binder(n));
+    k.unit(distance, { m: 1 });
+    k.unit(speed, { m: 1, s: -1 });
+    k.unit(gravity, { m: 1, s: -2 });
+    k.unit(time, { s: 1 });
+    // Built from the two atoms: one product with four factors, one sum.
+    const [drift, half, drop] = ["drift", "½", "drop"].map((n) => k.binder(n));
+    k.define(fall, k.network([distance, speed, gravity, time], [drift, half, drop], [
+      k.part(R.product, { a: speed, b: time, product: drift }),
+      k.part(null, { out: half }, 0.5),
+      k.part(R.product, { a: half, b: gravity, c: time, d: time, product: drop }),
+      k.part(R.sum, { a: drift, b: drop, total: distance }),
+    ]));
+    comments[fall] = `Make {${distance}} known and {${time}} unknown to ask when it lands.`;
+  }
+  const period = k.def("period");
+  k.define(period, k.lambda(["length", "gravity"], (l, g) => {
+    k.unit(l, { m: 1 });
+    k.unit(g, { m: 1, s: -2 });
+    return k.call(B.mul, k.call(B.mul, k.lit(2), k.lit(3.141592653589793)), k.call(B.sqrt, k.call(B.div, l, g)));
+  }));
+  comments[period] = "Only the inputs have units. The result is inferred to be in seconds.";
+  const ports = (d: string) => (k.code.nodes[(k.code.nodes[d] as { body: string }).body] as { params: string[] }).params;
+  out("physics", {
+    "code.json": k.code,
+    "names.default.json": k.names,
+    "comments.json": comments,
+    "layout.json": { positions: {}, known: { [fall]: ports(fall).slice(1) } },
+  });
+}

@@ -226,6 +226,51 @@ in closed form, and scans the guess for values that satisfy the one leftover
 equation, so it finds every root in range rather than one. The derived
 program shows that as "guess b … keep the b where …".
 
+## Errors you can't make
+
+There's no text, so there are no syntax errors. The aim is to make the other
+kinds just as impossible. `src/check.ts` names every kind, `src/edits.ts`
+makes every gesture a pure function `code → code`, and each edit is refused
+(with a reason, and nothing changed) if the result has an error the code
+before it didn't. The editor asks ahead of time, too: while you drag a wire,
+the ports it can legally reach light up and the others say why not, unit
+chips that would contradict the wiring are disabled, and so are picker
+options that would be refused.
+
+| kind | what stops it |
+|---|---|
+| syntax | there is no text |
+| unknown names | a reference is an id picked from what's in scope |
+| wrong number of arguments | wrapping or calling makes one slot per parameter |
+| ports that don't exist | a part's ports come from its function's definition |
+| dangling wires | a wire with fewer than two ends is removed |
+| broken trees (a node in two places) | edits swap whole subtrees |
+| a network that contains itself | refused when the part is added |
+| unit mismatches | refused at connection time |
+| holes, unconnected ports | allowed while editing; they're incomplete, not wrong |
+| √ of a negative, ÷ 0, too few known ports | only found by running |
+
+`test/check.test.ts` drives a few hundred random gestures (seeded) over each
+example and asserts that no accepted edit ever leaves an error.
+
+**Units are the types.** `src/units.ts` gives every value a dimension, a
+vector of exponents over m, s, kg, A and rad. Each builtin says how its
+ports relate (`+`: all equal; `×`: exponents add; `√`: halve; `sin`: takes
+rad), which gives linear equations over the exponents, solved exactly by
+incremental elimination. A type error is an inconsistent system. You
+declare units on a few ports and inference does the rest: in `fall`, only
+the four outer ports have units and every wire inside gets its own; in
+`period`, only the inputs do and the result comes out in seconds. A def used
+twice is inlined each time, so it's polymorphic in whatever it leaves free.
+Zero is the one number that is every unit at once.
+
+**+ and − are one node.** Arithmetic in networks is two variadic atoms from
+`../invertible`: a *sum* (`a + b + … = total`) and a *product*. Which symbol
+the node shows depends on which port is unknown: the same sum draws as `+`
+when the total is unknown, `−` when an addend is, and `neg` with a zero
+total. There's always one spare addend port, and connecting it adds a term.
+Turning an expression def into a network converts `+ − neg × ÷` to these.
+
 ## Mapping back to the original ideas
 
 | idea | where it lives here |
@@ -238,6 +283,7 @@ program shows that as "guess b … keep the b where …".
 | multiple paradigms as views of the same code | nested / let / sexpr / graph renderers |
 | libraries, packages, modules unified | no imports; refs by id + content hash + dependency closure |
 | a node whose inputs and outputs depend on how it's wired | `network` + `part`, solved by `../invertible` |
+| never a syntax error, and no type errors either | `src/check.ts`, `src/edits.ts`, units as types |
 
 ## Prior art, briefly
 
@@ -279,7 +325,12 @@ every non-semantic thing in independent, mergeable side tables.
 4. **Orphaned side-table entries** when a node is deleted, and merging two
    people's side tables. Since everything is keyed by id, merges are
    per-node rather than per-line, which should be much nicer than text.
-5. **Recursive and mutually recursive defs** need SCC-based hashing
+5. **Units beyond exponents.** Offsets (°C vs K), named-but-equal units
+   (J vs N·m are the same here) and a fractional exponent from `√` of an odd
+   power all fall out of the vector model unevenly. A known solver quirk:
+   `fall` solved for time with speed exactly 0 returns no solution, while
+   any other speed works.
+6. **Recursive and mutually recursive defs** need SCC-based hashing
    (Unison's approach); `hashDef` currently refuses them.
 
 ## Layout
@@ -293,9 +344,13 @@ src/eval.ts           strict interpreter, env keyed by binder id
 src/hash.ts           name- and id-free content hash
 src/render/           namer (display names + disambiguation), nested,
                       let, sexpr, graph views
-src/relational.ts     networks: compile to the solver, port directions, toNetwork()
+src/relational.ts     networks: compile to the solver, port directions, toNetwork(),
+                      sum/product atoms and the symbol they show
+src/units.ts          units as types: constraints, exact inference, compatible()
+src/check.ts          every kind of error, and incomplete states
+src/edits.ts          every gesture as a pure, guarded edit
 src/demo.ts           the walkthrough
 editor/               browser editor (main.ts, page.html, build.ts, dist/)
 examples/build.ts     regenerates the example programs (new random ids)
-test/core.test.ts, test/relational.test.ts
+test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test)
 ```
