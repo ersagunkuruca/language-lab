@@ -33,6 +33,18 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
       }
       case "call": return ["call", canon(n.fn), ...n.args.map(canon)];
       case "lambda": return ["lam", n.params.map(canon), canon(n.body)];
+      case "network": return ["net", n.params.map(canon), n.wires.map(canon), n.parts.map(canon)];
+      case "part": {
+        // Port keys that are the callee's param ids become positions too.
+        const callee = n.fn ? code.nodes[n.fn] : null;
+        const body = callee?.kind === "def" && callee.body ? code.nodes[callee.body] : null;
+        const params = body && (body.kind === "lambda" || body.kind === "network") ? body.params : [];
+        const fn = !callee ? ["const", n.value] : callee.kind === "builtin" ? ["builtin", callee.op] : ["def", hashDef(code, n.fn!, memo, stack)];
+        const ports = Object.entries(n.bind)
+          .map(([k, w]) => [params.includes(k) ? `p${params.indexOf(k)}` : k, binders.get(w)] as const)
+          .sort(([a], [b]) => (a < b ? -1 : 1));
+        return ["part", fn, ports];
+      }
       default: throw new Error(`unexpected ${n.kind}`);
     }
   };

@@ -7,14 +7,16 @@ prefix, naming style, whether to nest or use temporaries) is a *view* chosen
 per person. No parser exists, on purpose.
 
 ```sh
-npm run demo   # walks through everything below (Node >= 22.18, no dependencies)
+npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
+               # networks use the solver in ../invertible)
 npm test
 ```
 
 ## The core data model
 
 `code.json` is a flat map of nodes keyed by random ID. That's the whole
-semantic program. Seven node kinds (`src/model.ts`):
+semantic program. The expression node kinds (`src/model.ts`; holes and
+networks are covered further down):
 
 | kind      | fields                 | notes                                                        |
 |-----------|------------------------|--------------------------------------------------------------|
@@ -109,29 +111,29 @@ The node view (Mermaid, so GitHub draws it). Variables are wires that fan out:
 
 ```mermaid
 flowchart LR
-  n6c4d7986(["leading coefficient"])
-  n058bd72f(["linear coefficient"])
-  n1fa84a77(["constant term"])
-  out_nbd55b215[/"root"/]
-  n33da8789["÷"]
-  n119cf467["+"]
-  n88a295e3["−"]
-  n058bd72f --> n88a295e3
-  n88a295e3 -->|1| n119cf467
-  n30596cef["√"]
-  ndcd7bbed["discriminant"]
-  n6c4d7986 -->|1| ndcd7bbed
-  n058bd72f -->|2| ndcd7bbed
-  n1fa84a77 -->|3| ndcd7bbed
-  ndcd7bbed --> n30596cef
-  n30596cef -->|2| n119cf467
-  n119cf467 -->|1| n33da8789
-  nd6b55253["×<br/><i>denominator</i>"]
-  n8e659233["2"]
-  n8e659233 -->|1| nd6b55253
-  n6c4d7986 -->|2| nd6b55253
-  nd6b55253 -->|2| n33da8789
-  n33da8789 --> out_nbd55b215
+  n92f7051c(["leading coefficient"])
+  n650835b4(["linear coefficient"])
+  n49dc496d(["constant term"])
+  out_n0ec3f332[/"root"/]
+  n56af9fb8["÷"]
+  ne119fc68["+"]
+  n0c3b2c0a["−"]
+  n650835b4 --> n0c3b2c0a
+  n0c3b2c0a -->|1| ne119fc68
+  nff10a387["√"]
+  n8d9c044c["discriminant"]
+  n92f7051c -->|1| n8d9c044c
+  n650835b4 -->|2| n8d9c044c
+  n49dc496d -->|3| n8d9c044c
+  n8d9c044c --> nff10a387
+  nff10a387 -->|2| ne119fc68
+  ne119fc68 -->|1| n56af9fb8
+  n6c34cfa2["×<br/><i>denominator</i>"]
+  n2da62cc1["2"]
+  n2da62cc1 -->|1| n6c34cfa2
+  n92f7051c -->|2| n6c34cfa2
+  n6c34cfa2 -->|2| n56af9fb8
+  n56af9fb8 --> out_n0ec3f332
 ```
 
 **Rename is not an edit to the program.** Renaming a binder produces a new
@@ -162,22 +164,66 @@ assigns paths), not something the compiler has to resolve.
 
 `editor/dist/index.html` is a self-contained browser editor over the same
 core (open it directly, or rebuild with `npm install && npm run build-editor`).
-It never shows editable source text. You select nodes and use gestures:
+It never shows editable source text. There are two kinds of definitions.
 
-- **Blocks** (Scratch-like) and a **graph** sit side by side as two views of
-  one tree, with selection shared between them. Graph positions you drag are
-  saved to `layout.json`, which is just another side table.
+**Expression defs** (`discriminant`, `root`) are shown as Scratch-like blocks
+and a graph, with selection shared between them.
+
 - **Rename** a variable, definition or step. Naming a step is the same as
   extracting it in the let view; clearing the name inlines it.
 - **Wrap in…** a function, searched by *any* of its names or glyphs
   (`*`, `·`, `×`, `multiply` and `mul` all find the same node).
 - **Replace with…** a variable in scope, another definition or a number;
   **Delete** leaves a hole `□`, and holes still render and hash.
-- A **Files** panel shows which file each gesture touched, plus the meaning
-  hash, so you can see that renames, comments, notation and layout never
-  move it. A **Run** panel evaluates the definition live.
+- **Open definition** (or double-click a call) jumps to the callee, with a
+  back button. **Show inline** displays the callee's body in place of the
+  call. That is a view stored in `layout.json`; `code.json` doesn't change.
+- **Turn into a network** rewrites the def as a network (below). Calls keep
+  their ids as nodes, so names and comments carry over.
 
-Edits are kept in your browser's local storage; Reset brings the example back.
+**Networks** (`to polar`, `rotate`) are node graphs you wire freely: add
+nodes from a palette (builtins, relations such as `polar`, other defs,
+constants), drag between ports to connect, drag a wired port into empty
+space to disconnect, add and remove outer ports. A network is a function
+without a direction. Each outer port is either *known* or *solved for*, and
+that choice lives in `layout.json`, not in the code. The relation solver from
+`../invertible` derives the program for the current choice and lists every
+branch of a multi-valued answer, canonical first.
+
+So `to polar` with `x, y` known gives `angle, length`. Tick `angle` and
+`length` instead and it computes `x, y`. With `x, length` known it finds `y`
+and `angle`, `±` branches included. Each node's ports show which way values
+flow through it (filled = input, hollow = solved), and the arrows flip when
+you change the outer choice. `rotate` is two polar nodes sharing a length
+plus an adder; making `x′, y′` known solves for `turn` through both polar
+nodes backwards. `root`, turned into a network, can be asked for the linear
+coefficient that gives a particular root.
+
+A **Files** panel shows which file each gesture touched, plus the meaning
+hash, so you can see that renames, comments, notation, layout and direction
+never move it. Edits are kept in your browser's local storage; Reset brings
+the examples back.
+
+## Networks in the core
+
+`src/relational.ts` adds two node kinds to the model:
+
+| kind      | fields                         | notes                                               |
+|-----------|--------------------------------|-----------------------------------------------------|
+| `network` | `params[]`, `wires[]`, `parts[]` | a def body; params (outer ports) and wires are binders |
+| `part`    | `fn`, `bind`, `value?`         | a builtin, relation or def, each port bound to a wire by id |
+
+A network compiles to one solver relation: a builtin part becomes an
+equation (`out = a + b`), a relation or a network part is embedded with
+`uses`, and an expression def used as a part is inlined into an equation, so
+its insides can be inverted too. `partDirections` plans the network without
+one part to find which of that part's ports are already determined (inputs)
+and which it must produce (outputs).
+
+Known limitation: when a direction needs a nonlinear block solved
+numerically (the root network asked for `b`), Newton's method is tried from
+several seeded starts. It can miss solutions or report none where one exists.
+The solver thread is looking at tearing to make that exact.
 
 ## Mapping back to the original ideas
 
@@ -190,6 +236,7 @@ Edits are kept in your browser's local storage; Reset brings the example back.
 | strategies, batch sizes etc. stored separately | `hints.json` |
 | multiple paradigms as views of the same code | nested / let / sexpr / graph renderers |
 | libraries, packages, modules unified | no imports; refs by id + content hash + dependency closure |
+| a node whose inputs and outputs depend on how it's wired | `network` + `part`, solved by `../invertible` |
 
 ## Prior art, briefly
 
@@ -215,10 +262,11 @@ every non-semantic thing in independent, mergeable side tables.
 
 ## Open questions
 
-1. **Tree or graph as the canonical form?** Here the core is a tree and the
-   node graph is derived from it (a variable used twice is one binder, two
-   refs). A graph-first core would make sharing structural, but then a
-   "temporary used twice" in the let view is a semantic edit, not a view.
+1. **Tree or graph as the canonical form?** Expression defs are trees (the
+   graph is derived from them); networks are graphs with no direction. Both
+   are stored the same way, as nodes keyed by id. Open: should expression
+   defs simply *be* networks with one chosen direction, so there's one
+   editor instead of two?
 2. **Order in the let view.** For pure code, any topological order of the
    steps is equivalent, so the order could be a presentation choice too.
    Effects would pin it.
@@ -244,8 +292,9 @@ src/eval.ts           strict interpreter, env keyed by binder id
 src/hash.ts           name- and id-free content hash
 src/render/           namer (display names + disambiguation), nested,
                       let, sexpr, graph views
+src/relational.ts     networks: compile to the solver, port directions, toNetwork()
 src/demo.ts           the walkthrough
 editor/               browser editor (main.ts, page.html, build.ts, dist/)
 examples/build.ts     regenerates the example programs (new random ids)
-test/core.test.ts
+test/core.test.ts, test/relational.test.ts
 ```
