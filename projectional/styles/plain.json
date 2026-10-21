@@ -1,0 +1,13 @@
+{
+  "view": "let",
+  "quote": ["‹", "›"],
+  "notation": {
+    "builtin.add":  { "glyph": "+", "fixity": "infix", "prec": 6, "assoc": "both" },
+    "builtin.sub":  { "glyph": "-", "fixity": "infix", "prec": 6, "assoc": "left" },
+    "builtin.mul":  { "glyph": "*", "fixity": "infix", "prec": 7, "assoc": "both" },
+    "builtin.div":  { "glyph": "/", "fixity": "infix", "prec": 7, "assoc": "left" },
+    "builtin.neg":  { "glyph": "-", "fixity": "prefix", "prec": 9 },
+    "builtin.sqrt": { "glyph": "sqrt", "fixity": "call" },
+    "builtin.pow":  { "glyph": "pow", "fixity": "call" }
+  }
+}

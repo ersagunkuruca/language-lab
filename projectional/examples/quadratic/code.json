@@ -1,0 +1,256 @@
+{
+  "nodes": {
+    "22049689": {
+      "id": "22049689",
+      "kind": "ref",
+      "target": "builtin.neg"
+    },
+    "869c8199": {
+      "id": "869c8199",
+      "kind": "def",
+      "body": "cf9a467b"
+    },
+    "bd55b215": {
+      "id": "bd55b215",
+      "kind": "def",
+      "body": "e043d49c"
+    },
+    "ca04c218": {
+      "id": "ca04c218",
+      "kind": "binder"
+    },
+    "0d1b1f05": {
+      "id": "0d1b1f05",
+      "kind": "binder"
+    },
+    "66569f3d": {
+      "id": "66569f3d",
+      "kind": "binder"
+    },
+    "322713a2": {
+      "id": "322713a2",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "62969d0d": {
+      "id": "62969d0d",
+      "kind": "ref",
+      "target": "0d1b1f05"
+    },
+    "c95a0baa": {
+      "id": "c95a0baa",
+      "kind": "ref",
+      "target": "0d1b1f05"
+    },
+    "9258e074": {
+      "id": "9258e074",
+      "kind": "call",
+      "fn": "322713a2",
+      "args": [
+        "62969d0d",
+        "c95a0baa"
+      ]
+    },
+    "3476131c": {
+      "id": "3476131c",
+      "kind": "lit",
+      "value": 4
+    },
+    "8226291f": {
+      "id": "8226291f",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "0a8a832b": {
+      "id": "0a8a832b",
+      "kind": "ref",
+      "target": "ca04c218"
+    },
+    "d72e1b24": {
+      "id": "d72e1b24",
+      "kind": "call",
+      "fn": "8226291f",
+      "args": [
+        "3476131c",
+        "0a8a832b"
+      ]
+    },
+    "6a1d0a6d": {
+      "id": "6a1d0a6d",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "9b0a0231": {
+      "id": "9b0a0231",
+      "kind": "ref",
+      "target": "66569f3d"
+    },
+    "034d58a1": {
+      "id": "034d58a1",
+      "kind": "call",
+      "fn": "6a1d0a6d",
+      "args": [
+        "d72e1b24",
+        "9b0a0231"
+      ]
+    },
+    "39a8e4ca": {
+      "id": "39a8e4ca",
+      "kind": "ref",
+      "target": "builtin.sub"
+    },
+    "0b844a07": {
+      "id": "0b844a07",
+      "kind": "call",
+      "fn": "39a8e4ca",
+      "args": [
+        "9258e074",
+        "034d58a1"
+      ]
+    },
+    "cf9a467b": {
+      "id": "cf9a467b",
+      "kind": "lambda",
+      "params": [
+        "ca04c218",
+        "0d1b1f05",
+        "66569f3d"
+      ],
+      "body": "0b844a07"
+    },
+    "6c4d7986": {
+      "id": "6c4d7986",
+      "kind": "binder"
+    },
+    "058bd72f": {
+      "id": "058bd72f",
+      "kind": "binder"
+    },
+    "1fa84a77": {
+      "id": "1fa84a77",
+      "kind": "binder"
+    },
+    "3b8e5793": {
+      "id": "3b8e5793",
+      "kind": "ref",
+      "target": "869c8199"
+    },
+    "f5ef17e5": {
+      "id": "f5ef17e5",
+      "kind": "ref",
+      "target": "6c4d7986"
+    },
+    "bfaca691": {
+      "id": "bfaca691",
+      "kind": "ref",
+      "target": "058bd72f"
+    },
+    "c16c6aa9": {
+      "id": "c16c6aa9",
+      "kind": "ref",
+      "target": "1fa84a77"
+    },
+    "dcd7bbed": {
+      "id": "dcd7bbed",
+      "kind": "call",
+      "fn": "3b8e5793",
+      "args": [
+        "f5ef17e5",
+        "bfaca691",
+        "c16c6aa9"
+      ]
+    },
+    "856a442b": {
+      "id": "856a442b",
+      "kind": "ref",
+      "target": "builtin.sqrt"
+    },
+    "30596cef": {
+      "id": "30596cef",
+      "kind": "call",
+      "fn": "856a442b",
+      "args": [
+        "dcd7bbed"
+      ]
+    },
+    "8e659233": {
+      "id": "8e659233",
+      "kind": "lit",
+      "value": 2
+    },
+    "ab617310": {
+      "id": "ab617310",
+      "kind": "ref",
+      "target": "builtin.mul"
+    },
+    "049c9171": {
+      "id": "049c9171",
+      "kind": "ref",
+      "target": "6c4d7986"
+    },
+    "d6b55253": {
+      "id": "d6b55253",
+      "kind": "call",
+      "fn": "ab617310",
+      "args": [
+        "8e659233",
+        "049c9171"
+      ]
+    },
+    "0b80ecba": {
+      "id": "0b80ecba",
+      "kind": "ref",
+      "target": "058bd72f"
+    },
+    "88a295e3": {
+      "id": "88a295e3",
+      "kind": "call",
+      "fn": "22049689",
+      "args": [
+        "0b80ecba"
+      ]
+    },
+    "d748097c": {
+      "id": "d748097c",
+      "kind": "ref",
+      "target": "builtin.add"
+    },
+    "119cf467": {
+      "id": "119cf467",
+      "kind": "call",
+      "fn": "d748097c",
+      "args": [
+        "88a295e3",
+        "30596cef"
+      ]
+    },
+    "a45e01ea": {
+      "id": "a45e01ea",
+      "kind": "ref",
+      "target": "builtin.div"
+    },
+    "33da8789": {
+      "id": "33da8789",
+      "kind": "call",
+      "fn": "a45e01ea",
+      "args": [
+        "119cf467",
+        "d6b55253"
+      ]
+    },
+    "e043d49c": {
+      "id": "e043d49c",
+      "kind": "lambda",
+      "params": [
+        "6c4d7986",
+        "058bd72f",
+        "1fa84a77"
+      ],
+      "body": "33da8789"
+    }
+  },
+  "defs": [
+    "869c8199",
+    "bd55b215"
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "nodes": {
+    "7ef56fe6": {
+      "id": "7ef56fe6",
+      "kind": "def",
+      "body": null
+    },
+    "fa26f338": {
+      "id": "fa26f338",
+      "kind": "def",
+      "body": null
+    },
+    "ac2bd468": {
+      "id": "ac2bd468",
+      "kind": "def",
+      "body": null
+    },
+    "31964fe8": {
+      "id": "31964fe8",
+      "kind": "def",
+      "body": null
+    },
+    "0c12e33b": {
+      "id": "0c12e33b",
+      "kind": "def",
+      "body": null
+    },
+    "225abf5a": {
+      "id": "225abf5a",
+      "kind": "def",
+      "body": null
+    },
+    "60496c98": {
+      "id": "60496c98",
+      "kind": "def",
+      "body": "8038fd8a"
+    },
+    "0ce9baf5": {
+      "id": "0ce9baf5",
+      "kind": "binder"
+    },
+    "52636c4b": {
+      "id": "52636c4b",
+      "kind": "ref",
+      "target": "ac2bd468"
+    },
+    "c0bb65ba": {
+      "id": "c0bb65ba",
+      "kind": "ref",
+      "target": "31964fe8"
+    },
+    "cd720464": {
+      "id": "cd720464",
+      "kind": "ref",
+      "target": "0ce9baf5"
+    },
+    "28c41638": {
+      "id": "28c41638",
+      "kind": "call",
+      "fn": "52636c4b",
+      "args": [
+        "c0bb65ba",
+        "cd720464"
+      ]
+    },
+    "c98c277e": {
+      "id": "c98c277e",
+      "kind": "ref",
+      "target": "fa26f338"
+    },
+    "8512492c": {
+      "id": "8512492c",
+      "kind": "ref",
+      "target": "0ce9baf5"
+    },
+    "d0231004": {
+      "id": "d0231004",
+      "kind": "call",
+      "fn": "c98c277e",
+      "args": [
+        "8512492c",
+        "28c41638"
+      ]
+    },
+    "da6efde0": {
+      "id": "da6efde0",
+      "kind": "ref",
+      "target": "7ef56fe6"
+    },
+    "29c3a914": {
+      "id": "29c3a914",
+      "kind": "call",
+      "fn": "da6efde0",
+      "args": [
+        "d0231004"
+      ]
+    },
+    "ea0ac9f1": {
+      "id": "ea0ac9f1",
+      "kind": "lambda",
+      "params": [
+        "0ce9baf5"
+      ],
+      "body": "29c3a914"
+    },
+    "492e0fab": {
+      "id": "492e0fab",
+      "kind": "ref",
+      "target": "0c12e33b"
+    },
+    "2497cedc": {
+      "id": "2497cedc",
+      "kind": "ref",
+      "target": "225abf5a"
+    },
+    "4f496cdc": {
+      "id": "4f496cdc",
+      "kind": "call",
+      "fn": "492e0fab",
+      "args": [
+        "2497cedc"
+      ]
+    },
+    "8038fd8a": {
+      "id": "8038fd8a",
+      "kind": "call",
+      "fn": "ea0ac9f1",
+      "args": [
+        "4f496cdc"
+      ]
+    }
+  },
+  "defs": [
+    "7ef56fe6",
+    "fa26f338",
+    "ac2bd468",
+    "31964fe8",
+    "0c12e33b",
+    "225abf5a",
+    "60496c98"
+  ]
+}
