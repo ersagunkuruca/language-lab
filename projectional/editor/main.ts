@@ -25,6 +25,9 @@ import queensComments from "../examples/queens/comments.json" with { type: "json
 import algebraCode from "../examples/algebra/code.json" with { type: "json" };
 import algebraNames from "../examples/algebra/names.default.json" with { type: "json" };
 import algebraComments from "../examples/algebra/comments.json" with { type: "json" };
+import relationsCode from "../examples/relations/code.json" with { type: "json" };
+import relationsNames from "../examples/relations/names.default.json" with { type: "json" };
+import relationsComments from "../examples/relations/comments.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -66,7 +69,7 @@ interface Layout {
   expanded: Id[];
 }
 
-type Program = "numbers" | "queens" | "algebra";
+type Program = "numbers" | "queens" | "algebra" | "relations";
 
 interface Doc {
   program: Program;
@@ -111,6 +114,7 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
 const initialFor = (program: Program): Doc =>
   program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
   : program === "algebra" ? typedDoc("algebra", algebraCode as Code, algebraNames, algebraComments)
+  : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
   : initial();
 
 const initial = (): Doc => ({
@@ -130,7 +134,7 @@ try {
   if (saved?.docs && saved.current) { docs = saved.docs; doc = docs[saved.current as Program] ?? doc; }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative" };
+const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative", relations: "to polar" };
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === START[doc.program]) ?? doc.code.defs[0];
 
 const ui: UI = {
@@ -1572,7 +1576,7 @@ function render() {
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
-        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"]]),
+        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"], ["relations", "Relations in programs"]]),
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         defTabs,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),

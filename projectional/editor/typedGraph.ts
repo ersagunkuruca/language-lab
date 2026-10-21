@@ -31,6 +31,8 @@ import type { Info } from "../src/lang/infer.ts";
 import { S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { absOf, connectDrag, curve, moveDrag, s, type Pos } from "./canvas.ts";
+import { planSolve } from "../src/lang/solve.ts";
+import { portLabel } from "../src/relational.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
@@ -154,6 +156,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       case "lambda": return region(id, `(${n.params.map(name).join(", ")}) =>`, n.params, n.body, "lam");
       case "match": case "fold": return cases(id, n);
       case "call": return node(n.fn).kind === "lambda" ? letRegion(id, n) : call(id, n);
+      case "solve": return solve(id, n);
       default: return pill(id, n.kind, "lit");
     }
   };
@@ -236,6 +239,68 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     frame(g, id, title, w, h, cls);
     g.append(s("circle", { cx: w, cy: outY, r: 4, class: "outp" }));
     return { g, w, h, outY, id };
+  };
+
+  // A relation used in one direction: the given ports are inputs on the left,
+  // the solved ones are sources on the right (all from the same solution),
+  // and what follows uses them. The badge says whether it's pure: Choice when
+  // the solver can find several answers or none.
+  const solve = (id: Id, n: NodeOf<"solve">): L => {
+    const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
+    const givenKeys = Object.keys(n.given), boundKeys = Object.keys(n.binds);
+    const inputs = givenKeys.map((k) => n.given[k]);
+    const kids = inputs.map((a): L => (dotOf(a) ? { g: group(), w: 0, h: 18, outY: 9 } : lay(a)));
+    let badge = "";
+    try {
+      const plan = planSolve(code, n);
+      badge = plan.status === "underdetermined" ? `needs ${plan.needMore} more` : plan.unique ? "one answer" : `Choice${plan.many ? " · several answers" : ""}${plan.canFail ? " · may have none" : ""}`;
+    } catch {}
+    const choice = /Choice|needs/.test(badge);
+    const title = `solve ${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
+    const rows = Math.max(givenKeys.length, boundKeys.length);
+    const lw = Math.max(0, ...givenKeys.map((k) => tw(label(k), 6.6))), rw = Math.max(0, ...boundKeys.map((k) => tw(label(k), 6.6)));
+    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, lw + rw + 36);
+    const top = 34;
+    const bh = top + rows * 20 + 6;
+    const gap = 8;
+    const colW = Math.max(0, ...kids.map((k) => k.w));
+    const kidsH = kids.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, kids.length - 1);
+    const g = group();
+    let h = Math.max(kidsH, bh);
+    const bx = kids.length ? colW + 34 : 0, by = (h - bh) / 2;
+    const portY = (i: number) => by + top + i * 20 + 8;
+    let w = bx + bw;
+    let y = (h - kidsH) / 2;
+    kids.forEach((k, i) => {
+      const d = dotOf(inputs[i]);
+      if (d) uses.push({ dot: d, ref: inputs[i], el: g, x: bx, y: portY(i) });
+      else {
+        const p = place(k, colW - k.w, y);
+        g.append(k.g);
+        wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), "", inputs[i]);
+        w = Math.max(w, p.x + k.w);
+        h = Math.max(h, p.y + k.h);
+      }
+      y += k.h + gap;
+    });
+    g.append(titled(grab(s("rect", { x: bx, y: by, width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), id), typeOf(id)));
+    g.append(s("text", { x: bx + bw / 2, y: by + 12, class: "badge", "text-anchor": "middle" }, badge));
+    g.append(s("text", { x: bx + bw / 2, y: by + 27, class: "cl", "text-anchor": "middle" }, title));
+    givenKeys.forEach((k, i) => {
+      g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
+      g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, label(k)));
+    });
+    boundKeys.forEach((k, i) => {
+      const b = n.binds[k];
+      const py = portY(i);
+      g.append(s("text", { x: bx + bw - 9, y: py + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
+      g.append(titled(s("circle", { cx: bx + bw, cy: py, r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
+      dots.set(b, { el: g, x: bx + bw, y: py });
+    });
+    const body = lay(n.body);
+    const at = place(body, bx + bw + 40 + Math.max(0, ...boundKeys.map((k) => tw(name(n.binds[k]), 6.8))), Math.max(0, (h - body.h) / 2));
+    g.append(body.g);
+    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), outY: at.y + body.outY };
   };
 
   // A let: each value flows into its dot; wires from the dots run to the
