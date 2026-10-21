@@ -10,7 +10,6 @@ type Canon = unknown[];
 
 export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), stack = new Set<Id>()): string {
   if (memo.has(defId)) return memo.get(defId)!;
-  if (stack.has(defId)) throw new Error("recursive defs are not hashed yet (needs SCC hashing)");
   stack.add(defId);
   const def = code.nodes[defId];
   if (def.kind !== "def") throw new Error(`${defId} is not a def`);
@@ -29,6 +28,11 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
           return ["var", binders.get(n.target)];
         }
         if (t.kind === "builtin") return ["builtin", t.op];
+        if (t.kind === "variant" || t.kind === "field") return [t.kind, part(n.target)];
+        // A def that is still being hashed is a recursive reference: name it
+        // by its place on the stack instead (enough for self-recursion and
+        // for a fixed traversal order of a mutually recursive group).
+        if (stack.has(n.target)) return ["rec", [...stack].indexOf(n.target)];
         return ["def", hashDef(code, n.target, memo, stack)];
       }
       case "call": return ["call", canon(n.fn), ...n.args.map(canon)];
@@ -45,8 +49,39 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
           .sort(([a], [b]) => (a < b ? -1 : 1));
         return ["part", fn, ports];
       }
+      case "typedef": return ["type", n.params.map(canon), n.variants.map(canon)];
+      case "variant": return ["variant", n.fields.map(canon)];
+      case "field": return ["field", canon(n.type)];
+      case "tref": {
+        const t = code.nodes[n.target];
+        const head = t.kind === "binder" ? ["var", binders.get(n.target)] : t.kind === "builtin" ? ["builtin", t.op]
+          : stack.has(n.target) ? ["rec", [...stack].indexOf(n.target)] : ["def", hashDef(code, n.target, memo, stack)];
+        return ["tref", head, ...n.args.map(canon)];
+      }
+      case "tfun": return ["tfun", n.params.map(canon), canon(n.result)];
+      case "match": return ["match", canon(n.scrutinee), n.arms.map(canon), n.otherwise ? canon(n.otherwise) : null];
+      case "fold": return ["fold", canon(n.scrutinee), n.arms.map(canon)];
+      case "arm": return ["arm", part(n.variant), n.binds.map(canon), n.results.map((r) => (r ? canon(r) : null)), canon(n.body)];
       default: throw new Error(`unexpected ${n.kind}`);
     }
+  };
+
+  // A variant or field is identified by its type's hash and its position.
+  const part = (id: Id): Canon => {
+    for (const d of code.defs) {
+      const td = code.nodes[d]?.kind === "def" && (code.nodes[d] as { body: Id | null }).body;
+      const body = td ? code.nodes[td] : null;
+      if (body?.kind !== "typedef") continue;
+      for (const [vi, v] of body.variants.entries()) {
+        const variant = code.nodes[v];
+        if (variant.kind !== "variant") continue;
+        const own = d === defId || stack.has(d) ? ["rec", [...stack].indexOf(d)] : ["def", hashDef(code, d, memo, stack)];
+        if (v === id) return [own, vi];
+        const fi = variant.fields.indexOf(id);
+        if (fi >= 0) return [own, vi, fi];
+      }
+    }
+    return ["extern", id];
   };
 
   // An extern has no content to hash, so its identity is its id.

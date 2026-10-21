@@ -983,7 +983,7 @@ function kindLabel(id: Id): string {
   if (n.kind === "def") return isNetwork(id) ? "Network" : "Definition";
   if (n.kind === "part") return n.fn === null ? "Constant" : "Node";
   if (n.kind === "call") return node(n.fn)?.kind === "lambda" ? "Let" : "Step (call)";
-  return { lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", network: "Network" }[n.kind] ?? n.kind;
+  return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", network: "Network", match: "Match", fold: "Fold", arm: "Case" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
 function inspector(namer: Namer, p: Presentation): HTMLElement {

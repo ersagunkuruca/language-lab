@@ -1,0 +1,5 @@
+{
+  "686288ea": "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
+  "e7471ce2": "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
+  "317736f4": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all."
+}

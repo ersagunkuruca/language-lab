@@ -26,7 +26,7 @@ export interface Notation {
 }
 
 export interface Style {
-  view: "nested" | "let" | "sexpr" | "graph";
+  view: "nested" | "let" | "sexpr" | "graph" | "blocks";
   notation: Record<Id, Notation>;
   // How to show a name that wouldn't survive in a plain-text language.
   quote?: [string, string];

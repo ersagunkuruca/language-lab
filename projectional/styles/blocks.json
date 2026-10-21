@@ -1,0 +1,19 @@
+{
+  "view": "blocks",
+  "quote": ["‹", "›"],
+  "notation": {
+    "builtin.add":    { "glyph": "+", "fixity": "infix", "prec": 6, "assoc": "both" },
+    "builtin.sub":    { "glyph": "−", "fixity": "infix", "prec": 6, "assoc": "left" },
+    "builtin.mul":    { "glyph": "·", "fixity": "infix", "prec": 7, "assoc": "both" },
+    "builtin.div":    { "glyph": "/", "fixity": "infix", "prec": 7, "assoc": "left" },
+    "builtin.pow":    { "glyph": "^", "fixity": "infix", "prec": 8, "assoc": "right" },
+    "builtin.neg":    { "glyph": "−", "fixity": "prefix", "prec": 9 },
+    "builtin.sqrt":   { "glyph": "√", "fixity": "prefix", "prec": 10 },
+    "builtin.equal":  { "glyph": "=", "fixity": "infix", "prec": 4 },
+    "builtin.less":   { "glyph": "<", "fixity": "infix", "prec": 4 },
+    "builtin.and":    { "glyph": "and", "fixity": "infix", "prec": 3, "assoc": "both" },
+    "builtin.or":     { "glyph": "or", "fixity": "infix", "prec": 2, "assoc": "both" },
+    "builtin.not":    { "glyph": "not ", "fixity": "prefix", "prec": 5 },
+    "builtin.concat": { "glyph": "++", "fixity": "infix", "prec": 5, "assoc": "both" }
+  }
+}
