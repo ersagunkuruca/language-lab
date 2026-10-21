@@ -215,6 +215,17 @@ on a variable with one arm per case of its type, "Add a case" on a data type
 adds a hole arm to every match and fold over it, and `main` runs in the
 page. Any edit that would add a type error is refused with the reason.
 
+They have a node view too (`editor/typedGraph.ts`): calls are nodes, a
+variable is a pill, and functions, lets and each case of a match or fold
+are regions whose variables are ports on the left edge. Calls that bring in
+an effect carry a badge (Choice, Console, Diverge), and handlers (`first`,
+`all`, `count`, `with fuel`) are marked with the effect they remove.
+Dragging a variable onto an input uses it there (refused, with the reason,
+if it's out of scope or the wrong type); dragging an input's wire into
+empty space leaves a hole. A tree can't share a value between two inputs
+without a name, so wiring a node's output into a second input isn't a
+gesture: that would be "introduce a let", a refactoring.
+
 The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/
 

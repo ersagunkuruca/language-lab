@@ -48,6 +48,7 @@ import { std, stdNames } from "../src/lang/std.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import * as T from "./typed.ts";
+import { typedGraph } from "./typedGraph.ts";
 
 // ---------------------------------------------------------------- state
 
@@ -1548,6 +1549,17 @@ function addCasePanel(type: Id, info: T.Info, names: Names): HTMLElement {
     h("div", { class: "hint" }, "Fields:"), chips, h("div", { class: "acts" }, go));
 }
 
+function graphHooks(info: T.Info) {
+  return {
+    selected: ui.selected,
+    select: (id: Id) => select(id),
+    open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
+    canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
+    use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
+    clear: (slot: Id) => void applyT(T.toHole(doc.code, doc.names.short, info, slot)),
+  };
+}
+
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const t = info.typeOf.get(ui.def);
@@ -1648,7 +1660,9 @@ function render() {
   const values = solved?.canonical ?? null;
   const main = typed
     ? [
-      h("section", { class: "panel p-blocks wide" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, "drag a variable onto an input to use it there; drag an input's wire away to leave a hole")),
+        h("div", { class: "graph-wrap" }, typedGraph(doc.code, blocksPres(), info, ui.def, graphHooks(info!)))),
+      h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
         h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, blocksPres(), info, ui.def, ui.selected))),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"), h("small", {}, "the same tree, printed")),
         h("pre", { class: "text" }, (() => { try { return renderBlocks(doc.code, blocksPres(), info, ui.def); } catch (e) { return (e as Error).message; } })())),

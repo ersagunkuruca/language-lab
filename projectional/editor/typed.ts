@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
-import { freshId, replace } from "../src/model.ts";
+import { collect, freshId, replace } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -294,6 +294,16 @@ export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id):
   const scrutinee = mk({ kind: "ref", target: on });
   const next = replace({ nodes, defs: code.defs }, expr, () => ({ kind: "match", scrutinee, arms, otherwise: null }));
   return guardTyped(info, next, nn, expr, `Split on ${names[on] ?? "it"}: one case per ${display[type] ?? names[type] ?? "variant"}, each a copy to change.`);
+}
+
+// Use a variable in an input: the input's current contents are replaced by
+// a reference to it. Refused when it isn't in scope there or doesn't fit.
+export function useVar(code: Code, names: Names, info: Info, defId: Id, binder: Id, slot: Id): TEdit {
+  const cur = code.nodes[slot];
+  if (cur?.kind === "ref" && cur.target === binder) return { ok: false, reason: "already that" };
+  if (!scopeAt(code, defId, slot).includes(binder)) return { ok: false, reason: `${display[binder] ?? names[binder] ?? "it"} isn't in scope here` };
+  const next = collect(replace(code, slot, () => ({ kind: "ref", target: binder })));
+  return guardTyped(info, next, names, slot, `Wired ${display[binder] ?? names[binder] ?? "the variable"} in. Same as picking it from the palette: by id, type-checked.`);
 }
 
 export function addCase(code: Code, names: Names, info: Info, type: Id, name: string, fields: { name: string; type: Id }[]): TEdit {
