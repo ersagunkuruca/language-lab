@@ -7,7 +7,7 @@ follows every branch of any multi-valued inverse, and marks one answer as
 canonical.
 
 ```
-npm test                         # 32 tests, no dependencies (Node 20+)
+npm test                         # 34 tests, no dependencies (Node 20+)
 python3 -m http.server           # then open http://localhost:8000/ for the demo page
 ```
 
@@ -225,6 +225,8 @@ directions(examples.polar)                // [['x','y'], ['x','r'], ...] minimal
 checkWiring(examples.polar, ['x', 'r'], ['θ'])  // inputs wired in, outputs wired out: ok?
 results(examples.sine, { y: 0.5 })      // lazy stream of every solution; first()/only()
 view(sum(2), ['total', 'b'])            // { a: { symbol: '−', text: 'total − b' } }
+direction(examples.square, ['y'])       // { kind: 'function', multiplicity: 'many', canFail: true, run, all }
+direction(examples.polar, ['θ'])        // { kind: 'underdetermined', need: 1, completions: [['x'],['y'],['r']], with }
 ```
 
 Ports wired from the enclosing function's inputs are `known`; ports wired
