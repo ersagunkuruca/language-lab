@@ -1,0 +1,18 @@
+{
+  "name": "projectional",
+  "private": true,
+  "type": "module",
+  "description": "AST-first language prototype: the program is a tree of IDs, everything else is a view",
+  "scripts": {
+    "demo": "node src/demo.ts",
+    "test": "node --test test/*.test.ts",
+    "build-examples": "node examples/build.ts",
+    "build-editor": "node editor/build.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "view": "sexpr",
+  "quote": ["|", "|"],
+  "comments": false,
+  "notation": {
+    "builtin.add": { "glyph": "+", "fixity": "call" },
+    "builtin.sub": { "glyph": "-", "fixity": "call" },
+    "builtin.mul": { "glyph": "*", "fixity": "call" },
+    "builtin.div": { "glyph": "/", "fixity": "call" },
+    "builtin.neg": { "glyph": "negate", "fixity": "call" }
+  }
+}

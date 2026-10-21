@@ -1,0 +1,57 @@
+// Content hash of a definition, in the spirit of Unison. Ids and names are
+// both left out: binders are numbered by position, refs to other defs are
+// replaced by those defs' hashes. So two people who write the same function
+// independently, with different ids and different names, get the same hash,
+// and renaming anything never changes it.
+
+import type { Code, Id } from "./model.ts";
+
+type Canon = unknown[];
+
+export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), stack = new Set<Id>()): string {
+  if (memo.has(defId)) return memo.get(defId)!;
+  if (stack.has(defId)) throw new Error("recursive defs are not hashed yet (needs SCC hashing)");
+  stack.add(defId);
+  const def = code.nodes[defId];
+  if (def.kind !== "def") throw new Error(`${defId} is not a def`);
+  const binders = new Map<Id, number>();
+
+  const canon = (id: Id): Canon => {
+    const n = code.nodes[id];
+    switch (n.kind) {
+      case "lit": return ["lit", n.value];
+      case "hole": return ["hole"];
+      case "binder": binders.set(id, binders.size); return ["bind"];
+      case "ref": {
+        const t = code.nodes[n.target];
+        if (t.kind === "binder") {
+          if (!binders.has(n.target)) throw new Error(`ref to out-of-scope binder ${n.target}`);
+          return ["var", binders.get(n.target)];
+        }
+        if (t.kind === "builtin") return ["builtin", t.op];
+        return ["def", hashDef(code, n.target, memo, stack)];
+      }
+      case "call": return ["call", canon(n.fn), ...n.args.map(canon)];
+      case "lambda": return ["lam", n.params.map(canon), canon(n.body)];
+      default: throw new Error(`unexpected ${n.kind}`);
+    }
+  };
+
+  // An extern has no content to hash, so its identity is its id.
+  const body = def.body === null ? ["extern", defId] : canon(def.body);
+  const h = fnv1a64(JSON.stringify(body));
+  stack.delete(defId);
+  memo.set(defId, h);
+  return h;
+}
+
+// Plain-JS 64-bit FNV-1a so this runs unchanged in the browser editor. Fine
+// for a prototype; a real codebase would want a cryptographic hash.
+function fnv1a64(s: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(s)) {
+    h ^= BigInt(byte);
+    h = (h * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, "0");
+}
