@@ -79,7 +79,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .prog { display: grid; gap: 0; border-top: 1px solid var(--line); }
 .step { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .step .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; padding-top: 3px; }
-.kind.solve { color: var(--accent); } .kind.linear { color: var(--good); } .kind.check { color: var(--muted); } .kind.newton { color: var(--warn); }
+.kind.solve { color: var(--accent); } .kind.linear { color: var(--good); } .kind.check { color: var(--muted); } .kind.newton, .kind.tear { color: var(--warn); }
 .step .body { min-width: 0; display: grid; gap: 2px; }
 .step .text { font-family: var(--mono); font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .step .from { font-size: 0.8rem; color: var(--muted); }
@@ -177,7 +177,7 @@ const LABELS = {
   sumDiff: 'a+b, a−b', polar: 'polar', polarNoLaw: 'polar (no law)', sine: 'sin', sineDouble: 'sin 2x',
   square: 'x²', exponential: 'exp', ohm: 'Ohm + power', rotate: 'rotate (composed)', temperature: '°C °F K',
 };
-const KIND = { solve: 'isolate', linear: 'eliminate', check: 'check', newton: 'numeric' };
+const KIND = { solve: 'isolate', linear: 'eliminate', check: 'check', tear: 'tear + scan', newton: 'numeric' };
 
 let current = 'sumDiff';
 let known = { ...PRESETS[current] };

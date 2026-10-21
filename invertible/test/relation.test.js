@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ALL, sumDiff, polar, polarNoLaw, sine, square, sineDouble, ohm, rotate, temperature } from '../src/examples.js';
-import { solve, plan, describe, run, shortfall } from '../src/relation.js';
+import { solve, plan, describe, run, shortfall, relation } from '../src/relation.js';
 import { evaluate } from '../src/expr.js';
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg ?? ''} ${a} ≠ ${b}`);
@@ -57,11 +57,33 @@ test('polar: one known port is underdetermined by exactly one', () => {
   assert.equal(shortfall(polar, ['θ']), 1);
 });
 
-test('polar without the law falls back to Newton and still satisfies the equations', () => {
+test('polar without the law is torn: guess one unknown, root-find the other equation', () => {
   const r = solve(polarNoLaw, { x: 3, y: -4 });
-  assert.equal(describe(r.plan, polarNoLaw)[0].kind, 'newton');
-  close(r.canonical.r * Math.cos(r.canonical.θ), 3);
-  close(r.canonical.r * Math.sin(r.canonical.θ), -4);
+  assert.equal(describe(r.plan, polarNoLaw)[0].kind, 'tear');
+  close(r.canonical.r, 5);
+  close(r.canonical.θ, Math.atan2(-4, 3));
+  assert.ok(r.solutions.some((s) => Math.abs(s.values.r + 5) < 1e-9)); // the r < 0 family too
+  for (const s of r.solutions) {
+    close(s.values.r * Math.cos(s.values.θ), 3);
+    close(s.values.r * Math.sin(s.values.θ), -4);
+  }
+});
+
+test('tearing solves a nonlinear chain that Newton cannot start on', () => {
+  // quadratic root (−b + sqrt(b² − 4ac)) / 2a as a network, solved for b
+  const q = relation({
+    name: 'q', ports: ['a', 'b', 'c', 'r'],
+    eqs: ['t = -b', 'D = b*b - 4*a*c', 's = sqrt(D)', 't + s = 2*a*r'],
+  });
+  const r = solve(q, { a: 1, c: 0.5, r: 1 });
+  assert.equal(r.solutions.length, 1);
+  close(r.canonical.b, -1.5);
+  // r = 1 is never the + root when b = −3, c ≥ 0: no solution, not a wrong one
+  assert.equal(solve(q, { a: 1, b: -3, r: 1 }).solutions.length, 0);
+  // two roots: x² − 5x + 6 = 0 has x = 2, 3; as a relation over (p, x)
+  const two = relation({ name: 'two', ports: ['p', 'x'], eqs: ['u = x*x', 'p = u - 5*x + 6'] });
+  const xs = solve(two, { p: 0 }).solutions.map((s) => s.values.x).sort();
+  assert.deepEqual(xs.map((x) => +x.toFixed(9)), [2, 3]);
 });
 
 test('sin: full solution family, asin as the canonical branch', () => {
