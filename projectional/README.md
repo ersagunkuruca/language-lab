@@ -327,9 +327,7 @@ every non-semantic thing in independent, mergeable side tables.
    per-node rather than per-line, which should be much nicer than text.
 5. **Units beyond exponents.** Offsets (°C vs K), named-but-equal units
    (J vs N·m are the same here) and a fractional exponent from `√` of an odd
-   power all fall out of the vector model unevenly. A known solver quirk:
-   `fall` solved for time with speed exactly 0 returns no solution, while
-   any other speed works.
+   power all fall out of the vector model unevenly.
 6. **Recursive and mutually recursive defs** need SCC-based hashing
    (Unison's approach); `hashDef` currently refuses them.
 
