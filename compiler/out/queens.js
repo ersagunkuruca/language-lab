@@ -41,7 +41,7 @@ function* queens(size) {
           for (let l$7 = $range(size); l$7.tag === "std.list.cons"; l$7 = l$7.fields[1]) {
             const x$8 = l$7.fields[0];
             const column = x$8;
-            if ((safe(column, board2).tag === "std.bool.true")) {
+            if (safe(column, board2)) {
               yield $cons(column, board2);
             } else {
               /* fail */
@@ -131,29 +131,29 @@ function keep$plain(list2, test) {
 
 // safe
 function safe(column2, placed) {
-  return (() => {
-      const step$23 = (s$24, rs$25) => {
-        switch (s$24.tag) {
-          case "std.list.nil" /* nil */: {
-            return ((distance) => $T);
+  return ((() => {
+        const step$23 = (s$24, rs$25) => {
+          switch (s$24.tag) {
+            case "std.list.nil" /* nil */: {
+              return ((distance) => $T);
+            }
+            case "std.list.cons" /* cons */: {
+              const queen = s$24.fields[0];
+              const others_safe = rs$25;
+              return ((distance2) => $bool(((!$near(queen, column2) && !$near(Math.abs((queen - column2)), distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
+            }
           }
-          case "std.list.cons" /* cons */: {
-            const queen = s$24.fields[0];
-            const others_safe = rs$25;
-            return ((distance2) => $bool(((!$near(queen, column2) && !$near(Math.abs((queen - column2)), distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
-          }
+        };
+        const spine$28 = [];
+        let v$26 = placed;
+        for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+          spine$28.push(v$26);
+          v$26 = v$26.fields[k$30];
         }
-      };
-      const spine$28 = [];
-      let v$26 = placed;
-      for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-        spine$28.push(v$26);
-        v$26 = v$26.fields[k$30];
-      }
-      let r$27 = step$23(v$26);
-      for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$23(spine$28[i$29], r$27);
-      return r$27;
-    })()(1);
+        let r$27 = step$23(v$26);
+        for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$23(spine$28[i$29], r$27);
+        return r$27;
+      })()(1).tag === "std.bool.true");
 }
 
 export const defs = {

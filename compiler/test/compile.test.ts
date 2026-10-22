@@ -13,7 +13,7 @@ import type { Id } from "../../projectional/src/model.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { CONS, NIL, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { CONS, NIL, S, SHOW_ANY, TRUE } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram, load } from "../src/program.ts";
@@ -322,4 +322,35 @@ test("equal compares Ints exactly and Numbers to float precision, at every type"
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
   const hows = [...info.equality.values()];
   assert.ok(hows.includes("exact") && hows.includes("near") && hows.includes("mixed"));
+});
+
+// GAPS.md G3: a function that returns Bool returns a JS boolean, and a
+// match that decides a condition sets one, instead of building Bool data.
+test("Bool functions and match conditions compile to JS booleans, and stay Bool data as values", async () => {
+  const k = new Lang();
+  const small = k.def("small"), first = k.def("first is small"), pick = k.def("pick"), map = k.def("map"), main = k.def("main");
+  k.define(small, k.fn(["n"], (n) => k.call(S.less, n, k.lit(10))));
+  const head = (xs: Id) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.false },
+    { variant: CONS, names: ["x", "rest"], body: ([x]) => k.call(small, x) },
+  ]);
+  k.define(first, k.fn(["xs"], head));
+  k.define(pick, k.fn(["xs"], (xs) => k.if(head(xs), k.lit("yes"), k.lit("no"))));
+  k.define(map, k.fn(["list", "change"], (xs, f) => k.match(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["item", "rest"], body: ([h, t]) => k.call(CONS, k.call(f, h), k.call(map, t, f)) },
+  ])));
+  const list = (...ns: number[]) => k.list(...ns.map((n) => k.lit(n)));
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(
+    ...[k.call(small, k.lit(3)), k.call(small, k.lit(30)), k.call(first, list()), k.call(first, list(5))].map((b) => k.call(SHOW_ANY, b)),
+    k.call(SHOW_ANY, k.call(pick, list(5))), k.call(SHOW_ANY, k.call(pick, list(50))), k.call(SHOW_ANY, k.call(map, list(1, 20), small)),
+  )))));
+  const { defs, code, info, source } = await compiledDefs(k, ["main", "small"], "bools.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  // As a value (exported, or passed to map) it's Bool data.
+  assert.deepEqual(defs.small(3), { tag: TRUE, fields: [] });
+  assert.doesNotMatch(source, /function small\([^)]*\) \{\n\s*return \$bool/);
+  assert.match(source, /break done/);
 });

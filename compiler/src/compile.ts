@@ -31,7 +31,7 @@ import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
@@ -198,14 +198,24 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   };
   const streamsFn = (t: Type, rho: Rho) => t.t === "fn" && choice(t.eff, rho);
 
+  // Where `ret` puts a value.
+  interface Out { bool: boolean; leaf: (js: string) => string }
+  const RETURN: Out = { bool: false, leaf: (js) => `return ${js};` };
+  const RETURN_BOOL: Out = { bool: true, leaf: (js) => `return ${js};` };
+
   // ---- specializations of definitions
   // `plain`: parameters whose type says Choice, but whose argument at the
   // calls this copy serves is a function written in place that never
   // chooses, so the copy calls them as plain functions (GAPS.md G4).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id> }
+  // `bool`: the copy returns a JS boolean, not Bool data. Its callers test
+  // it as it is, or make it data where they need a value (GAPS.md G3).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
+  const isBool = (t: Type) => { const z = sub.zonk(t); return z.t === "con" && z.id === BOOL; };
+  // A use of a copy as a value: Bool data out, as everywhere else.
+  const asValue = (s: Spec) => (s.bool ? `((...a) => $bool(${s.name}(...a)))` : s.name);
 
   function spec(def: Id, rho: Rho, plain: Set<Id> = new Set()): Spec {
     const scheme = info.schemes.get(def)!;
@@ -213,7 +223,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams: streamsFn(scheme.type, rho) };
+      const streams = streamsFn(scheme.type, rho), t = scheme.type;
+      const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams, bool };
       specs.set(key, s);
       queue.push(s);
     }
@@ -389,7 +401,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const target = node<"ref">(n.fn).target;
         if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex), n.args);
         if (target === S.equal) return equality(n);
+        if (code.nodes[target]?.kind === "def" && !streamy(id)) {
+          const s = defCall(n);
+          if (s.bool) {
+            const c = `${s.name}(${n.args.map(ex).join(", ")})`;
+            return info.divergent.has(target) ? `($spendOrThrow(), ${c})` : c;
+          }
+        }
       }
+      if (n.kind === "match" && !handlerOf(n) && !streamy(id)) return `(() => {\n${ret(id, false, RETURN_BOOL)}\n})()`;
       return `(${ex(id)}.tag === ${JSON.stringify(TRUE)})`;
     }
 
@@ -407,7 +427,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (!isFnDef(n.target)) return `${s.name}()`;
           // A function without Choice, where a Choice function goes (a list
           // holding both kinds): lifted to a stream of one result.
-          return wrap(s.name, s.streams);
+          return wrap(asValue(s), s.streams);
         }
         case "variant":
           if (effectOf(n.target)) return wrap(`((...a) => ${perform(n.target, ["...a"])})`, false);
@@ -497,7 +517,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "def") {
           const s = defCall(n);
           const c = `${s.name}(${n.args.map(ex).join(", ")})`;
-          return info.divergent.has(f.target) ? `($spendOrThrow(), ${c})` : c;
+          const v = s.bool ? `$bool(${c})` : c;
+          return info.divergent.has(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
       }
       return `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
@@ -575,25 +596,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // consts, matches become switches, folds local recursive functions.
     // `tail`: these statements end the definition's own body, so a call
     // of the definition to itself here is a jump back to its start.
-    function ret(id: Id, tail = false): string {
+    // `out`: what to do with the value (return it, or put it in a
+    // variable), and whether it's wanted as a JS boolean instead of Bool
+    // data.
+    function ret(id: Id, tail = false, out: Out = RETURN): string {
       const n = code.nodes[id];
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
         const f = node<"lambda">(n.fn);
-        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body, tail);
+        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body, tail, out);
       }
       if (n.kind === "match") {
-        if (handlerOf(n)) return `return ${handleEx(n)};`;
+        if (handlerOf(n)) return out.leaf(out.bool ? `(${handleEx(n)}.tag === ${JSON.stringify(TRUE)})` : handleEx(n));
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
-          return `if (${exBool(n.scrutinee)}) {\n${ret(t, tail)}\n}\n${ret(e, tail)}`;
+          return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out)}\n}\n${ret(e, tail, out)}`)}`;
         }
         const s = temp("s");
-        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body, tail)}\n}`);
-        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail)}\n}`);
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body, tail, out)}\n}`);
+        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail, out)}\n}`);
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
-      if (n.kind === "fold") return foldLoop(n);
+      if (n.kind === "fold" && !out.bool) return out === RETURN ? foldLoop(n) : out.leaf(foldEx(n));
       if (tail && selfCall(n)) {
         // The new arguments go into the loop's inputs, and the body runs
         // again with them: no JS stack (COMPILER.md, stage 2½).
@@ -603,7 +627,17 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
         return `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
-      return `return ${ex(id)};`;
+      return out.leaf(out.bool ? exBool(id) : ex(id));
+    }
+
+    // A test of a Bool. When it is decided by a match (`is mark` in calc),
+    // the match runs as statements that set a JS boolean, instead of a
+    // function called in place that returns Bool data.
+    function condition(id: Id, k: (c: string) => string): string {
+      const n = code.nodes[id];
+      if (n.kind !== "match" || handlerOf(n)) return k(exBool(id));
+      const c = temp("c"), done = temp("done");
+      return `let ${c};\n${done}: {\n${ret(id, false, { bool: true, leaf: (js) => `${c} = ${js};\nbreak ${done};` })}\n}\n${k(c)}`;
     }
     // A call of this very specialization of the definition.
     let jumps = false;
@@ -759,7 +793,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const callee = kind === "def" ? defCall(n) : null;
       return parts([n.fn, ...n.args], ([fn, ...args]) => {
         let c: string;
-        if (callee) c = `${callee.name}(${args.join(", ")})`;
+        if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = `${args[0]}.fields[${fieldIndex(target!)}]`;
         else if (kind === "builtin" && OPS[target!]) {
@@ -822,7 +856,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ps = lam.params.map(local).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
-      const stmts = ret(lam.body, true);
+      const stmts = ret(lam.body, true, sp.bool ? RETURN_BOOL : RETURN);
       // Self tail calls jump: the parameters become the loop's inputs, and
       // each pass binds them afresh, so a function made in one pass keeps
       // that pass's values.
@@ -843,7 +877,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   for (const name of opts.exports) {
     const def = code.defs.find((d) => names[d] === name);
     if (!def) throw new Error(`no definition named ${name}`);
-    exported.push(`  ${JSON.stringify(name)}: ${spec(def, new Map()).name},`);
+    exported.push(`  ${JSON.stringify(name)}: ${asValue(spec(def, new Map()))},`);
   }
   for (let s; (s = queue.shift());) out.push(body(s));
 
