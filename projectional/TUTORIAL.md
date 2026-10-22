@@ -545,8 +545,9 @@ These are the words the in-editor Guide uses, one word per thing:
 
 This is the candid part, and the one list of open problems. Each item says
 what's there today, why it's a problem, and a proposal. [REVIEW.md](REVIEW.md)
-has the longer review and the roadmap. Fixed items are at the end, so the
-list shows what moved.
+has the longer review, [ROADMAP.md](ROADMAP.md) the order of work (items 1
+to 3 below are its item 1), and [NOTES.md](NOTES.md) the design discussion
+behind them. Fixed items are at the end, so the list shows what moved.
 
 ### 1. Sequences are drawn as nesting
 
@@ -610,10 +611,14 @@ per type, the way NUMBERS.md chooses a representation.
 made for the example inputs) or a **name** (on a dot: what a let is called).
 Both are small text near a wire, so it reads as if some wires have names.
 
-**Should there be a difference?** Yes. A name is presentation of the code (it
-lives in the names file, and renaming changes nothing). A value is a run
-result (it lives in `examples.json` and changes when the inputs do). The fix
-is to make them look different (item 2's pill for values), not to merge them.
+**Should there be a difference?** Between a value and a name, yes. A name is
+presentation of the code (it lives in the names file, and renaming changes
+nothing). A value is a run result (it lives in `examples.json` and changes
+when the inputs do). The fix is to make them look different (item 2's pill
+for values), not to merge them. Between a *name* drawn on a wire and a name
+drawn on a dot, no: both name the same let, so a captioned wire would be one
+more way to draw a named dot, next to the junction and the let/get pair
+(NOTES.md, "The node editor").
 
 ### 4. Cases that are values are drawn as functions
 
@@ -769,6 +774,7 @@ So the list above isn't read as "everything is wrong":
 - The language reference: [LANGUAGE.md](LANGUAGE.md). Running backwards:
   [BACKWARDS.md](BACKWARDS.md). Numbers and representations:
   [NUMBERS.md](NUMBERS.md). The compiler: [COMPILER.md](COMPILER.md). The
-  review and roadmap: [REVIEW.md](REVIEW.md). The prototype and editor:
+  review: [REVIEW.md](REVIEW.md). What's next: [ROADMAP.md](ROADMAP.md), and
+  the discussion behind it: [NOTES.md](NOTES.md). The prototype and editor:
   [README.md](README.md).
 - Screenshots are in `projectional/tutorial/`.

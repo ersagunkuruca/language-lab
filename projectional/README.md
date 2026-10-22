@@ -291,7 +291,7 @@ nothing changed, if the result has an error the code before it didn't. The
 editor asks ahead of time, too: a hole's palette lists only what fits,
 while you drag a wire the inputs it can legally reach light up and the
 others say why not, and unit chips that would make units disagree are
-disabled. The *Checks* panel and TUTORIAL.md §3.10 list every kind.
+disabled. The *Checks* panel and TUTORIAL.md §3.12 list every kind.
 
 **Units are part of the type.** `src/units.ts` gives every number a
 dimension, a vector of exponents over m, s, kg and A. Each builtin says how
