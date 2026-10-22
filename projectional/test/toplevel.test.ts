@@ -366,3 +366,23 @@ test("the effects example: a declared effect and Abort, each handled; values sho
   assert.match(text, /handle area\(\)\n\s+ask\(question\) →/);
   assert.match(text, /handle show\(share\(10, 0\)\)/);
 });
+
+test("an input added to a function that is solved somewhere is given there as a hole; removing it drops it again", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const fall = p.named("fall");
+  const solves = (code: Code) => Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && n.fn === fall);
+  assert.ok(solves(p.code).length, "landing times solves fall");
+  const before = infer(p.code, p.pres.names).errors.length;
+  const r = Top.addParameter(p.code, p.pres.names, fall, "mass");
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.deepEqual(infer(r.code, r.names).errors.length, before, "no new errors");
+  for (const sv of solves(r.code)) assert.equal(r.code.nodes[sv.given[r.select]].kind, "hole");
+  const back = Top.removeParameter(r.code, r.names, fall, r.select);
+  assert.ok(back.ok);
+  if (!back.ok) return;
+  for (const sv of solves(back.code)) assert.ok(!(r.select in sv.given));
+  assert.equal(infer(back.code, back.names).errors.length, before);
+});

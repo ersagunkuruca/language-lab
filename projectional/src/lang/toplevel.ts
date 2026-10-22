@@ -129,6 +129,9 @@ const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
   return b?.kind === "lambda" ? b : null;
 };
 
+// The solves that run `def` backwards.
+const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && n.fn === def);
+
 export function addParameter(code: Code, names: Names, def: Id, rawName: string): Top {
   const d = code.nodes[def] as NodeOf<"def">;
   const name = trim(rawName) || "input";
@@ -149,8 +152,13 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
   nodes[lam.id] = { ...lam, params: [...lam.params, b] };
   const calls = callsOf(code, def);
   for (const c of calls) nodes[c.id] = { ...c, args: [...c.args, add({ kind: "hole" })] };
+  // A solve of it is a call run backwards: the new input is given there too,
+  // as a hole, so what it solves for stays as determined as it was.
+  const solves = solvesOf(code, def);
+  for (const sv of solves) nodes[sv.id] = { ...sv, given: { ...sv.given, [b]: add({ kind: "hole" }) } };
+  const places = calls.length + solves.length;
   return { ok: true, code: { nodes, defs: code.defs }, names: nn, select: b,
-    note: `Added the input ${name}.${calls.length ? ` ${calls.length} call${calls.length === 1 ? "" : "s"} got a hole for it, so none is missing an argument.` : ""}` };
+    note: `Added the input ${name}.${places ? ` ${places} ${places === 1 ? "use" : "uses"} got a hole for it, so none is missing an argument.` : ""}` };
 }
 
 export function removeParameter(code: Code, names: Names, def: Id, param: Id): Top {
@@ -163,6 +171,11 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id): T
   nodes[lam.id] = { ...lam, params: lam.params.filter((p) => p !== param) };
   const calls = callsOf(code, def);
   for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
+  for (const sv of solvesOf(code, def)) {
+    if (param in sv.binds) return { ok: false, reason: `${nameOf(names, param)} is what a solve of ${nameOf(names, def)} works out; remove that solve first` };
+    const { [param]: _, ...given } = sv.given;
+    nodes[sv.id] = { ...sv, given };
+  }
   const next = collect({ nodes, defs: code.defs });
   const nn = { ...names };
   delete nn[param];
