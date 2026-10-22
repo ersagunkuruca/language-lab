@@ -190,7 +190,12 @@ absolute file URLs too. **Start-up done** another way: `lab compile` now
 bundles the program and its runtime into one file with esbuild. That's
 54 KB for calc, with no type stripping at run time and no imports from the
 checkout. Start-up went from about 270 ms to about 90 ms, worker thread
-(G1) included. Bare `node` takes 24 ms. Buffered output is still open.
+(G1) included. Bare `node` takes 24 ms. **Buffered output done**: standard output is written
+in 64 KB pieces, flushed before standard error and before any read, and
+written straight to the descriptors from the worker. That also fixed a bug
+the worker brought in: a worker's stdout and stderr were relayed separately,
+so errors could come out of order. A 40,000-line session takes 605 ms
+instead of 1,071 ms.
 
 **G9. Small allocations (perf, not measured on its own).** `Parsed` is
 returned by every parsing step and taken apart at once, so it could be two

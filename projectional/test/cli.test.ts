@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -56,4 +56,22 @@ test("a compiled program has the stack the evaluator doesn't need: calc on 20,00
   assert.doesNotMatch(readFileSync(compiled, "utf8"), /^import .* from "(file:|\/)/m);
   const deep = "(".repeat(20000) + "6 * 7" + ")".repeat(20000) + "\n1 / 0\n";
   assert.deepEqual(node([compiled], deep), { code: 1, out: "42\n", err: "calc: line 2: division by zero\n" });
+});
+
+test("compiled, output and errors come in the order they happen, as when run", () => {
+  const calc = join(import.meta.dirname, "../examples/calc");
+  const compiled = join(dir, "calc-order.mjs");
+  assert.equal(node([lab, "compile", calc, "-o", compiled]).code, 0);
+  const input = "1\n1 / 0\n2\nx\n3\n";
+  // both streams into one file, the way a terminal shows them
+  const merged = (args: string[]) => {
+    const file = join(dir, `merged-${args.length}.txt`);
+    const fd = openSync(file, "w");
+    spawnSync(process.execPath, args, { cwd: dir, input, stdio: ["pipe", fd, fd] });
+    closeSync(fd);
+    return readFileSync(file, "utf8");
+  };
+  const want = "1\ncalc: line 2: division by zero\n2\ncalc: line 4: unknown name x\n3\n";
+  assert.equal(merged([lab, "run", calc]), want);
+  assert.equal(merged([compiled]), want);
 });
