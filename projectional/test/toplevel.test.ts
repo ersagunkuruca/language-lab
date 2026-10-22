@@ -309,3 +309,18 @@ test("show inline: a call drawn as its callee's body is a let, and type-checks t
   runMain(v.code, infer(v.code, v.names), p.named("main"), { print: (s) => out.push(s) });
   assert.deepEqual(out, ["[1, 2, 3]"]);
 });
+
+test("values inside a fold: its outermost pass, with the rest already folded", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { trace } = await import("../src/lang/trace.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const info = infer(p.code, p.pres.names);
+  const v = (t: string) => (parseValue(t, p.code, p.pres.names) as { value: never }).value;
+  const tr = trace(p.code, info, p.named("insert"), [v("2"), v("[1, 3]")]);
+  const byName = (n: string) => [...tr.values].filter(([id]) => p.pres.names[id] === n).map(([, x]) => showValue(x, p.code, p.pres.names));
+  assert.deepEqual(byName("head"), ["1"]);
+  assert.deepEqual(byName("tail′"), ["[2, 3]"]);
+  assert.equal(showValue(tr.result!, p.code, p.pres.names), "[1, 2, 3]");
+});

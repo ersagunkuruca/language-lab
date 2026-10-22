@@ -6,7 +6,8 @@
 // evaluator (run.ts): a call's value is the callee run on the argument
 // values, a fold's is the evaluator's. Only what ran gets a value: the arm
 // a match didn't take has none, and a function's body has none until it's
-// called (with its own example). A Choice shows its first answer. Printing
+// called (with its own example). A fold shows its outermost pass: the case
+// the value took, with the rest already folded. A Choice shows its first answer. Printing
 // is swallowed. Definitions that might not finish aren't traced, and
 // neither is anything that calls one.
 
@@ -54,7 +55,26 @@ export function trace(code: Code, info: Info, def: Id, args: Value[]): Trace {
         values.set(arm.id, v);
         break;
       }
-      case "fold": walk(n.scrutinee, env); v = first(r.ev(id, env), id); break;
+      case "fold": {
+        // The case the value itself took, with each recursive part already
+        // folded (the evaluator folds it): one pass, the outermost, is
+        // what the frame shows.
+        const d = walk(n.scrutinee, env) as Data;
+        const at = code.nodes[n.scrutinee];
+        const arm = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
+        if (!arm || at.kind !== "ref" || code.nodes[at.target]?.kind !== "binder") { v = first(r.ev(id, env), id); break; }
+        const inner = new Map(env);
+        arm.binds.forEach((b, i) => { inner.set(b, d.fields[i]); values.set(b, d.fields[i]); });
+        arm.results.forEach((res, i) => {
+          if (!res) return;
+          const folded = first(r.ev(id, new Map(env).set(at.target, d.fields[i])), id);
+          inner.set(res, folded);
+          values.set(res, folded);
+        });
+        v = walk(arm.body, inner);
+        values.set(arm.id, v);
+        break;
+      }
       default: v = first(r.ev(id, env), id);
     }
     values.set(id, v);
