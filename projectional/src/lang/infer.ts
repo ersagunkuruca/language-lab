@@ -16,7 +16,8 @@ import type { Names } from "../presentation.ts";
 import { unitProblems } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
-import { BOOL, SIGS } from "./std.ts";
+import { BOOL, SET, SIGS } from "./std.ts";
+import { fieldPath } from "./records.ts";
 import {
   CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
@@ -304,7 +305,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const n = code.nodes[id];
     let t: Type;
     switch (n?.kind) {
-      case "lit": t = typeof n.value === "number" ? num : str; break;
+      case "lit": t = n.of ? { t: "con", id: n.of, args: [] } : typeof n.value === "number" ? num : str; break;
       case "ref": t = refType(id, n.target, env); break;
       case "hole":
         t = s.fresh();
@@ -338,6 +339,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             if (ft.t !== "fn") err(id, `${callee(n)} is ${show(f)}, not a function`);
             else ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
           } else throw e;
+        }
+        // An update needs to know which field it changes, so its first input
+        // is a field or a path of them, written in place (or a hole, still
+        // to be filled with one).
+        if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
+          && !info.errors.some((e) => e.id === n.args[0])) {
+          err(n.args[0], "set needs a field here, or a path of fields such as (p) ↦ p.address.city");
         }
         t = ret;
         break;

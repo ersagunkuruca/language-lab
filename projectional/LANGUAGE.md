@@ -55,6 +55,41 @@ The standard library (`src/lang/std.ts`) defines `Bool`, `Unit`, `List a`
 and `Pair a b` as ordinary typedef nodes with stable ids. Nothing about them
 is built into the language.
 
+**Updating a record** is `set(field, record, value)`: the record with that
+field changed and every other field kept. The field can also be a path,
+`set((p) ↦ p.home.city, ada, "Paris")`, which copies only the records on the
+path. That is the projection run backwards with the rest of the record
+given, so records get updates, and nested data gets lenses, without a new
+construct (REVIEW.md §5.3). The checker accepts only a field or a path of
+fields written in place, so an update always has exactly one answer. A
+general function there (`(p) ↦ p.width · 2`) is the next step: it would
+run backwards through the relational interpreter, with `Choice`.
+
+### Whole numbers and text, at real sizes
+
+`Int` is the whole numbers, and it **never overflows** (`src/lang/int.ts`).
+A value is a JS number while it is a safe integer and a BigInt beyond, with
+exactly one spelling per number, so `equal` and hashing stay right. This is
+NUMBERS.md's stage 1: the meaning is the integers, the representation is
+machine numbers with a BigInt fallback. Int literals are ordinary `lit`
+nodes with `of: "type.int"` (digits in a string past 2^53). Its operations
+have Number's names (`add`, `multiply`, `less than`, `show`, `range`),
+because names are presentation; the types tell them apart, and Int and
+Number never mix without `as number` or `whole part`. Where there is no
+whole answer there is no answer: `quotient` and `remainder` by zero, a
+negative `power`, `whole part` of infinity and `read whole number` of
+"007" are `Choice`, not a crash or a NaN. Division rounds down, so
+`remainder` has the divisor's sign.
+
+Text has `length`, `slice`, `characters`, `split`, `join all`, `find`
+(`Choice`: the part may not be there), `comes before`, `character code`
+and `character` (`src/lang/text.ts`). Positions count characters, so an
+emoji is one. `join all` joins a list in one step, where a fold of `join
+text` would copy.
+
+All of these run in the evaluator, the compiler (`$int`, `$impl`, `$many`
+in its runtime) and forward in the relational interpreter.
+
 ## Case analysis: `match`
 
 ```
@@ -416,7 +451,8 @@ class considered, and where each one ends up:
 | running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker |
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error |
 | incomplete program | allowed | holes have types and the program runs until it reaches one |
-| division by zero | runtime, but typed | `evaluate` fails instead of returning NaN; builtin `/` is IEEE (Infinity/NaN) |
+| integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback |
+| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Number's `/` is IEEE (Infinity/NaN) |
 | other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix |
 | unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) |

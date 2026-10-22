@@ -11,7 +11,8 @@ import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
-import { showType } from "../src/lang/types.ts";
+import { INT, showType } from "../src/lang/types.ts";
+import { read as readInt } from "../src/lang/int.ts";
 import { portLabel } from "../src/lang/equations.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
@@ -226,9 +227,15 @@ export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
 
 export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string): TEdit {
   const old = code.nodes[id] as NodeOf<"lit">;
+  if (old.of === INT) {
+    // Any size; digits are kept as text when they don't fit a safe integer.
+    const [n] = readInt(raw.trim());
+    if (n === undefined) return { ok: false, reason: "this is a whole number; that isn't one" };
+    return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: typeof n === "number" ? n : String(n), of: INT })), names, id, "Changed a literal.");
+  }
   const v = typeof old.value === "number" ? Number(raw) : raw;
   if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
-  return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: v })), names, id, "Changed a literal.");
+  return guardTyped(info, replace(code, id, () => ({ ...old, kind: "lit", value: v })), names, id, "Changed a literal.");
 }
 
 // Binders visible at `id`: lambda params, let names, arm bindings.

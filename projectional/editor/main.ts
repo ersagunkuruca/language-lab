@@ -1150,7 +1150,7 @@ function runTyped(info: T.Info) {
   const lines: string[] = [];
   let error: string | undefined;
   try {
-    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line) });
+    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line), names: pres().names });
     const shown = showValue(v, doc.code, pres().names);
     if (shown !== "unit") lines.push(`→ ${shown}`);
   } catch (e) { error = (e as Error).message; }
