@@ -1,0 +1,18 @@
+{
+  "eloo5p48gndd8vvf42804g13ol": "A heading and the lines under it, up to the next heading.",
+  "h3i3thmfob5ah8qailopi5fcg0": "What the fold over the lines carries, from the end of the file back: the lines not yet under a heading, and the sections already closed.",
+  "35qesdsb8b4dr2k73d0r5n1rov": "A section ready to write: its number, the file it goes to, how many words it has, and its text.",
+  "0tc1srjevvj5ltcn47a4p62kju": "The title of a level-one heading (\"# Title\"), or no answer for any other line.",
+  "541hkolua3m4rqsfh83apanjpv": "How many words a line has: the pieces between spaces that aren't empty.",
+  "84l9jnk4i671jkkoshh69qaoq2": "Cuts the lines into sections at each heading. A fold from the end: a line that isn't a heading joins the pending lines, a heading closes them into a section. Lines before the first heading become a Preface, if they have any words.",
+  "5l3mve4e0a45hnikgntnbmnhok": "A capital letter as a small one; anything else as it is. Character codes can have no answer (an empty text), so first falls back to the character itself.",
+  "c169p7jilj9ihn2kc92vlp61g0": "A title as a file name: letters and digits in lower case, every run of anything else one dash, none at the ends. \"Hello, World!\" is hello-world.",
+  "jvtogc5t6k0hnrum9lvmsn2m5m": "How many times a text is in a list.",
+  "2g7le8qqr118sh4ssfutlbh5ft": "A name not used yet: the second chapter called Notes is notes-2, the third notes-3. `taken` has every name before it, as it was before this.",
+  "foj3dk203vk2fmeoudeq0g6ej5": "A section as the file holds it: its heading, its lines, and a newline at the end.",
+  "m2thu50o4t8agj73h1uq9v6n3k": "Gives each section its number and file name, in order. Plain recursion on the list, so the checker sees it ends.",
+  "lhovdneg3h9c3rmlo4elcj64up": "The index file: a list of the chapters, each a link to its file, with its word count.",
+  "81c9mflbsvobagpqn4ma8tsjcp": "Writes one chapter's file, and a line about it to the log. The log is added to, not written over, so it keeps every run.",
+  "7okvmdlk4n9s3b6i4lu61tae9p": "Reads the book, writes a file per chapter and the contents, and says what it did.",
+  "2ogq1ruf9hej4ui9783smcq4f1": "chapters: splits a Markdown book into one file per chapter (at each \"# \" heading), plus contents.md, a list of them with links and word counts, and chapters.log, which every run adds to. Usage: chapters book.md folder. Exit code 1 if it couldn't."
+}
