@@ -20,6 +20,22 @@ Famous demos (ray-marching SDF shaders, for example) may be ported on those
 terms. Textbook algorithms say they are the textbook ones. This applies to
 everything in the repo, not only shaders.
 
+## Int equality was approximate (2026-10-22)
+
+*The finding.* Round 1 of the compiler gaps (compiler/GAPS.md, G0) found
+that `equal(1000000000000, 1000000000001)` was `true`, in the evaluator and
+in compiled code alike. Numbers compare to within 1e-9 relative, and an
+`Int` is a JS number while it's a safe integer, so at run time it got the
+same tolerance. The differential tests couldn't see it, because both sides
+had the same bug.
+
+*Current answer.* Equality is type-directed. The checker records, for each
+use of `equal`, whether the type compared holds only Ints (exact), only
+Numbers (to within 1e-9), or both or a type variable (whole numbers exactly,
+others to within 1e-9). The evaluator and the compiler both follow it. The
+test "equal compares Ints exactly…" in compiler/test/compile.test.ts checks
+every case both ways. No example's output changed.
+
 ## Peano naturals, linked lists, and the stack (2026-10-22)
 
 *The idea.* `zero | succ(Nat)` and `nil | cons(List)` are the mathematical

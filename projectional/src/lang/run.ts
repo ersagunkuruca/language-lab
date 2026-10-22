@@ -49,12 +49,31 @@ export function fromList(v: Value): Value[] {
 // very values the solver found for it.
 export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
+// An Int is a JS number too while it's a safe integer, so a value can't say
+// which of the two it is, and two Ints must not get the tolerance (10^12
+// and 10^12 + 1 are different counts). The checker knows the type at each
+// `equal` and picks how numbers in it compare (infer.ts, `equality`):
+// - "exact": there's no Number in the type, so every number is an Int;
+// - "near": there are Numbers in it and no Ints;
+// - "mixed": both, or a type variable that could be either. Two whole
+//   numbers compare exactly and anything else to within `close`. That's
+//   right for every Int, and for a Number only differs where both are
+//   whole and far beyond 10^9.
+export type Equality = "exact" | "near" | "mixed";
+
+const numbersEqual: Record<Equality, (a: number, b: number) => boolean> = {
+  exact: (a, b) => a === b,
+  near: close,
+  mixed: (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b)),
+};
+
 // With its own stack, so two long lists can be compared.
-export function equal(a: Value, b: Value): boolean {
+export function equal(a: Value, b: Value, how: Equality = "mixed"): boolean {
+  const same = numbersEqual[how];
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
-    if (typeof x === "number" && typeof y === "number") { if (!close(x, y)) return false; continue; }
+    if (typeof x === "number" && typeof y === "number") { if (!same(x, y)) return false; continue; }
     if (typeof x !== "object" || typeof y !== "object") { if (x !== y) return false; continue; }
     if (x.tag !== y.tag) return false;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
@@ -221,6 +240,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
+  // `equal` as the checker typed it at each use.
+  const equals: Record<Equality, Fn> = {
+    exact: tag((a, b) => one(bool(equal(a, b, "exact"))), { prim: S.equal }),
+    near: tag((a, b) => one(bool(equal(a, b, "near"))), { prim: S.equal }),
+    mixed: builtins[S.equal],
+  };
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
@@ -395,7 +420,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     atom(id: Id, env: Env): Value | undefined {
       const n = code.nodes[id];
       if (n.kind === "lit") return n.of === INT ? intLit(n.value) : n.value;
-      if (n.kind === "ref") return refValue(n.target, env);
+      if (n.kind === "ref") return n.target === S.equal ? equals[info.equality?.get(id) ?? "mixed"] : refValue(n.target, env);
       if (n.kind === "lambda") return closure(n, env);
       return undefined;
     }
