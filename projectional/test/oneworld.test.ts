@@ -101,6 +101,13 @@ test("polar from x and y alone: on an axis, and at the origin, where the angle i
   assert.match(o.angle, /^_\d+$/);
 });
 
+test("what's left over is written with the ports' names, and a number keeps its · before one", () => {
+  const fall = p.named("fall");
+  const [, speed, gravity] = params(p.code, fall);
+  const [a] = relate(p.code, fall, { [speed]: 5, [gravity]: 9.81, out: bool(true) }, { names: p.pres.names });
+  assert.deepEqual(a.residual, ["distance = 5 · time + 4.905 · time^2"]);
+});
+
 test("hence: a consequence gives the solver a way in without counting as a constraint", () => {
   const polar = p.named("polar");
   const { rel, predicate } = relationFor(p.code, polar);
