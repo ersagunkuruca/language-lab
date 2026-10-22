@@ -1,0 +1,589 @@
+// A compiler from the typed core (projectional/src/lang) to JavaScript.
+//
+// The evaluator (run.ts) treats every expression as a lazy stream of
+// results, because any of them might be a Choice. The compiler doesn't have
+// to guess: the checker has already worked out, in each function's type,
+// whether it can produce several results or none. So it generates two kinds
+// of code:
+//
+//   - code without Choice is ordinary JavaScript: expressions, ternaries for
+//     `if`, recursive functions for `fold`, `&&` for `and`;
+//   - code with Choice becomes nested `for … of` loops, one per choice point,
+//     with the rest of the computation (the continuation) inside the
+//     innermost loop. `one of` is a loop over a list, `fail` is the absence
+//     of a continuation, and a handler is a loop that stops early (`first`),
+//     counts (`count`) or collects (`all`). That is what you'd write by hand
+//     for backtracking search, and the checker is what makes it safe.
+//
+// A function whose type has Choice is a generator function; anything else
+// is a plain function. Effect-polymorphic definitions (`map`, whose effects
+// are its argument's) get one copy per calling convention they're used at:
+// there are only two, so at most two copies.
+//
+// `solve` nodes call the relation solver at compile time, not at run time:
+// the direction is fixed where the node is, so the plan is too, and it is
+// emitted as straight-line code (src/relation.ts). Plans that need numeric
+// search fall back to the solver at run time, with the plan made once.
+
+import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
+import type { Names } from "../../projectional/src/presentation.ts";
+import type { Info } from "../../projectional/src/lang/infer.ts";
+import { CHOICE, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { B } from "../../projectional/src/prelude.ts";
+import { CONS, FALSE, NIL, S, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
+import { planSolve } from "../../projectional/src/lang/solve.ts";
+import { compileSolve } from "./relation.ts";
+
+type Rho = Map<number, boolean>;
+type K = (value: string) => string;
+
+export interface Options {
+  // Where the generated module imports the runtime from.
+  runtime: string;
+  // Definitions to export, by display name.
+  exports: string[];
+}
+
+// Builtins that are just JavaScript. `bool` ones produce a JS boolean.
+const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
+  [B.add]: { js: ([a, b]) => `(${a} + ${b})` },
+  [B.sub]: { js: ([a, b]) => `(${a} - ${b})` },
+  [B.mul]: { js: ([a, b]) => `(${a} * ${b})` },
+  [B.div]: { js: ([a, b]) => `(${a} / ${b})` },
+  [B.neg]: { js: ([a]) => `(-${a})` },
+  [B.pow]: { js: ([a, b]) => `(${a} ** ${b})` },
+  [B.sqrt]: { js: ([a]) => `Math.sqrt(${a})` },
+  [B.sin]: { js: ([a]) => `Math.sin(${a})` },
+  [B.cos]: { js: ([a]) => `Math.cos(${a})` },
+  [B.exp]: { js: ([a]) => `Math.exp(${a})` },
+  [B.log]: { js: ([a]) => `Math.log(${a})` },
+  [S.abs]: { js: ([a]) => `Math.abs(${a})` },
+  [S.floor]: { js: ([a]) => `Math.floor(${a})` },
+  [S.mod]: { js: ([a, b]) => `$mod(${a}, ${b})` },
+  [S.concat]: { js: ([a, b]) => `(${a} + ${b})` },
+  [S.show]: { js: ([a]) => `$show(${a})` },
+  [S.range]: { js: ([a]) => `$range(${a})` },
+  [S.print]: { js: ([a]) => `$print(${a})` },
+  [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
+  [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
+  [S.or]: { js: ([a, b]) => `(${a} || ${b})`, bool: true },
+  [S.not]: { js: ([a]) => `!${a}`, bool: true },
+};
+const BOOL_ARGS = new Set([S.and, S.or, S.not]);
+const HANDLERS = new Set([S.first, S.all, S.count, S.fuel]);
+
+export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  const sub = info.subst;
+  const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
+  const node = <K extends NodeOf<any>["kind"]>(id: Id) => code.nodes[id] as NodeOf<K>;
+
+  // ---- identifiers: display names where there are some, made unique
+  const used = new Set<string>();
+  const idents = new Map<string, string>();
+  const ident = (key: string, hint: string): string => {
+    if (idents.has(key)) return idents.get(key)!;
+    let base = hint.replace(/[^\p{L}\p{N}_$]+/gu, "_").replace(/^_+|_+$/g, "") || "v";
+    if (/^\p{N}/u.test(base)) base = "_" + base;
+    let name = base;
+    for (let i = 2; used.has(name) || RESERVED.has(name); i++) name = `${base}${i}`;
+    used.add(name);
+    idents.set(key, name);
+    return name;
+  };
+  // Tags are variant ids; the name is only a comment.
+  const tag = (variant: Id) => `${JSON.stringify(variant)}${names[variant] && names[variant] !== variant ? ` /* ${names[variant]} */` : ""}`;
+  const local = (binder: Id) => ident(binder, names[binder] ?? "x");
+  let temps = 0;
+  const temp = (hint = "t") => `${hint}$${temps++}`;
+
+  const referenced = new Set<Id>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "ref") referenced.add(n.target);
+
+  // ---- effects under a specialization
+  const choice = (row: Row, rho: Rho) => {
+    const r = sub.resolveRow(row);
+    return r.effs.includes(CHOICE) || (r.tail !== null && rho.get(r.tail) === true);
+  };
+  const streamsFn = (t: Type, rho: Rho) => t.t === "fn" && choice(t.eff, rho);
+
+  // ---- specializations of definitions
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean }
+  const specs = new Map<string, Spec>();
+  const queue: Spec[] = [];
+  const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
+
+  function spec(def: Id, rho: Rho): Spec {
+    const scheme = info.schemes.get(def)!;
+    const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
+    const key = `${def}|${on.join(",")}`;
+    if (!specs.has(key)) {
+      const base = names[def] ?? def;
+      const s: Spec = { def, rho, name: ident(key, on.length ? `${base}$choice` : base), streams: streamsFn(scheme.type, rho) };
+      specs.set(key, s);
+      queue.push(s);
+    }
+    return specs.get(key)!;
+  }
+
+  // The specialization a use of `def` needs. Row variables that only appear
+  // as the definition's own effect (not inside a parameter) are pure: a
+  // definition that doesn't do Choice itself can't start doing it because
+  // a caller does. The others follow the argument passed for them.
+  function specAt(ref: Id, def: Id, rho: Rho): Spec {
+    const scheme = info.schemes.get(def)!;
+    const inner = new Set<number>();
+    const collect = (t: Type, top: boolean) => {
+      if (t.t === "con") t.args.forEach((a) => collect(a, false));
+      if (t.t !== "fn") return;
+      if (!top && t.eff.tail !== null) inner.add(t.eff.tail);
+      t.params.forEach((p) => collect(p, false));
+      collect(t.ret, false);
+    };
+    collect(scheme.type, true);
+    const out: Rho = new Map();
+    const walk = (s: Type, t: Type) => {
+      if (s.t === "con" && t.t === "con") s.args.forEach((a, i) => walk(a, t.args[i]));
+      if (s.t !== "fn" || t.t !== "fn") return;
+      // Where the position already says Choice, the variable adds nothing,
+      // so only positions without it tell us what the variable stands for.
+      if (s.eff.tail !== null && inner.has(s.eff.tail) && !s.eff.effs.includes(CHOICE) && !out.get(s.eff.tail)) out.set(s.eff.tail, choice(t.eff, rho));
+      s.params.forEach((p, i) => walk(p, t.params[i]));
+      walk(s.ret, t.ret);
+    };
+    walk(scheme.type, ty(ref));
+    return spec(def, out);
+  }
+
+  // ---- solve nodes: one function each, shared by every specialization
+  const solvers = new Map<Id, string>();
+  const solverCode: string[] = [];
+  function solver(n: NodeOf<"solve">): string {
+    if (!solvers.has(n.id)) {
+      const name = `solve$${solvers.size}`;
+      solvers.set(n.id, name);
+      const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
+      solverCode.push(compileSolve(name, planSolve(code, n).rel, Object.keys(n.given), Object.keys(n.binds), names[n.fn] ?? n.fn, label));
+    }
+    return solvers.get(n.id)!;
+  }
+
+  // ---- one specialization's body
+  function body(sp: Spec): string {
+    const rho = sp.rho;
+    const memo = new Map<Id, boolean>();
+    const d = node<"def">(sp.def);
+
+    // Does evaluating this expression give anything other than exactly
+    // one result? (A lambda doesn't: it's a value; calling it might.)
+    function streamy(id: Id): boolean {
+      if (memo.has(id)) return memo.get(id)!;
+      const n = code.nodes[id];
+      let r = false;
+      switch (n.kind) {
+        case "call": {
+          const f = code.nodes[n.fn];
+          if (f.kind === "lambda") r = n.args.some(streamy) || streamy(f.body);
+          else r = streamy(n.fn) || n.args.some(streamy) || callStreams(n);
+          break;
+        }
+        case "match": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)) || (!!n.otherwise && streamy(n.otherwise)); break;
+        case "fold": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)); break;
+        case "solve": r = !planSolve(code, n).unique || Object.values(n.given).some(streamy) || streamy(n.body); break;
+      }
+      memo.set(id, r);
+      return r;
+    }
+
+    // Does this call's callee produce a stream (is it a generator)?
+    function callStreams(n: NodeOf<"call">): boolean {
+      const f = code.nodes[n.fn];
+      if (f.kind === "ref") {
+        const t = code.nodes[f.target];
+        if (t.kind === "def") return specAt(f.id, f.target, rho).streams;
+        if (t.kind === "variant" || t.kind === "field") return false;
+        if (t.kind === "builtin") {
+          if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel) return true;
+          if (f.target === S.first) return streamsFn(ty(n.args[1]), rho);
+          return false;
+        }
+      }
+      return streamsFn(ty(n.fn), rho);
+    }
+
+    // ---- expressions with exactly one result: a JS expression
+    function ex(id: Id): string {
+      if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
+      const n = code.nodes[id];
+      switch (n.kind) {
+        case "lit": return typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
+        case "ref": return refValue(n);
+        case "hole": return `$hole(${JSON.stringify(id)})`;
+        case "lambda": return lambda(n);
+        case "call": return call(n);
+        case "match": return match(n);
+        case "fold": return foldEx(n);
+        case "solve": {
+          const binds = Object.values(n.binds).map(local);
+          return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${Object.values(n.given).map(ex).join(", ")})))`;
+        }
+        default: throw new Error(`can't compile a ${n.kind}`);
+      }
+    }
+
+    // A boolean expression as a JS boolean, without building Bool data.
+    function exBool(id: Id): string {
+      const n = code.nodes[id];
+      if (n.kind === "ref" && (n.target === TRUE || n.target === FALSE)) return String(n.target === TRUE);
+      if (n.kind === "call" && code.nodes[n.fn].kind === "ref") {
+        const target = node<"ref">(n.fn).target;
+        if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex));
+        if (target === S.equal) return equality(n);
+      }
+      return `(${ex(id)}.tag === ${JSON.stringify(TRUE)})`;
+    }
+
+    function equality(n: NodeOf<"call">): string {
+      const [a, b] = n.args.map(ex);
+      const t = ty(n.args[0]);
+      return t.t === "con" && (t.id === NUMBER || t.id === STRING) ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
+    }
+
+    function refValue(n: NodeOf<"ref">): string {
+      const t = code.nodes[n.target];
+      const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
+      switch (t.kind) {
+        case "binder": return local(n.target);
+        case "def": { const s = specAt(n.id, n.target, rho); return isFnDef(n.target) ? s.name : `${s.name}()`; }
+        case "variant":
+          if (n.target === TRUE) return "$T";
+          if (n.target === FALSE) return "$F";
+          if (n.target === NIL) return "$nil";
+          if (n.target === UNIT_V) return "$unit";
+          if (!t.fields.length) return `({ tag: ${tag(n.target)}, fields: [] })`;
+          return wrap(`((${t.fields.map((_, i) => `a${i}`).join(", ")}) => ${construct(n.target, t.fields.map((_, i) => `a${i}`))})`, false);
+        case "field": return wrap(`((d) => d.fields[${fieldIndex(n.target)}])`, false);
+        case "builtin": {
+          if (OPS[n.target]) {
+            const ps = Array.from({ length: arity(n.id) }, (_, i) => `a${i}`);
+            const js = OPS[n.target].bool ? `$bool(${OPS[n.target].js(ps)})` : OPS[n.target].js(ps);
+            return wrap(`((${ps.join(", ")}) => ${js})`, false);
+          }
+          const runtime: Record<Id, [string, boolean]> = {
+            [S.oneOf]: ["$oneOf", true], [S.fail]: ["$fail", true], [S.all]: ["$all", false], [S.count]: ["$count", false],
+            [S.equal]: ["((a, b) => $bool($eq(a, b)))", false],
+          };
+          if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
+          if (runtime[n.target]) return wrap(...runtime[n.target]);
+          throw new Error(`${names[n.target] ?? n.target} can't be used as a value yet`);
+        }
+        default: throw new Error(`can't refer to a ${t.kind}`);
+      }
+    }
+    const arity = (id: Id) => { const t = ty(id); return t.t === "fn" ? t.params.length : 0; };
+
+    function construct(variant: Id, fields: string[]): string {
+      if (variant === CONS) return `$cons(${fields.join(", ")})`;
+      return `({ tag: ${tag(variant)}, fields: [${fields.join(", ")}] })`;
+    }
+    function fieldIndex(field: Id): number {
+      const def = info.owner.get(field)!;
+      const variant = node<"typedef">(node<"def">(def).body!).variants[0];
+      return node<"variant">(variant).fields.indexOf(field);
+    }
+
+    function lambda(n: NodeOf<"lambda">): string {
+      const ps = n.params.map(local).join(", ");
+      if (streamsFn(ty(n.id), rho)) return `(function* (${ps}) {\n${st(n.body, (v) => `yield ${v};`)}\n})`;
+      const b = code.nodes[n.body].kind;
+      if (b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda")) return `((${ps}) => {\n${ret(n.body)}\n})`;
+      return `((${ps}) => ${ex(n.body)})`;
+    }
+
+    // A call with one result.
+    function call(n: NodeOf<"call">): string {
+      const f = code.nodes[n.fn];
+      if (f.kind === "lambda") return block(n.id);
+      if (f.kind === "ref") {
+        const t = code.nodes[f.target];
+        if (t.kind === "builtin") {
+          if (OPS[f.target]) {
+            const js = OPS[f.target].js(n.args.map(BOOL_ARGS.has(f.target) ? exBool : ex));
+            return OPS[f.target].bool ? `$bool(${js})` : js;
+          }
+          if (f.target === S.equal) return `$bool(${equality(n)})`;
+          if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
+        }
+        if (t.kind === "variant") return construct(f.target, n.args.map(ex));
+        if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
+        if (t.kind === "def") {
+          const s = specAt(f.id, f.target, rho);
+          const c = `${s.name}(${n.args.map(ex).join(", ")})`;
+          return info.divergent.has(f.target) ? `($spendOrThrow(), ${c})` : c;
+        }
+      }
+      return `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
+    }
+
+    // Handlers whose thunks are written in place become loops; otherwise
+    // the runtime's versions are called with the thunks as values.
+    const thunk = (id: Id) => (code.nodes[id].kind === "lambda" && !node<"lambda">(id).params.length ? node<"lambda">(id) : null);
+    function handlerEx(h: Id, n: NodeOf<"call">): string {
+      const body = thunk(n.args[h === S.fuel ? 1 : 0]);
+      if (h === S.first) {
+        const g = thunk(n.args[1]);
+        if (!body) return `$first(${ex(n.args[0])}, ${ex(n.args[1])})`;
+        return `(() => {\n${st(body.body, (v) => `return ${v};`)}\nreturn ${g ? ex(g.body) : `${ex(n.args[1])}()`};\n})()`;
+      }
+      if (h === S.all) {
+        if (!body) return `$all(${ex(n.args[0])})`;
+        const acc = temp("all");
+        return `(() => {\nconst ${acc} = [];\n${st(body.body, (v) => `${acc}.push(${v});`)}\nreturn $toList(${acc});\n})()`;
+      }
+      if (h === S.count) {
+        if (!body) return `$count(${ex(n.args[0])})`;
+        const c = temp("count");
+        return `(() => {\nlet ${c} = 0;\n${st(body.body, () => `${c}++;`)}\nreturn ${c};\n})()`;
+      }
+      throw new Error("with fuel always has Choice");
+    }
+
+    function match(n: NodeOf<"match">): string {
+      const arms = n.arms.map((a) => node<"arm">(a));
+      if (isBoolMatch(n)) {
+        const [t, e] = boolArms(n);
+        return `(${exBool(n.scrutinee)} ? ${ex(t)} : ${ex(e)})`;
+      }
+      return block(n.id);
+    }
+    // Only the fields the arm uses are taken out.
+    const binds = (a: NodeOf<"arm">, s: string) => a.binds.map((b, i) => (referenced.has(b) ? `\nconst ${local(b)} = ${s}.fields[${i}];` : "")).join("");
+    const isBoolMatch = (n: NodeOf<"match">) => n.arms.every((a) => [TRUE, FALSE].includes(node<"arm">(a).variant)) && (n.arms.length === 2 || (n.arms.length === 1 && !!n.otherwise));
+    const boolArms = (n: NodeOf<"match">): [Id, Id] => {
+      const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v)?.body ?? n.otherwise!;
+      return [arm(TRUE), arm(FALSE)];
+    };
+
+    // fold: a local recursive function, children first (bottom-up).
+    const foldEx = (n: NodeOf<"fold">) => block(n.id);
+
+    // An expression that needs statements (a let, a match, a fold) inside
+    // an expression.
+    const block = (id: Id) => `(() => {\n${ret(id)}\n})()`;
+
+    // Statements that return the value of `id` (no Choice). Lets become
+    // consts, matches become switches, folds local recursive functions.
+    function ret(id: Id): string {
+      const n = code.nodes[id];
+      if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
+      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
+        const f = node<"lambda">(n.fn);
+        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body);
+      }
+      if (n.kind === "match") {
+        if (isBoolMatch(n)) {
+          const [t, e] = boolArms(n);
+          return `if (${exBool(n.scrutinee)}) {\n${ret(t)}\n}\n${ret(e)}`;
+        }
+        const s = temp("s");
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body)}\n}`);
+        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise)}\n}`);
+        return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
+      }
+      if (n.kind === "fold") {
+        // Children before parents, as the evaluator does it.
+        const f = temp("fold"), s = temp("s");
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => {
+          const rec = a.results.map((r, i) => (r ? `\nconst ${local(r)} = ${f}(${s}.fields[${i}]);` : "")).join("");
+          return `case ${tag(a.variant)}: {${binds(a, s)}${rec}\n${ret(a.body)}\n}`;
+        });
+        return `const ${f} = (${s}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\nreturn ${f}(${ex(n.scrutinee)});`;
+      }
+      return `return ${ex(id)};`;
+    }
+
+    // `let x = v`, or just `v;` for the `_` of a sequence.
+    function bindLet(p: Id, v: string): string {
+      if (referenced.has(p)) return `const ${local(p)} = ${v};\n`;
+      return /^[\p{L}\p{N}_$]+$/u.test(v) ? "" : `${v};\n`;
+    }
+
+    // ---- expressions with Choice: statements that run `k` once per result
+    function st(id: Id, k: K): string {
+      if (!streamy(id)) return k(ex(id));
+      const n = code.nodes[id];
+      switch (n.kind) {
+        case "call": return stCall(n, k);
+        case "match": return stMatch(n, k);
+        case "fold": return stFold(n, k);
+        case "solve": {
+          const given = Object.values(n.given);
+          return parts(given, (vals) => {
+            const sol = temp("sol");
+            const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
+            return `for (const ${sol} of ${solver(n)}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
+          });
+        }
+        default: throw new Error(`internal: a ${n.kind} with Choice`);
+      }
+    }
+
+    // Evaluate parts left to right, earlier choices varying slowest (as the
+    // evaluator does). A part without Choice that a later part loops over
+    // is computed once, before the loop.
+    function parts(ids: Id[], k: (vals: string[]) => string, i = 0, acc: string[] = []): string {
+      if (i === ids.length) return k(acc);
+      const id = ids[i];
+      if (streamy(id)) return st(id, (v) => {
+        if (/^[\p{L}\p{N}_$]+$/u.test(v)) return parts(ids, k, i + 1, [...acc, v]);
+        const t = temp();
+        return `const ${t} = ${v};\n${parts(ids, k, i + 1, [...acc, t])}`;
+      });
+      const kind = code.nodes[id].kind;
+      if (kind === "lit" || kind === "ref" || !ids.slice(i + 1).some(streamy)) return parts(ids, k, i + 1, [...acc, ex(id)]);
+      const t = temp();
+      return `const ${t} = ${ex(id)};\n${parts(ids, k, i + 1, [...acc, t])}`;
+    }
+
+    // Run k more than once only if it's short; otherwise loop over a local
+    // generator and run k once, after it.
+    function branch(k: K, gen: (y: K) => string): string {
+      const probe = k("$$");
+      if (probe.length < 160) return gen(k);
+      const r = temp("r");
+      return `for (const ${r} of (function* () {\n${gen((v) => `yield ${v};`)}\n})()) {\n${k(r)}\n}`;
+    }
+
+    function stCall(n: NodeOf<"call">, k: K): string {
+      const f = code.nodes[n.fn];
+      if (f.kind === "lambda") {
+        return parts(n.args, (vals) => `${f.params.map((p, i) => bindLet(p, vals[i])).join("")}${st(f.body, k)}`);
+      }
+      if (f.kind === "ref" && code.nodes[f.target].kind === "builtin") {
+        const h = f.target;
+        if (h === S.fail) return "/* fail */";
+        if (h === S.oneOf) return parts(n.args, ([xs]) => {
+          const l = temp("l"), x = temp("x");
+          return `for (let ${l} = ${xs}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${k(x)}\n}`;
+        });
+        if (h === S.first && callStreams(n)) {
+          const body = thunk(n.args[0]), g = thunk(n.args[1]);
+          if (body && g) return branch(k, (y) => {
+            const L = temp("first");
+            return `${L}: {\n${st(body.body, (v) => `${y(v)}\nbreak ${L};`)}\n${st(g.body, y)}\n}`;
+          });
+        }
+        if (h === S.fuel) return parts(n.args, ([fuel, body]) => {
+          const r = temp("r");
+          return `for (const ${r} of $fuel(${fuel}, ${body}, ${streamsFn(ty(n.args[1]), rho)})) {\n${k(r)}\n}`;
+        });
+      }
+      const target = f.kind === "ref" ? f.target : null;
+      const kind = target ? code.nodes[target].kind : null;
+      return parts([n.fn, ...n.args], ([fn, ...args]) => {
+        let c: string;
+        if (kind === "def") c = `${specAt(n.fn, target!, rho).name}(${args.join(", ")})`;
+        else if (kind === "variant") c = construct(target!, args);
+        else if (kind === "field") c = `${args[0]}.fields[${fieldIndex(target!)}]`;
+        else if (kind === "builtin" && OPS[target!]) {
+          const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
+          c = OPS[target!].bool ? `$bool(${js})` : js;
+        } else if (target === S.equal) c = `$bool($eq(${args.join(", ")}))`;
+        else c = `${fn}(${args.join(", ")})`;
+        let out: string;
+        if (callStreams(n)) {
+          const r = temp("r");
+          out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
+        } else out = k(c);
+        // Out of fuel: this call has no result, the others carry on.
+        return target && info.divergent.has(target) ? `if ($spend()) {\n${out}\n}` : out;
+      });
+    }
+
+    function stMatch(n: NodeOf<"match">, k: K): string {
+      return parts([n.scrutinee], ([s]) => branch(k, (y) => {
+        if (isBoolMatch(n)) {
+          const [t, e] = boolArms(n);
+          const c = code.nodes[n.scrutinee].kind === "call" && !streamy(n.scrutinee) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
+          return `if (${c}) {\n${st(t, y)}\n} else {\n${st(e, y)}\n}`;
+        }
+        const v = temp("s");
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, v)}\n${st(a.body, y)}\nbreak;\n}`);
+        if (n.otherwise) cases.push(`default: {\n${st(n.otherwise, y)}\n}`);
+        return `{\nconst ${v} = ${s};\nswitch (${v}.tag) {\n${cases.join("\n")}\n}\n}`;
+      }));
+    }
+
+    // A fold with Choice: a local generator; each combination of the
+    // children's results is a separate branch.
+    function stFold(n: NodeOf<"fold">, k: K): string {
+      const f = temp("fold"), s = temp("s");
+      const cases = n.arms.map((id) => {
+        const a = node<"arm">(id);
+        let inner = st(a.body, (v) => `yield ${v};`);
+        for (let i = a.results.length - 1; i >= 0; i--) {
+          const r = a.results[i];
+          if (r) inner = `for (const ${local(r)} of ${f}(${s}.fields[${i}])) {\n${inner}\n}`;
+        }
+        return `case ${tag(a.variant)}: {${binds(a, s)}\n${inner}\nbreak;\n}`;
+      });
+      const r = temp("r");
+      return `const ${f} = function* (${s}) {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n` +
+        parts([n.scrutinee], ([v]) => `for (const ${r} of ${f}(${v})) {\n${k(r)}\n}`);
+    }
+
+    // ---- the definition itself
+    const b = d.body!;
+    const header = `// ${names[sp.def] ?? sp.def}${sp.rho.size && [...sp.rho.values()].some(Boolean) ? " (called with a Choice function)" : ""}`;
+    if (isFnDef(sp.def)) {
+      const lam = node<"lambda">(b);
+      const ps = lam.params.map(local).join(", ");
+      if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}`;
+      return `${header}\nfunction ${sp.name}(${ps}) {\n${ret(lam.body)}\n}`;
+    }
+    const cell = temp("value");
+    return `${header}\nlet ${cell};\nfunction ${sp.name}() {\nreturn ${cell} ??= ${ex(b)};\n}`;
+  }
+
+  // ---- the module
+  const out: string[] = [];
+  const exported: string[] = [];
+  for (const name of opts.exports) {
+    const def = code.defs.find((d) => names[d] === name);
+    if (!def) throw new Error(`no definition named ${name}`);
+    exported.push(`  ${JSON.stringify(name)}: ${spec(def, new Map()).name},`);
+  }
+  for (let s; (s = queue.shift());) out.push(body(s));
+
+  const helpers = ["$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
+    "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
+    "$close", "$planned", "$solveRuntime", "$print", "$FN"];
+  return indent([
+    `// Generated by compiler/src/compile.ts from a typed program. Do not edit.`,
+    `import { ${helpers.join(", ")} } from ${JSON.stringify(opts.runtime)};`,
+    ``,
+    ...solverCode,
+    ``,
+    out.join("\n\n"),
+    ``,
+    `export const defs = {\n${exported.join("\n")}\n};`,
+    ``,
+  ].join("\n"));
+}
+
+// Indent by braces, so the output is readable.
+function indent(src: string): string {
+  let depth = 0;
+  return src.split("\n").map((line) => {
+    const t = line.trim();
+    if (!t) return "";
+    const opens = (t.match(/[{(\[]/g) ?? []).length, closes = (t.match(/[})\]]/g) ?? []).length;
+    const lead = /^[})\]]/.test(t) ? 1 : 0;
+    const out = "  ".repeat(Math.max(0, depth - lead)) + t;
+    depth = Math.max(0, depth + opens - closes);
+    return out;
+  }).join("\n");
+}
+
+const RESERVED = new Set(("break case catch class const continue debugger default delete do else export extends false finally for function if " +
+  "import in instanceof new null return super switch this throw true try typeof var void while with yield let static enum await implements " +
+  "package protected interface private public arguments eval undefined NaN Infinity Math Object Array Number String Symbol defs").split(" "));
