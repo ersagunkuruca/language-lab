@@ -31,7 +31,7 @@ import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
@@ -75,6 +75,13 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [IO.appendFile]: { js: ([a, b]) => `$io.appendFile(${a}, ${b})` },
   [IO.fileExists]: { js: ([a]) => `$io.fileExists(${a})` },
   [IO.listFolder]: { js: ([a]) => `$io.listFolder(${a})` },
+  // Cells: the runtime's one handler (projectional/src/lang/cells.ts). A
+  // formula is given its compiled thunk; a read of one that gave no value
+  // throws, which ends whatever formula is reading it, as in the evaluator.
+  [CELL_OPS.cell]: { js: ([a]) => `$cells().cell(${a})` },
+  [CELL_OPS.formula]: { js: ([f]) => `$cells().formula(${f})` },
+  [CELL_OPS.read]: { js: ([c]) => `$cells().read(${c})` },
+  [CELL_OPS.write]: { js: ([c, v]) => `($cells().write(${c}, ${v}), $unit)` },
   [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
   [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
   [S.hence]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
@@ -753,7 +760,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$optional", "$spread", "$self", "$foldNested",
+    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];

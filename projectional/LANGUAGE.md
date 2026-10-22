@@ -426,8 +426,10 @@ What is deliberately not there, and why:
   can't see end. So `read` can loop. A check for *guarded corecursion*
   (each step builds a `term` before recursing, under a `formula`) would
   give productive producers no `Diverge` at all; it isn't written yet.
-- **The compiler doesn't compile Cells yet**, like the other effects'
-  operations (see What's next).
+- **Compiled, Cells runs on the same handler.** The compiler turns
+  `cell`, `formula`, `read` and `write` into calls on one `Cells` instance
+  in its runtime (cells.ts), so a compiled program updates and remembers
+  exactly as the evaluator does.
 
 ### How it runs: no stack limit
 
@@ -913,13 +915,12 @@ back into the group being hashed is named by its position.
   one-shot effect, environment variables, handlers for `Console`/`Files`
   written in the program (to mock IO in tests), and a compiled program as
   one portable file (today it imports the runtime from this repository).
-  `Cells` doesn't compile yet.
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Number m/s`) and
   a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
 - **Cells, further.** Guarded corecursion, so productive lazy producers
-  have no `Diverge`; `Cells` in the compiler; a stateful handler form so a
+  have no `Diverge`; a stateful handler form so a
   program can write its own Cells handler (server-side rendering, tests);
   async cells (HTTP results) as Solid's resources.

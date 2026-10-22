@@ -250,6 +250,13 @@ export const $io = {
   listFolder: (p) => $toList(fallible('listFolder')(p)),
 };
 
+// Cells' handler: one per program, or the one the host gives (a page that
+// watches cells shares its own).
+import { Cells } from '../../projectional/src/lang/cells.ts';
+let cells = null;
+export const $cells = () => (cells ??= new Cells($eq));
+export function $setCells(c) { cells = c; }
+
 // optional: the first answer as some(answer), or none.
 export function $optional(f) { for (const x of f()) return { tag: SOME, fields: [x] }; return { tag: NONE, fields: [] }; }
 

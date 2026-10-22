@@ -60,15 +60,14 @@ run in parallel because they touch different files.
    handles operations, handler matches, `Optional` and the world builtins
    (`$perform` with a handler stack, escapes as exceptions), `cli/lab.ts`
    runs, compiles and checks saved programs on Node, and `examples/wc` is a
-   word count in the language, after Unix `wc`. Open: `Cells` in the
-   compiler, a compiled program as one portable file, time, randomness and
+   word count in the language, after Unix `wc`. `Cells` compiles to the
+   runtime's one handler. Open: a compiled program as one portable file, time, randomness and
    HTTP effects.
 4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
    (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`
    (`write`), one runtime handler that gives Solid.js-style signals and lazy,
    remembered values; a reactive page and continued fractions with Gosper's
-   arithmetic, live at reactive.html. Open: guarded corecursion, Cells in
-   the compiler, a stateful handler form so programs can write their own.
+   arithmetic, live at reactive.html. Compiled too (PR #62). Open: guarded corecursion, a stateful handler form so programs can write their own.
 5. **Fold-as-loop as a representation.** Move "compile a fold to a loop"
    out of the compiler's special cases and into the representation table
    from NUMBERS.md, next to Peano `Nat` → binary. *Why:* one mechanism for

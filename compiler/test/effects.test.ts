@@ -10,9 +10,10 @@ import { pathToFileURL } from "node:url";
 import type { Id } from "../../projectional/src/model.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { Aborted, runMain, type World } from "../../projectional/src/lang/run.ts";
-import { ABORT_OP, IO, LOG_OP, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
+import { Aborted, makeRunner, runMain, type Value, type World } from "../../projectional/src/lang/run.ts";
+import { fractionsProgram } from "../../projectional/src/lang/cells-programs.ts";
+import { ABORT_OP, CELL_OPS, IO, LOG_OP, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint, $setWorld } from "../src/runtime.js";
@@ -137,4 +138,45 @@ test("files and the console, a missing file caught", async () => {
   }, { "notes.txt": "one\n" }, "first line\nsecond");
   assert.deepEqual(r.lines, [`["copy.txt", "notes.txt"]`, "true", `some("first line")`, "no such file: gone.txt", "aborted: no such file: gone too.txt"]);
   assert.deepEqual(r.out, ["error: one\ntwo\n"]);
+});
+
+test("Cells: continued fractions with Gosper's arithmetic, compiled, give the evaluator's terms", async () => {
+  const p = fractionsProgram();
+  const code = base(p.code), names = baseNames(p.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  const fns = ["rational", "root", "e", "terms", "showTerms", "plus", "minus", "times", "over"] as const;
+  const path = join(dir, "fractions.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: fns.map((f) => names[p.defs[f]]) }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const first = (it: Iterable<unknown>) => { for (const x of it) return x; throw new Error("no value"); };
+  // Each function both ways: the evaluator's streams, the compiled values.
+  const evaluated = Object.fromEntries(fns.map((f) => [f, (...a: unknown[]) => first(r.call(r.value(p.defs[f]), ...(a as Value[])))]));
+  const fn = Object.fromEntries(fns.map((f) => [f, compiled[names[p.defs[f]]]]));
+  for (const [way, f] of [["evaluator", evaluated], ["compiled", fn]] as const) {
+    const show = (x: unknown) => f.showTerms(f.terms(x, 10));
+    const sqrt2 = f.root(2), e = f.e();
+    assert.equal(show(sqrt2), "[1; 2, 2, 2, 2, 2, 2, 2, 2, 2]", way);
+    assert.equal(show(e), "[2; 1, 2, 1, 1, 4, 1, 1, 6, 1]", way);
+    assert.equal(show(f.plus(sqrt2, e)), "[4; 7, 1, 1, 4, 1, 3, 2, 1, 3]", way);
+    assert.equal(show(f.minus(e, sqrt2)), "[1; 3, 3, 2, 6, 3, 17, 1, 1, 3]", way);
+    assert.equal(show(f.over(f.rational(1, 1), sqrt2)), "[0; 1, 2, 2, 2, 2, 2, 2, 2, 2]", way);
+    assert.equal(show(f.times(f.rational(3, 4), f.rational(2, 3))), "[0; 2]", way);
+  }
+});
+
+test("Cells: a formula follows a write to the cell it reads", async () => {
+  const r = await both((k) => {
+    const main = k.def("main");
+    const read = (c: Id) => k.call(CELL_OPS.read, c);
+    k.define(main, k.thunk(() => k.let("a", k.call(CELL_OPS.cell, k.lit(2)), (a) =>
+      k.let("double", k.call(CELL_OPS.formula, k.thunk(() => k.call(B.mul, read(a), k.lit(2)))), (d) => k.seq(
+        k.call(S.print, show(k, read(d))),
+        k.call(S.print, show(k, read(d))),
+        k.call(CELL_OPS.write, a, k.lit(5)),
+        k.call(S.print, show(k, read(d))))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["4", "4", "10"]);
 });
