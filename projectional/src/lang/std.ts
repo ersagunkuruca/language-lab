@@ -89,6 +89,11 @@ export const S = {
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
   fail: builtin("fail", "fail", (s) => fn([], s.fresh(), s.freshRow([CHOICE]))),
+  // A function's derivative, read off its graph (src/lang/derive.ts).
+  derivative: builtin("derivative", "derivative", (s) => {
+    const e = s.freshRow();
+    return fn([fn([num], num, e)], fn([num], num, e), s.freshRow());
+  }),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.

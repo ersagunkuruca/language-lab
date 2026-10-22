@@ -64,6 +64,7 @@ integer parameters (`k ∈ ℤ`) and guards (conditions it needs):
 | `y = x^2` | `sqrt(y)`, `−sqrt(y)` |
 | `y = sin(x)` | `asin(y) + 2πk`, `π − asin(y) + 2πk` |
 | `y = cos(x)` | `acos(y) + 2πk`, `−acos(y) + 2πk` |
+| `θ = atan2(y, x)` | `y = x·tan θ` if `x·cos θ ≥ 0`; `x = y / tan θ` if `y·sin θ ≥ 0` (the point is on the ray at angle θ, not the opposite one) |
 | `y = sqrt(x)` | `y^2` if `y ≥ 0` |
 
 Because the `k` is a real variable inside the expression, periods compose by

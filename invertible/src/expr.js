@@ -30,6 +30,7 @@ export const atan = f1('atan');
 export const exp = f1('exp');
 export const log = f1('log');
 export const abs = f1('abs');
+export const atan2 = (y, x) => call('atan2', y, x);
 
 const isNum = (e, x) => e.k === 'num' && (x === undefined || e.v === x);
 
@@ -152,6 +153,21 @@ export const FN = {
     eval: Math.atan,
     inv: [(y) => [branch(tan(y), { guards: [sub(div(PI, num(2)), abs(y))] })]],
     d: [([a]) => div(num(1), add(num(1), pow(a, num(2))))],
+  },
+  // The angle of the point (x, y). Given the angle and one coordinate, the
+  // other lies on the ray at that angle: y = x·tan θ, valid only where x has
+  // the sign of cos θ (else the point is on the opposite ray), and likewise
+  // for x. With only the angle known, the point is anywhere on the ray.
+  atan2: {
+    eval: Math.atan2,
+    inv: [
+      (t, [, x]) => [branch(mul(x, tan(t)), { guards: [mul(x, cos(t))] })],
+      (t, [y]) => [branch(div(y, tan(t)), { guards: [mul(y, sin(t))] })],
+    ],
+    d: [
+      ([y, x]) => div(x, add(pow(x, num(2)), pow(y, num(2)))),
+      ([y, x]) => neg(div(y, add(pow(x, num(2)), pow(y, num(2))))),
+    ],
   },
 };
 

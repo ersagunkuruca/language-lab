@@ -29,6 +29,20 @@ for (const d of ["expression", "derivative", "evaluate", "newton", "root near"])
 console.log("  running main:");
 runMain(algebra.code, ai, algebra.named("main"), { print: (s) => console.log("    > " + s) });
 
+const calculus = loadProgram(join(root, "examples/calculus"));
+const ci = infer(calculus.code, calculus.pres.names);
+section("2b. Calculus on real functions: derivative reads the graph (examples/calculus)");
+for (const d of ["cubic", "cubic′", "kink′", "bump′", "∂polynomial/∂x", "sinc′", "root near"]) console.log(indent(renderBlocks(calculus.code, calculus.pres, ci, calculus.named(d))) + "\n");
+console.log("  running main:");
+runMain(calculus.code, ci, calculus.named("main"), { print: (s) => console.log("    > " + s) });
+
+const back = loadProgram(join(root, "examples/backwards"));
+const bi = infer(back.code, back.pres.names);
+section("2c. Everyday functions run backwards (examples/backwards, BACKWARDS.md)");
+for (const d of ["magnitudes to", "cuts", "read numbers", "square roots of each"]) console.log(indent(renderBlocks(back.code, back.pres, bi, back.named(d))) + "\n");
+console.log("  running main:");
+runMain(back.code, bi, back.named("main"), { print: (s) => console.log("    > " + s) });
+
 section("3. What the editor can't let you write");
 const names = algebra.pres.names;
 const evaluate = get(algebra.code, get(algebra.code, algebra.named("evaluate"), "def").body!, "lambda");

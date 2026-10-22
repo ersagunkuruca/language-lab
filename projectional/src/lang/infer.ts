@@ -15,7 +15,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { SIGS } from "./std.ts";
 import {
-  CHOICE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, showType as showT, STRING, Subst, TypeError,
+  CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -100,6 +100,8 @@ export function infer(code: Code, names: Names = {}): Info {
       const n = code.nodes[id];
       if (!n) return;
       if (n.kind === "ref" && code.nodes[n.target]?.kind === "def" && !isTypeDef(n.target)) out.add(n.target);
+      // a function run backwards is used too: its type gives the ports' types
+      if (n.kind === "solve" && code.nodes[n.fn]?.kind === "def") out.add(n.fn);
       for (const c of kids(n)) walk(c);
     };
     const body = (code.nodes[d] as NodeOf<"def">).body;
@@ -236,24 +238,58 @@ export function infer(code: Code, names: Names = {}): Info {
 
   // A relation used in one direction: given ports are numbers, solved ports
   // are numbers bound in the body, and Choice unless the answer is unique.
+  // A function run backwards by the relational interpreter instead takes
+  // its port types from the function's own type.
   function solveType(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row): Type {
-    for (const g of Object.values(n.given)) unifyAt(g, num, expr(g, env, row), "a given port");
     const inner = new Map(env);
+    let p: ReturnType<typeof planSolve> | null = null;
+    try { p = planSolve(code, n); } catch (e) { err(n.id, (e as Error).message); }
+    if (p?.mode === "relational") {
+      relationalSolve(n, env, row, inner, p.loops);
+      return expr(n.body, inner, row);
+    }
+    for (const g of Object.values(n.given)) unifyAt(g, num, expr(g, env, row), "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
-    try {
-      const p = planSolve(code, n);
-      const ports = p.rel.ports;
+    if (p) {
+      const ports = p.rel!.ports;
       for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
       if (p.status !== "solved") err(n.id, `${nm(n.fn)} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
-      else if (!p.unique) {
-        try { s.unifyRow(row, { effs: [CHOICE], tail: s.next++ }); }
-        catch (e) { if (e instanceof EffectError) err(n.id, `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`); else throw e; }
-      }
-    } catch (e) {
-      if (e instanceof TypeError) throw e;
-      err(n.id, (e as Error).message);
+      else if (!p.unique) choice(n.id, row, [CHOICE], `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`);
     }
     return expr(n.body, inner, row);
+  }
+
+  function choice(id: Id, row: Row, effs: Id[], message: string) {
+    try { s.unifyRow(row, { effs, tail: s.next++ }); }
+    catch (e) { if (e instanceof EffectError) err(id, message); else throw e; }
+  }
+
+  // Ports of a function: its params (by binder id, or by position for a
+  // builtin) and "out", typed from the function's type. Running backwards
+  // adds Choice (any number of answers), Diverge when it may unfold
+  // forever, and whatever the function itself does, except printing, which
+  // can't be undone.
+  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean) {
+    const ft = s.resolve(refType(n.id, n.fn, env));
+    if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
+    const t = code.nodes[n.fn];
+    const keys = t.kind === "def" ? (code.nodes[t.body!] as NodeOf<"lambda">).params : ft.params.map((_, i) => String(i));
+    const portType = (k: string) => (k === "out" ? ft.ret : keys.includes(k) ? ft.params[keys.indexOf(k)] : null);
+    for (const [k, g] of Object.entries(n.given)) {
+      const pt = portType(k);
+      const gt = expr(g, env, row);
+      if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(n.fn)} has no port ${k}`);
+    }
+    for (const [k, b] of Object.entries(n.binds)) {
+      const pt = portType(k) ?? s.fresh();
+      if (!portType(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
+      inner.set(b, pt);
+      info.typeOf.set(b, pt);
+    }
+    const own = s.resolveRow(ft.eff).effs;
+    if (own.includes(CONSOLE)) err(n.id, `${nm(n.fn)} prints, and printing can't be run backwards`);
+    const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : []), ...own.filter((e) => e !== CONSOLE)])];
+    choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? " and may search forever (Diverge)" : ""}, which nothing here handles`);
   }
 
   function callee(n: NodeOf<"call">): string {

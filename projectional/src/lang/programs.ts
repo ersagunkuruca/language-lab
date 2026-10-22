@@ -84,11 +84,81 @@ export function queens() {
   return { code: k.code, names: k.names, defs: { ...lib, safe, queens: place, main } };
 }
 
+// ---------------------------------------------------------------- calculus
+// Calculus on real functions. A function is a graph of nodes, not a black
+// box, so `derivative` reads it and builds the derivative as another
+// function (src/lang/derive.ts). The samples are ordinary definitions;
+// their derivatives (cubic′, …) are generated next to them by
+// examples/build-lang.ts and are ordinary definitions too. Finding where a
+// function is zero is running it backwards from 0. Compare `algebra`, which
+// does the same with expressions as a data type.
+
+export function calculus() {
+  const k = new Lang();
+  const lib = library(k);
+  const fn1 = (name: string, body: (x: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["x"], body)); return d; };
+  const [add, sub, mul, div] = [B.add, B.sub, B.mul, B.div];
+
+  const cubic = fn1("cubic", (x) => k.call(sub, k.call(sub, k.call(mul, k.call(mul, x, x), x), x), k.lit(1)));
+  const wave = fn1("wave", (x) => k.call(sub, k.call(B.cos, x), x));
+  // Piecewise: the derivative is piecewise too, arm by arm.
+  const kink = fn1("kink", (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), k.call(mul, x, x)));
+  // A let (a dot on the wire): the derivative lets the value and its slope.
+  const bump = fn1("bump", (x) => k.let("s", k.call(B.sin, x), (s) => k.call(mul, s, s)));
+  // Horner's rule as a fold over the coefficients, lowest first.
+  const polynomial = k.def("polynomial");
+  k.define(polynomial, k.fn(["coefficients", "x"], (cs, x) => k.fold(cs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["c", "rest"], results: [null, "higher"], body: ([c], [, r]) => k.call(add, c, k.call(mul, x, r!)) },
+  ])));
+  const parabola = fn1("parabola", (x) => k.call(polynomial, k.list(k.lit(-2), k.lit(0), k.lit(1)), x));
+  // No value at 0, and so no slope there either.
+  const sinc = fn1("sinc", (x) => k.if(k.call(S.equal, x, k.lit(0)), k.call(S.fail), k.call(div, k.call(B.sin, x), x)));
+
+  // Newton's method on real functions. Nothing gets smaller, so it carries
+  // Diverge; `with fuel` turns that into Choice.
+  const newton = k.def("newton");
+  k.define(newton, k.fn(["f", "slope", "guess"], (f, df, x) =>
+    k.let("next", k.call(sub, x, k.call(div, k.call(f, x), k.call(df, x))), (next) =>
+      k.if(k.call(S.less, k.call(S.abs, k.call(sub, next, x)), k.lit(1e-12)), next, k.call(newton, f, df, next)))));
+  const root = k.def("root near");
+  k.define(root, k.fn(["f", "guess"], (f, g) => k.call(S.fuel, k.lit(100), k.thunk(() =>
+    k.call(newton, f, k.call(S.derivative, f), g)))));
+
+  // Every zero at once: the function run backwards from 0. The solver
+  // can't isolate x in x·x·x − x − 1, so it scans for sign changes and
+  // finds every root in range, where Newton finds one.
+  const zeros = (name: string, f: Id) => { const d = k.def(name); const lam = k.code.nodes[(k.code.nodes[f] as { body: Id }).body] as { params: Id[] };
+    k.define(d, k.call(S.all, k.thunk(() => k.solve(f, { out: k.lit(0) }, { [lam.params[0]]: "x" }, ({ [lam.params[0]]: x }) => x)))); return d; };
+  const cubicZeros = zeros("zeros of cubic", cubic);
+  const parabolaZeros = zeros("zeros of x² − 2", fn1("x² − 2", (x) => k.call(sub, k.call(mul, x, x), k.lit(2))));
+
+  const samples = k.def("samples");
+  const entry = (name: string, f: Id) => k.call(PAIR_V, k.lit(name), f);
+  k.define(samples, k.list(entry("cubic", cubic), entry("wave", wave), entry("kink", kink), entry("bump", bump), entry("parabola", parabola), entry("sinc", sinc)));
+
+  const orElse = (f: () => Id, text: string) => k.call(S.first, k.thunk(f), k.thunk(() => k.lit(text)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(lib.each, samples, k.fn(["sample"], (p) => k.let("f", k.call(SECOND, p), (f) => k.call(S.print, k.text(
+      k.call(FIRST, p),
+      k.lit(": f(2) = "), orElse(() => k.call(S.show, k.call(f, k.lit(2))), "none"),
+      k.lit(", f′(2) = "), orElse(() => k.call(S.show, k.call(k.call(S.derivative, f), k.lit(2))), "none"),
+      k.lit(", root near 1: "), orElse(() => k.call(S.show, k.call(root, f, k.lit(1))), "none found"),
+    ))))),
+    k.call(S.print, k.text(k.lit("zeros of cubic: "), k.call(lib.showNumbers, cubicZeros))),
+    k.call(S.print, k.text(k.lit("zeros of x² − 2: "), k.call(lib.showNumbers, parabolaZeros))),
+  )));
+  return { code: k.code, names: k.names, defs: { ...lib, cubic, wave, kink, bump, polynomial, parabola, sinc, newton, root, samples, main } };
+}
+
 // ---------------------------------------------------------------- algebra
 // A tiny computer algebra system: expressions as data, and evaluation,
 // differentiation, simplification and printing as folds over them, so all
 // of them are total. Newton's method is the one thing that might not end,
 // and its type says so until `with fuel` turns that into a failure.
+// `calculus` does the same on real functions, without a second copy of
+// arithmetic as a data type; this one stays as the test bed for data types.
 
 export function algebra() {
   const k = new Lang();
@@ -284,4 +354,79 @@ export function relations() {
     k.call(S.print, k.text(k.lit("square roots(−1) = ["), k.call(lib.showNumbers, k.call(roots, k.lit(-1))), k.lit("]"))),
   )));
   return { code: k.code, names: k.names, defs: { split, missing, toPolar, square, roots, main } };
+}
+
+// ---------------------------------------------------------------- backwards
+// Everyday functions run backwards, through cases, text and folds (the
+// relational interpreter, src/lang/relate.ts). Each one is an ordinary
+// function written forwards; the solve node picks the direction.
+
+export function backwards() {
+  const k = new Lang();
+  const lib = library(k);
+  const square = k.def("square");
+  k.define(square, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+  const params = (def: Id) => (k.code.nodes[(k.code.nodes[def] as { body: Id }).body] as { params: Id[] }).params;
+  const backwards = (fn: Id, given: Record<string, Id>, want: string, name: string) =>
+    k.solve(fn, given, { [want]: name }, ({ [want]: x }) => x);
+
+  // An if, run backwards: a choice over its two arms.
+  const magnitude = k.def("magnitude");
+  k.define(magnitude, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), x)));
+  const unmagnitude = k.def("magnitudes to");
+  k.define(unmagnitude, k.fn(["size"], (y) => k.call(S.all, k.thunk(() => backwards(magnitude, { out: y }, params(magnitude)[0], "x")))));
+
+  // Text: join text with one side known strips it off; with neither known,
+  // every way to cut the text in two.
+  const greet = k.def("greet");
+  k.define(greet, k.fn(["name"], (who) => k.text(k.lit("hello, "), who)));
+  const greeted = k.def("who was greeted");
+  k.define(greeted, k.fn(["greeting"], (g) => k.call(S.first, k.thunk(() => backwards(greet, { out: g }, params(greet)[0], "name")), k.thunk(() => k.lit("nobody")))));
+  const cuts = k.def("cuts");
+  k.define(cuts, k.fn(["text"], (t) => k.call(S.all, k.thunk(() =>
+    k.solve(S.concat, { out: t }, { 0: "front", 1: "back" }, ({ 0: a, 1: b }) => k.text(a, k.lit("|"), b))))));
+
+  // A fold, run backwards, is an unfold: the printer becomes a parser.
+  // Unfolding may not end in general, so it carries Diverge until fuel
+  // bounds it.
+  const read = k.def("read numbers");
+  k.define(read, k.fn(["text"], (t) => k.call(S.fuel, k.lit(10000), k.thunk(() => backwards(lib.showNumbers, { out: t }, params(lib.showNumbers)[0], "numbers")))));
+
+  // map, run backwards with its function known: every list whose squares
+  // these are.
+  const unsquare = k.def("square roots of each");
+  k.define(unsquare, k.fn(["squares"], (ys) => k.call(S.all, k.thunk(() => k.call(S.fuel, k.lit(10000), k.thunk(() =>
+    k.solve(lib.map, { [params(lib.map)[1]]: k.x(square), out: ys }, { [params(lib.map)[0]]: "list" }, ({ [params(lib.map)[0]]: xs }) => xs)))))));
+
+  // atan2 is a primitive with inverses: given the angle and x, y is on the
+  // ray at that angle (or nowhere, for the opposite ray).
+  const angle = k.def("angle");
+  k.define(angle, k.fn(["x", "y"], (x, y) => k.call(B.atan2, y, x)));
+  const onRay = k.def("height on the ray");
+  k.define(onRay, k.fn(["angle", "x"], (a, x) => backwards(angle, { out: a, [params(angle)[0]]: x }, params(angle)[1], "y")));
+
+  // Words, one per item, for printing lists of texts.
+  const words = k.def("words");
+  k.define(words, k.fn(["texts"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    {
+      variant: CONS, names: ["w", "rest"], results: [null, "rest shown"],
+      body: ([w, rest], [, shown]) => k.match(rest, [{ variant: NIL, names: [], body: () => w }], k.text(w, k.lit(" "), shown!)),
+    },
+  ])));
+  const bracket = (xs: Id) => k.text(k.lit("["), k.call(lib.showNumbers, xs), k.lit("]"));
+
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.text(k.lit("magnitudes to(5) = "), k.call(lib.showNumbers, k.call(unmagnitude, k.lit(5))))),
+    k.call(S.print, k.text(k.lit("who was greeted(\"hello, Ada\") = "), k.call(greeted, k.lit("hello, Ada")))),
+    k.call(S.print, k.text(k.lit("who was greeted(\"goodbye\") = "), k.call(greeted, k.lit("goodbye")))),
+    k.call(S.print, k.text(k.lit("cuts(\"abc\") = "), k.call(words, k.call(cuts, k.lit("abc"))))),
+    k.call(S.print, k.text(k.lit("read numbers(\"10 20 30\") = "), k.call(S.first, k.thunk(() => bracket(k.call(read, k.lit("10 20 30")))), k.thunk(() => k.lit("unreadable"))))),
+    k.call(S.print, k.text(k.lit("read numbers(\"10  20\") = "), k.call(S.first, k.thunk(() => bracket(k.call(read, k.lit("10  20")))), k.thunk(() => k.lit("unreadable"))))),
+    k.call(S.print, k.text(k.lit("square roots of each([4, 9]) = "), k.call(words, k.call(lib.map, k.call(unsquare, k.list(k.lit(4), k.lit(9))), k.fn(["xs"], (xs) => bracket(xs)))))),
+    k.call(S.print, k.text(k.lit("height on the ray(3π/4, −2) = "), k.call(S.first, k.thunk(() => k.call(S.show, k.call(onRay, k.lit(3 * Math.PI / 4), k.lit(-2)))), k.thunk(() => k.lit("none"))))),
+    k.call(S.print, k.text(k.lit("height on the ray(3π/4, 2) = "), k.call(S.first, k.thunk(() => k.call(S.show, k.call(onRay, k.lit(3 * Math.PI / 4), k.lit(2)))), k.thunk(() => k.lit("none"))))),
+  )));
+  return { code: k.code, names: k.names, defs: { square, magnitude, unmagnitude, greet, greeted, cuts, read, unsquare, angle, onRay, words, main } };
 }

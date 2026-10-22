@@ -1,0 +1,8 @@
+{
+  "0440d0ac": "magnitude is an if; run backwards it is a choice over the two arms.",
+  "5d831041": "join text with the front known strips it off.",
+  "1dcc7f60": "join text with neither side known: every way to cut the text in two.",
+  "6d33f5c4": "show numbers is a fold that prints; run backwards it unfolds, so it parses. Unfolding might not end, which the type says (Diverge) until fuel bounds it.",
+  "caff880b": "map run backwards with its function known: every list whose squares these are.",
+  "583fa2c5": "atan2 run backwards: given the angle and x, the y on that ray, or none."
+}
