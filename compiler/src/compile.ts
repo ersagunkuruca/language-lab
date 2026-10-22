@@ -182,18 +182,21 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const streamsFn = (t: Type, rho: Rho) => t.t === "fn" && choice(t.eff, rho);
 
   // ---- specializations of definitions
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean }
+  // `plain`: parameters whose type says Choice, but whose argument at the
+  // calls this copy serves is a function written in place that never
+  // chooses, so the copy calls them as plain functions (GAPS.md G4).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id> }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
 
-  function spec(def: Id, rho: Rho): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set()): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
-      const s: Spec = { def, rho, name: ident(key, on.length ? `${base}$choice` : base), streams: streamsFn(scheme.type, rho) };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams: streamsFn(scheme.type, rho) };
       specs.set(key, s);
       queue.push(s);
     }
@@ -204,7 +207,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -226,7 +229,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       walk(s.ret, t.ret);
     };
     walk(scheme.type, ty(ref));
-    return spec(def, out);
+    return spec(def, out, plain);
+  }
+
+  // The parameters of a function definition that are only ever called,
+  // never passed on or stored, so a copy may call them plainly.
+  const onlyCalled = new Map<Id, Set<Id>>();
+  function calledParams(def: Id): Set<Id> {
+    if (!onlyCalled.has(def)) {
+      const lam = node<"lambda">(node<"def">(def).body!);
+      const ok = new Set(lam.params);
+      const callee = new Set<Id>();
+      for (const id of subtree(code, lam.body)) {
+        const n = code.nodes[id];
+        if (n.kind === "call") callee.add(n.fn);
+      }
+      for (const id of subtree(code, lam.body)) {
+        const n = code.nodes[id];
+        if (n.kind === "ref" && ok.has(n.target) && !callee.has(id)) ok.delete(n.target);
+      }
+      onlyCalled.set(def, ok);
+    }
+    return onlyCalled.get(def)!;
   }
 
   // ---- solve nodes: one function each, shared by every specialization
@@ -256,6 +280,29 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const rho = sp.rho;
     const memo = new Map<Id, boolean>();
     const d = node<"def">(sp.def);
+    // Lambdas here that are typed Choice but never choose, and are passed
+    // where the callee's copy calls them plainly.
+    const plainHere = new Set<Id>();
+
+    // The copy of a definition a call needs: by the effects of its
+    // arguments' types, and which of its Choice-typed function parameters
+    // get a lambda written in place that doesn't choose.
+    function defCall(n: NodeOf<"call">): Spec {
+      const f = node<"ref">(n.fn);
+      const plain = new Set<Id>();
+      if (!reflective && isFnDef(f.target)) {
+        const params = node<"lambda">(node<"def">(f.target).body!).params;
+        const called = calledParams(f.target);
+        n.args.forEach((a, i) => {
+          const arg = code.nodes[a];
+          if (arg.kind === "lambda" && called.has(params[i]) && streamsFn(ty(a), rho) && !streamy(arg.body)) {
+            plain.add(params[i]);
+            plainHere.add(a);
+          }
+        });
+      }
+      return specAt(f.id, f.target, rho, plain);
+    }
 
     // Does evaluating this expression give anything other than exactly
     // one result? (A lambda doesn't: it's a value; calling it might.)
@@ -283,7 +330,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const f = code.nodes[n.fn];
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
-        if (t.kind === "def") return specAt(f.id, f.target, rho).streams;
+        if (t.kind === "def") return defCall(n).streams;
+        if (sp.plain.has(f.target)) return false;
         if (t.kind === "variant" || t.kind === "field") return false;
         if (t.kind === "builtin") {
           if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel || manyOf(f.target)) return true;
@@ -407,7 +455,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
-      if (streamsFn(ty(n.id), rho)) return `(function* (${ps}) {\n${st(n.body, (v) => `yield ${v};`)}\n})`;
+      if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${st(n.body, (v) => `yield ${v};`)}\n})`;
       const b = code.nodes[n.body].kind;
       if (b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda")) return `((${ps}) => {\n${ret(n.body)}\n})`;
       return `((${ps}) => ${ex(n.body)})`;
@@ -434,7 +482,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "variant") return effectOf(f.target) ? perform(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
         if (t.kind === "def") {
-          const s = specAt(f.id, f.target, rho);
+          const s = defCall(n);
           const c = `${s.name}(${n.args.map(ex).join(", ")})`;
           return info.divergent.has(f.target) ? `($spendOrThrow(), ${c})` : c;
         }
@@ -549,7 +597,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function selfCall(n: Node): boolean {
       if (n.kind !== "call") return false;
       const f = code.nodes[n.fn];
-      return f.kind === "ref" && f.target === sp.def && specAt(f.id, f.target, rho).name === sp.name;
+      return f.kind === "ref" && f.target === sp.def && defCall(n).name === sp.name;
     }
 
     // A fold without Choice is a loop, not a recursion, so a list of a
@@ -695,9 +743,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
       const target = f.kind === "ref" ? f.target : null;
       const kind = target ? code.nodes[target].kind : null;
+      const callee = kind === "def" ? defCall(n) : null;
       return parts([n.fn, ...n.args], ([fn, ...args]) => {
         let c: string;
-        if (kind === "def") c = `${specAt(n.fn, target!, rho).name}(${args.join(", ")})`;
+        if (callee) c = `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = `${args[0]}.fields[${fieldIndex(target!)}]`;
         else if (kind === "builtin" && OPS[target!]) {
