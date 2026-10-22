@@ -11,7 +11,7 @@
 // positive, so data can't be used to recurse without recursion.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { dependencies, ownerOfTypeParts } from "../model.ts";
+import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
@@ -41,8 +41,12 @@ export interface Info {
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const str: Type = { t: "con", id: STRING, args: [] };
 
-export function infer(code: Code, names: Names = {}): Info {
+// `reuse` rechecks only the definitions in `only` and takes the others'
+// types from an earlier check of the same program (the palette uses this to
+// try a filling against just the definitions it can affect).
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id> }): Info {
   const s = new Subst();
+  if (reuse) s.next = reuse.from.subst.next;
   const owner = ownerOfTypeParts(code);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
@@ -210,7 +214,14 @@ export function infer(code: Code, names: Names = {}): Info {
     if (body) walk(body);
     return [...out];
   };
-  const groups = sccs(valueDefs, deps);
+  // Definitions not rechecked keep their earlier types.
+  if (reuse) for (const d of valueDefs) {
+    if (reuse.only.has(d)) continue;
+    const sc = reuse.from.schemes.get(d);
+    if (sc) { info.schemes.set(d, sc); info.typeOf.set(d, sc.type); }
+    if (reuse.from.divergent.has(d)) info.divergent.add(d);
+  }
+  const groups = sccs(reuse ? valueDefs.filter((d) => reuse.only.has(d)) : valueDefs, deps);
 
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
@@ -637,9 +648,28 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       throw e;
     }
   };
+  // Checking the whole program costs a full inference, so it's shared:
+  // what callers can see of a filling is only what it makes of the group's
+  // types, and fillings that make the same of them pass or fail together.
+  // Only the group and what depends on it can be affected, so only they
+  // are rechecked. That holds for a filling that makes a new recursive
+  // group too: everything in it already depends on this group.
+  const affected = dependents(code, h.group);
+  let before: number | undefined;
+  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }).errors.length;
+  const whole = (f: Filling) => recheck(fillHole(code, {}, hole, f).code) <= (before ??= recheck(code));
+  // Running a function backwards depends on its body, not just its type
+  // (a call that may search forever makes the search Diverge), so if the
+  // group is run backwards anywhere, every filling is checked on its own.
+  const solvedOn = Object.values(code.nodes).some((n) => (n.kind === "solve" || n.kind === "part") && !!n.fn && h.group.includes(n.fn));
+  const checked = new Map<string, boolean>();
   const safe = (s: Subst, f: Filling, risky: boolean) => {
+    if (risky || solvedOn) return whole(f);
     const touches = pinned.some((k) => (k[0] === "t" ? s.types.has(+k.slice(1)) : s.rows.has(+k.slice(1))));
-    return (!touches && !risky) || infer(fillHole(code, {}, hole, f).code).errors.length === 0;
+    if (!touches) return true;
+    const key = groupKey(s, h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; }));
+    if (!checked.has(key)) checked.set(key, whole(f));
+    return checked.get(key)!;
   };
   const consider = (target: Id, t: Type, risky = false) => {
     const asRef = fits(t, false);
@@ -651,11 +681,11 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (asCall && safe(asCall, call, risky)) out.push(call);
   };
   for (const b of h.scope) consider(b.id, b.type);
-  // Referring to a def that itself depends on this one makes them one
-  // recursive group, checked without generalization: also confirmed.
+  // Referring to the group itself, or to a def that depends on it, makes a
+  // recursive group whose checks (does it end?) see the body: confirmed.
   for (const [d, sc] of info.schemes) {
-    if (h.group.includes(d)) consider(d, sc.type);
-    else consider(d, instantiate(sc, info.subst), dependencies(code, d).some((x) => h.group.includes(x)));
+    if (h.group.includes(d)) consider(d, sc.type, true);
+    else consider(d, instantiate(sc, info.subst), affected.has(d));
   }
   for (const [id, sig] of Object.entries(SIGS)) consider(id, sig(info.subst));
   for (const [part, def] of info.owner) {
@@ -677,14 +707,54 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       // cases of a type is what says so. Checked like any filling that pins
       // a variable down.
       for (const type of dataTypes.filter((t) => !t.startsWith("std.") || t === "std.bool" || t === "std.list")) {
+        const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+        const s = info.subst.clone();
+        try { s.unify(bt, { t: "con", id: type, args: td.params.map(() => s.fresh()) }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
         for (const kind of ["match", "fold"] as const) {
           const f: Filling = { kind, on: b.id, type };
-          if (infer(fillHole(code, {}, hole, f).code).errors.length <= info.errors.length) out.push(f);
+          if (safe(s, f, false)) out.push(f);
         }
       }
     }
   }
   return out;
+}
+
+// The definitions in `group` and every definition that reaches one of them.
+function dependents(code: Code, group: Id[]): Set<Id> {
+  const owner = ownerOfTypeParts(code);
+  const usedBy = new Map<Id, Id[]>();
+  for (const d of code.defs) {
+    for (const id of subtree(code, d)) {
+      const n = code.nodes[id];
+      let t = n.kind === "ref" ? n.target : n.kind === "part" || n.kind === "solve" ? n.fn : null;
+      if (t && owner.has(t)) t = owner.get(t)!;
+      if (t && t !== d) usedBy.set(t, [...(usedBy.get(t) ?? []), d]);
+    }
+  }
+  const out = new Set(group);
+  const todo = [...group];
+  while (todo.length) for (const u of usedBy.get(todo.pop()!) ?? []) if (!out.has(u)) { out.add(u); todo.push(u); }
+  return out;
+}
+
+// The group's types under s, with variables numbered by first appearance
+// (and marked when they must be plain), so equal keys mean equal types.
+function groupKey(s: Subst, types: Type[]): string {
+  const vars = new Map<number, number>();
+  const rows = new Map<number, number>();
+  const go = (t: Type): string => {
+    t = s.resolve(t);
+    if (t.t === "var") {
+      if (!vars.has(t.v)) vars.set(t.v, vars.size);
+      return `${s.plain.has(t.v) ? "p" : "v"}${vars.get(t.v)}`;
+    }
+    if (t.t === "con") return `${t.id}(${t.args.map(go).join(",")})`;
+    const r = s.resolveRow(t.eff);
+    if (r.tail !== null && !rows.has(r.tail)) rows.set(r.tail, rows.size);
+    return `(${t.params.map(go).join(",")})-[${r.effs.join(",")}|${r.tail === null ? "" : rows.get(r.tail)}]->${go(t.ret)}`;
+  };
+  return types.map(go).join(";");
 }
 
 // A variant's constructor type with fresh variables (same as infer's refType).
