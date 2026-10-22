@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { load } from "../src/program.ts";
-import { area, corners } from "../src/fixtures.ts";
+import { area, corners, vectors } from "../src/fixtures.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");
@@ -61,6 +61,24 @@ test("an if inside an expression is a var set by an if statement; pow of a negat
   // x³ of a variable is a product; of anything else, lab_pow.
   assert.match(s.wgsl, /return \(p0 \* p0 \* p0\) \+ lab_pow\(p0 - 2\.0, 3\.0\);/);
   assert.match(s.wgsl, /fn lab_pow/);
+});
+
+test("records are structs: built by their case, read by fields or a one-arm match, carried by loops", () => {
+  const v = vectors();
+  const roots = Object.values(v.defs);
+  const s = emitWgsl(lowerScalar(v.code, v.info, v.names, roots, { records: true }));
+  assert.match(s.wgsl, /struct Vec_0 \{\n {2}x: f32,\n {2}y: f32,\n {2}z: f32,\n\}/);
+  assert.match(s.wgsl, /struct Ray_1 \{\n {2}origin: Vec_0,\n {2}direction: Vec_0,\n\}/);
+  // The standard library's Pair, at Number and Number.
+  assert.match(s.wgsl, /struct Pair_2 \{\n {2}fst: f32,\n {2}snd: f32,\n\}/);
+  assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return Vec_0\(l3\.x \+ \(p1 \* l4\.x\)/);
+  assert.match(s.wgsl, /fn walk_3\(a0: Vec_0, a1: f32, a2: f32\) -> Pair_2 \{\n {2}var p0 = a0;[\s\S]*let t0 = Vec_0\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
+  assert.match(s.wgsl, /return walk_3\(Vec_0\(p0, 1\.0, 0\.0\), p1, 0\.0\)\.snd;/);
+  assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
+  assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
+  // Without records (what WebAssembly takes), they're refused as before.
+  const plain = lowerScalar(v.code, v.info, v.names, roots);
+  assert.match(why(plain.refused, v.defs.length), /other than Number or Bool/);
 });
 
 function why(refused: Map<string, string>, def: string): string {

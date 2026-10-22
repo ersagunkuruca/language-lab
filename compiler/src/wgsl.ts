@@ -1,7 +1,8 @@
 // WGSL for the scalar profile (scalar.ts): the same lowering wasm.ts
 // prints, printed a second time for the GPU. Number is `f32` (GPUs have no
 // f64 to speak of, so results are close to the evaluator's, not equal),
-// Bool is `bool`, a let is a `let`, and `if` is an `if` statement.
+// Bool is `bool`, a record is a `struct`, a let is a `let`, and `if` is an
+// `if` statement. Lower with `{ records: true }` to have records.
 //
 // The one rule a shader adds: no recursion, because a GPU has no call
 // stack (WGSL forbids a function that reaches itself). A call to itself as
@@ -21,12 +22,11 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../projectional/src/model.ts";
-import type { Lowered, Op, SExpr, SFunc, SType } from "./scalar.ts";
+import type { LType, Lowered, Op, RType, SExpr, SFunc } from "./scalar.ts";
 
-export interface ShaderFunc { def: Id; name: string; wgsl: string; params: SType[]; result: SType }
-export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string> }
-
-const TYPE: Record<SType, string> = { f64: "f32", i32: "bool" };
+export interface ShaderFunc { def: Id; name: string; wgsl: string; params: LType[]; result: LType }
+// structs: the WGSL name of each record type and of its fields.
+export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }> }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||",
 };
@@ -82,26 +82,55 @@ export function emitWgsl(lowered: Lowered): Shader {
 
   const kept = funcs.map((_, i) => i).filter((i) => !bad.has(i));
   const used = new Set<string>();
-  const wname = new Map(kept.map((i) => {
-    let base = funcs[i].name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
+  const ident = (name: string, suffix: string) => {
+    let base = name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     if (/^\d/.test(base)) base = `f_${base}`;
-    let n = `${base}_${i}`;
+    let n = `${base}${suffix}`;
     while (used.has(n)) n += "_";
     used.add(n);
-    return [i, n];
-  }));
+    return n;
+  };
+  const wname = new Map(kept.map((i) => [i, ident(funcs[i].name, `_${i}`)]));
+
+  // Structs for the records the kept functions use, each after the ones
+  // its fields need.
+  const structs = new Map<string, { name: string; fields: string[] }>();
+  const structText: string[] = [];
+  const struct = (r: RType): string => {
+    if (!structs.has(r.key)) {
+      const ts = r.fields.map((f) => tname(f.t));
+      const fieldNames = new Set<string>();
+      const fields = r.fields.map((f) => {
+        let n = f.name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
+        if (/^\d/.test(n)) n = `f_${n}`;
+        while (fieldNames.has(n) || n === "self") n += "_";
+        fieldNames.add(n);
+        return n;
+      });
+      const name = ident(r.name, `_${structs.size}`);
+      structs.set(r.key, { name, fields });
+      structText.push(`// ${r.name}\nstruct ${name} {\n${fields.map((n, j) => `  ${n}: ${ts[j]},`).join("\n")}\n}`);
+    }
+    return structs.get(r.key)!.name;
+  };
+  function tname(t: LType): string {
+    return t === "f64" ? "f32" : t === "i32" ? "bool" : struct(t);
+  }
+  for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) tname(t);
 
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
+    ...structText,
     ...text,
   ].join("\n\n") + "\n";
   return {
     wgsl,
     funcs: kept.map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params, result: funcs[i].result })),
     refused,
+    structs,
   };
 
   function func(f: SFunc, i: number): string {
@@ -122,8 +151,14 @@ export function emitWgsl(lowered: Lowered): Shader {
           return ex(e.body, pre, d);
         case "if": {
           const c = ex(e.cond, pre, d), t = temp();
-          pre.push(`${d}var ${t}: ${TYPE[e.t]};`, `${d}if (${bare(c)}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
+          pre.push(`${d}var ${t}: ${tname(e.t)};`, `${d}if (${bare(c)}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
           return t;
+        }
+        case "make": return `${tname(e.t)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+        case "get": {
+          const r = ex(e.rec, pre, d);
+          struct(e.t);
+          return `${r}.${structs.get(e.t.key)!.fields[e.i]}`;
         }
         case "call": return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         case "op": {
@@ -166,7 +201,7 @@ export function emitWgsl(lowered: Lowered): Shader {
       return [...out, to === "return" ? `${d}return ${bare(x)};` : `${d}${to.set} = ${bare(x)};`];
     }
 
-    const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${TYPE[t]}`).join(", ")}) -> ${TYPE[f.result]}`;
+    const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t)}`).join(", ")}) -> ${tname(f.result)}`;
     const body = loops
       ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...block(f.body, "return", "    "), "  }"]
       : block(f.body, "return", "  ");
@@ -203,7 +238,8 @@ function usesOp(e: SExpr, op: Op): boolean {
 }
 function kids(e: SExpr): SExpr[] {
   switch (e.k) {
-    case "op": case "call": return e.args;
+    case "op": case "call": case "make": return e.args;
+    case "get": return [e.rec];
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     default: return [];

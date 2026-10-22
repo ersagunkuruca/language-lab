@@ -19,13 +19,19 @@ import type { Code } from "../projectional/src/model.ts";
 import type { Info } from "../projectional/src/lang/infer.ts";
 import type { Names } from "../projectional/src/presentation.ts";
 import type { Id } from "../projectional/src/model.ts";
-import { lowerScalar } from "./src/scalar.ts";
+import { lowerScalar, type LType, type SType } from "./src/scalar.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
-import { area, corners } from "./src/fixtures.ts";
+import { area, corners, vectors } from "./src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
-const TRUE = "std.bool.true";
+const TRUE = "std.bool.true", FALSE = "std.bool.false";
+const size = (t: LType): number => (typeof t === "string" ? 1 : t.fields.reduce((n, f) => n + size(f.t), 0));
+const scalars = (ts: LType[]): SType[] => ts.flatMap((t) => (typeof t === "string" ? [t] : scalars(t.fields.map((f) => f.t))));
+// The evaluator's value as numbers and booleans, in field order.
+const flatten = (t: LType, v: Value): (number | boolean)[] =>
+  t === "f64" ? [v as number] : t === "i32" ? [(v as { tag: string }).tag === TRUE]
+    : t.fields.flatMap((f, j) => flatten(f.t, (v as { fields: Value[] }).fields[j]));
 
 // Inputs that f32 holds exactly, so only the computation differs.
 const GRID = [-2.5, -1.75, -1, -0.5, -0.125, 0, 0.25, 0.5, 1, 1.5, 2, 3.75];
@@ -43,6 +49,11 @@ const cases: Case[] = [
     // gcd by subtraction only ends for positive whole numbers.
     return { label: "corners", code: c.code, info: c.info, names: c.names, roots: Object.values(c.defs), inputs: (f) => (f.name === "gcd" ? [[12, 18], [7, 3], [5, 5], [1, 100]] : undefined) };
   })(),
+  (() => {
+    const v = vectors();
+    // walk stops once 4 away, so its step must move it away.
+    return { label: "records", code: v.code, info: v.info, names: v.names, roots: Object.values(v.defs), inputs: (f) => (f.name === "walk" ? [[0, 1, 0, 0.5, 0], [2, 0, 1, 0.25, 3]] : f.name === "steps" ? [[0, 0.5], [-1, 0.125], [3, 2]] : undefined) };
+  })(),
 ];
 
 const browser = await chromium.launch({
@@ -56,11 +67,25 @@ if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser
 
 let failures = 0, compared = 0;
 for (const c of cases) {
-  const shader = emitWgsl(lowerScalar(c.code, c.info, c.names, c.roots));
+  const shader = emitWgsl(lowerScalar(c.code, c.info, c.names, c.roots, { records: true }));
   const r = makeRunner(c.code, c.info, { print: () => {} });
   for (const f of shader.funcs) {
-    const inputs = c.inputs?.(f) ?? GRID.map((x, k) => f.params.map((t, j) => (t === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));
-    const arg = (t: string, j: number) => (t === "i32" ? `(inp[b + ${j}u] > 0.5)` : `inp[b + ${j}u]`);
+    // Records go in and out as their numbers, in field order.
+    const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);
+    const inputs = c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));
+    let at = 0;
+    const arg = (t: LType): string => {
+      if (t === "i32") return `(inp[b + ${at++}u] > 0.5)`;
+      if (t === "f64") return `inp[b + ${at++}u]`;
+      return `${shader.structs.get(t.key)!.name}(${t.fields.map((x) => arg(x.t)).join(", ")})`;
+    };
+    const outs: string[] = [];
+    const out = (t: LType, x: string) => {
+      if (t === "i32") outs.push(`select(0.0, 1.0, ${x})`);
+      else if (t === "f64") outs.push(x);
+      else t.fields.forEach((y, j) => out(y.t, `${x}.${shader.structs.get(t.key)!.fields[j]}`));
+    };
+    out(f.result, "r");
     const kernel = `${shader.wgsl}
 @group(0) @binding(0) var<storage, read> inp: array<f32>;
 @group(0) @binding(1) var<storage, read_write> outp: array<f32>;
@@ -68,24 +93,31 @@ for (const c of cases) {
 fn main(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x;
   if (i >= ${inputs.length}u) { return; }
-  let b = i * ${f.params.length}u;
+  let b = i * ${width}u;
   let r = ${f.wgsl}(${f.params.map(arg).join(", ")});
-  outp[i] = ${f.result === "i32" ? "select(0.0, 1.0, r)" : "r"};
+${outs.map((x, j) => `  outp[i * ${outWidth}u + ${j}u] = ${x};`).join("\n")}
 }`;
     // A GPU that never answers is a failure, not a hang.
     const got = await Promise.race([
-      page.evaluate(run, { wgsl: kernel, inputs: inputs.flat(), count: inputs.length }),
+      page.evaluate(run, { wgsl: kernel, inputs: inputs.flat(), count: inputs.length * outWidth }),
       new Promise<string>((done) => setTimeout(() => done("no answer from the GPU in 60 s"), 60_000).unref()),
     ]);
     if (typeof got === "string") { console.log(`✗ ${c.label}: ${f.name}: ${got}`); failures++; continue; }
     let bad = 0;
-    inputs.forEach((args, k) => {
-      const want = first(r.call(r.value(f.def), ...args.map((x, j) => (f.params[j] === "i32" ? { tag: x ? TRUE : "std.bool.false", fields: [] } : x))));
-      const ok = f.result === "i32"
-        ? (got[k] === 1) === ((want as { tag: string }).tag === TRUE)
-        : typeof want === "number" && (Number.isNaN(want) ? Number.isNaN(got[k]) : Math.abs(got[k] - want) <= 2e-3 * Math.max(1, Math.abs(want)));
+    inputs.forEach((xs, k) => {
+      let j = 0;
+      const value = (t: LType): Value => {
+        if (t === "i32") return { tag: xs[j++] ? TRUE : FALSE, fields: [] };
+        if (t === "f64") return xs[j++];
+        return { tag: t.variant, fields: t.fields.map((x) => value(x.t)) };
+      };
+      const want = flatten(f.result, first(r.call(r.value(f.def), ...f.params.map(value)))!);
+      const ok = want.every((w, o) => {
+        const g = got[k * outWidth + o];
+        return typeof w === "boolean" ? (g === 1) === w : Number.isNaN(w) ? Number.isNaN(g) : Math.abs(g - w) <= 2e-3 * Math.max(1, Math.abs(w));
+      });
       compared++;
-      if (!ok) { bad++; console.log(`✗ ${c.label}: ${f.name}(${args.join(", ")}) = ${got[k]} on the GPU, ${String(want)} in the evaluator`); }
+      if (!ok) { bad++; console.log(`✗ ${c.label}: ${f.name}(${xs.join(", ")}) = ${got.slice(k * outWidth, (k + 1) * outWidth).join(", ")} on the GPU, ${want.join(", ")} in the evaluator`); }
     });
     failures += bad;
     if (!bad) console.log(`✓ ${c.label}: ${f.name} (${inputs.length} inputs)`);
