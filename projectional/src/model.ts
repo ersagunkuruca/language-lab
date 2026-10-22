@@ -80,6 +80,9 @@ export interface Code {
 // references, solver variable names). Longer form first.
 export const ID_PATTERN = "@[0-9a-v]{26}(?::[0-9]+)?|[0-9a-v]{26}|[0-9a-f]{8}";
 export const isPublished = (id: Id) => id.startsWith("@");
+// "{3fa2c19e}" inside a comment is a reference to that node, shown by name.
+export const resolveRefs = (text: string, name: (id: Id) => string) =>
+  text.replace(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"), (_, ref) => name(ref));
 export function freshId(): Id {
   const b = crypto.getRandomValues(new Uint8Array(26));
   return Array.from(b, (x) => (x & 31).toString(32)).join("");

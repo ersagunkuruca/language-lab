@@ -43,7 +43,7 @@ import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
-import { children, freshId, get, ID_PATTERN, isPublished, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { children, freshId, get, ID_PATTERN, isPublished, merge, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
@@ -938,8 +938,20 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (structure) out.append(structure);
 
   const ta = h("textarea", { id: "f-comment", rows: "2", placeholder: "Add a note to this node" }) as HTMLTextAreaElement;
-  ta.value = doc.comments[id] ?? "";
-  ta.addEventListener("change", () => setComment(id, ta.value));
+  // References show as {name}; on the way back a {name} that is one of them,
+  // or that only one node carries, becomes that node's id again.
+  const raw = doc.comments[id] ?? "";
+  const refs = [...raw.matchAll(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"))].map((m) => m[1]);
+  ta.value = resolveRefs(raw, (ref) => `{${names[ref] ?? ref}}`);
+  ta.addEventListener("change", () => {
+    const back = ta.value.replace(/\{([^{}]+)\}/g, (whole, nm: string) => {
+      const mine = refs.find((r) => names[r] === nm);
+      const all = Object.keys(names).filter((r) => names[r] === nm && doc.code.nodes[r]);
+      const ref = mine ?? (all.length === 1 ? all[0] : undefined);
+      return ref ? `{${ref}}` : whole;
+    });
+    if (back !== raw) setComment(id, back);
+  });
   out.append(h("label", { class: "field", for: "f-comment" }, h("span", {}, "Comment · comments.json"), ta));
   return out;
 }
