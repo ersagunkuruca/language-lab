@@ -242,6 +242,12 @@ read.
 6. G7's fusion. It belongs with ROADMAP 5, so it's done there, not as a
    compiler special case.
 
+Left after the fusion (for round 2, not changed in calc): the tokenizer
+still builds its token list and `keep` builds a second one (neither fold
+can be fused: the tokenizer's arms look at the tokens already made), and
+`evaluate` allocates a `{ v, i, rs }` frame per tree node (G9). Compiled
+calc on 4,000 lines is about 31 ms against the ideal's 21.
+
 Next round: a bigger program with more `Choice` in it (a solver or a
 search, not one with `Choice` only at the edges), and one that writes
 files, so the handler stack and generators get measured too.

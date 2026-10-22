@@ -16,7 +16,7 @@ const p = loadProgram(dir);
 const names = p.pres.names;
 const info = infer(p.code, names);
 const reps: Representation[] = JSON.parse(readFileSync(join(dir, "representations.json"), "utf8"));
-const [unary, binary] = reps;
+const [unary, binary, int] = reps;
 const variant = (n: string) => Object.keys(names).find((k) => names[k] === n && p.code.nodes[k]?.kind === "variant")!;
 const [ZERO, SUCC, EMPTY, EVEN, ODD] = ["zero", "succ", "empty", "even", "odd"].map(variant);
 
@@ -64,9 +64,9 @@ test("match and fold on Nat, done on Binary, see the same cases as on Nat", () =
   }
 });
 
-test("the chooser picks binary for main, and represent gives the same answers", () => {
+test("the chooser picks Int for main, and represent onto binary gives the same answers", () => {
   const c = choose(p.code, p.named("main"), reps);
-  assert.equal(c.rep.name, "binary");
+  assert.equal(c.rep.name, "int");
   assert.ok(c.jobs.includes("fold") && c.jobs.includes(p.named("multiply")));
   assert.equal(represent(p.code, [p.named("main")], unary), p.code);
 
@@ -76,6 +76,33 @@ test("the chooser picks binary for main, and represent gives the same answers", 
   assert.equal(showType(bi.typeOf.get(p.named("factorial"))!, names), "(Binary) -> Binary");
   assert.deepEqual(printed(bin, bi, "small"), printed(p.code, info, "small"));
   assert.deepEqual(printed(bin, bi, "main"), ["18! = 6402373705728000", "2^50 = 1125899906842624", "100 is even: yes"]);
+});
+
+// Nat stored as an Int (NUMBERS.md, "Folds run the way their value is
+// stored"): the program still says zero and succ; fold Nat (Int) folds over
+// range(n), so compiled it is a counted loop.
+test("Nat as an Int: every job agrees with Nat through natural, and folds see the same cases", () => {
+  for (const d of ["natural", "match Nat (Int)", "fold Nat (Int)"]) assert.ok(!info.divergent.has(p.named(d)), d);
+  const means = (i: Value, n: Value) => assert.ok(equal(call("natural", i), n));
+  for (let a = 0; a <= 9; a++) {
+    means(a, peano(a));
+    means(call("succ (Int)", a), peano(a + 1));
+    assert.equal(call("number (Int)", a), call("number", peano(a)));
+    for (let b = 0; b <= 9; b++) {
+      means(a + b, call("add", peano(a), peano(b)));
+      means(a * b, call("multiply", peano(a), peano(b)));
+    }
+    const seen: number[] = [];
+    assert.equal(call("fold Nat (Int)", a, () => [0], (m: Value, acc: Value) => (seen.push(m as number), [(acc as number) + 1])), a);
+    assert.deepEqual(seen, Array.from({ length: a }, (_, i) => i));
+    assert.equal(call("match Nat (Int)", a, () => ["zero"], (m: Value) => [m]), a === 0 ? "zero" : a - 1);
+  }
+  const ints = represent(p.code, [p.named("main"), p.named("small")], int);
+  const ii = infer(ints, names);
+  assert.deepEqual(ii.errors, []);
+  assert.equal(showType(ii.typeOf.get(p.named("factorial"))!, names), "(Int) -> Int");
+  assert.deepEqual(printed(ints, ii, "small"), printed(p.code, info, "small"));
+  assert.deepEqual(printed(ints, ii, "main"), ["18! = 6402373705728000", "2^50 = 1125899906842624", "100 is even: yes"]);
 });
 
 test("meaning run backwards encodes: the canonical spelling first, then the ones with leading zeros", () => {

@@ -14,15 +14,16 @@ import { compile } from "../src/compile.ts";
 import { examples, load } from "../src/program.ts";
 import { $setPrint } from "../src/runtime.js";
 
-test("numbers: the binary representation compiles and prints what the evaluator prints", async () => {
+async function compiledAs(rep: string) {
   const p = load("numbers");
   const reps: Representation[] = JSON.parse(readFileSync(join(examples, "numbers/representations.json"), "utf8"));
   const entries = [p.named("main"), p.named("small")];
-  const code = represent(p.code, entries, reps.find((r) => r.name === "binary")!);
+  const code = represent(p.code, entries, reps.find((r) => r.name === rep)!);
   const info = infer(code, p.pres.names);
   assert.deepEqual(info.errors, []);
-  const file = join(mkdtempSync(join(tmpdir(), "represented-")), "numbers.js");
-  writeFileSync(file, compile(code, info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main", "small"] }));
+  const source = compile(code, info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main", "small"] });
+  const file = join(mkdtempSync(join(tmpdir(), "represented-")), `numbers-${rep}.js`);
+  writeFileSync(file, source);
   const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
   for (const name of ["small", "main"]) {
     const want: string[] = [], got: string[] = [];
@@ -31,4 +32,20 @@ test("numbers: the binary representation compiles and prints what the evaluator 
     defs[name]();
     assert.deepEqual(got, want);
   }
+  return source;
+}
+
+test("numbers: the binary representation compiles and prints what the evaluator prints", async () => {
+  await compiledAs("binary");
+});
+
+// Peano Nat stored as an Int: the program still says zero and succ, and a
+// fold over a Nat is a counted loop (`fold Nat (Int)` folds over range(n),
+// which the compiler runs on n: NUMBERS.md, "Folds run the way their value
+// is stored").
+test("numbers: Nat as an Int compiles to Int arithmetic and counted loops, with no Nat values left", async () => {
+  const source = await compiledAs("int");
+  const fold = source.slice(source.indexOf("function fold_Nat_"), source.indexOf("\n}\n", source.indexOf("function fold_Nat_")));
+  assert.match(fold, /for \(let i\$\d+ = Number\(n\d*\) - 1;/);
+  assert.doesNotMatch(source, /bcabb936|b58105ec/); // zero and succ, as data
 });
