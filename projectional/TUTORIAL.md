@@ -14,6 +14,21 @@ the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Insertion sort*, *Eight queens*, *Calculus*, *Run backwards* and
 *Relations in programs*. *+ New program* starts an empty one of your own.
 
+![The editor: programs on the left, the graph in the middle with the text
+below it, and on the right the inspector (Definition, Program, Checks, Files)
+above Run](tutorial/editor.png)
+
+The window is in panes. The menu bar across the top switches *Short names* /
+*Descriptive* and the notation, and has *Undo*, *Redo*, the *Guide* and this
+tutorial. The *Programs* outline is on the left. The graph is in the middle,
+with a tab for each definition you've opened, and the same definition as
+text below it (*Blocks*, *Steps*, *Nested* or *Lisp*). On the right, the
+inspector has four tabs: *Definition* (or *Selected* when something is
+picked), *Program*, *Checks* and *Files*; *Run* sits under them. Drag the
+gutters between panes to resize them. Colour means something only in a few
+places: blue for what's selected and for values, purple for dots, amber for
+holes and refusals. Everything else is grey.
+
 The tutorial is in three parts:
 
 1. [For a five-year-old](#part-1-for-a-five-year-old): what this is, with no
@@ -72,7 +87,7 @@ value is made from other values: "the discriminant is b·b minus 4·a·c". There
 is no `x = x + 1`, because nothing changes after it's made. That's why it can
 be drawn: every value is a node, and every use of it is a wire.
 
-![The discriminant: three inputs, four calls, one result. The teal numbers are the values for the example inputs 1, −3, 2.](tutorial/discriminant.png)
+![The discriminant: three inputs, four calls, one result. The blue chips are the values for the example inputs 1, −3, 2.](tutorial/discriminant.png)
 
 ### 2. Functions are values too
 
@@ -130,7 +145,7 @@ That's all the functional programming you need.
 There is no source text. The program is stored as nodes keyed by ids in
 `code.json`. Names live in separate files (`names.*.json`), as do comments
 (`comments.json`), positions on the canvas (`layout.json`) and example
-inputs (`examples.json`). The *Files* panel lists them, with the program's
+inputs (`examples.json`). The *Files* tab lists them, with the program's
 **meaning hash**.
 
 What this buys:
@@ -146,7 +161,7 @@ What this buys:
 
 **Try it.** Open *Numbers & physics* → `discriminant`. Switch between *Short
 names* and *Descriptive*, and between the three notations. Watch the *Files*
-panel: `code.json` and the meaning hash never change.
+tab: `code.json` and the meaning hash never change.
 
 ### 3.2 Nodes and wires
 
@@ -159,10 +174,10 @@ that variable comes from, so a value used twice visibly fans out. In
 `discriminant` above, `linear coefficient` has two wires because it's used
 twice.
 
-**Values on wires.** A small teal chip next to an output is the value it made when
-the definition last ran on its example inputs (*Show values* in the *Run*
-panel; the inputs are kept in `examples.json`, not in the code). That's
-different from a name: a name is brown or black, belongs to a dot, and is
+**Values on wires.** A small blue chip next to an output is the value it made when
+the definition last ran on its example inputs (the *Run* pane;
+the inputs are kept in `examples.json`, not in the code). That's
+different from a name: a name is plain text, belongs to a dot, and is
 part of the names file. A value is a result and changes when the inputs do.
 Chips are placed where they cover no node and no other chip; one with no
 room shrinks to a dot, and hovering shows it.
@@ -184,6 +199,8 @@ layout* goes back to the automatic one. Where wires still cross, one hops
 over the other (a bridge); where a wire runs under a node, its hidden
 stretch shows faintly over it (a tunnel). NODE-EDITOR.md has the reasons.
 
+![Right-clicking the column dot in queens](tutorial/menu.png)
+
 ### 3.3 Dots: where a value starts and branches
 
 A **dot** is where a value starts and branches out to every place that uses
@@ -200,6 +217,14 @@ node. Removing a dot with one wire out puts the value back on that wire.
 A dot that nothing reads is a step done only for its effect, like each
 `print` in `main`. Those are drawn hollow.
 
+A dot whose wires run far across the graph can be drawn differently: right-click
+it and pick *Show as let and get nodes*. The dot becomes a **let** node where
+the value is made, and each use gets a small **get** node beside it with the
+same name, so no long wire is needed. It is only a way of drawing (it's kept
+in `layout.json`); the code is the same dot. *Show as wires* turns it back.
+
+![queens with column shown as a let node and get nodes](tutorial/queens-letget.png)
+
 ### 3.4 Frames: functions not called yet
 
 A **frame** is a function as a value. Its inputs are dots on its left; what
@@ -213,7 +238,7 @@ drag a node out, the frame grows to keep it inside.
 ### 3.5 Holes: the program is allowed to be unfinished
 
 A **hole** (`□`) is a value not filled in yet. It knows its type. Select it
-and the side panel lists only fillings that fit: variables in scope, calls
+and the inspector lists only fillings that fit: variables in scope, calls
 (which arrive with one hole per input), constructors, numbers, text,
 functions, and "match …" / "fold …" for each variable whose type has cases.
 A program with holes runs until it reaches one.
@@ -228,14 +253,16 @@ of "type errors prevented by the editor": you can't pick what doesn't fit.
 
 ### 3.6 Writing your own program
 
-- **+ New program** makes an empty program; **Save file** and **Open file…**
-  write and read it as one JSON file holding the code, names, comments and
+- **+ New program** makes an empty program; **Save file** and **Open file…** (in the
+  *Program* tab) write and read it as one JSON file holding the code, names, comments and
   layout together. Every edit is also kept in the browser as you go.
 - **+ New definition** makes a function (give its inputs, or none for an
   action you can run), a value, or a data type (give its first case).
-- *This definition* lets you rename it, add, reorder and remove inputs (every
-  call gets a hole for a new input, so none is missing an argument), and
-  delete it.
+- The *Definition* tab lets you rename it, add, reorder and remove inputs
+  (every call gets a hole for a new input, so none is missing an argument),
+  delete it, and *Pin this type* so edits inside must keep it. A definition
+  from a published module is read-only there; *Copy into my program* gives
+  you your own version to change.
 - **Copy** (Ctrl+C), cut (Ctrl+X) and **Paste the copy here** (Ctrl+V on a
   hole) move subtrees, with their dots and names.
 - **Show inline** draws a call as the called definition's body, in place. It's
@@ -372,9 +399,9 @@ handle width() + height()
 ```
 
 So there's no new node for handlers: a handler is a match, an operation is a
-case, performing is calling. The blocks and the text write such a match as `handle`,
-and the **Effects** example is this program, with `Abort` handled too. To
-declare your own, *+ New definition* → *Effect*.
+case, performing is calling. The blocks and the text write such a match as
+`handle`, and the **Effects** example is this program, with `Abort` handled
+too. To declare your own, *+ New definition* → *Effect*.
 
 **Two safety rules.** A definition's own value must be pure; anything that
 acts is an *action*, a function with no inputs (the `() =>` frames handlers
@@ -407,7 +434,7 @@ LANGUAGE.md, "Cells", has the details.
 
 Every function has **ports**: its inputs and its result. Running it forward
 means giving it the inputs and asking for the result. But you can give it
-any of its ports and ask for the others. *Run* in the side panel lists the
+any of its ports and ask for the others. The *Run* pane lists the
 ports of whatever definition you're looking at, each with a tick box: ticked
 ports are ones you give, the others are worked out. Which ones are ticked is
 stored in `layout.json`, not in the code, so flipping them changes the
@@ -531,7 +558,7 @@ you can reach light up and the others say why not.
 | `sqrt` of a negative, `÷ 0` on `Number` | runtime | `Number` follows IEEE (NaN, Infinity); `Int` division by zero has no answer |
 | logic errors | not prevented | running backwards gives round-trip laws to test against |
 
-The *Checks* panel lists these live for whatever program is open.
+The *Checks* tab lists these live for whatever program is open.
 LANGUAGE.md has the full table, with which test shows each row.
 
 ### 3.13 Libraries, and how it runs
@@ -577,98 +604,29 @@ These are the words the in-editor Guide uses, one word per thing:
 
 This is the candid part, and the one list of open problems. Each item says
 what's there today, why it's a problem, and a proposal. [REVIEW.md](REVIEW.md)
-has the longer review, [ROADMAP.md](ROADMAP.md) the order of work (items 1
-to 3 below are its item 1), and [NOTES.md](NOTES.md) the design discussion
+has the longer review, [ROADMAP.md](ROADMAP.md) the order of work, and [NOTES.md](NOTES.md) the design discussion
 behind them. Fixed items are at the end, so the list shows what moved.
 
-### 1. Sequences are drawn as nesting
+### 1. The graph still crosses itself
 
-**Today.** Adjacent steps are nested inside each other. In the blocks view of
-*Eight queens* → `main`, each `print` is a box inside the previous one's box,
-five levels deep for five prints. The same happens to a run of lets, and a
-list written out (`[4, 9]`) is `cons(4, cons(9, nil))`, a chain of nodes.
-It's the Peano / linked-list problem again: the structure is right, the
-picture isn't.
+**Today.** The node editor work (NODE-EDITOR.md) fixed most of what made the
+graph hard to read: values are chips that avoid nodes and each other, nodes
+stay where you put them, *Tidy* spaces things out, crossings get bridges and
+tunnels, and a value used far away can be a let node with get nodes. What's
+left shows in `rotate`:
 
-![main's prints in the blocks view: each one nested inside the one before](tutorial/queens-main-blocks.png)
+![rotate: bridges where wires cross, but the wires still cross a lot](tutorial/rotate.png)
 
-**Why.** A step `a; b` is stored as a let whose body is `b`, and a let is a
-function call, so each step really is inside the one before. The *As text*
-panel already prints steps flat and a list as `[x]`; the blocks and the graph
-don't.
+- *Tidy* removes overlaps but doesn't reorder nodes to cut crossings, so a
+  definition with many inputs fanning into a few nodes is still a weave.
+- Wires don't route around nodes; they pass under them (as tunnels) or
+  over input names. In `insert`, `tail` and `tail′` are hidden under wires.
 
-**Proposal.** Keep the storage, change the view. A chain of lets or steps is
-drawn as one flat list of rows (the graph already puts effect-only steps in a
-column; the blocks should too). A `cons` chain that ends in `nil` is drawn as
-`[a, b, c]`, one node with an input per item and a spare input to add one.
-The same rule could later show `succ(succ(zero))` as `2`: a view that's chosen
-per type, the way NUMBERS.md chooses a representation.
+**Proposal.** A layered layout (Sugiyama-style, as ELK and Graphviz do) that
+orders nodes in each column to minimize crossings, as a *Tidy* option, and
+names drawn with a background so a wire can't cover them.
 
-**Done, as a view.** Runs of steps are one column of rows and a list is one
-`list` node with an input per item. A chain of one operator whose grouping
-doesn't matter (`++`, `+`, `·`, `and`, `or`) is one node with an input per
-operand, and the text writes it one operand per line, each after the
-operator, however the pairs nest in the tree. `−` and `/` keep their pairs.
-
-### 2. The graph doesn't scale yet
-
-**Today.** Look at *Eight queens* → `main` in the graph:
-
-![main in the graph: values overlap names, wires cross, unit appears twice](tutorial/queens-main.png)
-
-- **Labels overlap.** Value captions sit on top of input names (`fall`'s
-  `29.62` over `distance`, `drift` over `10`), and a dot's name and its value
-  print in the same spot. Every `print` shows `unitunit`.
-- **Wires cross nodes and each other**, and nothing spaces nodes out. The
-  `size` wire in `queens` runs through the case frame's input names.
-- **Nodes are placed relative to what they feed**, with offsets saved from an
-  automatic layout. Moving one thing can move others.
-- *Fit* doesn't center horizontally, the graph panel can't be resized, and
-  there's no right-click menu for adding a node, searching or inlining.
-
-**Proposal.**
-- Value captions in a small pill attached to the wire's start, hidden by
-  default when they'd overlap, shown on hover; names on dots only.
-- An automatic layout that minimizes crossings (layered, Sugiyama-style, as
-  ELK and Graphviz do), runnable on the whole graph or on a selection, that
-  treats wires as obstacles too. Where crossings remain, draw a small
-  **bridge** where a wire crosses a wire and a **tunnel** (a gap) where it
-  passes under a node.
-- Free positions: a node's position is its own, stored absolutely; the
-  automatic layout only places nodes that have none.
-- Per-dot choice of drawing: a dot can be a **junction** (today) or a
-  **named let node** plus **get nodes** where it's used (Unreal's and
-  Houdini's "named reroute"), so a value used far away doesn't need a long
-  wire. That's a view stored in `layout.json`; the code is the same let.
-- A right-click menu on the canvas and on nodes: add (the palette, searched),
-  inline, open, put a dot, lay out the selection.
-
-**Done** (NODE-EDITOR.md): value chips placed off nodes and each other,
-free positions, Tidy for everything or the picked nodes (wires included),
-bridges and tunnels, let and get nodes per binding, the right-click menu,
-Fit centred, a resizable canvas. Still open: Tidy spaces
-nodes out but doesn't reorder them to cut crossings (the Sugiyama-style
-layout above), and wires don't route around nodes.
-
-### 3. Captioned wires and named dots look alike, and mean different things
-
-**Today.** Text next to a wire is either a **value** (teal: what this output
-made for the example inputs) or a **name** (on a dot: what a let is called).
-Both are small text near a wire, so it reads as if some wires have names.
-
-**Should there be a difference?** Between a value and a name, yes. A name is
-presentation of the code (it lives in the names file, and renaming changes
-nothing). A value is a run result (it lives in `examples.json` and changes
-when the inputs do). The fix is to make them look different (item 2's pill
-for values), not to merge them. Between a *name* drawn on a wire and a name
-drawn on a dot, no: both name the same let, so a captioned wire would be one
-more way to draw a named dot, next to the junction and the let/get pair
-(NOTES.md, "The node editor").
-
-**Done.** Values are chips with a border, names are plain text on a dot,
-a port or a let node, and nothing else puts text on a wire.
-
-### 4. Cases that are values are drawn as functions
+### 2. Cases that are values are drawn as functions
 
 **Today.** The `then` and `else` of an `if`, and every case with no fields
 (`nil`), are drawn inside `() =>` frames, because internally they run only
@@ -679,7 +637,7 @@ wire.
 **Proposal.** Draw a zero-input frame as just its contents, with no box,
 unless it's a real action passed to a handler like `first` or `all`.
 
-### 5. "Output" and "dot" are almost the same thing
+### 3. "Output" and "dot" are almost the same thing
 
 **Today.** A node's output is a filled circle on its right. Dragging it to a
 second input creates a dot on its wire. Inputs of functions are dots, the
@@ -689,41 +647,44 @@ solved ports of a `solve` node are dots, but a node's output isn't.
 wire; there's nothing to create when you use it a second time. That removes
 one shape and one gesture.
 
-### 6. Order is invisible
+### 4. Order is shown by position only
 
-**Today.** A dataflow picture has no order. In the graph of `main`, the five
-prints are scattered across three rows; nothing says which runs first. A fold
-computes its children before the parent, so effects inside a fold run
-bottom-up, and the docs say "use `for each` when order matters".
+**Today.** Steps are now drawn flat: in the blocks a run of `print`s is one
+list, and in the graph they stack top to bottom in the order they run. But
+that order is only where the layout put them; drag one and nothing says
+which runs first. A fold computes its children before the parent, so effects
+inside a fold run bottom-up, and the docs say "use `for each` when order
+matters".
+
+![main in the graph: one step per row, values in chips](tutorial/queens-main.png)
 
 **Proposal.** Draw a thin "then" wire between effectful steps, the way Unreal
-Blueprints have execution pins, and lay the steps out along it. That also
-gives item 1's flat list a shape in the graph.
+Blueprints have execution pins, so order survives moving things around.
 
-### 7. `for some` is drawn as nested frames
+### 5. `for some` is two nodes for two wires
 
-**Today.** `rotate` has two internal wires, `length` and `angle`, and they
-appear as two nested `(length) =>` / `(angle) =>` frames feeding two `for some`
-nodes. An existential is the honest meaning, but the picture of "a wire that
-isn't an input" is two boxes and two nodes.
+**Today.** `rotate`'s two internal wires, `length` and `angle`, now share one
+frame, but each still has its own `for some` node, one feeding the other.
+The picture of "a wire that isn't an input" is a frame and two nodes.
 
-**Proposal.** One `for some` with several inputs, or draw an existential as a
-dot inside the frame with no wire coming in, labelled "some".
+**Proposal.** One `for some` node for all of a frame's unknowns, or draw an
+existential as a dot inside the frame with no wire coming in, labelled
+"some".
 
-### 8. ~~Effects: seven of them, and the editor shows three~~ (done)
+### 6. ~~Effects: nine of them, and the editor shows three~~ (done)
 
 *+ New definition* has a fourth kind, **Effect**: its cases are called
 operations, their fields inputs, and each operation says what it gives back
 (or "nothing: it never returns", like `abort`). The palette offers
 `handle Ask in □` for every effect, and the blocks view writes a handler
 match as `handle`, so it reads differently from a match on data while staying
-the same node. The guide lists all seven effects, and the **Effects** example
-uses a declared effect and `Abort`, built in the editor by clicks only.
+the same node. The guide lists the effects, and the **Effects** example uses
+a declared effect and `Abort`, built in the editor by clicks only.
 
 What's left is the three ways to say "no answer" (`Choice`, `Abort`,
 `Optional`); 3.9 gives the rule of thumb.
 
-### 9. The type syntax has a variable most people won't understand
+### 7. The type syntax has a variable most people won't understand
 
 **Today.** Types like `(List a, (a) -[e]-> b) -[e]-> List b` show `e`, a row
 variable meaning "whatever effects the function you pass has". `root near`'s
@@ -733,7 +694,7 @@ Number`.
 **Proposal.** Show it in words on hover ("has the effects of `f`") and hide
 `e` by default. The badges already say what a node does.
 
-### 10. Three ways to repeat
+### 8. Three ways to repeat
 
 **Today.** `fold`, plain recursion (with termination inferred) and `with fuel`
 (recursion with a limit). They exist for good reasons, but a newcomer will
@@ -742,19 +703,8 @@ ask which to use.
 **Proposal.** Teach fold first and present recursion as "a fold the checker
 couldn't see", and fuel as "recursion with a budget".
 
-### 11. Libraries: visible but frozen
+### 9. Small inconsistencies worth fixing
 
-- You can open a library function and read it, but any edit inside it is
-  refused, because changing it would change its name. The missing gesture is
-  "copy into my program", which makes a draft you can change and later
-  publish as a replacement.
-- Pins exist in the checker, but the editor can't pin one of your own
-  definitions, and doesn't show which ones are pinned.
-
-### 12. Small inconsistencies worth fixing
-
-- `if` draws its cases in the order they're stored: in `insert`, `else` comes
-  before `then`. It should always be `condition`, `then`, `else`.
 - The palette labels some fillings with an empty name ("match , match ,
   fold"), for values that have no name of their own.
 - `+` is still three built-ins in tree code (`add`, `subtract`, `negate`), each
@@ -769,7 +719,7 @@ couldn't see", and fuel as "recursion with a budget".
   tutorial each restate parts of the model and the error table. LANGUAGE.md
   should be the reference, the rest should link to it.
 
-### 13. Cells: the handler is the runtime's, and lazy producers say Diverge
+### 10. Cells: the handler is the runtime's, and lazy producers say Diverge
 
 Today: `Cells` (reactivity and values on demand) is handled only by the
 runtime, because its handler keeps state and handlers in the language
@@ -782,12 +732,12 @@ for example a server-side renderer or a test that answers reads. A guarded
 corecursion check (a recursive call under a `formula`, inside a
 constructor) would drop `Diverge` from productive producers.
 
-### 14. Things that are good and should stay
+### 11. Things that are good and should stay
 
 So the list above isn't read as "everything is wrong":
 
 - Names, comments, layout and examples outside the code. Rename, notation,
-  layout and example values never change meaning, and the Files panel shows it.
+  layout and example values never change meaning, and the *Files* tab shows it.
 - Holes with types and a palette of only what fits.
 - *Add a case* adding holes everywhere.
 - One `Choice` effect covering search, absence, filtering and every backwards
@@ -799,6 +749,24 @@ So the list above isn't read as "everything is wrong":
 
 ### Fixed since the first version of this list
 
+- ~~**Sequences are drawn as nesting.**~~ Adjacent `print`s and lets are
+  one flat list in the blocks and one column in the graph, and a `cons`
+  chain ending in `nil` is one `list` node with an input per item. The tree
+  is unchanged; it's a view. (Showing `succ(succ(zero))` as `2` is the same
+  idea, not done yet.)
+- ~~**The graph doesn't scale.**~~ Mostly fixed (NODE-EDITOR.md): value chips
+  that don't overlap, free positions, *Tidy*, bridges and tunnels, let and
+  get nodes, a right-click menu, *Fit* centred, a resizable canvas. What's
+  left is item 1.
+- ~~**Captioned wires and named dots look alike.**~~ Values are chips with a
+  border; names are plain text on a dot, a port or a let node, and nothing
+  else puts text on a wire. A name on a wire would just be one more way to
+  draw a named dot (NOTES.md, "The node editor").
+- ~~**Libraries are visible but frozen.**~~ *Copy into my program* makes a
+  draft of a library definition you can change, and *Pin this type* freezes
+  one of your own definitions' type.
+- ~~**`if` shows its cases in stored order.**~~ It's always `condition`,
+  `then`, `else`.
 - ~~**Two worlds of functions.**~~ A network is now a function returning
   `Bool`, built from `equal`, `and`, `for some` and `hence`; one interpreter
   runs every backwards direction, and the network node kinds, editor and
@@ -806,7 +774,7 @@ So the list above isn't read as "everything is wrong":
 - ~~**Builtins are black boxes, and arithmetic exists three times.**~~ There's
   one table of arithmetic (evaluate, invert, differentiate); selecting a
   built-in shows its equation and directions; the data-type algebra demo was
-  replaced by calculus on real functions. (What's left is item 12's three
+  replaced by calculus on real functions. (What's left is item 9's three
   `+`s.)
 - ~~**Relations only cover arithmetic.**~~ Every node runs backwards
   (BACKWARDS.md), and pattern matching *is* a constructor run backwards.
@@ -826,7 +794,7 @@ So the list above isn't read as "everything is wrong":
 ## Where this lives
 
 - This file: `projectional/TUTORIAL.md`. The editor build also turns it into
-  `tutorial.html` at the site's root, linked from the editor's header.
+  `tutorial.html` at the site's root, linked from the editor's menu bar.
 - The language reference: [LANGUAGE.md](LANGUAGE.md). Running backwards:
   [BACKWARDS.md](BACKWARDS.md). Numbers and representations:
   [NUMBERS.md](NUMBERS.md). The compiler: [COMPILER.md](COMPILER.md). The

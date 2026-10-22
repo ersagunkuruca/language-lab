@@ -1,0 +1,11 @@
+{
+  "elaoqo2la47ugrm3060ecjk2b9": "What wc counts, plus whether the text so far starts inside a word (the fold runs from the end, so that is what tells a word's last character).",
+  "hhk4e2lbtlesvtiip1rarrd8pb": "Which counts to print: -l, -w and -c, as in wc. With none of them, all three.",
+  "bk31jnfalpt9je4igi91471ah1": "What counting a list of files comes to: how many couldn't be read, and the counts of those that could.",
+  "sn0glri28d9ovpmss0btve8dan": "Space, newline, tab or carriage return: what separates words.",
+  "bh9efsil4ts208iii321ntl90j": "One fold over the characters. A word is counted at its last character: one that isn't blank, followed by one that is, or by the end.",
+  "jmkqs92u6c9ks8rv7huctss6d2": "A count right-aligned in eight places, as wc lines them up.",
+  "8qbk8geb817ttu7cvlvfgqkcbh": "-l, -w and -c anywhere among the arguments; none means all three.",
+  "bool6bs3jc93bo2uehc2ch94v8": "Each file in order: print its counts, or why it couldn't be read (an Abort from read file, caught by the match), then the rest. Plain recursion on the list, so the checker sees it ends.",
+  "v5gbgjvpaap2fg298qdgujgmnl": "wc, after the Unix word count (Version 1 AT&T Unix, 1971; the options and the layout follow GNU coreutils wc). The arguments are file names and -l, -w, -c; with no file it counts standard input. The exit code is 1 if a file couldn't be read."
+}

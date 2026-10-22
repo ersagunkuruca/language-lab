@@ -31,7 +31,7 @@ import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { CONS, FALSE, INT_OPS, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
+import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
@@ -66,6 +66,22 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [S.show]: { js: ([a]) => `$show(${a})` },
   [S.range]: { js: ([a]) => `$range(${a})` },
   [S.print]: { js: ([a]) => `$print(${a})` },
+  // The world: the runtime's World, set by whoever runs the program.
+  [IO.printError]: { js: ([a]) => `$io.printError(${a})` },
+  [IO.readInput]: { js: () => `$io.readInput()` },
+  [IO.readLine]: { js: () => `$io.readLine()` },
+  [IO.readFile]: { js: ([a]) => `$io.readFile(${a})` },
+  [IO.writeFile]: { js: ([a, b]) => `$io.writeFile(${a}, ${b})` },
+  [IO.appendFile]: { js: ([a, b]) => `$io.appendFile(${a}, ${b})` },
+  [IO.fileExists]: { js: ([a]) => `$io.fileExists(${a})` },
+  [IO.listFolder]: { js: ([a]) => `$io.listFolder(${a})` },
+  // Cells: the runtime's one handler (projectional/src/lang/cells.ts). A
+  // formula is given its compiled thunk; a read of one that gave no value
+  // throws, which ends whatever formula is reading it, as in the evaluator.
+  [CELL_OPS.cell]: { js: ([a]) => `$cells().cell(${a})` },
+  [CELL_OPS.formula]: { js: ([f]) => `$cells().formula(${f})` },
+  [CELL_OPS.read]: { js: ([c]) => `$cells().read(${c})` },
+  [CELL_OPS.write]: { js: ([c, v]) => `($cells().write(${c}, ${v}), $unit)` },
   [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
   [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
   [S.hence]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
@@ -89,10 +105,19 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
 const implOf = (id: Id) => (OPS[id] ? null : STD_IMPL[id] ? `$impl[${JSON.stringify(id)}]` : null);
 const manyOf = (id: Id) => (STD_MANY[id] ? `$many[${JSON.stringify(id)}]` : null);
 const BOOL_ARGS = new Set([S.and, S.hence, S.or, S.not]);
-const HANDLERS = new Set([S.first, S.all, S.count, S.fuel]);
+const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
   const sub = info.subst;
+  // Effects a program defines: an operation is a variant of an effect, and a
+  // match on operations is a handler (runtime.js $perform, $handle).
+  const effectOf = (variant: Id): Id | null => {
+    const def = info.owner.get(variant);
+    const body = def ? (code.nodes[def] as NodeOf<"def">).body : null;
+    return body && (code.nodes[body] as NodeOf<"typedef">).effect ? def! : null;
+  };
+  const handlerOf = (n: NodeOf<"match">) => (n.arms.length ? effectOf((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : null);
+  const perform = (op: Id, args: string[]) => `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`;
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   const node = <K extends NodeOf<any>["kind"]>(id: Id) => code.nodes[id] as NodeOf<K>;
 
@@ -324,6 +349,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return wrap(s.name, s.streams);
         }
         case "variant":
+          if (effectOf(n.target)) return wrap(`((...a) => ${perform(n.target, ["...a"])})`, false);
           if (n.target === TRUE) return "$T";
           if (n.target === FALSE) return "$F";
           if (n.target === NIL) return "$nil";
@@ -338,7 +364,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             return wrap(`((${ps.join(", ")}) => ${js})`, false);
           }
           const runtime: Record<Id, [string, boolean]> = {
-            [S.oneOf]: ["$oneOf", true], [S.fail]: ["$fail", true], [S.all]: ["$all", false], [S.count]: ["$count", false],
+            [S.oneOf]: ["$oneOf", true], [S.fail]: ["$fail", true], [S.all]: ["$all", false], [S.count]: ["$count", false], [S.optional]: ["$optional", false],
             [S.equal]: ["((a, b) => $bool($eq(a, b)))", false],
           };
           if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
@@ -405,7 +431,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
-        if (t.kind === "variant") return construct(f.target, n.args.map(ex));
+        if (t.kind === "variant") return effectOf(f.target) ? perform(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
         if (t.kind === "def") {
           const s = specAt(f.id, f.target, rho);
@@ -431,6 +457,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const acc = temp("all");
         return `(() => {\nconst ${acc} = [];\n${st(body.body, (v) => `${acc}.push(${v});`)}\nreturn $toList(${acc});\n})()`;
       }
+      if (h === S.optional) {
+        if (!body) return `$optional(${ex(n.args[0])})`;
+        return `(() => {\n${st(body.body, (v) => `return { tag: ${tag(SOME)}, fields: [${v}] };`)}\nreturn { tag: ${tag(NONE)}, fields: [] };\n})()`;
+      }
       if (h === S.count) {
         if (!body) return `$count(${ex(n.args[0])})`;
         const c = temp("count");
@@ -439,7 +469,25 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       throw new Error("with fuel always has Choice");
     }
 
+    // A handler: its cases as functions, answers and escapes apart (an
+    // answer never has Choice; an escape may, when the match does).
+    function handlerCases(n: NodeOf<"match">, streams: boolean): [string, string] {
+      const arms = n.arms.map((a) => node<"arm">(a));
+      const fn = (a: NodeOf<"arm">, gen: boolean) => {
+        const ps = a.binds.map(local).join(", ");
+        return gen ? `function* (${ps}) {\n${st(a.body, (v) => `yield ${v};`)}\n}` : `((${ps}) => {\n${ret(a.body)}\n})`;
+      };
+      const table = (as: NodeOf<"arm">[], gen: boolean) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a, gen)}`).join(", ")} }`;
+      const answers = arms.filter((a) => node<"variant">(a.variant).returns);
+      return [table(answers, false), table(arms.filter((a) => !answers.includes(a)), streams)];
+    }
+    function handleEx(n: NodeOf<"match">): string {
+      const [answers, escapes] = handlerCases(n, false);
+      return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${ret(n.scrutinee)}\n})`;
+    }
+
     function match(n: NodeOf<"match">): string {
+      if (handlerOf(n)) return handleEx(n);
       const arms = n.arms.map((a) => node<"arm">(a));
       if (isBoolMatch(n)) {
         const [t, e] = boolArms(n);
@@ -472,6 +520,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body);
       }
       if (n.kind === "match") {
+        if (handlerOf(n)) return `return ${handleEx(n)};`;
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
           return `if (${exBool(n.scrutinee)}) {\n${ret(t)}\n}\n${ret(e)}`;
@@ -559,7 +608,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const n = code.nodes[id];
       switch (n.kind) {
         case "call": return stCall(n, k);
-        case "match": return stMatch(n, k);
+        case "match": {
+          if (!handlerOf(n)) return stMatch(n, k);
+          const [answers, escapes] = handlerCases(n, true), r = temp("r");
+          return `for (const ${r} of $handleS(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, function* () {\n${st(n.scrutinee, (v) => `yield ${v};`)}\n})) {\n${k(r)}\n}`;
+        }
         case "fold": return stFold(n, k);
         case "solve": {
           return parts(givenOf(n), (vals) => {
@@ -627,7 +680,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return parts([n.fn, ...n.args], ([fn, ...args]) => {
         let c: string;
         if (kind === "def") c = `${specAt(n.fn, target!, rho).name}(${args.join(", ")})`;
-        else if (kind === "variant") c = construct(target!, args);
+        else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = `${args[0]}.fields[${fieldIndex(target!)}]`;
         else if (kind === "builtin" && OPS[target!]) {
           const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
@@ -707,7 +760,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$spread", "$self", "$foldNested",
+    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
