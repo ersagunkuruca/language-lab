@@ -28,7 +28,6 @@ export class Namer {
       const n = code.nodes[id];
       if (n.kind === "binder") add(id);
       else if (n.kind === "ref") add(n.target);
-      else if (n.kind === "part" && n.fn) add(n.fn);
       else if (pres.names[id] !== undefined && n.kind !== "def") add(id);
     }
     const byName = new Map<string, Id[]>();

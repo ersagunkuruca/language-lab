@@ -29,11 +29,15 @@ export function $range(n) {
   return l;
 }
 
+// Numbers are equal to the precision floats carry, as in the evaluator.
+export const $near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
+
 // With its own stack, so two long lists can be compared.
 export function $eq(a, b) {
   const todo = [a, b];
   while (todo.length) {
     const y = todo.pop(), x = todo.pop();
+    if (typeof x === 'number' && typeof y === 'number') { if (!$near(x, y)) return false; continue; }
     if (typeof x !== 'object' || typeof y !== 'object') { if (x !== y) return false; continue; }
     if (x.tag !== y.tag) return false;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push(x.fields[i], y.fields[i]);
@@ -161,7 +165,7 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // (projectional/COMPILER.md).
 
 import { META, makeRunner } from '../../projectional/src/lang/run.ts';
-import { relate, toValue } from '../../projectional/src/lang/relate.ts';
+import { relate, satisfiable, toValue } from '../../projectional/src/lang/relate.ts';
 import { ownerOfTypeParts } from '../../projectional/src/model.ts';
 
 export function $loadProgram(code, divergent) {
@@ -206,6 +210,10 @@ export function* $relate(program, fn, known, binds) {
     yield out;
   }
 }
+
+// for some: is there a value that makes f true? The relational interpreter
+// searches, as it does for the evaluator.
+export const $exists = (program, f) => $bool(satisfiable(program.code, f));
 
 export function $derivative(program, f, streams) {
   const derivative = program.runner().value('builtin.derivative');

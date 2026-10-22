@@ -13,7 +13,7 @@ import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
-import { portLabel } from "../src/relational.ts";
+import { portLabel } from "../src/lang/equations.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {

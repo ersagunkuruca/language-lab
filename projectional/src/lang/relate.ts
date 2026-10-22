@@ -22,7 +22,10 @@
 //                unfold those. It can go on forever, so it may Diverge.
 //   comparisons  `less`, and `equal` when false, wait until both sides are
 //                known, then check (they can't produce a number, only
-//                reject one).
+//                reject one). `equal` when true is unification, which
+//                is what a wire in a network was.
+//   for some     a fresh unknown, and the function's body run backwards
+//                from true.
 //   calls        a call to a known function runs that function's body.
 //                Information flows from whatever is known: when the call's
 //                value is known it is pushed into the function first, else
@@ -38,7 +41,13 @@
 //
 // The search is miniKanren's: a lazy stream of states with fair
 // interleaving, so an infinite branch (unfolding a list forever) can't
-// starve a finite one. Answers come in the order the arms and branches are
+// starve a finite one. miniKanren is by Daniel P. Friedman, William E. Byrd
+// and Oleg Kiselyov (The Reasoned Schemer, MIT Press, 2005;
+// http://minikanren.org). The stream shape below (empty, an answer and the
+// rest, or a suspension) and unit/mplus/bind follow Jason Hemann and
+// Daniel P. Friedman's microKanren ("μKanren: A Minimal Functional Core for
+// Relational Programming", Scheme Workshop 2013,
+// http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf). Answers come in the order the arms and branches are
 // written, canonical branch first, but fairness may interleave them.
 
 import { plan, relation, stream } from "../../../invertible/src/relation.js";
@@ -49,9 +58,8 @@ import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
-import { META, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
-import { RELATIONS, VARIADIC } from "../relational.ts";
-import { relationFor } from "./solve.ts";
+import { close, META, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
+import { NUMERIC, relationFor } from "./equations.ts";
 import { CONS, FALSE, NIL, S, SET, SHOW_ANY, SIGS, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
@@ -156,7 +164,6 @@ function deep(t: Term, s: State): Term {
 const hasVars = (t: Term): boolean => t instanceof LVar || (isData(t) && t.fields.some(hasVars));
 const ground = (t: Term, s: State): Term | undefined => { const d = deep(t, s); return hasVars(d) ? undefined : d; };
 
-const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
 function unify(a: Term, b: Term, s: State): State | null {
   a = walk(a, s);
@@ -256,13 +263,15 @@ function settle(s: State): Stream {
   }
   s = { ...s, eqs: open };
   const solved = solveSome(s);
-  if (solved) return solved;
+  if (solved !== undefined) return solved; // null: no solution, a failure
   for (let i = 0; i < s.waits.length; i++) {
     const g = wake(s.waits[i], s);
     if (g) return g({ ...s, waits: s.waits.filter((_, j) => j !== i) });
   }
   return unit(s);
 }
+
+const PERIODS = 64;
 
 // Hand the solver the smallest thing it can solve: a single equation with
 // one unknown, else (for a handful of equations) the whole system, which is
@@ -279,9 +288,13 @@ function solveSome(s: State): Stream | undefined {
     if (!determined.length) continue;
     const sols = stream(rel as never, p as never, {} as never) as Iterable<{ values: Record<string, number | null> }>;
     const it = sols[Symbol.iterator]();
+    // A periodic family (angle + 2πk) never ends. If none of its first
+    // members fits what else is known, the rest won't either, and walking
+    // them would never come back (it spends no fuel), so stop there.
+    let left = PERIODS;
     const next = (): Stream => {
       const r = it.next();
-      if (r.done) return null;
+      if (r.done || left-- <= 0) return null;
       let t: State | null = s;
       for (const x of determined) {
         const val = r.value.values[x];
@@ -385,9 +398,6 @@ export interface Options {
   // The names generic `show` prints cases with; std's if not given.
   names?: Names;
 }
-
-// Numeric builtins, by the name the solver knows them under.
-const NUMERIC: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
 
 export function interpreter(code: Code, opts: Options = {}) {
   const nodes = code.nodes;
@@ -546,10 +556,11 @@ export function interpreter(code: Code, opts: Options = {}) {
           const no = conj(eq(out, boolT(false)), wait({ k: "test", args: [a, b], f: (x, y) => !valueEqual(x, y), text: "≠" }));
           return isData(o) ? (o.tag === TRUE ? yes : no)(s) : disj(yes, no)(s);
         };
-      case S.and: return table(args, out, (x, y) => x && y);
+      case S.and: case S.hence: return table(args, out, (x, y) => x && y);
       case S.or: return table(args, out, (x, y) => x || y);
       case S.not: return table(args, out, (x) => !x);
       case S.oneOf: return member(a, out);
+      case S.exists: return exists(a, out);
       case S.fail: return failG;
       case S.first: case S.all: case S.count: return aggregate(id, args, out);
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
@@ -616,6 +627,29 @@ export function interpreter(code: Code, opts: Options = {}) {
   function table(args: Term[], out: Term, f: (...xs: boolean[]) => boolean): Goal {
     const rows = args.length === 1 ? [[true], [false]] : [[true, true], [true, false], [false, true], [false, false]];
     return disj(...rows.map((row) => conj(...row.map((x, i) => eq(args[i], boolT(x))), eq(out, boolT(f(...row))))));
+  }
+
+  // for some(f): true when some value makes f true. Run that way it is one
+  // more unknown, and f's body runs backwards from true. False means no
+  // value does, which can only be found by searching them all; so it's
+  // decided only when the search can't depend on anything else unknown.
+  function exists(f: Term, out: Term): Goal {
+    return (s0) => {
+      const [[x], s] = freshVars(s0, 1);
+      const yes = conj(eq(out, boolT(true)), (st: State) => apply(walk(f, st), [x], boolT(true))(st));
+      const no: Goal = (st) => {
+        for (const t of pull(apply(walk(f, st), [x], boolT(true))(st))) {
+          for (const n of t.sub.keys()) {
+            if (n < s0.next && !st.sub.has(n)) throw new NotInvertible("for some can't be false while what it depends on is unknown");
+          }
+          return null;
+        }
+        return eq(out, boolT(false))(st);
+      };
+      const o = walk(out, s);
+      if (isData(o)) return (o.tag === TRUE ? yes : no)(s);
+      return disj(yes, no)(s);
+    };
   }
 
   // one of(list) = x: x is somewhere in the list. If the list isn't known
@@ -770,8 +804,8 @@ export function interpreter(code: Code, opts: Options = {}) {
   }
 
   // fn as a relation over named ports. A function's ports are its params
-  // (by binder id, or position for a builtin) and "out"; anything else
-  // (polar, a network, the sum atom) contributes its equations.
+  // (by binder id, or position for a builtin) and "out". A numeric builtin
+  // contributes its equation.
   function relationGoal(fn: Id, at: Record<string, Term>): Goal {
     const t = nodes[fn];
     return (s0) => {
@@ -788,7 +822,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       if (isFunctionBuiltin(code, fn)) {
         return builtin(fn, Array.from({ length: arity(fn) }, (_, i) => port(String(i))), port("out"))(s);
       }
-      const rel = relationFor(code, fn, Object.keys(at)) as unknown as { ports: string[]; vars: string[]; eqs: Eq[] };
+      const rel = relationFor(code, fn).rel as unknown as { ports: string[]; vars: string[]; eqs: Eq[] };
       const names = new Map<string, Expr>();
       for (const x of rel.vars) {
         if (rel.ports.includes(x)) { const e = toExpr(port(x), s); if (!e) return null; names.set(x, e); }
@@ -805,10 +839,9 @@ export function interpreter(code: Code, opts: Options = {}) {
 const arity = (fn: Id) => { const t = SIGS[fn]?.(new Subst()); return t?.t === "fn" ? t.params.length : 0; };
 
 // Builtins that are functions with no equations to give the solver: text,
-// comparisons, choice. Numeric builtins and relations go to the solver.
+// comparisons, choice. Numeric builtins go to the solver.
 function isFunctionBuiltin(code: Code, fn: Id): boolean {
-  const t = code.nodes[fn];
-  return t.kind === "builtin" && !NUMERIC[fn] && !(t.op in RELATIONS) && !(t.op in VARIADIC);
+  return code.nodes[fn].kind === "builtin" && !NUMERIC[fn];
 }
 
 function* pull(st: Stream): Generator<State> {
@@ -855,6 +888,14 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
   }
 }
 
+// Does some value make f true? This is `for some` run forward.
+export function satisfiable(code: Code, f: unknown, opts: Options = {}): boolean {
+  const it = interpreter(code, opts);
+  const [[x], s] = freshVars({ sub: new Map(), eqs: [], waits: [], next: 0 }, 1);
+  for (const _ of pull(it.apply(fromValue(f), [x], boolT(true))(s))) return true;
+  return false;
+}
+
 // Leftover equations as a person would write them: unknowns that no port
 // shows are substituted away (t = y + 0 and x + t = 10 is x + y = 10).
 function tidy(eqs: Eq[], values: Record<string, Term>): Eq[] {
@@ -881,7 +922,7 @@ function portsOf(code: Code, fn: Id, known: string[]): string[] {
   const body = t.kind === "def" && t.body ? code.nodes[t.body] : null;
   if (body?.kind === "lambda") return [...body.params, "out"];
   if (isFunctionBuiltin(code, fn)) return [...Array.from({ length: arity(fn) }, (_, i) => String(i)), "out"];
-  return (relationFor(code, fn, known) as unknown as { ports: string[] }).ports;
+  return relationFor(code, fn).rel.ports;
 }
 
 export function showTerm(t: Term): string {

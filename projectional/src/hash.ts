@@ -18,7 +18,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
   const canon = (id: Id): Canon => {
     const n = code.nodes[id];
     switch (n.kind) {
-      case "lit": return n.of ? ["lit", n.value, n.of] : ["lit", n.value];
+      case "lit": return n.of ? ["lit", n.value, n.of] : n.unit ? ["lit", n.value, unitKey(n.unit)] : ["lit", n.value];
       case "hole": return ["hole"];
       case "binder": binders.set(id, binders.size); return n.unit ? ["bind", unitKey(n.unit)] : ["bind"];
       case "ref": {
@@ -37,18 +37,6 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
       }
       case "call": return ["call", canon(n.fn), ...n.args.map(canon)];
       case "lambda": return ["lam", n.params.map(canon), canon(n.body)];
-      case "network": return ["net", n.params.map(canon), n.wires.map(canon), n.parts.map(canon)];
-      case "part": {
-        // Port keys that are the callee's param ids become positions too.
-        const callee = n.fn ? code.nodes[n.fn] : null;
-        const body = callee?.kind === "def" && callee.body ? code.nodes[callee.body] : null;
-        const params = body && (body.kind === "lambda" || body.kind === "network") ? body.params : [];
-        const fn = !callee ? ["const", n.value, ...(n.unit ? [unitKey(n.unit)] : [])] : callee.kind === "builtin" ? ["builtin", callee.op] : ["def", hashDef(code, n.fn!, memo, stack)];
-        const ports = Object.entries(n.bind)
-          .map(([k, w]) => [params.includes(k) ? `p${params.indexOf(k)}` : k, binders.get(w)] as const)
-          .sort(([a], [b]) => (a < b ? -1 : 1));
-        return ["part", fn, ports];
-      }
       case "typedef": return ["type", n.params.map(canon), n.variants.map(canon)];
       case "variant": return ["variant", n.fields.map(canon)];
       case "field": return ["field", canon(n.type)];
@@ -64,7 +52,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
         const t = code.nodes[n.fn];
         const fn = t.kind === "builtin" ? ["builtin", t.op] : stack.has(n.fn) ? ["rec", [...stack].indexOf(n.fn)] : ["def", hashDef(code, n.fn, memo, stack)];
         const body = t.kind === "def" && t.body ? code.nodes[t.body] : null;
-        const params = body && (body.kind === "lambda" || body.kind === "network") ? body.params : [];
+        const params = body && body.kind === "lambda" ? body.params : [];
         const key = (k: string) => (params.includes(k) ? `p${params.indexOf(k)}` : k);
         const given = Object.entries(n.given).map(([k, e]) => [key(k), canon(e)] as const).sort(([a], [b]) => (a < b ? -1 : 1));
         const binds = Object.entries(n.binds).map(([k, b]) => [key(k), canon(b)] as const).sort(([a], [b]) => (a < b ? -1 : 1));

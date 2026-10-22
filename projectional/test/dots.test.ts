@@ -27,7 +27,7 @@ const under = (code: Code, d: Id): Id[] => {
   return out;
 };
 
-for (const program of ["queens", "relations"]) test(`${program}: a dot on any wire keeps the program and its output, and comes off again`, () => {
+for (const program of ["queens", "relations", "physics"]) test(`${program}: a dot on any wire keeps the program and its output, and comes off again`, () => {
   const p = load(program);
   const info = infer(p.code, p.pres.names);
   const main = p.named("main");

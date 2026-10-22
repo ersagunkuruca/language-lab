@@ -3,7 +3,6 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { evaluate } from "./eval.ts";
 import { hashDef } from "./hash.ts";
 import { loadCode, loadPresentation, root } from "./io.ts";
 import { dependencies, get, replace, subtree, type Code, type Id } from "./model.ts";
@@ -14,6 +13,15 @@ import { renderLet } from "./render/letseq.ts";
 import { renderNested } from "./render/nested.ts";
 import { renderSexpr } from "./render/sexpr.ts";
 import { renderBlocks } from "./lang/render.ts";
+import { infer } from "./lang/infer.ts";
+import { makeRunner } from "./lang/run.ts";
+
+// A definition as a plain JS function: its first result. There is one
+// evaluator (src/lang/run.ts); this is just a way to call it.
+const evaluate = (code: Code, def: Id) => {
+  const r = makeRunner(code, infer(code), { print: () => {} });
+  return (...args: number[]) => { for (const v of r.call(r.value(def), ...args)) return v; throw new Error("no result"); };
+};
 
 const views = { nested: renderNested, let: renderLet, sexpr: renderSexpr, graph: renderGraph, blocks: (c: Code, p: Presentation, d: Id) => renderBlocks(c, p, null, d) };
 const render = (code: Code, pres: Presentation, def: Id) => views[pres.style.view](code, pres, def);
@@ -60,7 +68,7 @@ const plainPres = loadPresentation(dir, { names: ["short", "descriptive"], style
   section("3. Renaming touches only the names layer");
   const lam = get(code, get(code, x, "def").body!, "lambda");
   const b = lam.params[1];
-  const before = { hash: hashDef(code, x), value: evaluate(code, x) as (...a: number[]) => number };
+  const before = { hash: hashDef(code, x), value: evaluate(code, x) };
   const renamed = { ...plainPres, names: rename(plainPres.names, b, "how steep it is at zero") };
   console.log(show(code, renamed, [x]));
   console.log(`
@@ -79,7 +87,7 @@ const plainPres = loadPresentation(dir, { names: ["short", "descriptive"], style
   names = rename(names, c, "k");
   const pres = { ...mathPres, names };
   console.log(show(code, pres, [disc]));
-  const f = evaluate(code, disc) as (...a: number[]) => number;
+  const f = evaluate(code, disc);
   console.log(`\n    all three binders named "k"; Δ(1, -3, 2) is still ${f(1, -3, 2)}`);
 }
 
@@ -95,7 +103,7 @@ const plainPres = loadPresentation(dir, { names: ["short", "descriptive"], style
     return { kind: "call", fn: ref(B.add), args: [ref(lam.params[0]), ref(lam.params[0])] };
   });
   console.log(show(edited, plainPres, [x]));
-  const f = evaluate(edited, x) as (...a: number[]) => number;
+  const f = evaluate(edited, x);
   console.log(`
     the step keeps its name "denominator" and the sqrt step keeps its comment,
     because both are keyed by node id, not by line number.

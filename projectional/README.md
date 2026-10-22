@@ -15,15 +15,15 @@ roadmap towards real programs, shaders, websites and apps), see
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
-               # networks use the solver in ../invertible)
+               # running backwards uses the solver in ../invertible)
 npm test
 ```
 
 ## The core data model
 
 `code.json` is a flat map of nodes keyed by random ID. That's the whole
-semantic program. The expression node kinds (`src/model.ts`; holes and
-networks are covered further down):
+semantic program. The expression node kinds (`src/model.ts`; holes, data
+types and `solve` are covered in LANGUAGE.md):
 
 | kind      | fields                 | notes                                                        |
 |-----------|------------------------|--------------------------------------------------------------|
@@ -146,7 +146,7 @@ flowchart LR
 **Rename is not an edit to the program.** Renaming a binder produces a new
 names table. `code.json` is byte-for-byte unchanged, the semantic hash is
 unchanged, and evaluation is unchanged (the interpreter's environment is
-keyed by binder id, `src/eval.ts`).
+keyed by binder id, `src/lang/run.ts`).
 
 **Collisions are a display problem.** Name all three parameters `k` and
 nothing breaks; the renderer shows `Δ = (k₁, k₂, k₃) => k₂ · k₂ − 4 · k₁ · k₃`
@@ -171,40 +171,20 @@ assigns paths), not something the compiler has to resolve.
 
 The repository's root `index.html` is a self-contained browser editor over the same
 core (open it directly, or rebuild with `npm install && npm run build-editor`).
-It never shows editable source text. There are two kinds of definitions.
+It never shows editable source text. Every program is typed, and there is
+one kind of definition: a function (or a value, or a data type), shown as a
+graph, as blocks and as text, with selection shared between them.
 
-**Expression defs** (`discriminant`, `root`) are shown as Scratch-like blocks
-and a graph, with selection shared between them.
-
-- **Rename** a variable, definition or step. Naming a step is the same as
-  extracting it in the let view; clearing the name inlines it.
-- **Wrap in…** a function, searched by *any* of its names or glyphs
-  (`*`, `·`, `×`, `multiply` and `mul` all find the same node).
-- **Replace with…** a variable in scope, another definition or a number;
-  **Delete** leaves a hole `□`, and holes still render and hash.
-- **Open definition** (or double-click a call) jumps to the callee, with a
-  back button. **Show inline** displays the callee's body in place of the
-  call. That is a view stored in `layout.json`; `code.json` doesn't change.
-- **Turn into a network** rewrites the def as a network (below). Calls keep
-  their ids as nodes, so names and comments carry over.
-
-**Networks** (`to polar`, `rotate`) are node graphs you wire freely: add
-nodes from a palette (builtins, relations such as `polar`, other defs,
-constants), drag between ports to connect, drag a wired port into empty
-space to disconnect, add and remove outer ports. A network is a function
-without a direction. Each outer port is either *known* or *solved for*, and
-that choice lives in `layout.json`, not in the code. The relation solver from
-`../invertible` derives the program for the current choice and lists every
-branch of a multi-valued answer, canonical first.
-
-So `to polar` with `x, y` known gives `angle, length`. Tick `angle` and
-`length` instead and it computes `x, y`. With `x, length` known it finds `y`
-and `angle`, `±` branches included. Each node's ports show which way values
-flow through it (filled = input, hollow = solved), and the arrows flip when
-you change the outer choice. `rotate` is two polar nodes sharing a length
-plus an adder; making `x′, y′` known solves for `turn` through both polar
-nodes backwards. `root`, turned into a network, can be asked for the linear
-coefficient that gives a particular root.
+**Run** runs an action (a definition with no inputs, like `main`). For any
+other function it lists the function's ports, its parameters and its result,
+each with a tick box: ticked ports are given, the rest are worked out by
+`src/lang/relate.ts`. That's running it backwards, and which ports are ticked
+lives in `layout.json`, not in the code. A function that returns `Bool` built
+from `equal` and `and` (what used to be a network, like `fall` or `rotate`)
+starts with its result ticked as `true`, so it solves for whatever you leave
+unticked, every answer listed, canonical first. When the function reads as
+equations, the panel also shows the program the solver derives for that
+direction (the quadratic formula, for `fall` asked for its time).
 
 A **Files** panel shows which file each gesture touched, plus the meaning
 hash, so you can see that renames, comments, notation, layout and direction
@@ -222,8 +202,8 @@ on a variable with one arm per case of its type, "Add a case" on a data type
 adds a hole arm to every match and fold over it, and `main` runs in the
 page. Any edit that would add a type error is refused with the reason.
 
-Every definition is drawn on one canvas (`editor/canvas.ts`): typed
-programs, plain expressions and networks alike, with the same gestures.
+Every definition is drawn on one canvas (`editor/canvas.ts`), with the same
+gestures.
 In tree code (`editor/typedGraph.ts`) calls are nodes and functions are
 frames whose variables are sources on the left edge. `if`, `match` and
 `fold` are ordinary nodes too: the value, then one function per case of its
@@ -280,72 +260,28 @@ The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
 and the tutorial to the repository root, which is the site)
 
-## Networks in the core
-
-`src/relational.ts` adds two node kinds to the model:
-
-| kind      | fields                         | notes                                               |
-|-----------|--------------------------------|-----------------------------------------------------|
-| `network` | `params[]`, `wires[]`, `parts[]` | a def body; params (outer ports) and wires are binders |
-| `part`    | `fn`, `bind`, `value?`         | a builtin, relation or def, each port bound to a wire by id |
-
-A network compiles to one solver relation: a builtin part becomes an
-equation (`out = a + b`), a relation or a network part is embedded with
-`uses`, and an expression def used as a part is inlined into an equation, so
-its insides can be inverted too. `partDirections` plans the network without
-one part to find which of that part's ports are already determined (inputs)
-and which it must produce (outputs).
-
-When a direction needs a nonlinear block (the root network asked for `b`),
-the solver *tears* it: it guesses one unknown, computes the others from it
-in closed form, and scans the guess for values that satisfy the one leftover
-equation, so it finds every root in range rather than one. The derived
-program shows that as "guess b … keep the b where …".
-
 ## Errors you can't make
 
 There's no text, so there are no syntax errors. The aim is to make the other
-kinds just as impossible. `src/check.ts` names every kind, `src/edits.ts`
-makes every gesture a pure function `code → code`, and each edit is refused
-(with a reason, and nothing changed) if the result has an error the code
-before it didn't. The editor asks ahead of time, too: while you drag a wire,
-the ports it can legally reach light up and the others say why not, unit
-chips that would contradict the wiring are disabled, and so are picker
-options that would be refused.
+kinds just as impossible: every edit goes through the type checker
+(`editor/typed.ts`, `src/lang/infer.ts`) and is refused, with the reason and
+nothing changed, if the result has an error the code before it didn't. The
+editor asks ahead of time, too: a hole's palette lists only what fits,
+while you drag a wire the inputs it can legally reach light up and the
+others say why not, and unit chips that would make units disagree are
+disabled. The *Checks* panel and TUTORIAL.md §3.10 list every kind.
 
-| kind | what stops it |
-|---|---|
-| syntax | there is no text |
-| unknown names | a reference is an id picked from what's in scope |
-| wrong number of arguments | wrapping or calling makes one slot per parameter |
-| ports that don't exist | a part's ports come from its function's definition |
-| dangling wires | a wire with fewer than two ends is removed |
-| broken trees (a node in two places) | edits swap whole subtrees |
-| a network that contains itself | refused when the part is added |
-| unit mismatches | refused at connection time |
-| holes, unconnected ports | allowed while editing; they're incomplete, not wrong |
-| √ of a negative, ÷ 0, too few known ports | only found by running |
-
-`test/check.test.ts` drives a few hundred random gestures (seeded) over each
-example and asserts that no accepted edit ever leaves an error.
-
-**Units are the types.** `src/units.ts` gives every value a dimension, a
-vector of exponents over m, s, kg, A and rad. Each builtin says how its
-ports relate (`+`: all equal; `×`: exponents add; `√`: halve; `sin`: takes
-rad), which gives linear equations over the exponents, solved exactly by
-incremental elimination. A type error is an inconsistent system. You
-declare units on a few ports and inference does the rest: in `fall`, only
-the four outer ports have units and every wire inside gets its own; in
-`period`, only the inputs do and the result comes out in seconds. A def used
-twice is inlined each time, so it's polymorphic in whatever it leaves free.
-Zero is the one number that is every unit at once.
-
-**+ and − are one node.** Arithmetic in networks is two variadic atoms from
-`../invertible`: a *sum* (`a + b + … = total`) and a *product*. Which symbol
-the node shows depends on which port is unknown: the same sum draws as `+`
-when the total is unknown, `−` when an addend is, and `neg` with a zero
-total. There's always one spare addend port, and connecting it adds a term.
-Turning an expression def into a network converts `+ − neg × ÷` to these.
+**Units are part of the type.** `src/units.ts` gives every number a
+dimension, a vector of exponents over m, s, kg and A. Each builtin says how
+its ports relate (`+` and `equal`: all the same; `×`: exponents add; `√`:
+halve; `sin`: dimensionless), which gives linear equations over the
+exponents, solved exactly by incremental elimination; the type checker
+reports an inconsistent system as a type error. Declare units on a few
+parameters or numbers and inference does the rest: in `fall` only the four
+parameters have units and `drift` and `drop` come out in metres; in
+`period` the result comes out in seconds. A definition used twice is inlined
+each time, so it's polymorphic in whatever it leaves free. A plain number is
+dimensionless, and zero is every unit at once.
 
 ## Mapping back to the original ideas
 
@@ -358,8 +294,8 @@ Turning an expression def into a network converts `+ − neg × ÷` to these.
 | strategies, batch sizes etc. stored separately | `hints.json` |
 | multiple paradigms as views of the same code | nested / let / sexpr / graph renderers |
 | libraries, packages, modules unified | no imports; refs by id + content hash + dependency closure |
-| a node whose inputs and outputs depend on how it's wired | `network` + `part`, solved by `../invertible` |
-| never a syntax error, and no type errors either | `src/check.ts`, `src/edits.ts`, units as types |
+| a node whose inputs and outputs depend on how it's wired | any function, run from any ports: `solve` nodes, `src/lang/relate.ts`, `../invertible` |
+| never a syntax error, and no type errors either | typed holes, guarded edits, units as types |
 
 ## Prior art, briefly
 
@@ -385,11 +321,10 @@ every non-semantic thing in independent, mergeable side tables.
 
 ## Open questions
 
-1. **Tree or graph as the canonical form?** Expression defs are trees (the
-   graph is derived from them); networks are graphs with no direction. Both
-   are stored the same way, as nodes keyed by id. Open: should expression
-   defs simply *be* networks with one chosen direction, so there's one
-   editor instead of two?
+1. **Tree or graph as the canonical form?** Answered: the tree. A network
+   turned out to be a function returning `Bool` whose wires are `equal`s,
+   so there's one kind of definition and one editor (LANGUAGE.md, "One
+   world"). The graph is a view of the tree.
 2. **Order in the let view.** For pure code, any topological order of the
    steps is equivalent, so the order could be a presentation choice too.
    Effects would pin it.
@@ -421,26 +356,22 @@ src/model.ts          node types, traversal, replace(), dependencies()
 src/presentation.ts   names / comments / hints / style types, rename()
 src/prelude.ts        builtins (ordinary nodes with stable ids)
 src/builder.ts        build trees from code (there's no parser)
-src/eval.ts           strict interpreter, env keyed by binder id
 src/hash.ts           name- and id-free content hash
 src/render/           namer (display names + disambiguation), nested,
                       let, sexpr, graph views
-src/relational.ts     networks: compile to the solver, port directions, toNetwork(),
-                      sum/product atoms and the symbol they show
-src/units.ts          units as types: constraints, exact inference, compatible()
-src/check.ts          every kind of error, and incomplete states
-src/edits.ts          every gesture as a pure, guarded edit
+src/units.ts          units as part of types: constraints, exact inference
 src/demo.ts           the walkthrough
 src/lang/             the typed core: types + effects, inference, evaluator,
                       block view, std library, example programs (LANGUAGE.md);
+                      equations.ts reads code as equations for the solver,
                       relate.ts runs any function backwards, derive.ts
                       differentiates functions (BACKWARDS.md); represent.ts
                       runs a program on another representation of its data (NUMBERS.md)
 editor/               browser editor (main.ts, page.html, build.ts → /index.html, /tutorial.html)
-examples/build.ts     regenerates the example programs (new random ids)
+examples/build.ts     regenerates compose and quadratic (new random ids)
 examples/build-lang.ts  regenerates the typed examples (queens, algebra, relations,
-                      backwards, calculus, numbers); name some to rebuild only those
-test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test),
-test/lang.test.ts, test/backwards.test.ts, test/numbers.test.ts,
-test/known-holes.test.ts (holes found by REVIEW.md, as todo tests)
+                      backwards, calculus, numbers, physics); name some to rebuild only those
+test/                 core, lang, backwards, numbers, oneworld (networks as
+                      predicates), guarantees, scale, dots, graph, toplevel, and
+                      known-holes (holes found by REVIEW.md, as todo tests)
 ```

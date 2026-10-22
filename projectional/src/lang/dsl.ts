@@ -97,6 +97,23 @@ export class Lang extends Builder {
     return this.add({ kind: "lit", value: safe ? Number(v) : String(v), of: INT });
   }
 
+  // Predicates: what a network is. `equal` is a wire, `and` puts wires
+  // side by side, and `for some` names unknowns that aren't ports (one
+  // `for some` per unknown, nested).
+  equal(a: Id, b: Id): Id {
+    return this.call(S.equal, a, b);
+  }
+
+  and(...xs: Id[]): Id {
+    return xs.reduceRight((rest, x) => this.call(S.and, x, rest));
+  }
+
+  exists(names: string[], body: (...unknowns: Id[]) => Id): Id {
+    const go = (i: number, got: Id[]): Id => i === names.length ? body(...got)
+      : this.call(S.exists, this.lambda([names[i]], (x) => go(i + 1, [...got, x])));
+    return go(0, []);
+  }
+
   hole(): Id {
     return this.add({ kind: "hole" });
   }

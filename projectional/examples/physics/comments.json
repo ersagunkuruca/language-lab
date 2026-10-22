@@ -1,4 +1,7 @@
 {
-  "6d8ef328": "Make {f6b8bcd8} known and {ca0489ff} unknown to ask when it lands.",
-  "b58eab5e": "Only the inputs have units. The result is inferred to be in seconds."
+  "hrscob09cc2u9rbciqghos2sra": "A predicate: true when (x, y) is at this length and angle. x² + y² = length² follows from the other two (hence); it lets the solver find the length from x and y without searching.",
+  "ef2qlgvc9pagd7mbrjga1vti6p": "Two polars sharing a length. The length and angle inside are unknowns of for some, the way wires inside a network were. Give it x′, y′ and the turn and it runs backwards.",
+  "6hpbegvm9ekio82s9259bbshse": "What was a network: one equal is the wire that closes it, drift and drop are dots. In Run, tick which ports you know; make the distance known and the time unknown to ask when it lands.",
+  "s1l0sf006j8lf36reqn46e91sq": "An ordinary function. Only the inputs declare units; the result is inferred to be in seconds.",
+  "f1n9ttn882jm0o9laafiu1fin8": "fall used in one direction, from true: a quadratic in time, so two answers (the negative one is before the throw)."
 }
