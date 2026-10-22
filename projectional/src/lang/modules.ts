@@ -149,7 +149,9 @@ export function pointsAt(n: Node): Id[] {
   const out = [...children(n)];
   if (n.kind === "ref" || n.kind === "tref") out.push(n.target);
   if (n.kind === "arm") out.push(n.variant);
-  if (n.kind === "solve") out.push(n.fn, ...Object.keys(n.given), ...Object.keys(n.binds));
+  // A solve's ports are the function's parameters, and "out", its result.
+  if (n.kind === "solve") out.push(n.fn, ...[...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out"));
+  if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);
   return out;
 }
