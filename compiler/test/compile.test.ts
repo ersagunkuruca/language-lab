@@ -104,3 +104,61 @@ test("an effect-polymorphic function gets one copy per calling convention", asyn
   }
   assert.equal(fromList(defs.choices()).length, 8);
 });
+
+// Real-sized data: a fold without Choice is a loop, so it needs no JS stack
+// per item, for chains (lists) and for trees.
+async function compiledDefs(k: Lang, exports: string[], file: string) {
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const path = join(dir, file);
+  writeFileSync(path, compile(code, info, names, { runtime, exports }));
+  return { code, info, names, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
+}
+
+test("a fold over a million items compiles to a loop", async () => {
+  const k = new Lang();
+  const total = k.def("total");
+  k.define(total, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, h, r!) },
+  ])));
+  const big = k.def("big");
+  k.define(big, k.thunk(() => k.call(total, k.call(S.range, k.lit(1_000_000)))));
+  const { defs } = await compiledDefs(k, ["big", "total"], "bigfold.js");
+  assert.equal(defs.big(), 499999500000);
+});
+
+test("a fold over a deep tree compiles to a loop with its own stack, children first", async () => {
+  const k = new Lang();
+  const tree = k.type("tree", [], [["leaf", [["n", () => k.tref("type.number")]]], ["node", [["l", (self) => k.tref(self)], ["r", (self) => k.tref(self)]]]]);
+  // show(tree): the order of the text says the children are folded left to right, before the parent.
+  const render = k.def("render");
+  k.define(render, k.fn(["t"], (t) => k.fold(t, [
+    { variant: tree.v.leaf, names: ["n"], body: ([n]) => k.call(S.show, n) },
+    { variant: tree.v.node, names: ["l", "r"], results: ["L", "R"], body: (_, [L, R]) => k.text(k.lit("("), L!, k.lit(" "), R!, k.lit(")")) },
+  ])));
+  const size = k.def("size");
+  k.define(size, k.fn(["t"], (t) => k.fold(t, [
+    { variant: tree.v.leaf, names: ["n"], body: () => k.lit(1) },
+    { variant: tree.v.node, names: ["l", "r"], results: ["L", "R"], body: (_, [L, R]) => k.call(B.add, L!, R!) },
+  ])));
+  const { defs, code, info } = await compiledDefs(k, ["render", "size"], "treefold.js");
+  const leaf = (n: number) => ({ tag: tree.v.leaf, fields: [n] });
+  const node = (l: unknown, r: unknown) => ({ tag: tree.v.node, fields: [l, r] });
+  const small = node(node(leaf(1), leaf(2)), leaf(3));
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.equal(defs.render(small), "((1 2) 3)");
+  assert.equal(defs.render(small), [...r.call(r.value(code.defs.find((d) => k.names[d] === "render")!), small as Value)][0]);
+  // A tree 100,000 deep on the left.
+  let deep: unknown = leaf(0);
+  for (let i = 1; i < 100_000; i++) deep = node(deep, leaf(i));
+  assert.equal(defs.size(deep), 100_000);
+});
+
+test("$eq compares long lists without the JS stack", async () => {
+  const { $eq, $range } = await import("../src/runtime.js");
+  assert.ok($eq($range(1_000_000), $range(1_000_000)));
+  assert.ok(!$eq($range(1_000_000), $range(999_999)));
+});

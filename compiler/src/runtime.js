@@ -29,10 +29,15 @@ export function $range(n) {
   return l;
 }
 
+// With its own stack, so two long lists can be compared.
 export function $eq(a, b) {
-  if (typeof a !== 'object' || typeof b !== 'object') return a === b;
-  if (a.tag !== b.tag) return false;
-  for (let i = 0; i < a.fields.length; i++) if (!$eq(a.fields[i], b.fields[i])) return false;
+  const todo = [a, b];
+  while (todo.length) {
+    const y = todo.pop(), x = todo.pop();
+    if (typeof x !== 'object' || typeof y !== 'object') { if (x !== y) return false; continue; }
+    if (x.tag !== y.tag) return false;
+    for (let i = x.fields.length - 1; i >= 0; i--) todo.push(x.fields[i], y.fields[i]);
+  }
   return true;
 }
 

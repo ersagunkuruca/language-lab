@@ -224,6 +224,26 @@ fuel` body, where the evaluator would let a later branch that makes no
 divergent calls still succeed. Nothing does this today. If it starts to
 matter, make out-of-fuel a `Choice` failure at every call site.
 
+### Folds are loops; recursion still uses the stack
+
+A `fold` without `Choice` compiles to a loop, so its size is bounded by
+memory. When no case has more than one recursive field (lists, Nat, binary
+numbers, any chain), the generated code walks down the spine into an array
+and then runs one `step` function per item back up it. For trees it keeps
+an explicit stack of values whose children are still being folded. Either
+way the arms are run children first, as the evaluator does. A million-item
+fold and a 100,000-deep tree are in the tests.
+
+What isn't a loop yet:
+
+- **Plain recursion** (a function that calls itself, not a `fold`) is JS
+  recursion, so it runs out of stack at around 10,000 levels. The
+  evaluator has no such limit. The fix is the same as the evaluator's
+  (continuations on the heap) for the functions the checker finds
+  recursive, or self tail calls as loops for the common case. Until then,
+  `fold` is the way to walk long data in compiled code.
+- **A fold with `Choice`** is a recursive generator, one per level.
+
 ### Data
 
 Values have the same representation as in the evaluator: numbers, strings,
