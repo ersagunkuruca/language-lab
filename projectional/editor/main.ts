@@ -39,7 +39,7 @@ import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
-import { children, freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { children, freshId, get, ID_PATTERN, isPublished, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
@@ -60,6 +60,7 @@ import { typedGraph } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
+import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -105,6 +106,8 @@ interface Doc {
   // Changed by you since it was loaded (an example as shipped is not saved
   // as yours, so it keeps up with the shipped one).
   edited?: boolean;
+  // Pins: definitions whose type is frozen (src/lang/signatures.ts).
+  signatures?: Pins;
 }
 
 interface UI {
@@ -291,7 +294,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {} }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -313,7 +316,7 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples },
+    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -404,11 +407,15 @@ function travel(from: Doc[], to: Doc[], label: string) {
 const node = (id: Id) => doc.code.nodes[id];
 
 // Type inference for typed programs, once per version of the code.
-const typedInfo = new WeakMap<Code, T.Info>();
+// Pins take part, so a pin or unpin with the same code checks again.
+const NO_PINS: Pins = {};
+const typedInfo = new WeakMap<Code, { pins: Pins; info: T.Info }>();
 function typesOf(): T.Info | null {
-  let i = typedInfo.get(doc.code);
-  if (!i) { try { i = T.infer(doc.code, pres().names); typedInfo.set(doc.code, i); } catch { return null; } }
-  return i;
+  const pins = doc.signatures ?? NO_PINS;
+  T.setProgramPins(pins);
+  const hit = typedInfo.get(doc.code);
+  if (hit?.pins === pins) return hit.info;
+  try { const info = T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
@@ -946,7 +953,19 @@ const topT = (info: T.Info, r: Top.Top): T.TEdit => (r.ok ? T.guardTyped(info, r
 
 // A button for an edit that may be refused: disabled, with the reason, when
 // it would be.
-function edit(label: string, title: string, r: Top.Top, run: () => void, cls = "btn") {
+// Pin or unpin the definition's type: a side table, so not a code edit.
+function pinRow(info: T.Info, dname: string) {
+  const pins = doc.signatures ?? {};
+  const pinned = pins[ui.def];
+  const r = pinned ? T.unpin(pins, ui.def, dname) : T.pin(doc.code, info, pins, ui.def, dname);
+  const run = () => { if (r.ok) commit({ signatures: r.pins }, ["signatures.json"], r.note); };
+  return h("div", { class: "pin-row" },
+    h("div", { class: "sub-head" }, `Type of ${dname} · signatures.json`),
+    h("p", { class: "hint" }, pinned ? `Pinned at ${showPin(pinned, pres().names)}: edits inside must keep it, and callers see only it.` : "Not pinned: its type is whatever its body makes it. Pin it to make that type a promise."),
+    h("div", { class: "acts" }, edit(pinned ? "Unpin" : "Pin this type", pinned ? "Let the type follow the body again" : "Freeze the type it has now", r, run)));
+}
+
+function edit(label: string, title: string, r: { ok: true } | { ok: false; reason: string }, run: () => void, cls = "btn") {
   const b = h("button", { class: cls, type: "button", disabled: !r.ok, title: r.ok ? title : `Can't: ${r.reason}` }, label);
   b.addEventListener("click", run);
   return b;
@@ -1001,7 +1020,15 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     add.addEventListener("click", () => applyT(T.addCase(code, sh, info, ui.def, c.input.value, [])));
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
     out.append(h("p", { class: "hint" }, "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
+  } else if (sel === ui.def && isPublished(ui.def)) {
+    // A published definition is read-only; copying it in is how you change it.
+    const r = T.copyIntoProgram(code, sh, info, ui.def, dname);
+    out.append(h("div", { class: "sub-head" }, `${dname} is published`),
+      h("p", { class: "hint" }, `It's named by its content (${ui.def.slice(0, 9)}…), so it can't change. Copy it into this program to edit your own version; this program's calls switch to the copy.`),
+      h("div", { class: "acts" }, edit("Copy into my program", "A copy of your own, used by this program", r, () => { if (r.ok) { ui.def = r.select!; ui.back = []; applyT(r); } })));
+    return out;
   } else if (sel === ui.def) {
+    out.append(pinRow(info, dname));
     const params = body?.kind === "lambda" ? body.params : [];
     out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
     if (!params.length) out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run on its own." : "None: it's a value. Adding an input makes it a function."));
