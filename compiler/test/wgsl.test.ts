@@ -21,6 +21,13 @@ test("calculus: the same definitions the WASM printer takes, as f32 functions", 
   assert.match(why(s.refused, p.named("sinc")), /Choice/);
 });
 
+test("examples/shaders: red, green and blue, and everything they call, go to the GPU", () => {
+  const p = load("shaders");
+  const s = emitWgsl(lowerScalar(p.code, p.info, p.pres.names, p.own.defs));
+  assert.deepEqual([...s.refused.keys()], []);
+  for (const c of ["red", "green", "blue"]) assert.deepEqual(s.funcs.find((f) => f.name === c)?.params, ["f64", "f64", "f64"]);
+});
+
 test("a call to itself as the last step is a loop; the GPU never sees recursion", () => {
   const a = area();
   const s = emitWgsl(lowerScalar(a.code, a.info, a.names, [a.area]));

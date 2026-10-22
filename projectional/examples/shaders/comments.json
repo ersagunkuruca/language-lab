@@ -1,0 +1,8 @@
+{
+  "dg2kunkg973vnjc17n6om5it4j": "Ripples spreading from the point (cx, cy): a cosine of the distance, moving outwards as time goes on. Between −1 and 1.",
+  "s3u37og8of25gnrcnff3blep9k": "Two sources of ripples circling each other. Where crests meet they add up, where a crest meets a trough they cancel. Between −0.5 and 0.5.",
+  "agct4svallg61andm9i4a2ue3a": "1 in the middle, falling to 0 at distance 1 and staying 0 outside.",
+  "p2vkil3v0h74lt4bukvrtj3a79": "How red the pixel at (x, y) is at this time, from 0 to 1. The page runs red, green and blue on the GPU for every pixel.",
+  "3s1is2rsc0c3vmuo4ditiasoji": "How green: brighter where the ripples are strong either way.",
+  "4r961huh4lkkdhdsdg5m92bj6n": "How blue: the opposite of red, so troughs are blue and crests are orange."
+}

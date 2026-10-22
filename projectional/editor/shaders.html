@@ -1,0 +1,29 @@
+<main>
+<nav><a href="./">← Back to the editor</a> · <a href="tutorial.html">Tutorial</a> · <a href="https://github.com/ersagunkuruca/language-lab/blob/main/projectional/COMPILER.md#targets-beyond-javascript-shaders-webassembly-native">Targets in COMPILER.md</a></nav>
+<h1>Shaders: the language on the GPU</h1>
+<p>The picture below is a program in the language. Its three definitions <code>red</code>, <code>green</code> and <code>blue</code> say how much of each colour the point (x, y) has at a given time. The compiler turns them into WGSL, WebGPU's shading language, and the GPU runs them once for every pixel, every frame.</p>
+<p>Only part of the language can go to a GPU. That part is Numbers and Bools, arithmetic, <code>if</code>, lets, and calls. There is no recursion, because a GPU has no call stack. A function that calls itself as its last step is fine, though, because that is a loop, and it becomes one. Anything else is refused, and the compiler says why, the way it reports a type error.</p>
+
+<section class="demo">
+<div class="pair">
+<div>
+<canvas id="picture"></canvas>
+<p class="log" id="status">Starting…</p>
+<p class="hint" id="check"></p>
+</div>
+<pre class="code" id="program"></pre>
+</div>
+</section>
+
+<section class="demo">
+<h2>What the GPU runs</h2>
+<div class="pair">
+<pre class="code" id="wgsl"></pre>
+<div>
+<p class="hint">On the left is the WGSL the compiler printed. A Number is <code>f32</code> and a let is a <code>let</code>. An <code>if</code> is an if statement. Calls stay calls. Below is the part the page adds around it: one triangle that covers the screen, and a fragment shader that turns each pixel's position into x and y and calls the three functions.</p>
+<pre class="code" id="fragment"></pre>
+</div>
+</div>
+</section>
+<p class="credits">Everything on this page is written for this project. The full-screen triangle is the usual graphics trick of one oversized triangle instead of two that make a square. The WGSL follows the <a href="https://www.w3.org/TR/WGSL/">W3C spec</a>.</p>
+</main>

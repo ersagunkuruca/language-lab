@@ -28,6 +28,7 @@ jobs:
         run: |
           npm run build-editor
           npm run smoke
+          npm run smoke-shaders
       - name: invertible
         working-directory: invertible
         run: npm test

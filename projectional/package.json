@@ -11,6 +11,7 @@
     "test": "node --test test/*.test.ts",
     "build-editor": "node editor/build.ts",
     "smoke": "node editor/smoke.ts",
+    "smoke-shaders": "node editor/shaders-smoke.ts",
     "lang": "node src/lang/demo.ts",
     "numbers": "node src/lang/numbers-demo.ts",
     "lab": "node cli/lab.ts"
