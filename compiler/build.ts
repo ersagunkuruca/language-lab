@@ -13,6 +13,7 @@ const programs: Record<string, string[]> = {
   relations: ["main", "split", "to polar", "square roots"],
   backwards: ["main"],
   calculus: ["main"],
+  calc: ["main"],
 };
 
 for (const [name, exports] of Object.entries(programs)) {
