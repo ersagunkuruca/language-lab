@@ -11,6 +11,7 @@ import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
@@ -214,7 +215,14 @@ export const setDisplayNames = (n: Names) => { display = n; };
 // Accept only if the program has no more type errors than before.
 // Every program is checked with the modules' pins, and without offering
 // their helpers.
-export const infer = (code: Code, names: Names = {}): Info => check(code, names, undefined, { pins: LIBRARY.pins, hidden: LIBRARY.hidden });
+// The program's own pins (signatures.ts) join the modules'; a pin of a
+// definition that's gone is dropped.
+let programPins: Pins = {};
+export const setProgramPins = (p: Pins) => { programPins = p; };
+export const infer = (code: Code, names: Names = {}): Info => {
+  const own = Object.fromEntries(Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def"));
+  return check(code, names, undefined, { pins: { ...LIBRARY.pins, ...own }, hidden: LIBRARY.hidden });
+};
 
 // A published definition is named by its content, so it can't change: an
 // edit that would change one is refused.
@@ -355,8 +363,7 @@ export function dataTypeOf(code: Code, info: Info, b: Id): Id | null {
 }
 
 // Copy a subtree with fresh ids, binders included (refs to them follow).
-function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id): Id {
-  const map = new Map<Id, Id>();
+function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id, map = new Map<Id, Id>()): Id {
   const go = (id: Id): Id => {
     const n = code.nodes[id];
     if (n.kind === "ref") return mk({ kind: "ref", target: map.get(n.target) ?? n.target });
@@ -367,6 +374,11 @@ function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id): 
       case "match": { const s = go(n.scrutinee); const arms = n.arms.map(go); return mk({ kind: "match", scrutinee: s, arms, otherwise: n.otherwise ? go(n.otherwise) : null }); }
       case "fold": { const s = go(n.scrutinee); return mk({ kind: "fold", scrutinee: s, arms: n.arms.map(go) }); }
       case "arm": { const binds = n.binds.map(go); const results = n.results.map((r) => (r ? go(r) : null)); return mk({ kind: "arm", variant: n.variant, binds, results, body: go(n.body) }); }
+      case "solve": {
+        const given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, go(v)]));
+        const binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, go(v)]));
+        return mk({ kind: "solve", fn: map.get(n.fn) ?? n.fn, given, binds, body: go(n.body) });
+      }
       default: return mk({ ...n, id: undefined } as unknown as NodeData);
     }
   };
@@ -615,3 +627,56 @@ export function addCase(code: Code, names: Names, info: Info, type: Id, name: st
 }
 
 export { fillings, type Filling, type Info };
+
+// ---------------------------------------------------------------- pins and copies
+//
+// A pin freezes the type the checker gives a definition now, so it becomes
+// an interface (src/lang/signatures.ts): an edit inside that would change
+// it is refused at the definition, and callers are checked against the pin.
+// Pins are a side table like names (signatures in the file), so pinning
+// never changes the code.
+
+export type PinEdit = { ok: true; pins: Pins; note: string } | { ok: false; reason: string };
+
+export function pin(code: Code, info: Info, pins: Pins, def: Id, name: string): PinEdit {
+  if (isPublished(def)) return { ok: false, reason: `${name} is published, so it's pinned already` };
+  if (subtree(code, def).some((x) => code.nodes[x].kind === "hole")) return { ok: false, reason: `${name} has holes: fill them first, so the pin promises the type it will have` };
+  if (info.errors.some((e) => subtree(code, def).includes(e.id))) return { ok: false, reason: `${name} has a type error to fix first` };
+  const p = pinsOf(info, [def]);
+  if (!p[def]) return { ok: false, reason: `${name} has no type yet` };
+  return { ok: true, pins: { ...pins, ...p }, note: `Pinned ${name} at ${showType(p[def].type, display)}: edits inside it must keep that type, and callers see only it.` };
+}
+
+export function unpin(pins: Pins, def: Id, name: string): PinEdit {
+  if (!pins[def]) return { ok: false, reason: `${name} isn't pinned` };
+  const { [def]: _, ...rest } = pins;
+  return { ok: true, pins: rest, note: `Unpinned ${name}: its type follows its body again.` };
+}
+
+// A published definition can't change (it is named by what it says). To
+// change one, copy it into the program: a new definition with the same body
+// under fresh ids, which the program's own calls now use. Recursive calls
+// in the copy call the copy. The library's version stays as it was.
+export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, name: string): TEdit {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.body || !isPublished(def)) return { ok: false, reason: "only a published definition is copied in; your own you can edit" };
+  const nodes = { ...code.nodes };
+  const nn = { ...names };
+  const copy = freshId();
+  // Names of what the copy binds come from the library's names.
+  const all: Names = { ...LIBRARY.names, ...display, ...names };
+  const body = copyTree(code, nodes, all, d.body, new Map([[def, copy]]));
+  for (const id of Object.keys(nodes)) if (!code.nodes[id] && all[id] !== undefined) nn[id] = all[id];
+  nodes[copy] = { id: copy, kind: "def", body };
+  const taken = new Set(Object.values({ ...display, ...names }));
+  let label = `my ${name}`;
+  for (let k = 2; taken.has(label); k++) label = `my ${name} ${k}`;
+  nn[copy] = label;
+  // The program's own calls switch to the copy; the library's don't.
+  let uses = 0;
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind === "ref" && n.target === def && !LIBRARY.code.nodes[n.id]) { nodes[n.id] = { ...n, target: copy }; uses++; }
+  }
+  const next: Code = { nodes, defs: [...code.defs, copy] };
+  return guardTyped(info, next, nn, copy, `Copied ${name} into the program as ${label}${uses ? `; the ${uses === 1 ? "call" : `${uses} calls`} here now use it` : ""}. Edit it freely: the published ${name} is unchanged.`);
+}

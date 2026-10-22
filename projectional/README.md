@@ -261,8 +261,14 @@ something calls), and the result is type-checked like any other edit. A
 new input has no type until something says what it is, so the palette
 offers splitting it by the cases of any data type. A data type is drawn as
 its constructors: one node per case, its fields as inputs. Filling a hole
-moves on to the next one. *Save file* writes the program's own code, names,
-comments and layout as one JSON file (`editor/files.ts`); *Open file*
+moves on to the next one. *Pin this type* freezes a definition's inferred
+type as its signature (`signatures` in the file, `src/lang/signatures.ts`):
+an edit inside that would change it is refused at the definition, and
+callers see only the pin. A published library definition can't change,
+since its id is its content; opening one offers *Copy into my program*, a
+copy under fresh ids (named `my …`, recursive calls calling the copy) that
+this program's own calls switch to. *Save file* writes the program's own
+code, names, comments, pins and layout as one JSON file (`editor/files.ts`); *Open file*
 checks that every id it refers to exists, then opens it as a program of
 your own. Programs are also kept in the browser as you edit. The palette
 also takes a value typed into its search (`3`, `"text"`, `[3, 1, 2]`,
