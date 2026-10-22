@@ -9,6 +9,9 @@ per person. No parser exists, on purpose.
 New here? Start with [TUTORIAL.md](TUTORIAL.md): an introduction for
 non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
+For a candid review of the whole project (holes, what's achievable, and a
+roadmap towards real programs, shaders, websites and apps), see
+[REVIEW.md](REVIEW.md).
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
@@ -421,5 +424,6 @@ examples/build.ts     regenerates the example programs (new random ids)
 examples/build-lang.ts  regenerates the typed examples (queens, algebra, relations,
                       backwards, calculus, numbers); name some to rebuild only those
 test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test),
-test/lang.test.ts, test/backwards.test.ts, test/numbers.test.ts
+test/lang.test.ts, test/backwards.test.ts, test/numbers.test.ts,
+test/known-holes.test.ts (holes found by REVIEW.md, as todo tests)
 ```
