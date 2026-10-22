@@ -263,6 +263,21 @@ test("a saved file lists what it uses from modules, and opening it without them 
   assert.ok("error" in without && /uses length from prelude, which isn't in any module loaded here/.test(without.error));
 });
 
+// A solve given its function's result names the port "out", which is not
+// a node: the file must still open.
+test("a saved program that solves a function from its result opens again", async () => {
+  const { toFile, fromFile } = await import("../editor/files.ts");
+  const k = new Lang(LIBRARY.code);
+  const double = k.def("double");
+  k.define(double, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2))));
+  const [x] = (k.code.nodes[(k.code.nodes[double] as { body: Id }).body] as { params: Id[] }).params;
+  const half = k.def("half");
+  k.define(half, k.fn(["y"], (y) => k.solve(double, { out: y }, { [x]: "x" }, (b) => b[x])));
+  const text = toFile({ title: "Half", typed: true, code: base(k.code), names: k.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {} }, LIBRARY.code);
+  const opened = fromFile(text, () => LIBRARY.code);
+  assert.ok(!("error" in opened), "error" in opened ? opened.error : "");
+});
+
 test("the editor refuses an edit that would change published code", async () => {
   const { changesPublished } = await import("../editor/typed.ts");
   const code = base({ nodes: {}, defs: [] });
