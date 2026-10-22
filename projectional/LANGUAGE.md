@@ -354,6 +354,9 @@ back into the group being hashed is named by its position.
 
 ## What's next
 
+- **Numbers.** Fractions, big integers, continued fractions, Clifford
+  algebras and tensors, and running a definition like Peano naturals on a
+  fast representation chosen by cost: the plan is [NUMBERS.md](NUMBERS.md).
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.

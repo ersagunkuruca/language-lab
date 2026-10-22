@@ -1,0 +1,9 @@
+{
+  "19445331": "The meaning: a natural number is zero or one more than a natural number. This is the program; how the machine stores it is a separate choice.",
+  "46d00673": "Written against Nat only. On the binary representation the same definition runs 18! in milliseconds; in unary it would need 6.4 quadrillion succ nodes.",
+  "018e2b8f": "Peano-style recursion with match. It works unchanged on Binary, through match Nat′.",
+  "6b1adc26": "A representation of Nat: little-endian bits. even(h) is 2h, odd(h) is 2h + 1, and there is never a leading zero, so each number has one spelling.",
+  "86e8ce2b": "The abstraction function. Run forward it says what some bits mean; run backwards it encodes a Nat, canonical spelling first.",
+  "28fe4c57": "A match on Nat, done on Binary: one function per case of Nat.",
+  "0b8a46b4": "A fold on Nat, done on Binary. It is a fold over the bits, so it is still total."
+}

@@ -1,0 +1,209 @@
+// Representations: the same program, run on a different data type
+// (NUMBERS.md). A representation of a type T is
+//
+//   - another type R, with an abstraction function `meaning : R → T` (an
+//     ordinary definition; run backwards it encodes, canonical first),
+//   - definitions that do T's jobs on R: each constructor, `match`, `fold`,
+//     and any function on T it can do faster,
+//   - what each job costs, in the size of the number or structure.
+//
+// It's a side table keyed by ids, like names and comments. The program
+// doesn't change: `represent` makes a new program in which T's jobs are
+// done by R's definitions, and `choose` picks a representation from the
+// costs of the jobs a program actually uses. The evaluator stays the
+// meaning: tests check every implementation against the definition it
+// replaces, through `meaning`.
+
+import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+
+export interface Representation {
+  name: string;
+  of: Id;             // the type being represented (its def)
+  type: Id;           // the type that represents it (equal to `of` for the definition itself)
+  meaning: Id | null; // R → T; null when R is T
+  // Every value has one spelling, so structural equality is equality of
+  // meanings. A representation that isn't canonical must implement `equal`.
+  canonical: boolean;
+  // Keys: a variant of T (its constructor), "match", "fold", or a def on T.
+  impl: Record<string, Id>;
+  // The same keys, plus "space". Values are on the ladder below.
+  cost: Record<string, string>;
+}
+
+export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
+const rank = (c: string | undefined) => (c === undefined ? LADDER.length : LADDER.indexOf(c));
+
+const variantsOf = (code: Code, type: Id) => (code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants;
+
+// The jobs on T a definition uses, transitively: constructors, matches,
+// folds, and calls to functions some representation implements.
+export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
+  const t = reps[0].of;
+  const variants = new Set(variantsOf(code, t));
+  const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
+  const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
+  const out = new Set<string>();
+  const walk = (def: Id) => {
+    for (const id of subtree(code, def)) {
+      const n = code.nodes[id];
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
+      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(n.kind);
+    }
+  };
+  // A function some representation implements is one job: don't look
+  // inside it, since its body is what gets replaced.
+  const seen = new Set<Id>();
+  const visit = (def: Id) => {
+    if (seen.has(def)) return;
+    seen.add(def);
+    walk(def);
+    if (implemented.has(def) && def !== entry) return;
+    for (const d of directRefs(code, def)) visit(d);
+  };
+  visit(entry);
+  return [...out];
+}
+
+function directRefs(code: Code, def: Id): Id[] {
+  const out: Id[] = [];
+  for (const id of subtree(code, def)) {
+    const n = code.nodes[id];
+    if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") out.push(n.target);
+  }
+  return out;
+}
+
+const armsOver = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, variants: Set<Id>) =>
+  n.arms.some((a) => variants.has((code.nodes[a] as NodeOf<"arm">).variant));
+
+export interface Choice {
+  rep: Representation;
+  table: { rep: string; costs: Record<string, string> }[];
+  jobs: string[];
+}
+
+// Pick the representation whose worst job is cheapest, then the cheapest
+// in total, then the smallest. A job a representation doesn't implement is
+// done by its definition, which costs what it costs in T's own terms.
+export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
+  const jobs = uses(code, entry, reps);
+  const spec = reps.find((r) => r.type === r.of)!;
+  const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? spec.cost[j] ?? "?"]));
+  const score = (r: Representation) => {
+    const c = costs(r);
+    const rs = jobs.map((j) => rank(c[j]));
+    return [Math.max(...rs), rs.reduce((a, b) => a + b, 0), rank(c.space)];
+  };
+  const best = [...reps].sort((a, b) => {
+    const [x, y] = [score(a), score(b)];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  })[0];
+  return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
+}
+
+// The program from `entries`, with T's jobs done by `rep`. Node ids are kept
+// where a node is replaced (a match becomes a call to the representation's
+// match), so names and comments stay attached.
+export function represent(code: Code, entries: Id[], rep: Representation): Code {
+  if (rep.type === rep.of) return code;
+  const t = rep.of;
+  const variants = new Set(variantsOf(code, t));
+  const nodes: Record<Id, Node> = { ...code.nodes };
+  const add = (n: Omit<Node, "id"> & { kind: Node["kind"] }): Id => {
+    const id = freshId();
+    nodes[id] = { ...n, id } as Node;
+    return id;
+  };
+  const ref = (target: Id) => add({ kind: "ref", target });
+  const binder = () => add({ kind: "binder" });
+
+  // The representation's own code stays as it is: it's written on R, and
+  // `meaning` is written on T.
+  const own = new Set<Id>();
+  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : [])]) {
+    own.add(d);
+    for (const x of dependencies(code, d)) own.add(x);
+  }
+  // Rewrite what the entry reaches, not going inside replaced functions.
+  const todo = new Set<Id>();
+  const reach = (def: Id) => {
+    if (todo.has(def) || own.has(def) || rep.impl[def]) return;
+    todo.add(def);
+    for (const d of directRefs(code, def)) reach(d);
+  };
+  entries.forEach(reach);
+
+  // Copy a subtree with fresh ids (binders too), for an `otherwise` used by
+  // several cases.
+  const copy = (id: Id, renames = new Map<Id, Id>()): Id => {
+    const n = nodes[id];
+    const fresh = freshId();
+    if (n.kind === "binder") renames.set(id, fresh);
+    const c = structuredClone(n) as Record<string, unknown>;
+    c.id = fresh;
+    const kid = (x: Id) => copy(x, renames);
+    switch (n.kind) {
+      case "ref": c.target = renames.get(n.target) ?? n.target; break;
+      case "call": c.fn = kid(n.fn); c.args = n.args.map(kid); break;
+      case "lambda": c.params = n.params.map(kid); c.body = kid(n.body); break;
+      case "match": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); c.otherwise = n.otherwise && kid(n.otherwise); break;
+      case "fold": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); break;
+      case "arm": c.binds = n.binds.map(kid); c.results = n.results.map((r) => r && kid(r)); c.body = kid(n.body); break;
+      case "solve":
+        c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
+        c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
+        c.body = kid(n.body);
+        break;
+    }
+    nodes[fresh] = c as unknown as Node;
+    return fresh;
+  };
+
+  const recursive = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields.map((f) => {
+    const ty = nodes[(nodes[f] as NodeOf<"field">).type];
+    return ty.kind === "tref" && ty.target === t;
+  });
+
+  const rewrite = (id: Id) => {
+    const n = nodes[id];
+    for (const c of childrenOf(n)) rewrite(c);
+    if (n.kind === "ref" && rep.impl[n.target]) nodes[id] = { ...n, target: rep.impl[n.target] };
+    else if (n.kind === "tref" && n.target === t) nodes[id] = { ...n, target: rep.type };
+    else if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) {
+      const arms = new Map(n.arms.map((a) => { const arm = nodes[a] as NodeOf<"arm">; return [arm.variant, arm]; }));
+      // One function per case, in the type's order: its fields, then (fold)
+      // the folded value of each recursive field.
+      const cases = variantsOf(code, t).map((v) => {
+        const arm = arms.get(v);
+        const fields = (nodes[v] as NodeOf<"variant">).fields;
+        const rec = recursive(v);
+        if (!arm) {
+          const params = [...fields.map(binder), ...(n.kind === "fold" ? rec.filter(Boolean).map(binder) : [])];
+          return add({ kind: "lambda", params, body: copy((n as NodeOf<"match">).otherwise!) });
+        }
+        const results = n.kind === "fold" ? rec.flatMap((r, i) => (r ? [arm.results[i] ?? binder()] : [])) : [];
+        return add({ kind: "lambda", params: [...arm.binds, ...results], body: arm.body });
+      });
+      nodes[id] = { id, kind: "call", fn: ref(rep.impl[n.kind]), args: [n.scrutinee, ...cases] };
+    }
+  };
+  for (const d of todo) rewrite(d);
+  return { nodes, defs: code.defs };
+}
+
+function childrenOf(n: Node): Id[] {
+  switch (n.kind) {
+    case "call": return [n.fn, ...n.args];
+    case "lambda": return [n.body];
+    case "def": return n.body ? [n.body] : [];
+    case "typedef": return n.variants;
+    case "variant": return n.fields;
+    case "field": return [n.type];
+    case "tref": return n.args;
+    case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
+    case "fold": return [n.scrutinee, ...n.arms];
+    case "arm": return [n.body];
+    case "solve": return [...Object.values(n.given), n.body];
+    default: return [];
+  }
+}
