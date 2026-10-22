@@ -163,7 +163,8 @@ test("the checker: unhandled effects, incomplete handlers, answers that aren't o
   });
   // main may perform Ask as far as its type goes; running it is refused
   const main = p.k.code.defs.find((d) => p.k.names[d] === "main")!;
-  assert.equal(p.type(main), "() -[Console, Ask]-> Unit");
+  // (effects print in id order, and Ask's id is random)
+  assert.match(p.type(main), /^\(\) -\[(Ask, Console|Console, Ask)\]-> Unit$/);
   assert.throws(() => p.run(), /unhandled effect/);
   assert.ok(p.errors.some((m) => /no case for tell/.test(m)), p.errors.join("\n"));
   assert.ok(p.errors.some((m) => /the answer to ask must be one value/.test(m)), p.errors.join("\n"));
