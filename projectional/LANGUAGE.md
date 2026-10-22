@@ -91,6 +91,14 @@ and its result, which is what the product and chain rules need. Unused
 binders cost nothing, and a view can hide them. A fold is structural
 recursion, so it always ends.
 
+A field can also hold the type inside another one, like a rose tree's
+`children: List Tree` (an HTML document, JSON, a syntax tree with argument
+lists). Its folded value is the container with each tree replaced by its
+folded value, `List R`: the fold is mapped over the container
+(`src/lang/nested.ts`, what Coq does for nested inductive types). So
+`size(node(v, children)) = 1 + sum(sizes)` is a total fold, and it runs
+without the JS stack however wide or deep the tree is.
+
 Plain recursion is allowed too. The checker (`terminates` in
 `src/lang/infer.ts`) uses size-change termination (Lee, Jones and
 Ben-Amram, 2001): each recursive call says, for each input, whether it is

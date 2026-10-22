@@ -46,6 +46,7 @@ import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as es
 import type { Code, Id, NodeOf } from "../model.ts";
 import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
+import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
 import { META, equal as valueEqual, type Data, type Value } from "./run.ts";
 import { RELATIONS, VARIADIC } from "../relational.ts";
@@ -599,8 +600,33 @@ export function interpreter(code: Code, opts: Options = {}) {
       arm.binds.forEach((b, i) => inner.set(b, fields[i]));
       rec.forEach((i, k) => inner.set(arm.results[i]!, rs[k]));
       const body = ev(arm.body, inner, res);
-      const children = conj(...rec.map((i, k) => fold(fields[i], rs[k])));
+      const shapes = fieldShapes(code, owner.get(arm.variant)!, arm.variant);
+      const fids = (nodes[arm.variant] as NodeOf<"variant">).fields;
+      const children = conj(...rec.map((i, k) => shapes[i] === "nested"
+        ? mapped(owner.get(arm.variant)!, { tid: (nodes[fids[i]] as NodeOf<"field">).type, env: new Map() }, fields[i], rs[k])
+        : fold(fields[i], rs[k])));
       return (walk(res, s) instanceof LVar ? conj(children, body) : conj(body, children))(s);
+    };
+    // A container of trees (a rose tree's children) and its folded value:
+    // the same container with each tree's folded value in its place. Either
+    // side may be what's known, so the shape comes from whichever is.
+    const mapped = (def: Id, at: { tid: Id; env: TypeEnv }, v: Term, r: Term): Goal => {
+      const place = look(code, def, at.tid, at.env);
+      if (place.k === "self") return fold(v, r);
+      if (place.k === "other") return eq(r, v);
+      const shape = (variant: Id): Goal => (s0) => {
+        const n = fieldCount(variant);
+        const [vs, s1] = freshVars(s0, n);
+        const [rs, s2] = freshVars(s1, n);
+        const fs = place.fields(variant);
+        return conj(eq(v, dataT(variant, vs)), eq(r, dataT(variant, rs)), ...fs.map((f, i) => mapped(def, f, vs[i], rs[i])))(s2);
+      };
+      return (s) => {
+        const d = walk(v, s), e = walk(r, s);
+        if (isData(d)) return shape(d.tag)(s);
+        if (isData(e)) return shape(e.tag)(s);
+        return step(disj(...place.variants.map(shape)))(s);
+      };
     };
     // Folding a value whose shape is unknown is unfolding it: one choice per
     // case, and each recursive part is unfolded in turn.
