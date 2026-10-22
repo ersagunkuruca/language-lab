@@ -11,8 +11,9 @@ Everything here can be tried in the editor:
 https://ersagunkuruca.github.io/language-lab/ (or open the repository's
 `index.html` locally). The examples ship with it, in the *Programs* list on
 the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
-*Insertion sort*, *Eight queens*, *Calculus*, *Run backwards* and
-*Relations in programs*. *+ New program* starts an empty one of your own.
+*Insertion sort*, *Eight queens*, *Calculus*, *Run backwards*,
+*Relations in programs*, and two shaders, *Shader: ripples* and *Shader: ray
+marching*. *+ New program* starts an empty one of your own.
 
 ![The editor: programs on the left, the graph in the middle with the text
 below it, and on the right Run above the inspector (Definition, Program,
@@ -578,6 +579,15 @@ runs anything backwards. And the compiler (`compiler/`, COMPILER.md) turns a
 program into JavaScript; eight queens runs about 600× faster compiled, and
 its search becomes the backtracking loop you'd write by hand. The compiled
 programs are tested to print exactly what the evaluator prints.
+
+**Some programs are pictures.** A program with a `colour` of `(x, y, time)`
+(a record of red, green and blue), or with a `red`, a `green` and a `blue`,
+is drawn above *Run*: the compiler turns it into a GPU shader (WGSL) and the
+browser draws it every frame with WebGPU. Edit any definition it uses and the
+picture is drawn again. Without WebGPU it's drawn on the CPU, smaller. When a
+function can't go to the GPU (it uses text, say, or calls itself other than
+in a loop), the picture says why. Open *Shader: ray marching* and change a
+number in `sky`.
 
 **Data can be stored differently from how it's written.** NUMBERS.md's proof
 of concept writes `factorial` on Peano naturals (`zero | succ(Nat)`) and runs
