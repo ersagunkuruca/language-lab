@@ -7,8 +7,8 @@ people. The last part, [What's confusing, and what could be simpler](#whats-conf
 is the reason it exists today.
 
 Everything here can be tried in the editor:
-https://ersagunkuruca.github.io/language-lab/ (or open
-`projectional/editor/dist/index.html` locally). The examples are the ones
+https://ersagunkuruca.github.io/language-lab/ (or open the repository's
+`index.html` locally). The examples are the ones
 that ship with it: `fall`, `to polar`, `rotate`, eight queens, the algebra
 system and the relations program.
 

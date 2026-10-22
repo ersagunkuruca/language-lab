@@ -166,7 +166,7 @@ assigns paths), not something the compiler has to resolve.
 
 ## The editor
 
-`editor/dist/index.html` is a self-contained browser editor over the same
+The repository's root `index.html` is a self-contained browser editor over the same
 core (open it directly, or rebuild with `npm install && npm run build-editor`).
 It never shows editable source text. There are two kinds of definitions.
 
@@ -257,8 +257,8 @@ a dataflow picture can't show is order, so a step done only for its effect
 (`_ = print(…)`) is a hollow dot nothing reads, in the column of steps.
 
 The editor is published by `.github/workflows/pages.yml` on every push to
-main: https://ersagunkuruca.github.io/language-lab/projectional/editor/dist/ (the site
-root and /projectional/ redirect there)
+main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
+and the tutorial to the repository root, which is the site)
 
 ## Networks in the core
 
@@ -413,7 +413,7 @@ src/edits.ts          every gesture as a pure, guarded edit
 src/demo.ts           the walkthrough
 src/lang/             the typed core: types + effects, inference, evaluator,
                       block view, std library, example programs (LANGUAGE.md)
-editor/               browser editor (main.ts, page.html, build.ts, dist/)
+editor/               browser editor (main.ts, page.html, build.ts → /index.html, /tutorial.html)
 examples/build.ts     regenerates the example programs (new random ids)
 examples/build-lang.ts  regenerates examples/queens and examples/algebra
 test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test),
