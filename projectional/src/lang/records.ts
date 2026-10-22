@@ -7,19 +7,23 @@
 import { ownerOfTypeParts, type Code, type Id, type NodeOf } from "../model.ts";
 
 // The fields `id` reads, outermost first, if it is a field or a lambda of
-// one parameter that only takes fields of it; otherwise null.
-export function fieldPath(code: Code, id: Id): Id[] | null {
+// one parameter that only takes fields of it; otherwise null. With
+// `unfinished`, holes are allowed where the path isn't written yet.
+export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
   const n = code.nodes[id];
+  if (unfinished && n?.kind === "hole") return [];
   if (n?.kind === "ref" && code.nodes[n.target]?.kind === "field") return [n.target];
   if (n?.kind !== "lambda" || n.params.length !== 1) return null;
   const path: Id[] = [];
   let e = code.nodes[n.body];
   while (e?.kind === "call" && e.args.length === 1) {
     const head = code.nodes[e.fn];
+    if (unfinished && head?.kind === "hole") { e = code.nodes[e.args[0]]; continue; }
     if (head?.kind !== "ref" || code.nodes[head.target]?.kind !== "field") return null;
     path.unshift(head.target);
     e = code.nodes[e.args[0]];
   }
+  if (unfinished && e?.kind === "hole") return path;
   return path.length && e?.kind === "ref" && e.target === n.params[0] ? path : null;
 }
 

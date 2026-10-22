@@ -339,8 +339,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           } else throw e;
         }
         // An update needs to know which field it changes, so its first input
-        // is a field or a path of them, written in place.
-        if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0])
+        // is a field or a path of them, written in place (or a hole, still
+        // to be filled with one).
+        if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
           && !info.errors.some((e) => e.id === n.args[0])) {
           err(n.args[0], "set needs a field here, or a path of fields such as (p) ↦ p.address.city");
         }
