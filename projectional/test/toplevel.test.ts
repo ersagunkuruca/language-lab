@@ -289,3 +289,22 @@ test("the sort example, written in the editor, type-checks and runs", async () =
   runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
   assert.deepEqual(out, ["[1, 2, 3]"]);
 });
+
+test("show inline: a call drawn as its callee's body is a let, and type-checks the same", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { inlineView } = await import("../editor/inline.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const insert = p.named("insert");
+  const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
+  const v = inlineView(p.code, p.pres.names, [call]);
+  const c = v.code.nodes[call] as NodeOf<"call">;
+  assert.equal(v.code.nodes[c.fn].kind, "lambda");
+  assert.equal(v.names[(v.code.nodes[c.fn] as NodeOf<"lambda">).params[0]], "x");
+  assert.ok([...v.from.keys()].every((id) => id === call || id.endsWith(`~${call}`)));
+  assert.deepEqual(infer(v.code, v.names).errors, []);
+  assert.equal(p.code.nodes[(p.code.nodes[call] as NodeOf<"call">).fn].kind, "ref", "the program itself is untouched");
+  const out: string[] = [];
+  runMain(v.code, infer(v.code, v.names), p.named("main"), { print: (s) => out.push(s) });
+  assert.deepEqual(out, ["[1, 2, 3]"]);
+});

@@ -59,6 +59,7 @@ import { typedGraph } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
+import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -75,6 +76,8 @@ interface Layout {
   // give it when running it backwards. Choosing different ones is how you
   // invert it, and it never touches code.json.
   known: Record<Id, Id[]>;
+  // Calls shown with the callee's body in place (editor/inline.ts). A view.
+  inline?: Id[];
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
@@ -768,6 +771,15 @@ const GRAPH_HINT = "drag a node to move it; click a wire to put a dot on it; dra
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   if (ui.mode === "new-def") return newDefinitionForm(info);
   const id = ui.selected ?? ui.def;
+  const shownFrom = view?.from.get(id);
+  if (shownFrom && id.includes("~")) {
+    const call = id.split("~").at(-1)!;
+    return h("div", { class: "insp" }, h("p", { class: "hint" }, `Shown inline from ${namer.name(shownFrom)}. This is a view: to change it, open the definition.`),
+      h("div", { class: "acts" },
+        h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": shownFrom }, `Open ${namer.name(shownFrom)}`),
+        inlinable(view!.code, id) ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": id }, (doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline") : null,
+        h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call }, "Collapse the call")));
+  }
   if (!node(id)) return h("div", { class: "empty" }, "Nothing selected. Click anything in the blocks; a hole (□) opens a palette of what fits.");
   const n = node(id);
   const names = p.names;
@@ -781,7 +793,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
 
   const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
-  if (callee && callee !== ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`)));
+  // The call itself, or its head (the name clicked to select it).
+  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? Object.values(doc.code.nodes).find((c) => c.kind === "call" && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
+  if ((callee && callee !== ui.def) || call) out.append(h("div", { class: "acts" },
+    callee && callee !== ui.def ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`) : null,
+    call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
 
   if (n.kind === "binder" || n.kind === "def" || n.kind === "variant" || n.kind === "field") {
     const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
@@ -1062,6 +1078,39 @@ function programPanel(): HTMLElement {
   return out;
 }
 
+// The graph, with any calls shown inline. Their copies are a view, so every
+// edit that would land in one is refused with where to make it instead.
+let view: InlineView | null = null;
+function graphOf(info: T.Info): HTMLElement {
+  const calls = (doc.layout.inline ?? []).filter((c) => c.includes("~") || node(c));
+  const p = typedPres();
+  view = calls.length ? inlineView(doc.code, p.names, calls) : null;
+  if (!view) return typedGraph(doc.code, p, info, ui.def, graphHooks(info), viewKey()).el;
+  const v = view;
+  const vinfo = T.infer(v.code, v.names);
+  const hooks = graphHooks(info);
+  const viewOnly = (id: Id) => (v.from.has(id) && id.includes("~") ? `this is shown inline from ${p.names[v.from.get(id)!] ?? "its definition"}: open it to change it` : null);
+  return typedGraph(v.code, { ...p, names: v.names }, vinfo, ui.def, {
+    ...hooks,
+    canUse: (b, slot) => viewOnly(slot) ?? hooks.canUse(b, slot),
+    use: (b, slot) => { if (!viewOnly(slot)) hooks.use(b, slot); },
+    clear: (slot) => { if (!viewOnly(slot)) hooks.clear(slot); },
+    addDot: (slot) => { if (!viewOnly(slot)) hooks.addDot(slot); },
+    canShare: (from) => { const r = viewOnly(from); if (r) return () => r; const c = hooks.canShare(from); return (slot) => viewOnly(slot) ?? c(slot); },
+    share: (from, slot) => { if (!viewOnly(from) && !viewOnly(slot)) hooks.share(from, slot); },
+  }, viewKey()).el;
+}
+
+function toggleInline(call: Id) {
+  const now = doc.layout.inline ?? [];
+  const on = now.includes(call);
+  // Collapsing a call collapses what was shown inline inside it too.
+  const inline = on ? now.filter((x) => x !== call && !x.endsWith(`~${call}`)) : [...now, call];
+  ui.selected = call;
+  commit({ layout: { ...doc.layout, inline } }, ["layout.json"],
+    on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
+}
+
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
@@ -1283,7 +1332,7 @@ function render() {
 
   const main = [
     h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
-      typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info), viewKey()).el),
+      graphOf(info)),
     h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
       h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
     h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"),
@@ -1342,6 +1391,7 @@ document.addEventListener("click", (e) => {
     if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
+    if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
     if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();
