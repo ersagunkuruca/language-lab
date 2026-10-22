@@ -7,6 +7,8 @@
 //   tutorial.html  TUTORIAL.md as a page, its screenshots read from
 //                  projectional/tutorial/
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
+//   shaders.html   a program compiled to WGSL, drawn by WebGPU
+//                  (editor/shaders.ts)
 
 import { build } from "esbuild";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -111,3 +113,40 @@ ${readFileSync(here + "reactive.html", "utf8")}<script>${rjs}</script>
 </body>
 </html>
 `);
+
+// The shaders page: shaders.html's text around editor/shaders.ts.
+const sout = await build({ entryPoints: [here + "shaders.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
+const sjs = sout.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
+writeFileSync(site + "shaders.html", `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shaders: the language on the GPU</title>
+${fonts}
+<style>
+${tokens}
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
+main { max-width: 72rem; margin: 0 auto; padding: 24px 16px 80px; }
+nav { font-size: 14px; }
+a { color: var(--accent); }
+h1 { font-size: 30px; line-height: 1.25; margin: 0.6em 0 0.4em; }
+h2 { font-size: 21px; margin: 0 0 12px; }
+p { max-width: 46rem; }
+code, pre { font-family: var(--font-code); font-size: 0.86em; }
+:not(pre) > code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+.hint, .credits, .log { color: var(--muted); font-size: 14px; }
+.log { font-variant-numeric: tabular-nums; min-height: 1.6em; margin: 8px 0 0; }
+.demo { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 28px 0; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+pre.code { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow: auto; max-height: 34rem; line-height: 1.45; font-size: 12.5px; }
+#picture { display: block; width: 100%; aspect-ratio: 1; border-radius: 8px; background: #000; image-rendering: auto; }
+</style>
+</head>
+<body>
+${readFileSync(here + "shaders.html", "utf8")}<script>${sjs}</script>
+</body>
+</html>
+`);
+console.log("shaders.html");

@@ -37,11 +37,12 @@ jobs:
           npm test
           npm run build-editor
           npm run smoke
+          npm run smoke-shaders
       - name: Lay out the site like the repository
         run: |
           mkdir _site
           git archive HEAD | tar -x -C _site
-          cp index.html tutorial.html reactive.html _site/
+          cp index.html tutorial.html reactive.html shaders.html _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
