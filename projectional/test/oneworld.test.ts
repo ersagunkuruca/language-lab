@@ -144,3 +144,19 @@ test("a predicate hashes by structure: the same network written twice hashes the
   assert.equal(hashDef(a.code, a.named("rotate")), hashDef(base(b.code), b.ids.get(a.named("rotate"))!));
   assert.notEqual(hashDef(a.code, a.named("rotate")), hashDef(a.code, a.named("fall")));
 });
+
+test("units: a recursive call isn't unfolded again, so checking stays fast when a def calls a recursive group", async () => {
+  const T = await import("../editor/typed.ts");
+  const p = loadProgram(join(root, "examples", "physics"));
+  const fall = p.named("fall"), main = p.named("main");
+  // fall gets a value that calls main, which calls fall: one recursive
+  // group that main reaches many times over.
+  const r = T.addStep(p.code, p.pres.names, infer(p.code, p.pres.names) as never, fall);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const hole = r.select!;
+  const code: Code = { ...r.code, nodes: { ...r.code.nodes, mainref: { id: "mainref", kind: "ref", target: main }, [hole]: { id: hole, kind: "call", fn: "mainref", args: [] } } };
+  const t0 = Date.now();
+  for (const d of code.defs) units(code, d);
+  assert.ok(Date.now() - t0 < 2000, `units took ${Date.now() - t0} ms`);
+});
