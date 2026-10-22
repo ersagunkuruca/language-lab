@@ -295,7 +295,8 @@ and text, with no dependencies. Each part maps directly:
 - A let is a local, and `if` is `if … else … end`.
 - `sin`, `pow` and friends are imported from the host's `Math`, so results
   are bit-for-bit the evaluator's.
-- A call in tail position is `return_call` (the tail-call proposal, now
+- A call in tail position is `return_call` (the tail-call proposal,
+  https://github.com/WebAssembly/tail-call, now
   standard and on by default in V8, Firefox and Safari), so loops written
   as tail recursion run in constant stack.
 
@@ -353,7 +354,9 @@ code becomes **success continuations**: a nondeterministic function takes
 an extra argument, "what to do with each answer", and calls it once per
 answer. `first` passes a continuation that records the answer and
 signals stop. This is how Mercury's high-level C backend compiles
-nondeterministic code, and it's the natural reading of our JS output: the
+nondeterministic code (Fergus Henderson and Zoltan Somogyi, "Compiling
+Mercury to high-level C code", CC 2002,
+https://mercurylang.org/documentation/papers.html), and it's the natural reading of our JS output: the
 code inside the innermost loop *is* the continuation. It needs closures
 (the continuation captures variables), so it comes with WasmGC or with
 native closures.
@@ -378,8 +381,12 @@ of them static first.
    almost no cost, and it is what the CLI target needs first.
 2. **Real native code:** emit C, the route Koka takes. The language is
    pure and its data can't form cycles (nothing is mutable), so reference
-   counting with reuse (Koka's Perceus) gives garbage-collector-free memory
-   management that frees exactly when the last reference goes. C then gets
+   counting with reuse (Koka's Perceus: Alex Reinking, Ningning Xie,
+   Leonardo de Moura and Daan Leijen, "Perceus: Garbage Free Reference
+   Counting with Reuse", PLDI 2021,
+   https://www.microsoft.com/en-us/research/publication/perceus-garbage-free-reference-counting-with-reuse/)
+   gives garbage-collector-free memory management that frees exactly when
+   the last reference goes. C then gets
    us every platform via any C compiler, and WebAssembly again via clang.
    LLVM IR directly would give more control but no portability, and it's
    more work.
