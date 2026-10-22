@@ -246,9 +246,13 @@ const ui: UI = {
 
 const undo: Doc[] = [];
 const redo: Doc[] = [];
+// The program just deleted, until the next edit or switch: Undo brings it
+// back, so a delete needs no "are you sure".
+let deleted: Doc | null = null;
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
+  deleted = null;
   undo.push(doc);
   redo.length = 0;
   doc = { ...doc, ...next, edited: true };
@@ -268,6 +272,7 @@ function save() {
 
 function switchProgram(p: Program) {
   if (p === doc.program) return;
+  deleted = null;
   save();
   doc = docs[p] ?? initialFor(p);
   showProgram();
@@ -346,10 +351,21 @@ function openFile() {
 function deleteProgram() {
   if (!doc.program.startsWith(MINE)) return;
   const gone = titleOf(doc);
+  const was = doc;
   delete docs[doc.program];
   doc = docs[EXAMPLES[0][0]] ?? initialFor(EXAMPLES[0][0]);
   showProgram();
-  ui.note = `Deleted ${gone} from this browser. A file you saved of it is still there to open.`;
+  deleted = was;
+  ui.note = `Deleted ${gone} from this browser. Undo brings it back.`;
+  render();
+}
+
+function undeleteProgram() {
+  const d = deleted;
+  if (!d) return;
+  docs[d.program] = d;
+  switchProgram(d.program);
+  ui.note = `Brought ${titleOf(d)} back.`;
   render();
 }
 
@@ -410,6 +426,7 @@ function applyT(e: T.TEdit): boolean {
 }
 
 function travel(from: Doc[], to: Doc[], label: string) {
+  if (from === undo && !from.length && deleted) return undeleteProgram();
   const d = from.pop();
   if (!d) return;
   to.push(doc);
@@ -1622,7 +1639,7 @@ function render() {
       h("header", { class: "bar" }, h("div", { class: "controls" },
         seg("program", doc.program, [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])]),
         h("div", { class: "seg" },
-          h("button", { type: "button", "data-act": "undo", disabled: !undo.length }, "Undo"),
+          h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program) }, "Reset")))),
       h("p", { class: "status refused", role: "status" }, `The editor failed to draw this program (${e instanceof Error ? e.message : String(e)}). It's a bug in the editor, not your program: Undo, Reset to the example, or open another program.`));
   }
@@ -1664,7 +1681,7 @@ function draw() {
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
         seg("style", ui.style, [["math", "a · b"], ["plain", "a * b"], ["lisp", "(* a b)"]]),
         h("div", { class: "seg" },
-          h("button", { type: "button", "data-act": "undo", disabled: !undo.length }, "Undo"),
+          h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
         h("button", { class: `btn${guideOpen ? " on" : ""}`, type: "button", "data-act": "guide" }, guideOpen ? "Hide the guide" : "Guide"),
