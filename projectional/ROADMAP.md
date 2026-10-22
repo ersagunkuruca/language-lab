@@ -68,14 +68,17 @@ run in parallel because they touch different files.
    (`write`), one runtime handler that gives Solid.js-style signals and lazy,
    remembered values; a reactive page and continued fractions with Gosper's
    arithmetic, live at reactive.html. Compiled too (PR #62). Open: guarded corecursion, a stateful handler form so programs can write their own.
-5. **Fold-as-loop as a representation.** Move "compile a fold to a loop"
-   out of the compiler's special cases and into the representation table
-   from NUMBERS.md, next to Peano `Nat` → binary. *Why:* one mechanism for
-   "how this runs" instead of two, before the backends multiply.
-   *Design:* NUMBERS.md, "Folds run the way their value is stored": the
-   loop is the fold of the `cells` representation, and fusion (a fold over
-   `characters(t)`, `range(n)`, later `build`) is choosing another
-   representation for one value. In progress.
+5. ~~**Fold-as-loop as a representation.**~~ **Done** (PRs #90, #91, #92,
+   #94, #96, #97): how a fold runs is the fold job of the representation its
+   value has (NUMBERS.md, "Folds run the way their value is stored"). The
+   compiler's loop is the fold of `cells`; a fold over `characters(t)` runs
+   on the string and one over `range(n)` is a counted loop (fusion as
+   choosing a representation for one value, after Gill, Launchbury and
+   Peyton Jones's foldr/build); Peano `Nat` is stored as an Int whose fold
+   is a counted loop, written in the language and picked by the chooser,
+   also by `lab run` and `lab compile`. Open: `build` for user producers
+   (`keep` after a fold), user representations chosen per value, folds with
+   `Choice` asking the table, arrays and ropes for lists.
 6. **Compile targets.** All are profiles (REVIEW.md §5.2) plus a code
    generator:
    - **Shaders (WGSL)** first. *Done (PRs #80, #82, #85, #86):* the

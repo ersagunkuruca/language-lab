@@ -47,9 +47,18 @@ definition, and the compiler picks a faster implementation underneath.
 fast versions of its jobs, and the chooser picks one by declared cost.
 `factorial` on Peano `Nat` runs on binary numbers. The stackless evaluator
 and fold-as-loop (PRs #32, #33) are the control side of the same split: they
-make deep recursion survive, but don't change its cost. They should merge:
-fold-as-loop becomes one more entry in the representation table instead of a
-compiler special case (ROADMAP item 5).
+make deep recursion survive, but don't change its cost.
+
+*Merged (ROADMAP item 5, 2026-10-22).* Control and data are now one
+mechanism: how a fold runs is a job of the representation of what it folds.
+The compiler's loop is the fold of `cells` (values linked as written). A
+list made by `characters` or `range` is folded on the string or the count,
+without building the list. Peano `Nat` has an `int` representation,
+written in the language, whose fold is a fold over `range(n)` and so a
+counted loop: `factorial` still says `zero` and `succ`, and `lab run
+examples/numbers` runs it on Ints. Linked lists in general (arrays, ropes)
+and fusing a user's own list producer with its consumer are still open
+(NUMBERS.md, "Folds run the way their value is stored").
 
 ## Nested prints and cons chains (2026-10-22)
 
