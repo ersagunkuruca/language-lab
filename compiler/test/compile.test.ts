@@ -34,7 +34,7 @@ function printed(run: () => void, setPrint: (p: (s: string) => void) => void): s
   return lines;
 }
 
-for (const name of ["queens", "algebra", "relations"]) {
+for (const name of ["queens", "algebra", "relations", "backwards", "calculus"]) {
   test(`${name}: compiled main prints what the evaluator prints`, async () => {
     const p = load(name);
     const want: string[] = [];

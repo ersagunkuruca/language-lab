@@ -22,7 +22,7 @@ const qr = makeRunner(queens.code, queens.info, { print: () => {} });
 const count = (it: Iterable<Value>) => { let n = 0; for (const _ of it) n++; return n; };
 row("count every 8-queens board", time(() => count(qr.call(qr.value(queens.named("queens")), 8)), 1), time(() => count(qc.queens(8))));
 
-for (const name of ["queens", "algebra", "relations"]) {
+for (const name of ["queens", "algebra", "relations", "backwards", "calculus"]) {
   const p = load(name);
   const c = (await import(`./out/${name}.js`)).defs;
   $setPrint(() => {});

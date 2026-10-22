@@ -6,7 +6,7 @@ compare it against the evaluator.
 
 ```sh
 cd compiler
-npm run build   # compiles examples/queens, algebra, relations to compiler/out/*.js
+npm run build   # compiles the five typed examples to compiler/out/*.js
 npm test        # the compiled programs must print exactly what the evaluator prints
 npm run bench   # evaluator vs compiled
 ```
@@ -45,21 +45,28 @@ npm run bench   # evaluator vs compiled
   a numeric search (tearing, Newton) or a periodic family (`asin(y) + 2πk`)
   call the solver at run time instead, with the plan made once at load. For
   directions that go through matches, strings and folds (the relational
-  interpreter, `src/lang/relate.ts`, being built separately), use Mercury's
-  approach: a static mode analysis per (definition, known ports) where it
-  succeeds, and the interpreter as a runtime library where it doesn't.
+  interpreter, `src/lang/relate.ts`), use Mercury's approach: a static mode
+  analysis per (definition, known ports) where it succeeds, and the
+  interpreter as a runtime library where it doesn't. Today the interpreter
+  runs all of them; the mode analysis is the next stage.
 
 ## What the proof of concept shows
 
-All three example programs compile and print exactly what the evaluator
+All five example programs compile and print exactly what the evaluator
 prints. `npm run bench` on this machine:
 
 |                            | evaluator | compiled | speedup |
 |----------------------------|----------:|---------:|--------:|
-| count every 8-queens board |   2071 ms |   5.1 ms |    408× |
-| queens: main               |   2662 ms |   6.1 ms |    434× |
-| algebra: main              |     40 ms |   1.7 ms |     23× |
-| relations: main            |    3.0 ms |   0.2 ms |     15× |
+| count every 8-queens board |   1767 ms |   3.1 ms |    576× |
+| queens: main               |   2219 ms |   3.5 ms |    641× |
+| algebra: main              |     33 ms |   1.0 ms |     35× |
+| relations: main            |    2.2 ms |   0.1 ms |     23× |
+| backwards: main            |     11 ms |   1.9 ms |      6× |
+| calculus: main             |     21 ms |   2.5 ms |      8× |
+
+`backwards` and `calculus` gain least because most of their work is in the
+relational interpreter and `derivative`, which still run interpreted (see
+stage 1b below).
 
 Eight queens shows what the effect types buy. Its source has no search
 code: each row does `one of(range(size))` and fails if the column isn't
@@ -189,6 +196,22 @@ the runtime and call it, as tearing calls the numeric solver now. Forward
 evaluation is just the direction where only the inputs are known, so it is
 always the first mode to compile.
 
+The runtime half is done. A relational `solve` compiles to a call to
+`relate.ts`, which works on the program's node table, so a module that
+needs it carries that table (`examples/backwards` and `examples/calculus`
+do). Functions are not black boxes there: `map` run backwards is passed
+`square`, and the interpreter looks inside it. So in such a program every
+compiled function remembers its lambda node and the values it closed over,
+exactly as the evaluator's functions do (the `META` tag), and is wrapped
+when the evaluator has to call it as a stream.
+
+`derivative` works the same way for now: it is handed to the evaluator,
+which reads the function's nodes, writes the derivative as new nodes, and
+interprets them. When the function is known at compile time (a def, or a
+lambda written in place), the better plan is to run `derivativeLambda` in
+the compiler and compile the derivative like any other definition. That's
+staging, the same idea as running the solver at compile time.
+
 ### Diverge and fuel
 
 Only calls into definitions in `info.divergent` (the ones the checker
@@ -219,7 +242,8 @@ should become the language's rule, and the evaluator should follow.
 | stage | what | start when |
 |---|---|---|
 | 0 | pure code, `Choice`, `Console`, `Diverge`, `solve` with closed-form plans; differential tests (this PR) | done |
-| 1 | mode analysis for relational directions; `relate.ts` as the fallback runtime | `relate.ts` is merged |
+| 1a | relational directions and `derivative` through their interpreters, linked as the runtime; compiled functions carry their nodes | done (all five examples match the evaluator) |
+| 1b | mode analysis, so relational directions compile; `derivative` at compile time when the function is known | next; worth it once a backwards search shows up in a profile |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
 | 3 | user-defined effects and handlers: one-shot handlers as generators that yield effect requests; `Choice` stays special (loops), because it is the one multi-shot effect | user-defined effects are added to the checker |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
@@ -234,7 +258,7 @@ have.
 ```
 compiler/src/compile.ts    the code generator: conventions, specialization, loops for Choice
 compiler/src/relation.ts   a solve plan, written out as code
-compiler/src/runtime.js    what generated code links against (handlers, fuel, solver fallback)
+compiler/src/runtime.js    what generated code links against (handlers, fuel, solver and relate.ts fallbacks, derivative)
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js
 compiler/bench.ts          evaluator vs compiled

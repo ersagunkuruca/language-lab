@@ -8,7 +8,7 @@ straight-line arithmetic. Why it's built this way, and what comes next, is
 in [`projectional/COMPILER.md`](../projectional/COMPILER.md).
 
 ```sh
-npm run build   # projectional/examples/{queens,algebra,relations} -> out/*.js
+npm run build   # projectional/examples/{queens,algebra,relations,backwards,calculus} -> out/*.js
 npm test        # compiled output must match the evaluator on every example
 npm run bench   # eight queens: about 400× faster than the evaluator
 ```

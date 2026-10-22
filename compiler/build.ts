@@ -9,6 +9,8 @@ const programs: Record<string, string[]> = {
   queens: ["main", "queens"],
   algebra: ["main"],
   relations: ["main", "split", "to polar", "square roots"],
+  backwards: ["main"],
+  calculus: ["main"],
 };
 
 for (const [name, exports] of Object.entries(programs)) {
