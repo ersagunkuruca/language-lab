@@ -9,7 +9,8 @@
     "build-examples": "node examples/build.ts",
     "build-editor": "node editor/build.ts",
     "lang": "node src/lang/demo.ts",
-    "build-lang-examples": "node examples/build-lang.ts"
+    "build-lang-examples": "node examples/build-lang.ts",
+    "numbers": "node src/lang/numbers-demo.ts"
   },
   "engines": {
     "node": ">=22.18"

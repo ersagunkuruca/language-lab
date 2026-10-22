@@ -11,6 +11,7 @@ import type { Names } from "../src/presentation.ts";
 import { differentiate } from "../src/lang/derive.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { algebra, backwards, calculus, queens, relations } from "../src/lang/programs.ts";
+import { numbers } from "../src/lang/numbers.ts";
 
 const comments: Record<string, Record<string, string>> = {
   calculus: {
@@ -40,6 +41,15 @@ const comments: Record<string, Record<string, string>> = {
     safe: "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
     keep: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
   },
+  numbers: {
+    Nat: "The meaning: a natural number is zero or one more than a natural number. This is the program; how the machine stores it is a separate choice.",
+    factorial: "Written against Nat only. On the binary representation the same definition runs 18! in milliseconds; in unary it would need 6.4 quadrillion succ nodes.",
+    "is even": "Peano-style recursion with match. It works unchanged on Binary, through match Nat′.",
+    Binary: "A representation of Nat: little-endian bits. even(h) is 2h, odd(h) is 2h + 1, and there is never a leading zero, so each number has one spelling.",
+    meaning: "The abstraction function. Run forward it says what some bits mean; run backwards it encodes a Nat, canonical spelling first.",
+    "match Nat′": "A match on Nat, done on Binary: one function per case of Nat.",
+    "fold Nat′": "A fold on Nat, done on Binary. It is a fold over the bits, so it is still total.",
+  },
   algebra: {
     evaluate: "Total over the tree (a fold), but division by zero is a failure: the type says Choice.",
     derivative: "The fold binds each part and its derivative, so the product and quotient rules read like the textbook.",
@@ -67,6 +77,7 @@ function withDerivatives(p: { code: Code; names: Names; defs: Record<string, str
 const all = [
   ["queens", queens], ["algebra", algebra], ["relations", relations], ["backwards", backwards],
   ["calculus", () => withDerivatives(calculus(), ["cubic", "wave", "kink", "bump", "parabola", "sinc"])],
+  ["numbers", numbers],
 ] as const;
 const only = process.argv.slice(2);
 for (const [dir, build] of all) {
@@ -79,4 +90,5 @@ for (const [dir, build] of all) {
   save(join(d, "code.json"), p.code);
   save(join(d, "names.default.json"), p.names);
   save(join(d, "comments.json"), notes);
+  if ("representations" in p) save(join(d, "representations.json"), p.representations);
 }

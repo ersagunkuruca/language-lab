@@ -414,11 +414,12 @@ src/demo.ts           the walkthrough
 src/lang/             the typed core: types + effects, inference, evaluator,
                       block view, std library, example programs (LANGUAGE.md);
                       relate.ts runs any function backwards, derive.ts
-                      differentiates functions (BACKWARDS.md)
+                      differentiates functions (BACKWARDS.md); represent.ts
+                      runs a program on another representation of its data (NUMBERS.md)
 editor/               browser editor (main.ts, page.html, build.ts → /index.html, /tutorial.html)
 examples/build.ts     regenerates the example programs (new random ids)
 examples/build-lang.ts  regenerates the typed examples (queens, algebra, relations,
-                      backwards, calculus); name some to rebuild only those
+                      backwards, calculus, numbers); name some to rebuild only those
 test/core.test.ts, test/relational.test.ts, test/check.test.ts (with the fuzz test),
-test/lang.test.ts, test/backwards.test.ts
+test/lang.test.ts, test/backwards.test.ts, test/numbers.test.ts
 ```
