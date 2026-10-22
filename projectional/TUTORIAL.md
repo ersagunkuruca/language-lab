@@ -9,8 +9,8 @@ is the reason it exists today.
 Everything here can be tried in the editor:
 https://ersagunkuruca.github.io/language-lab/ (or open the repository's
 `index.html` locally). The examples are the ones
-that ship with it: `fall`, `to polar`, `rotate`, eight queens, the algebra
-system and the relations program.
+that ship with it: `fall`, `to polar`, `rotate`, eight queens, calculus over real
+functions, functions run backwards, and the relations program.
 
 The tutorial is in three parts:
 
@@ -259,7 +259,7 @@ and keep it only if it's safe.
 recursive call passes something a match took apart from the same parameter
 (`for each(rest, action)` inside the `cons(item, rest)` case). Anything else
 gets the `Diverge` effect in its type, and so does everything that calls it.
-`newton` in the algebra program has `-[Choice, Diverge]->` because nothing in
+`newton` in the calculus program has `-[Choice, Diverge]->` because nothing in
 it gets smaller.
 
 ### 3.8 Effects: Choice, Console, Diverge
