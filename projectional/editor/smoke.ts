@@ -73,6 +73,24 @@ async function stopped(p: Page) {
   for (const line of await p.locator(".status-line.bad").allInnerTexts()) errors.push(`${where}: ${line}`);
 }
 
+// A program of your own, deleted and brought back with Undo: nothing is
+// lost to a stray click on Delete.
+async function deleteAndUndo() {
+  where = "delete and undo";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
+  await p.goto(page);
+  const programs = async () => (await p.locator(".nav-row:not([data-def])").allInnerTexts()).map((s) => s.trim());
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator('[data-panel="program"]').click();
+  await p.locator('button[data-act="delete-program"]').click();
+  if ((await programs()).includes("Untitled 1")) errors.push(`${where}: Delete left the program in the list`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if (!(await programs()).includes("Untitled 1")) errors.push(`${where}: Undo didn't bring the program back`);
+  await p.close();
+}
+
 // reactive.html, next to the editor: both Cells programs run, and a click
 // and a slider change what they should.
 async function cellsPage() {
@@ -96,6 +114,7 @@ await visit(null);
 const fresh = defs;
 await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
+await deleteAndUndo();
 await cellsPage();
 await browser.close();
 console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor`);
