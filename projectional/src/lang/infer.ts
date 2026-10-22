@@ -5,8 +5,10 @@
 // scope errors can only mean "this ref points at a binder whose lambda or arm
 // doesn't enclose it", which is what an editor's cut-and-paste can cause.
 // Definitions are checked in dependency order, mutually recursive groups
-// together, and generalized. A recursive group whose recursion isn't
-// structural gets the Diverge effect: totality is inferred, not promised.
+// together, and generalized. A recursive group that can't be shown to end
+// (size-change termination, at the end of this file) gets the Diverge
+// effect: totality is inferred, not promised. Data types must be strictly
+// positive, so data can't be used to recurse without recursion.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { dependencies, ownerOfTypeParts } from "../model.ts";
@@ -15,7 +17,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { SIGS } from "./std.ts";
 import {
-  CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, showType as showT, STRING, Subst, TypeError,
+  CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -52,6 +54,7 @@ export function infer(code: Code, names: Names = {}): Info {
       s.unify(want, got);
     } catch (e) {
       if (e instanceof EffectError) err(id, `${what || "this"} performs ${effName(e)}, which nothing here handles`);
+      else if (e instanceof PlainError) err(id, `${what ? what + ": " : ""}${show(got)} has functions in it, and only plain data can be used here`);
       else if (e instanceof TypeError) err(id, `${what ? what + ": " : ""}expected ${show(want)}, got ${show(got)}`);
       else throw e;
     }
@@ -64,6 +67,8 @@ export function infer(code: Code, names: Names = {}): Info {
     return body?.kind === "typedef" ? body : null;
   };
   const isTypeDef = (id: Id) => !!typedefOf(id);
+  const fieldTypes = (def: Id) => typedefOf(def)!.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? [])
+    .flatMap((f) => { const n = code.nodes[f]; return n?.kind === "field" ? [{ field: f, type: n.type }] : []; });
 
   const typeExpr = (id: Id, params: Map<Id, Type>): Type => {
     const n = code.nodes[id];
@@ -91,6 +96,84 @@ export function infer(code: Code, names: Names = {}): Info {
     return t.kind === "tref" && t.target === def && t.args.length === td.params.length &&
       t.args.every((a, i) => { const x = code.nodes[a]; return x.kind === "tref" && x.target === td.params[i]; });
   };
+
+  // --- plain data
+  // A data type is plain when none of its fields holds a function, given
+  // that the params it puts in fields are plain. plainShape(T) is the set of
+  // T's params that must be plain, or null if T holds functions anyway.
+  const plainParams = new Map<Id, Set<number> | null>();
+  const plainShape = (def: Id): Set<number> | null => {
+    if (plainParams.has(def)) return plainParams.get(def)!;
+    const td = typedefOf(def);
+    plainParams.set(def, new Set()); // builtins; and a type's mention of itself adds nothing
+    if (!td) return new Set();
+    const need = new Set<number>();
+    let ok = true;
+    const walk = (tid: Id) => {
+      const t = code.nodes[tid];
+      if (t.kind === "tfun") { ok = false; return; }
+      if (t.kind !== "tref") return;
+      const i = td.params.indexOf(t.target);
+      if (i >= 0) { need.add(i); return; }
+      const inner = plainShape(t.target);
+      if (!inner) { ok = false; return; }
+      t.args.forEach((a, j) => { if (inner.has(j)) walk(a); });
+    };
+    for (const { type } of fieldTypes(def)) walk(type);
+    plainParams.set(def, ok ? need : null);
+    return ok ? need : null;
+  };
+  s.plainArgs = (id, args) => { const need = plainShape(id); return need && args.filter((_, i) => need.has(i)); };
+
+  // --- strict positivity
+  // A data type may not take itself as an input in its own fields, directly
+  // or through another type. With `knot = wrap(f: knot → Number)`,
+  // `apply(x) = match x | wrap(f) → f(x)` calls itself through the data
+  // with no recursion anywhere, and `apply(wrap(apply))` never ends. As an
+  // output it's fine: `() → Stream` is how lazy data is written.
+  const typeDefs = code.defs.filter(isTypeDef);
+  const trefTargets = (tid: Id) => trefTargetsIn(code, tid);
+  const reach = new Map<Id, Set<Id>>();
+  // The data types a T can contain, T included.
+  const reachOf = (def: Id): Set<Id> => {
+    if (reach.has(def)) return reach.get(def)!;
+    const out = new Set<Id>([def]);
+    reach.set(def, out);
+    for (const { type } of fieldTypes(def)) for (const t of trefTargets(type)) if (isTypeDef(t)) reachOf(t).forEach((x) => out.add(x));
+    return out;
+  };
+  const positiveParam = new Map<string, boolean>();
+  // Is T's param i only used strictly positively in T's fields?
+  const paramPositive = (T: Id, i: number): boolean => {
+    const key = `${T}#${i}`;
+    if (!positiveParam.has(key)) {
+      positiveParam.set(key, true); // assumed while it's being checked
+      const p = typedefOf(T)!.params[i];
+      positiveParam.set(key, fieldTypes(T).every(({ type }) => positive(type, (t) => t === p, false)));
+    }
+    return positiveParam.get(key)!;
+  };
+  // Does type expression tid use the types `is` picks out only strictly
+  // positively (never left of an arrow, also not inside another type)?
+  function positive(tid: Id, is: (t: Id) => boolean, under: boolean): boolean {
+    const t = code.nodes[tid];
+    if (t?.kind === "tfun") return t.params.every((p) => positive(p, is, true)) && positive(t.result, is, under);
+    if (t?.kind !== "tref") return true;
+    const touches = (x: Id) => is(x) || (isTypeDef(x) && [...reachOf(x)].some(is));
+    if (under && touches(t.target)) return false;
+    return t.args.every((a, i) => {
+      const inside = [...trefTargets(a)].some(touches);
+      if (inside && isTypeDef(t.target) && !paramPositive(t.target, i)) return false;
+      return positive(a, is, under);
+    });
+  }
+  for (const def of typeDefs) {
+    // the type itself, and any type it's defined together with
+    const self = (t: Id) => t === def || (isTypeDef(t) && reachOf(t).has(def) && reachOf(def).has(t));
+    for (const { field, type } of fieldTypes(def)) {
+      if (!positive(type, self, false)) err(field, `${nm(def)} can't take itself as an input in its own field ${nm(field)}: through it, a function could call itself without recursion and never end`);
+    }
+  }
 
   // --- definitions, in dependency order
   const valueDefs = code.defs.filter((d) => !isTypeDef(d) && code.nodes[d]?.kind === "def");
@@ -127,7 +210,13 @@ export function infer(code: Code, names: Names = {}): Info {
       unifyAt(d, mono.get(d)!, t);
     }
     const recursive = group.length > 1 || deps(group[0]).includes(group[0]);
-    if (recursive && !structural(code, group)) {
+    // Only functions can be recursive: a value defined in terms of itself
+    // (ones = cons(1, ones)) has no first step to take.
+    if (recursive) for (const d of group) {
+      const body = (code.nodes[d] as NodeOf<"def">).body;
+      if (body && code.nodes[body].kind !== "lambda") err(d, `${nm(d)} is defined in terms of itself; only a function can be recursive`);
+    }
+    if (recursive && !terminates(code, group)) {
       for (const d of group) {
         info.divergent.add(d);
         const t = s.resolve(mono.get(d)!);
@@ -137,7 +226,7 @@ export function infer(code: Code, names: Names = {}): Info {
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
-      info.schemes.set(d, { vars: [...fv.vars], rows: [...fv.rows], type: t });
+      info.schemes.set(d, { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)) });
       mono.delete(d);
       info.typeOf.set(d, t);
     }
@@ -211,6 +300,7 @@ export function infer(code: Code, names: Names = {}): Info {
           s.unify(f, { t: "fn", params: args, ret, eff: row });
         } catch (e) {
           if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
+          else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
           else if (e instanceof TypeError) {
             // Find the argument that's wrong, for a useful message.
             const ft = s.resolve(f);
@@ -283,6 +373,10 @@ export function infer(code: Code, names: Names = {}): Info {
     for (const [k, b] of Object.entries(n.binds)) {
       const pt = portType(k) ?? s.fresh();
       if (!portType(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
+      // An answer is a value found by search; a function can't be guessed.
+      try { s.requirePlain(pt); } catch (e) {
+        if (e instanceof PlainError) err(n.id, `${nm(b)} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
+      }
       inner.set(b, pt);
       info.typeOf.set(b, pt);
     }
@@ -379,55 +473,104 @@ function sccs(ids: Id[], deps: (id: Id) => Id[]): Id[][] {
   return out;
 }
 
-// The termination check, in the style of Coq's guard condition but much
-// smaller: every recursive call must pass, in some input position, a value
-// that a match took apart from what that same position received. Such a
-// call works on a strictly smaller piece of finite data, so the recursion
-// ends. Anything else (including passing the function around as a value)
-// counts as possibly divergent.
-function structural(code: Code, group: Id[]): boolean {
+// Every type a type expression mentions.
+function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
+  const t = code.nodes[tid];
+  if (t?.kind === "tfun") { t.params.forEach((p) => trefTargetsIn(code, p, out)); trefTargetsIn(code, t.result, out); }
+  if (t?.kind === "tref") { out.add(t.target); t.args.forEach((a) => trefTargetsIn(code, a, out)); }
+  return out;
+}
+
+// The termination check: size-change termination (Lee, Jones and Ben-Amram,
+// 2001), on the order "is a piece of".
+//
+// Each recursive call gives a graph from the caller's inputs to the
+// callee's: an arc i → j when the callee's input j is the caller's input i
+// (≥) or a piece a match took apart from it (>). Lets are transparent: a
+// dot naming a piece is still that piece. Composing graphs follows a chain
+// of calls. The group ends if every chain that comes back to where it
+// started (every idempotent graph from f to f) has an input that strictly
+// shrinks along it: data is finite (data types are strictly positive and
+// values aren't recursive), so a shrinking input can't shrink forever.
+//
+// This accepts every recursion on one decreasing argument, lexicographic
+// orders (ackermann), and arguments that swap places, and rejects ping-pong
+// recursion where each call shrinks one argument while growing the other.
+// Passing a function of the group around as a value counts as possibly
+// divergent.
+type Arc = [from: number, to: number, strict: boolean];
+interface CallGraph { from: Id; to: Id; arcs: Arc[] }
+
+function terminates(code: Code, group: Id[]): boolean {
   const inGroup = new Set(group);
+  const graphs: CallGraph[] = [];
   for (const d of group) {
     const body = (code.nodes[d] as NodeOf<"def">).body;
     const lam = body ? code.nodes[body] : null;
     if (lam?.kind !== "lambda") return false;
-    // smaller.get(b) = the param positions b is a strict sub-part of
-    const smaller = new Map<Id, Set<number>>();
-    const params = lam.params;
-    const positionsOf = (id: Id): Set<number> => {
-      const n = code.nodes[id];
-      if (n.kind !== "ref") return new Set();
-      const i = params.indexOf(n.target);
-      return i >= 0 ? new Set([i]) : smaller.get(n.target) ?? new Set();
+    // size.get(b): for each input i that b is (false) or is a piece of (true)
+    const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));
+    const sizeOf = (id: Id | undefined) => {
+      const n = id === undefined ? null : code.nodes[id];
+      return n?.kind === "ref" ? size.get(n.target) : undefined;
     };
     let ok = true;
-    const walk = (id: Id, inCallHead = false) => {
+    const walk = (id: Id) => {
       const n = code.nodes[id];
-      if (n.kind === "ref" && inGroup.has(n.target) && !inCallHead) ok = false;
+      if (n.kind === "ref" && inGroup.has(n.target)) ok = false;
       if (n.kind === "call") {
         const f = code.nodes[n.fn];
         if (f.kind === "ref" && inGroup.has(f.target)) {
-          const guarded = n.args.some((a, i) => {
-            const an = code.nodes[a];
-            return an.kind === "ref" && params.indexOf(an.target) < 0 && (smaller.get(an.target)?.has(i) ?? false);
-          });
-          if (!guarded) ok = false;
-          n.args.forEach((a) => walk(a));
+          const arcs: Arc[] = [];
+          n.args.forEach((a, j) => sizeOf(a)?.forEach((strict, i) => arcs.push([i, j, strict])));
+          graphs.push({ from: d, to: f.target, arcs });
+          n.args.forEach(walk);
+          return;
+        }
+        if (f.kind === "lambda") {
+          f.params.forEach((p, i) => { const sz = sizeOf(n.args[i]); if (sz) size.set(p, new Map(sz)); });
+          n.args.forEach(walk);
+          walk(f.body);
           return;
         }
       }
       if (n.kind === "match" || n.kind === "fold") {
-        const from = positionsOf(n.scrutinee);
-        // Taken apart from a param (or a piece of one): the pieces are smaller.
-        // Includes the "original" binders in a fold's arms.
-        for (const a of n.arms) for (const b of (code.nodes[a] as NodeOf<"arm">).binds) if (from.size) smaller.set(b, new Set(from));
+        const from = sizeOf(n.scrutinee);
+        if (from) {
+          for (const a of n.arms) {
+            for (const b of (code.nodes[a] as NodeOf<"arm">).binds) size.set(b, new Map([...from.keys()].map((i) => [i, true])));
+          }
+        }
       }
-      for (const c of kids(n)) walk(c, n.kind === "call" && c === n.fn);
+      kids(n).forEach(walk);
     };
     walk(lam.body);
     if (!ok) return false;
   }
-  return true;
+
+  const norm = (from: Id, to: Id, arcs: Arc[]): CallGraph => {
+    const best = new Map<string, Arc>();
+    for (const [i, j, strict] of arcs) {
+      const k = `${i},${j}`;
+      best.set(k, [i, j, strict || (best.get(k)?.[2] ?? false)]);
+    }
+    return { from, to, arcs: [...best.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]) };
+  };
+  const key = (g: CallGraph) => `${g.from}\u0000${g.to}\u0000${g.arcs.map((a) => a.join(",")).join(";")}`;
+  const compose = (g: CallGraph, h: CallGraph) =>
+    norm(g.from, h.to, g.arcs.flatMap(([i, j, s1]) => h.arcs.filter(([k]) => k === j).map(([, l, s2]): Arc => [i, l, s1 || s2])));
+  const all = new Map<string, CallGraph>();
+  const todo = graphs.map((g) => norm(g.from, g.to, g.arcs));
+  while (todo.length) {
+    const g = todo.pop()!;
+    if (all.has(key(g))) continue;
+    all.set(key(g), g);
+    for (const h of [...all.values()]) {
+      if (g.to === h.from) todo.push(compose(g, h));
+      if (h.to === g.from) todo.push(compose(h, g));
+    }
+  }
+  return [...all.values()].every((g) => g.from !== g.to || key(compose(g, g)) !== key(g) || g.arcs.some(([i, j, strict]) => i === j && strict));
 }
 
 // ---------------------------------------------------------------- editor API

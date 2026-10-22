@@ -76,7 +76,10 @@ const pure = (params: Type[], ret: Type): Sig => (s) => fn(params, ret, s.freshR
 
 export const S = {
   less: builtin("less", "less than", pure([num, num], bool)),
-  equal: builtin("equal", "equal", (s) => { const a = s.fresh(); return fn([a, a], bool, s.freshRow()); }),
+  // Only plain data can be compared: two functions that do the same thing
+  // can't be told equal, and comparing them by where they live isn't
+  // equality.
+  equal: builtin("equal", "equal", (s) => { const a = s.fresh(true); return fn([a, a], bool, s.freshRow()); }),
   and: builtin("and", "and", pure([bool, bool], bool)),
   or: builtin("or", "or", pure([bool, bool], bool)),
   not: builtin("not", "not", pure([bool], bool)),
@@ -89,10 +92,13 @@ export const S = {
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
   fail: builtin("fail", "fail", (s) => fn([], s.fresh(), s.freshRow([CHOICE]))),
-  // A function's derivative, read off its graph (src/lang/derive.ts).
+  // A function's derivative, read off its graph (src/lang/derive.ts). Where
+  // the slope can't be read (the function goes through floor, or takes
+  // apart data built from its input) there is none, so the derivative may
+  // fail: Choice.
   derivative: builtin("derivative", "derivative", (s) => {
     const e = s.freshRow();
-    return fn([fn([num], num, e)], fn([num], num, e), s.freshRow());
+    return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),

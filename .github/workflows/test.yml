@@ -1,0 +1,31 @@
+# Runs every test suite on pull requests. Pushes to main are tested by the
+# Pages build before it publishes.
+name: Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: projectional
+        working-directory: projectional
+        run: |
+          npm ci
+          npm test
+      - name: invertible
+        working-directory: invertible
+        run: npm test
+      - name: compiler
+        working-directory: compiler
+        run: npm test
