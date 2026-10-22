@@ -1,8 +1,11 @@
-// Node's World (run.ts): the console and the file system, for programs run
-// from the command line (cli/lab.ts) by the evaluator or compiled. Every
-// operation is synchronous, like the rest of the language; a failure throws
-// with a message, which becomes the reason of the program's Abort.
+// Node's World (run.ts): the console, the file system, the clock and the
+// web, for programs run from the command line (cli/lab.ts) by the evaluator
+// or compiled. Every operation is synchronous, like the rest of the
+// language; a failure throws with a message, which becomes the reason of
+// the program's Abort. `fetch text` is synchronous too: a child Node does
+// the fetch and the program waits for it.
 
+import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { worldRandom } from "./random.ts";
 import type { World } from "./run.ts";
@@ -37,6 +40,16 @@ export function nodeWorld(): World {
     if (code === "EACCES") throw new Error(`not allowed to use ${path}`);
     throw e;
   };
+  // Each address is fetched once per run, failures included.
+  const fetched = new Map<string, { text: string } | { error: string }>();
+  const fetchOnce = (url: string): { text: string } | { error: string } => {
+    try {
+      return { text: execFileSync(process.execPath, ["-e", FETCH, url], { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] }) };
+    } catch (e) {
+      const why = String((e as { stderr?: string }).stderr ?? "").trim() || (e as Error).message;
+      return { error: `could not fetch ${url}: ${why}` };
+    }
+  };
   return {
     error: (line) => process.stderr.write(line + "\n"),
     log: (line) => process.stderr.write(line + "\n"),
@@ -59,9 +72,24 @@ export function nodeWorld(): World {
     appendFile: (path, text) => { try { appendFileSync(path, text); } catch (e) { plain(e, path); } },
     fileExists: (path) => existsSync(path),
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
+    fetchText: (url) => {
+      let r = fetched.get(url);
+      if (!r) fetched.set(url, (r = fetchOnce(url)));
+      if ("error" in r) throw new Error(r.error);
+      return r.text;
+    },
     random: worldRandom,
     now: Date.now,
     // Sleeping without spinning: wait on a word nobody will ever change.
     wait: (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); },
   };
 }
+
+// The child's script: the body on standard output, or why not on standard
+// error with a failing exit.
+const FETCH = `
+fetch(process.argv[1]).then(async (r) => {
+  if (!r.ok) { process.stderr.write(r.status + " " + r.statusText); process.exit(2); }
+  process.stdout.write(await r.text());
+}, (e) => { process.stderr.write(String(e.cause?.message ?? e.message)); process.exit(2); });
+`;

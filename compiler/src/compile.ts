@@ -78,6 +78,7 @@ const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> 
   [IO.appendFile]: { js: ([a, b]) => `$io.appendFile(${a}, ${b})` },
   [IO.fileExists]: { js: ([a]) => `$io.fileExists(${a})` },
   [IO.listFolder]: { js: ([a]) => `$io.listFolder(${a})` },
+  [IO.fetchText]: { js: ([a]) => `$io.fetchText(${a})` },
   // Cells: the runtime's one handler (projectional/src/lang/cells.ts). A
   // formula is given its compiled thunk; a read of one that gave no value
   // throws, which ends whatever formula is reading it, as in the evaluator.

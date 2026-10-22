@@ -37,6 +37,7 @@ function fakeWorld(files: Record<string, string>, input: string) {
     random: () => 0.75,
     now: () => 1000,
     wait: (ms) => out.push(`wait ${ms}`),
+    fetchText: (url) => { out.push(`fetch ${url}`); if (url !== "/a") throw new Error(`could not fetch ${url}: 404 Not Found`); return "A"; },
   };
   return { world, out };
 }
@@ -233,4 +234,20 @@ test("Time and Wait: the world's clock, a match's clock, and waiting", async () 
   });
   assert.deepEqual(r.lines, ["1000", "42", "[1001, 1002]"]);
   assert.deepEqual(r.out, ["wait 250"]);
+});
+
+test("fetch text: the world's body, a failure as an Abort, compiled the same", async () => {
+  const r = await both((k) => {
+    const print = (x: Id) => k.call(S.print, x);
+    const fetch = (u: string) => k.call(IO.fetchText, k.lit(u));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(
+      print(fetch("/a")),
+      print(k.handle(fetch("/b"), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }])),
+      print(k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit("/a"), k.lit("/c"))), (x) =>
+        k.handle(k.call(IO.fetchText, x), [{ variant: ABORT_OP, names: ["why"], body: () => k.lit("-") }])))))),
+      fetch("/d"))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["A", "could not fetch /b: 404 Not Found", "[\"A\", \"-\"]", "aborted: could not fetch /d: 404 Not Found"]);
 });
