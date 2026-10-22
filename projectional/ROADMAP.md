@@ -61,7 +61,7 @@ run in parallel because they touch different files.
    (`$perform` with a handler stack, escapes as exceptions), `cli/lab.ts`
    runs, compiles and checks saved programs on Node, and `examples/wc` is a
    word count in the language, after Unix `wc`. `Cells` compiles to the
-   runtime's one handler. Open: a compiled program as one portable file, time, randomness and
+   runtime's one handler. A compiled program is one portable file (`lab compile` bundles its runtime). Open: time, randomness and
    HTTP effects.
 4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
    (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`

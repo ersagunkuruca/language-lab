@@ -66,9 +66,11 @@ function entry(p: Program, name: string): Id {
 // The compiled program, and a few lines that run it the way `lab run` does.
 // The thread main runs on gets this much stack, in megabytes.
 const STACK_MB = 1024;
-function compiled(p: Program, main: Id): string {
+// `files`: import the runtime by absolute file URL, for an unbundled module;
+// otherwise by absolute path, which is what the bundler resolves.
+function compiled(p: Program, main: Id, files: boolean): string {
   const here = import.meta.dirname;
-  const url = (path: string) => JSON.stringify(pathToFileURL(join(here, path)).href);
+  const url = (path: string) => JSON.stringify(files ? pathToFileURL(join(here, path)).href : join(here, path));
   const name = p.names[main];
   const takesArgs = (p.info.typeOf.get(main) as { params: unknown[] }).params.length === 1;
   const program = compile(p.code, p.info, p.names, { runtime: JSON.parse(url("../../compiler/src/runtime.js")), exports: [name] });
@@ -119,7 +121,20 @@ switch (command) {
     const main = entry(p, mainName);
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.mjs`;
-    writeFileSync(out, compiled(p, main));
+    // One file with the runtime in it, so it runs anywhere Node does and
+    // starts fast; without esbuild (a dev dependency), a module that
+    // imports the runtime from this checkout.
+    const esbuild = await import("esbuild").catch(() => null);
+    if (esbuild) {
+      await esbuild.build({
+        stdin: { contents: compiled(p, main, false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
+        bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
+        banner: { js: `// ${p.title}, compiled by lab (projectional/cli/lab.ts), with its runtime. Run: node <this file> [arguments…]` },
+      });
+    } else {
+      writeFileSync(out, compiled(p, main, true));
+      process.stderr.write("lab: esbuild isn't installed (npm install in projectional/), so the output imports the runtime from this checkout\n");
+    }
     process.stderr.write(`lab: wrote ${out}; run it with: node ${out} [arguments…]\n`);
     break;
   }

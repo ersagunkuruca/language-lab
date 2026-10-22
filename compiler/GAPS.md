@@ -186,7 +186,11 @@ load the evaluator and the solver lazily (only `backwards` and `calculus`
 need them), and buffer standard output in `nodeWorld` (flushing before any
 standard-error write and at exit, so the two streams still interleave
 correctly). Single-file output (ROADMAP 3, "open") then removes the
-absolute file URLs too.
+absolute file URLs too. **Start-up done** another way: `lab compile` now
+bundles the program and its runtime into one file with esbuild. That's
+54 KB for calc, with no type stripping at run time and no imports from the
+checkout. Start-up went from about 270 ms to about 90 ms, worker thread
+(G1) included. Bare `node` takes 24 ms. Buffered output is still open.
 
 **G9. Small allocations (perf, not measured on its own).** `Parsed` is
 returned by every parsing step and taken apart at once, so it could be two
