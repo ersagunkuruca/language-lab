@@ -149,8 +149,10 @@ not only code: an influence is credited even when nothing was copied.
 | Update order: mark dirty on write, pull on read | Adapted | Milo's [Reactively](https://dev.to/modderme123/super-charging-fine-grained-reactive-performance-47ph). |
 | One mechanism for laziness and incremental update | Prior art | Adapton (Hammer, Phang, Hicks and Foster, PLDI 2014). |
 | Model, update, view for web apps | Considered, rejected | [The Elm architecture](https://guide.elm-lang.org/architecture/) (Evan Czaplicki). Still possible as a style, WEB.md. |
-| The focused input wins in two-way binding | Influence | Svelte's `bind:value` (Rich Harris). |
-| Two-way binding by running the view backwards | Our own | Follows from running functions backwards (Ersagun's idea, above). Prior art: lenses. |
+| An input's value is set only when it differs, so typing isn't disturbed | Influence | Svelte's `bind:value` (Rich Harris). In `src/lang/html.ts`. |
+| Elements as (tag, attributes, children) | Influence | HyperScript's `h()` (Dominic Tarr), as virtual-DOM libraries since use it. `Html` in std.ts. |
+| Two-way binding by running the view backwards | Our own | Follows from running functions backwards (Ersagun's idea, above). Prior art: lenses (Foster, Greenwald, Moore, Pierce and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS 2007). `examples/converter`. |
+| Mobile apps as a packaged web page | Plan | PWAs (W3C web app manifest), [Capacitor](https://capacitorjs.com) (Ionic). WEB.md. |
 
 ## Shaders
 

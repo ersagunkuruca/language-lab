@@ -503,6 +503,40 @@ with 1 when a file is missing. The missing file is an `Abort` from
 `read file`, caught by a match in `count files`. Its counts match `wc`'s
 (`test/cli.test.ts`). Run by the evaluator it counts 200,000 lines in about
 25 seconds, and compiled in about one.
+
+### Pages: web apps
+
+A page is a program whose `main` takes nothing and returns an `Html`,
+an ordinary data type in std (WEB.md has the design and the reasons):
+
+```
+type Html      = element(tag: Text, attributes: List Attribute, children: List Html)
+               | text(shows: () -[Cells, Diverge]-> Text)
+               | part(view: () -[Cells, Diverge]-> Html)
+type Attribute = property(name: Text, value: () -[Cells, Diverge]-> Text)
+               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort]-> Unit)
+type Event     = event(value: Text, key: Text)
+```
+
+`main` runs once; each function in the value runs in a watcher of the
+Cells handler, so a write re-runs only the texts, attributes and parts
+that read that cell (Solid.js's model, no virtual DOM). The rows are the
+guarantees: a view can't write or print, a handler can't leave a search
+open around a write. In the browser, `print` goes to the console and
+files are `localStorage` entries named after the program.
+
+```
+node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
+```
+
+`examples/converter`, live at
+[apps/converter.html](https://ersagunkuruca.github.io/language-lab/apps/converter.html),
+is the proof: ten fields over three quantities, where each field is the
+function that shows it (`as °F(c) = show(c × 9 / 5 + 32)`) and typing
+in it runs that function backwards (`solve as °F(out = text) for c`).
+Text the function can't produce, like `hot` or `68.0`, has no answer, so
+the field is marked and nothing changes. The evaluator and the compiled
+page draw and react alike (`compiler/test/web.test.ts`).
 ## Relations inside programs: `solve`
 
 A `solve` node uses a function in the direction chosen where it's used.
