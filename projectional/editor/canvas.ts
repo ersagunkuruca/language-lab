@@ -5,7 +5,7 @@
 //                The panel is a window onto it: drag empty space to pan, use
 //                the wheel to zoom, Fit to see it all. Nothing is ever pushed
 //                around to make room: the window moves, not the picture.
-//   wires        one curve shape, left to right
+//   wires        one curve shape, left to right (graphLayout.ts)
 //   moving       drag a node's body; the view saves where it ended up
 //   connecting   drag from a source onto a target; every target says ahead
 //                of time whether it would take the wire, and why not
@@ -22,20 +22,6 @@ export function s(tag: string, attrs: Record<string, string | number> = {}, text
 }
 
 export type Pos = { x: number; y: number };
-
-export const curve = (x1: number, y1: number, x2: number, y2: number) => {
-  const dx = Math.max(16, Math.abs(x2 - x1) / 2);
-  return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
-};
-
-// A point inside nested translated groups, in the coordinates of `root`.
-export function absOf(root: Element, el: Element, x: number, y: number): Pos {
-  for (let e: Element | null = el; e && e !== root; e = e.parentElement) {
-    const m = /translate\(([-\d.e]+)[ ,]+([-\d.e]+)\)/.exec(e.getAttribute("transform") ?? "");
-    if (m) { x += Number(m[1]); y += Number(m[2]); }
-  }
-  return { x, y };
-}
 
 // Screen pixels per svg unit.
 export function moveScale(root: SVGSVGElement): number {
@@ -128,7 +114,9 @@ export interface Canvas {
   root: SVGSVGElement;      // the svg filling it; drag feedback is drawn here
   world: SVGGElement;       // the plane: draw everything in here
   zoom: () => number;       // screen pixels per world unit
+  fit: () => void;
 }
+
 type View = { x: number; y: number; z: number };
 
 // Where each graph's window was, so editing (which redraws) doesn't move it.
@@ -141,11 +129,12 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   let view = views.get(key);
   const apply = () => { if (view) world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); };
   const set = (v: View) => { view = v; views.set(key, v); apply(); };
+  // Fit: the whole picture, centered both ways.
   const fit = () => {
     const b = world.getBBox(), r = root.getBoundingClientRect();
     if (!b.width || !r.width) return;
     const z = Math.min(1, (r.width - 32) / b.width, (r.height - 32) / b.height);
-    set({ z, x: 16 - b.x * z, y: 16 - b.y * z });
+    set({ z, x: (r.width - b.width * z) / 2 - b.x * z, y: (r.height - b.height * z) / 2 - b.y * z });
   };
   apply();
   // First time this graph is shown: fit it, once it has a size.
@@ -157,7 +146,7 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   // wire). Listening on the window around the svg means every handler on
   // the svg and inside it has already had its turn.
   el.addEventListener("pointerdown", (ev) => {
-    if (ev.defaultPrevented || ev.button !== 0 || !root.contains(ev.target as Node)) return;
+    if (ev.defaultPrevented || ev.button !== 0 || ev.shiftKey || !root.contains(ev.target as Node)) return;
     const v0 = view ?? { x: 0, y: 0, z: 1 };
     root.classList.add("panning");
     const mv = (e: PointerEvent) => set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY });
@@ -186,9 +175,9 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   const tools = document.createElement("div");
   tools.className = "canvas-tools";
   tools.append(
-    btn("Fit", "Show the whole graph", fit),
+    btn("Fit", "Show the whole graph, centered", fit),
     btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
   );
   el.append(root, tools);
-  return { el, root, world, zoom: () => view?.z ?? 1 };
+  return { el, root, world, zoom: () => view?.z ?? 1, fit };
 }

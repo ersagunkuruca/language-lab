@@ -1,5 +1,6 @@
 // The built page in a real browser: open every example program, every
-// definition in it, run it, show its values and click its first nodes, and
+// definition in it, run it, show its values and click its first nodes (and
+// once per program, tidy its graph and show a binding as let and get nodes), and
 // fail on any error the page throws or logs, or any run or values that
 // stop with an error. The unit tests can't catch a view that throws while
 // drawing; this can.
@@ -46,6 +47,20 @@ async function visit(saved: string | null, only?: string) {
       await click('[data-act="t-values"]');
       await stopped(p);
       for (let k = 0; k < 6; k++) await click(".p-graph [data-id]", k);
+      // The graph's menu, and the gestures it offers that only change the
+      // layout: once per program, on its first definition.
+      if (j === 0) {
+        const svg = p.locator(".p-graph svg.canvas");
+        const bb = await svg.boundingBox();
+        if (bb) {
+          await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
+          await click('.ctx-item[data-menu="tidy-all"]');
+          await click(".p-graph .reroute:not(.silent)");
+          await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
+          await click('.ctx-item[data-menu="named"]');
+          await stopped(p);
+        }
+      }
       defs++;
       if (process.env.SMOKE_LOG) console.log(where, Math.round(performance.now()));
     }

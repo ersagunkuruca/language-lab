@@ -392,7 +392,22 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .edge-hit:hover + .tw, .tgraph .tw[data-edge]:hover { stroke: var(--accent); stroke-width: 2.4; }
 .tgraph .inp.use { fill: var(--wire); stroke: var(--wire); }
 .tgraph .portl { fill: var(--faint); font-size: 11px; pointer-events: none; }
-.tgraph .val { fill: var(--accent); font: 500 10.5px var(--font-code); paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
+.tgraph .val rect { fill: var(--panel); }
+.tgraph .val text { fill: var(--accent); font: 500 10.5px var(--font-code); }
+.tgraph .val-more { fill: var(--accent); }
+/* A wire's stretch under a node it doesn't connect to (a tunnel). */
+.tgraph .tunnel { fill: none; stroke: var(--wire); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; pointer-events: none; }
+.tgraph .tunnel.use { stroke: var(--dot); }
+.tgraph rect.picked { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; }
+.tgraph .rg.picked { stroke: var(--accent); stroke-width: 2; }
+.tgraph .marquee { fill: var(--accent); fill-opacity: .08; stroke: var(--accent); stroke-dasharray: 4 3; pointer-events: none; }
+.tgraph .lit > .pill, .tgraph .lit > .cn, .tgraph .src.lit { stroke: var(--accent); stroke-width: 2; }
+.ctx-menu { position: fixed; z-index: 50; width: 310px; max-height: 440px; overflow: auto; padding: 6px; background: var(--panel); border: 0; border-radius: 14px; box-shadow: var(--float); }
+.ctx-item { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: 13px var(--font-ui); cursor: pointer; }
+.ctx-item:hover:not(:disabled), .ctx-item:focus-visible { background: var(--tone); }
+.ctx-item:disabled { opacity: .45; cursor: default; }
+.ctx-head { padding: 4px 10px 2px; font: 600 12px var(--font-code); color: var(--muted); }
+.ctx-sep { border-top: 1px solid var(--tone); margin: 4px 0; }
 .tgraph.dragging .cannot { opacity: .25; }
 .tgraph.dragging .inp.can, .tgraph.dragging .pill.can { stroke: var(--accent); stroke-width: 3.5; }
 .tgraph .why { fill: var(--hot); font: 600 12px var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }

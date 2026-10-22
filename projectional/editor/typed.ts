@@ -556,6 +556,27 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
   return guardTyped(info, next, names, dot, "Put a dot on that wire. Drag from the dot to any input it can reach to use the same value there; naming it is optional.");
 }
 
+// A new value of its own, not wired anywhere yet: a dot holding a hole, as
+// the first step of the definition's body (where everything in it can
+// reach it). Fill the hole, then drag from the dot to wherever the value
+// goes. It's how the graph adds a node in empty space without a node that
+// belongs to nothing: every node is still part of the tree.
+export function addStep(code: Code, names: Names, info: Info, defId: Id): TEdit & { dot?: Id } {
+  const def = code.nodes[defId] as NodeOf<"def">;
+  const top = def?.body ? code.nodes[def.body] : null;
+  if (!top) return { ok: false, reason: "this definition has no body yet: fill it first" };
+  if (top.kind === "typedef") return { ok: false, reason: "a data type has no steps; add a case or a field instead" };
+  const at = top.kind === "lambda" ? top.body : def.body!;
+  const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
+  const next = swapIn(code, at, let_);
+  next.nodes[dot] = { id: dot, kind: "binder" };
+  next.nodes[hole] = { id: hole, kind: "hole" };
+  next.nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: at };
+  next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [hole] };
+  const r = guardTyped(info, next, names, hole, "Added a value: a dot holding a hole. Fill the hole, then drag from the dot to where the value goes.");
+  return r.ok ? { ...r, dot } : r;
+}
+
 // The reverse: a dot with one wire out goes back to being a plain wire.
 export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id): TEdit {
   const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));
