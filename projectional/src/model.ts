@@ -29,8 +29,14 @@ export type Node =
   // product of fields. Variant and field ids are the tags and labels, so a
   // ref to a variant is its constructor and a ref to the field of a
   // one-variant type is its projection. Names are presentation, as always.
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[] }
-  | { id: Id; kind: "variant"; fields: Id[] }
+  //
+  // An effect is declared the same way (LANGUAGE.md, "Effects you define"):
+  // a typedef with `effect: true`, whose variants are its operations and
+  // whose fields are what each operation is given. Calling an operation
+  // performs it; `returns` is the type a handler answers it with, and an
+  // operation without one never returns (it ends the handled computation).
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true }
+  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id }
   | { id: Id; kind: "field"; type: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
@@ -88,7 +94,7 @@ export function children(n: Node): Id[] {
     case "lambda": return [...n.params, n.body];
     case "def": return n.body ? [n.body] : [];
     case "typedef": return [...n.params, ...n.variants];
-    case "variant": return n.fields;
+    case "variant": return n.returns ? [...n.fields, n.returns] : n.fields;
     case "field": return [n.type];
     case "tref": return n.args;
     case "tfun": return [...n.params, n.result];

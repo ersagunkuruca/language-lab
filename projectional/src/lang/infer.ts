@@ -19,7 +19,7 @@ import { planSolve } from "./solve.ts";
 import { BOOL, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import {
-  CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
+  CHOICE, DIVERGE, EffectError, WORLD, freeVars, instantiate, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -74,6 +74,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return body?.kind === "typedef" ? body : null;
   };
   const isTypeDef = (id: Id) => !!typedefOf(id);
+  // An effect is a typedef whose variants are operations.
+  const isEffect = (id: Id) => !!typedefOf(id)?.effect;
   const fieldTypes = (def: Id) => typedefOf(def)!.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? [])
     .flatMap((f) => { const n = code.nodes[f]; return n?.kind === "field" ? [{ field: f, type: n.type }] : []; });
 
@@ -82,6 +84,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (n.kind === "tfun") return { t: "fn", params: n.params.map((p) => typeExpr(p, params)), ret: typeExpr(n.result, params), eff: s.freshRow() };
     if (n.kind !== "tref") throw new Error(`${id} is not a type`);
     if (params.has(n.target)) return params.get(n.target)!;
+    if (isEffect(n.target)) err(id, `${nm(n.target)} is an effect, not a type of values`);
     return { t: "con", id: n.target, args: n.args.map((a) => typeExpr(a, params)) };
   };
 
@@ -193,6 +196,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     });
   }
   for (const def of typeDefs) {
+    // Rows hold effects without arguments, so an effect has no parameters:
+    // for an error that carries data of its own, declare an effect for it.
+    if (isEffect(def) && typedefOf(def)!.params.length) err(def, `${nm(def)} is an effect, and effects can't have parameters (declare one effect for each kind of reason)`);
     // the type itself, and any type it's defined together with
     const self = (t: Id) => t === def || (isTypeDef(t) && reachOf(t).has(def) && reachOf(def).has(t));
     for (const { field, type } of fieldTypes(def)) {
@@ -282,7 +288,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         err(id, `${nm(target)} has no type`);
         return s.fresh();
       case "variant": {
-        const { self, fields } = dataType(owner.get(target)!);
+        const def = owner.get(target)!;
+        // An operation: calling it performs the effect. One that never
+        // returns has a result of any type, since nobody receives it.
+        if (isEffect(def)) {
+          const { fields } = dataType(def);
+          const r = (code.nodes[target] as NodeOf<"variant">).returns;
+          return { t: "fn", params: fields(target), ret: r ? typeExpr(r, new Map()) : s.fresh(), eff: s.freshRow([def]) };
+        }
+        const { self, fields } = dataType(def);
         const fs = fields(target);
         return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
       }
@@ -422,8 +436,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       info.typeOf.set(b, pt);
     }
     const own = s.resolveRow(ft.eff).effs;
-    if (own.includes(CONSOLE)) err(n.id, `${nm(n.fn)} prints, and printing can't be run backwards`);
-    const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : []), ...own.filter((e) => e !== CONSOLE)])];
+    // Searching runs a function many times over and drops most of the runs,
+    // so nothing it does may be seen from outside: no world effects, and no
+    // effects of our own either, whose handlers could be anything.
+    const acts = own.filter((e) => e !== CHOICE && e !== DIVERGE);
+    if (acts.length) err(n.id, `${nm(n.fn)} performs ${acts.map(nm).join(", ")}, and a function that acts can't be run backwards`);
+    const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : [])])];
     choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? " and may search forever (Diverge)" : ""}, which nothing here handles`);
   }
 
@@ -433,10 +451,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   function cases(n: NodeOf<"match"> | NodeOf<"fold">, env: Map<Id, Type>, row: Row): Type {
-    const scrut = expr(n.scrutinee, env, row);
     const result = s.fresh();
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     const def = arms.length ? owner.get(arms[0].variant) : undefined;
+    if (def && isEffect(def)) return handle(n, def, arms, env, row, result);
+    const scrut = expr(n.scrutinee, env, row);
     if (!def) {
       if (n.kind === "fold" || !n.otherwise) err(n.id, "a case analysis needs at least one case");
     } else {
@@ -474,15 +493,153 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return result;
   }
 
+  // A handler is a match whose cases are an effect's operations (OCaml 5's
+  // effect cases in `match`, LANGUAGE.md "Effects you define"). The value
+  // examined is the computation that performs the effect: its effects are
+  // the match's, minus this one. A case for an operation that returns
+  // gives the answer, and the computation carries on with it; a case for
+  // one that never returns gives the value of the whole match. Cases run
+  // outside the handler, so their own effects are the match's.
+  function handle(n: NodeOf<"match"> | NodeOf<"fold">, effect: Id, arms: NodeOf<"arm">[], env: Map<Id, Type>, row: Row, result: Type): Type {
+    if (n.kind === "fold") err(n.id, `${nm(effect)} is an effect; its operations are handled with a match, not folded`);
+    const rest = s.next++;
+    s.unifyRow({ effs: [], tail: rest }, row);
+    unifyAt(n.scrutinee, result, expr(n.scrutinee, env, { effs: [effect], tail: rest }), "the handled computation");
+    const { fields } = dataType(effect);
+    const seen = new Set<Id>();
+    for (const arm of arms) {
+      if (owner.get(arm.variant) !== effect) { err(arm.id, `${nm(arm.variant)} is not an operation of ${nm(effect)}`); continue; }
+      if (seen.has(arm.variant)) err(arm.id, `${nm(arm.variant)} is handled twice`);
+      seen.add(arm.variant);
+      const fs = fields(arm.variant);
+      if (arm.binds.length !== fs.length) err(arm.id, `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
+      const inner = new Map(env);
+      arm.binds.forEach((b, i) => { if (fs[i]) { inner.set(b, fs[i]); info.typeOf.set(b, fs[i]); } });
+      const r = (code.nodes[arm.variant] as NodeOf<"variant">).returns;
+      if (!r) { unifyAt(arm.body, result, expr(arm.body, inner, row), "this case"); continue; }
+      // An answer is one value: the computation carries on once with it.
+      const own = s.freshRow();
+      unifyAt(arm.body, typeExpr(r, new Map()), expr(arm.body, inner, own), `the answer to ${nm(arm.variant)}`);
+      if (s.resolveRow(own).effs.includes(CHOICE)) err(arm.body, `the answer to ${nm(arm.variant)} must be one value, and this may give several or none: handle the Choice here (first, optional)`);
+      try { s.unifyRow(own, row); } catch (e) { if (e instanceof EffectError) err(arm.body, `this case performs ${effName(e)}, which nothing here handles`); else throw e; }
+    }
+    const missing = typedefOf(effect)!.variants.filter((v) => !seen.has(v));
+    if (missing.length) err(n.id, `no case for ${missing.map(nm).join(", ")}: a handler handles every operation of ${nm(effect)}`);
+    if (n.kind === "match" && n.otherwise) err(n.otherwise, `a handler has a case for each operation of ${nm(effect)} and nothing else`);
+    return result;
+  }
+
   // Units are part of a number's type: a conflict is a type error.
   for (const u of unitProblems(code)) err(u.id, u.message);
 
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
+  worldUnderChoice(code, info, (id) => isEffect(owner.get(id) ?? ""), owner, nm, err);
   for (const h of info.holes.values()) {
     h.expected = s.zonk(h.expected);
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));
   }
   return info;
+}
+
+// The world and Choice (LANGUAGE.md): a function that does something to
+// the world while a Choice is open would do it on paths that are later
+// abandoned, and on every guess of a search. The Choice must be handled
+// inside, before the world is touched.
+//
+// Types can't say this on their own: a handler's thunk has the type
+// "Choice, and whatever the code around it does", so its type has the
+// world in it whenever the code around it prints. So this works out what
+// each function does itself, from the calls in its body (not in functions
+// it makes): each callee's effects as declared, plus those of the
+// functions it is given and calls right away (its parameters whose effects
+// are its own), minus what it handles of theirs. A function given where
+// the callee calls it under Choice counts too. A function held in a
+// variable other than a let isn't followed, so that case is still open.
+function worldUnderChoice(code: Code, info: Info, isOperation: (id: Id) => boolean, owner: Map<Id, Id>, nm: (id: Id) => string, err: (id: Id, message: string) => void) {
+  const s = info.subst;
+  const concrete = (t: Type | undefined): Id[] => (t && t.t === "fn" ? s.resolveRow(t.eff).effs : []);
+  // A callee's type before this call site's unification: a builtin's
+  // signature, a definition's scheme, an operation's effect.
+  const declared = (callee: Id): Type | undefined => {
+    const f = code.nodes[callee];
+    if (f?.kind !== "ref") return undefined;
+    const t = code.nodes[f.target];
+    if (t?.kind === "builtin") return SIGS[f.target]?.(s.clone());
+    if (t?.kind === "def") return info.schemes.get(f.target)?.type;
+    if (t?.kind === "variant" && isOperation(f.target)) return { t: "fn", params: [], ret: { t: "var", v: -1 }, eff: { effs: [owner.get(f.target)!], tail: null } };
+    return undefined;
+  };
+  // Functions bound by a let: x = (…) ↦ … then x(…).
+  const letBound = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) {
+    const head = n.kind === "call" ? code.nodes[n.fn] : null;
+    if (n.kind === "call" && head?.kind === "lambda") head.params.forEach((p, i) => { if (code.nodes[n.args[i]]?.kind === "lambda") letBound.set(p, n.args[i]); });
+  }
+  const doesItself = new Map<Id, Set<Id>>();
+  // What calling the function `arg` stands for does.
+  const effectsOf = (arg: Id): Id[] => {
+    const a = code.nodes[arg];
+    if (a?.kind === "lambda") return [...own(a.id)];
+    if (a?.kind === "ref" && letBound.has(a.target)) return [...own(letBound.get(a.target)!)];
+    return concrete(declared(arg));
+  };
+  function own(lambda: Id): Set<Id> {
+    if (doesItself.has(lambda)) return doesItself.get(lambda)!;
+    const out = new Set<Id>();
+    doesItself.set(lambda, out);
+    const walk = (id: Id) => {
+      const n = code.nodes[id];
+      if (!n) return;
+      if (n.kind === "call") {
+        const head = code.nodes[n.fn];
+        if (head?.kind === "lambda") walk(head.body); // a let runs here
+        else if (head?.kind === "ref" && letBound.has(head.target)) own(letBound.get(head.target)!).forEach((e) => out.add(e));
+        const t = declared(n.fn);
+        if (t?.t === "fn") {
+          const mine = concrete(t);
+          mine.forEach((e) => out.add(e));
+          // Parameters it calls now: their effects are the call's, less the
+          // ones it handles (those its parameter type names).
+          const tail = s.resolveRow(t.eff).tail;
+          t.params.forEach((p, i) => {
+            if (p.t !== "fn" || tail === null || s.resolveRow(p.eff).tail !== tail || !n.args[i]) return;
+            const handled = concrete(p);
+            effectsOf(n.args[i]).filter((e) => !handled.includes(e) || mine.includes(e)).forEach((e) => out.add(e));
+          });
+        }
+      }
+      if (n.kind === "solve") {
+        try { const p = planSolve(code, n); if (p.mode === "relational" || !p.unique) out.add(CHOICE); } catch { /* reported elsewhere */ }
+      }
+      if (n.kind === "lambda") return;
+      for (const c of kids(n)) walk(c);
+    };
+    walk((code.nodes[lambda] as NodeOf<"lambda">).body);
+    return out;
+  }
+  const world = (effs: Iterable<Id>) => [...effs].filter((e) => WORLD.includes(e));
+  const says = (w: Id[]) => `does ${w.map(nm).join(" and ")}`;
+  // A let's lambda is part of the function it is written in.
+  const lets = new Set<Id>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda") lets.add(n.fn);
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind === "lambda" && info.typeOf.has(n.id) && !lets.has(n.id)) {
+      const effs = own(n.id), w = world(effs);
+      if (effs.has(CHOICE) && w.length) err(n.id, `this ${says(w)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`);
+    }
+    if (n.kind === "call") {
+      const t = declared(n.fn);
+      if (t?.t !== "fn") continue;
+      t.params.forEach((p, i) => {
+        if (!concrete(p).includes(CHOICE) || !n.args[i]) return;
+        const a = code.nodes[n.args[i]];
+        // a lambda with a Choice of its own is reported as itself
+        if (a?.kind === "lambda" && own(a.id).has(CHOICE)) return;
+        const w = world(effectsOf(n.args[i]));
+        if (w.length) err(n.args[i], `this ${says(w)}, and is run under a Choice here, so it would act on paths that are later abandoned`);
+      });
+    }
+  }
 }
 
 // Children that are expressions or binders (types and variants excluded).
@@ -679,7 +836,16 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (!checked.has(key)) checked.set(key, whole(f));
     return checked.get(key)!;
   };
+  // A filling that brings Choice or the world where the other is may break
+  // the rule that the world isn't touched under Choice, which only the
+  // whole check sees.
+  const near = new Set(info.subst.resolveRow(h.row).effs);
+  const expected = info.subst.resolve(h.expected);
+  const underChoice = near.has(CHOICE) || (expected.t === "fn" && info.subst.resolveRow(expected.eff).effs.includes(CHOICE));
+  const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));
   const consider = (target: Id, t: Type, risky = false) => {
+    const ft = info.subst.resolve(t);
+    if (ft.t === "fn" && mixes(info.subst.resolveRow(ft.eff).effs)) risky = true;
     const asRef = fits(t, false);
     const ref: Filling = { kind: "ref", target, type: t };
     if (asRef && safe(asRef, ref, risky)) out.push(ref);
@@ -704,7 +870,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   lit("text", str);
   const ex = info.subst.resolve(h.expected);
   if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length });
-  const dataTypes = [...new Set(info.owner.values())];
+  const dataTypes = [...new Set(info.owner.values())].filter((d) => !(code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect);
   for (const b of h.scope) {
     const bt = info.subst.resolve(b.type);
     if (bt.t === "con" && dataTypes.includes(bt.id)) {
@@ -777,5 +943,10 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
   };
   const self: Type = { t: "con", id: def, args: [...params.values()] };
   const fs = (code.nodes[variant] as NodeOf<"variant">).fields.map((f) => te((code.nodes[f] as NodeOf<"field">).type));
+  // An effect's operation performs it (infer's refType).
+  if (td.effect) {
+    const r = (code.nodes[variant] as NodeOf<"variant">).returns;
+    return { t: "fn", params: fs, ret: r ? te(r) : s.fresh(), eff: s.freshRow([def]) };
+  }
   return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
 }
