@@ -22,9 +22,12 @@ import phyLayout from "../examples/physics/layout.json" with { type: "json" };
 import queensCode from "../examples/queens/code.json" with { type: "json" };
 import queensNames from "../examples/queens/names.default.json" with { type: "json" };
 import queensComments from "../examples/queens/comments.json" with { type: "json" };
-import algebraCode from "../examples/algebra/code.json" with { type: "json" };
-import algebraNames from "../examples/algebra/names.default.json" with { type: "json" };
-import algebraComments from "../examples/algebra/comments.json" with { type: "json" };
+import calculusCode from "../examples/calculus/code.json" with { type: "json" };
+import calculusNames from "../examples/calculus/names.default.json" with { type: "json" };
+import calculusComments from "../examples/calculus/comments.json" with { type: "json" };
+import backwardsCode from "../examples/backwards/code.json" with { type: "json" };
+import backwardsNames from "../examples/backwards/names.default.json" with { type: "json" };
+import backwardsComments from "../examples/backwards/comments.json" with { type: "json" };
 import relationsCode from "../examples/relations/code.json" with { type: "json" };
 import relationsNames from "../examples/relations/names.default.json" with { type: "json" };
 import relationsComments from "../examples/relations/comments.json" with { type: "json" };
@@ -72,7 +75,8 @@ interface Layout {
   expanded: Id[];
 }
 
-type Program = "numbers" | "queens" | "algebra" | "relations";
+type Program = "numbers" | "queens" | "calculus" | "backwards" | "relations";
+const PROGRAMS: Program[] = ["numbers", "queens", "calculus", "backwards", "relations"];
 
 interface Doc {
   program: Program;
@@ -116,7 +120,8 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
 
 const initialFor = (program: Program): Doc =>
   program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
-  : program === "algebra" ? typedDoc("algebra", algebraCode as Code, algebraNames, algebraComments)
+  : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
+  : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
   : initial();
 
@@ -134,10 +139,14 @@ let docs: Partial<Record<Program, Doc>> = {};
 let doc: Doc = initial();
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) ?? "null");
-  if (saved?.docs && saved.current) { docs = saved.docs; doc = docs[saved.current as Program] ?? doc; }
+  // Programs that have left the picker (the old data-type algebra) are dropped.
+  if (saved?.docs && saved.current) {
+    docs = Object.fromEntries(Object.entries(saved.docs).filter(([k]) => PROGRAMS.includes(k as Program)));
+    doc = docs[saved.current as Program] ?? doc;
+  }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", algebra: "derivative", relations: "to polar" };
+const START: Record<Program, string> = { numbers: "fall", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === START[doc.program]) ?? doc.code.defs[0];
 
 const ui: UI = {
@@ -1622,7 +1631,7 @@ function render() {
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
-        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["algebra", "Algebra"], ["relations", "Relations in programs"]]),
+        seg("program", doc.program, [["numbers", "Numbers & networks"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]]),
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         defTabs,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
