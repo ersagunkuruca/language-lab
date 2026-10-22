@@ -186,11 +186,12 @@ fit effects whose world must not be touched under `Choice`?
   written, but a number drawn on an abandoned path changed nothing outside
   the program. (Nothing is restored either: under `seeded`, the next
   alternative takes the next numbers.)
-- **Time**: `now()` and, on the command line, `wait(ms)`. No separate tick
+- **Time**: `now()`, and `wait(ms)` as its own effect (`Wait`), so a
+  page's types can allow the clock and refuse pausing. No separate tick
   operation: in a page, a part that reads `now()` runs again each animation
   frame, the way a time-varying value works in Fran (Elliott and Hudak) and
-  `Time.every` in Elm. Like Random, a match can answer it, so a test can fix
-  the clock.
+  `Time.every` in Elm. Like Random, a match can answer them, so a test can
+  fix the clock and skip the pauses.
 - **HTTP**: `fetch text(url)`, a GET that aborts on failure. It is memoised
   per URL for the run, so a search that backtracks never repeats a request;
   that is why it can be allowed where `Files` isn't. A page's part that

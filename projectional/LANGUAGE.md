@@ -371,6 +371,27 @@ the program, so a search may draw (`all(() => x = one of(xs); random() <
 0.5 …)`). Under `seeded`, each alternative takes the next numbers, depth
 first, and an abandoned alternative doesn't give its numbers back.
 
+### Time
+
+`Time` is a std effect with one operation, `now()`: milliseconds since
+1970 (UTC), as a Number. `Wait` is another, `wait(ms)`, which pauses the
+program. Like Random, neither is the world: reading the clock or pausing
+changes nothing outside the program, so both may run under `Choice`, and
+a match can answer them (a test fixes the clock with `match … | now() →
+0`, and skips the pauses with `| wait(ms) → unit`). What nothing handles,
+the world answers (`World.now`, `World.wait`; Node's wait sleeps without
+spinning).
+
+There is no tick or timer operation. In a page, the clock is a cell the
+browser writes on every animation frame, once something has read it, and
+`now()` reads that cell. So a part that shows the time runs again each
+frame, and nothing else does (`text(() => show(floor(now() / 1000)))` is a
+seconds counter; its text changes once a second, because a watcher only
+sets what really changed). This is a time-varying value, the idea of Fran
+(Elliott and Hudak, 1997) and of Elm's time subscriptions, falling out of
+the cells a page already has. A page can't `wait`: `Wait` isn't in its
+rows, so a part that waits is a type error.
+
 ### Cells: reactivity and values on demand
 
 Is this effect system the same thing as Solid.js's reactivity? In one
@@ -531,10 +552,10 @@ an ordinary data type in std (WEB.md has the design and the reasons):
 
 ```
 type Html      = element(tag: Text, attributes: List Attribute, children: List Html)
-               | text(shows: () -[Cells, Diverge]-> Text)
-               | part(view: () -[Cells, Diverge]-> Html)
-type Attribute = property(name: Text, value: () -[Cells, Diverge]-> Text)
-               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort]-> Unit)
+               | text(shows: () -[Cells, Diverge, Time]-> Text)
+               | part(view: () -[Cells, Diverge, Time]-> Html)
+type Attribute = property(name: Text, value: () -[Cells, Diverge, Time]-> Text)
+               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time]-> Unit)
 type Event     = event(value: Text, key: Text)
 ```
 
@@ -543,7 +564,8 @@ Cells handler, so a write re-runs only the texts, attributes and parts
 that read that cell (Solid.js's model, no virtual DOM). The rows are the
 guarantees: a view can't write or print, a handler can't leave a search
 open around a write. In the browser, `print` goes to the console and
-files are `localStorage` entries named after the program.
+files are `localStorage` entries named after the program. A view that
+reads `now()` runs again every animation frame ("Time" above).
 
 ```
 node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else

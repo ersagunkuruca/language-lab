@@ -12,8 +12,8 @@
 // Effects a program defines are performed by calling an operation, and
 // handled by a match on the operations (infer.ts `handle`): performing
 // looks up the continuation for the nearest such match. The world effects
-// (Console, Files) have one handler, the runtime's `World`; Log, Abort and
-// Random, when nothing in the program handles them, go to it too.
+// (Console, Files) have one handler, the runtime's `World`; Log, Abort,
+// Random, Time and Wait, when nothing in the program handles them, go to it too.
 
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -23,7 +23,7 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
+import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { Cells, NoValue, nodeOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator } from "./random.ts";
@@ -159,6 +159,9 @@ export interface World {
   listFolder(path: string): string[];
   // Random's answer when the program has no handler: a Number in [0, 1).
   random(): number;
+  // Time's and Wait's: milliseconds since 1970, and pausing.
+  now(): number;
+  wait(ms: number): void;
 }
 
 // An Abort that nothing in the program handled.
@@ -360,11 +363,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
     // What the program leaves unhandled, the runtime handles: Log goes to
     // standard error, an Abort ends the run, and the world draws Random's
-    // numbers.
+    // numbers, reads the clock and waits.
     unhandled(op: Id, args: Value[]) {
       if (op === LOG_OP) return ((rt.world?.log ?? rt.print)(args[0] as string), this.ret(unit));
       if (op === ABORT_OP) throw new Aborted(args[0] as string);
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
+      if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
+      if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
       throw new Error(`nothing handles ${op}`);
     }
 
@@ -671,8 +676,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 }
 
 // Run an action (a definition of type () -> ...). Only effects the runtime
-// can handle may be left: the world's, Diverge, Log, Random and Abort
-// (which ends the run with Aborted). Anything else (an unhandled Choice) is reported
+// can handle may be left: the world's, Diverge, Log, Random, Time, Wait and
+// Abort (which ends the run with Aborted). Anything else (an unhandled Choice) is reported
 // before anything runs.
 export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: (s) => console.log(s) }): Value {
   const t = info.typeOf.get(def);
@@ -687,7 +692,7 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
-const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT, RANDOM];
+const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT, RANDOM, TIME, WAIT];
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
 export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
