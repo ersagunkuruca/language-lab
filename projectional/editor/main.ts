@@ -15,6 +15,13 @@ import quadHints from "../examples/quadratic/hints.json" with { type: "json" };
 import phyCode from "../examples/physics/code.json" with { type: "json" };
 import phyNames from "../examples/physics/names.default.json" with { type: "json" };
 import phyComments from "../examples/physics/comments.json" with { type: "json" };
+import phyLayout from "../examples/physics/layout.json" with { type: "json" };
+import phyExamples from "../examples/physics/examples.json" with { type: "json" };
+import quadExamples from "../examples/quadratic/examples.json" with { type: "json" };
+import sortCode from "../examples/sort/code.json" with { type: "json" };
+import sortNames from "../examples/sort/names.default.json" with { type: "json" };
+import sortComments from "../examples/sort/comments.json" with { type: "json" };
+import sortExamples from "../examples/sort/examples.json" with { type: "json" };
 import queensCode from "../examples/queens/code.json" with { type: "json" };
 import queensNames from "../examples/queens/names.default.json" with { type: "json" };
 import queensComments from "../examples/queens/comments.json" with { type: "json" };
@@ -33,7 +40,7 @@ import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
 import { freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
-import { showType as showTypeOf } from "../src/lang/types.ts";
+import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { prelude, preludeNames } from "../src/prelude.ts";
@@ -54,6 +61,7 @@ import { typedGraph } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
+import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -70,11 +78,13 @@ interface Layout {
   // give it when running it backwards. Choosing different ones is how you
   // invert it, and it never touches code.json.
   known: Record<Id, Id[]>;
+  // Calls shown with the callee's body in place (editor/inline.ts). A view.
+  inline?: Id[];
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -106,10 +116,8 @@ interface UI {
   mode: null | "split" | "new-def";
   newKind: "function" | "value" | "type";
   query: string;
-  args: Record<Id, string>;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string } | null;
-  exError: string | null;
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -121,16 +129,20 @@ const STORE = "projectional-editor-v5";
 const BASE = merge(prelude, std);
 const baseFor = (_typed: boolean) => BASE;
 
-const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
+// An example is a folder of the same side tables a saved file holds
+// (examples/unpack.ts writes one from a file the editor saved).
+const typedDoc = (program: Program, code: Code, names: Names, comments: Comments, more: { layout?: Partial<Layout>; examples?: Record<Id, string[]> } = {}): Doc => ({
   program, typed: true,
   code: merge(BASE, code),
   names: { short: names, descriptive: {} },
   comments, hints: {},
-  layout: { positions: {}, known: {} },
+  layout: { positions: {}, known: {}, ...more.layout },
+  examples: more.examples,
 });
 
 const initialFor = (program: Program): Doc =>
-  program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
+  program === "sort" ? typedDoc("sort", sortCode as Code, sortNames, sortComments, { examples: sortExamples })
+  : program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
   : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
   : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
@@ -138,21 +150,12 @@ const initialFor = (program: Program): Doc =>
 
 // The quadratic and the physics: plain arithmetic, and predicates with
 // units that run in every direction.
-// Each starts out run the way you'd first ask: how far it falls, where the
-// point lands.
+// Each starts out run the way you'd first ask (layout.json): how far it
+// falls, where the point lands.
 const initial = (): Doc => {
-  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments });
-  const known: Record<Id, Id[]> = {};
-  const ask = (name: string, unknown: number[]) => {
-    const def = d.code.defs.find((x) => d.names.short[x] === name);
-    const lam = def ? defBodyIn(d.code, def) : null;
-    if (def && lam?.kind === "lambda") known[def] = [...lam.params.filter((_, i) => !unknown.includes(i)), "out"];
-  };
-  ask("fall", [0]);
-  ask("rotate", [3, 4]);
-  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints, layout: { ...d.layout, known } };
+  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments }, { layout: phyLayout, examples: { ...quadExamples, ...phyExamples } });
+  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints };
 };
-const defBodyIn = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && n.body ? code.nodes[n.body] : null; };
 
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
@@ -167,7 +170,7 @@ try {
   }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
+const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
@@ -184,31 +187,11 @@ const ui: UI = {
   note: "A typed program. Hover anything for its type; click a hole for a palette of only what fits there. Run lets you run any function backwards.",
   mode: null,
   query: "",
-  args: {},
   refused: false,
   output: null,
-  exError: null,
   newKind: "function",
 };
 
-// Sensible starting values for the physics: thrown down at 5 m/s, and a
-// one-metre pendulum. Values are per definition and port, so they're kept
-// as you flip which ports are known.
-function startingValues() {
-  const seed = (name: string, vals: string[]) => {
-    const d = doc.code.defs.find((x) => doc.names.short[x] === name || doc.names.descriptive[x] === name);
-    const b = d ? doc.code.nodes[d] : null;
-    const lam = b?.kind === "def" && b.body ? doc.code.nodes[b.body] : null;
-    if (lam?.kind === "lambda") [...lam.params, "out"].forEach((port, i) => { if (vals[i] !== undefined) ui.args[`${d}/${port}`] ??= vals[i]; });
-  };
-  seed("fall", ["29.62", "5", "9.81", "2", "true"]);
-  seed("period", ["1", "9.81"]);
-  seed("rotate", ["1", "0", "1.5707963267948966", "0", "1", "true"]);
-  seed("landing times", ["29.62", "5"]);
-  seed("polar", ["0", "2", "2", "1.5707963267948966", "true"]);
-  seed("discriminant", ["1", "-3", "2"]);
-}
-startingValues();
 
 const undo: Doc[] = [];
 const redo: Doc[] = [];
@@ -249,7 +232,6 @@ function showProgram() {
   ui.touched = [];
   ui.refused = false;
   ui.note = "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
-  startingValues();
   save();
   render();
 }
@@ -543,6 +525,23 @@ function knownPorts(info: T.Info): Id[] {
   return returnsBool(info, ui.def) ? [...ports.slice(0, -2), "out"] : ports.slice(0, -1);
 }
 
+// One set of values per definition, by port (its inputs, then "out"),
+// kept in examples.json: what you give it, whichever way it runs. The
+// graph shows what every node makes of them.
+function portText(info: T.Info, p: Id): string {
+  const i = portsOfDef(ui.def).indexOf(p);
+  return doc.examples?.[ui.def]?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
+}
+
+function setPortText(p: Id, text: string) {
+  const ports = portsOfDef(ui.def);
+  const cur = ports.map((_, i) => doc.examples?.[ui.def]?.[i] ?? "");
+  cur[ports.indexOf(p)] = text;
+  while (cur.length && cur.at(-1) === "") cur.pop();
+  ui.touched = [];
+  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: cur } }, ["examples.json"], "Ran it again with that value. Values live in examples.json, never in the code.");
+}
+
 function setKnown(info: T.Info, port: Id, on: boolean) {
   const cur = knownPorts(info);
   const next = on ? [...cur, port] : cur.filter((p) => p !== port);
@@ -555,12 +554,12 @@ interface Backwards { answers: { values: Record<string, string>; free: string[];
 
 const backwardsCache = new Map<string, Backwards>();
 function runBackwards(info: T.Info, known: Id[]): Backwards {
-  const key = JSON.stringify([fnv(JSON.stringify(userCode(doc.code))), ui.def, known, known.map((k) => ui.args[`${ui.def}/${k}`] ?? "")]);
+  const key = JSON.stringify([fnv(JSON.stringify(userCode(doc.code))), ui.def, known, known.map((k) => portText(info, k))]);
   const hit = backwardsCache.get(key);
   if (hit) return hit;
   const out: Backwards = { answers: [], more: false };
   // A port's value is written the way values print: 3, "text", [1, 2], true.
-  const read = known.map((k) => [k, parseValue(ui.args[lkey(k)] ?? "", doc.code, pres().names)] as const);
+  const read = known.map((k) => [k, parseValue(portText(info, k), doc.code, pres().names)] as const);
   const bad = read.find(([, r]) => "error" in r);
   if (bad) return { answers: [], more: false, error: `${bad[0] === "out" ? "The result" : new Namer(doc.code, pres(), ui.def).name(bad[0])}: ${(bad[1] as { error: string }).error}.` };
   const values = Object.fromEntries(read.map(([k, r]) => [k, (r as { value: Value }).value]));
@@ -599,7 +598,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const ports = portsOfDef(ui.def);
   const known = knownPorts(info);
   const pred = returnsBool(info, ui.def);
-  const missing = known.filter((k) => !(ui.args[lkey(k)] ?? (k === "out" && pred ? "true" : "")).trim());
+  const missing = known.filter((k) => !portText(info, k).trim());
   const r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
   const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
@@ -615,12 +614,9 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     cb.addEventListener("change", () => setKnown(info, p, cb.checked));
     const shown = r.answers[0]?.values[p];
     const input = on
-      ? h("input", { id, type: "text", value: ui.args[lkey(p)] ?? (p === "out" && pred ? "true" : ""), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
+      ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
       : h("output", { class: shown === undefined ? "none" : "" }, shown === undefined ? "?" : nice(shown));
-    if (on) {
-      if (ui.args[lkey(p)] === undefined && p === "out" && pred) ui.args[lkey(p)] = "true";
-      (input as HTMLInputElement).addEventListener("change", () => { ui.args[lkey(p)] = (input as HTMLInputElement).value; ui.touched = []; ui.note = "Ran it again with that value."; render(); });
-    }
+    if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }
   if (missing.length) box.append(h("p", { class: "status-line warn" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
@@ -768,6 +764,15 @@ const GRAPH_HINT = "drag a node to move it; click a wire to put a dot on it; dra
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   if (ui.mode === "new-def") return newDefinitionForm(info);
   const id = ui.selected ?? ui.def;
+  const shownFrom = view?.from.get(id);
+  if (shownFrom && id.includes("~")) {
+    const call = id.split("~").at(-1)!;
+    return h("div", { class: "insp" }, h("p", { class: "hint" }, `Shown inline from ${namer.name(shownFrom)}. This is a view: to change it, open the definition.`),
+      h("div", { class: "acts" },
+        h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": shownFrom }, `Open ${namer.name(shownFrom)}`),
+        inlinable(view!.code, id) ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": id }, (doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline") : null,
+        h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call }, "Collapse the call")));
+  }
   if (!node(id)) return h("div", { class: "empty" }, "Nothing selected. Click anything in the blocks; a hole (□) opens a palette of what fits.");
   const n = node(id);
   const names = p.names;
@@ -781,7 +786,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
 
   const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
-  if (callee && callee !== ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`)));
+  // The call itself, or its head (the name clicked to select it).
+  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? Object.values(doc.code.nodes).find((c) => c.kind === "call" && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
+  if ((callee && callee !== ui.def) || call) out.append(h("div", { class: "acts" },
+    callee && callee !== ui.def ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`) : null,
+    call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
 
   if (n.kind === "binder" || n.kind === "def" || n.kind === "variant" || n.kind === "field") {
     const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
@@ -805,7 +814,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (n.kind === "lit") {
     const input = h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" }) as HTMLInputElement;
     input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
-    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
+    // Enter on an unchanged value (an empty text, say) moves on too.
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
@@ -850,9 +861,9 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   switch (f.kind) {
     case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
-    case "lit": return [f.of === "number" ? "a number" : "a text", f.of === "number" ? "Number" : "Text", "literals"];
+    case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
-    default: return [`${f.kind} ${nm(f.on)} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}`, "case analysis"];
+    default: return [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
 }
 
@@ -872,9 +883,19 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     again?.focus();
     if (again && at !== null) again.setSelectionRange(at, at);
   });
+  // What's typed may itself be a value: 3, "hi", [3, 1, 2], circle(2).
+  // Offered first, and only if it fits. A bare case name is already listed.
+  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? T.fillValue(doc.code, doc.names.short, info, hole, ui.query, ui.def) : null;
+  const value = typed?.ok ? typed : null;
   const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0], ui.def)); };
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && shown[0]) run(shown[0]); });
+  const runValue = () => { ui.query = ""; applyT(value!); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (value) runValue(); else if (shown[0]) run(shown[0]); } });
   const list = h("div", { class: "opts palette" });
+  if (value) {
+    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this value, written out"));
+    b.addEventListener("click", runValue);
+    list.append(h("div", { class: "pal-g" }, "the value typed"), b);
+  }
   let group = "";
   for (const x of shown.slice(0, 40)) {
     if (x.l[2] !== group) { group = x.l[2]; list.append(h("div", { class: "pal-g" }, group)); }
@@ -882,7 +903,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     b.addEventListener("click", () => run(x));
     list.append(b);
   }
-  if (!shown.length) list.append(h("p", { class: "hint" }, "Nothing that fits matches."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values can be typed too: 3, \"text\", [1, 2]."));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
@@ -1050,6 +1071,39 @@ function programPanel(): HTMLElement {
   return out;
 }
 
+// The graph, with any calls shown inline. Their copies are a view, so every
+// edit that would land in one is refused with where to make it instead.
+let view: InlineView | null = null;
+function graphOf(info: T.Info): HTMLElement {
+  const calls = (doc.layout.inline ?? []).filter((c) => c.includes("~") || node(c));
+  const p = typedPres();
+  view = calls.length ? inlineView(doc.code, p.names, calls) : null;
+  if (!view) return typedGraph(doc.code, p, info, ui.def, graphHooks(info), viewKey()).el;
+  const v = view;
+  const vinfo = T.infer(v.code, v.names);
+  const hooks = graphHooks(info);
+  const viewOnly = (id: Id) => (v.from.has(id) && id.includes("~") ? `this is shown inline from ${p.names[v.from.get(id)!] ?? "its definition"}: open it to change it` : null);
+  return typedGraph(v.code, { ...p, names: v.names }, vinfo, ui.def, {
+    ...hooks,
+    canUse: (b, slot) => viewOnly(slot) ?? hooks.canUse(b, slot),
+    use: (b, slot) => { if (!viewOnly(slot)) hooks.use(b, slot); },
+    clear: (slot) => { if (!viewOnly(slot)) hooks.clear(slot); },
+    addDot: (slot) => { if (!viewOnly(slot)) hooks.addDot(slot); },
+    canShare: (from) => { const r = viewOnly(from); if (r) return () => r; const c = hooks.canShare(from); return (slot) => viewOnly(slot) ?? c(slot); },
+    share: (from, slot) => { if (!viewOnly(from) && !viewOnly(slot)) hooks.share(from, slot); },
+  }, viewKey()).el;
+}
+
+function toggleInline(call: Id) {
+  const now = doc.layout.inline ?? [];
+  const on = now.includes(call);
+  // Collapsing a call collapses what was shown inline inside it too.
+  const inline = on ? now.filter((x) => x !== call && !x.endsWith(`~${call}`)) : [...now, call];
+  ui.selected = call;
+  commit({ layout: { ...doc.layout, inline } }, ["layout.json"],
+    on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
+}
+
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
@@ -1088,40 +1142,22 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
     }
   } else if (z?.t === "fn") box.append(backwardsPanel(namer, info));
-  // Values on wires: example inputs, and every node's value for them.
-  const params = body.kind === "lambda" ? body.params : [];
+  // Values on the wires: a function shows them for the values above; an
+  // action, once you ask (it may take a while, and its printing is left out).
   const ex = doc.examples?.[ui.def];
-  const fields = params.map((p, i) => {
-    const pt = info.typeOf.get(p);
-    const fn = !!pt && info.subst.resolve(pt).t === "fn";
-    const input = h("input", { id: `f-ex-${i}`, type: "text", value: ex?.[i] ?? "", disabled: fn, placeholder: fn ? "a function: try it from a definition that calls this" : pt ? typeName(info, pt, pres().names) : "", autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") showValues(); });
-    return h("label", { class: "field", for: `f-ex-${i}` }, h("span", {}, namer.name(p)), input);
-  });
-  box.append(h("div", { class: "sub-head" }, "Values on the wires · examples.json"),
-    h("p", { class: "hint" }, params.length ? "Example inputs, written like 3, \"text\", [1, 2] or circle(2). The graph shows what every node makes of them." : "Run it once and the graph shows what every node made (printing is left out)."),
-    ...fields,
-    h("div", { class: "acts" },
-      h("button", { class: "btn", type: "button", "data-act": "t-values" }, ex ? "Update values" : "Show values"),
-      ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
-  const tr = ex ? traced(info) : null;
-  if (tr?.result !== undefined) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
-  if (tr?.error) box.append(h("p", { class: "status-line bad" }, `Stopped: ${tr.error.message}.`));
-  if (ui.exError) box.append(h("p", { class: "status-line bad" }, ui.exError));
+  const tr = traced(info);
+  if (action) box.append(h("div", { class: "acts" },
+    h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
+    ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
+  else if (z?.t === "fn") box.append(h("p", { class: "hint" }, "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."));
+  if (tr?.result !== undefined && action) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
+  if (tr?.error) box.append(h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
 
-// Read the example inputs and keep them (they're part of the program's files).
+// An action's values come from running it, so they're asked for.
 function showValues() {
-  const body = defBody(ui.def);
-  const n = body?.kind === "lambda" ? body.params.length : 0;
-  const texts = Array.from({ length: n }, (_, i) => (document.getElementById(`f-ex-${i}`) as HTMLInputElement | null)?.value ?? "");
-  ui.exError = null;
-  for (const [i, t] of texts.entries()) {
-    const r = parseValue(t, doc.code, pres().names);
-    if ("error" in r) { ui.exError = `Input ${i + 1}: ${r.error}.`; return render(); }
-  }
-  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: texts } }, ["examples.json"], "Values on the wires: each node shows what it made of these inputs. They're saved in examples.json, not in the code.");
+  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: [] } }, ["examples.json"], "Values on the wires: each node shows what it made. Printing is left out.");
 }
 
 function hideValues() {
@@ -1132,15 +1168,26 @@ function hideValues() {
 
 // The run on the examples, once per version of the code and examples.
 const traces = new WeakMap<Code, Map<string, Trace>>();
+// The inputs the graph shows values for: the values given, and for the
+// ports solved for, the first answer. None until every input has one.
+function traceInputs(info: T.Info): string[] | null {
+  const body = defBody(ui.def);
+  if (body?.kind !== "lambda") return doc.examples?.[ui.def] ? [] : null;
+  const known = knownPorts(info);
+  const answer = known.length === portsOfDef(ui.def).length - 1 && !known.includes("out") ? null : runBackwards(info, known).answers[0];
+  const texts = body.params.map((p) => (known.includes(p) ? portText(info, p) : answer?.values[p] ?? ""));
+  return texts.every((t) => t.trim()) ? texts : null;
+}
+
 function traced(info: T.Info): Trace | null {
-  const ex = doc.examples?.[ui.def];
-  if (!ex) return null;
-  const key = `${ui.def}\u0000${ex.join("\u0000")}`;
+  const texts = traceInputs(info);
+  if (!texts) return null;
+  const key = `${ui.def}\u0000${texts.join("\u0000")}`;
   let m = traces.get(doc.code);
   if (!m) traces.set(doc.code, (m = new Map()));
   if (!m.has(key)) {
-    const args = ex.map((t) => parseValue(t, doc.code, pres().names));
-    m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "an example input doesn't read as a value" } }
+    const args = texts.map((t) => parseValue(t, doc.code, pres().names));
+    m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
       : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value)));
   }
   return m.get(key)!;
@@ -1271,7 +1318,7 @@ function render() {
 
   const main = [
     h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
-      typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info), viewKey()).el),
+      graphOf(info)),
     h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
       h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
     h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"),
@@ -1330,6 +1377,7 @@ document.addEventListener("click", (e) => {
     if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
+    if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
     if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();

@@ -95,7 +95,7 @@ export function usesOfDefinition(code: Code, def: Id): Id[] {
     switch (n.kind) {
       case "ref": case "tref": return into(n.target);
       case "arm": return into(n.variant);
-      case "part": case "solve": return into(n.fn);
+      case "solve": return into(n.fn);
       default: return false;
     }
   }).map((n) => n.id);

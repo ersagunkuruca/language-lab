@@ -170,7 +170,7 @@ test("a program saved to a file opens again as the same program, and a broken fi
   s.fill(main, call(S.print));
   s.fill(main, (f) => f.kind === "lit" && f.of === "text");
   const empty = base({ nodes: {}, defs: [] });
-  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {}, expanded: [] }, examples: {} }, empty);
+  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {} }, examples: {} }, empty);
   // Only the program's own nodes are in the file.
   assert.ok(JSON.parse(text).code.defs.length === 1);
   const r = fromFile(text, () => empty);
@@ -247,4 +247,79 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   assert.ok("error" in parseValue("[4, ", s.code, all));
   assert.ok("error" in parseValue("nosuch(1)", s.code, all));
   assert.deepEqual(parseValue("true", s.code, all), { value: { tag: "std.bool.true", fields: [] } });
+});
+
+test("insertion sort, the textbook algorithm, written with palette picks and a typed value", async () => {
+  const T = await import("../editor/typed.ts");
+  const { CONS, NIL, TRUE } = await import("../src/lang/std.ts");
+  T.setDisplayNames(baseNames({}));
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "insert", { kind: "function", params: ["x", "items"] }));
+  const insert = s.def("insert");
+  const [x, items] = (s.code.nodes[(s.code.nodes[insert] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  // An unknown input: fold is offered only on types with something to fold.
+  const offers = fillings(s.code, s.info(), s.holes(insert)[0]);
+  assert.ok(offers.some((f) => f.kind === "match" && f.on === items && f.type === "std.bool"));
+  assert.ok(!offers.some((f) => f.kind === "fold" && f.type === "std.bool"));
+  const e = fillHole(s.code, s.names, s.holes(insert)[0], offers.find((f) => f.kind === "fold" && f.on === items && f.type === "std.list")!, baseNames({}));
+  s.code = e.code; s.names = e.names;
+  // The arm binders are named after the library's fields.
+  const arm = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === CONS) as NodeOf<"arm">;
+  assert.deepEqual([...arm.binds, arm.results[1]!].map((b) => s.names[b]), ["head", "tail", "tail′"]);
+  s.fill(insert, call(CONS)); s.fill(insert, ref(x)); s.fill(insert, ref(NIL));
+  // if x < head: a match on a value given next, whose scrutinee is a hole.
+  const m = s.fill(insert, (f) => f.kind === "match" && f.on === null && f.type === "std.bool") as NodeOf<"match">;
+  assert.equal(s.code.nodes[m.scrutinee].kind, "hole");
+  s.fill(insert, call(S.less)); s.fill(insert, ref(x)); s.fill(insert, ref(arm.binds[0]));
+  // Reading order is if/then/else: the true case's hole comes next.
+  const then = (s.code.nodes[m.arms.find((a) => (s.code.nodes[a] as NodeOf<"arm">).variant === TRUE)!] as NodeOf<"arm">).body;
+  assert.equal(T.nextHole(s.code, insert, m.scrutinee), then);
+  const r = T.fillValue(s.code, s.names, s.info(), then, "[0]", insert);
+  assert.ok(r.ok);
+  assert.equal(T.fillValue(s.code, s.names, s.info(), then, '"text"', insert).ok, false, "a Text doesn't fit a List Number");
+});
+
+test("the sort example, written in the editor, type-checks and runs", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const info = infer(p.code, p.pres.names);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
+  assert.deepEqual(out, ["[1, 2, 3]"]);
+});
+
+test("show inline: a call drawn as its callee's body is a let, and type-checks the same", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { inlineView } = await import("../editor/inline.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const insert = p.named("insert");
+  const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
+  const v = inlineView(p.code, p.pres.names, [call]);
+  const c = v.code.nodes[call] as NodeOf<"call">;
+  assert.equal(v.code.nodes[c.fn].kind, "lambda");
+  assert.equal(v.names[(v.code.nodes[c.fn] as NodeOf<"lambda">).params[0]], "x");
+  assert.ok([...v.from.keys()].every((id) => id === call || id.endsWith(`~${call}`)));
+  assert.deepEqual(infer(v.code, v.names).errors, []);
+  assert.equal(p.code.nodes[(p.code.nodes[call] as NodeOf<"call">).fn].kind, "ref", "the program itself is untouched");
+  const out: string[] = [];
+  runMain(v.code, infer(v.code, v.names), p.named("main"), { print: (s) => out.push(s) });
+  assert.deepEqual(out, ["[1, 2, 3]"]);
+});
+
+test("values inside a fold: its outermost pass, with the rest already folded", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { trace } = await import("../src/lang/trace.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const info = infer(p.code, p.pres.names);
+  const v = (t: string) => (parseValue(t, p.code, p.pres.names) as { value: never }).value;
+  const tr = trace(p.code, info, p.named("insert"), [v("2"), v("[1, 3]")]);
+  const byName = (n: string) => [...tr.values].filter(([id]) => p.pres.names[id] === n).map(([, x]) => showValue(x, p.code, p.pres.names));
+  assert.deepEqual(byName("head"), ["1"]);
+  assert.deepEqual(byName("tail′"), ["[2, 3]"]);
+  assert.equal(showValue(tr.result!, p.code, p.pres.names), "[1, 2, 3]");
 });

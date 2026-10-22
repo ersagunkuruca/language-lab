@@ -1,0 +1,4 @@
+{
+  "n7m8dbevtqo7s1h07idtb8fuhl": "Put x into a sorted list, before the first item it is less than. A fold: the cons case gets the rest already done (tail′), and uses it only when x goes further along.",
+  "jd71se0rr08lbrtv67koakumof": "Insertion sort, the textbook algorithm (no one source; see any algorithms text). Fold the list from the end, inserting each item into the sorted rest. Written in the editor with palette picks only."
+}
