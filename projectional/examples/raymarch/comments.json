@@ -1,0 +1,21 @@
+{
+  "uisquodkfrkoo9l79dsb8jbfnq": "A point or a direction in space.",
+  "54pnspql08fnfblh52eq0qm3qf": "How much red, green and blue, each from 0 to 1.",
+  "lutrps1irm199iqbgvtdo282ue": "The smaller of a and b.",
+  "dqrvoi8fvnbchp3qope2alhp0c": "The larger of a and b.",
+  "lm4bh90rqfn5vhgjna287jf0kv": "x, kept between 0 and 1.",
+  "tl6hjc48ha6qc4hdmncad2augp": "How far (x, y, z) is from a ball of this radius around the origin. Negative inside.",
+  "urv9eu7810qd4sqjvlricdqtso": "How far (x, y, z) is from a ring (a torus) lying flat around the origin. The formula is Inigo Quilez's torus, from https://iquilezles.org/articles/distfunctions/.",
+  "t8p8dbn9irpk3eesbn2pdf12c7": "The nearer of two shapes, with the seam between them rounded off so they melt together. This is Inigo Quilez's polynomial smooth minimum, from https://iquilezles.org/articles/smin/.",
+  "gbj4taagj9imrlmltjq2bapl90": "A drop circling inside a ring at this time, melting into it where they meet.",
+  "4bckvu4k8pm5tf5brugtb31o1b": "The whole scene: the shapes above a floor at height −0.8. Each frame, every pixel asks this how far it can safely step.",
+  "g8qua82584vidupaamhpqb6r4r": "How far along the ray from (ox, oy, oz) in direction (dx, dy, dz) the first surface is. Sphere tracing: the scene says how far is surely empty, so step that far and ask again. Stops on a surface, past 20, or after 120 steps. A loop on the GPU, since the call to itself is its last step.",
+  "mj3ija70ca5512ft0vb00ck1ol": "How much light reaches (px, py, pz) from direction (lx, ly, lz): 0 when something is in the way, less when something nearly is, which softens the shadow's edge. This is Inigo Quilez's soft shadow, from https://iquilezles.org/articles/rmshadows/.",
+  "loi27ds4ps59b6m5gi4le4nsd0": "(x, y, z) scaled to length 1.",
+  "sgnq80h0ulti69tdf85d8ctphp": "How much a and b point the same way.",
+  "eshm7a5ef1erjshv7d9jd6ugnt": "The colour of the sky looking in a direction this steep: paler at the horizon.",
+  "g7bf60oa8upqsibuj4ph3tgjtf": "0 or 1 in a checkerboard of half-unit squares on the floor.",
+  "9llh56o35attq62halcqgona2f": "The colour of the surface at (x, y, z). The normal, the direction the surface faces, is the gradient of the scene: its three partial derivatives, generated from scene by the derivative transformation (∂scene/∂x and so on), not estimated by sampling nearby points.",
+  "l6iousmq11pkei9qnle3ksbtuc": "a when amount is 0, b when it is 1, and in between.",
+  "t4pma75h0imolv3puct9l0h2hb": "The colour of the pixel at (x, y): follow a ray from the camera through it and shade what it hits, fading into the sky with distance; or show the sky."
+}

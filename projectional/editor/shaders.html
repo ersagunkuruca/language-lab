@@ -1,29 +1,36 @@
 <main>
 <nav><a href="./">← Back to the editor</a> · <a href="tutorial.html">Tutorial</a> · <a href="https://github.com/ersagunkuruca/language-lab/blob/main/projectional/COMPILER.md#targets-beyond-javascript-shaders-webassembly-native">Targets in COMPILER.md</a></nav>
 <h1>Shaders: the language on the GPU</h1>
-<p>The picture below is a program in the language. Its three definitions <code>red</code>, <code>green</code> and <code>blue</code> say how much of each colour the point (x, y) has at a given time. The compiler turns them into WGSL, WebGPU's shading language, and the GPU runs them once for every pixel, every frame.</p>
-<p>Only part of the language can go to a GPU. That part is Numbers and Bools, arithmetic, <code>if</code>, lets, and calls. There is no recursion, because a GPU has no call stack. A function that calls itself as its last step is fine, though, because that is a loop, and it becomes one. Anything else is refused, and the compiler says why, the way it reports a type error.</p>
+<p>Each picture below is a program in the language. It says what colour the point (x, y) is at a given time, either as one definition <code>colour</code> that gives a <code>Colour</code> record, or as three definitions <code>red</code>, <code>green</code> and <code>blue</code>. The compiler turns that into WGSL, WebGPU's shading language, and the GPU runs it once for every pixel, every frame.</p>
+<p>Only part of the language can go to a GPU: Numbers and Bools, records of them, arithmetic, <code>if</code>, lets, and calls. There is no recursion, because a GPU has no call stack. A function that calls itself as its last step is fine, though, because that is a loop, and it becomes one. Anything else is refused, and the compiler says why, the way it reports a type error.</p>
 
-<section class="demo">
+<section id="raymarch" class="demo">
+<h2>A ray marcher, with normals from the derivative</h2>
 <div class="pair">
 <div>
-<canvas id="picture"></canvas>
-<p class="log" id="status">Starting…</p>
-<p class="hint" id="check"></p>
+<canvas class="picture"></canvas>
+<p class="log status">Starting…</p>
+<p class="hint check"></p>
+<p class="hint">For each pixel, <code>march</code> follows a ray from the camera. <code>scene</code> says how far the nearest surface is, so the ray can safely step that far, and then it asks again. Where a surface faces is the gradient of <code>scene</code>. Most ray marchers estimate it by sampling <code>scene</code> at six nearby points. Here it is exact: <code>∂scene/∂x</code>, <code>∂scene/∂y</code> and <code>∂scene/∂z</code> were generated from <code>scene</code> by the language's derivative transformation (the one behind <code>derivative</code> and the editor's derivative gesture). They are ordinary definitions, so they compile to the GPU like everything else. <code>march</code> and <code>shadow</code> call themselves as their last step, so on the GPU they are loops.</p>
 </div>
-<pre class="code" id="program"></pre>
+<pre class="code program"></pre>
 </div>
+<details><summary>The WGSL the GPU runs</summary><div class="pair"><pre class="code wgsl"></pre><pre class="code fragment"></pre></div></details>
 </section>
 
-<section class="demo">
-<h2>What the GPU runs</h2>
+<section id="ripples" class="demo">
+<h2>Ripples</h2>
 <div class="pair">
-<pre class="code" id="wgsl"></pre>
 <div>
-<p class="hint">On the left is the WGSL the compiler printed. A Number is <code>f32</code> and a let is a <code>let</code>. An <code>if</code> is an if statement. Calls stay calls. Below is the part the page adds around it: one triangle that covers the screen, and a fragment shader that turns each pixel's position into x and y and calls the three functions.</p>
-<pre class="code" id="fragment"></pre>
+<canvas class="picture"></canvas>
+<p class="log status">Starting…</p>
+<p class="hint check"></p>
 </div>
+<pre class="code program"></pre>
 </div>
+<details><summary>The WGSL the GPU runs</summary>
+<p class="hint">On the left is the WGSL the compiler printed. A Number is <code>f32</code>, a record is a <code>struct</code>, a let is a <code>let</code>, and an <code>if</code> is an if statement. Calls stay calls. On the right is the part the page adds around it: one triangle that covers the screen, and a fragment shader that turns each pixel's position into x and y and calls the program.</p>
+<div class="pair"><pre class="code wgsl"></pre><pre class="code fragment"></pre></div></details>
 </section>
-<p class="credits">Everything on this page is written for this project. The full-screen triangle is the usual graphics trick of one oversized triangle instead of two that make a square. The WGSL follows the <a href="https://www.w3.org/TR/WGSL/">W3C spec</a>.</p>
+<p class="credits">Credits: sphere tracing is John C. Hart's ("Sphere tracing", The Visual Computer, 1996). The ring's distance, the smooth blend and the soft shadow are <a href="https://iquilezles.org">Inigo Quilez</a>'s formulas, from <a href="https://iquilezles.org/articles/distfunctions/">his distance functions</a>, <a href="https://iquilezles.org/articles/smin/">smooth minimum</a> and <a href="https://iquilezles.org/articles/rmshadows/">soft shadows</a> articles, and each definition that uses one says so. The scene, the ripples and the code are written for this project. The WGSL follows the <a href="https://www.w3.org/TR/WGSL/">W3C spec</a>.</p>
 </main>
