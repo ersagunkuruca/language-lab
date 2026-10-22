@@ -67,10 +67,11 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [S.print]: { js: ([a]) => `$print(${a})` },
   [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
   [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
+  [S.hence]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
   [S.or]: { js: ([a, b]) => `(${a} || ${b})`, bool: true },
   [S.not]: { js: ([a]) => `!${a}`, bool: true },
 };
-const BOOL_ARGS = new Set([S.and, S.or, S.not]);
+const BOOL_ARGS = new Set([S.and, S.hence, S.or, S.not]);
 const HANDLERS = new Set([S.first, S.all, S.count, S.fuel]);
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
@@ -114,7 +115,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // over, the same as the evaluator's (META), and the module carries its
   // own node table for the interpreter to read.
   const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
-  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && n.target === S.derivative));
+  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.exists)));
+  // The expressions a solve node hands over: all of its given ports for the
+  // interpreter, only the solver's known ones (not a predicate's out = true)
+  // for a planned direction.
+  const givenOf = (n: NodeOf<"solve">) => (relational(n) ? Object.values(n.given) : planSolve(code, n).known.map((k) => n.given[k]));
   // The binders a lambda closes over: used inside it, bound outside it.
   function captured(lambda: Id): Id[] {
     const inside = subtree(code, lambda);
@@ -199,7 +204,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           `return $relate($program, ${JSON.stringify(n.fn)}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
         return name;
       }
-      solverCode.push(compileSolve(name, planSolve(code, n).rel!, Object.keys(n.given), Object.keys(n.binds), names[n.fn] ?? n.fn, label));
+      solverCode.push(compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[n.fn] ?? n.fn, label));
     }
     return solvers.get(n.id)!;
   }
@@ -261,7 +266,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "fold": return foldEx(n);
         case "solve": {
           const binds = Object.values(n.binds).map(local);
-          return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${Object.values(n.given).map(ex).join(", ")})))`;
+          return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${givenOf(n).map(ex).join(", ")})))`;
         }
         default: throw new Error(`can't compile a ${n.kind}`);
       }
@@ -282,7 +287,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function equality(n: NodeOf<"call">): string {
       const [a, b] = n.args.map(ex);
       const t = ty(n.args[0]);
-      return t.t === "con" && (t.id === NUMBER || t.id === STRING) ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
+      // Numbers compare to the precision floats carry (run.ts `close`).
+      if (t.t === "con" && t.id === NUMBER) return `$near(${a}, ${b})`;
+      return t.t === "con" && t.id === STRING ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
     }
 
     function refValue(n: NodeOf<"ref">): string {
@@ -366,6 +373,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === S.equal) return `$bool(${equality(n)})`;
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
           if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
+          if (f.target === S.exists) return `$exists($program, ${ex(n.args[0])})`;
         }
         if (t.kind === "variant") return construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
@@ -524,8 +532,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "match": return stMatch(n, k);
         case "fold": return stFold(n, k);
         case "solve": {
-          const given = Object.values(n.given);
-          return parts(given, (vals) => {
+          return parts(givenOf(n), (vals) => {
             const sol = temp("sol");
             const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
             return `for (const ${sol} of ${solver(n)}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
@@ -597,6 +604,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           c = OPS[target!].bool ? `$bool(${js})` : js;
         } else if (target === S.equal) c = `$bool($eq(${args.join(", ")}))`;
         else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
+        else if (target === S.exists) c = `$exists($program, ${args[0]})`;
         else c = `${fn}(${args.join(", ")})`;
         let out: string;
         if (callStreams(n)) {
@@ -667,8 +675,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$planned", "$solveRuntime", "$print", "$FN", "$spread", "$self", "$foldNested",
-    ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative"] : [])];
+    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$spread", "$self", "$foldNested",
+    ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
   return indent([

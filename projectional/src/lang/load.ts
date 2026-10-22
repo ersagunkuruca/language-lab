@@ -1,19 +1,18 @@
-// Loading a typed program: its code.json on top of the prelude, the
-// relations and the standard library, with their names underneath its own.
+// Loading a typed program: its code.json on top of the prelude and the
+// standard library, with their names underneath its own.
 
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { merge, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
-import { relationNames, relationPrelude } from "../relational.ts";
 import { root } from "../io.ts";
 import { std, stdNames } from "./std.ts";
 
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
 
-export const base = (code: Code): Code => merge(prelude, relationPrelude, std, code);
-export const baseNames = (...layers: Names[]): Names => layer<Names>(preludeNames, relationNames, stdNames, ...layers);
+export const base = (code: Code): Code => merge(prelude, std, code);
+export const baseNames = (...layers: Names[]): Names => layer<Names>(preludeNames, stdNames, ...layers);
 
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });

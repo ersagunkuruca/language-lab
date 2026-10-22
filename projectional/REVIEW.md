@@ -198,6 +198,15 @@ more importantly, the hash as the identity of published code (§4.5).
 
 ## 3. Still two worlds, and more copies than that
 
+> **Status (2026-10-22): done, except mode analysis.** Networks are
+> predicates; `network`, `part`, `eval.ts`, `check.ts`, `edits.ts` and
+> `relational.ts` are gone; units are checked by the type checker in every
+> program; the editor has one path, with a run-backwards panel for any
+> function. `+` is still `add`/`subtract`/`negate` (the `sum` atom went
+> away rather than taking over), and directions through cases and folds are
+> still found by running, not by the checker. See LANGUAGE.md, "One world".
+> The rest of this section is the review as written.
+
 The tutorial's first critique was "two worlds of functions". It's worse
 than that when counted in code:
 
@@ -579,9 +588,10 @@ Each step says why it comes where it does.
    the next example program only in the editor, and fix what hurts.
    *Why:* the thesis is projectional editing, and it hasn't been tested by
    writing anything.
-4. **One world** (a month). Network = predicate; delete `network`, `part`,
-   `src/eval.ts`, the untyped checker; units on `Number`; mode analysis in
-   the checker so backwards directions are static. *Why now:* every feature
+4. **One world** (a month). *Done, except mode analysis.* Network =
+   predicate; delete `network`, `part`, `src/eval.ts`, the untyped checker;
+   units on `Number`; mode analysis in the checker so backwards directions
+   are static. *Why now:* every feature
    added before this is added twice.
 5. **Signatures, identity, modules** (a month). Pins, incremental checking,
    publish by hash, namespaces and visibility. *Why:* needed before any

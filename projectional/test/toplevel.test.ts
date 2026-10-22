@@ -170,7 +170,7 @@ test("a program saved to a file opens again as the same program, and a broken fi
   s.fill(main, call(S.print));
   s.fill(main, (f) => f.kind === "lit" && f.of === "text");
   const empty = base({ nodes: {}, defs: [] });
-  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {}, expanded: [] }, examples: {} }, empty);
+  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {} }, examples: {} }, empty);
   // Only the program's own nodes are in the file.
   assert.ok(JSON.parse(text).code.defs.length === 1);
   const r = fromFile(text, () => empty);

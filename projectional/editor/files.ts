@@ -18,7 +18,7 @@ export interface ProgramFile {
   names: Names;
   descriptive: Names;
   comments: Comments;
-  layout: { positions: Record<string, { x: number; y: number }>; known: Record<Id, Id[]>; expanded: Id[] };
+  layout: { positions: Record<string, { x: number; y: number }>; known: Record<Id, Id[]> };
   // Example inputs per definition, as text.
   examples: Record<Id, string[]>;
 }
@@ -59,7 +59,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     const targets: (Id | null | undefined)[] = [...children(n)];
     if (n.kind === "ref" || n.kind === "tref") targets.push(n.target);
     if (n.kind === "arm") targets.push(n.variant);
-    if (n.kind === "part" || n.kind === "solve") targets.push(n.fn);
+    if (n.kind === "solve") targets.push(n.fn);
     if (n.kind === "call") targets.push(n.fn);
     const missing = targets.find((t) => t && !code.nodes[t]);
     if (missing) return { error: `node ${n.id} points at ${missing}, which isn't in the file` };
@@ -76,7 +76,6 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     layout: {
       positions: isObj(l.positions) ? (l.positions as ProgramFile["layout"]["positions"]) : {},
       known: isObj(l.known) ? (l.known as Record<Id, Id[]>) : {},
-      expanded: Array.isArray(l.expanded) ? (l.expanded as Id[]) : [],
     },
   };
   return { file, code };

@@ -13,9 +13,10 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
+import { unitProblems } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
-import { SIGS } from "./std.ts";
+import { BOOL, SIGS } from "./std.ts";
 import {
   CHOICE, CONSOLE, DIVERGE, EffectError, freeVars, instantiate, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
@@ -39,6 +40,7 @@ export interface Info {
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const str: Type = { t: "con", id: STRING, args: [] };
+const bool: Type = { t: "con", id: BOOL, args: [] };
 
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
@@ -276,7 +278,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         return s.fresh();
       case "builtin":
         if (SIGS[target]) return SIGS[target](s);
-        err(id, `${nm(target)} has no type here (a relation is used inside a network)`);
+        err(id, `${nm(target)} has no type`);
         return s.fresh();
       case "variant": {
         const { self, fields } = dataType(owner.get(target)!);
@@ -367,11 +369,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       relationalSolve(n, env, row, inner, p.loops);
       return expr(n.body, inner, row);
     }
-    for (const g of Object.values(n.given)) unifyAt(g, num, expr(g, env, row), "a given port");
+    // A predicate's out = true is a Bool; every other port is a number.
+    const outTrue = (k: string) => !!p?.predicate && k === "out";
+    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, expr(g, env, row), "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
-      for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
+      for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k) && !outTrue(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
       if (p.status !== "solved") err(n.id, `${nm(n.fn)} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
       else if (!p.unique) choice(n.id, row, [CHOICE], `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`);
     }
@@ -461,6 +465,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (n.kind === "match" && n.otherwise) unifyAt(n.otherwise, result, expr(n.otherwise, env, row), "the other cases");
     return result;
   }
+
+  // Units are part of a number's type: a conflict is a type error.
+  for (const u of unitProblems(code)) err(u.id, u.message);
 
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
@@ -655,7 +662,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge), so if the
   // group is run backwards anywhere, every filling is checked on its own.
-  const solvedOn = Object.values(code.nodes).some((n) => (n.kind === "solve" || n.kind === "part") && !!n.fn && h.group.includes(n.fn));
+  const solvedOn = Object.values(code.nodes).some((n) => n.kind === "solve" && h.group.includes(n.fn));
   const checked = new Map<string, boolean>();
   const safe = (s: Subst, f: Filling, risky: boolean) => {
     if (risky || solvedOn) return whole(f);
@@ -740,7 +747,7 @@ function dependents(code: Code, group: Id[]): Set<Id> {
   for (const d of code.defs) {
     for (const id of subtree(code, d)) {
       const n = code.nodes[id];
-      let t = n.kind === "ref" ? n.target : n.kind === "part" || n.kind === "solve" ? n.fn : null;
+      let t = n.kind === "ref" ? n.target : n.kind === "solve" ? n.fn : null;
       if (t && owner.has(t)) t = owner.get(t)!;
       if (t && t !== d) usedBy.set(t, [...(usedBy.get(t) ?? []), d]);
     }
