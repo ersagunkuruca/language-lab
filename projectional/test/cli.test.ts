@@ -41,6 +41,19 @@ test("wc, run and compiled: counts, totals, options, a missing file, standard in
   }
 });
 
+// examples/numbers is written on Peano Nat; its representations.json lets
+// lab store Nat as an Int (NUMBERS.md), so 18! runs, evaluated and compiled.
+test("lab runs and compiles numbers on the representation the chooser picks", () => {
+  const numbers = join(import.meta.dirname, "../examples/numbers");
+  const want = "18! = 6402373705728000\n2^50 = 1125899906842624\n100 is even: yes\n";
+  assert.deepEqual(node([lab, "run", numbers]), { code: 0, err: "", out: want });
+  const compiled = join(dir, "numbers.mjs");
+  assert.equal(node([lab, "compile", numbers, "-o", compiled]).code, 0);
+  assert.deepEqual(node([compiled]), { code: 0, err: "", out: want });
+  const small = (as: string[]) => node([lab, "run", ...as, numbers, "--main", "small"]).out;
+  assert.equal(small(["--as-defined"]), small([]));
+});
+
 test("lab refuses a program it can't run, and says why", () => {
   const r = node([lab, "run", join(import.meta.dirname, "../examples/queens"), "--main", "queens"]);
   assert.equal(r.code, 2);

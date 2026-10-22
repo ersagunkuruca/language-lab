@@ -420,8 +420,10 @@ from one entry in the table. The program still says `zero` and `succ`.
 The chooser now picks `int` for `numbers`' `main` (its `number` job is 1,
 against binary's log n). `main` (18!, 2⁵⁰, is 100 even) takes about 6 ms
 evaluated, against about 13 to 45 ms on binary, and about 0.03 ms compiled,
-against 0.09 ms. `lab run` and `lab compile` still run the definition, so
-choosing a representation there is the next step for this row.
+against 0.09 ms. `lab run` and `lab compile` choose too: a program folder with a
+`representations.json` runs on the chooser's pick for each type `main`
+uses (`lab run examples/numbers` prints 18! instead of running out of
+memory), and `--as-defined` runs the definitions as written.
 
 ## Number systems, one by one
 
