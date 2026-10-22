@@ -76,6 +76,10 @@ button { font: inherit; color: inherit; }
 @media (max-width: 1250px) {
   .grid { grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "nav graph graph" "nav blocks blocks" "nav text side"; }
 }
+/* The graph across the page's whole width (its Wide button). */
+@media (min-width: 721px) {
+  .graph-wide .grid { grid-template-columns: 210px minmax(0, 1fr) minmax(0, 1fr) 300px; grid-template-areas: "graph graph graph graph" "nav blocks text side"; }
+}
 @media (max-width: 720px) {
   .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "nav" "graph" "blocks" "side" "text"; }
   .p-nav { position: static; max-height: 40vh; }
@@ -125,7 +129,7 @@ button { font: inherit; color: inherit; }
 /* graph */
 .graph-wrap { overflow: auto; max-height: 520px; }
 /* Every graph is a window onto an unbounded plane (editor/canvas.ts). */
-.canvas-wrap { position: relative; height: 480px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; }
+.canvas-wrap { position: relative; height: 480px; min-height: 160px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; }
 .canvas-wrap svg.canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 .canvas-wrap svg.canvas.panning { cursor: grabbing; }
 .canvas-wrap svg.canvas text { user-select: none; -webkit-user-select: none; }
@@ -332,7 +336,23 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .edge-hit:hover + .tw, .tgraph .tw[data-edge]:hover { stroke: var(--accent); stroke-width: 2.4; }
 .tgraph .inp.use { fill: var(--let-ln); stroke: var(--let-ln); }
 .tgraph .portl { fill: var(--var-ln); font-size: 11px; pointer-events: none; }
-.tgraph .val { fill: var(--accent); font: 600 10.5px var(--font-code); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.tgraph .val rect { fill: var(--panel); stroke: var(--accent); stroke-width: 1; stroke-opacity: .55; }
+.tgraph .val text { fill: var(--accent); font: 500 10.5px var(--font-code); }
+.tgraph .val-more { fill: var(--accent); }
+/* A wire's stretch under a node it doesn't connect to (a tunnel). */
+.tgraph .tunnel { fill: none; stroke: var(--wire); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; pointer-events: none; }
+.tgraph .tunnel.use { stroke: var(--let-ln); }
+.tgraph rect.picked { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; }
+.tgraph .rg.picked { stroke: var(--accent); stroke-width: 2.5; }
+.tgraph .marquee { fill: var(--accent); fill-opacity: .08; stroke: var(--accent); stroke-dasharray: 4 3; pointer-events: none; }
+.tgraph .cn.letn { fill: var(--let-bg); stroke: var(--let-ln); }
+.tgraph .lit > .pill, .tgraph .lit > .cn, .tgraph .src.lit { stroke: var(--accent); stroke-width: 2.5; }
+.ctx-menu { position: fixed; z-index: 50; width: 310px; max-height: 440px; overflow: auto; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.ctx-item { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: var(--fg); font: 13px var(--font-ui); cursor: pointer; }
+.ctx-item:hover:not(:disabled), .ctx-item:focus-visible { background: var(--accent-soft); }
+.ctx-item:disabled { opacity: .45; cursor: default; }
+.ctx-head { padding: 4px 10px 2px; font: 600 12px var(--font-code); color: var(--muted); }
+.ctx-sep { border-top: 1px solid var(--line); margin: 4px 0; }
 .tgraph.dragging .cannot { opacity: .25; }
 .tgraph.dragging .inp.can, .tgraph.dragging .pill.can { stroke: var(--accent); stroke-width: 3.5; }
 .tgraph .why { fill: var(--hot); font: 600 12px var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }

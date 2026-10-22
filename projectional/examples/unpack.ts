@@ -31,6 +31,6 @@ save(`${dir}/code.json`, f.code);
 save(`${dir}/names.default.json`, f.names);
 if (some(f.descriptive)) save(`${dir}/names.descriptive.json`, f.descriptive);
 save(`${dir}/comments.json`, f.comments);
-if (some(f.layout.positions) || some(f.layout.known)) save(`${dir}/layout.json`, f.layout);
+if (some(f.layout.at ?? {}) || (f.layout.named ?? []).length || some(f.layout.known)) save(`${dir}/layout.json`, f.layout);
 if (some(f.examples)) save(`${dir}/examples.json`, f.examples);
 console.log(`${f.title}: ${f.code.defs.length} definitions into ${dir}`);

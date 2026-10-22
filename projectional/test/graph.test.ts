@@ -1,7 +1,9 @@
-// The graph's coordinate math, on a tiny stand-in for the DOM: a node moved
-// by an offset lands exactly that far from where it was, every frame around
-// it grows to hold it (left and up too), a frame's parameters stay on its
-// left edge, and every wire still ends on the output it comes from.
+// The graph's coordinate math, on a tiny stand-in for the DOM: a node put
+// somewhere is drawn exactly there and nothing else moves (positions are
+// free, not offsets from what a node feeds), every frame around it grows to
+// hold it, a frame's parameters stay on its left edge, every wire still
+// ends on the output it comes from, and a binding shown as let and get
+// nodes has no wires to its uses.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -27,16 +29,17 @@ class El {
   get firstChild() { return this.children[0] ?? null; }
   all(): El[] { return [this, ...this.children.flatMap((c) => c.all())]; }
 }
-(globalThis as unknown as { document: unknown }).document = { createElementNS: (_: string, tag: string) => new El(tag), createElement: (tag: string) => new El(tag) };
+(globalThis as unknown as { document: unknown }).document = { createElementNS: (_: string, tag: string) => new El(tag), createElement: (tag: string) => new El(tag), documentElement: { classList: { contains: () => false, toggle() {}, add() {} } } };
 (globalThis as unknown as { requestAnimationFrame: unknown }).requestAnimationFrame = () => 0;
+(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class { observe() {} };
 const { typedGraph } = await import("../editor/typedGraph.ts");
 
 const p = loadProgram(join(root, "examples", "queens"));
 const info = infer(p.code, p.pres.names);
 const def = p.named("queens");
-const draw = (offsets: Record<Id, { x: number; y: number }>) => typedGraph(p.code, p.pres, info, def, {
+const draw = (at: Record<Id, { x: number; y: number }>, named: Id[] = []) => typedGraph(p.code, p.pres, info, def, {
   selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
-  canShare: () => () => null, share() {}, offsets, moved() {},
+  canShare: () => () => null, share() {}, at, moved() {}, named: new Set(named),
 }).root as unknown as El;
 
 // Top-left corner of an element in the picture's coordinates.
@@ -54,25 +57,57 @@ const frames = (svg: El, el: El) => { const out: El[] = []; for (let e = el.pare
 const calls = p.code.nodes;
 const safe = Object.values(calls).find((n) => n.kind === "call" && calls[n.fn].kind === "ref" && p.pres.names[(calls[n.fn] as { target: Id }).target] === "safe")!.id;
 
-for (const off of [{ x: 120, y: 80 }, { x: -90, y: -40 }, { x: -170, y: 30 }]) {
-  test(`a node moved by (${off.x}, ${off.y}) lands there, inside every frame around it`, () => {
-    const before = draw({}), after = draw({ [safe]: off });
-    const a = at(before, grabbed(before, safe)), b = at(after, grabbed(after, safe));
-    assert.deepEqual({ x: b.x - a.x, y: b.y - a.y }, off);
-    const r = grabbed(after, safe);
-    const w = Number(r.getAttribute("width")), h = Number(r.getAttribute("height"));
-    for (const f of frames(after, r)) {
-      const fa = at(after, f);
-      assert.ok(fa.x <= b.x && fa.y <= b.y, "frame starts above and left of the node");
-      assert.ok(fa.x + Number(f.getAttribute("width")) >= b.x + w && fa.y + Number(f.getAttribute("height")) >= b.y + h, "frame ends below and right of it");
+const frameOf = (svg: El, id: Id) => svg.all().find((e) => e.getAttribute("data-frame") === id)!;
+const box = (svg: El, el: El) => { const a = at(svg, el); return { ...a, w: Number(el.getAttribute("width")), h: Number(el.getAttribute("height")) }; };
+
+for (const to of [{ x: 400, y: 300 }, { x: -90, y: -40 }, { x: 20, y: 500 }]) {
+  test(`a node put at (${to.x}, ${to.y}) is drawn there, nothing else moves, and its frames hold it`, () => {
+    const before = draw({}), after = draw({ [safe]: to });
+    assert.deepEqual(at(after, grabbed(after, safe)), to);
+    // Every other node stays where it was.
+    for (const e of before.all().filter((e) => e.getAttribute("data-move") && e.getAttribute("data-move") !== safe && !e.getAttribute("data-frame"))) {
+      const id = e.getAttribute("data-move")!;
+      assert.deepEqual(at(after, grabbed(after, id)), at(before, e), `${id} moved`);
     }
-    // Parameters sit on their frame's left edge.
-    for (const src of after.all().filter((e) => e.tagName === "circle" && /\bsrc\b/.test(e.getAttribute("class") ?? ""))) {
-      const f = src.parentElement!.children.find((c) => /\brg\b/.test(c.getAttribute("class") ?? ""));
-      if (f) assert.equal(at(after, src).x, at(after, f).x);
+    // Every frame around it holds it.
+    const b = box(after, grabbed(after, safe));
+    const around: Id[] = [];
+    for (const n of Object.values(calls)) if ((n.kind === "lambda" || n.kind === "arm") && JSON.stringify(n).length && contains(n.id, safe)) around.push(n.id);
+    around.push(def);
+    for (const f of around.map((id) => frameOf(after, id)).filter(Boolean)) {
+      const fb = box(after, f);
+      assert.ok(fb.x <= b.x && fb.y <= b.y, "frame starts above and left of the node");
+      assert.ok(fb.x + fb.w >= b.x + b.w && fb.y + fb.h >= b.y + b.h, "frame ends below and right of it");
     }
   });
 }
+
+// Is `inner` somewhere under `outer` in the tree?
+function contains(outer: Id, inner: Id): boolean {
+  const n = calls[outer] as unknown as Record<string, unknown>;
+  const kids = Object.values(n).flatMap((v) => (Array.isArray(v) ? v : typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v) : [])).filter((k): k is Id => typeof k === "string" && k in calls && k !== outer);
+  return kids.some((k) => k === inner || (calls[k].kind !== "def" && contains(k, inner)));
+}
+
+test("a frame's parameters sit on its left edge", () => {
+  const svg = draw({ [safe]: { x: -200, y: 40 } });
+  const arm = Object.values(calls).find((n) => n.kind === "arm" && contains(n.id, safe) && n.binds.length) as { id: Id; binds: Id[] };
+  const f = box(svg, frameOf(svg, arm.id));
+  for (const b of arm.binds) {
+    const c = svg.all().find((e) => e.tagName === "circle" && e.getAttribute("data-src") === b && /\bsrc\b/.test(e.getAttribute("class") ?? ""))!;
+    assert.equal(at(svg, c).x, f.x);
+  }
+});
+
+test("a binding shown as let and get nodes has get nodes and no wires to its uses", () => {
+  const column = Object.keys(p.pres.names).find((id) => p.pres.names[id] === "column" && calls[id]?.kind === "binder" && contains(def, id))!;
+  const wires = draw({}).all().filter((e) => /\buse-hit\b/.test(e.getAttribute("class") ?? "") && calls[e.getAttribute("data-id")!]?.kind === "ref" && (calls[e.getAttribute("data-id")!] as { target: Id }).target === column);
+  assert.ok(wires.length >= 2, "as wires, it has a wire per use");
+  const svg = draw({}, [column]);
+  assert.equal(svg.all().filter((e) => /\buse-hit\b/.test(e.getAttribute("class") ?? "") && (calls[e.getAttribute("data-id")!] as { target?: Id }).target === column).length, 0);
+  assert.equal(svg.all().filter((e) => /\bget\b/.test(e.getAttribute("class") ?? "")).length, wires.length);
+  assert.ok(svg.all().some((e) => /\bletn\b/.test(e.getAttribute("class") ?? "") && e.getAttribute("data-id") === column), "a let node where it's bound");
+});
 
 // Each call's output circle, and the wire leaving it, must meet, however far
 // its arguments were dragged (to the right of the call, for instance).

@@ -56,7 +56,7 @@ import { runMain, showValue, type Value } from "../src/lang/run.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
 import * as T from "./typed.ts";
-import { typedGraph } from "./typedGraph.ts";
+import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
@@ -73,7 +73,11 @@ type StyleName = "math" | "plain" | "lisp";
 type TextView = "blocks" | "nested" | "let" | "sexpr";
 
 interface Layout {
-  positions: Record<string, Pos>;
+  // Where nodes were put, in world coordinates, by `def/id`. Nodes not
+  // here take the automatic place.
+  at?: Record<string, Pos>;
+  // Bindings shown as a let node with get nodes instead of wires.
+  named?: Id[];
   // Per definition: which ports (parameters, and "out" for the result) you
   // give it when running it backwards. Choosing different ones is how you
   // invert it, and it never touches code.json.
@@ -123,10 +127,13 @@ interface UI {
   query: string;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string } | null;
+  // The graph's right-click menu: what it was for, where (screen, world).
+  menu: { target: MenuTarget; x: number; y: number; world: Pos } | null;
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
-// v5: tree nodes keep an offset from the automatic layout, not a position.
+// v5. Since free placement, layout.at holds positions; the offsets older
+// versions kept in layout.positions are ignored.
 const STORE = "projectional-editor-v5";
 
 // What every program is merged onto: the builtins, the standard library
@@ -141,7 +148,7 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
   code: merge(BASE, code),
   names: { short: names, descriptive: {} },
   comments, hints: {},
-  layout: { positions: {}, known: {}, ...more.layout },
+  layout: { known: {}, ...more.layout },
   examples: more.examples,
 });
 
@@ -218,6 +225,7 @@ const ui: UI = {
   query: "",
   refused: false,
   output: null,
+  menu: null,
   newKind: "function",
 };
 
@@ -226,6 +234,7 @@ const undo: Doc[] = [];
 const redo: Doc[] = [];
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
+  ui.menu = null;
   undo.push(doc);
   redo.length = 0;
   doc = { ...doc, ...next, edited: true };
@@ -372,6 +381,7 @@ function pasteIntoSelected() {
 // refusal changes nothing and says why.
 function applyT(e: T.TEdit): boolean {
   if (!e.ok) {
+    ui.menu = null;
     ui.note = `Refused: ${e.reason}. Nothing changed.`;
     ui.touched = [];
     ui.refused = true;
@@ -788,7 +798,7 @@ const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 const withHandles = (p: Presentation): Presentation => ({ ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } });
 const typedPres = (): Presentation => withHandles(blocksPres());
-const GRAPH_HINT = "drag a node to move it; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
+const GRAPH_HINT = "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   if (ui.mode === "new-def") return newDefinitionForm(info);
@@ -835,6 +845,12 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     out.append(h("div", { class: "sub-head" }, "Dot · code.json"),
       h("p", { class: "hint" }, `${k === 0 ? "Nothing reads it: it is a step done for its effect." : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
+  }
+  if (n.kind === "binder" && names[id] !== "_") {
+    const on = (doc.layout.named ?? []).includes(id);
+    out.append(h("div", { class: "sub-head" }, "Shown as · layout.json"),
+      h("p", { class: "hint" }, on ? "A let node, and a get node next to every use: no long wires." : "Wires from where it's bound to every use."),
+      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "named", "data-target": id }, on ? "Show as wires" : "Show as let and get nodes")));
   }
 
   if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
@@ -896,19 +912,19 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   }
 }
 
-function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
+function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
   // at a hole of any type it would otherwise come before calling it.
   const order = ["in scope", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: fillLabel(f, info, names) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
   const shown = all.filter(({ l }) => !q || l.some((s) => s.toLowerCase().includes(q)));
-  const input = h("input", { id: "f-query", type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
+  const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
   input.addEventListener("input", () => {
     ui.query = input.value;
     const at = input.selectionStart;
     render();
-    const again = document.getElementById("f-query") as HTMLInputElement | null;
+    const again = document.getElementById(field) as HTMLInputElement | null;
     again?.focus();
     if (again && at !== null) again.setSelectionRange(at, at);
   });
@@ -1103,16 +1119,18 @@ function programPanel(): HTMLElement {
 // The graph, with any calls shown inline. Their copies are a view, so every
 // edit that would land in one is refused with where to make it instead.
 let view: InlineView | null = null;
+// The graph last drawn, so the menu can ask it to tidy.
+let graph: GraphView | null = null;
 function graphOf(info: T.Info): HTMLElement {
   const calls = (doc.layout.inline ?? []).filter((c) => c.includes("~") || node(c));
   const p = typedPres();
   view = calls.length ? inlineView(doc.code, p.names, calls) : null;
-  if (!view) return typedGraph(doc.code, p, info, ui.def, graphHooks(info), viewKey()).el;
+  if (!view) return (graph = typedGraph(doc.code, p, info, ui.def, graphHooks(info), viewKey())).el;
   const v = view;
   const vinfo = T.infer(v.code, v.names);
   const hooks = graphHooks(info);
   const viewOnly = (id: Id) => (v.from.has(id) && id.includes("~") ? `this is shown inline from ${p.names[v.from.get(id)!] ?? "its definition"}: open it to change it` : null);
-  return typedGraph(v.code, { ...p, names: v.names }, vinfo, ui.def, {
+  return (graph = typedGraph(v.code, { ...p, names: v.names }, vinfo, ui.def, {
     ...hooks,
     canUse: (b, slot) => viewOnly(slot) ?? hooks.canUse(b, slot),
     use: (b, slot) => { if (!viewOnly(slot)) hooks.use(b, slot); },
@@ -1120,7 +1138,109 @@ function graphOf(info: T.Info): HTMLElement {
     addDot: (slot) => { if (!viewOnly(slot)) hooks.addDot(slot); },
     canShare: (from) => { const r = viewOnly(from); if (r) return () => r; const c = hooks.canShare(from); return (slot) => viewOnly(slot) ?? c(slot); },
     share: (from, slot) => { if (!viewOnly(from) && !viewOnly(slot)) hooks.share(from, slot); },
-  }, viewKey()).el;
+  }, viewKey())).el;
+}
+
+// A binding shown as wires, or as a let node with get nodes. A view.
+function toggleNamed(b: Id) {
+  const now = doc.layout.named ?? [];
+  const on = now.includes(b);
+  commit({ layout: { ...doc.layout, named: on ? now.filter((x) => x !== b) : [...now, b] } }, ["layout.json"],
+    on ? "Back to wires: one wire from where it's bound to every use. Only layout.json changed."
+      : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only layout.json changed.");
+}
+
+// ---------------------------------------------------------------- the graph's menu
+//
+// Right-click in the graph: what you can do right there. On a hole, the
+// same palette as the side panel; on empty space, add a value; on a node,
+// a binding or a frame, what applies to it. Tidy and Reset only change
+// layout.json.
+
+function graphMenu(info: T.Info): HTMLElement | null {
+  const m = ui.menu;
+  if (!m) return null;
+  const { kind, id } = m.target;
+  const picked = graph?.picked() ?? [];
+  const item = (label: string, act: string, hint = "", disabled?: string) =>
+    h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!disabled, title: disabled ? `Can't: ${disabled}` : hint }, label);
+  const rows: (HTMLElement | null)[] = [];
+  const names = typedPres().names;
+  const head = (t: string) => h("div", { class: "ctx-head" }, t);
+  if (kind === "hole" && id) {
+    rows.push(fillPalette(id, info, names, "m-query"));
+  } else if (kind === "space") {
+    const r = T.addStep(doc.code, doc.names.short, info, ui.def);
+    rows.push(item("Add a value here…", "add", "A new dot holding a hole, here: fill it, then wire the dot in", r.ok ? undefined : r.reason));
+  } else if (kind === "binder" && id) {
+    const on = (doc.layout.named ?? []).includes(id);
+    rows.push(head(names[id] ?? "a value"));
+    if (names[id] !== "_") rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
+    rows.push(item("Name it…", "name"));
+    if (T.isDot(doc.code, ui.def, id)) { const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", r.ok ? undefined : r.reason)); }
+  } else if ((kind === "node" || kind === "frame") && id) {
+    const d = calleeDef(id);
+    if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc.code, typedPres(), d).name(d)}`, "goto"));
+    const code = view?.code ?? doc.code;
+    if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
+    const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
+    if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
+    if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear"));
+    if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
+    rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
+  }
+  if (kind !== "hole") {
+    rows.push(h("div", { class: "ctx-sep" }));
+    if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
+    rows.push(item("Tidy everything", "tidy-all", "Space out every node: no overlaps, nodes off wires, inputs left of what they feed"));
+    rows.push(item("Reset the layout", "reset-all", "Every node back to the automatic place"));
+    rows.push(item("Fit", "fit"));
+  }
+  const left = Math.max(8, Math.min(m.x + 10, window.innerWidth - 330)), top = Math.max(8, Math.min(m.y + 10, window.innerHeight - (kind === "hole" ? 420 : 280)));
+  return h("div", { class: "ctx-menu", role: "menu", style: `left:${left}px;top:${top}px` }, ...rows);
+}
+
+function menuAction(act: string, target: Id | undefined) {
+  const info = typesOf();
+  const m = ui.menu;
+  ui.menu = null;
+  if (!info) return render();
+  const forget = (keys: Id[]) => {
+    const at = { ...(doc.layout.at ?? {}) };
+    for (const k of keys) delete at[lkey(k)];
+    commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Back to the automatic place. Only layout.json changed.");
+  };
+  switch (act) {
+    case "add": {
+      const r = T.addStep(doc.code, doc.names.short, info, ui.def);
+      if (!r.ok || !m) return void applyT(r);
+      const hole = r.select!, w = m.world;
+      ui.selected = hole;
+      commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } } },
+        ["code.json", "names.short.json", "layout.json"], r.note);
+      ui.menu = { ...m, target: { kind: "hole", id: hole } };
+      render();
+      document.getElementById("m-query")?.focus();
+      return;
+    }
+    case "named": return toggleNamed(target!);
+    case "name": { select(target!); document.getElementById("f-name")?.focus(); return; }
+    case "undot": return void applyT(T.removeDot(doc.code, doc.names.short, info, ui.def, target!));
+    case "goto": { const d = calleeDef(target!); if (d) openDef(d); return; }
+    case "inline": return toggleInline(target!);
+    case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
+    case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
+    case "tidy-all": return graph?.tidy(null);
+    case "tidy-picked": return graph?.tidy(graph.picked());
+    case "tidy-frame": return graph?.tidy([target!]);
+    case "reset-one": { const p = graph?.picked() ?? []; return forget(p.length > 1 ? graph!.expand(p) : graph?.expand([target!]) ?? [target!]); }
+    case "reset-all": {
+      const at = Object.fromEntries(Object.entries(doc.layout.at ?? {}).filter(([k]) => !k.startsWith(`${ui.def}/`)));
+      return commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Every node is back where the automatic layout puts it. Only layout.json changed.");
+    }
+    case "fit": { render(); graph?.fit(); return; }
+  }
+  render();
 }
 
 function toggleInline(call: Id) {
@@ -1152,8 +1272,15 @@ function graphHooks(info: T.Info) {
       const tr = traced(info);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;
     })(),
-    offsets: Object.fromEntries(Object.entries(doc.layout.positions).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
-    moved: (id: Id, off: Pos) => commit({ layout: { ...doc.layout, positions: { ...doc.layout.positions, [lkey(id)]: off } } }, ["layout.json"], "Moved a node. Where it sits lives in layout.json; the code is untouched."),
+    at: Object.fromEntries(Object.entries(doc.layout.at ?? {}).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
+    moved: (to: Record<Id, Pos>, note?: string) => {
+      const n = Object.keys(to).length;
+      if (!n) { ui.note = note ?? "Nothing moved."; ui.touched = []; return render(); }
+      commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) } } }, ["layout.json"],
+        note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
+    },
+    named: new Set(doc.layout.named ?? []),
+    menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
   };
 }
 
@@ -1302,7 +1429,7 @@ function guide(): HTMLElement {
     ["Wire", pic(80, wire(10, 70), svg("circle", { cx: 10, cy: 20, r: 4, class: "outp" }), svg("circle", { cx: 70, cy: 20, r: 5, class: "inp" })),
       "Carries a value from an output to an input. Drag from an output or a dot onto an input to make one; drag an input's wire into empty space to remove it."],
     ["Dot", pic(80, svg("path", { d: "M22,24 C46,24 46,10 72,10", class: "tw use" }), svg("path", { d: "M22,24 C46,24 46,36 72,36", class: "tw use" }), svg("circle", { cx: 16, cy: 24, r: 6, class: "reroute" }), text(16, 12, "a", "dotl")),
-      "Where a value starts and branches out to every place that uses it. A function's parameters are dots on its frame's left edge; a dot on a wire is a let. Click any wire to put a dot on it; select a dot to name it, or leave it unnamed (•1)."],
+      "Where a value starts and branches out to every place that uses it. A function's parameters are dots on its frame's left edge; a dot on a wire is a let. Click any wire to put a dot on it; select a dot to name it, or leave it unnamed (•1). Right-click it to show it as a let node with a small get node at every use instead of wires."],
     ["Frame", pic(80, svg("rect", { x: 4, y: 3, width: 72, height: 34, rx: 9, class: "rg lam" }), text(12, 15, "(x) =>", "rt", "start"), svg("circle", { cx: 4, cy: 26, r: 6, class: "reroute" })),
       "A function that hasn't been called yet: its parameters are the dots on its left, what it gives back leaves on its right. Each case of an if, match or fold is a frame wired into that node."],
     ["Hole", pic(80, svg("rect", { x: 10, y: 8, width: 56, height: 24, rx: 12, class: "pill hole" }), text(38, 24, "□", "pl")),
@@ -1314,7 +1441,7 @@ function guide(): HTMLElement {
   ];
   return h("section", { class: "guide", "aria-label": "Guide" },
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
-    h("p", { class: "hint" }, "Drag a node to move it (that only changes layout.json). Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."));
+    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."));
 }
 
 // A built-in isn't a black box: show its equation, its code, and every
@@ -1424,6 +1551,7 @@ function draw() {
     h("main", { class: "grid is-typed" },
       navigator(p),
       ...main,
+      graphMenu(info),
       h("aside", { class: "side" },
         h("section", { class: "panel" }, h("h2", {}, "Program"), programPanel()),
         h("section", { class: "panel" }, h("h2", {}, ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "This definition"), typedInspector(namer, typedPres(), info), definitionPanel(p)),
@@ -1435,8 +1563,15 @@ function draw() {
   if (focused) document.getElementById(focused)?.focus();
 }
 
+// A press outside the menu closes it, before anything else sees the press.
+document.addEventListener("pointerdown", (e) => {
+  if (ui.menu && !(e.target as HTMLElement).closest(".ctx-menu")) { ui.menu = null; document.querySelector(".ctx-menu")?.remove(); }
+}, true);
+
 document.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
+  const mi = t.closest<HTMLElement>("[data-menu]");
+  if (mi) return menuAction(mi.dataset.menu!, mi.dataset.target || undefined);
   const set = t.closest<HTMLElement>("[data-set]");
   if (set) {
     if (set.dataset.set === "program") return switchProgram(set.dataset.value!);
@@ -1457,6 +1592,7 @@ document.addEventListener("click", (e) => {
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
     if (a === "inline") return toggleInline(act.dataset.target!);
+    if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
     if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();
@@ -1486,6 +1622,7 @@ document.addEventListener("dblclick", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && ui.menu) { ui.menu = null; return render(); }
   const typing = (e.target as HTMLElement).closest("input, textarea");
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !typing) {
     e.preventDefault();
