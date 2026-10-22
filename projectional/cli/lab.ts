@@ -77,24 +77,45 @@ function compiled(p: Program, main: Id, files: boolean): string {
   return `#!/usr/bin/env node
 // ${p.title}, compiled by lab (projectional/cli/lab.ts). Run: node <this file> [arguments…]
 ${program}
-import { $setWorld as $$setWorld, $toList as $$toList, $Aborted as $$Aborted } from ${url("../../compiler/src/runtime.js")};
+import { $setWorld as $$setWorld, $setPrint as $$setPrint, $toList as $$toList, $Aborted as $$Aborted } from ${url("../../compiler/src/runtime.js")};
 import { nodeWorld as $$nodeWorld } from ${url("../src/lang/world.ts")};
 import { Worker as $$Worker, isMainThread as $$isMain, parentPort as $$parent } from "node:worker_threads";
+import { writeSync as $$writeSync } from "node:fs";
 // Recursion that isn't a tail call uses the JS stack, so main runs on a
 // thread with a big one (compiler/GAPS.md, G1); the evaluator has no limit.
 if ($$isMain) {
   const worker = new $$Worker(new URL(import.meta.url), { argv: process.argv.slice(2), resourceLimits: { stackSizeMb: ${STACK_MB} } });
   worker.on("message", (code) => { process.exitCode = code; });
 } else {
-  $$setWorld($$nodeWorld());
+  // A worker's process.stdout and stderr are relayed to the main thread
+  // separately, which loses their order, so it writes to the descriptors
+  // itself. Standard output goes in large pieces, not a write per print
+  // (GAPS.md G8), flushed before anything goes to standard error and before
+  // the program reads, so a prompt shows before its answer is read.
+  // A reader that went away (\`| head\`) closes the pipe: the rest is dropped.
+  const closed = new Set();
+  const write = (fd, text) => {
+    for (let b = Buffer.from(text); b.length && !closed.has(fd);) {
+      try { b = b.subarray($$writeSync(fd, b)); } catch (e) { if (e.code === "EPIPE") closed.add(fd); else if (e.code !== "EAGAIN") throw e; }
+    }
+  };
+  let out = "";
+  const flush = () => { if (out) { write(1, out); out = ""; } };
+  const world = $$nodeWorld();
+  const first = (f) => (...a) => (flush(), f(...a));
+  const error = (line) => { flush(); write(2, line + "\\n"); };
+  $$setWorld({ ...world, error, log: error, input: first(world.input), readLine: first(world.readLine) });
+  $$setPrint((line) => { out += line + "\\n"; if (out.length > 65536) flush(); });
   try {
     const code = defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""});
     process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0;
   } catch (e) {
+    flush();
     if (!(e instanceof $$Aborted)) throw e;
-    process.stderr.write(e.reason + "\\n");
+    error(e.reason);
     process.exitCode = 1;
   }
+  flush();
   $$parent.postMessage(process.exitCode);
 }
 `;
