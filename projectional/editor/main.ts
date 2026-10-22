@@ -15,6 +15,11 @@ import quadHints from "../examples/quadratic/hints.json" with { type: "json" };
 import phyCode from "../examples/physics/code.json" with { type: "json" };
 import phyNames from "../examples/physics/names.default.json" with { type: "json" };
 import phyComments from "../examples/physics/comments.json" with { type: "json" };
+import phyLayout from "../examples/physics/layout.json" with { type: "json" };
+import sortCode from "../examples/sort/code.json" with { type: "json" };
+import sortNames from "../examples/sort/names.default.json" with { type: "json" };
+import sortComments from "../examples/sort/comments.json" with { type: "json" };
+import sortExamples from "../examples/sort/examples.json" with { type: "json" };
 import queensCode from "../examples/queens/code.json" with { type: "json" };
 import queensNames from "../examples/queens/names.default.json" with { type: "json" };
 import queensComments from "../examples/queens/comments.json" with { type: "json" };
@@ -33,7 +38,7 @@ import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
 import { freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
-import { showType as showTypeOf } from "../src/lang/types.ts";
+import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { prelude, preludeNames } from "../src/prelude.ts";
@@ -74,7 +79,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -121,16 +126,20 @@ const STORE = "projectional-editor-v5";
 const BASE = merge(prelude, std);
 const baseFor = (_typed: boolean) => BASE;
 
-const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
+// An example is a folder of the same side tables a saved file holds
+// (examples/unpack.ts writes one from a file the editor saved).
+const typedDoc = (program: Program, code: Code, names: Names, comments: Comments, more: { layout?: Partial<Layout>; examples?: Record<Id, string[]> } = {}): Doc => ({
   program, typed: true,
   code: merge(BASE, code),
   names: { short: names, descriptive: {} },
   comments, hints: {},
-  layout: { positions: {}, known: {} },
+  layout: { positions: {}, known: {}, ...more.layout },
+  examples: more.examples,
 });
 
 const initialFor = (program: Program): Doc =>
-  program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
+  program === "sort" ? typedDoc("sort", sortCode as Code, sortNames, sortComments, { examples: sortExamples })
+  : program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
   : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
   : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
@@ -138,21 +147,12 @@ const initialFor = (program: Program): Doc =>
 
 // The quadratic and the physics: plain arithmetic, and predicates with
 // units that run in every direction.
-// Each starts out run the way you'd first ask: how far it falls, where the
-// point lands.
+// Each starts out run the way you'd first ask (layout.json): how far it
+// falls, where the point lands.
 const initial = (): Doc => {
-  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments });
-  const known: Record<Id, Id[]> = {};
-  const ask = (name: string, unknown: number[]) => {
-    const def = d.code.defs.find((x) => d.names.short[x] === name);
-    const lam = def ? defBodyIn(d.code, def) : null;
-    if (def && lam?.kind === "lambda") known[def] = [...lam.params.filter((_, i) => !unknown.includes(i)), "out"];
-  };
-  ask("fall", [0]);
-  ask("rotate", [3, 4]);
-  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints, layout: { ...d.layout, known } };
+  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments }, { layout: phyLayout });
+  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints };
 };
-const defBodyIn = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && n.body ? code.nodes[n.body] : null; };
 
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
@@ -167,7 +167,7 @@ try {
   }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
+const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
@@ -805,7 +805,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (n.kind === "lit") {
     const input = h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" }) as HTMLInputElement;
     input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
-    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
+    // Enter on an unchanged value (an empty text, say) moves on too.
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
@@ -850,9 +852,9 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   switch (f.kind) {
     case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
-    case "lit": return [f.of === "number" ? "a number" : "a text", f.of === "number" ? "Number" : "Text", "literals"];
+    case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
-    default: return [`${f.kind} ${nm(f.on)} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}`, "case analysis"];
+    default: return [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
 }
 
@@ -872,9 +874,19 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     again?.focus();
     if (again && at !== null) again.setSelectionRange(at, at);
   });
+  // What's typed may itself be a value: 3, "hi", [3, 1, 2], circle(2).
+  // Offered first, and only if it fits. A bare case name is already listed.
+  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? T.fillValue(doc.code, doc.names.short, info, hole, ui.query, ui.def) : null;
+  const value = typed?.ok ? typed : null;
   const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0], ui.def)); };
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && shown[0]) run(shown[0]); });
+  const runValue = () => { ui.query = ""; applyT(value!); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (value) runValue(); else if (shown[0]) run(shown[0]); } });
   const list = h("div", { class: "opts palette" });
+  if (value) {
+    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this value, written out"));
+    b.addEventListener("click", runValue);
+    list.append(h("div", { class: "pal-g" }, "the value typed"), b);
+  }
   let group = "";
   for (const x of shown.slice(0, 40)) {
     if (x.l[2] !== group) { group = x.l[2]; list.append(h("div", { class: "pal-g" }, group)); }
@@ -882,7 +894,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     b.addEventListener("click", () => run(x));
     list.append(b);
   }
-  if (!shown.length) list.append(h("p", { class: "hint" }, "Nothing that fits matches."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values can be typed too: 3, \"text\", [1, 2]."));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
