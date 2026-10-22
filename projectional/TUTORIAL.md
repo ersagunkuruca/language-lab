@@ -137,14 +137,14 @@ What this buys:
 - **Notation is personal.** The `a · b` / `a * b` / `(* a b)` switch and the
   Short names / Descriptive switch change only what you see.
 
-**Try it.** Open *Numbers & networks* → `discriminant`. Switch between *Short
+**Try it.** Open *Numbers & physics* → `discriminant`. Switch between *Short
 names* and *Descriptive*, and between the three notations. Watch the Files
 panel: `code.json` is never touched.
 
 ### 3.2 Nodes and wires
 
 A **node** computes a value: a function call, an `if`, a `match`, a `fold`, a
-relation. Inputs are hollow circles on its left; its output is the filled
+`solve`. Inputs are hollow circles on its left; its output is the filled
 circle on its right. A **wire** carries a value from an output to an input.
 
 There are no variable boxes. Every use of a variable is a wire from where
@@ -300,43 +300,61 @@ the runtime can't handle; that's reported before anything runs.
 **Try it.** Open *Eight queens* → `main` and press *Run*: the first solution
 for 8, the count (92), and all four solutions for 6.
 
-### 3.9 Relations: nodes with no fixed direction
+### 3.9 Running a function backwards
 
-A **relation** is a node whose ports aren't inputs or outputs until you say
-which ones you know. `polar` relates `x, y` with `length, angle`. Give it
-`x, y` and it solves for `length, angle`; give it `length, angle` and it
-solves for `x, y`. Underneath, the solver from `invertible/` derives an
-ordinary program for whichever direction you picked.
+Every function has **ports**: its parameters and its result. Running it
+forward means giving it the parameters and asking for the result. But you can
+give it any of its ports and ask for the others. *Run* in the side panel
+lists the ports of whatever definition you're looking at, each with a tick
+box: ticked ports are ones you give, the others are worked out. Which ones
+are ticked is stored in `layout.json`, not in the code, so flipping them
+changes the direction, not the program.
 
-Relations show up in two places.
+`period(length, gravity)` gives 2.006 s for a one-metre pendulum. Untick
+`length`, tick the result and type 2: it answers how long a pendulum swings
+once every two seconds.
 
-**Networks** (the `◇` definitions in *Numbers & networks*: `to polar`,
-`rotate`, `fall`) are graphs of relations with outer ports. Each outer port is
-either known or solved for, and that choice is stored in `layout.json`, not
-in the code. Known ports are filled dots on the left; solved ports are hollow
-on the right, with their values.
+**A function that says true or false is a set of equations.** `fall` is an
+ordinary definition with four parameters that returns a `Bool`:
 
 ![fall: distance = speed·time + ½·gravity·time²](tutorial/fall.png)
 
-`fall` computes `distance` from `speed`, `gravity` and `time`. Make
-`distance` known and `time` unknown, and it answers "when does it land?". The
-answer comes from the same network: thrown down at 5 m/s, 29.62 m takes 2 s.
-The solver also reports the other root, about −3.02 s, as a second branch.
+Each `equal` in it is an equation (here, `distance = drift + drop`), `and`
+puts several together, and a dot on a wire (`drift`, `drop`) is just a name
+for part of one. Run it with *holds* ticked and `true`, and it solves for
+whichever ports you left unticked, keeping it true. Give it `distance` and
+ask for `time`, and it answers "when does it land?": thrown down at 5 m/s,
+29.62 m takes 2 s. The other root, about −3.02 s, is a second answer.
 
-Arithmetic in networks is two relations, not six functions. A **sum** is
-`a + b + … = total`. It draws as `+` when the total is unknown, as `−` when an
-addend is unknown, and as `neg` when the total is zero. A **product** is the
-same with `×` and `÷`. There's always one spare addend port; connecting it
-adds a term.
+![Running fall backwards: distance known, time solved, with the other root](tutorial/fall-backwards.png)
 
-**Units are the types in networks.** Every value has a dimension (m, s, kg,
-A, rad). Declare units on a few ports and the rest are inferred; a connection
-that would mix them is refused while you drag. In `fall` only the outer ports
-have units; every wire inside gets its own.
+*The program it derives for this direction* shows what the solver from
+`invertible/` worked out: an ordinary program, here the quadratic formula for
+`time`. That's what the compiler writes out, too.
 
-**Solve nodes** use a relation in one direction inside a typed program
-(*Relations in programs*). The ports you give it are inputs; the ones it
-solves for come out on its right, all from the same solution:
+Two more words make predicates as expressive as wiring:
+
+- `for some` names a value that isn't a parameter. `rotate(x, y, turn, x′,
+  y′)` says: for some `length` and `angle`, `polar(x, y, length, angle)` and
+  `polar(x′, y′, length, angle + turn)`. Its unknowns are the wires inside.
+  Run forward, `for some` asks whether any value makes it true.
+- `hence` adds something that follows from what came before. `polar` says
+  `x = length · cos(angle)` and `y = length · sin(angle)`, hence `x² + y² =
+  length²`. The consequence gives the solver a way in (from `x` and `y` it
+  finds `length` with a square root, no search), but it isn't counted as an
+  extra condition, so `polar` given only `x` is still correctly a whole
+  family of points.
+
+**Units are part of the type.** Declare `m` on `distance` and `m/s²` on
+`gravity` (select a parameter or a number; *Unit* shows chips) and the rest
+is inferred: `period` comes out in seconds, `drift` and `drop` in metres. An
+edit that would add metres to seconds is refused like any other type error.
+A plain number is dimensionless; a number like 9.81 m/s² carries its unit.
+
+**Solve nodes** do the same inside a program (*Relations in programs*). The
+ports you give it are inputs; the ones it solves for come out on its right,
+all from the same solution. A predicate is solved with its result given as
+`true`:
 
 ![to polar as a solve node inside a typed program](tutorial/to-polar-solve.png)
 
@@ -365,7 +383,7 @@ you can reach light up and the others say why not.
 | null / undefined | impossible | there is no null; absence is `Choice`, which must be handled |
 | unhandled effect | checked | effects are in types; `main` can't keep `Choice` |
 | non-termination | inferred | it shows up as `Diverge` in the type |
-| unit mismatch (networks) | prevented | refused while you wire |
+| unit mismatch | prevented | units are part of the type |
 | unfinished program | allowed | holes have types; it runs until it reaches one |
 | `sqrt` of a negative, `÷ 0` in builtins | runtime | builtins follow IEEE (NaN, Infinity) |
 | logic errors | not prevented | relations give round-trip laws to test against |
@@ -397,26 +415,20 @@ problem, and a proposal. [REVIEW.md](REVIEW.md) goes further: soundness
 holes, scale, and a roadmap. They're ordered roughly by how much they'd simplify
 the language.
 
-### 1. There are still two worlds of functions
+### 1. ~~There are still two worlds of functions~~ (done: one world)
 
-**Today.** Tree code (typed definitions, plus the plain expression defs like
-`discriminant`) has a direction: arguments in, result out. Networks have no
-direction and are solved. `solve` nodes bridge the two. The *Numbers &
-networks* program even has `to polar` as a network, while *Relations in
-programs* has a different `to polar` as a typed definition with a `solve`
-node. They look different (the network has no frame, its `polar` node is
-green; the solve node is orange and says "solve polar") and they're edited
-with different panels.
+**Was.** Tree code had a direction; networks had none and were solved, with
+their own node kinds, their own editor, their own checker, and units only
+there. *Numbers & networks* had `to polar` as a network while *Relations in
+programs* had a different `to polar` with a `solve` node.
 
-**Why it matters.** A newcomer has to learn when they're in which world, and
-the same idea (which ports are known) lives in `layout.json` for networks but
-in `code.json` for solve nodes.
-
-**Proposal.** Make every definition a network, and make "a function" mean a
-network plus a chosen direction. Tree code becomes the special case where the
-direction is fixed, and a call is a solve node whose direction happens to be
-the forward one. Then there is one kind of definition, one panel and one
-place where "known" is stored.
+**Now.** A network is an ordinary function returning `Bool`: each `equal` is
+a wire, `and` collects them, and `for some` names the wires inside. Any
+function can be run from any of its ports (*Run*, and `solve` nodes), and one
+interpreter (`relate.ts`) does every backwards run. The network node kinds,
+the network editor, `eval.ts`, `check.ts` and the separate relation builtins
+are gone; `polar` is a three-line definition. Units moved into the type
+checker (item 9). See LANGUAGE.md, "One world".
 
 ### 2. Builtins are black boxes, and arithmetic exists three times
 
@@ -427,18 +439,12 @@ per argument and a symbolic derivative. And the algebra example builds a
 *third* copy: an `expression` data type with `sum`, `product`, `sine`, plus
 `evaluate` and `derivative` written over it.
 
-Also, tree code has `add`, `subtract` and `negate` as separate builtins, while
-networks have one `sum` relation. So `+` means different things in different
-places.
-
 **Why it matters.** The pitch is that functions aren't black boxes, but the
 most basic ones are. And the algebra example teaches the opposite lesson from
 the one we want: it differentiates a data structure *about* functions instead
 of differentiating functions.
 
 **Proposal.**
-- One `sum` and one `product` everywhere; `+`, `−`, `neg`, `×`, `÷` are only
-  how they're drawn, as networks already do.
 - Give each builtin a visible definition: the equation it satisfies (for
   `sum`, `a + b + … = total`) and its inverses, shown when you open it, even
   if the evaluator still runs JavaScript underneath.
@@ -487,8 +493,7 @@ unless it's a real action passed to a handler like `first` or `all`.
 
 **Today.** A node's output is a filled circle on its right. Dragging it to a
 second input creates a dot on its wire. A parameter is a dot, a solved port of
-a relation is a dot, a known outer port of a network is a dot, but a node's
-output isn't.
+a `solve` node is a dot, but a node's output isn't.
 
 **Proposal.** Every output is a dot. A value used once is a dot with one
 wire; there's nothing to create when you use it a second time. That removes
@@ -528,29 +533,23 @@ ask which to use.
 couldn't see". If folds over numbers (`range`) are cheap enough, most
 programs never need the others.
 
-### 9. Units only exist in networks
+### 9. ~~Units only exist in networks~~ (done)
 
-**Today.** Networks have units as types. Typed programs have `Number` with no
-unit. `period` in *Numbers & networks* infers seconds; the same expression in
-a typed program wouldn't.
-
-**Proposal.** Make the unit a parameter of `Number` (LANGUAGE.md lists this as
-next). It's the same kind of inference, and it would remove one more
-difference between the two worlds.
+Units are part of `Number`'s type now, in every program: declared on
+parameters and numbers, inferred everywhere else, and a mismatch is a type
+error. What's still missing is a unit *parameter* in written types (a
+function generic over its unit, like `sqrt` taking m² to m, is inferred but
+can't be written down).
 
 ### 10. Small inconsistencies worth fixing
 
 - `equal` is defined for any type, including functions, which can't really
   be compared. `show` only works on numbers.
-- Three kinds of definition tabs: plain, `◇` network, `▤` data type. With
-  proposal 1 there'd be two (functions and data types).
-- Three panel layouts: typed programs show *Graph / Blocks / As text*;
-  expression defs show *Blocks / Graph / Text views*; networks show the
-  network and *Derived program*.
-- The model has 19 node kinds (`lit binder ref call lambda def builtin hole
-  network part typedef variant field tref tfun match fold arm solve`).
-  Proposals 1 and 3 would remove `network`/`part` vs `call`/`solve` as
-  separate pairs, and `match`/`arm` as separate from `solve`.
+- Two kinds of definition tabs now (functions and `▤` data types) and one
+  panel layout, since every program is typed.
+- The model has 17 node kinds (`lit binder ref call lambda def builtin hole
+  typedef variant field tref tfun match fold arm solve`). Proposal 3 would
+  remove `match`/`arm` as separate from `solve`.
 
 ### 11. Things that are good and should stay
 

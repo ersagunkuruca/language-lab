@@ -8,8 +8,6 @@ import { call, v } from "../../invertible/src/expr.js";
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { impl } from "../src/prelude.ts";
-import { RELATIONS, VARIADIC } from "../src/relational.ts";
-import { relationFor } from "../src/lang/solve.ts";
 
 interface Rel { name: string; ports: string[]; eqs: unknown[] }
 export interface Definition {
@@ -23,7 +21,7 @@ export function builtinOf(code: Code, id: Id | null): Id | null {
   const n = id ? code.nodes[id] : null;
   if (!n) return null;
   const t = n.kind === "builtin" ? n.id : n.kind === "call" ? (code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as { target: Id }).target : null)
-    : n.kind === "ref" ? n.target : n.kind === "part" || n.kind === "solve" ? n.fn : null;
+    : n.kind === "ref" ? n.target : n.kind === "solve" ? n.fn : null;
   return t && code.nodes[t]?.kind === "builtin" ? t : null;
 }
 
@@ -40,9 +38,7 @@ export function definitionOf(code: Code, fn: Id): Definition | null {
       const f = impl[op as keyof typeof impl];
       const args = f.length === 1 ? ["x"] : ["a", "b"].slice(0, f.length);
       rel = (defineRelation as unknown as (s: object) => Rel)({ name: op, ports: [...args, "result"], eqs: [{ lhs: v("result"), rhs: call(op, ...args.map((a) => v(a))) }] });
-    } else if (op in VARIADIC) rel = relationFor(code, fn, ["a", "b", VARIADIC[op as keyof typeof VARIADIC].total]) as unknown as Rel;
-    else if (op in RELATIONS) rel = relationFor(code, fn, []) as unknown as Rel;
-    else return null;
+    } else return null;
     const ways = (directions as unknown as (r: Rel) => string[][])(rel).map((given) => {
       const a = (analyze as unknown as (r: Rel, k: string[]) => { steps: { kind: string; text: string; raw: { branches?: unknown[] } }[] })(rel, given);
       const steps = a.steps.filter((s) => s.kind !== "check");

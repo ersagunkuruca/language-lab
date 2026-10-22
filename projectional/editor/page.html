@@ -71,18 +71,15 @@ button { font: inherit; color: inherit; }
 
 .grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px;
   grid-template-rows: auto 1fr; grid-template-areas: "blocks graph side" "text text side"; align-items: start; }
-.p-blocks { grid-area: blocks; } .p-graph { grid-area: graph; } .p-text { grid-area: text; } .p-net { grid-area: net; }
-.grid.is-net { grid-template-areas: "net net side" "text text side"; }
+.p-blocks { grid-area: blocks; } .p-graph { grid-area: graph; } .p-text { grid-area: text; }
 .grid.is-typed { grid-template-areas: "graph graph side" "blocks text side"; }
 .side { grid-area: side; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 @media (max-width: 1100px) {
   .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "blocks blocks" "graph side" "text side"; }
-  .grid.is-net { grid-template-areas: "net net" "text side"; }
   .grid.is-typed { grid-template-areas: "graph graph" "blocks blocks" "text side"; }
 }
 @media (max-width: 720px) {
   .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "blocks" "side" "graph" "text"; }
-  .grid.is-net { grid-template-areas: "net" "side" "text"; }
   .grid.is-typed { grid-template-areas: "graph" "blocks" "side" "text"; }
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
@@ -200,71 +197,30 @@ select { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-ra
 .result code { font-size: 16px; font-weight: 500; text-align: right; }
 .result code.err { font-size: 13px; font-weight: 400; color: var(--hot); }
 
-/* inline views */
-.blk.virtual, .pill.virtual { border-style: dashed; }
-.blk.inlined { --ln: var(--def-ln); }
-.tag.inl { background: var(--def-ln); }
-.gn.virtual rect { stroke-dasharray: 5 3; }
+/* run backwards: one row per port, ticked when you give it */
+.port-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; font-size: 13px; }
+.port-row input[type=checkbox] { width: auto; margin: 0; }
+.port-row .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.port-row.known .pname { color: var(--fg); }
+.port-row input[type=text], .port-row output { font: 13px var(--font-code); min-width: 0; }
+.port-row output { padding: 4px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
+.port-row output.none { background: none; color: var(--muted); font-weight: 400; }
+.port-row .unit { font: 500 11px var(--font-code); color: var(--def-ln); min-width: 2.5em; }
+.alts ul { margin: 4px 0 0; padding-left: 18px; font: 12px var(--font-code); }
 .btn.back { font-weight: 600; }
 .netmark { color: var(--accent); }
 
-/* network editor */
-.net-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
-.legend { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--muted); font-size: 12px; margin-left: auto; }
-.lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 2px solid var(--wire); }
-.lg.in { background: var(--panel); border-color: var(--wire); }
-.lg.out { background: var(--let-ln); border-color: var(--let-ln); }
-.lg.free { background: var(--panel); border-style: dashed; }
-.graph.net { touch-action: none; }
-.nb { cursor: grab; }
-/* Network nodes use the same look as every other graph: a node is green,
-   a given port is a hollow input, a solved port is a filled dot, and an
-   outer port is a dot (known) or a result (unknown) with its label. */
-.nb .body { fill: var(--op-bg); stroke: var(--op-ln); stroke-width: 1.5; }
-.nb.const .body { fill: var(--lit-bg); stroke: var(--lit-ln); }
-.nb.ext .body { fill: transparent; stroke: none; }
-.nb.sel .body { stroke: var(--accent); stroke-width: 3; }
-.nb.ext.sel .body { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.nb .lbl { fill: var(--fg); font-size: 13px; font-weight: 500; }
-.nb .sub { fill: var(--muted); font: italic 11px var(--font-ui); }
-.nb .val { fill: var(--accent); font-size: 12px; font-family: var(--font-code); }
-.nb .sep { display: none; }
-.plbl { fill: var(--var-ln); font-size: 11px; }
-.dot { fill: var(--panel); stroke: var(--wire); stroke-width: 2; stroke-dasharray: 3 2; cursor: crosshair; }
-.dot.bound { stroke-dasharray: none; }
-.dot.in { fill: var(--panel); stroke: var(--wire); }
-.dot.out { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; }
-.nb.ext.in .dot { fill: var(--let-ln); stroke: var(--panel); stroke-width: 1.5; }
-.nb.ext.out .dot { fill: var(--panel); stroke: var(--wire); stroke-width: 2; }
-.dot:hover { stroke-width: 3.5; }
-.wire.sel { stroke: var(--accent); stroke-width: 3; }
-.wire.pending { stroke: var(--accent); stroke-dasharray: 5 4; }
-.wire-hit { fill: none; stroke: transparent; stroke-width: 12; cursor: pointer; }
-.wire-lbl { fill: var(--muted); font: italic 11px var(--font-ui); }
-.check { display: flex; gap: 8px; align-items: center; }
-.check input { width: auto; }
-.ports { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.prow { display: grid; grid-template-columns: 34px 1fr auto; gap: 6px; align-items: center; }
-.pdir { font: 500 11px var(--font-code); text-align: center; border-radius: 4px; padding: 1px 0; border: 1px solid var(--line); color: var(--muted); }
-.pdir.in { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
-.pdir.out { background: var(--hot-soft); color: var(--hot); border-color: transparent; }
-.pw { color: var(--muted); font-family: var(--font-code); font-size: 12px; }
 .status-line { margin: 0; font-size: 13px; padding: 6px 8px; border-radius: 6px; }
 .status-line.warn { background: var(--hot-soft); color: var(--hot); }
 .status-line.bad { background: var(--hot-soft); color: var(--hot); font-weight: 500; }
 .alts summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.alt { font-family: var(--font-code); font-size: 12px; padding: 2px 0 2px 12px; }
 
 /* error prevention */
-.nb.atom .lbl { font-size: 16px; }
 .punit { fill: var(--def-ln); color: var(--def-ln); font: 500 10px var(--font-code); }
-.nb .val.unit { fill: var(--def-ln); }
 .dragging .dot { transition: opacity .1s; }
 .dragging .dot.cannot { opacity: .25; stroke-dasharray: none; stroke: var(--hot); }
 .dragging .dot.can { stroke: var(--accent); stroke-width: 3.5; stroke-dasharray: none; }
-.wire.pending.bad { stroke: var(--hot); }
 .why { fill: var(--hot); font: 600 12px var(--font-ui); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
-.wire.pending { pointer-events: none; }
 .status.refused { color: var(--hot); border-color: var(--hot); background: var(--hot-soft); font-weight: 500; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .chip-btn { font: 500 12px var(--font-code); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }

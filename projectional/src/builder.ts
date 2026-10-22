@@ -57,8 +57,7 @@ export class Builder {
   }
 
   define(def: Id, body: Id): Id {
-    const k = this.kind(body);
-    this.code.nodes[def] = { id: def, kind: "def", body: k === "network" ? body : this.x(body) };
+    this.code.nodes[def] = { id: def, kind: "def", body: this.x(body) };
     return def;
   }
 
@@ -66,16 +65,7 @@ export class Builder {
     return this.named(this.add({ kind: "binder" }), name);
   }
 
-  // A network: ports and wires are binders, parts bind port keys to them.
-  network(params: Id[], wires: Id[], parts: Id[]): Id {
-    return this.add({ kind: "network", params, wires, parts });
-  }
-
-  part(fn: Id | null, bind: Record<string, Id>, value?: number): Id {
-    return this.add(value === undefined ? { kind: "part", fn, bind } : { kind: "part", fn, bind, value });
-  }
-
-  // Declare the unit of a binder or constant part (see units.ts).
+  // Declare the unit of a binder or a number (see units.ts).
   unit(id: Id, unit: Unit): Id {
     this.code.nodes[id] = { ...this.code.nodes[id], unit } as Node;
     return id;

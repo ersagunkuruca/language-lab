@@ -32,7 +32,7 @@ import { S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { absOf, connectDrag, curve, infiniteCanvas, moveDrag, s, type Canvas, type Pos } from "./canvas.ts";
 import { planSolve } from "../src/lang/solve.ts";
-import { portLabel } from "../src/relational.ts";
+import { portLabel } from "../src/lang/equations.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 

@@ -15,7 +15,7 @@ import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
-import { relate, toValue } from "./relate.ts";
+import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { CONS, FALSE, NIL, S, STD_IMPL, TRUE, UNIT_V } from "./std.ts";
 import { CONSOLE, DIVERGE } from "./types.ts";
@@ -33,11 +33,18 @@ export function fromList(v: Value): Value[] {
   return out;
 }
 
+// Numbers stand for reals and floats only approximate them, so two numbers
+// are equal when they agree to the precision floats carry. Otherwise a
+// predicate like distance = speed·time + ½·g·time² would be false for the
+// very values the solver found for it.
+export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
+
 // With its own stack, so two long lists can be compared.
 export function equal(a: Value, b: Value): boolean {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
+    if (typeof x === "number" && typeof y === "number") { if (!close(x, y)) return false; continue; }
     if (typeof x !== "object" || typeof y !== "object") { if (x !== y) return false; continue; }
     if (x.tag !== y.tag) return false;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
@@ -111,6 +118,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
     [S.range]: (n) => one(toList(Array.from({ length: Math.max(0, n as number) }, (_, i) => i))),
     [S.oneOf]: (xs) => fromList(xs),
+    [S.exists]: (f) => one(bool(satisfiable(code, f))),
+    [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     [S.print]: (s) => (rt.print(s as string), one(unit)),
     // The handlers are run by the machine itself (see `apply`); these are
@@ -369,7 +378,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           }
           return;
         }
-        for (const sol of solutions(p.rel!, known as Record<string, number>)) {
+          // A predicate's out = true isn't one of the solver's ports.
+        const values = Object.fromEntries(p.known.map((k) => [k, known[k] as number]));
+        for (const sol of solutions(p.rel!, values)) {
           // A port the equations leave free has no value: not a solution.
           if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
           yield Object.keys(n.binds).map((k) => sol[k]!);

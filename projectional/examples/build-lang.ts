@@ -10,7 +10,7 @@ import type { Code } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { differentiate } from "../src/lang/derive.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { algebra, backwards, calculus, queens, relations } from "../src/lang/programs.ts";
+import { algebra, backwards, calculus, physics, queens, relations } from "../src/lang/programs.ts";
 import { numbers } from "../src/lang/numbers.ts";
 
 const comments: Record<string, Record<string, string>> = {
@@ -32,9 +32,19 @@ const comments: Record<string, Record<string, string>> = {
     "height on the ray": "atan2 run backwards: given the angle and x, the y on that ray, or none.",
   },
   relations: {
-    split: "Linear elimination gives one answer, so the type has no Choice.",
+    "sum and difference": "Two equals between four ports. Give it any two and it works out the other two.",
+    split: "sum and difference, solved from true for a and b. Linear elimination gives one answer, so the type has no Choice.",
+    "missing addend": "add, run backwards from its result and one argument.",
+    polar: "A predicate: true when (x, y) is at this length and angle. x² + y² = length² follows from the other two (hence); it lets the solver find the length from x and y without searching.",
     "to polar": "Two branches for the angle and length (plus 2πk): the type says Choice, first picks the canonical one.",
     "square roots": "square read backwards: x · x = y. all collects both roots, and none for a negative y.",
+  },
+  physics: {
+    polar: "A predicate: true when (x, y) is at this length and angle. x² + y² = length² follows from the other two (hence); it lets the solver find the length from x and y without searching.",
+    rotate: "Two polars sharing a length. The length and angle inside are unknowns of for some, the way wires inside a network were. Give it x′, y′ and the turn and it runs backwards.",
+    fall: "What was a network: one equal is the wire that closes it, drift and drop are dots. In Run, tick which ports you know; make the distance known and the time unknown to ask when it lands.",
+    period: "An ordinary function. Only the inputs declare units; the result is inferred to be in seconds.",
+    "landing times": "fall used in one direction, from true: a quadratic in time, so two answers (the negative one is before the throw).",
   },
   queens: {
     queens: "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
@@ -75,7 +85,7 @@ function withDerivatives(p: { code: Code; names: Names; defs: Record<string, str
 }
 
 const all = [
-  ["queens", queens], ["algebra", algebra], ["relations", relations], ["backwards", backwards],
+  ["queens", queens], ["algebra", algebra], ["relations", relations], ["backwards", backwards], ["physics", physics],
   ["calculus", () => withDerivatives(calculus(), ["cubic", "wave", "kink", "bump", "parabola", "sinc"])],
   ["numbers", numbers],
 ] as const;

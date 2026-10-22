@@ -5,7 +5,6 @@ import type { Id } from "../model.ts";
 import { B } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { CONS, FIRST, NIL, PAIR_V, S, SECOND } from "./std.ts";
-import { R } from "../relational.ts";
 
 // Loops without loops: list helpers every program here can use. `each` and
 // `map` recurse on the tail they took apart, so the checker sees they end;
@@ -316,8 +315,26 @@ export function algebra() {
 }
 
 // ---------------------------------------------------------------- relations
-// Relations as functions with a direction picked at the use site. Whether a
-// direction is pure or a Choice is inferred from the solver's plan.
+// A network is a function that returns Bool: each `equal` is a wire, and the
+// parameters are the outer ports. Solving it from out = true runs it in
+// whichever direction the given ports choose. Whether a direction is pure
+// or a Choice is inferred from the solver's plan.
+
+const paramsOf = (k: Lang, def: Id) => (k.code.nodes[(k.code.nodes[def] as { body: Id }).body] as { params: Id[] }).params;
+
+// Cartesian and polar coordinates as one predicate. x² + y² = length²
+// follows from the other two (`hence`); it's written down because it lets
+// the solver reach the length from x and y in closed form instead of
+// searching, and marked as following so that it isn't counted as a third
+// constraint: given only x, polar is still a whole family of points.
+function polar(k: Lang) {
+  const polar = k.def("polar");
+  k.define(polar, k.fn(["x", "y", "length", "angle"], (x, y, r, θ) => k.call(S.hence,
+    k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, θ))), k.equal(y, k.call(B.mul, r, k.call(B.sin, θ)))),
+    k.equal(k.call(B.add, k.call(B.mul, x, x), k.call(B.mul, y, y)), k.call(B.mul, r, r)),
+  )));
+  return polar;
+}
 
 export function relations() {
   const k = new Lang();
@@ -325,17 +342,24 @@ export function relations() {
   const pair = (a: Id, b: Id) => k.call(PAIR_V, a, b);
   const showPair = (p: Id) => k.text(k.call(S.show, k.call(FIRST, p)), k.lit(", "), k.call(S.show, k.call(SECOND, p)));
 
+  // Two wires between four ports.
+  const sumDiff = k.def("sum and difference");
+  k.define(sumDiff, k.fn(["a", "b", "sum", "difference"], (a, b, c, d) => k.and(k.equal(k.call(B.add, a, b), c), k.equal(k.call(B.sub, a, b), d))));
+  const [pa, pb, pc, pd] = paramsOf(k, sumDiff);
+
   // Linear: one answer, so no Choice in the type.
   const split = k.def("split");
-  k.define(split, k.fn(["sum", "difference"], (c, d) => k.solve(R.sumDiff, { c, d }, { a: "a", b: "b" }, ({ a, b }) => pair(a, b))));
+  k.define(split, k.fn(["sum", "difference"], (c, d) => k.solve(sumDiff, { [pc]: c, [pd]: d, out: k.true }, { [pa]: "a", [pb]: "b" }, (r) => pair(r[pa], r[pb]))));
 
-  // Also linear, through the variadic sum atom: the missing addend.
+  // add, run backwards: the missing addend.
   const missing = k.def("missing addend");
-  k.define(missing, k.fn(["known", "total"], (a, t) => k.solve(R.sum, { a, total: t }, { b: "b" }, ({ b }) => b)));
+  k.define(missing, k.fn(["known", "total"], (a, t) => k.solve(B.add, { 0: a, out: t }, { 1: "b" }, (r) => r[1])));
 
   // Polar has two branches (and k·2π): Choice.
+  const pol = polar(k);
+  const [px, py, pr, pθ] = paramsOf(k, pol);
   const toPolar = k.def("to polar");
-  k.define(toPolar, k.fn(["x", "y"], (x, y) => k.solve(R.polar, { x, y }, { r: "length", θ: "angle" }, ({ r, θ }) => pair(r, θ))));
+  k.define(toPolar, k.fn(["x", "y"], (x, y) => k.solve(pol, { [px]: x, [py]: y, out: k.true }, { [pr]: "length", [pθ]: "angle" }, (r) => pair(r[pr], r[pθ]))));
 
   // An ordinary function, read backwards: x · x = y has two answers.
   const square = k.def("square");
@@ -353,7 +377,84 @@ export function relations() {
     k.call(S.print, k.text(k.lit("square roots(9) = "), k.call(lib.showNumbers, k.call(roots, k.lit(9))))),
     k.call(S.print, k.text(k.lit("square roots(−1) = ["), k.call(lib.showNumbers, k.call(roots, k.lit(-1))), k.lit("]"))),
   )));
-  return { code: k.code, names: k.names, defs: { split, missing, toPolar, square, roots, main } };
+  return { code: k.code, names: k.names, defs: { sumDiff, split, missing, polar: pol, toPolar, square, roots, main } };
+}
+
+// ---------------------------------------------------------------- physics
+// What used to be networks, written as ordinary definitions. A predicate
+// relates its ports; which of them are known is chosen where it's used (a
+// solve node in code, the Run panel in the editor). Units are declared on
+// parameters and inferred everywhere else (src/units.ts).
+
+export function physics() {
+  const k = new Lang();
+  const lib = library(k);
+  const pol = polar(k);
+
+  // Rotate a point by a turn: the same length, the angle plus the turn.
+  // The length and angle are wires inside, so they are unknowns of `for
+  // some`. No inverse is written anywhere; given x′, y′ and the turn, it
+  // runs backwards to x and y.
+  const rotate = k.def("rotate");
+  k.define(rotate, k.fn(["x", "y", "turn", "x′", "y′"], (x, y, turn, x2, y2) => k.exists(["length", "angle"], (r, θ) => k.and(
+    k.call(pol, x, y, r, θ),
+    k.call(pol, x2, y2, r, k.call(B.add, θ, turn)),
+  ))));
+
+  // A falling object: distance = speed·time + ½·gravity·time². The two
+  // dots (drift, drop) are lets; the one equal is the wire that closes it.
+  // Make the distance known and the time unknown to ask when it lands.
+  const fall = k.def("fall");
+  k.define(fall, k.fn(["distance", "speed", "gravity", "time"], (d, v, g, t) => {
+    k.unit(d, { m: 1 });
+    k.unit(v, { m: 1, s: -1 });
+    k.unit(g, { m: 1, s: -2 });
+    k.unit(t, { s: 1 });
+    return k.let("drift", k.call(B.mul, v, t), (drift) =>
+      k.let("drop", k.call(B.mul, k.call(B.mul, k.lit(0.5), g), k.call(B.mul, t, t)), (drop) =>
+        k.equal(d, k.call(B.add, drift, drop))));
+  }));
+  const [fd, fv, fg, ft] = paramsOf(k, fall);
+
+  // A pendulum's period: an ordinary function. Only the inputs have units;
+  // the result is inferred to be in seconds.
+  const period = k.def("period");
+  k.define(period, k.fn(["length", "gravity"], (l, g) => {
+    k.unit(l, { m: 1 });
+    k.unit(g, { m: 1, s: -2 });
+    return k.call(B.mul, k.call(B.mul, k.lit(2), k.lit(Math.PI)), k.call(B.sqrt, k.call(B.div, l, g)));
+  }));
+
+  // fall, used in one direction: every time at which it has fallen this
+  // far. A quadratic has two roots; the negative one is before the throw.
+  const m = { m: 1 }, mps = { m: 1, s: -1 }, g = { m: 1, s: -2 };
+  const measured = (x: number, unit: Record<string, number>) => k.unit(k.lit(x), unit);
+  const landing = k.def("landing times");
+  k.define(landing, k.fn(["height", "speed"], (h, v) => {
+    k.unit(h, m);
+    k.unit(v, mps);
+    return k.call(S.all, k.thunk(() =>
+      k.solve(fall, { [fd]: h, [fv]: v, [fg]: measured(9.81, g), out: k.true }, { [ft]: "time" }, (r) => r[ft])));
+  }));
+
+  const [rx, ry, rturn, rx2, ry2] = paramsOf(k, rotate);
+  const showPoint = (x: Id, y: Id) => k.text(k.lit("("), k.call(S.show, x), k.lit(", "), k.call(S.show, y), k.lit(")"));
+  const quarter = Math.PI / 2;
+  const yesNo = (b: Id) => k.if(b, k.lit("true"), k.lit("false"));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.text(k.lit("period(1, 9.81) = "), k.call(S.show, k.call(period, measured(1, m), measured(9.81, g))))),
+    k.call(S.print, k.text(k.lit("fall(29.62, 5, 9.81, 2) = "), yesNo(k.call(fall, measured(29.62, m), measured(5, mps), measured(9.81, g), measured(2, { s: 1 }))))),
+    k.call(S.print, k.text(k.lit("landing times(29.62, 5) = "), k.call(lib.showNumbers, k.call(landing, measured(29.62, m), measured(5, mps))))),
+    k.call(S.print, k.text(k.lit("rotate (1, 0) by a quarter turn = "), k.call(S.first, k.thunk(() =>
+      k.solve(rotate, { [rx]: k.lit(1), [ry]: k.lit(0), [rturn]: k.lit(quarter), out: k.true }, { [rx2]: "x′", [ry2]: "y′" }, (r) => showPoint(r[rx2], r[ry2]))), k.thunk(() => k.lit("none"))))),
+    k.call(S.print, k.text(k.lit("what lands on (0, 2) after a quarter turn = "), k.call(S.first, k.thunk(() =>
+      k.solve(rotate, { [rx2]: k.lit(0), [ry2]: k.lit(2), [rturn]: k.lit(quarter), out: k.true }, { [rx]: "x", [ry]: "y" }, (r) => showPoint(r[rx], r[ry]))), k.thunk(() => k.lit("none"))))),
+    k.call(S.print, k.text(k.lit("polar(0, 2, 2, π/2) = "), yesNo(k.call(pol, k.lit(0), k.lit(2), k.lit(2), k.lit(quarter))))),
+    k.call(S.print, k.text(k.lit("for some y, angle: polar(1, y, 2, angle) = "), yesNo(k.exists(["y", "angle"], (y, a) => k.call(pol, k.lit(1), y, k.lit(2), a))))),
+    k.call(S.print, k.text(k.lit("for some y, angle: polar(3, y, 2, angle) = "), yesNo(k.exists(["y", "angle"], (y, a) => k.call(pol, k.lit(3), y, k.lit(2), a))))),
+  )));
+  return { code: k.code, names: k.names, defs: { polar: pol, rotate, fall, period, landing, main } };
 }
 
 // ---------------------------------------------------------------- backwards

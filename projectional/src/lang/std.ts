@@ -91,6 +91,16 @@ export const S = {
   range: builtin("range", "range", pure([num], list(num))),
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
+  // Is there a value that makes this true? Its parameter is an unknown, the
+  // way a wire inside a network was: `for some(length => …)`. Run forward
+  // it searches (relate.ts); read as equations it is one more unknown.
+  // a, hence b: both hold, and b follows from a. Run, it is `and`. Read as
+  // equations, b's are marked as consequences: they give the solver more
+  // ways in (x² + y² = r² reaches r from x and y in closed form) without
+  // counting as constraints of their own, so they don't make a direction
+  // look determined when it isn't.
+  hence: builtin("hence", "hence", pure([bool, bool], bool)),
+  exists: builtin("exists", "for some", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([a], bool, e)], bool, e); }),
   fail: builtin("fail", "fail", (s) => fn([], s.fresh(), s.freshRow([CHOICE]))),
   // A function's derivative, read off its graph (src/lang/derive.ts). Where
   // the slope can't be read (the function goes through floor, or takes
