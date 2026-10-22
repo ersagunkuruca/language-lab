@@ -234,7 +234,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
 
   function typeText(id: Id): string {
     const n = node(id);
-    if (n.kind === "tfun") return `(${n.params.map(typeText).join(", ")}) -> ${typeText(n.result)}`;
+    if (n.kind === "tfun") return `(${n.params.map(typeText).join(", ")}) ${n.effects?.length ? `-[${n.effects.map(nameOf).join(", ")}]->` : "->"} ${typeText(n.result)}`;
     const r = n as NodeOf<"tref">;
     return [nameOf(r.target), ...r.args.map((a) => { const s = typeText(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
   }

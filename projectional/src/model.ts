@@ -41,7 +41,9 @@ export type Node =
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
   | { id: Id; kind: "tref"; target: Id; args: Id[] }
-  | { id: Id; kind: "tfun"; params: Id[]; result: Id }
+  // A function type. `effects` (effect defs or the builtin effects) is its
+  // row, closed: a function type with none listed is pure.
+  | { id: Id; kind: "tfun"; params: Id[]; result: Id; effects?: Id[] }
   // Case analysis. There is one arm per variant (the editor makes them from
   // the type), or arms for some and `otherwise` for the rest, so a missing
   // case can't be written down.
@@ -104,7 +106,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f) };
     case "field": return { ...n, id: f(n.id), type: f(n.type) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
-    case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result) };
+    case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
     case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };
     case "fold": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f) };
     case "arm": return { ...n, id: f(n.id), variant: f(n.variant), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
@@ -156,13 +158,15 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      let target = node.kind === "ref" ? node.target : node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
-      if (target && owner.has(target)) target = owner.get(target)!;
-      if (!target || seen.has(target)) continue;
-      const t = code.nodes[target];
-      if (t.kind === "def" || t.kind === "builtin") {
-        seen.add(target);
-        visit(target);
+      const target = node.kind === "ref" ? node.target : node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : [])]) {
+        if (t && owner.has(t)) t = owner.get(t)!;
+        if (!t || seen.has(t)) continue;
+        const d = code.nodes[t];
+        if (d.kind === "def" || d.kind === "builtin") {
+          seen.add(t);
+          visit(t);
+        }
       }
     }
   };
