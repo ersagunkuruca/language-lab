@@ -121,6 +121,8 @@ type View = { x: number; y: number; z: number };
 
 // Where each graph's window was, so editing (which redraws) doesn't move it.
 const views = new Map<string, View>();
+// The smallest zoom a graph first opens at: labels still legible.
+const READABLE = 0.6;
 
 export function infiniteCanvas(key: string, cls: string): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
@@ -129,16 +131,20 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   let view = views.get(key);
   const apply = () => { if (view) world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); };
   const set = (v: View) => { view = v; views.set(key, v); apply(); };
-  // Fit: the whole picture, centered both ways.
-  const fit = () => {
+  // Fit: the whole picture, centered both ways. Readable: never smaller than
+  // READABLE, and a side that doesn't fit then starts at its top or left
+  // edge, the rest a pan away.
+  const fit = (readable = false) => {
     const b = world.getBBox(), r = root.getBoundingClientRect();
     if (!b.width || !r.width) return;
-    const z = Math.min(1, (r.width - 32) / b.width, (r.height - 32) / b.height);
-    set({ z, x: (r.width - b.width * z) / 2 - b.x * z, y: (r.height - b.height * z) / 2 - b.y * z });
+    let z = Math.min(1, (r.width - 32) / b.width, (r.height - 32) / b.height);
+    if (readable) z = Math.max(z, READABLE);
+    const place = (room: number, size: number, at: number) => (size * z <= room - 32 ? (room - size * z) / 2 : 16) - at * z;
+    set({ z, x: place(r.width, b.width, b.x), y: place(r.height, b.height, b.y) });
   };
   apply();
-  // First time this graph is shown: fit it, once it has a size.
-  if (!view) requestAnimationFrame(() => { if (root.isConnected) fit(); });
+  // First time this graph is shown: fit it readably, once it has a size.
+  if (!view) requestAnimationFrame(() => { if (root.isConnected) fit(true); });
 
   const el = document.createElement("div");
   el.className = "canvas-wrap";
@@ -175,7 +181,7 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   const tools = document.createElement("div");
   tools.className = "canvas-tools";
   tools.append(
-    btn("Fit", "Show the whole graph, centered", fit),
+    btn("Fit", "Show the whole graph, centered", () => fit()),
     btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
   );
   el.append(root, tools);

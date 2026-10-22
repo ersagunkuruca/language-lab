@@ -139,7 +139,7 @@ interface UI {
   menu: { target: MenuTarget; x: number; y: number; world: Pos } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
-  panel: "node" | "program" | "checks" | "files";
+  panel: "node" | "program" | "checks" | "files" | "guide";
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -1526,6 +1526,7 @@ function select(id: Id | null) {
   if (ui.selected === id) return;
   if (ui.selected !== id) { ui.mode = null; ui.query = ""; }
   ui.selected = id;
+  if (id && ui.panel === "guide") ui.panel = "node";
   render();
 }
 
@@ -1536,7 +1537,9 @@ function select(id: Id | null) {
 // everywhere: if two things look the same, they are the same.
 
 const GUIDE_SEEN = "projectional-guide-seen";
-let guideOpen = (() => { try { return !localStorage.getItem(GUIDE_SEEN); } catch { return true; } })();
+// The guide is a tab in the side column, open on a first visit, so the
+// graph keeps its room.
+try { if (!localStorage.getItem(GUIDE_SEEN)) { ui.panel = "guide"; localStorage.setItem(GUIDE_SEEN, "1"); } } catch { ui.panel = "guide"; }
 
 function guide(): HTMLElement {
   const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph" }); r.append(...els); return r; };
@@ -1689,6 +1692,7 @@ function draw() {
     ["program", "Program", () => [programPanel()]],
     ["checks", "Checks", () => [typedChecks(namer, info)]],
     ["files", "Files", () => [filesPanel()]],
+    ["guide", "Guide", () => [guide()]],
   ];
   const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
 
@@ -1703,10 +1707,8 @@ function draw() {
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
-        h("button", { class: `btn${guideOpen ? " on" : ""}`, type: "button", "data-act": "guide" }, guideOpen ? "Hide the guide" : "Guide"),
         h("a", { class: "btn", href: "tutorial.html" }, "Tutorial"),
         h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
-    ...(guideOpen ? [guide()] : []),
     h("main", { class: "grid is-typed", style: dockStyle() },
       navigator(p),
       graphMenu(info),
@@ -1788,7 +1790,6 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
-    if (a === "guide") { guideOpen = !guideOpen; try { localStorage.setItem(GUIDE_SEEN, "1"); } catch {} return render(); }
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }
