@@ -127,11 +127,11 @@ as JS's own `String(x)` does.
 
 ### 2.1 The stack
 
-| | largest list summed |
-|---|---:|
-| evaluator, plain recursion | 341 |
-| evaluator, `fold` | 1,640 |
-| compiled, recursion or `fold` | between 1,000 and 10,000 |
+| | largest list summed | after the real-data work |
+|---|---:|---:|
+| evaluator, plain recursion | 341 | memory-bound (1,000,000 in 5 s) |
+| evaluator, `fold` | 1,640 | memory-bound (1,000,000 in 1.4 s) |
+| compiled, recursion or `fold` | between 1,000 and 10,000 | see below |
 
 The evaluator is a generator per node, and each level of recursion is
 several JS frames. The compiled code is ordinary JS recursion. Neither is

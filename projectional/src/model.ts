@@ -66,9 +66,16 @@ export interface Code {
   defs: Id[];
 }
 
+// 130 random bits, as 26 base-32 characters (digits and a to v). At that
+// size two programs of a billion nodes each share an id with a chance of
+// about 1 in 10^21, so ids from different authors can be mixed freely.
+// Older programs have 8-character ids; both kinds live side by side.
+// What a generated id looks like, for finding ids inside text (comment
+// references, solver variable names). Longer form first.
+export const ID_PATTERN = "[0-9a-v]{26}|[0-9a-f]{8}";
 export function freshId(): Id {
-  const b = crypto.getRandomValues(new Uint8Array(4));
-  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  const b = crypto.getRandomValues(new Uint8Array(26));
+  return Array.from(b, (x) => (x & 31).toString(32)).join("");
 }
 
 export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {
@@ -192,9 +199,28 @@ export function collect(code: Code): Code {
   return { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
 }
 
-export function merge(...codes: Code[]): Code {
-  return {
-    nodes: Object.assign({}, ...codes.map((c) => c.nodes)),
-    defs: codes.flatMap((c) => c.defs),
-  };
+export class MergeClash extends Error {
+  ids: Id[];
+  constructor(ids: Id[]) {
+    super(`these ids name different nodes in the programs being merged: ${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ` and ${ids.length - 5} more` : ""}`);
+    this.ids = ids;
+  }
 }
+
+// Put programs together. The same node in two of them (a shared library)
+// is fine; two different nodes under one id is refused, never overwritten.
+export function merge(...codes: Code[]): Code {
+  const nodes: Record<Id, Node> = {};
+  const clashes: Id[] = [];
+  for (const c of codes) {
+    for (const [id, n] of Object.entries(c.nodes)) {
+      const old = nodes[id];
+      if (old && old !== n && !sameNode(old, n)) clashes.push(id);
+      nodes[id] = n;
+    }
+  }
+  if (clashes.length) throw new MergeClash(clashes);
+  return { nodes, defs: [...new Set(codes.flatMap((c) => c.defs))] };
+}
+
+const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);

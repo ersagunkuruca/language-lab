@@ -173,6 +173,17 @@ anything that acts is an action, a function with no inputs. `runMain`
 accepts an action only if its remaining effects are ones the runtime handles,
 so an unhandled `Choice` at the top is reported before anything runs.
 
+### How it runs: no stack limit
+
+The evaluator (`src/lang/run.ts`) is a small machine, not a recursive
+interpreter. What is left to do after the current expression (the
+continuation) is a linked list of frames on the heap, and every choice
+still open is a choice point holding that continuation. So recursion depth
+is limited by memory, not by the JS stack: summing a million numbers by
+`fold` or by plain recursion both work (`test/scale.test.ts` pins 200,000;
+`node bench/limits.ts` times up to a million). A frame is never changed
+after it's made, which is what lets a choice point resume it later.
+
 ### Choice: Verse, Prolog, `null`, and the solver's branches are one thing
 
 Evaluation produces a lazy stream of results (`src/lang/run.ts`). Pure code
