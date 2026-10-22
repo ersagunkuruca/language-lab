@@ -4,43 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cells: reactivity and values on demand</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap">
 <style>
 :root {
-  --bg: #e9ece6;
-  --panel: #f7f8f4;
-  --fg: #1c2420;
-  --muted: #5b6760;
-  --line: #d0d6ce;
-  --accent: #17706a;
-  --accent-soft: #d3ebe7;
-  --hot: #b4570f;
-  --hot-soft: #f8e4d0;
-  --op-bg: #dcebd4; --op-ln: #5f9150;
-  --def-bg: #d8e5f3; --def-ln: #4a78a8;
-  --var-bg: #f5e3c6; --var-ln: #b07c26;
-  --let-bg: #e7def1; --let-ln: #7a5aa6;
-  --lit-bg: #ecebe5; --lit-ln: #8a887c;
-  --wire: #7d8a83;
-  --font-ui: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-code: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --bg: oklch(91.5% 0.005 250);        /* the ground between panes */
+  --panel: oklch(98.6% 0.002 250);     /* panes (sheets) */
+  --canvas: oklch(96.2% 0.004 250);    /* graph background, wells, inputs */
+  --frame: oklch(92.6% 0.006 250);     /* functions not yet called */
+  --tone: oklch(88% 0.009 250);        /* nodes, active controls */
+  --tone-2: oklch(84% 0.011 250);
+  --lit: oklch(99.6% 0.001 250);       /* literals */
+  --fg: oklch(23% 0.012 250);
+  --muted: oklch(47% 0.012 250);
+  --faint: oklch(61% 0.01 250);
+  --line: oklch(90% 0.006 250);        /* the rare separator that remains */
+  --accent: oklch(52% 0.12 252);       /* selection, values */
+  --accent-soft: oklch(92.5% 0.03 252);
+  --hot: oklch(60% 0.14 62);           /* holes, refusals, what just changed */
+  --hot-soft: oklch(94.5% 0.045 78);
+  --dot: oklch(52% 0.17 300);          /* dots: parameters and lets */
+  /* Node kinds share one tone; the old per-kind colours now mean nothing extra. */
+  --op-bg: var(--tone); --op-ln: var(--muted);
+  --def-bg: var(--tone); --def-ln: var(--muted);
+  --var-bg: var(--tone); --var-ln: var(--muted);
+  --let-bg: var(--frame); --let-ln: var(--dot);
+  --lit-bg: var(--lit); --lit-ln: var(--faint);
+  --wire: oklch(58% 0.012 250);
+  --float: 0 1px 2px oklch(23% 0.012 250 / 0.1), 0 8px 24px oklch(23% 0.012 250 / 0.14);
+  --font-ui: "Red Hat Display", "Helvetica Neue", Arial, sans-serif;
+  --font-code: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
-    --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
-    --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
-    --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
-    --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+    --bg: oklch(14.5% 0.006 250); --panel: oklch(20.5% 0.007 250); --canvas: oklch(18% 0.007 250); --frame: oklch(23% 0.008 250);
+    --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
+    --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
+    --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+    --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
+    --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
-  --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
-  --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
-  --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
-  --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+  --bg: oklch(14.5% 0.006 250); --panel: oklch(20.5% 0.007 250); --canvas: oklch(18% 0.007 250); --frame: oklch(23% 0.008 250);
+  --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
+  --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
+  --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+  --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
+  --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
   color-scheme: dark;
 }
 
