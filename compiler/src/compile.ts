@@ -366,6 +366,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "builtin") {
           if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel || manyOf(f.target)) return true;
           if (f.target === S.first) return streamsFn(ty(n.args[1]), rho);
+          if (f.target === S.seeded) return streamsFn(ty(n.args[1]), rho);
           return false;
         }
       }
@@ -450,6 +451,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             [S.equal]: [`((a, b) => $bool($eq(a, b, ${JSON.stringify(equalityOf(n.id))})))`, false],
           };
           if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
+          if (n.target === S.seeded) return streamsFn(ty(n.id), rho) ? "$seededS" : "$seeded";
           if (manyOf(n.target)) return wrap(manyOf(n.target)!, true);
           if (implOf(n.target)) return wrap(implOf(n.target)!, false);
           if (runtime[n.target]) return wrap(...runtime[n.target]);
@@ -508,6 +510,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
           if (f.target === S.equal) return `$bool(${equality(n)})`;
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
+          if (f.target === S.seeded) return `$seeded(${ex(n.args[0])}, ${ex(n.args[1])})`;
           if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
           if (f.target === S.exists) return `$exists($program, ${ex(n.args[0])})`;
           if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
@@ -828,6 +831,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             return `${L}: {\n${st(body.body, (v) => `${y(v)}\nbreak ${L};`)}\n${st(g.body, y)}\n}`;
           });
         }
+        if (h === S.seeded && callStreams(n)) return parts(n.args, ([seed, body]) => {
+          const r = temp("r");
+          return `for (const ${r} of $seededS(${seed}, ${body})) {\n${k(r)}\n}`;
+        });
         if (h === S.fuel) return parts(n.args, ([fuel, body]) => {
           const r = temp("r");
           return `for (const ${r} of $fuel(${fuel}, ${body}, ${streamsFn(ty(n.args[1]), rho)})) {\n${k(r)}\n}`;
@@ -928,7 +935,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$optional", "$cells", "$spread", "$self", "$foldNested",
+    "$close", "$near", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];

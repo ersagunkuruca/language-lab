@@ -88,6 +88,8 @@ not only code: an influence is credited even when nothing was copied.
 | A handler is a `match` whose cases are an effect's operations | Adapted | OCaml 5.3's effect cases in `match` (OCaml 5 effects: Sivaramakrishnan et al., PLDI 2021). Credited in `src/lang/infer.ts` and LANGUAGE.md. |
 | An abort cuts the remaining alternatives | Prior art | ISO Prolog's `catch/3`; Koka and Effekt treat aborts as exceptions the same way. |
 | Effects as ordinary type definitions; world effects not allowed under `Choice` | Our own | Grew out of the review (REVIEW.md); no direct source we know of. |
+| Randomness as an effect whose handler chooses the numbers (a seeded one for tests, the world's otherwise) | Prior art | Koka's `ndet` effect for random numbers; the Eff papers' examples of handlers for nondeterminism and randomness (Bauer and Pretnar). LANGUAGE.md "Random". |
+| The seeded generator, xoshiro128** seeded by SplitMix32 | Adapted | xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain, [prng.di.unimi.it](https://prng.di.unimi.it/xoshiro128starstar.c)); SplitMix by Guy Steele, Doug Lea and Christine Flood ("Fast splittable pseudorandom number generators", OOPSLA 2014). Translated in `src/lang/random.ts`. |
 
 ## Choice: failure and many answers
 

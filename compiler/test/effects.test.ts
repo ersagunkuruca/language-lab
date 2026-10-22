@@ -13,7 +13,7 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { Aborted, makeRunner, runMain, type Value, type World } from "../../projectional/src/lang/run.ts";
 import { fractionsProgram } from "../../projectional/src/lang/cells-programs.ts";
-import { ABORT_OP, CELL_OPS, IO, LOG_OP, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, IO, LOG_OP, RANDOM_OP, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint, $setWorld } from "../src/runtime.js";
@@ -34,6 +34,7 @@ function fakeWorld(files: Record<string, string>, input: string) {
     appendFile: (p, t) => { files[p] = (files[p] ?? "") + t; },
     fileExists: (p) => p in files,
     listFolder: () => Object.keys(files).sort(),
+    random: () => 0.75,
   };
   return { world, out };
 }
@@ -179,4 +180,34 @@ test("Cells: a formula follows a write to the cell it reads", async () => {
     return main;
   });
   assert.deepEqual(r.lines, ["4", "4", "10"]);
+});
+
+// A draw as a whole number, exactly: every bit of the Number shows.
+const bits = (k: Lang, x: Id) => show(k, k.call(B.mul, x, k.lit(2 ** 53)));
+
+test("Random: seeded draws are the evaluator's bit for bit, with and without Choice", async () => {
+  const r = await both((k) => {
+    const draw = () => k.call(RANDOM_OP);
+    const seeded = (seed: number, body: () => Id) => k.call(S.seeded, k.lit(seed), k.thunk(body));
+    const all = (body: () => Id) => k.call(S.all, k.thunk(body));
+    // Each alternative draws the next numbers, depth first.
+    const search = () => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3), k.lit(4))), (x) =>
+      k.if(k.call(S.less, draw(), k.lit(0.5)), k.call(S.fail), k.call(B.add, x, k.call(S.floor, k.call(B.mul, draw(), k.lit(1000))))));
+    const print = (x: Id) => k.call(S.print, x);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(
+      print(seeded(42, () => k.text(bits(k, draw()), k.lit(" "), bits(k, draw())))),
+      // The search inside seeded, and seeded inside the search (its own
+      // result has Choice then).
+      print(k.call(SHOW_ANY, seeded(9, () => all(search)))),
+      print(k.call(SHOW_ANY, all(() => seeded(9, search)))),
+      // A match answers it; the world answers the rest.
+      print(show(k, k.handle(draw(), [{ variant: RANDOM_OP, names: [], body: () => k.lit(0.25) }]))),
+      print(show(k, draw())),
+    )));
+    return main;
+  });
+  assert.equal(r.lines[0], "5950297428061403 1006121846472570");
+  assert.equal(r.lines[1], r.lines[2]);
+  assert.deepEqual(r.lines.slice(3), ["0.25", "0.75"]);
 });

@@ -64,6 +64,13 @@ export const NONE = "std.optional.none", SOME = "std.optional.some";
 export const ABORT = typedef("std.abort", "Abort", [], [["abort", [["reason", () => tref(STRING)]]]], true);
 export const LOG = typedef("std.log", "Log", [], [["log", [["line", () => tref(STRING)]], () => tref(UNIT)]], true);
 export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
+// Random: `random()` is a Number in [0, 1). Like Log it isn't a world
+// effect: drawing a number changes nothing outside the program, so a search
+// may draw. `seeded(seed, action)` answers it with the same numbers every
+// run (random.ts); a match can answer it too (a test's fixed value), and
+// what nothing handles, the world answers.
+export const RANDOM = typedef("std.random", "Random", [], [["random", [], () => tref(NUMBER)]], true);
+export const RANDOM_OP = "std.random.random";
 
 // A page (WEB.md): an ordinary rose tree, whose changing parts are
 // functions the page runs in watchers (src/lang/html.ts). Views may read
@@ -185,6 +192,11 @@ export const S = {
   optional: builtin("optional", "optional", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], optional(a), e); }),
   // ... and back: the value, or no answer at all.
   valueOf: builtin("valueOf", "value of", (s) => { const a = s.fresh(); return fn([optional(a)], a, s.freshRow([CHOICE])); }),
+  // Random's handler that gives the same numbers for the same seed.
+  seeded: builtin("seeded", "seeded", (s) => {
+    const a = s.fresh(), e = s.freshRow();
+    return fn([num, fn([], a, { effs: [RANDOM], tail: e.tail })], a, e);
+  }),
   // Turns "might not terminate" into "might fail": at most n calls to
   // possibly-divergent definitions, then fail.
   fuel: builtin("fuel", "with fuel", (s) => {
@@ -281,7 +293,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, EVENT, ATTRIBUTE, HTML] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, EVENT, ATTRIBUTE, HTML] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

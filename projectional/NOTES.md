@@ -170,3 +170,30 @@ and ports). A caption would be a name drawn on a wire and a let is a name
 drawn on a dot, and both would name the same value, so there should be no
 difference: a caption is one more way to draw a named dot, alongside the
 junction and the let/get pair. The editor thread decides which is default.
+
+## Time, randomness and HTTP (2026-10-22)
+
+*The idea.* Real programs and pages need the time (a clock, an animation),
+random numbers (a dice game), and the network (fetching data). How do they
+fit effects whose world must not be touched under `Choice`?
+
+*Current answer.* One PR each (ROADMAP item 7):
+
+- **Random** is a std effect with a seeded handler and the world as the
+  default (LANGUAGE.md "Random"). It may run under `Choice`, and `Files` and
+  `Console` may not, because the rule is about what can't be taken back:
+  printing on an abandoned path stays printed, a written file stays
+  written, but a number drawn on an abandoned path changed nothing outside
+  the program. (Nothing is restored either: under `seeded`, the next
+  alternative takes the next numbers.)
+- **Time**: `now()` and, on the command line, `wait(ms)`. No separate tick
+  operation: in a page, a part that reads `now()` runs again each animation
+  frame, the way a time-varying value works in Fran (Elliott and Hudak) and
+  `Time.every` in Elm. Like Random, a match can answer it, so a test can fix
+  the clock.
+- **HTTP**: `fetch text(url)`, a GET that aborts on failure. It is memoised
+  per URL for the run, so a search that backtracks never repeats a request;
+  that is why it can be allowed where `Files` isn't. A page's part that
+  fetches keeps its content until the reply arrives and then runs again
+  (Solid's `createResource`, React's Suspense).
+

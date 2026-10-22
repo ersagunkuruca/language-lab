@@ -177,7 +177,8 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // abortive handlers the same way).
 
 import { Aborted } from '../../projectional/src/lang/run.ts';
-import { ABORT, ABORT_OP, LOG_OP, NONE, SOME } from '../../projectional/src/lang/std.ts';
+import { ABORT, ABORT_OP, LOG_OP, NONE, RANDOM, RANDOM_OP, SOME } from '../../projectional/src/lang/std.ts';
+import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
 export { Aborted as $Aborted };
 
 const handlers = [];
@@ -194,9 +195,10 @@ export function $perform(effect, op, args) {
     try { return h.answers[op](...args); } finally { handlers.push(...above); }
   }
   // What the program doesn't handle, the runtime does: Log goes to standard
-  // error and an Abort ends the run.
+  // error, an Abort ends the run, and the world draws Random's numbers.
   if (op === LOG_OP) { (world.log ?? printer)(args[0]); return $unit; }
   if (op === ABORT_OP) throw new Aborted(args[0]);
+  if (op === RANDOM_OP) return (world.random ?? worldRandom)();
   throw new Error(`nothing handles ${op}`);
 }
 
@@ -231,6 +233,13 @@ export function* $handleS(effect, answers, escapes, body) {
     yield r.value;
   }
 }
+
+// `seeded`: Random answered from a generator (projectional/src/lang/random.ts,
+// the evaluator's too, so both give the same numbers), around a computation
+// with one result or with Choice.
+const draws = (seed) => { const g = seededGenerator(seed); return { [RANDOM_OP]: () => g.next() }; };
+export const $seeded = (seed, body) => $handle(RANDOM, draws(seed), {}, body);
+export const $seededS = (seed, body) => $handleS(RANDOM, draws(seed), {}, body);
 
 // ---- the world ---------------------------------------------------------------
 // The world effects' one handler. A program compiled for the command line
