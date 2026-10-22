@@ -117,8 +117,6 @@ export interface Canvas {
   fit: () => void;
 }
 
-const HEIGHT = "graph-height", WIDE = "graph-wide";
-try { if (localStorage.getItem(WIDE)) document.documentElement.classList.add("graph-wide"); } catch {}
 type View = { x: number; y: number; z: number };
 
 // Where each graph's window was, so editing (which redraws) doesn't move it.
@@ -144,12 +142,6 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
 
   const el = document.createElement("div");
   el.className = "canvas-wrap";
-  // Resizable from its bottom edge; the height is remembered in this browser.
-  try { const hgt = Number(localStorage.getItem(HEIGHT)); if (hgt >= 160) el.style.height = `${hgt}px`; } catch {}
-  new ResizeObserver(() => {
-    const hgt = Math.round(el.getBoundingClientRect().height);
-    if (hgt >= 160 && el.isConnected) try { localStorage.setItem(HEIGHT, String(hgt)); } catch {}
-  }).observe(el);
   // Pan: a press on the svg that nothing in it took (a node, a port, a
   // wire). Listening on the window around the svg means every handler on
   // the svg and inside it has already had its turn.
@@ -182,18 +174,10 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   };
   const tools = document.createElement("div");
   tools.className = "canvas-tools";
-  const wide = () => document.documentElement.classList.contains("graph-wide");
-  const widen = btn(wide() ? "Narrow" : "Wide", "Give the graph the page's whole width", () => {
-    const on = !wide();
-    document.documentElement.classList.toggle("graph-wide", on);
-    widen.textContent = on ? "Narrow" : "Wide";
-    try { localStorage.setItem(WIDE, on ? "1" : ""); } catch {}
-  });
   tools.append(
     btn("Fit", "Show the whole graph, centered", fit),
     btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
   );
-  tools.append(widen);
   el.append(root, tools);
   return { el, root, world, zoom: () => view?.z ?? 1, fit };
 }

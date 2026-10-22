@@ -4,43 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Language tutorial</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap">
 <style>
 :root {
-  --bg: #e9ece6;
-  --panel: #f7f8f4;
-  --fg: #1c2420;
-  --muted: #5b6760;
-  --line: #d0d6ce;
-  --accent: #17706a;
-  --accent-soft: #d3ebe7;
-  --hot: #b4570f;
-  --hot-soft: #f8e4d0;
-  --op-bg: #dcebd4; --op-ln: #5f9150;
-  --def-bg: #d8e5f3; --def-ln: #4a78a8;
-  --var-bg: #f5e3c6; --var-ln: #b07c26;
-  --let-bg: #e7def1; --let-ln: #7a5aa6;
-  --lit-bg: #ecebe5; --lit-ln: #8a887c;
-  --wire: #7d8a83;
-  --font-ui: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-code: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --bg: oklch(91.5% 0.005 250);        /* the ground between panes */
+  --panel: oklch(98.6% 0.002 250);     /* panes (sheets) */
+  --canvas: oklch(96.2% 0.004 250);    /* graph background, wells, inputs */
+  --frame: oklch(92.6% 0.006 250);     /* functions not yet called */
+  --tone: oklch(88% 0.009 250);        /* nodes, active controls */
+  --tone-2: oklch(84% 0.011 250);
+  --lit: oklch(99.6% 0.001 250);       /* literals */
+  --fg: oklch(23% 0.012 250);
+  --muted: oklch(47% 0.012 250);
+  --faint: oklch(61% 0.01 250);
+  --line: oklch(90% 0.006 250);        /* the rare separator that remains */
+  --accent: oklch(52% 0.12 252);       /* selection, values */
+  --accent-soft: oklch(92.5% 0.03 252);
+  --hot: oklch(60% 0.14 62);           /* holes, refusals, what just changed */
+  --hot-soft: oklch(94.5% 0.045 78);
+  --dot: oklch(52% 0.17 300);          /* dots: parameters and lets */
+  /* Node kinds share one tone; the old per-kind colours now mean nothing extra. */
+  --op-bg: var(--tone); --op-ln: var(--muted);
+  --def-bg: var(--tone); --def-ln: var(--muted);
+  --var-bg: var(--tone); --var-ln: var(--muted);
+  --let-bg: var(--frame); --let-ln: var(--dot);
+  --lit-bg: var(--lit); --lit-ln: var(--faint);
+  --wire: oklch(58% 0.012 250);
+  --float: 0 1px 2px oklch(23% 0.012 250 / 0.1), 0 8px 24px oklch(23% 0.012 250 / 0.14);
+  --font-ui: "Red Hat Display", "Helvetica Neue", Arial, sans-serif;
+  --font-code: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
-    --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
-    --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
-    --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
-    --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+    --bg: oklch(14.5% 0.006 250); --panel: oklch(20.5% 0.007 250); --canvas: oklch(18% 0.007 250); --frame: oklch(23% 0.008 250);
+    --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
+    --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
+    --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+    --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
+    --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
-  --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
-  --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
-  --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
-  --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+  --bg: oklch(14.5% 0.006 250); --panel: oklch(20.5% 0.007 250); --canvas: oklch(18% 0.007 250); --frame: oklch(23% 0.008 250);
+  --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
+  --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
+  --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+  --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
+  --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
   color-scheme: dark;
 }
 
@@ -111,7 +122,7 @@ main   : () -[Console]-&gt; Unit</code></pre>
 <p>A <strong>node</strong> computes a value: a function call, an <code>if</code>, a <code>match</code>, a <code>fold</code>, a <code>solve</code>. Inputs are hollow circles on its left; its output is the filled circle on its right. A <strong>wire</strong> carries a value from an output to an input.</p>
 <p>There are no variable boxes. Every use of a variable is a wire from where that variable comes from, so a value used twice visibly fans out. In <code>discriminant</code> above, <code>linear coefficient</code> has two wires because it's used twice.</p>
 <p><strong>Values on wires.</strong> A small teal chip next to an output is the value it made when the definition last ran on its example inputs (<em>Show values</em> in the <em>Run</em> panel; the inputs are kept in <code>examples.json</code>, not in the code). That's different from a name: a name is brown or black, belongs to a dot, and is part of the names file. A value is a result and changes when the inputs do. Chips are placed where they cover no node and no other chip; one with no room shrinks to a dot, and hovering shows it.</p>
-<p><strong>Gestures.</strong> Drag from an output (or a dot) onto an input to use that value there. Drag an input's wire into empty space to remove it; the input becomes a hole. Drag a node to move it, which only changes <code>layout.json</code>: it stays exactly where you put it, and nothing else moves (alt-drag moves a dot). Shift-click or shift-drag picks several, and dragging one moves them all. <em>Fit</em> and <em>100%</em> zoom the canvas, which is unbounded in every direction; <em>Wide</em> gives it the page's width, and its bottom edge resizes it.</p>
+<p><strong>Gestures.</strong> Drag from an output (or a dot) onto an input to use that value there. Drag an input's wire into empty space to remove it; the input becomes a hole. Drag a node to move it, which only changes <code>layout.json</code>: it stays exactly where you put it, and nothing else moves (alt-drag moves a dot). Shift-click or shift-drag picks several, and dragging one moves them all. <em>Fit</em> and <em>100%</em> zoom the canvas, which is unbounded in every direction; the gutters between panes resize it.</p>
 <p><strong>Right-click</strong> anywhere in the graph for what you can do there: on a hole, the palette, searched; on empty space, <em>Add a value here</em> (a new dot holding a hole, to fill and wire in); on a node, open, show inline, put a dot on it, clear it; on a dot or port, <em>Show as let and get nodes</em>. <em>Tidy</em> spaces out the whole graph or the picked nodes, moving them off wires too; <em>Reset the layout</em> goes back to the automatic one. Where wires still cross, one hops over the other (a bridge); where a wire runs under a node, its hidden stretch shows faintly over it (a tunnel). NODE-EDITOR.md has the reasons.</p>
 <h3 id="33-dots-where-a-value-starts-and-branches">3.3 Dots: where a value starts and branches</h3>
 <p>A <strong>dot</strong> is where a value starts and branches out to every place that uses it. Two things are dots:</p>
@@ -211,7 +222,7 @@ main   : () -[Console]-&gt; Unit</code></pre>
 <ul><li><strong>Labels overlap.</strong> Value captions sit on top of input names (<code>fall</code>'s <code>29.62</code> over <code>distance</code>, <code>drift</code> over <code>10</code>), and a dot's name and its value print in the same spot. Every <code>print</code> shows <code>unitunit</code>.</li><li><strong>Wires cross nodes and each other</strong>, and nothing spaces nodes out. The <code>size</code> wire in <code>queens</code> runs through the case frame's input names.</li><li><strong>Nodes are placed relative to what they feed</strong>, with offsets saved from an automatic layout. Moving one thing can move others.</li><li><em>Fit</em> doesn't center horizontally, the graph panel can't be resized, and there's no right-click menu for adding a node, searching or inlining.</li></ul>
 <p><strong>Proposal.</strong></p>
 <ul><li>Value captions in a small pill attached to the wire's start, hidden by default when they'd overlap, shown on hover; names on dots only.</li><li>An automatic layout that minimizes crossings (layered, Sugiyama-style, as ELK and Graphviz do), runnable on the whole graph or on a selection, that treats wires as obstacles too. Where crossings remain, draw a small <strong>bridge</strong> where a wire crosses a wire and a <strong>tunnel</strong> (a gap) where it passes under a node.</li><li>Free positions: a node's position is its own, stored absolutely; the automatic layout only places nodes that have none.</li><li>Per-dot choice of drawing: a dot can be a <strong>junction</strong> (today) or a <strong>named let node</strong> plus <strong>get nodes</strong> where it's used (Unreal's and Houdini's &quot;named reroute&quot;), so a value used far away doesn't need a long wire. That's a view stored in <code>layout.json</code>; the code is the same let.</li><li>A right-click menu on the canvas and on nodes: add (the palette, searched), inline, open, put a dot, lay out the selection.</li></ul>
-<p><strong>Done</strong> (NODE-EDITOR.md): value chips placed off nodes and each other, free positions, Tidy for everything or the picked nodes (wires included), bridges and tunnels, let and get nodes per binding, the right-click menu, Fit centred, a resizable and widenable canvas. Still open: Tidy spaces nodes out but doesn't reorder them to cut crossings (the Sugiyama-style layout above), and wires don't route around nodes.</p>
+<p><strong>Done</strong> (NODE-EDITOR.md): value chips placed off nodes and each other, free positions, Tidy for everything or the picked nodes (wires included), bridges and tunnels, let and get nodes per binding, the right-click menu, Fit centred, a resizable canvas. Still open: Tidy spaces nodes out but doesn't reorder them to cut crossings (the Sugiyama-style layout above), and wires don't route around nodes.</p>
 <h3 id="3-captioned-wires-and-named-dots-look-alike-and-mean-different-things">3. Captioned wires and named dots look alike, and mean different things</h3>
 <p><strong>Today.</strong> Text next to a wire is either a <strong>value</strong> (teal: what this output made for the example inputs) or a <strong>name</strong> (on a dot: what a let is called). Both are small text near a wire, so it reads as if some wires have names.</p>
 <p><strong>Should there be a difference?</strong> Between a value and a name, yes. A name is presentation of the code (it lives in the names file, and renaming changes nothing). A value is a run result (it lives in <code>examples.json</code> and changes when the inputs do). The fix is to make them look different (item 2's pill for values), not to merge them. Between a <em>name</em> drawn on a wire and a name drawn on a dot, no: both name the same let, so a captioned wire would be one more way to draw a named dot, next to the junction and the let/get pair (NOTES.md, &quot;The node editor&quot;).</p>

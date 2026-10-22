@@ -132,6 +132,9 @@ interface UI {
   output: { def: Id; lines: string[]; error?: string } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   menu: { target: MenuTarget; x: number; y: number; world: Pos } | null;
+  // Definitions open as tabs over the graph, and which inspector tab shows.
+  tabs: Id[];
+  panel: "node" | "program" | "checks" | "files";
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -230,6 +233,8 @@ const ui: UI = {
   output: null,
   menu: null,
   newKind: "function",
+  tabs: [],
+  panel: "node",
 };
 
 
@@ -267,6 +272,7 @@ function showProgram() {
   redo.length = 0;
   ui.def = startDef();
   ui.back = [];
+  ui.tabs = [];
   ui.selected = firstHole();
   ui.mode = null;
   ui.output = null;
@@ -1524,6 +1530,38 @@ function navigator(p: Presentation) {
   return h("nav", { class: "panel p-nav", "aria-label": "Programs and definitions" }, h("h2", {}, "Programs"), find, list);
 }
 
+// The dock's sizes: the outline's and the side's widths and the text pane's
+// height. Dragging a gutter sets them; this browser remembers them.
+const DOCK = "projectional-dock";
+const dock: Record<string, number> = (() => { try { return JSON.parse(localStorage.getItem(DOCK) ?? "{}"); } catch { return {}; } })();
+const dockStyle = () => Object.entries(dock).map(([k, v]) => `--${k}: ${v}px`).join("; ");
+// The shown definition's tab: a newly opened one goes right after it.
+let openAt = -1;
+
+document.addEventListener("pointerdown", (e) => {
+  const g = (e.target as HTMLElement).closest<HTMLElement>("[data-gutter]");
+  if (!g || e.button !== 0) return;
+  e.preventDefault();
+  const k = g.dataset.gutter!, grid = g.closest<HTMLElement>(".grid")!;
+  const pane = k === "text-h" ? grid.querySelector<HTMLElement>(".p-text")! : grid.querySelector<HTMLElement>(k === "nav-w" ? ".p-nav" : ".side")!;
+  const r = pane.getBoundingClientRect();
+  const start = k === "text-h" ? r.height : r.width;
+  const limit = k === "text-h" ? [80, grid.clientHeight - 200] : k === "nav-w" ? [140, 420] : [240, 640];
+  g.classList.add("dragging");
+  const mv = (ev: PointerEvent) => {
+    const d = k === "text-h" ? e.clientY - ev.clientY : k === "nav-w" ? ev.clientX - e.clientX : e.clientX - ev.clientX;
+    dock[k] = Math.round(Math.min(limit[1], Math.max(limit[0], start + d)));
+    grid.style.setProperty(`--${k}`, `${dock[k]}px`);
+  };
+  const up = () => {
+    g.classList.remove("dragging");
+    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+    try { localStorage.setItem(DOCK, JSON.stringify(dock)); } catch {}
+  };
+  window.addEventListener("pointermove", mv);
+  window.addEventListener("pointerup", up);
+});
+
 // A view that throws leaves the page as it was, so every click after it
 // fails too. Say what broke and keep the way out: the program picker, Undo,
 // and Reset to the example as shipped.
@@ -1550,19 +1588,27 @@ function draw() {
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
 
-  const main = [
-    h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
-      graphOf(info)),
-    h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
-      h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
-    h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"),
-      seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]])),
-      h("pre", { class: "text" }, textPanel(info))),
+  // Open definitions are tabs; the one shown is always among them.
+  ui.tabs = ui.tabs.filter((d) => defBody(d));
+  if (!ui.tabs.includes(ui.def)) ui.tabs.splice(Math.min(ui.tabs.length, openAt + 1), 0, ui.def);
+  openAt = ui.tabs.indexOf(ui.def);
+  const tab = (d: Id) => h("div", { class: `tab${d === ui.def ? " on" : ""}` },
+    h("button", { type: "button", class: "t-open", "data-tab": d, "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
+    ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
+  const textView = ui.text === "blocks"
+    ? h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
+    : h("pre", { class: "text" }, textPanel(info));
+  const panels: [UI["panel"], string, () => Kid[]][] = [
+    ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
+    ["program", "Program", () => [programPanel()]],
+    ["checks", "Checks", () => [typedChecks(namer, info)]],
+    ["files", "Files", () => [filesPanel()]],
   ];
+  const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
 
   app.replaceChildren(
     h("header", { class: "bar" },
-      h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
+      h("div", { class: "brand" }, h("strong", {}, "Language Lab"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
@@ -1575,17 +1621,28 @@ function draw() {
         h("a", { class: "btn", href: "tutorial.html" }, "Tutorial"),
         h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
     ...(guideOpen ? [guide()] : []),
-    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
-    h("main", { class: "grid is-typed" },
+    h("main", { class: "grid is-typed", style: dockStyle() },
       navigator(p),
-      ...main,
       graphMenu(info),
+      h("div", { class: "gutter", "data-gutter": "nav-w", style: "grid-area: g1", "aria-hidden": "true" }),
+      h("div", { class: "center" },
+        h("section", { class: "panel p-graph", "aria-label": "Graph" },
+          h("div", { class: "tabs" }, ...ui.tabs.map(tab), h("span", { class: "hint", title: GRAPH_HINT }, GRAPH_HINT)),
+          h("div", { class: "graph-host" }, graphOf(info))),
+        h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
+        h("section", { class: "panel p-text", "aria-label": "Text" },
+          h("div", { class: "text-head" }, h("h2", {}, "Text"),
+            seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
+            ui.text === "blocks" ? h("span", { class: "hint" }, "hover for types; click a □ to fill it; double-click a name to open it") : null),
+          h("div", { class: "body" }, textView))),
+      h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Program"), programPanel()),
-        h("section", { class: "panel" }, h("h2", {}, ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "This definition"), typedInspector(namer, typedPres(), info), definitionPanel(p)),
-        h("section", { class: "panel" }, h("h2", {}, "Run"), typedRunPanel(namer, info)),
-        h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), typedChecks(namer, info)),
-        h("section", { class: "panel" }, h("h2", {}, "Files"), filesPanel()))),
+        h("section", { class: "panel", "aria-label": shown[1] },
+          h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
+            h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
+          ...shown[2]()),
+        h("section", { class: "panel" }, h("h2", {}, "Run"), typedRunPanel(namer, info)))),
+    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
   );
   document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });
   if (focused) document.getElementById(focused)?.focus();
@@ -1611,6 +1668,17 @@ document.addEventListener("click", (e) => {
   }
   const def = t.closest<HTMLElement>("[data-def]");
   if (def) { openDef(def.dataset.def!); ui.back = []; return render(); }
+  const tb = t.closest<HTMLElement>("[data-tab]");
+  if (tb) { if (tb.dataset.tab !== ui.def) { openDef(tb.dataset.tab!); ui.back = []; render(); } return; }
+  const close = t.closest<HTMLElement>("[data-close-tab]");
+  if (close) {
+    const d = close.dataset.closeTab!, i = ui.tabs.indexOf(d);
+    ui.tabs = ui.tabs.filter((x) => x !== d);
+    if (d === ui.def) { openDef(ui.tabs[Math.max(0, i - 1)]); ui.back = []; }
+    return render();
+  }
+  const panel = t.closest<HTMLElement>("[data-panel]");
+  if (panel) { ui.panel = panel.dataset.panel as UI["panel"]; return render(); }
   const act = t.closest<HTMLElement>("[data-act]");
   if (act) {
     const a = act.dataset.act;

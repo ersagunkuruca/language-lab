@@ -173,7 +173,7 @@ hole. Drag a node to move it, which only changes `layout.json`: it stays
 exactly where you put it, and nothing else moves (alt-drag moves a dot).
 Shift-click or shift-drag picks several, and dragging one moves them all.
 *Fit* and *100%* zoom the canvas, which is unbounded in every direction;
-*Wide* gives it the page's width, and its bottom edge resizes it.
+the gutters between panes resize it.
 
 **Right-click** anywhere in the graph for what you can do there: on a hole,
 the palette, searched; on empty space, *Add a value here* (a new dot holding
@@ -638,7 +638,7 @@ per type, the way NUMBERS.md chooses a representation.
 **Done** (NODE-EDITOR.md): value chips placed off nodes and each other,
 free positions, Tidy for everything or the picked nodes (wires included),
 bridges and tunnels, let and get nodes per binding, the right-click menu,
-Fit centred, a resizable and widenable canvas. Still open: Tidy spaces
+Fit centred, a resizable canvas. Still open: Tidy spaces
 nodes out but doesn't reorder them to cut crossings (the Sugiyama-style
 layout above), and wires don't route around nodes.
 
