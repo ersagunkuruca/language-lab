@@ -7,6 +7,7 @@
     "build": "node build.ts",
     "test": "node --test test/*.test.ts",
     "bench": "node bench.ts",
+    "gpu": "node gpu.ts",
     "gaps": "node gaps/bench.ts"
   },
   "engines": {

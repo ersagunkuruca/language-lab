@@ -34,3 +34,6 @@ jobs:
       - name: compiler
         working-directory: compiler
         run: npm test
+      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
+        working-directory: compiler
+        run: npm run gpu
