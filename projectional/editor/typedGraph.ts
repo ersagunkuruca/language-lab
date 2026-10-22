@@ -467,7 +467,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // An if reads then, else, whatever order the arms were stored in.
     if (isIf) armNodes = [...armNodes].sort((a, b) => (a.variant === TRUE ? -1 : b.variant === TRUE ? 1 : 0));
     const type = armNodes[0] && info?.owner.get(armNodes[0].variant);
-    const title = isIf ? "if" : `${n.kind}${type ? ` ${name(type)}` : ""}`;
+    // A match on an effect's operations handles that effect (LANGUAGE.md,
+    // "Effects you define"), and says so, as the blocks and text do.
+    const typeBody = type && (node(type) as NodeOf<"def">)?.body ? node((node(type) as NodeOf<"def">).body!) : null;
+    const handles = n.kind === "match" && typeBody?.kind === "typedef" && !!typeBody.effect;
+    const title = isIf ? "if" : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
@@ -507,23 +511,27 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return [name(r.target), ...r.args.map((a) => { const x = typeText(a); return x.includes(" ") ? `(${x})` : x; })].join(" ");
   };
   const typeFrame = (td: NodeOf<"typedef">): Sub => {
-    const title = `type ${name(defId)}: one constructor per case`;
+    // An effect is a typedef too: its cases are its operations, and each
+    // says what it gives back to whoever performs it.
+    const title = td.effect ? `effect ${name(defId)}: one operation per case` : `type ${name(defId)}: one constructor per case`;
     frames.set(defId, { id: defId, parent: null, title, cls: "def", binders: [], labels: [], out: null, pad: [22, 30, 22, 14], minH: 0, minW: tw(title, 6.6) + 24 });
     frame = defId;
     const at = new Map<Id, Pos>();
     let y = 30, w = 0;
     for (const v of td.variants) {
-      const fs = (node(v) as NodeOf<"variant">).fields;
+      const { fields: fs, returns } = node(v) as NodeOf<"variant">;
       const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
-      const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22));
-      const bh = Math.max(30, 28 + fs.length * 18);
+      const gives = returns ? `returns ${typeText(returns)}` : "";
+      const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22), gives ? tw(gives, 6.6) + 22 : 0);
+      const bh = Math.max(30, 28 + fs.length * 18) + (gives ? 18 : 0);
       const k = item(v, bw, bh, (g) => {
-        g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v, "data-move": v }), `${name(v)}: makes a ${name(defId)}`));
+        g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v, "data-move": v }), td.effect ? `${name(v)}: an operation of ${name(defId)}${gives ? `; it ${gives}` : ""}` : `${name(v)}: makes a ${name(defId)}`));
         g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(v)));
         fs.forEach((f, i) => {
           g.append(titled(s("circle", { cx: 0, cy: 32 + i * 18, r: 5, class: `inp${sel(f)}`, "data-id": f }), labels[i]));
           g.append(s("text", { x: 9, y: 36 + i * 18, class: "portl" }, labels[i]));
         });
+        if (gives) g.append(s("text", { x: 9, y: 36 + fs.length * 18, class: "portl" }, gives));
         g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), name(defId)));
       });
       shift(at, k, 22, y);
