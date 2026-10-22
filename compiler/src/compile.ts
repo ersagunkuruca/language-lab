@@ -127,6 +127,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const handlerOf = (n: NodeOf<"match">) => (n.arms.length ? effectOf((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : null);
   const perform = (op: Id, args: string[]) => `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`;
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
+  // How numbers compare at a use of `equal` (run.ts `Equality`). A Number
+  // or an Int on its own is compared without the general loop.
+  const equalityOf = (ref: Id) => info.equality?.get(ref) ?? "mixed";
+  const equalJs = (ref: Id, arg: Id, [a, b]: string[]) => {
+    const t = ty(arg), how = equalityOf(ref);
+    if (t.t === "con" && t.id === NUMBER) return `$near(${a}, ${b})`;
+    if (t.t === "con" && (t.id === STRING || t.id === INT)) return `(${a} === ${b})`;
+    return how === "mixed" ? `$eq(${a}, ${b})` : `$eq(${a}, ${b}, ${JSON.stringify(how)})`;
+  };
   const node = <K extends NodeOf<any>["kind"]>(id: Id) => code.nodes[id] as NodeOf<K>;
 
   // ---- identifiers: display names where there are some, made unique
@@ -385,11 +394,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     function equality(n: NodeOf<"call">): string {
-      const [a, b] = n.args.map(ex);
-      const t = ty(n.args[0]);
-      // Numbers compare to the precision floats carry (run.ts `close`).
-      if (t.t === "con" && t.id === NUMBER) return `$near(${a}, ${b})`;
-      return t.t === "con" && (t.id === STRING || t.id === INT) ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
+      return equalJs(n.fn, n.args[0], n.args.map(ex));
     }
 
     function refValue(n: NodeOf<"ref">): string {
@@ -421,7 +426,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
           const runtime: Record<Id, [string, boolean]> = {
             [S.oneOf]: ["$oneOf", true], [S.fail]: ["$fail", true], [S.all]: ["$all", false], [S.count]: ["$count", false], [S.optional]: ["$optional", false],
-            [S.equal]: ["((a, b) => $bool($eq(a, b)))", false],
+            [S.equal]: [`((a, b) => $bool($eq(a, b, ${JSON.stringify(equalityOf(n.id))})))`, false],
           };
           if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
           if (manyOf(n.target)) return wrap(manyOf(n.target)!, true);
@@ -760,7 +765,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         else if (kind === "builtin" && OPS[target!]) {
           const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
           c = OPS[target!].bool ? `$bool(${js})` : js;
-        } else if (target === S.equal) c = `$bool($eq(${args.join(", ")}))`;
+        } else if (target === S.equal) c = `$bool(${equalJs(n.fn, n.args[0], args)})`;
         else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
         else if (target === S.exists) c = `$exists($program, ${args[0]})`;
         else if (target === SET) c = setCall(n.args[0], args[1], args[2]);

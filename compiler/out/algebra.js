@@ -203,7 +203,7 @@ function simplify(expression3) {
                 return ({ tag: "6bce4e58" /* number */, fields: [t$25] });
               }
             }
-            return ($eq(l4, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? r4 : ($eq(r4, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
+            return ($eq(l4, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near") ? r4 : ($eq(r4, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near") ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
           })();
       }
       case "f2da4c50" /* difference */: {
@@ -216,7 +216,7 @@ function simplify(expression3) {
                 return ({ tag: "6bce4e58" /* number */, fields: [t$28] });
               }
             }
-            return ($eq(r5, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? l5 : ($eq(l5, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
+            return ($eq(r5, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near") ? l5 : ($eq(l5, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near") ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
           })();
       }
       case "24d4c71f" /* product */: {
@@ -229,7 +229,7 @@ function simplify(expression3) {
                 return ({ tag: "6bce4e58" /* number */, fields: [t$31] });
               }
             }
-            return (($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [0] })) || $eq(r6, ({ tag: "6bce4e58" /* number */, fields: [0] }))) ? ({ tag: "6bce4e58" /* number */, fields: [0] }) : ($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [1] })) ? r6 : ($eq(r6, ({ tag: "6bce4e58" /* number */, fields: [1] })) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
+            return (($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near") || $eq(r6, ({ tag: "6bce4e58" /* number */, fields: [0] }), "near")) ? ({ tag: "6bce4e58" /* number */, fields: [0] }) : ($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [1] }), "near") ? r6 : ($eq(r6, ({ tag: "6bce4e58" /* number */, fields: [1] }), "near") ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
           })();
       }
       case "af14d535" /* negative */: {
@@ -256,7 +256,7 @@ function simplify(expression3) {
       case "563662e0" /* quotient */: {
         const t2 = rs$22[0];
         const b2 = rs$22[1];
-        if ($eq(b2, ({ tag: "6bce4e58" /* number */, fields: [1] }))) {
+        if ($eq(b2, ({ tag: "6bce4e58" /* number */, fields: [1] }), "near")) {
           return t2;
         }
         return ({ tag: "563662e0" /* quotient */, fields: [t2, b2] });

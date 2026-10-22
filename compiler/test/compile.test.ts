@@ -13,7 +13,7 @@ import type { Id } from "../../projectional/src/model.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { CONS, NIL, S } from "../../projectional/src/lang/std.ts";
+import { CONS, NIL, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram, load } from "../src/program.ts";
@@ -253,7 +253,7 @@ test("$eq compares long lists without the JS stack", async () => {
 });
 
 test("Int, text and set compile to what the evaluator does", async () => {
-  const { INT_OPS: I, TEXT_OPS: T, SET, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../projectional/src/lang/std.ts");
   const { INT, STRING } = await import("../../projectional/src/lang/types.ts");
   const k = new Lang();
   const orNone = (body: () => string) => k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")));
@@ -300,4 +300,26 @@ test("comes before, against a constant below the surrogates, is JS's < and still
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
   assert.match(source, /\("m" < "ma"\)/);
   assert.match(source, /\$text\.less\("𝄞", ""\)/);
+});
+
+// GAPS.md G0: an Int is a JS number while it's small, so it used to get
+// Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
+test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {
+  const k = new Lang();
+  const same = k.def("same"), main = k.def("main");
+  k.define(same, k.fn(["a", "b"], (a, b) => k.equal(a, b)));
+  const big = () => k.int(1000000000000), next = () => k.int(1000000000001);
+  const third = () => k.call(B.add, k.lit(0.1), k.lit(0.2));
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(
+    k.equal(big(), next()), k.equal(k.list(big()), k.list(next())), k.call(same, big(), next()), k.call(same, k.list(big()), k.list(next())),
+    k.equal(big(), big()), k.call(same, big(), big()),
+    k.equal(third(), k.lit(0.3)), k.equal(k.list(third()), k.list(k.lit(0.3))), k.call(same, third(), k.lit(0.3)),
+  )))));
+  const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true]"]);
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  const hows = [...info.equality.values()];
+  assert.ok(hows.includes("exact") && hows.includes("near") && hows.includes("mixed"));
 });

@@ -95,7 +95,11 @@ at each `equal`, so it should record it. The evaluator and the compiler
 then use exact comparison at `Int`, at `Text`, and at data with no `Number`
 inside, and keep the tolerance only where a `Number` is compared. This
 touches `src/lang/run.ts` and `infer.ts`, so it's a language change, not a
-compiler change.
+compiler change. **Done**: the checker records how numbers compare at each
+`equal` (exact where there are only Ints, near where there are only
+Numbers, and where a type variable could be either, whole numbers exactly),
+and the evaluator and the compiler both use it. No example's output
+changed. The inline form (G2) is still open.
 
 **G1. Recursion uses the JS stack (correctness).** The compiled calc
 crashes with `RangeError` on a 5,000-line input. The evaluator, which keeps

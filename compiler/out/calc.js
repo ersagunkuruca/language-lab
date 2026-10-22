@@ -61,7 +61,7 @@ function run_line(line2, bindings2) {
     case "std.list.cons" /* cons */: {
       const t = s$3.fields[0];
       const more = s$3.fields[1];
-      if ($eq(t, ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: ["let"] }))) {
+      if ($eq(t, ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: ["let"] }), "exact")) {
         const s$4 = more;
         switch (s$4.tag) {
           case "std.list.cons" /* cons */: {
@@ -85,7 +85,7 @@ function run_line(line2, bindings2) {
           }
         }
       }
-      if ($eq(t, ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: ["?"] }))) {
+      if ($eq(t, ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: ["?"] }), "exact")) {
         $print(parenthesized(whole_expression(more)));
         return bindings2;
       }
@@ -176,7 +176,7 @@ function tokens(line3) {
         let r$14 = step$6(v$13);
         for (let i$16 = spine$15.length - 1; i$16 >= 0; i$16--) r$14 = step$6(spine$15[i$16], r$14);
         return r$14;
-      })(), ((t2) => $bool(!$eq(t2, ({ tag: "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */, fields: [] })))));
+      })(), ((t2) => $bool(!$eq(t2, ({ tag: "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */, fields: [] }), "exact"))));
 }
 
 // expect
@@ -186,7 +186,7 @@ function expect(mark, tokens2) {
     case "std.list.cons" /* cons */: {
       const t3 = s$18.fields[0];
       const more4 = s$18.fields[1];
-      if ($eq(t3, ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [mark] }))) {
+      if ($eq(t3, ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [mark] }), "exact")) {
         return more4;
       }
       return $perform("std.abort", "std.abort.abort" /* abort */, [((("expected “" + mark) + "”, got ") + describe(tokens2))]);
