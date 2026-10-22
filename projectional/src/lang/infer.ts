@@ -975,7 +975,10 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const ex = info.subst.resolve(h.expected);
   if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length });
   const dataTypes = [...new Set(info.owner.values())].filter((d) => !(code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect);
-  const splittable = dataTypes.filter((t) => !t.startsWith("std.") || t === "std.bool" || t === "std.list");
+  // The standard library's types that are data you write programs about;
+  // the rest (Unit, Html, Event…) would only crowd the palette.
+  const STD_SPLIT = ["std.bool", "std.list", "std.pair", "std.optional"];
+  const splittable = dataTypes.filter((t) => !t.startsWith("std.") || STD_SPLIT.includes(t));
   for (const b of h.scope) {
     const bt = info.subst.resolve(b.type);
     if (bt.t === "con" && dataTypes.includes(bt.id)) {
