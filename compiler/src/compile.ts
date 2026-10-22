@@ -35,6 +35,7 @@ import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IM
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
+import { foldPlan } from "../../projectional/src/lang/represent.ts";
 
 type Rho = Map<number, boolean>;
 type K = (value: string) => string;
@@ -659,10 +660,20 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     //  - When a field holds the type nested in a container (a rose tree's
     //    List Tree), `parts` lists the trees inside it (projectional/src/
     //    lang/nested.ts) and puts their results back in a copy of it.
+    // How it loops is the fold job of the storage its input has
+    // (projectional/src/lang/represent.ts, `foldPlan`).
     function foldLoop(n: NodeOf<"fold">): string {
+      const plan = foldPlan(code, n);
+      switch (plan.rep.jobs.fold) {
+        case "cells.loop": return foldCells(n, ex(plan.on));
+        default: throw new Error(`no template for ${plan.rep.jobs.fold}`);
+      }
+    }
+
+    function foldCells(n: NodeOf<"fold">, input: string): string {
       const arms = n.arms.map((a) => node<"arm">(a));
       const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
-      if (arms.some((a) => recOf(a).some((i) => nestedShape(a, i)))) return foldNested(n, arms, recOf);
+      if (arms.some((a) => recOf(a).some((i) => nestedShape(a, i)))) return foldNested(input, arms, recOf);
       const chain = arms.every((a) => recOf(a).length <= 1);
       const step = temp("step"), s = temp("s"), rs = temp("rs");
       const cases = arms.map((a) => {
@@ -676,19 +687,19 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const spine = temp("spine"), i = temp("i");
         const next = recursive.map((a) => `${v}.tag === ${tag(a.variant)} ? ${recOf(a)[0]} : `).join("") + "-1";
         const k = temp("k");
-        return `${fn}const ${spine} = [];\nlet ${v} = ${ex(n.scrutinee)};\n` +
+        return `${fn}const ${spine} = [];\nlet ${v} = ${input};\n` +
           `for (let ${k} = ${next}; ${k} >= 0; ${k} = ${next}) {\n${spine}.push(${v});\n${v} = ${v}.fields[${k}];\n}\n` +
           `let ${r} = ${step}(${v});\nfor (let ${i} = ${spine}.length - 1; ${i} >= 0; ${i}--) ${r} = ${step}(${spine}[${i}], ${r});\nreturn ${r};`;
       }
       const todo = temp("todo"), top = temp("top"), ix = temp("ix");
       const fields = `{ ${recursive.map((a) => `${tag(a.variant).split(" ")[0]}: [${recOf(a).join(", ")}]`).join(", ")} }`;
-      return `${fn}const ${ix} = ${fields};\nconst ${todo} = [{ v: ${ex(n.scrutinee)}, i: 0, rs: [] }];\n` +
+      return `${fn}const ${ix} = ${fields};\nconst ${todo} = [{ v: ${input}, i: 0, rs: [] }];\n` +
         `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\nconst ${v} = ${ix}[${top}.v.tag];\n` +
         `if (${v} && ${top}.i < ${v}.length) {\n${todo}.push({ v: ${top}.v.fields[${v}[${top}.i++]], i: 0, rs: [] });\ncontinue;\n}\n` +
         `const ${r} = ${step}(${top}.v, ${top}.rs);\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
     }
 
-    function foldNested(n: NodeOf<"fold">, arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]): string {
+    function foldNested(input: string, arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]): string {
       const step = temp("step"), s = temp("s"), rs = temp("rs"), parts = temp("parts");
       const cases = arms.map((a) => {
         const rec = recOf(a).map((i, k) => `\nconst ${local(a.results[i]!)} = ${rs}[${k}];`).join("");
@@ -701,7 +712,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const todo = temp("todo"), top = temp("top"), r = temp("r"), at = temp("at");
       return `const ${step} = (${s}, ${rs}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n` +
         `const ${parts} = (${s}) => {\nswitch (${s}.tag) {\n${partCases.join("\n")}\ndefault: return [];\n}\n};\n` +
-        `const ${todo} = [{ v: ${ex(n.scrutinee)}, ps: null, kids: null, i: 0, rs: [] }];\n` +
+        `const ${todo} = [{ v: ${input}, ps: null, kids: null, i: 0, rs: [] }];\n` +
         `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\n` +
         `if (!${top}.ps) { ${top}.ps = ${parts}(${top}.v); ${top}.kids = ${top}.ps.flatMap((p) => p.children); }\n` +
         `if (${top}.i < ${top}.kids.length) {\n${todo}.push({ v: ${top}.kids[${top}.i++], ps: null, kids: null, i: 0, rs: [] });\ncontinue;\n}\n` +

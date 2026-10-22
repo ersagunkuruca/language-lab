@@ -207,3 +207,36 @@ function childrenOf(n: Node): Id[] {
     default: return [];
   }
 }
+
+// ---- Representations the compiler stores itself
+//
+// The rows above are written in the language: their jobs are definitions.
+// These rows are the backends' own storage, so their jobs are templates,
+// code each backend emits, named here. The first is `cells`: a value stored
+// as the definition writes it, one object per case, linked by fields. Its
+// fold is the loop the compiler makes for any fold without Choice (a spine
+// for chains, an explicit stack for trees). Other rows make the same fold
+// run on other storage, for a value made by their `meaning`
+// (NUMBERS.md, "Folds run the way their value is stored").
+
+export interface Storage {
+  name: string;
+  // The type it stores, or "data" for every data type.
+  of: Id | "data";
+  // The function whose result is stored this way, for a value it makes.
+  meaning: Id | null;
+  // Job → the template that does it.
+  jobs: Record<string, string>;
+  cost: Record<string, string>;
+}
+
+export const CELLS: Storage = { name: "cells", of: "data", meaning: null, jobs: { fold: "cells.loop" }, cost: { fold: "n", space: "n" } };
+export const STORAGES: Storage[] = [CELLS];
+
+// Which storage runs a fold, and the node whose value it runs on: the
+// argument of a `meaning` when the fold's input is made by one (the law
+// fold′(x) = fold(meaning(x)) read backwards), else the input itself.
+export interface FoldPlan { rep: Storage; on: Id }
+export function foldPlan(code: Code, fold: NodeOf<"fold">): FoldPlan {
+  return { rep: CELLS, on: fold.scrutinee };
+}
