@@ -6,7 +6,9 @@
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CHOICE, CONSOLE, DIVERGE, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import { CHOICE, CONSOLE, DIVERGE, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import * as I from "./int.ts";
+import * as T from "./text.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -14,7 +16,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
@@ -51,6 +53,7 @@ export const PAIR_V = "std.pair.pair", FIRST = "std.pair.pair.fst", SECOND = "st
 type Sig = (s: Subst) => Type;
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const str: Type = { t: "con", id: STRING, args: [] };
+const int: Type = { t: "con", id: INT, args: [] };
 const bool: Type = { t: "con", id: BOOL, args: [] };
 const unit: Type = { t: "con", id: UNIT, args: [] };
 const list = (a: Type): Type => ({ t: "con", id: LIST, args: [a] });
@@ -58,6 +61,8 @@ const fn = (params: Type[], ret: Type, eff: { effs: Id[]; tail: number | null })
 
 export const SIGS: Record<Id, Sig> = {};
 export const STD_IMPL: Record<Id, (...xs: any[]) => any> = {};
+// Builtins with Choice: every answer, as an array (none, one or several).
+export const STD_MANY: Record<Id, (...xs: any[]) => any[]> = {};
 
 function builtin(op: string, name: string, sig: Sig, f?: (...xs: any[]) => any) {
   const id = `builtin.${op}`;
@@ -65,6 +70,20 @@ function builtin(op: string, name: string, sig: Sig, f?: (...xs: any[]) => any) 
   SIGS[id] = sig;
   if (f) STD_IMPL[id] = f;
   return id;
+}
+function choice(op: string, name: string, params: Type[], ret: Type, f: (...xs: any[]) => any[]) {
+  const id = builtin(op, name, (s) => fn(params, ret, s.freshRow([CHOICE])));
+  STD_MANY[id] = f;
+  return id;
+}
+
+const truth = (b: boolean) => ({ tag: b ? "std.bool.true" : "std.bool.false", fields: [] });
+// Lists as std builds them, for builtins that take or give one.
+const listOf = (xs: unknown[]) => xs.reduceRight<object>((tail, x) => ({ tag: "std.list.cons", fields: [x, tail] }), { tag: "std.list.nil", fields: [] });
+function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
+  const out: unknown[] = [];
+  for (let d = l; d.tag === "std.list.cons"; d = d.fields[1] as typeof l) out.push(d.fields[0]);
+  return out;
 }
 
 // The numeric builtins from prelude.ts get types here; their code stays there.
@@ -126,6 +145,61 @@ export const S = {
     return fn([num, fn([], a, { effs: [DIVERGE], tail: e.tail })], a, { effs: [CHOICE], tail: e.tail });
   }),
 };
+
+// Int: whole numbers that never overflow. Same names as Number's, because
+// names are presentation (NUMBERS.md stage 2): the palette offers the one
+// whose types fit. Division and powers can have no answer, so they're
+// Choice rather than a crash or a NaN.
+export const INT_OPS = {
+  add: builtin("int.add", "add", pure([int, int], int), I.add),
+  sub: builtin("int.sub", "subtract", pure([int, int], int), I.sub),
+  mul: builtin("int.mul", "multiply", pure([int, int], int), I.mul),
+  neg: builtin("int.neg", "negate", pure([int], int), I.neg),
+  abs: builtin("int.abs", "abs", pure([int], int), I.abs),
+  less: builtin("int.less", "less than", pure([int, int], bool), (a: I.Int, b: I.Int) => truth(I.less(a, b))),
+  quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
+  remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
+  power: choice("int.power", "power", [int, int], int, I.power),
+  show: builtin("int.show", "show", pure([int], str), I.show),
+  read: choice("int.read", "read whole number", [str], int, I.read),
+  toNumber: builtin("int.toNumber", "as number", pure([int], num), I.toNumber),
+  wholePart: choice("int.wholePart", "whole part", [num], int, I.wholePart),
+  // 0, 1, …, n − 1. A list of a billion items is a billion cells, so this
+  // is for sizes that fit in memory, like everything else.
+  range: builtin("int.range", "range", pure([int], list(int)), (n: I.Int) => {
+    let l: object = { tag: "std.list.nil", fields: [] };
+    for (let i = Number(n) - 1; i >= 0; i--) l = { tag: "std.list.cons", fields: [i, l] };
+    return l;
+  }),
+};
+
+// Text at real sizes (src/lang/text.ts). Positions count characters.
+export const TEXT_OPS = {
+  length: builtin("text.length", "length", pure([str], int), T.length),
+  slice: builtin("text.slice", "slice", pure([str, int, int], str), T.slice),
+  characters: builtin("text.characters", "characters", pure([str], list(str)), (t: string) => listOf(T.characters(t))),
+  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => listOf(T.split(t, by))),
+  joinAll: builtin("text.joinAll", "join all", pure([list(str), str], str), (l: { tag: Id; fields: unknown[] }, by: string) => T.joinAll(itemsOf(l) as string[], by)),
+  find: choice("text.find", "find", [str, str], int, T.find),
+  less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
+  code: choice("text.code", "character code", [str], int, T.code),
+  fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
+};
+
+// show for any plain value: [1, 2, 3], circle(2), "text". Cases print
+// with the program's names, which the runtime is given (names are
+// presentation, so they're an input to the run, like the console). Number's
+// own show stays: run backwards, it is what reads numbers.
+export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
+
+// Records: set(field, record, value) is the record with that field changed.
+// `field` is a field, or a path of fields (p ↦ p.address.city), which the
+// checker insists on; the update is that path run backwards, with every
+// other field kept (src/lang/records.ts).
+export const SET = builtin("set", "set", (s) => {
+  const r = s.fresh(), a = s.fresh();
+  return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
+});
 
 export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };

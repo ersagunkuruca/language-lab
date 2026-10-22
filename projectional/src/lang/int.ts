@@ -1,0 +1,80 @@
+// Int: whole numbers that never overflow (NUMBERS.md, stage 1).
+//
+// The meaning is the mathematical integers. The representation is a JS
+// number while it is a safe integer (|x| < 2^53), and a BigInt beyond, so
+// small numbers are as fast as floats and big ones are exact. It is
+// canonical: every integer has exactly one spelling (a safe integer is never
+// a BigInt), so `===`, `equal` and hashing stay correct.
+
+export type Int = number | bigint;
+
+export const isInt = (x: unknown): x is Int => typeof x === "bigint" || Number.isSafeInteger(x);
+
+// The one spelling of a BigInt.
+export const norm = (b: bigint): Int => (b >= -9007199254740991n && b <= 9007199254740991n ? Number(b) : b);
+const big = (x: Int) => (typeof x === "bigint" ? x : BigInt(x));
+
+// A literal: digits in a string when they don't fit a safe integer.
+export const intLit = (v: number | string): Int => (typeof v === "number" ? v : norm(BigInt(v)));
+
+// The float result is exact whenever it is a safe integer, so the fast path
+// needs only that check.
+export function add(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a + b; if (Number.isSafeInteger(r)) return r; }
+  return norm(big(a) + big(b));
+}
+export function sub(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a - b; if (Number.isSafeInteger(r)) return r; }
+  return norm(big(a) - big(b));
+}
+export function mul(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a * b; if (Number.isSafeInteger(r)) return r === 0 ? 0 : r; }
+  return norm(big(a) * big(b));
+}
+export const neg = (a: Int): Int => (typeof a === "number" ? (a === 0 ? 0 : -a) : norm(-a));
+export const abs = (a: Int): Int => (less(a, 0) ? neg(a) : a);
+export const less = (a: Int, b: Int): boolean => a < b;
+
+// Division rounds down and the remainder has the divisor's sign, so
+// a = b · quotient + remainder always, and remainder(-1, 3) = 2. Dividing by
+// zero has no answer: these are Choice.
+export function quotient(a: Int, b: Int): Int[] {
+  if (b === 0) return [];
+  if (typeof a === "number" && typeof b === "number") {
+    // a − r is an exact multiple of b, so the division is exact.
+    const d = a - floorMod(a, b);
+    if (Number.isSafeInteger(d)) { const q = d / b; return [q === 0 ? 0 : q]; }
+  }
+  const x = big(a), y = big(b), q = x / y, r = x % y;
+  return [norm(r !== 0n && (r < 0n) !== (y < 0n) ? q - 1n : q)];
+}
+const floorMod = (a: number, b: number) => { const r = a % b; return r !== 0 && (r < 0) !== (b < 0) ? r + b : r; };
+export function remainder(a: Int, b: Int): Int[] {
+  if (b === 0) return [];
+  if (typeof a === "number" && typeof b === "number") { const r = floorMod(a, b); return [r === 0 ? 0 : r]; }
+  const y = big(b), r = big(a) % y;
+  return [norm(r !== 0n && (r < 0n) !== (y < 0n) ? r + y : r)];
+}
+
+// A negative power isn't whole: no answer.
+export function power(a: Int, n: Int): Int[] {
+  if (less(n, 0)) return [];
+  if (typeof a === "number" && typeof n === "number") { const r = a ** n; if (Number.isSafeInteger(r)) return [r]; }
+  return [norm(big(a) ** big(n))];
+}
+
+export const show = (a: Int): string => String(a);
+// The nearest float; exact up to 2^53.
+export const toNumber = (a: Int): number => Number(a);
+// Rounds down. Infinity and NaN aren't whole numbers: no answer.
+export function wholePart(x: number): Int[] {
+  if (!Number.isFinite(x)) return [];
+  const f = Math.floor(x);
+  return [Number.isSafeInteger(f) ? (f === 0 ? 0 : f) : norm(BigInt(f))];
+}
+// Only the spelling `show` produces: no leading zeros, no plus sign, no
+// spaces. So reading is `show` run backwards, and it has one answer or none.
+export function read(t: string): Int[] {
+  if (!/^-?(0|[1-9][0-9]*)$/.test(t) || t === "-0") return [];
+  return [norm(BigInt(t))];
+}

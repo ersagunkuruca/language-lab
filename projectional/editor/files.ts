@@ -18,7 +18,7 @@ export interface ProgramFile {
   names: Names;
   descriptive: Names;
   comments: Comments;
-  layout: { positions: Record<string, { x: number; y: number }>; known: Record<Id, Id[]> };
+  layout: { positions: Record<string, { x: number; y: number }>; known: Record<Id, Id[]>; inline?: Id[] };
   // Example inputs per definition, as text.
   examples: Record<Id, string[]>;
 }
@@ -76,6 +76,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     layout: {
       positions: isObj(l.positions) ? (l.positions as ProgramFile["layout"]["positions"]) : {},
       known: isObj(l.known) ? (l.known as Record<Id, Id[]>) : {},
+      ...(Array.isArray(l.inline) && l.inline.every((c) => typeof c === "string") ? { inline: l.inline as Id[] } : {}),
     },
   };
   return { file, code };

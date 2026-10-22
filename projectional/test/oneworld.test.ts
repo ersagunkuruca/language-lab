@@ -13,7 +13,7 @@ import { get, replace, type Code, type Id } from "../src/model.ts";
 import { portLabel, relationFor } from "../src/lang/equations.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, loadProgram } from "../src/lang/load.ts";
-import { physics } from "../src/lang/programs.ts";
+import { reId } from "./helpers.ts";
 import { relate, showTerm } from "../src/lang/relate.ts";
 import { bool, runMain } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
@@ -115,10 +115,10 @@ test("units: declared on parameters and numbers, inferred through predicates and
 });
 
 test("a predicate hashes by structure: the same network written twice hashes the same", () => {
-  const a = physics(), b = physics();
-  const code = (q: typeof a): Code => base(q.code);
-  assert.equal(hashDef(code(a), a.defs.rotate), hashDef(code(b), b.defs.rotate));
-  assert.notEqual(hashDef(code(a), a.defs.rotate), hashDef(code(a), a.defs.fall));
+  const a = loadProgram(join(root, "examples", "physics"));
+  const b = reId(a.own);
+  assert.equal(hashDef(a.code, a.named("rotate")), hashDef(base(b.code), b.ids.get(a.named("rotate"))!));
+  assert.notEqual(hashDef(a.code, a.named("rotate")), hashDef(a.code, a.named("fall")));
 });
 
 test("a port named by an all-digit binder id isn't read as a position", () => {

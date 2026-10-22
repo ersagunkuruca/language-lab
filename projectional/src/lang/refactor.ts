@@ -8,6 +8,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
 import { freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
+import { INT } from "./types.ts";
 
 export interface Edit { code: Code; names: Names }
 
@@ -37,22 +38,24 @@ function recursiveField(code: Code, def: Id, f: Id): boolean {
 }
 
 // Arms for every variant of `def`, each with fresh binders named after the
-// fields and a hole for a body.
-function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean): Id[] {
+// fields and a hole for a body. A field's name is the program's or else the
+// library's (`library`), which the program doesn't store.
+function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean, library: Names = {}): Id[] {
+  const fieldName = (f: Id) => names[f] ?? library[f] ?? "field";
   return variants.map((v) => {
     const fields = (code.nodes[v] as NodeOf<"variant">).fields;
-    const binds = fields.map((f) => { const b = add({ kind: "binder" }); names[b] = names[f] ?? "field"; return b; });
+    const binds = fields.map((f) => { const b = add({ kind: "binder" }); names[b] = fieldName(f); return b; });
     const results = fields.map((f) => {
       if (!fold || !recursiveField(code, def, f)) return null;
       const r = add({ kind: "binder" });
-      names[r] = `${names[f] ?? "field"}′`;
+      names[r] = `${fieldName(f)}′`;
       return r;
     });
     return add({ kind: "arm", variant: v, binds, results, body: add({ kind: "hole" }) });
   });
 }
 
-export function fillHole(code: Code, names: Names, hole: Id, f: Filling): Edit {
+export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library: Names = {}): Edit {
   const { nodes, add } = adder(code);
   const nn: Names = { ...names };
   const holes = (k: number) => Array.from({ length: k }, () => add({ kind: "hole" }));
@@ -60,7 +63,7 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling): Edit {
   switch (f.kind) {
     case "ref": data = { kind: "ref", target: f.target }; break;
     case "call": data = { kind: "call", fn: add({ kind: "ref", target: f.target }), args: holes(f.arity) }; break;
-    case "lit": data = { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
+    case "lit": data = f.of === "int" ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
     case "lambda": {
       const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = `input ${i + 1}`; return b; });
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };
@@ -68,8 +71,8 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling): Edit {
     }
     case "match":
     case "fold": {
-      const scrutinee = add({ kind: "ref", target: f.on });
-      const arms = makeArms({ ...code, nodes }, add, nn, f.type, variantsOf(code, f.type), f.kind === "fold");
+      const scrutinee = add(f.on ? { kind: "ref", target: f.on } : { kind: "hole" });
+      const arms = makeArms({ ...code, nodes }, add, nn, f.type, variantsOf(code, f.type), f.kind === "fold", library);
       data = f.kind === "match" ? { kind: "match", scrutinee, arms, otherwise: null } : { kind: "fold", scrutinee, arms };
       break;
     }

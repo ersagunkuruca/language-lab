@@ -6,10 +6,8 @@
   "scripts": {
     "demo": "node src/demo.ts",
     "test": "node --test test/*.test.ts",
-    "build-examples": "node examples/build.ts",
     "build-editor": "node editor/build.ts",
     "lang": "node src/lang/demo.ts",
-    "build-lang-examples": "node examples/build-lang.ts",
     "numbers": "node src/lang/numbers-demo.ts"
   },
   "engines": {

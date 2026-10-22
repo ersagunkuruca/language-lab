@@ -77,7 +77,7 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
 
 ## The proof of concept
 
-`examples/numbers` (built by `src/lang/numbers.ts`) has three parts, all
+`examples/numbers` (first typed in through the builder, now JSON) has three parts, all
 ordinary definitions.
 
 The meaning, and a program written against it:
@@ -508,7 +508,7 @@ In order. Each stage says when to start it.
 | stage | what | start when |
 |---|---|---|
 | 0 | representations as side tables; `represent` (code → code) and `choose` (declared costs); laws as tests; Peano Nat with binary (this PR) | done |
-| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | next: it's what makes numbers usable |
+| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **partly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md). Still to do: Int's definition as data (match and fold on it as a view), Nat, Rational |
 | 2 | **Overloading by name.** Several defs displayed as `+`, the palette picks by type; operation records as arguments the editor fills | with stage 1, since Int and Rational need `+` |
 | 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations; the editor's representation picker | a program in the editor is slow because of list length or indexing |
 | 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | after 2 (it needs `·` on multivectors to be the same `·`) |
@@ -538,7 +538,6 @@ In order. Each stage says when to start it.
 ```
 NUMBERS.md                        this plan
 src/lang/represent.ts             Representation, represent() (the rewrite), choose() (the chooser)
-src/lang/numbers.ts               the example: Nat, a program on it, Binary and its implementations
 src/lang/numbers-demo.ts          npm run numbers
 examples/numbers/                 the example as code.json + names + comments + representations.json
 test/numbers.test.ts              laws, the rewrite, encoding by running meaning backwards
