@@ -99,7 +99,10 @@ compiler change. **Done**: the checker records how numbers compare at each
 `equal` (exact where there are only Ints, near where there are only
 Numbers, and where a type variable could be either, whole numbers exactly),
 and the evaluator and the compiler both use it. No example's output
-changed. The inline form (G2) is still open.
+changed. The inline form (G2) is still open. *Later* (second review):
+that made a generic `equal` answer differently from a direct one, so it
+is now one rule for every type, whole numbers exactly and others near
+(NOTES.md, "Equality: one rule").
 
 **G1. Recursion uses the JS stack (correctness).** The compiled calc
 crashes with `RangeError` on a 5,000-line input. The evaluator, which keeps

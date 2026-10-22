@@ -58,7 +58,7 @@ import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
-import { close, META, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
+import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { CONS, FALSE, NIL, S, SET, SHOW_ANY, SIGS, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
 import { intLit } from "./int.ts";
@@ -171,7 +171,8 @@ function unify(a: Term, b: Term, s: State): State | null {
   if (a === b) return s;
   if (a instanceof LVar) return bindVar(s, a, b);
   if (b instanceof LVar) return bindVar(s, b, a);
-  if (typeof a === "number" && typeof b === "number") return close(a, b) ? s : null;
+  // The same rule as `equal` forward (run.ts sameNumber): Ints exactly.
+  if (typeof a === "number" && typeof b === "number") return sameNumber(a, b) ? s : null;
   if (typeof a !== "object" || typeof b !== "object") return null;
   if (isData(a) && isData(b)) {
     if (a.tag !== b.tag || a.fields.length !== b.fields.length) return null;

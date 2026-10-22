@@ -364,7 +364,9 @@ test("a fold over range(n) counts down from n − 1, without the list, for Numbe
 
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
 // Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
-test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {
+// REVIEW-2026-10-22b.md §2: and one rule for every type, so going through a
+// generic function never changes the answer.
+test("equal compares whole numbers exactly and others to float precision, at every type", async () => {
   const k = new Lang();
   const same = k.def("same"), main = k.def("main");
   k.define(same, k.fn(["a", "b"], (a, b) => k.equal(a, b)));
@@ -374,14 +376,13 @@ test("equal compares Ints exactly and Numbers to float precision, at every type"
     k.equal(big(), next()), k.equal(k.list(big()), k.list(next())), k.call(same, big(), next()), k.call(same, k.list(big()), k.list(next())),
     k.equal(big(), big()), k.call(same, big(), big()),
     k.equal(third(), k.lit(0.3)), k.equal(k.list(third()), k.list(k.lit(0.3))), k.call(same, third(), k.lit(0.3)),
+    k.equal(k.lit(1e12), k.lit(1e12 + 1)), k.call(same, k.lit(1e12), k.lit(1e12 + 1)),
   )))));
   const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
-  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true]"]);
+  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, false, false]"]);
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
-  const hows = [...info.equality.values()];
-  assert.ok(hows.includes("exact") && hows.includes("near") && hows.includes("mixed"));
 });
 
 // GAPS.md G3: a function that returns Bool returns a JS boolean, and a
