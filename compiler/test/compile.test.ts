@@ -144,8 +144,9 @@ async function compiledDefs(k: Lang, exports: string[], file: string) {
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const path = join(dir, file);
-  writeFileSync(path, compile(code, info, names, { runtime, exports }));
-  return { code, info, names, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
+  const source = compile(code, info, names, { runtime, exports });
+  writeFileSync(path, source);
+  return { code, info, names, source, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
 }
 
 test("a fold over a million items compiles to a loop", async () => {
@@ -281,4 +282,22 @@ test("Int, text and set compile to what the evaluator does", async () => {
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
   assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]']);
+});
+
+test("comes before, against a constant below the surrogates, is JS's < and still orders by code point", async () => {
+  const { TEXT_OPS: T, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const inputs = ["", "a", "m", "z", "", "￿", "𝄞", "ma", "퟿"];
+  const main = k.def("main");
+  // "m" is narrow, so it compiles to <; "" isn't: 𝄞 (U+1D11E) comes
+  // after it by code point, though its UTF-16 units come before
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...inputs.flatMap((c) => [
+    k.call(T.less, k.lit(c), k.lit("m")), k.call(T.less, k.lit("m"), k.lit(c)), k.call(T.less, k.lit(c), k.lit("")),
+  ]))))));
+  const { defs, code, info, source } = await compiledDefs(k, ["main"], "less.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  assert.match(source, /\("m" < "ma"\)/);
+  assert.match(source, /\$text\.less\("𝄞", ""\)/);
 });

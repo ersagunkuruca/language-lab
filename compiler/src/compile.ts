@@ -47,7 +47,9 @@ export interface Options {
 }
 
 // Builtins that are just JavaScript. `bool` ones produce a JS boolean.
-const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
+// `ids`, where given, are the argument nodes, for builtins that compile
+// differently when an argument is a constant.
+const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> = {
   [B.add]: { js: ([a, b]) => `(${a} + ${b})` },
   [B.sub]: { js: ([a, b]) => `(${a} - ${b})` },
   [B.mul]: { js: ([a, b]) => `(${a} * ${b})` },
@@ -96,7 +98,9 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [INT_OPS.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
   [INT_OPS.show]: { js: ([a]) => `String(${a})` },
   [INT_OPS.toNumber]: { js: ([a]) => `Number(${a})` },
-  [TEXT_OPS.less]: { js: ([a, b]) => `$text.less(${a}, ${b})`, bool: true },
+  // Code-point order. When one side is a constant whose characters all come
+  // before the surrogates (U+D800), JS's UTF-16 order gives the same answer.
+  [TEXT_OPS.less]: { js: ([a, b], ids) => (ids && ids.some(narrowText) ? `(${a} < ${b})` : `$text.less(${a}, ${b})`), bool: true },
   // Cases print with the names the program was compiled with ($names).
   [SHOW_ANY]: { js: ([a]) => `$showAny(${a}, $names)` },
 };
@@ -107,7 +111,11 @@ const manyOf = (id: Id) => (STD_MANY[id] ? `$many[${JSON.stringify(id)}]` : null
 const BOOL_ARGS = new Set([S.and, S.hence, S.or, S.not]);
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 
+// Set by compile(): is this node a text literal below the surrogates?
+let narrowText: (id: Id) => boolean = () => false;
+
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  narrowText = (id) => { const n = code.nodes[id]; return n.kind === "lit" && typeof n.value === "string" && n.of === undefined && /^[\u0000-\ud7ff]*$/.test(n.value); };
   const sub = info.subst;
   // Effects a program defines: an operation is a variant of an effect, and a
   // match on operations is a handler (runtime.js $perform, $handle).
@@ -370,7 +378,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind === "ref" && (n.target === TRUE || n.target === FALSE)) return String(n.target === TRUE);
       if (n.kind === "call" && code.nodes[n.fn].kind === "ref") {
         const target = node<"ref">(n.fn).target;
-        if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex));
+        if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex), n.args);
         if (target === S.equal) return equality(n);
       }
       return `(${ex(id)}.tag === ${JSON.stringify(TRUE)})`;
@@ -469,7 +477,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const t = code.nodes[f.target];
         if (t.kind === "builtin") {
           if (OPS[f.target]) {
-            const js = OPS[f.target].js(n.args.map(BOOL_ARGS.has(f.target) ? exBool : ex));
+            const js = OPS[f.target].js(n.args.map(BOOL_ARGS.has(f.target) ? exBool : ex), n.args);
             return OPS[f.target].bool ? `$bool(${js})` : js;
           }
           if (f.target === S.equal) return `$bool(${equality(n)})`;
