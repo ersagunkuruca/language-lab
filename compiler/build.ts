@@ -3,7 +3,9 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compileProgram } from "./src/program.ts";
+import { compileProgram, load } from "./src/program.ts";
+import { lowerScalar } from "./src/scalar.ts";
+import { emitWasm } from "./src/wasm.ts";
 
 const programs: Record<string, string[]> = {
   queens: ["main", "queens"],
@@ -18,3 +20,9 @@ for (const [name, exports] of Object.entries(programs)) {
   writeFileSync(join(import.meta.dirname, "out", `${name}.js`), source);
   console.log(`out/${name}.js: ${source.split("\n").length} lines`);
 }
+
+// The scalar part of calculus, as WebAssembly text, for reading.
+const calculus = load("calculus");
+const wasm = emitWasm(lowerScalar(calculus.code, calculus.info, calculus.pres.names, calculus.own.defs));
+writeFileSync(join(import.meta.dirname, "out", "calculus.wat"), wasm.wat);
+console.log(`out/calculus.wat: ${wasm.exports.join(", ")}`);

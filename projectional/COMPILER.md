@@ -24,9 +24,10 @@ npm run bench   # evaluator vs compiled
   gives us closures, garbage collection, generators and strings for free.
   V8 then does the low-level work better than we would. Not WASM (we'd
   have to bring our own GC and closures), and not a bytecode VM of our own
-  (that's just a faster evaluator). WASM comes in only if a numeric
-  benchmark, such as a big physics network, shows JS is the bottleneck.
-  Even then it would be for numeric kernels only.
+  (that's just a faster evaluator). JavaScript stays the main target. The
+  other targets (shaders, WebAssembly, native binaries) start from the
+  part of the language that needs no heap, and grow from there. See
+  "Targets beyond JavaScript" below for the order and the reasons.
 - **What is the IR?** No new IR. The node graph plus the checker's `Info`
   (types, effect rows, which definitions may diverge) is the IR. Program
   transformations are code → code functions that produce ordinary
@@ -257,6 +258,156 @@ comment.
 sides, which only differs in how much fuel gets spent. Short-circuiting
 should become the language's rule, and the evaluator should follow.
 
+## Targets beyond JavaScript: shaders, WebAssembly, native
+
+Ersagun asked: if shaders are a target, why not WebAssembly, and why not
+a native binary later? All three are worth doing. They share one
+structure, and the order follows from what each one needs beyond the JS
+backend.
+
+### What each target needs that JS gives for free
+
+| | JS (now) | WGSL shader | WASM, scalar | WASM, full | native binary |
+|---|---|---|---|---|---|
+| numbers, `if`, lets, calls | yes | yes | yes | yes | yes |
+| recursion | yes (stack-limited) | **no**, bounded loops only | yes, tail calls are `return_call` | yes | yes |
+| data (`{tag, fields}`), lists | GC objects | **no**, fixed-size structs and vectors | **no** | WasmGC structs | our own memory management |
+| closures, higher-order code | JS closures | **no**, specialized away | **no** | WasmGC + `call_ref` | structs + function pointers |
+| `Choice` | generators | **no**, except over a constant list | **no** | success continuations | success continuations |
+| effect handlers | a stack of handlers, exceptions | **no** | **no** | handler stack, WASM exceptions | handler stack, return codes |
+| text | JS strings | **no** | **no** | JS strings via imports | our own strings |
+| the solver fallback, `relate.ts` | linked as JS | **no**, closed-form plans only | **no**, closed-form plans only | call back into JS | port it, or refuse |
+
+The first three columns are the **scalar profile**: Number and Bool,
+arithmetic, `if`, lets, and calls between such definitions. It needs no
+heap, no closures and no runtime, which is exactly what a GPU and plain
+WebAssembly can run. A shader adds one rule (no recursion, because GPUs
+have no call stack) and needs vector types. WebAssembly allows recursion.
+
+### WebAssembly for the scalar profile: built
+
+`compiler/src/scalar.ts` checks the profile and lowers a definition to a
+tiny expression tree (numbers, locals, operations, `if`, let, call).
+`compiler/src/wasm.ts` prints that tree as a WebAssembly module, binary
+and text, with no dependencies. Each part maps directly:
+
+- Number is `f64` and Bool is `i32`.
+- A let is a local, and `if` is `if … else … end`.
+- `sin`, `pow` and friends are imported from the host's `Math`, so results
+  are bit-for-bit the evaluator's.
+- A call in tail position is `return_call` (the tail-call proposal, now
+  standard and on by default in V8, Firefox and Safari), so loops written
+  as tail recursion run in constant stack.
+
+A definition outside the profile is **refused with the reason**, the way
+a type error is reported: `sinc` "has effects (Choice)", `parabola` "calls
+polynomial, which takes or gives something other than Number or Bool". So
+"can this run on the GPU / in WASM" becomes a question with a visible
+answer in the editor (REVIEW.md §5.2, targets as profiles).
+
+From the examples, `cubic`, `wave`, `kink`, `bump`, their generated
+derivatives (`cubic′` …), `fall` and `period` compile. The tests compare
+each one with the evaluator at several inputs, bit for bit. A numeric
+loop written as tail recursion (the area under a cubic) benchmarks like
+this:
+
+| steps | evaluator | compiled JS | WASM |
+|---:|---:|---:|---:|
+| 1,000 | 11 ms | 0.17 ms | 0.01 ms |
+| 10,000 | 83 ms | stack overflow | 0.05 ms |
+| 1,000,000 | (skipped) | stack overflow | 3.1 ms |
+
+The JS failure is the backend's known limit: plain recursion is JS
+recursion. Compiling self tail calls as loops in the JS backend is the
+cheap fix and belongs in stage 2 below. It's still a real point for WASM:
+tail calls are native, not a transformation we have to get right.
+
+### How the rest maps, when it comes
+
+**Effects.** As designed in LANGUAGE.md, every operation is either
+*answered* (tail-resumptive: the case gives one value and the computation
+carries on) or *aborting* (the case's value replaces the whole handled
+computation). Neither needs first-class continuations, which is what
+makes them portable:
+
+- **Answered.** A call to the case found on a stack of handlers. The key
+  is the effect's def id (effects have no type parameters). Handlers are
+  deep: the case runs with the stack cut back below its own handler, so a
+  `Log` case that logs reaches the next handler out. JS: closures on an
+  array. WASM: a table of `funcref`s or the handler passed as an argument.
+  C: the same with function pointers. An answer case can't have `Choice`
+  (the checker forbids it), so it is always a plain call.
+- **Aborting.** An exception caught by its match, which also drops the
+  computation's remaining `Choice` alternatives (a cut, like Prolog's
+  `catch/3`). JS: `throw`/`catch`. WASM: exception handling
+  (`try_table`/`throw`, standard). C: a return code checked after each
+  call, or `setjmp`/`longjmp`.
+- **World effects** (files, console) are host imports in every target. A
+  host failure becomes an `Abort` at the call site.
+
+The effects thread owns this part in the JS backend: `$perform`, `$handle`
+and `$handleS` in runtime.js. The other targets follow the same scheme.
+
+**`Choice`.** JS uses generators. WebAssembly and C have none, so `Choice`
+code becomes **success continuations**: a nondeterministic function takes
+an extra argument, "what to do with each answer", and calls it once per
+answer. `first` passes a continuation that records the answer and
+signals stop. This is how Mercury's high-level C backend compiles
+nondeterministic code, and it's the natural reading of our JS output: the
+code inside the innermost loop *is* the continuation. It needs closures
+(the continuation captures variables), so it comes with WasmGC or with
+native closures.
+
+**The solver fallback.** Closed-form plans are already straight-line code
+(src/relation.ts), and the same plans can be lowered into the scalar tree
+for WASM and shaders. The `$clean` rounding has to come along, so a WASM
+solve gives the solver's numbers exactly. Tearing, Newton and periodic
+families are bounded loops or streams, so they work in full WASM and
+native code but not in a shader. In a shader, `first` of a periodic
+family is its canonical branch, which is straight-line. `relate.ts` (a
+search over terms with unification) stays a JS library. A WASM module that
+needs it imports it from JS. A native binary either has the search ported
+or refuses those directions, and the mode analysis (stage 1b) makes most
+of them static first.
+
+**Native binaries.** Two routes, in this order:
+
+1. **Now-ish, for CLIs:** package the JS output with a runtime as a single
+   executable (Node's single executable applications, `deno compile` or
+   `bun build --compile`). That gives one file and no install step at
+   almost no cost, and it is what the CLI target needs first.
+2. **Real native code:** emit C, the route Koka takes. The language is
+   pure and its data can't form cycles (nothing is mutable), so reference
+   counting with reuse (Koka's Perceus) gives garbage-collector-free memory
+   management that frees exactly when the last reference goes. C then gets
+   us every platform via any C compiler, and WebAssembly again via clang.
+   LLVM IR directly would give more control but no portability, and it's
+   more work.
+
+Full WebAssembly via WasmGC (structs, closures, exceptions) is the last of
+these, not the first. In a browser it competes with our own JS backend,
+which already runs on a mature JIT. Its real use is running the same
+program outside a JS host, and the C route covers that too.
+
+### The order
+
+1. **WebAssembly, scalar profile.** Done in this change. It's the CPU
+   fallback for shader code and a fast path for numeric kernels.
+2. **WGSL shaders.** A second printer for the same scalar tree, plus a
+   "no recursion" rule, vector types (`vec3`, `mat4`) and `Float32`. Every
+   piece of this is shared with step 1. This is REVIEW.md's stage 7 (the
+   SDF ray marcher).
+3. **Single-file executables** from the JS output, with the CLI target
+   (effects thread).
+4. **Grow the scalar profile** towards the heap: fixed-size records
+   (flattened into locals), then lists. This step also opens shaders to
+   structs.
+5. **Native via C** with reference counting and success continuations.
+   Start when a CLI needs fast startup or low memory, or the language needs
+   to be embedded somewhere without JS.
+6. **Full WASM via WasmGC.** Only when a program has to run in a
+   WebAssembly-only host.
+
 ## When to do what
 
 | stage | what | start when |
@@ -265,9 +416,10 @@ should become the language's rule, and the evaluator should follow.
 | 1a | relational directions and `derivative` through their interpreters, linked as the runtime; compiled functions carry their nodes | done (all five examples match the evaluator) |
 | 1b | mode analysis, so relational directions compile; `derivative` at compile time when the function is known | next; worth it once a backwards search shows up in a profile |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
-| 3 | user-defined effects and handlers: one-shot handlers as generators that yield effect requests; `Choice` stays special (loops), because it is the one multi-shot effect | user-defined effects are added to the checker |
+| 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflows at 10,000 steps) | next small fix |
+| 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops) | in progress in the effects thread |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
-| 5 | WASM for numeric kernels (networks solved in one direction, run many times) | a numeric benchmark shows JS is the bottleneck |
+| 5 | other targets: WASM scalar profile (done), WGSL, single-file executables, native via C, WasmGC | the order in "Targets beyond JavaScript" |
 
 Things not to build: a parser, our own bytecode VM, or a typed IR separate
 from the node graph. Each would be a second copy of something we already
@@ -279,6 +431,9 @@ have.
 compiler/src/compile.ts    the code generator: conventions, specialization, loops for Choice
 compiler/src/relation.ts   a solve plan, written out as code
 compiler/src/runtime.js    what generated code links against (handlers, fuel, solver and relate.ts fallbacks, derivative)
+compiler/src/scalar.ts     the scalar profile: check it, refuse with a reason, lower to a small tree
+compiler/src/wasm.ts       that tree as a WebAssembly module (binary and text), tail calls as return_call
+compiler/src/fixtures.ts   small programs for the tests and the benchmark
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js
 compiler/bench.ts          evaluator vs compiled
