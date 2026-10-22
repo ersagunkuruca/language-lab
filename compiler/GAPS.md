@@ -159,6 +159,9 @@ one-character strings, then walks it into a spine array, then folds the
 array. The ideal walks the string from the end. `keep` after it builds a
 second list. Fusing a fold with the builtin that produced its input is the
 first case of the "fold-as-loop as a representation" item (ROADMAP 5).
+**Fusion done** there: `characters(t)` is a representation of a list
+(NUMBERS.md, "Folds run the way their value is stored"), and a fold over
+it runs on the text from the end. About 35 ms → 31 ms on 4,000 lines.
 
 **G2. Equality with a constructed constant (perf: 3 to 5 ms).** `t =
 word("let")` compiles to `$eq(t, { tag: …, fields: ["let"] })`. That

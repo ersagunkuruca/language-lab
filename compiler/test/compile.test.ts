@@ -302,6 +302,36 @@ test("comes before, against a constant below the surrogates, is JS's < and still
   assert.match(source, /\$text\.less\("𝄞", ""\)/);
 });
 
+// NUMBERS.md, "Folds run the way their value is stored": a fold over
+// characters(t) runs on t's characters from the end, without the list,
+// unless an arm reads the rest of the list itself.
+test("a fold over characters(t) runs on the text, and splits it as characters does", async () => {
+  const { TEXT_OPS: T, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const inputs = ["", "abc", "a𝄞b", "\uD834", "\uDD1Ex\uD834", "👋👋", "\uD834\uD834\uDD1E"];
+  const marks = k.def("marks");
+  k.define(marks, k.fn(["t"], (t) => k.fold(k.call(T.characters, t), [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["c", "rest"], results: [null, "r"], body: ([c], [, r]) => k.call(S.concat, c, k.call(S.concat, k.lit("|"), r!)) },
+  ])));
+  const tails = k.def("tails");
+  k.define(tails, k.fn(["t"], (t) => k.fold(k.call(T.characters, t), [
+    { variant: NIL, names: [], body: () => k.lit(".") },
+    { variant: CONS, names: ["c", "rest"], results: [null, "r"], body: ([c, rest], [, r]) => k.call(S.concat, c, k.call(S.concat, k.call(T.joinAll, rest, k.lit("")), r!)) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...inputs.flatMap((x) => [k.call(marks, k.lit(x)), k.call(tails, k.lit(x))]))))));
+  const { defs, code, info, source } = await compiledDefs(k, ["main"], "characters.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  assert.match(want[0], /"a\|𝄞\|b\|"/);
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(fn("marks"), /charCodeAt/);
+  assert.doesNotMatch(fn("marks"), /characters/);
+  assert.match(fn("tails"), /builtin\.text\.characters/);
+});
+
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
 // Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
 test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {

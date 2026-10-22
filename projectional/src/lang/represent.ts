@@ -15,6 +15,7 @@
 // replaces, through `meaning`.
 
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { CONS, LIST, TEXT_OPS } from "./std.ts";
 
 export interface Representation {
   name: string;
@@ -228,15 +229,39 @@ export interface Storage {
   // Job → the template that does it.
   jobs: Record<string, string>;
   cost: Record<string, string>;
+  // Fields, by variant, that this storage doesn't hold as values of the
+  // type: the rest of a list stored as text is a position in a string, not
+  // a list. A fold whose arms read one of them raw runs on cells instead.
+  hidden?: Record<Id, number[]>;
 }
 
 export const CELLS: Storage = { name: "cells", of: "data", meaning: null, jobs: { fold: "cells.loop" }, cost: { fold: "n", space: "n" } };
-export const STORAGES: Storage[] = [CELLS];
+// A list of one-character texts, kept as the text it was split from. Its
+// fold walks the string's characters from the end, which is the order a
+// fold over the list runs its arms in (children first).
+export const TEXT: Storage = {
+  name: "text", of: LIST, meaning: TEXT_OPS.characters, jobs: { fold: "text.reverse" },
+  cost: { fold: "n", space: "n" }, hidden: { [CONS]: [1] },
+};
+export const STORAGES: Storage[] = [CELLS, TEXT];
 
 // Which storage runs a fold, and the node whose value it runs on: the
 // argument of a `meaning` when the fold's input is made by one (the law
 // fold′(x) = fold(meaning(x)) read backwards), else the input itself.
 export interface FoldPlan { rep: Storage; on: Id }
 export function foldPlan(code: Code, fold: NodeOf<"fold">): FoldPlan {
+  const input = code.nodes[fold.scrutinee];
+  const made = input?.kind === "call" ? code.nodes[input.fn] : undefined;
+  for (const rep of STORAGES) {
+    if (!rep.meaning || made?.kind !== "ref" || made.target !== rep.meaning || input?.kind !== "call") continue;
+    if (fold.arms.some((a) => readsHidden(code, code.nodes[a] as NodeOf<"arm">, rep))) continue;
+    return { rep, on: input.args[0] };
+  }
   return { rep: CELLS, on: fold.scrutinee };
+}
+
+function readsHidden(code: Code, arm: NodeOf<"arm">, rep: Storage): boolean {
+  const hidden = new Set((rep.hidden?.[arm.variant] ?? []).map((i) => arm.binds[i]));
+  if (!hidden.size) return false;
+  return subtree(code, arm.body).some((id) => { const n = code.nodes[id]; return n.kind === "ref" && hidden.has(n.target); });
 }
