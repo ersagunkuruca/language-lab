@@ -31,6 +31,8 @@ export const UPDATE = "effect.update";
 // while a Choice is still open (LANGUAGE.md, "The world and Choice"), and
 // only the runtime handles them.
 export const WORLD: readonly Id[] = [CONSOLE, FILES, UPDATE];
+// The effects that are builtins rather than typedefs a program declares.
+export const BUILTIN_EFFECTS: readonly Id[] = [CHOICE, CONSOLE, DIVERGE, FILES, CELLS, UPDATE];
 
 export const NUMBER = "type.number";
 export const STRING = "type.string";

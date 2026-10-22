@@ -17,7 +17,7 @@ import { B } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY } from "./library.ts";
 import { CELL_OPS, CONS, FIRST, INT_OPS, LIST, NIL, NONE, PAIR, PAIR_V, S, SECOND, SOME, TEXT_OPS, UNIT } from "./std.ts";
-import { CELL, INT, NUMBER, STRING } from "./types.ts";
+import { CELL, CELLS, DIVERGE, INT, NUMBER, STRING, UPDATE } from "./types.ts";
 import type { UiIds } from "./ui.ts";
 
 const C = CELL_OPS;
@@ -40,13 +40,13 @@ function lang() {
 function uiType(k: Lang) {
   const str = () => k.tref(STRING), num = () => k.tref(NUMBER);
   return k.type("UI", [], [
-    ["text", [["shows", () => k.tfun([], str())]]],
-    ["button", [["label", str], ["on click", () => k.tfun([], k.tref(UNIT))]]],
-    ["entry", [["hint", str], ["on enter", () => k.tfun([str()], k.tref(UNIT))]]],
+    ["text", [["shows", () => k.tfun([], str(), [CELLS, DIVERGE])]]],
+    ["button", [["label", str], ["on click", () => k.tfun([], k.tref(UNIT), [CELLS, UPDATE])]]],
+    ["entry", [["hint", str], ["on enter", () => k.tfun([str()], k.tref(UNIT), [CELLS, UPDATE])]]],
     ["slider", [["label", str], ["low", num], ["high", num], ["value", () => k.tref(CELL, num())]]],
     ["row", [["items", (self) => k.tref(LIST, k.tref(self))]]],
     ["column", [["items", (self) => k.tref(LIST, k.tref(self))]]],
-    ["dynamic", [["view", (self) => k.tfun([], k.tref(self))]]],
+    ["dynamic", [["view", (self) => k.tfun([], k.tref(self), [CELLS, DIVERGE])]]],
   ]);
 }
 

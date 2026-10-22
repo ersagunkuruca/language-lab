@@ -221,6 +221,16 @@ whose order changes the meaning. Rows are sets, so they compose in any
 order, and nothing about effects shows up in the code: it's all in the
 inferred type. (This is the Koka/Eff/OCaml 5 line of design, cut down.)
 
+A function kept **inside data** has its row written in the type, closed:
+`type UI = text(shows: () -[Cells, Diverge]-> Text) | …`. A field's
+function type that lists no effects is pure. So a function put in a field
+can't hide what it does: taking it out and calling it has exactly the
+effects the field says. (Before, each use of the type gave the field a
+fresh row, and a printer could be put in a field and called back out
+under a `Choice` with no error.) Data types have no row variables, so a
+type can't be "pure when its function is pure" the way `map` is; a field
+lists the most it allows.
+
 The effects:
 
 | effect | operations | handled by |

@@ -37,9 +37,11 @@ export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id
   while (todo.length) {
     const n = code.nodes[todo.pop()!];
     if (!n) continue;
-    let t = target(n);
-    if (t && owner.has(t)) t = owner.get(t)!;
-    if (t && code.nodes[t]?.kind === "def") out.add(t);
+    // A function type's effects are references too.
+    for (let t of [target(n), ...(n.kind === "tfun" ? n.effects ?? [] : [])]) {
+      if (t && owner.has(t)) t = owner.get(t)!;
+      if (t && code.nodes[t]?.kind === "def") out.add(t);
+    }
     for (const c of kids(n)) todo.push(c);
   }
   return [...out];
@@ -172,7 +174,7 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);
         return ["tref", head, ...n.args.map(go)];
       }
-      case "tfun": return ["tfun", n.params.map(go), go(n.result)];
+      case "tfun": return n.effects?.length ? ["tfun", n.params.map(go), go(n.result), n.effects.map(defRef)] : ["tfun", n.params.map(go), go(n.result)];
       case "match": return ["match", go(n.scrutinee), n.arms.map(go), n.otherwise ? go(n.otherwise) : null];
       case "solve": {
         const t = code.nodes[n.fn];

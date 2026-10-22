@@ -9,8 +9,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { Aborted, runMain, runProgram, type World } from "../src/lang/run.ts";
-import { ABORT_OP, INT_OPS, IO, LOG_OP, NONE, S, SHOW_ANY, SOME, TEXT_OPS } from "../src/lang/std.ts";
-import { showType } from "../src/lang/types.ts";
+import { ABORT_OP, INT_OPS, IO, LOG_OP, NONE, S, SHOW_ANY, SOME, TEXT_OPS, UNIT } from "../src/lang/std.ts";
+import { CONSOLE, showType, STRING } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 // A world in memory: files in a map, input from a string, everything
@@ -215,6 +215,28 @@ test("the world isn't touched while a Choice is open", () => {
   const bad = p.info.errors.map((e) => p.k.names[e.id] ?? e.message);
   assert.equal(p.errors.filter((m) => /while a Choice is open|is run under a Choice here/.test(m)).length, 4, p.errors.join("\n"));
   assert.ok(bad.length >= 4);
+});
+
+// A function kept in data keeps its effects: a field's function type lists
+// them, and lists none when it is pure. (Before, each use of the type gave
+// the field a fresh row, so a printer could be put in a field and called
+// back out under a Choice unchecked.)
+test("a function in a field can't hide its effects", () => {
+  const boxed = (effects: Id[]) => program((k) => {
+    const box = k.type("Box", [], [["box", [["run", () => k.tfun([], k.tref(UNIT), effects)]]]]);
+    const open = k.def("open");
+    k.define(open, k.fn(["b"], (b) => k.match(b, [{ variant: box.v.box, names: ["f"], body: ([f]) => k.call(f) }])));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.all, k.thunk(() => k.call(open, k.call(box.v.box, k.thunk(() => k.call(S.print, k.lit("x")))))))));
+  });
+  // pure field: the printer doesn't fit in it
+  assert.ok(boxed([]).errors.length > 0);
+  // a field that says it prints: opening it prints, so it can't run under all
+  const p = boxed([CONSOLE]);
+  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "open")!), "(Box) -[Console]-> Unit");
+  assert.ok(p.errors.some((m) => /while a Choice is open|is run under a Choice here/.test(m)), p.errors.join("\n"));
+  // only effects can be listed
+  assert.ok(program((k) => { k.type("Bad", [], [["bad", [["f", () => k.tfun([], k.tref(UNIT), [STRING])]]]]); }).errors.some((m) => /is not an effect/.test(m)));
 });
 
 test("...and it is fine once the Choice is handled first", () => {
