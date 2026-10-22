@@ -892,10 +892,15 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     const name = (n: number) => `_${n}`;
     const shown = (e: Expr): string => eshow(rn(e));
     const rn = (e: Expr): Expr => e.k === "var" && e.name!.startsWith("?") ? evar(name(+e.name!.slice(1))) as Expr : e.k === "call" ? { ...e, args: e.args!.map(rn) } : e;
+    // An unknown that is a port is written as the port's name; a number
+    // next to it gets its · back (the solver writes 5x).
+    const portOf = new Map<number, string>();
+    for (const p of ports) { const v = values[p]; if (v instanceof LVar && !portOf.has(v.n)) portOf.set(v.n, p === "out" ? "result" : opts.names?.[p] ?? p); }
+    const named = (t: string) => t.replace(/(\d)(_\d+)/g, "$1 · $2").replace(/_(\d+)/g, (m, n) => portOf.get(+n) ?? m);
     const residual = [
       ...tidy(st.eqs, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
       ...st.waits.map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
-    ];
+    ].map(named);
     yield { values, free: ports.filter((p) => hasVars(values[p])), residual };
   }
 }

@@ -55,7 +55,7 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, TRUE } from "../src/lang/std.ts";
-import { CHOICE } from "../src/lang/types.ts";
+import { CHOICE, NUMBER } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { needsHandling, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -636,7 +636,14 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
   // A port's value is written the way values print: 3, "text", [1, 2], true.
   const read = known.map((k) => [k, parseValue(portText(info, k), doc.code, pres().names)] as const);
   const bad = read.find(([, r]) => "error" in r);
-  if (bad) return { answers: [], more: false, error: `${bad[0] === "out" ? "The result" : new Namer(doc.code, pres(), ui.def).name(bad[0])}: ${(bad[1] as { error: string }).error}.` };
+  if (bad) {
+    const who = bad[0] === "out" ? "The result" : new Namer(doc.code, pres(), ui.def).name(bad[0]);
+    // "fast" for a number reads as a case name nobody declared; say what fits.
+    const t = bad[0] !== "out" ? info.typeOf.get(bad[0]) : undefined;
+    const z = t ? info.subst.zonk(t) : null;
+    const number = z?.t === "con" && z.id === NUMBER;
+    return { answers: [], more: false, error: number ? `${who} needs a Number, like 3 or 2.5.` : `${who}: ${(bad[1] as { error: string }).error}.` };
+  }
   const values = Object.fromEntries(read.map(([k, r]) => [k, (r as { value: Value }).value]));
   // When it reads as equations, the solver's plan for this direction is
   // the program it derives, shown as text.
@@ -654,7 +661,7 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
     // the same values count once.
     const seen = new Set<string>();
     let tries = 0;
-    for (const a of relate(doc.code, ui.def, values, { spend: () => ++steps < 20000 })) {
+    for (const a of relate(doc.code, ui.def, values, { spend: () => ++steps < 20000, names: pres().names })) {
       const shown = Object.fromEntries(Object.entries(a.values).map(([k, v]) => [k, showTerm(v)]));
       const key = JSON.stringify(Object.values(shown).map((v) => (/^-?\d/.test(v) ? fmt(Number(v)) : v)));
       if (seen.has(key)) { if (++tries > 64) break; continue; }
