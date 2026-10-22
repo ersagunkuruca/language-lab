@@ -10,7 +10,7 @@ import { R } from "../relational.ts";
 // Loops without loops: list helpers every program here can use. `each` and
 // `map` recurse on the tail they took apart, so the checker sees they end;
 // `keep` (filter) is a choice plus `all`.
-function library(k: Lang) {
+export function library(k: Lang) {
   const each = k.def("for each");
   k.define(each, k.fn(["list", "action"], (xs, f) => k.match(xs, [
     { variant: NIL, names: [], body: () => k.unitValue },
