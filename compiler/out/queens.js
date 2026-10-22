@@ -94,17 +94,22 @@ function show_numbers(numbers) {
 }
 
 // for each
-function for_each(list, action) {
-  const s$19 = list;
-  switch (s$19.tag) {
-    case "std.list.nil" /* nil */: {
-      return $unit;
-    }
-    case "std.list.cons" /* cons */: {
-      const item = s$19.fields[0];
-      const rest2 = s$19.fields[1];
-      action(item);
-      return for_each(rest2, action);
+function for_each(list$in, action$in) {
+  for (;;) {
+    const list = list$in, action = action$in;
+    const s$19 = list;
+    switch (s$19.tag) {
+      case "std.list.nil" /* nil */: {
+        return $unit;
+      }
+      case "std.list.cons" /* cons */: {
+        const item = s$19.fields[0];
+        const rest2 = s$19.fields[1];
+        action(item);
+        list$in = rest2;
+        action$in = action;
+        continue;
+      }
     }
   }
 }

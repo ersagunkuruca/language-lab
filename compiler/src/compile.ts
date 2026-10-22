@@ -25,7 +25,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
-import { subtree, type Code, type Id, type NodeOf } from "../../projectional/src/model.ts";
+import { subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -512,26 +512,44 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
     // Statements that return the value of `id` (no Choice). Lets become
     // consts, matches become switches, folds local recursive functions.
-    function ret(id: Id): string {
+    // `tail`: these statements end the definition's own body, so a call
+    // of the definition to itself here is a jump back to its start.
+    function ret(id: Id, tail = false): string {
       const n = code.nodes[id];
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
         const f = node<"lambda">(n.fn);
-        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body);
+        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body, tail);
       }
       if (n.kind === "match") {
         if (handlerOf(n)) return `return ${handleEx(n)};`;
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
-          return `if (${exBool(n.scrutinee)}) {\n${ret(t)}\n}\n${ret(e)}`;
+          return `if (${exBool(n.scrutinee)}) {\n${ret(t, tail)}\n}\n${ret(e, tail)}`;
         }
         const s = temp("s");
-        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body)}\n}`);
-        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise)}\n}`);
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body, tail)}\n}`);
+        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail)}\n}`);
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
       if (n.kind === "fold") return foldLoop(n);
+      if (tail && selfCall(n)) {
+        // The new arguments go into the loop's inputs, and the body runs
+        // again with them: no JS stack (COMPILER.md, stage 2½).
+        jumps = true;
+        const lam = node<"lambda">(d.body!);
+        const args = (n as NodeOf<"call">).args.map(ex);
+        const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
+        return `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+      }
       return `return ${ex(id)};`;
+    }
+    // A call of this very specialization of the definition.
+    let jumps = false;
+    function selfCall(n: Node): boolean {
+      if (n.kind !== "call") return false;
+      const f = code.nodes[n.fn];
+      return f.kind === "ref" && f.target === sp.def && specAt(f.id, f.target, rho).name === sp.name;
     }
 
     // A fold without Choice is a loop, not a recursion, so a list of a
@@ -742,7 +760,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ps = lam.params.map(local).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
-      return `${header}\nfunction ${sp.name}(${ps}) {\n${ret(lam.body)}\n}${meta}`;
+      const stmts = ret(lam.body, true);
+      // Self tail calls jump: the parameters become the loop's inputs, and
+      // each pass binds them afresh, so a function made in one pass keeps
+      // that pass's values.
+      if (jumps) {
+        const ins = lam.params.map((p) => `${local(p)}$in`).join(", ");
+        const fresh = lam.params.length ? `const ${lam.params.map((p) => `${local(p)} = ${local(p)}$in`).join(", ")};\n` : "";
+        return `${header}\nfunction ${sp.name}(${ins}) {\nfor (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
+      }
+      return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
     }
     const cell = temp("value");
     return `${header}\nlet ${cell};\nfunction ${sp.name}() {\nreturn ${cell} ??= ${ex(b)};\n}`;

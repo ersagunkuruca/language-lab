@@ -24,17 +24,22 @@ function main() {
 }
 
 // for each
-function for_each(list, action) {
-  const s$2 = list;
-  switch (s$2.tag) {
-    case "std.list.nil" /* nil */: {
-      return $unit;
-    }
-    case "std.list.cons" /* cons */: {
-      const item = s$2.fields[0];
-      const rest = s$2.fields[1];
-      action(item);
-      return for_each(rest, action);
+function for_each(list$in, action$in) {
+  for (;;) {
+    const list = list$in, action = action$in;
+    const s$2 = list;
+    switch (s$2.tag) {
+      case "std.list.nil" /* nil */: {
+        return $unit;
+      }
+      case "std.list.cons" /* cons */: {
+        const item = s$2.fields[0];
+        const rest = s$2.fields[1];
+        action(item);
+        list$in = rest;
+        action$in = action;
+        continue;
+      }
     }
   }
 }

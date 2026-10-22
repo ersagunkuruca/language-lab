@@ -131,6 +131,29 @@ test("a fold over a million items compiles to a loop", async () => {
   assert.equal(defs.big(), 499999500000);
 });
 
+test("a self tail call compiles to a loop: a million steps, and each step's closures keep their own values", async () => {
+  const k = new Lang();
+  // count down from n, adding n each time: a loop written as tail recursion
+  const down = k.def("down");
+  k.define(down, k.fn(["n", "total"], (n, t) => k.if(k.call(S.less, n, k.lit(1)), t, k.call(down, k.call(B.sub, n, k.lit(1)), k.call(B.add, t, n)))));
+  // a list of functions, one made per step, each remembering that step's n
+  const makers = k.def("makers");
+  k.define(makers, k.fn(["n", "made"], (n, made) => k.if(k.call(S.less, n, k.lit(1)), made,
+    k.call(makers, k.call(B.sub, n, k.lit(1)), k.call(CONS, k.fn(["x"], (x) => k.call(B.mul, x, n)), made)))));
+  const apply = k.def("apply all");
+  k.define(apply, k.fn(["fs"], (fs) => k.match(fs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["f", "rest"], body: ([f, rest]) => k.call(CONS, k.call(f, k.lit(10)), k.call(apply, rest)) },
+  ])));
+  const small = k.def("small");
+  k.define(small, k.thunk(() => k.call(apply, k.call(makers, k.lit(3), NIL))));
+  const { code, info, defs } = await compiledDefs(k, ["down", "small"], "tail.js");
+  assert.equal(defs.down(1_000_000, 0), 500000500000);
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.deepEqual(fromList(defs.small() as Value), [10, 20, 30]);
+  assert.deepEqual(fromList(defs.small() as Value), fromList([...r.call(r.value(small))][0]));
+});
+
 test("a fold over a deep tree compiles to a loop with its own stack, children first", async () => {
   const k = new Lang();
   const tree = k.type("tree", [], [["leaf", [["n", () => k.tref("type.number")]]], ["node", [["l", (self) => k.tref(self)], ["r", (self) => k.tref(self)]]]]);

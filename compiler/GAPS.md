@@ -104,7 +104,8 @@ recursion:
 - *Self tail calls*: `run lines` (one call per line), `sum rest` and
   `product rest` (one call per operator), and `lookup`. Each one returns a
   call to itself. *Fix:* compile them as loops. This is COMPILER.md stage
-  2½. It's small and it fixes two of the three rows in the limits table.
+  2½. **Done** (the PR after round 1). Compiled calc now takes 100,000
+  lines and a 200,000-term sum, like the ideal.
 - *Real nesting*: parentheses go through
   `atom → expression → sum → product → unary → power → atom`, so each
   level costs six frames. The ideal has the same problem, only later,
