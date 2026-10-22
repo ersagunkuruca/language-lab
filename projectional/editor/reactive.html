@@ -1,0 +1,28 @@
+<main>
+<nav><a href="./">← Back to the editor</a> · <a href="tutorial.html">Tutorial</a> · <a href="https://github.com/ersagunkuruca/language-lab/blob/main/projectional/LANGUAGE.md#cells-reactivity-and-values-on-demand">Cells in LANGUAGE.md</a></nav>
+<h1>Cells: reactivity and values on demand</h1>
+<p>Both pages below are programs in the language, run in your browser by its evaluator. They use one effect, <code>Cells</code>:
+<code>cell(x)</code> makes a cell you can write, <code>formula(() =&gt; …)</code> makes one computed from others, <code>read(c)</code> reads either, and <code>write(c, x)</code> changes a cell (that one is the effect <code>Update</code>).</p>
+<p><strong>Is this Solid.js?</strong> It's the same model. In Solid, reading a signal inside an effect or a memo records the dependency, through a global "current listener". Here <code>read</code> is an operation of an effect, and the runtime's handler of that effect records who read what. A handler's dynamic scope is exactly that "current listener". A cell is Solid's signal, a formula is its memo, and each changing part of the page is one of its effects. What the language adds is that the type says so: a view is <code>() -[Cells]-&gt; Text</code>, it can only read; a button is <code>() -[Cells, Update]-&gt; Unit</code>; a formula can't write, and nothing may write while a search (<code>Choice</code>) is still open.</p>
+<p><strong>And values on demand?</strong> The same handler gives them. A formula runs when it is first read, and its value is kept until a cell it read changes, which is what "lazy" means in Haskell. A continued fraction whose rest is a formula is an infinite number whose terms are worked out when you ask for them, and only once.</p>
+<p class="hint">Parts of a page that run again flash. The line under each page counts what ran.</p>
+
+<section id="counter" class="demo">
+<h2>A counter, a detail that can hide, a todo list</h2>
+<div class="pair">
+<div><div class="live"></div><p class="log"></p>
+<p class="hint">Click <b>+</b>: the count, “doubled” and “count squared” run again, nothing else. Hide the details and click <b>+</b> again: “count squared” no longer runs, because while hidden it doesn't read <code>count</code>. Dependencies are found while running, not declared.</p></div>
+<pre class="code"></pre>
+</div>
+</section>
+
+<section id="fractions" class="demo">
+<h2>Continued fractions, computed on demand</h2>
+<div class="pair">
+<div><div class="live"></div><p class="log"></p>
+<p class="hint">√n = [a₀; a₁, a₂, …] means a₀ + 1/(a₁ + 1/(a₂ + …)). The sums and products are exact, by Gosper's algorithm (HAKMEM, 1972): each term of the result is taken from just enough terms of the inputs. Move <b>terms</b> up by one: only the new terms are computed. At n = 4, √4 × √4 gives [4]; at any n that isn't a square, no first term ever comes, because the terms of √n · √n agree with n forever, and equality of exact reals can't be decided. <code>with fuel</code> gives up after 300 steps.</p></div>
+<pre class="code"></pre>
+</div>
+</section>
+<p class="credits">Credits: the reactive model is <a href="https://www.solidjs.com">Solid.js</a>'s (Ryan Carniato), after S.js (Adam Haile). The update order (mark dirty, pull values) is Milo's <a href="https://dev.to/modderme123/super-charging-fine-grained-reactive-performance-47ph">Reactively</a> algorithm. Demand-driven plus incremental is Adapton (Hammer et al., PLDI 2014). Continued-fraction arithmetic is R. W. Gosper's (HAKMEM item 101, 1972); e's expansion is Euler's.</p>
+</main>

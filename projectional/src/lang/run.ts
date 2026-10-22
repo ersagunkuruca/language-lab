@@ -23,10 +23,11 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { ABORT, ABORT_OP, CONS, FALSE, IO, LOG, LOG_OP, NIL, NONE, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
+import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, IO, LOG, LOG_OP, NIL, NONE, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
 import { intLit } from "./int.ts";
+import { Cells, NoValue, nodeOf } from "./cells.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
-import { CHOICE, DIVERGE, INT, WORLD, type Type } from "./types.ts";
+import { CELLS, CHOICE, DIVERGE, INT, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -116,6 +117,9 @@ export interface Runtime {
   // The rest of the world, for programs that use it (world.ts has Node's).
   // Without one, those operations abort saying so.
   world?: Partial<World>;
+  // The handler of Cells (cells.ts). Without one, each run gets its own,
+  // which still computes formulas on demand and remembers them.
+  cells?: Cells;
 }
 
 // What the world effects do. A failure throws, with a message that becomes
@@ -154,6 +158,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // builtin that calls back in): each machine starts from it.
   let ambient: Fuel | null = null;
 
+  const cells = rt.cells ?? new Cells(equal);
   const builtins: Record<Id, Fn> = {};
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = (...a) => one(f(...(a as number[])));
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = (...a) => one(f(...a));
@@ -178,6 +183,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.appendFile]: (p, t) => (world("appendFile")(p as string, t as string), one(unit)),
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
+    [CELL_OPS.cell]: (v) => one(cells.cell(v)),
+    [CELL_OPS.formula]: (f) => one(cells.formula(() => {
+      for (const v of (f as Fn)()) return v;
+      throw new NoValue("this formula gave no value");
+    })),
+    // A formula that gave no value (it ran out of `with fuel`) is a read
+    // with no answer; it is computed again at the next read.
+    [CELL_OPS.read]: (c) => {
+      try { return one(cells.read(c)); } catch (e) { if (e instanceof NoValue) return []; throw e; }
+    },
+    [CELL_OPS.write]: (c, v) => (cells.write(c, v), one(unit)),
     [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
@@ -633,7 +649,7 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
-const RUNTIME_HANDLES = [...WORLD, DIVERGE, LOG, ABORT];
+const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT];
 
 // A program run from the command line (cli/lab.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an
@@ -656,7 +672,7 @@ export function showValue(v: Value, code: Code, names: Names): string {
   if (typeof v === "bigint") return String(v);
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
   if (typeof v === "string") return JSON.stringify(v);
-  if (typeof v === "function") return "<function>";
+  if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names)).join(", ")}]`;
   const name = names[v.tag] ?? v.tag;
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names)).join(", ")})` : name;

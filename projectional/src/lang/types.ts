@@ -21,15 +21,24 @@ export const CONSOLE = "effect.console";
 export const DIVERGE = "effect.diverge";
 // Reading and writing files.
 export const FILES = "effect.files";
+// Cells: making and reading cells, and formulas computed on demand
+// (src/lang/cells.ts). Update: writing a cell. A write is seen outside
+// (whatever reads that cell runs again), like printing, so Update is a
+// world effect; reading isn't, so a search may read cells.
+export const CELLS = "effect.cells";
+export const UPDATE = "effect.update";
 // The world effects: what they do can't be taken back. They may not happen
 // while a Choice is still open (LANGUAGE.md, "The world and Choice"), and
 // only the runtime handles them.
-export const WORLD: readonly Id[] = [CONSOLE, FILES];
+export const WORLD: readonly Id[] = [CONSOLE, FILES, UPDATE];
 
 export const NUMBER = "type.number";
 export const STRING = "type.string";
 // Whole numbers that never overflow (src/lang/int.ts).
 export const INT = "type.int";
+// A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
+// holding the same value are still two cells.
+export const CELL = "type.cell";
 
 export class TypeError extends Error {}
 

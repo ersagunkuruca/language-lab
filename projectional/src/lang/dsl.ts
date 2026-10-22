@@ -65,6 +65,11 @@ export class Lang extends Builder {
     return this.add({ kind: "tref", target, args });
   }
 
+  // A function type, for a field that holds a function.
+  tfun(params: Id[], result: Id): Id {
+    return this.add({ kind: "tfun", params, result });
+  }
+
   fn(names: string[], body: (...params: Id[]) => Id): Id {
     return this.lambda(names, body);
   }
