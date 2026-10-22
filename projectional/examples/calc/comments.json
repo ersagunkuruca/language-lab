@@ -1,0 +1,16 @@
+{
+  "hb4002r311qtknph13f1uvibbe": "What the text of a line is cut into. A gap is the space between tokens; the tokenizer keeps it so it can tell 12 from 1 2, then drops it.",
+  "rreh05dfq7c7vb0t8i76sdm2o3": "An expression: a whole number, a name, minus something, or an operator between two expressions.",
+  "p5apms9urqlquebqg1p3mosq90": "What each parsing step gives back: the expression it read, and the tokens after it.",
+  "tnt9kdj6jdf7kps6ifi6rsn513": "What carries from one line to the next: the names defined so far (newest first) and how many lines failed.",
+  "gakvtr76as6b4pivqck17c65pt": "One fold over the characters. The fold runs from the end, so a digit or letter joins the token right after it when there's no gap between them. Then the gaps are dropped.",
+  "l0n7sceg3b0qispgnceqa2j44c": "A token as an error message shows it.",
+  "cs05ufd1gqtupg3l3ipih39bi9": "Recursive descent, one definition per level: sum (+ −), product (× / %), unary minus, power (^, to the right), atom. Each takes the tokens and gives back what it read plus the tokens after it.",
+  "vmj137u9ibbv0bgd3ngv1sk4on": "One operator on two whole numbers. Division, remainder and power can have no answer (Choice), which becomes an Abort with the reason.",
+  "onu4gr9dmkodijuhhj5lcv2vo2": "A fold over the expression tree: the children's values first, then the node's.",
+  "s7dg67if8rgs61f8m7gds57rs5": "The expression with every operation in parentheses, which shows how it was read.",
+  "s8b7ckmq5q5o0lqvstvtb22kh5": "Parse an expression that must use every token.",
+  "fbfndujth9rojtlbqgmkcu33bp": "One line: `let name = expression` defines a name, `? expression` shows how it parses, anything else is evaluated. Blank lines do nothing. Gives back the bindings for the next line.",
+  "3v80md47mq7j81b65ilme5ekg9": "Each line in order, catching its Abort: the reason goes to standard error with the line number, and the session carries on. Plain recursion on the list, so the checker sees it ends.",
+  "0jvipanrt02fagv75k8g8v9pf5": "calc: a calculator for whole numbers of any size. Reads lines from standard input: expressions with + - * / % ^ and parentheses, `let name = expression`, and `? expression` to see how an expression was read. Exit code 1 if any line failed."
+}

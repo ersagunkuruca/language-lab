@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build.ts",
     "test": "node --test test/*.test.ts",
-    "bench": "node bench.ts"
+    "bench": "node bench.ts",
+    "gaps": "node gaps/bench.ts"
   },
   "engines": {
     "node": ">=22.18"

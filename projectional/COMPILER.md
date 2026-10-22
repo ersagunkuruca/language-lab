@@ -427,7 +427,7 @@ program outside a JS host, and the C route covers that too.
 | 1a | relational directions and `derivative` through their interpreters, linked as the runtime; compiled functions carry their nodes | done (all five examples match the evaluator) |
 | 1b | mode analysis, so relational directions compile; `derivative` at compile time when the function is known | next; worth it once a backwards search shows up in a profile |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
-| 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflows at 10,000 steps) | next small fix |
+| 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflows at 10,000 steps; compiled calc crashes on 5,000 lines, GAPS.md G1) | next small fix |
 | 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `lab compile` (projectional/cli/lab.ts); `Cells` as calls on one runtime `Cells` instance | done |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
 | 5 | other targets: WASM scalar profile (done), WGSL, single-file executables, native via C, WasmGC | the order in "Targets beyond JavaScript" |
@@ -449,4 +449,6 @@ compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js
 compiler/bench.ts          evaluator vs compiled
 compiler/test/             compiled vs evaluated, on every example
+compiler/GAPS.md           a bigger program's compiled output vs a hand-written ideal, gaps ranked
+compiler/gaps/             that program's ideal JS and the benchmark behind GAPS.md
 ```
