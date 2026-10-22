@@ -324,3 +324,45 @@ test("values inside a fold: its outermost pass, with the rest already folded", a
   assert.deepEqual(byName("tail′"), ["[2, 3]"]);
   assert.equal(showValue(tr.result!, p.code, p.pres.names), "[1, 2, 3]");
 });
+
+test("an effect of your own: declared, given back a type, and handled by a match the palette offers", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "Ask", { kind: "effect", firstOperation: "ask" }));
+  const Ask = s.def("Ask");
+  const td = s.code.nodes[(s.code.nodes[Ask] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  assert.equal(td.effect, true);
+  const ask = td.variants[0];
+  s.ok(Top.addField(s.code, s.names, Ask, ask, "question", { target: "type.string", args: [] }));
+  s.ok(Top.setReturns(s.code, s.names, ask, { target: "type.number", args: [] }));
+  assert.ok(!Top.fieldTypes(s.code, Ask).some((t) => t.target === Ask), "an effect isn't data a field holds");
+  s.ok(Top.newDefinition(s.code, s.names, "answer", { kind: "value" }));
+  const answer = s.def("answer");
+  // handle Ask in ask("width"), answering 30.
+  s.fill(answer, (f) => f.kind === "match" && f.on === null && f.type === Ask);
+  s.fill(answer, call(ask));
+  const lit = s.fill(answer, (f) => f.kind === "lit" && f.of === "text");
+  s.code = { ...s.code, nodes: { ...s.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: "width" } } };
+  s.number(answer, 30);
+  const info = s.info();
+  assert.deepEqual(info.errors, []);
+  assert.equal(showType(info.typeOf.get(answer)!, s.all()), "Number");
+});
+
+test("the effects example: a declared effect and Abort, each handled; values show through a handler", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { trace } = await import("../src/lang/trace.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/effects"));
+  const info = infer(p.code, p.pres.names);
+  assert.deepEqual(info.errors, []);
+  assert.equal(showType(info.typeOf.get(p.named("area"))!, p.pres.names), "() -[Ask]-> Number");
+  const out: string[] = [];
+  runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
+  assert.deepEqual(out, ["360 · can't: nobody to share with"]);
+  const t = trace(p.code, info, p.named("main"), []);
+  assert.equal(t.error, undefined);
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const text = renderBlocks(p.code, p.pres, info, p.named("main"));
+  assert.match(text, /handle area\(\)\n\s+ask\(question\) →/);
+  assert.match(text, /handle show\(share\(10, 0\)\)/);
+});

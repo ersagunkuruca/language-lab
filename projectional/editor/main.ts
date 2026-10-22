@@ -34,6 +34,10 @@ import backwardsComments from "../examples/backwards/comments.json" with { type:
 import relationsCode from "../examples/relations/code.json" with { type: "json" };
 import relationsNames from "../examples/relations/names.default.json" with { type: "json" };
 import relationsComments from "../examples/relations/comments.json" with { type: "json" };
+import effectsCode from "../examples/effects/code.json" with { type: "json" };
+import effectsNames from "../examples/effects/names.default.json" with { type: "json" };
+import effectsComments from "../examples/effects/comments.json" with { type: "json" };
+import effectsExamples from "../examples/effects/examples.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -51,8 +55,9 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, TRUE } from "../src/lang/std.ts";
+import { CHOICE } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { runMain, showValue, type Value } from "../src/lang/run.ts";
+import { needsHandling, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
 import * as T from "./typed.ts";
@@ -89,7 +94,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -126,7 +131,7 @@ interface UI {
   touched: string[];
   note: string;
   mode: null | "split" | "new-def";
-  newKind: "function" | "value" | "type";
+  newKind: "function" | "value" | "type" | "effect";
   query: string;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string } | null;
@@ -164,6 +169,7 @@ const initialFor = (program: Program): Doc =>
   : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
   : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
+  : program === "effects" ? typedDoc("effects", effectsCode as Code, effectsNames, effectsComments, { examples: effectsExamples })
   : initial();
 
 // The quadratic and the physics: plain arithmetic, and predicates with
@@ -211,7 +217,7 @@ function resolves(code: Code): boolean {
   return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : n.kind === "solve" ? [n.fn] : [])].every((c) => code.nodes[c]));
 }
 
-const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
+const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar", effects: "main" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
@@ -665,9 +671,11 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     const cb = h("input", { type: "checkbox", checked: on, title: on ? "Known: you give it. Untick to solve for it." : "Solved for. Tick to give it instead." }) as HTMLInputElement;
     cb.addEventListener("change", () => setKnown(info, p, cb.checked));
     const shown = r.answers[0]?.values[p];
+    // Left free: every value fits (the angle of the origin).
+    const any = !!r.answers[0]?.free.includes(p) && shown !== undefined && /^_\d+$/.test(shown);
     const input = on
       ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
-      : h("output", { class: shown === undefined ? "none" : "" }, shown === undefined ? "?" : nice(shown));
+      : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : nice(shown));
     if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }
@@ -921,7 +929,9 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
     case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
-    default: return [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
+    default: return words(f.type).effect
+      ? [`handle ${nm(f.type)} in □`, `one case per operation of ${nm(f.type)}, on the computation you give next`, "case analysis"]
+      : [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
 }
 
@@ -1021,6 +1031,14 @@ function runTop(info: T.Info, r: Top.Top, then?: (r: Extract<Top.Top, { ok: true
 const row = (...kids: Kid[]) => h("div", { class: "srow" }, ...kids);
 const pick = (id: Id, label: string, detail?: string) => h("button", { class: "slink", type: "button", "data-act": "goto-node", "data-target": id }, label, detail ? h("span", { class: "opt-d" }, ` ${detail}`) : null);
 
+// A data type's words, or an effect's: an effect's cases are operations,
+// and their fields are what each is given.
+function words(type: Id) {
+  const effect = !!(defBody(type) as { effect?: true } | null)?.effect;
+  return effect ? { effect, case: "operation", cases: "operations", field: "input", fields: "inputs" } : { effect, case: "case", cases: "cases", field: "field", fields: "fields" };
+}
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
 function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   const code = doc.code, sh = doc.names.short;
   const sel = ui.selected ?? ui.def;
@@ -1031,17 +1049,22 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   const out = h("div", { class: "structure" });
 
   if (sel === ui.def && body?.kind === "typedef") {
-    out.append(h("div", { class: "sub-head" }, `Cases of ${dname} · code.json`));
+    // An effect is a data type whose cases are operations: the same panel,
+    // in its words.
+    const w = words(ui.def);
+    out.append(h("div", { class: "sub-head" }, `${cap(w.cases)} of ${dname} · code.json`));
     for (const v of body.variants) {
       const fs = get(code, v, "variant").fields;
-      out.append(row(pick(v, names[v] ?? "case", fs.length ? `(${fs.map((f) => names[f] ?? "field").join(", ")})` : ""),
-        edit("×", "Remove this case", Top.removeCase(code, sh, ui.def, v), () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
+      out.append(row(pick(v, names[v] ?? w.case, fs.length ? `(${fs.map((f) => names[f] ?? w.field).join(", ")})` : ""),
+        edit("×", `Remove this ${w.case}`, Top.removeCase(code, sh, ui.def, v), () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
     }
-    const c = textField("f-new-case", "New case", "its name");
-    const add = h("button", { class: "btn", type: "button" }, "Add the case");
+    const c = textField("f-new-case", `New ${w.case}`, "its name");
+    const add = h("button", { class: "btn", type: "button" }, `Add the ${w.case}`);
     add.addEventListener("click", () => applyT(T.addCase(code, sh, info, ui.def, c.input.value, [])));
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
-    out.append(h("p", { class: "hint" }, "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
+    out.append(h("p", { class: "hint" }, body.effect
+      ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
+      : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
   } else if (sel === ui.def && isPublished(ui.def)) {
     // A published definition is read-only; copying it in is how you change it.
     const r = T.copyIntoProgram(code, sh, info, ui.def, dname);
@@ -1065,29 +1088,41 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     return out;
   } else if (n?.kind === "variant") {
     const type = info.owner.get(sel)!;
-    out.append(h("div", { class: "sub-head" }, `Fields of ${names[sel] ?? "this case"} · code.json`));
+    const w = words(type);
+    out.append(h("div", { class: "sub-head" }, `${cap(w.fields)} of ${names[sel] ?? `this ${w.case}`} · code.json`));
     const fs = n.fields;
-    if (!fs.length) out.append(h("p", { class: "hint" }, "None: it's a constant."));
+    if (!fs.length) out.append(h("p", { class: "hint" }, w.effect ? "None: performing it takes nothing." : "None: it's a constant."));
     for (const f of fs) {
-      out.append(row(pick(f, names[f] ?? "field", typeText(get(code, f, "field").type, names)),
-        edit("×", "Remove this field", Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
+      out.append(row(pick(f, names[f] ?? w.field, typeText(get(code, f, "field").type, names)),
+        edit("×", `Remove this ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
     }
-    const c = textField("f-new-field", "New field", "its name");
+    const c = textField("f-new-field", `New ${w.field}`, "its name");
     const t = typeChoice("f-new-field-type", type, names, null);
-    const add = h("button", { class: "btn", type: "button" }, "Add the field");
+    const add = h("button", { class: "btn", type: "button" }, `Add the ${w.field}`);
     add.addEventListener("click", () => runTop(info, Top.addField(code, sh, type, sel, c.input.value, t.spec())));
     out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.select), h("div", { class: "acts" }, add),
-      h("p", { class: "hint" }, "Every place that makes this case gets a hole for a new field, and every arm for it a name."),
-      h("div", { class: "acts" }, edit("Remove this case", "Remove this case from the type", Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
+      h("p", { class: "hint" }, w.effect ? "Every call of it gets a hole for a new input, and every case that handles it a name." : "Every place that makes this case gets a hole for a new field, and every arm for it a name."));
+    if (w.effect) {
+      // What the handler answers it with: the value the call gives back.
+      const specs = Top.fieldTypes(code, type);
+      const now = n.returns ? typeText(n.returns, names) : null;
+      const r = h("select", { id: "f-returns" }, h("option", { value: "", selected: !now }, "nothing: it never returns"),
+        ...specs.map((sp, i) => h("option", { value: String(i), selected: specText(sp, names) === now }, specText(sp, names)))) as HTMLSelectElement;
+      r.addEventListener("change", () => runTop(info, Top.setReturns(code, sh, sel, r.value === "" ? null : specs[Number(r.value)])));
+      out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r),
+        h("p", { class: "hint" }, now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with.` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead.`));
+    }
+    out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
     return out;
   } else if (n?.kind === "field") {
     const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
     const type = info.owner.get(sel)!;
     const t = typeChoice("f-field-type", type, names, typeText(n.type, names));
     t.select.addEventListener("change", () => runTop(info, Top.setFieldType(code, sh, sel, t.spec())));
-    out.append(h("div", { class: "sub-head" }, `Field of ${names[variant.id] ?? "a case"} · code.json`),
+    const w = words(type);
+    out.append(h("div", { class: "sub-head" }, `${cap(w.field)} of `, pick(variant.id, names[variant.id] ?? `a ${w.case}`), " · code.json"),
       h("label", { class: "field", for: "f-field-type" }, h("span", {}, "Holding"), t.select),
-      h("div", { class: "acts" }, edit("Remove this field", "Remove it from the case", Top.removeField(code, sh, variant.id, sel), () => runTop(info, Top.removeField(code, sh, variant.id, sel), () => { ui.selected = variant.id; }), "btn danger")));
+      h("div", { class: "acts" }, edit(`Remove this ${w.field}`, `Remove it from the ${w.case}`, Top.removeField(code, sh, variant.id, sel), () => runTop(info, Top.removeField(code, sh, variant.id, sel), () => { ui.selected = variant.id; }), "btn danger")));
     return out;
   } else return null;
 
@@ -1110,23 +1145,28 @@ function newDefinitionForm(info: T.Info): HTMLElement {
   const name = textField("f-def-name", "Name", "what to call it");
   const kind = ui.newKind;
   const extra = kind === "function" ? textField("f-def-inputs", "Inputs", "names, separated by commas (none for an action)")
-    : kind === "type" ? textField("f-def-case", "First case", "a name, e.g. circle") : null;
+    : kind === "type" ? textField("f-def-case", "First case", "a name, e.g. circle")
+    : kind === "effect" ? textField("f-def-case", "First operation", "a name, e.g. ask") : null;
   const go = h("button", { class: "btn", type: "button" }, "Create");
   go.addEventListener("click", () => {
     const shape: Top.Shape = kind === "function" ? { kind, params: (extra!.input.value).split(",").map((x) => x.trim()).filter(Boolean) }
-      : kind === "type" ? { kind, firstCase: extra!.input.value } : { kind: "value" };
+      : kind === "type" ? { kind, firstCase: extra!.input.value }
+      : kind === "effect" ? { kind, firstOperation: extra!.input.value } : { kind: "value" };
     runTop(info, Top.newDefinition(doc.code, doc.names.short, name.input.value, shape), (r) => {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
-      ui.selected = kind === "type" ? null : r.select;
+      ui.selected = kind === "type" || kind === "effect" ? null : r.select;
       ui.mode = null;
     });
   });
   for (const f of [name, extra]) f?.input.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
   return h("div", { class: "insp" },
     h("div", { class: "sub-head" }, "New definition · code.json"),
-    seg("new-kind", kind, [["function", "Function"], ["value", "Value"], ["type", "Data type"]]),
-    h("p", { class: "hint" }, kind === "function" ? "Takes inputs and gives back a value; with no inputs it's an action you can run." : kind === "value" ? "One value, computed once." : "Cases, each with fields: like an enum whose cases carry data."),
+    seg("new-kind", kind, [["function", "Function"], ["value", "Value"], ["type", "Data type"], ["effect", "Effect"]]),
+    h("p", { class: "hint" }, kind === "function" ? "Takes inputs and gives back a value; with no inputs it's an action you can run."
+      : kind === "value" ? "One value, computed once."
+      : kind === "type" ? "Cases, each with fields: like an enum whose cases carry data."
+      : "Operations a computation can ask for, like a data type whose cases are requests. Calling one performs it; whoever runs the computation answers it with a match, one case per operation."),
     name.el, extra?.el ?? null,
     h("div", { class: "acts" }, go, h("button", { class: "btn", type: "button", "data-act": "new-def" }, "Cancel")));
 }
@@ -1323,8 +1363,14 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const z = t ? info.subst.zonk(t) : null;
   const action = z?.t === "fn" && z.params.length === 0;
   const body = defBody(ui.def);
-  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, "A data type doesn't run; its constructors are called from functions.");
-  if (action) {
+  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
+  // An action that performs an effect nothing answers yet runs only inside
+  // a handler: say where, instead of a Run that can only fail.
+  const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
+  if (needs.length) {
+    const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
+    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
+  } else if (action) {
     box.append(h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
     if (ui.output?.def === ui.def) {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || "(no output)"));
@@ -1335,7 +1381,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // action, once you ask (it may take a while, and its printing is left out).
   const ex = doc.examples?.[ui.def];
   const tr = traced(info);
-  if (action) box.append(h("div", { class: "acts" },
+  if (action && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn") box.append(h("p", { class: "hint" }, "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."));
@@ -1371,6 +1417,10 @@ function traceInputs(info: T.Info): string[] | null {
 function traced(info: T.Info): Trace | null {
   const texts = traceInputs(info);
   if (!texts) return null;
+  // What performs an effect of your own has values only inside a handler.
+  const t = info.typeOf.get(ui.def);
+  const z = t ? info.subst.zonk(t) : null;
+  if (z?.t === "fn" && needsHandling(z).some((e) => e !== CHOICE)) return null;
   const key = `${ui.def}\u0000${texts.join("\u0000")}`;
   let m = traces.get(doc.code);
   if (!m) traces.set(doc.code, (m = new Map()));
@@ -1468,7 +1518,7 @@ function guide(): HTMLElement {
     ["Hole", pic(80, svg("rect", { x: 10, y: 8, width: 56, height: 24, rx: 12, class: "pill hole" }), text(38, 24, "□", "pl")),
       "A value not filled in yet. It knows its type; select it and the side panel lists only what fits. The program runs until it reaches one."],
     ["Badge", pic(80, svg("rect", { x: 12, y: 2, width: 56, height: 36, rx: 7, class: "cn eff" }), text(40, 13, "Choice", "badge"), text(40, 31, "fail", "cl")),
-      "The effects a node has. Choice: it can give several answers, or none. Console: it prints. Diverge: it might not finish. “handles Choice” marks a node that takes care of it, so the effect stops there."],
+      "The effects a node has. Choice: several answers, or none. Abort: stops with a reason. Log: debugging output. Console: reads and prints. Files: reads and writes files. Diverge: might not finish. And effects you declare (+ New definition, Effect). “handles …” marks a node that takes care of one, so it stops there: first or all for Choice, a handle match for Abort, Log and yours."],
     ["Solve", pic(80, ...box(12, "polar", "cn rel"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 6, class: "reroute" })),
       "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest (dots, right). A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
   ];

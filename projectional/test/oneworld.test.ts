@@ -84,6 +84,23 @@ test("a periodic family that no member of fits ends instead of walking every tur
   assert.ok(Date.now() - t < 5000);
 });
 
+test("polar from x and y alone: on an axis, and at the origin, where the angle is free", () => {
+  const polar = p.named("polar");
+  const [x, y] = params(p.code, polar);
+  const first = (a: number, b: number) => answers(polar, { [x]: a, [y]: b, out: bool(true) }, 1)[0];
+  const r = (v: string) => Math.round(+v * 1e6) / 1e6;
+  // The canonical answer first: positive length, angle from the principal branch.
+  for (const [a, b, len, ang] of [[3, 4, 5, 0.927295], [0, 2, 2, 1.570796], [0, -2, 2, -1.570796], [-2, 0, 2, 3.141593]]) {
+    const got = first(a, b);
+    assert.ok(got, `an answer for (${a}, ${b})`);
+    assert.deepEqual([r(got.length), r(got.angle)], [len, ang], `(${a}, ${b})`);
+  }
+  // At the origin every angle fits: the length is 0 and the angle is left free.
+  const o = first(0, 0);
+  assert.equal(o.length, "0");
+  assert.match(o.angle, /^_\d+$/);
+});
+
 test("hence: a consequence gives the solver a way in without counting as a constraint", () => {
   const polar = p.named("polar");
   const { rel, predicate } = relationFor(p.code, polar);

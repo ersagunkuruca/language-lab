@@ -13,7 +13,7 @@ import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
-import { CONS, FALSE, NIL, TRUE } from "./std.ts";
+import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showType } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -39,6 +39,12 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
   const isLet = (n: Node): boolean => n.kind === "call" && node(n.fn).kind === "lambda";
+  // A match whose arms are an effect's operations handles it.
+  const isHandler = (n: NodeOf<"match">) => {
+    const owner = n.arms.length ? info?.owner.get((node(n.arms[0]) as NodeOf<"arm">).variant) : undefined;
+    const d = owner ? node(owner) : null;
+    return d?.kind === "def" && !!d.body && !!(node(d.body) as { effect?: true }).effect;
+  };
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -84,7 +90,13 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
         if (items) return atom(`[${items.map((i) => inline(i).text).join(", ")}]`);
         const f = node(n.fn);
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-        const args = n.args.map(inline);
+        const ops = chainOperands(code, id);
+        const args = (ops ?? n.args).map(inline);
+        if (nota?.fixity === "infix" && ops) {
+          // a ++ b ++ c: one chain, whichever way the pairs nest.
+          const p = nota.prec ?? 5;
+          return { text: args.map((a) => paren(a, a.prec > p)).join(` ${nota.glyph} `), prec: p };
+        }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
@@ -136,7 +148,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       return [`${ind}${lead}if ${cond}`, ...block(t, ind + "  ", "then "), ...block(f, ind + "  ", "else ")];
     }
     if (n.kind === "match" || n.kind === "fold") {
-      const out = [`${ind}${lead}${n.kind} ${inline(n.scrutinee).text}`];
+      const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];
       for (const a of n.arms) {
         const arm = node(a) as NodeOf<"arm">;
         const results = arm.results.filter((r): r is Id => r !== null);
@@ -170,10 +182,21 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       // A call with a tall argument: the tall parts go on their own lines.
       const f = node(n.fn);
       const head = f.kind === "ref" ? nameOf(f.target) : `(${inline(n.fn).text})`;
+      // An operator's operands one under another, each after the operator:
+      //   show(…)
+      //   ++ " · "
+      //   ++ handle …
+      const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
+      const ops = chainOperands(code, id) ?? n.args;
+      if (nota?.fixity === "infix" && ops.length >= 2) {
+        const p = nota.prec ?? 5;
+        const one = (a: Id, lead: string) => (tall(a) ? block(a, ind, lead) : [`${ind}${lead}${paren(inline(a), inline(a).prec > p)}`]);
+        return ops.flatMap((a, i) => one(a, i ? `${nota.glyph} ` : lead));
+      }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return [...block(n.fn, ind, `${lead}apply `), `${ind}  to (${n.args.map((a) => inline(a).text).join(", ")})`];
-      const args = n.args.map((a, i) => {
+      const args = ops.map((a, i) => {
         const lines = block(a, ind + "  ", "");
-        if (i < n.args.length - 1) lines[lines.length - 1] += ",";
+        if (i < ops.length - 1) lines[lines.length - 1] += ",";
         return lines;
       });
       return [`${ind}${lead}${head}(`, ...args.flat(), `${ind})`];
@@ -189,11 +212,12 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   if (comment) out.push(`-- ${comment}`);
   if (body?.kind === "typedef") {
     enter(body.params);
-    const head = `type ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;
+    const head = `${body.effect ? "effect" : "type"} ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;
     out.push(head);
     for (const v of body.variants) {
-      const fs = (node(v) as NodeOf<"variant">).fields.map((f) => `${nameOf(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
-      out.push(`  | ${nameOf(v)}${fs.length ? `(${fs.join(", ")})` : ""}`);
+      const vn = node(v) as NodeOf<"variant">;
+      const fs = vn.fields.map((f) => `${nameOf(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
+      out.push(`  | ${nameOf(v)}${fs.length ? `(${fs.join(", ")})` : ""}${vn.returns ? ` returns ${typeText(vn.returns)}` : ""}`);
     }
     return out.join("\n");
   }

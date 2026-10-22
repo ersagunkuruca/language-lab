@@ -649,12 +649,15 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
   throw new Error("no result");
 }
 const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT];
+// The effects of a function's type that something in the program has to
+// handle before it can run: an unhandled Choice, effects you declared.
+export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
 
 // Why an action can't be run as it is: an effect only the program could
 // handle is left over. Null when it can.
 function leftover(t: Type, names: Names): string | null {
   if (t.t !== "fn") return "not a function";
-  const extra = t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
+  const extra = needsHandling(t);
   if (!extra.length) return null;
   return `unhandled effect: ${extra.map((e) => names[e] ?? e).join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`;
 }
