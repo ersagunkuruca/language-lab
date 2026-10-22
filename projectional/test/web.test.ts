@@ -68,3 +68,39 @@ test("the browser world keeps files in localStorage, one prefix per program", ()
   assert.throws(() => w.readFile("missing"), /no such file: missing/);
   assert.throws(() => w.input(), /a page has no standard input/);
 });
+
+// examples/converter, the app at apps/converter.html: every field is the
+// function that shows it, run backwards when typed into.
+test("the converter app: typing in any field moves the others, and text with no answer is marked", async () => {
+  const { webPage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples/converter"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  assert.deepEqual(info.errors, []);
+  const html = await webPage("Converter", p.code, info, p.pres.names, p.named("main"));
+  const run = (store: ReturnType<typeof memoryStore>) => {
+    const body = new FakeEl("body");
+    runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], { document: { ...fakeDoc(), body }, localStorage: store, console });
+    const root = body.kids[0] as FakeEl;
+    const inputs: FakeEl[] = [];
+    const walk = (e: FakeEl) => { if (e.tag === "input") inputs.push(e); e.kids.forEach((k) => k instanceof FakeEl && walk(k)); };
+    walk(root);
+    return inputs;
+  };
+  const store = memoryStore();
+  const f = run(store);
+  const values = () => f.map((i) => i.value + (i.attrs.get("aria-invalid") === "true" ? "!" : ""));
+  assert.deepEqual(values(), ["20", "68", "293.15", "1", "16", "48", "236.5882365", "12", "5", "25"]);
+  f[1].type_("212");
+  f[4].type_("2");
+  f[8].type_("4");
+  assert.deepEqual(values(), ["100", "212", "373.15", "0.125", "2", "6", "29.573529563", "15", "4", "20"]);
+  f[0].type_("hot");
+  assert.equal(values()[0], "hot!");
+  // the mark goes when the temperature changes some other way
+  f[2].type_("273.15");
+  assert.deepEqual(values().slice(0, 3), ["0", "32", "273.15"]);
+  // and the next visit starts where this one left off
+  assert.deepEqual(run(store).map((i) => i.value).slice(0, 3), ["0", "32", "273.15"]);
+});
