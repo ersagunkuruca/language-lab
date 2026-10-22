@@ -172,7 +172,7 @@ test("R2 §1.2 run backwards, Ints still compare to within 1e-9", { todo: "relat
   assert.equal(answers.length, 0, "f() = 1000000000000 has an answer backwards");
 });
 
-test("R2 §2.1 running a one-item `one of` backwards ends", { todo: "member runs before its list is built, so it enumerates lists" }, () => {
+test("R2 §2.1 running a one-item `one of` backwards ends", () => {
   const k = new Lang();
   const f = k.def("f");
   k.define(f, k.thunk(() => k.call(S.oneOf, k.list(k.lit(3)))));

@@ -54,7 +54,7 @@ node --test test/backwards.test.ts
 | `equal(a, b) = true` | compare | unify `a` and `b` |
 | `and`, `or`, `not` | evaluate | every row of the truth table that fits |
 | `range(n)` | `[0, …, n − 1]` | `n` is the list's length, once that's known |
-| `one of(list)` | each item | the value is somewhere in the list; if the list isn't known, lists that contain it, one length at a time |
+| `one of(list)` | each item | the value is somewhere in the list. It waits for each cell of the list to be known, so a list built by a later goal is searched once and a finite one fails finitely; a list that never becomes known is left as a residual |
 | `fail()` | no answers | no answers |
 | `solve` | a relation in a direction | the same as a call, read sideways: its given ports are inputs, its bound ports are unknowns |
 | `for some(f)` | is there an `x` with `f(x)`? (a search) | `x` is a fresh unknown, and `f(x)` must hold |
