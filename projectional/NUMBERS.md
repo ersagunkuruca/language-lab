@@ -309,7 +309,7 @@ Other representations run the same fold differently:
 | representation | of | stored as | `meaning` | its `fold` runs as | |
 |---|---|---|---|---|---|
 | `cells` | any data type | one object per case | itself | spine loop (chains), explicit stack (trees), `parts` (nested) | today's loops |
-| `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | first new row |
+| `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | built |
 | `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | next |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
 | `int` | `Nat` | an `Int` | `natural` | a counted loop: Peano `succ` folded n times | later |
@@ -379,7 +379,12 @@ text, characters outside the basic plane, `range(0)`.
 1. The table and `foldPlan`, with `cells` as the only row, and the compiler
    asking it. The compiled output doesn't change.
 2. `text`: a fold over `characters(t)`. This is the fusion GAPS.md G7
-   left for here; the measure is calc's tokenizer.
+   left for here; the measure is calc's tokenizer. **Done**: the fold in
+   calc's `tokens` runs on the line, with no list of characters and no
+   spine array. Compiled calc on 4,000 lines went from about 35 ms to
+   about 31 ms (best of 40 runs, the ideal takes about 21 ms). The rest
+   of the tokenizer's cost is the token list it builds and `keep`'s second
+   one, which is the `build` row's job.
 3. `counted`: a fold over `range(n)` (`queens` uses it).
 4. User representations per value: `fold(meaning(x))` → `fold′(x)` when
    `meaning` is a definition, tested on `binary`.
