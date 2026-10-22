@@ -11,7 +11,9 @@ non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 For a candid review of the whole project (holes, what's achievable, and a
 roadmap towards real programs, shaders, websites and apps), see
-[REVIEW.md](REVIEW.md).
+[REVIEW.md](REVIEW.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
+the design ideas we've discussed, with the current answer to each, are in
+[NOTES.md](NOTES.md).
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
