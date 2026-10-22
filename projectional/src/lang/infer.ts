@@ -965,6 +965,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   for (const [id, sig] of Object.entries(SIGS)) consider(id, sig(info.subst));
   for (const [part, def] of info.owner) {
     if (code.nodes[part].kind === "variant") consider(part, constructorType(code, info.subst, def, part));
+    // A field of a one-case type reads it from a value: fst(p), pages(c).
+    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t); }
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);
@@ -1060,6 +1062,18 @@ function groupKey(s: Subst, types: Type[]): string {
 }
 
 // A variant's constructor type with fresh variables (same as infer's refType).
+// A field as the function that reads it, for a data type with one case
+// (refType's "field"); null for an effect's input or a field of one case
+// among several, which only a match reaches.
+function fieldType(code: Code, s: Subst, def: Id, field: Id): Type | null {
+  const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  if (td.effect || td.variants.length !== 1) return null;
+  const made = constructorType(code, s, def, td.variants[0]);
+  if (made.t !== "fn") return null;
+  const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(field);
+  return { t: "fn", params: [made.ret], ret: made.params[i], eff: s.freshRow() };
+}
+
 function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
   const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
   const params = new Map(td.params.map((p) => [p, s.fresh()] as const));

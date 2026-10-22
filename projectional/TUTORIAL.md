@@ -274,6 +274,10 @@ of "type errors prevented by the editor": you can't pick what doesn't fit.
   data type of the standard library or your own, or the type itself), then,
   for one that takes arguments, each of those the same way: *Pair*, then
   *Int* and *Text*.
+- A field of a type with one case is also the function that reads it: the
+  palette offers `pages(□)` for a chapter's page count, and `fst(□)` and
+  `snd(□)` for a Pair. A type with several cases is taken apart with a
+  match instead, since the field may not be there.
 - The *Definition* tab lets you rename it, add, reorder and remove inputs
   (every call gets a hole for a new input, so none is missing an argument),
   delete it, and *Pin this type* so edits inside must keep it. A definition
