@@ -92,7 +92,39 @@ type Wait =
   | { k: "compute"; args: Term[]; out: Term; f: (...xs: Value[]) => Value; text: string }
   | { k: "range"; n: Term; out: Term };
 
-interface State { sub: Map<number, Term>; eqs: Eq[]; waits: Wait[]; next: number }
+interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number }
+
+// The substitution: logic variable number to term. Persistent, as a 32-way
+// trie on the number, so binding a variable copies one short path instead
+// of the whole map. (Copying the map was what made reading text back
+// cubic.) Variables are numbered densely from 0, so the trie stays shallow.
+type Trie = (Trie | Term | undefined)[];
+class Sub {
+  root: Trie;
+  depth: number;
+  constructor(root: Trie = [], depth = 0) { this.root = root; this.depth = depth; }
+  get(n: number): Term | undefined {
+    if (n >= 2 ** (5 * (this.depth + 1))) return undefined;
+    let node: Trie | undefined = this.root;
+    for (let d = this.depth; d > 0; d--) {
+      node = node[(n >>> (5 * d)) & 31] as Trie | undefined;
+      if (!node) return undefined;
+    }
+    return node[n & 31] as Term | undefined;
+  }
+  has(n: number) { return this.get(n) !== undefined; }
+  set(n: number, t: Term): Sub {
+    let root = this.root, depth = this.depth;
+    while (n >= 2 ** (5 * (depth + 1))) { root = [root]; depth++; }
+    const put = (node: Trie | undefined, d: number): Trie => {
+      const copy = node ? node.slice() : [];
+      const i = (n >>> (5 * d)) & 31;
+      copy[i] = d === 0 ? t : put(copy[i] as Trie | undefined, d - 1);
+      return copy;
+    };
+    return new Sub(put(root, depth), depth);
+  }
+}
 
 const walk = (t: Term, s: State): Term => {
   while (t instanceof LVar) {
@@ -136,9 +168,7 @@ function unify(a: Term, b: Term, s: State): State | null {
 }
 
 function bindVar(s: State, v: LVar, t: Term): State {
-  const sub = new Map(s.sub);
-  sub.set(v.n, t);
-  return { ...s, sub };
+  return { ...s, sub: s.sub.set(v.n, t) };
 }
 
 const freshVars = (s: State, n: number): [LVar[], State] =>
@@ -262,8 +292,19 @@ function wake(w: Wait, s: State): Goal | null {
       if (typeof c !== "string") return null;
       if (typeof a === "string") return c.startsWith(a) ? eq(w.b, c.slice(a.length)) : failG;
       if (typeof b === "string") return c.endsWith(b) ? eq(w.a, c.slice(0, c.length - b.length)) : failG;
-      // Every way to cut the text in two.
-      return disj(...Array.from({ length: c.length + 1 }, (_, i) => conj(eq(w.a, c.slice(0, i)), eq(w.b, c.slice(i)))));
+      // Every way to cut the text in two that the two sides could be: a
+      // side that is itself a join with a known part, or a number shown,
+      // rules most cuts out before any branch is made (in "1 22 333", the
+      // front of `show(n) ++ " " ++ rest` must end in a space, and before
+      // it must be a number). Without this, reading text back is quadratic
+      // in branches.
+      const front = fits(w.a, s, 2), back = fits(w.b, s, 2);
+      const cuts: Goal[] = [];
+      for (let i = 0; i <= c.length; i++) {
+        const x = c.slice(0, i), y = c.slice(i);
+        if ((!front || front(x)) && (!back || back(y))) cuts.push(conj(eq(w.a, x), eq(w.b, y)));
+      }
+      return disj(...cuts);
     }
     case "show": {
       const n = walk(w.n, s), t = walk(w.s, s);
@@ -296,6 +337,24 @@ function wake(w: Wait, s: State): Goal | null {
       return conj(eq(w.n, length), wait(w));
     }
   }
+}
+
+// A quick test of which texts an unknown could turn out to be, from the
+// constraint waiting to produce it (null: no idea, anything fits). Looks a
+// couple of joins deep, never branches.
+function fits(t: Term, s: State, depth: number): ((text: string) => boolean) | null {
+  t = walk(t, s);
+  if (typeof t === "string") return (x) => x === t;
+  if (!(t instanceof LVar) || depth === 0) return null;
+  for (const w of s.waits) {
+    if (w.k === "show" && walk(w.s, s) === t) return (x) => x.trim() === x && x !== "" && showNumber(Number(x)) === x;
+    if (w.k !== "concat" || walk(w.c, s) !== t) continue;
+    const a = walk(w.a, s), b = walk(w.b, s);
+    if (typeof b === "string") { const f = fits(a, s, depth - 1); return (x) => x.endsWith(b) && (!f || f(x.slice(0, x.length - b.length))); }
+    if (typeof a === "string") { const f = fits(b, s, depth - 1); return (x) => x.startsWith(a) && (!f || f(x.slice(a.length))); }
+    return null;
+  }
+  return null;
 }
 
 const list = (xs: Term[]): DataT => xs.reduceRight<DataT>((tail, x) => dataT(CONS, [x, tail]), dataT(NIL));
@@ -373,6 +432,20 @@ export function interpreter(code: Code, opts: Options = {}) {
   // the value is known (backwards), so information flows from what's known.
   const cheap = (id: Id) => ["lit", "ref", "lambda"].includes(nodes[id].kind);
 
+  // A call of a builtin that never branches when its inputs are unknown
+  // (it waits, or adds an equation), all the way down.
+  const WAITING = new Set<Id>([S.concat, S.show, ...Object.keys(NUMERIC)]);
+  const waitsOnly = (id: Id): boolean => {
+    const n = nodes[id];
+    if (cheap(id)) return true;
+    if (n.kind !== "call") return false;
+    const head = nodes[n.fn];
+    if (head.kind !== "ref") return false;
+    const t = nodes[head.target];
+    if (!(t?.kind === "builtin" && WAITING.has(head.target)) && t?.kind !== "variant") return false;
+    return n.args.every(waitsOnly);
+  };
+
   function callGoal(n: NodeOf<"call">, env: Env, out: Term): Goal {
     return (s0) => {
       const [[f, ...args], s] = freshVars(s0, n.args.length + 1);
@@ -381,7 +454,15 @@ export function interpreter(code: Code, opts: Options = {}) {
       const hard = argGoals.filter((_, i) => !cheap(n.args[i]));
       const applyG: Goal = (st) => apply(walk(f, st), args, out)(st);
       const known = !(walk(out, s) instanceof LVar);
-      return conj(ev(n.fn, env, f), ...easy, ...(known ? [applyG, ...hard] : [...hard, applyG]))(s);
+      if (!known) return conj(ev(n.fn, env, f), ...easy, ...hard, applyG)(s);
+      // Backwards into a builtin that waits for its inputs (join text, show,
+      // arithmetic): its arguments that are themselves such calls go first.
+      // They only record what they are waiting for, never branch, and then
+      // the call can see the shape of its inputs (text(show(n), " ", rest)
+      // can only be cut at a space after a number) instead of guessing.
+      const waits = n.args.map((a, i) => !cheap(a) && waitsOnly(a) && waitsOnly(n.id));
+      const before = argGoals.filter((_, i) => waits[i]), after = argGoals.filter((_, i) => !cheap(n.args[i]) && !waits[i]);
+      return conj(ev(n.fn, env, f), ...easy, ...before, applyG, ...after)(s);
     };
   }
 
@@ -501,8 +582,8 @@ export function interpreter(code: Code, opts: Options = {}) {
       const [[r], inner] = freshVars(s, 1);
       const answers: Term[] = [];
       for (const t of pull(apply(body, [], r)(inner))) {
-        for (const n of t.sub.keys()) {
-          if (n < s.next && !s.sub.has(n)) {
+        for (let n = 0; n < s.next; n++) {
+          if (t.sub.has(n) && !s.sub.has(n)) {
             throw new NotInvertible(`${id === S.first ? "first" : id === S.all ? "all" : "count"} can't be run backwards while its action depends on something unknown`);
           }
         }
@@ -660,7 +741,7 @@ export interface Answer {
 export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts: Options = {}): Generator<Answer> {
   const it = interpreter(code, opts);
   const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, fromValue(v)]));
-  const start: State = { sub: new Map(), eqs: [], waits: [], next: 0 };
+  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0 };
   const ports = portsOf(code, fn, Object.keys(known));
   const [vs, s] = freshVars(start, ports.length);
   ports.forEach((p, i) => { if (!(p in at)) at[p] = vs[i]; });

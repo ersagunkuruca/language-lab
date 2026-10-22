@@ -106,3 +106,21 @@ test("merge refuses two different nodes under one id, and allows the same node t
   assert.equal(merge(a, same).nodes.x.kind, "lit");
   assert.throws(() => merge(a, other), (e) => e instanceof MergeClash && e.ids[0] === "x");
 });
+
+test("the printer is a parser at real sizes: show numbers read back from 1,000 numbers", async () => {
+  const { relate, toValue } = await import("../src/lang/relate.ts");
+  const { fromList } = await import("../src/lang/run.ts");
+  const { library } = await import("../src/lang/programs.ts");
+  const k = new Lang();
+  const lib = library(k);
+  const code = base(k.code);
+  const numbers = Array.from({ length: 1000 }, (_, i) => i * 7);
+  const t = performance.now();
+  // Every answer: the search also has to rule out every other reading.
+  const answers = [...relate(code, lib.showNumbers, { out: numbers.join(" ") })];
+  assert.equal(answers.length, 1);
+  const xs = Object.values(answers[0].values).map((v) => toValue(v)).find((v) => typeof v === "object");
+  assert.deepEqual(fromList(xs!), numbers);
+  // It was cubic: 400 numbers took four minutes. Now about linear.
+  assert.ok(performance.now() - t < 5000, `took ${performance.now() - t} ms`);
+});
