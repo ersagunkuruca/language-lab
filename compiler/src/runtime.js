@@ -156,6 +156,110 @@ export function $setPrint(p) { printer = p; }
 export function $print(s) { printer(s); return $unit; }
 export { FN as $FN } from '../../invertible/src/expr.js';
 
+// ---- effects a program defines (projectional/LANGUAGE.md) -----------------
+// Handlers are a stack. Performing an operation finds the nearest handler
+// of its effect. An operation that returns calls that handler's case with
+// the stack cut back to below the handler (cases run outside their own
+// handler), and its value is the answer. One that never returns throws an
+// Escape that the handler's match catches; the case then runs there, after
+// the stack is unwound. No continuation is ever captured, which is what the
+// two shapes of operation buy (Koka and Effekt compile tail-resumptive and
+// abortive handlers the same way).
+
+import { Aborted } from '../../projectional/src/lang/run.ts';
+import { ABORT, ABORT_OP, LOG_OP, NONE, SOME } from '../../projectional/src/lang/std.ts';
+export { Aborted as $Aborted };
+
+const handlers = [];
+class Escape {
+  constructor(handler, op, args) { this.handler = handler; this.op = op; this.args = args; }
+}
+
+export function $perform(effect, op, args) {
+  for (let i = handlers.length - 1; i >= 0; i--) {
+    const h = handlers[i];
+    if (h.effect !== effect) continue;
+    if (!(op in h.answers)) throw new Escape(h, op, args);
+    const above = handlers.splice(i);
+    try { return h.answers[op](...args); } finally { handlers.push(...above); }
+  }
+  // What the program doesn't handle, the runtime does: Log goes to standard
+  // error and an Abort ends the run.
+  if (op === LOG_OP) { (world.log ?? printer)(args[0]); return $unit; }
+  if (op === ABORT_OP) throw new Aborted(args[0]);
+  throw new Error(`nothing handles ${op}`);
+}
+
+// A match handling `effect` around a computation with one result.
+export function $handle(effect, answers, escapes, body) {
+  const h = { effect, answers }, at = handlers.length;
+  handlers.push(h);
+  try { return body(); } catch (e) {
+    if (!(e instanceof Escape) || e.handler !== h) throw e;
+    handlers.length = at;
+    return escapes[e.op](...e.args);
+  } finally { handlers.length = at; }
+}
+
+// ... around a computation with Choice: the handler is on the stack while
+// the computation runs, which is during each step of its generator. An
+// escape ends it, alternatives and all, with the case's results.
+export function* $handleS(effect, answers, escapes, body) {
+  const h = { effect, answers };
+  const it = body()[Symbol.iterator]();
+  for (;;) {
+    const at = handlers.length;
+    handlers.push(h);
+    let r;
+    try { r = it.next(); } catch (e) {
+      handlers.length = at;
+      if (!(e instanceof Escape) || e.handler !== h) throw e;
+      yield* escapes[e.op](...e.args);
+      return;
+    } finally { handlers.length = at; }
+    if (r.done) return;
+    yield r.value;
+  }
+}
+
+// ---- the world ---------------------------------------------------------------
+// The world effects' one handler. A program compiled for the command line
+// sets Node's (projectional/src/lang/world.ts); without one, the
+// operations abort saying so. Failures are an Abort where they were called.
+
+let world = {};
+export function $setWorld(w) { world = w ?? {}; }
+const fallible = (k) => (...args) => {
+  const f = world[k];
+  let v;
+  try {
+    if (!f) throw new Error(`this runtime can't ${k}`);
+    v = f.apply(world, args);
+  } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
+  return v;
+};
+const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
+export const $io = {
+  printError: (s) => { (world.error ?? printer)(s); return $unit; },
+  readInput: fallible('input'),
+  readLine: (...a) => some(fallible('readLine')(...a)),
+  readFile: fallible('readFile'),
+  writeFile: (p, t) => (fallible('writeFile')(p, t), $unit),
+  appendFile: (p, t) => (fallible('appendFile')(p, t), $unit),
+  fileExists: (p) => $bool(!!world.fileExists?.(p)),
+  listFolder: (p) => $toList(fallible('listFolder')(p)),
+};
+
+// Cells' handler: one per program, or the one the host gives (a page that
+// watches cells shares its own).
+import { Cells } from '../../projectional/src/lang/cells.ts';
+let cells = null;
+export const $cells = () => (cells ??= new Cells($eq));
+export function $setCells(c) { cells = c; }
+
+// optional: the first answer as some(answer), or none.
+export function $optional(f) { for (const x of f()) return { tag: SOME, fields: [x] }; return { tag: NONE, fields: [] }; }
+
 // ---- reflection: functions that are looked inside at run time -------------
 // The relational interpreter (relate.ts) runs a function backwards from its
 // nodes, and `derivative` builds a new function from them. Both are

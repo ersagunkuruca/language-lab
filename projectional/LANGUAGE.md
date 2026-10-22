@@ -286,8 +286,7 @@ logging, IO, mocking IO in tests) without first-class continuations:
   whole match and the rest of the computation is dropped, including any
   alternatives it still had (a cut, like ISO Prolog's `catch/3`).
 
-Both can compile to plain JavaScript without capturing continuations (the
-compiler doesn't do it yet, see "What's next"): an
+Both compile to plain JavaScript without capturing continuations: an
 answer is a call to the handler's case found on a stack of handlers, an
 abort is an exception caught by its match (this is how Koka and Effekt
 compile tail-resumptive and abortive handlers). Effects take no type
@@ -333,8 +332,8 @@ a printing function kept in a variable (not a let) and called under
 ### The world
 
 The world effects have one handler, the runtime's `World` (`run.ts`): the
-evaluator takes one (`Runtime.world`); a Node one comes with the command
-line. Operations that can fail (`read file`, `write file`, `list folder`,
+evaluator takes one (`Runtime.world`), and `src/lang/world.ts` is Node's.
+Operations that can fail (`read file`, `write file`, `list folder`,
 `read input`) abort with the reason, at the place they were called, so an
 ordinary `match … | abort(why) → …` catches a missing file. A command-line
 `main` takes the arguments as `List Text` and returns the exit code
@@ -427,8 +426,10 @@ What is deliberately not there, and why:
   can't see end. So `read` can loop. A check for *guarded corecursion*
   (each step builds a `term` before recursing, under a `formula`) would
   give productive producers no `Diverge` at all; it isn't written yet.
-- **The compiler doesn't compile Cells yet**, like the other effects'
-  operations (see What's next).
+- **Compiled, Cells runs on the same handler.** The compiler turns
+  `cell`, `formula`, `read` and `write` into calls on one `Cells` instance
+  in its runtime (cells.ts), so a compiled program updates and remembers
+  exactly as the evaluator does.
 
 ### How it runs: no stack limit
 
@@ -470,6 +471,28 @@ mechanism covers:
   solver branch is one choice. That join isn't made in code yet; it's the
   obvious next step.
 
+
+### The command line: `lab`
+
+`cli/lab.ts` (also `npm run lab --`) runs a program saved by the editor,
+or a folder of side tables like `examples/wc`:
+
+```
+node cli/lab.ts run examples/wc notes.txt todo.txt     # the evaluator
+node cli/lab.ts compile examples/wc -o wc.mjs          # a JavaScript module
+node wc.mjs -l notes.txt                               # same output, same exit code
+node cli/lab.ts check examples/wc                      # errors, and each definition's type
+```
+
+`examples/wc` is the proof: a word count written in the language, after
+Unix `wc` (Version 1 AT&T Unix, 1971; the options and layout follow GNU
+coreutils `wc`). It counts lines, words and characters in one fold over a
+file's characters, takes `-l`, `-w` and `-c`, reads standard input when
+it's given no file, and prints `wc: no such file or folder: x` and exits
+with 1 when a file is missing. The missing file is an `Abort` from
+`read file`, caught by a match in `count files`. Its counts match `wc`'s
+(`test/cli.test.ts`). Run by the evaluator it counts 200,000 lines in about
+25 seconds, and compiled in about one.
 ## Relations inside programs: `solve`
 
 A `solve` node uses a function in the direction chosen where it's used.
@@ -888,19 +911,16 @@ back into the group being hashed is named by its position.
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
-- **Effects in the compiler, and a `lab` command line.** The evaluator runs
-  every effect above; the compiler doesn't compile operations, handler
-  matches or the world builtins yet. Then a `lab run file.json args…` /
-  `lab compile` command and a real CLI program written in the language.
-  Also open: a time and randomness effect, HTTP as an async one-shot
-  effect, and handlers for `Console`/`Files` written in the program (to
-  mock IO in tests).
+- **More of the world.** A time and randomness effect, HTTP as an async
+  one-shot effect, environment variables, handlers for `Console`/`Files`
+  written in the program (to mock IO in tests), and a compiled program as
+  one portable file (today it imports the runtime from this repository).
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Number m/s`) and
   a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
 - **Cells, further.** Guarded corecursion, so productive lazy producers
-  have no `Diverge`; `Cells` in the compiler; a stateful handler form so a
+  have no `Diverge`; a stateful handler form so a
   program can write its own Cells handler (server-side rendering, tests);
   async cells (HTTP results) as Solid's resources.
