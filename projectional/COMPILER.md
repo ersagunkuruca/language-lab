@@ -414,7 +414,9 @@ program outside a JS host, and the C route covers that too.
    piece of this is shared with step 1. This is REVIEW.md's stage 7 (the
    SDF ray marcher).
 3. **Single-file executables** from the JS output, with the CLI target
-   (effects thread).
+   (effects thread). A first step is done: `lab compile` writes one
+   bundled `.mjs` with its runtime (esbuild), which runs on any Node. A
+   binary with Node inside (single executable applications) is the next.
 4. **Grow the scalar profile** towards the heap: fixed-size records
    (flattened into locals), then lists. This step also opens shaders to
    structs.

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -52,6 +52,8 @@ test("a compiled program has the stack the evaluator doesn't need: calc on 20,00
   const calc = join(import.meta.dirname, "../examples/calc");
   const compiled = join(dir, "calc.mjs");
   assert.equal(node([lab, "compile", calc, "-o", compiled]).code, 0);
+  // one file with its runtime, importing nothing from this checkout
+  assert.doesNotMatch(readFileSync(compiled, "utf8"), /^import .* from "(file:|\/)/m);
   const deep = "(".repeat(20000) + "6 * 7" + ")".repeat(20000) + "\n1 / 0\n";
   assert.deepEqual(node([compiled], deep), { code: 1, out: "42\n", err: "calc: line 2: division by zero\n" });
 });
