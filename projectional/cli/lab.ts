@@ -64,6 +64,8 @@ function entry(p: Program, name: string): Id {
 }
 
 // The compiled program, and a few lines that run it the way `lab run` does.
+// The thread main runs on gets this much stack, in megabytes.
+const STACK_MB = 1024;
 function compiled(p: Program, main: Id): string {
   const here = import.meta.dirname;
   const url = (path: string) => JSON.stringify(pathToFileURL(join(here, path)).href);
@@ -75,14 +77,23 @@ function compiled(p: Program, main: Id): string {
 ${program}
 import { $setWorld as $$setWorld, $toList as $$toList, $Aborted as $$Aborted } from ${url("../../compiler/src/runtime.js")};
 import { nodeWorld as $$nodeWorld } from ${url("../src/lang/world.ts")};
-$$setWorld($$nodeWorld());
-try {
-  const code = defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""});
-  process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0;
-} catch (e) {
-  if (!(e instanceof $$Aborted)) throw e;
-  process.stderr.write(e.reason + "\\n");
-  process.exitCode = 1;
+import { Worker as $$Worker, isMainThread as $$isMain, parentPort as $$parent } from "node:worker_threads";
+// Recursion that isn't a tail call uses the JS stack, so main runs on a
+// thread with a big one (compiler/GAPS.md, G1); the evaluator has no limit.
+if ($$isMain) {
+  const worker = new $$Worker(new URL(import.meta.url), { argv: process.argv.slice(2), resourceLimits: { stackSizeMb: ${STACK_MB} } });
+  worker.on("message", (code) => { process.exitCode = code; });
+} else {
+  $$setWorld($$nodeWorld());
+  try {
+    const code = defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""});
+    process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0;
+  } catch (e) {
+    if (!(e instanceof $$Aborted)) throw e;
+    process.stderr.write(e.reason + "\\n");
+    process.exitCode = 1;
+  }
+  $$parent.postMessage(process.exitCode);
 }
 `;
 }

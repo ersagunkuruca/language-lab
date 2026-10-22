@@ -47,3 +47,11 @@ test("lab refuses a program it can't run, and says why", () => {
   assert.match(r.err, /queens can't be run from the command line: main takes the arguments|unhandled effect: Choice/);
   assert.equal(node([lab, "run", join(dir, "nothing.json")]).code, 2);
 });
+
+test("a compiled program has the stack the evaluator doesn't need: calc on 20,000 nested parentheses", () => {
+  const calc = join(import.meta.dirname, "../examples/calc");
+  const compiled = join(dir, "calc.mjs");
+  assert.equal(node([lab, "compile", calc, "-o", compiled]).code, 0);
+  const deep = "(".repeat(20000) + "6 * 7" + ")".repeat(20000) + "\n1 / 0\n";
+  assert.deepEqual(node([compiled], deep), { code: 1, out: "42\n", err: "calc: line 2: division by zero\n" });
+});

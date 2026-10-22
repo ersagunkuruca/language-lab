@@ -114,7 +114,11 @@ recursion:
   `resourceLimits.stackSizeMb`, or with `node --stack-size`. The full fix
   is heap continuations for the recursive definitions that aren't tail
   calls, the same way the evaluator does it, and only for those (the
-  checker knows which they are).
+  checker knows which they are). **Cheap fix done**: a program
+  `lab compile` writes runs `main` in a worker thread with a 1 GB stack.
+  20,000 and 100,000 nested parentheses work. It costs about 130 ms of
+  start-up for now, because the module, with its heavy runtime, loads
+  twice. G8's lazy runtime brings that down.
 - *Fuel*: every call into a `Diverge` definition does `$spendOrThrow()`,
   even though nothing in calc ever installs `with fuel`. Removing those
   calls saves 6 to 10 ms of the 88. *Fix:* look at the whole program. If no
