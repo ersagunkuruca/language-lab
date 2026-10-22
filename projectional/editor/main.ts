@@ -38,6 +38,12 @@ import effectsCode from "../examples/effects/code.json" with { type: "json" };
 import effectsNames from "../examples/effects/names.default.json" with { type: "json" };
 import effectsComments from "../examples/effects/comments.json" with { type: "json" };
 import effectsExamples from "../examples/effects/examples.json" with { type: "json" };
+import shadersCode from "../examples/shaders/code.json" with { type: "json" };
+import shadersNames from "../examples/shaders/names.default.json" with { type: "json" };
+import shadersComments from "../examples/shaders/comments.json" with { type: "json" };
+import raymarchCode from "../examples/raymarch/code.json" with { type: "json" };
+import raymarchNames from "../examples/raymarch/names.default.json" with { type: "json" };
+import raymarchComments from "../examples/raymarch/comments.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -94,7 +100,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -170,6 +176,8 @@ const initialFor = (program: Program): Doc =>
   : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
   : program === "effects" ? typedDoc("effects", effectsCode as Code, effectsNames, effectsComments, { examples: effectsExamples })
+  : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
+  : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
   : initial();
 
 // The quadratic and the physics: plain arithmetic, and predicates with
