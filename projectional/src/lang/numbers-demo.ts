@@ -29,6 +29,9 @@ for (const d of ["Nat", "add", "multiply", "factorial", "is even"]) show(d);
 section("2. A representation: binary, with what it means");
 for (const d of ["Binary", "meaning", "add′", "match Nat′", "fold Nat′"]) show(d);
 
+section("2b. Another representation: an Int, with a fold that is a counted loop");
+for (const d of ["natural", "match Nat (Int)", "fold Nat (Int)"]) show(d);
+
 section("3. Choosing: the costs of the jobs main uses");
 const c = choose(p.code, p.named("main"), reps);
 const jobs = [...c.jobs, "space"];
@@ -40,13 +43,17 @@ console.log(`\n    chosen: ${c.rep.name}`);
 section("4. Running the same program both ways");
 console.log("  small, in unary (the definition):");
 timed("unary", () => runMain(p.code, info, p.named("small"), { print: out }));
-const bin = represent(p.code, [p.named("main"), p.named("small")], c.rep);
+const bin = represent(p.code, [p.named("main"), p.named("small")], reps.find((r) => r.name === "binary")!);
 const bi = infer(bin, names);
 console.log("\n  small, in binary:");
 timed("binary", () => runMain(bin, bi, p.named("small"), { print: out }));
 console.log("\n  main, in binary (unary would need 6.4 quadrillion succ nodes for 18!):");
 timed("binary", () => runMain(bin, bi, p.named("main"), { print: out }));
-console.log("\n  factorial, after the change of representation (the same nodes, new types):");
+console.log(`\n  main, as the chooser picked (${c.rep.name}):`);
+const ch = represent(p.code, [p.named("main"), p.named("small")], c.rep);
+const ci = infer(ch, names);
+timed(c.rep.name, () => runMain(ch, ci, p.named("main"), { print: out }));
+console.log("\n  factorial, after the change of representation to binary (the same nodes, new types):");
 show("factorial", bi, bin);
 
 section("5. meaning run backwards encodes, canonical spelling first");

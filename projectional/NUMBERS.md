@@ -312,7 +312,7 @@ Other representations run the same fold differently:
 | `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | built |
 | `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
-| `int` | `Nat` | an `Int` | `natural` | a counted loop: Peano `succ` folded n times | later |
+| `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program |
 | `array` | `List a` | a JS array | `items` | an index loop | later |
 | `build` | `List a` | a function of `cons` and `nil` | `build` | apply it | later |
 
@@ -393,7 +393,35 @@ text, characters outside the basic plane, `range(0)`.
    `meaning` is a definition, tested on `binary`.
 5. Later, when a program needs them: `build` for user functions that make
    a list from `cons` and `nil` (so `keep` over a list made by a fold runs
-   in one pass), `array`, and `int` for Peano `Nat`.
+   in one pass), and `array`.
+
+**Peano `Nat` stored as an `Int` (done).** This one needs no template. It
+is a representation written in the language, in `examples/numbers` next
+to `binary`, and chosen for the whole program by the chooser of PR #30:
+
+```
+natural(i) =                          ← meaning: Int → Nat
+  fold range(i)
+    nil → zero
+    cons(j, rest) with r → succ(r)
+
+‹fold Nat (Int)›(n, ‹if zero›, ‹if succ›) =
+  fold range(n)
+    nil → ‹if zero›()
+    cons(i, rest) with r → ‹if succ›(n − 1 − i, r)
+```
+
+`zero` is `0`, `succ` adds one, `match` tests for 0, and `add` and
+`multiply` are Int's own. Both definitions are folds, so the checker proves
+them total, unlike a recursion that counts down. A fold over a Nat calls
+`fold Nat (Int)`, whose fold over `range(n)` the compiler runs on n
+(`counted`, above), so the control (a loop) and the data (an Int) come
+from one entry in the table. The program still says `zero` and `succ`.
+The chooser now picks `int` for `numbers`' `main` (its `number` job is 1,
+against binary's log n). `main` (18!, 2⁵⁰, is 100 even) takes about 6 ms
+evaluated, against about 13 to 45 ms on binary, and about 0.03 ms compiled,
+against 0.09 ms. `lab run` and `lab compile` still run the definition, so
+choosing a representation there is the next step for this row.
 
 ## Number systems, one by one
 

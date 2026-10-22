@@ -44,5 +44,31 @@
       "b081127a": "log n",
       "95266d64": "n"
     }
+  },
+  {
+    "name": "int",
+    "of": "19445331",
+    "type": "type.int",
+    "meaning": "t58t6n404an52kkhhk7jhf4gvk",
+    "canonical": true,
+    "impl": {
+      "bcabb936": "m55h1ubgksf273o0kme2hq2osn",
+      "b58105ec": "s9fs69p2k7g20pkmllcms2prst",
+      "match": "ukusc805rjl0r5ucsjs7tg23ua",
+      "fold": "vpcukg3ek2ue9vt7pr455c949r",
+      "39411748": "builtin.int.add",
+      "9e69c7e7": "builtin.int.mul",
+      "b081127a": "mdm5p3681vf0f977fard1q8tkm"
+    },
+    "cost": {
+      "39411748": "log n",
+      "space": "log n",
+      "bcabb936": "1",
+      "b58105ec": "1",
+      "match": "1",
+      "fold": "n",
+      "9e69c7e7": "log² n",
+      "b081127a": "1"
+    }
   }
 ]
