@@ -165,6 +165,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Sphere tracing | Adapted | John C. Hart, "Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces", The Visual Computer, 1996. |
 | The ring's (torus's) distance, the smooth minimum, the soft shadow | Adapted | Inigo Quilez's formulas, from his [distance functions](https://iquilezles.org/articles/distfunctions/), [smooth minimum](https://iquilezles.org/articles/smin/) and [soft shadows](https://iquilezles.org/articles/rmshadows/) articles. Credited in each definition's comment in `examples/raymarch` (shown in the editor), on `shaders.html` and in COMPILER.md. |
+| A shader runs something that might not finish only under a budget, `first(() => with fuel(n, …), …)`, counted as the evaluator counts | Prior art | Fuel as a bound on recursion is an old technique: the "fuel" argument in Coq and Agda developments, gas in the Ethereum virtual machine (Gavin Wood, the Ethereum yellow paper, 2014), fuel in [Wasmtime](https://docs.wasmtime.dev/api/wasmtime/struct.Config.html#method.consume_fuel). GPU drivers' watchdogs (Windows TDR) are the runtime's blunter version. `compiler/src/scalar.ts`, COMPILER.md, the comment on `colour` in `examples/raymarch` (shown in the editor). |
 | The scene (a drop in a ring over a checker floor), the ripples, normals as saved derivatives | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
 
 ## The node editor
