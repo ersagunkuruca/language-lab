@@ -10,7 +10,7 @@ import { analyze } from "../../invertible/src/index.js";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
 import { get, replace, type Code, type Id } from "../src/model.ts";
-import { relationFor } from "../src/lang/equations.ts";
+import { portLabel, relationFor } from "../src/lang/equations.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, loadProgram } from "../src/lang/load.ts";
 import { reId } from "./helpers.ts";
@@ -119,4 +119,11 @@ test("a predicate hashes by structure: the same network written twice hashes the
   const b = reId(a.own);
   assert.equal(hashDef(a.code, a.named("rotate")), hashDef(base(b.code), b.ids.get(a.named("rotate"))!));
   assert.notEqual(hashDef(a.code, a.named("rotate")), hashDef(a.code, a.named("fall")));
+});
+
+test("a port named by an all-digit binder id isn't read as a position", () => {
+  const polar = p.named("polar");
+  const code: Code = { ...p.code, nodes: { ...p.code.nodes, "19718686": { id: "19718686", kind: "binder" } } };
+  assert.equal(portLabel(code, { "19718686": "angle" }, polar, "19718686"), "angle");
+  assert.equal(portLabel(code, {}, polar, "19718686"), "19718686");
 });

@@ -204,9 +204,9 @@ export const isPredicate = (code: Code, fn: Id) => { try { return relationFor(co
 export function portLabel(code: Code, names: Names, fn: Id | null, key: string): string {
   if (fn && names[`${fn}#${key}`] !== undefined) return names[`${fn}#${key}`];
   if (key === "out") return "=";
-  if (/^\d+$/.test(key)) {
-    const op = fn ? NUMERIC[fn] : undefined;
-    return op && arityOf(op) === 1 ? "x" : "abcdefgh"[+key];
-  }
+  // A builtin's ports are positions; a definition's are binder ids, which
+  // can be all digits too (19718686), so only a builtin's count as one.
+  const op = fn ? NUMERIC[fn] : undefined;
+  if (op && /^\d+$/.test(key)) return arityOf(op) === 1 ? "x" : "abcdefgh"[+key] ?? key;
   return names[key] ?? key;
 }
