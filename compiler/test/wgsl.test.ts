@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { load } from "../src/program.ts";
+import { makeRunner } from "../../projectional/src/lang/run.ts";
 import { area, corners, vectors } from "../src/fixtures.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
@@ -26,6 +27,34 @@ test("examples/shaders: red, green and blue, and everything they call, go to the
   const s = emitWgsl(lowerScalar(p.code, p.info, p.pres.names, p.own.defs));
   assert.deepEqual([...s.refused.keys()], []);
   for (const c of ["red", "green", "blue"]) assert.deepEqual(s.funcs.find((f) => f.name === c)?.params, ["f64", "f64", "f64"]);
+});
+
+test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all", () => {
+  const p = load("raymarch");
+  const s = emitWgsl(lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true }));
+  assert.deepEqual([...s.refused.keys()], []);
+  const names = s.funcs.map((f) => f.name);
+  // The normals are the generated partial derivatives, not finite differences.
+  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "march", "shadow", "shade"]) assert.ok(names.includes(d), d);
+  // march and shadow call themselves last: loops.
+  for (const f of s.funcs.filter((f) => f.name === "march" || f.name === "shadow")) {
+    const body = s.wgsl.slice(s.wgsl.indexOf(`fn ${f.wgsl}(`));
+    assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{[\s\S]*continue;/);
+  }
+  assert.match(s.wgsl, /struct Colour_\d+ \{\n {2}red: f32,\n {2}green: f32,\n {2}blue: f32,\n\}/);
+  // And they are the gradient: close to central differences, away from the
+  // blend's seams.
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const at = (name: string, ...xs: number[]) => { for (const v of r.call(r.value(p.named(name)), ...xs)) return v as number; return NaN; };
+  const h = 1e-5;
+  for (const [x, y, z, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
+    const pt = [x, y, z];
+    ["x", "y", "z"].forEach((axis, i) => {
+      const plus = pt.map((v, j) => (j === i ? v + h : v)), minus = pt.map((v, j) => (j === i ? v - h : v));
+      const numeric = (at("scene", ...plus, t) - at("scene", ...minus, t)) / (2 * h);
+      assert.ok(Math.abs(at(`∂scene/∂${axis}`, x, y, z, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
+    });
+  }
 });
 
 test("a call to itself as the last step is a loop; the GPU never sees recursion", () => {

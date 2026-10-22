@@ -1,7 +1,7 @@
 // The built shaders.html in a real browser, twice: with WebGPU (headless
 // Chromium draws with SwiftShader, a GPU in software), where the page's own
-// check of the GPU against the evaluator must pass; and without, where the
-// page must fall back to WebAssembly and still draw. Fails on any error the
+// check of the GPU against the evaluator must pass for each picture; and
+// without, where each picture must still be drawn on the CPU. Fails on any error the
 // page throws or logs.
 //
 //   npm run build-editor && npm run smoke-shaders
@@ -20,32 +20,37 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   page.on("pageerror", (e) => errors.push(`${label}: ${e.stack ?? e.message}`));
   page.on("console", (m) => { if (m.type() === "error") errors.push(`${label}: ${m.text()}`); });
   await page.goto(url);
-  await page.waitForSelector("body[data-ready]", { timeout: 60_000 });
-  const status = await page.locator("#status").innerText();
-  const worst = await page.locator("#check").getAttribute("data-worst");
-  console.log(`${label}: ${status}${worst ? `; largest difference from the evaluator ${worst}` : ""}`);
+  await page.waitForSelector("body[data-ready]", { timeout: 120_000 });
   if ((await page.locator("body").getAttribute("data-ready")) !== "true") errors.push(`${label}: the page stopped with an error`);
-  if (label === "with WebGPU") {
-    if (!status.startsWith("WebGPU")) errors.push(`${label}: didn't draw with WebGPU: ${status}`);
-    if (worst === null || !(Number(worst) < 2e-3)) errors.push(`${label}: the GPU is ${worst} away from the evaluator`);
-  } else if (!status.includes("WebAssembly")) errors.push(`${label}: didn't fall back to WebAssembly: ${status}`);
-  // The middle of the picture isn't black.
-  const box = (await page.locator("#picture").boundingBox())!;
-  const shot = await page.screenshot({ clip: { x: box.x + box.width / 2 - 20, y: box.y + box.height / 2 - 20, width: 40, height: 40 } });
-  const lit = await page.evaluate(async (png) => {
-    const img = new Image();
-    img.src = `data:image/png;base64,${png}`;
-    await img.decode();
-    const c = document.createElement("canvas");
-    c.width = img.width; c.height = img.height;
-    const ctx = c.getContext("2d")!;
-    ctx.drawImage(img, 0, 0);
-    const d = ctx.getImageData(0, 0, c.width, c.height).data;
-    let sum = 0;
-    for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
-    return sum / (d.length / 4) / 3;
-  }, shot.toString("base64"));
-  if (lit < 20) errors.push(`${label}: the middle of the picture is black (average ${lit.toFixed(0)} of 255)`);
+  for (const section of ["raymarch", "ripples"]) {
+    const where = `${label}, ${section}`;
+    const $ = (c: string) => page.locator(`#${section} .${c}`);
+    const status = await $("status").innerText();
+    const worst = await $("check").getAttribute("data-worst");
+    console.log(`${where}: ${status}${worst ? `; largest difference from the evaluator ${worst}` : ""}`);
+    if (label === "with WebGPU") {
+      if (!status.startsWith("WebGPU")) errors.push(`${where}: didn't draw with WebGPU: ${status}`);
+      if (worst === null || !(Number(worst) < 2e-3)) errors.push(`${where}: the GPU is ${worst} away from the evaluator`);
+    } else if (!status.includes("on the CPU")) errors.push(`${where}: didn't fall back to the CPU: ${status}`);
+    // The middle of the picture isn't black.
+    const box = (await $("picture").boundingBox())!;
+    await $("picture").scrollIntoViewIfNeeded();
+    const shot = await $("picture").screenshot();
+    const lit = await page.evaluate(async (png) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${png}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(c.width / 2 - 20, c.height / 2 - 20, 40, 40).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+      return sum / (d.length / 4) / 3;
+    }, shot.toString("base64"));
+    if (!box || lit < 20) errors.push(`${where}: the middle of the picture is black (average ${lit.toFixed(0)} of 255)`);
+  }
   await browser.close();
 }
 

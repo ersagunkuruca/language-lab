@@ -141,7 +141,10 @@ code, pre { font-family: var(--font-code); font-size: 0.86em; }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 860px) { .pair { grid-template-columns: minmax(0, 1fr); } }
 pre.code { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow: auto; max-height: 34rem; line-height: 1.45; font-size: 12.5px; }
-#picture { display: block; width: 100%; aspect-ratio: 1; border-radius: 8px; background: #000; image-rendering: auto; }
+.picture { display: block; width: 100%; aspect-ratio: 1; border-radius: 8px; background: #000; }
+details { margin-top: 16px; }
+summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+details .pair { margin-top: 10px; }
 </style>
 </head>
 <body>
