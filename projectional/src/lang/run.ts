@@ -23,7 +23,7 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, IO, LOG, LOG_OP, NIL, NONE, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
+import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { Cells, NoValue, nodeOf } from "./cells.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
@@ -691,6 +691,16 @@ function leftover(t: Type, names: Names): string | null {
 export function mainProblem(info: Info, def: Id, names: Names = {}): string | null {
   const t = info.typeOf.get(def);
   if (!t || t.t !== "fn" || t.params.length > 1) return "main takes the arguments (a list of texts), or nothing";
+  return leftover(t, names);
+}
+
+// Can `def` be a page's main (WEB.md, `lab build-web`)? It takes nothing
+// and returns the page, an Html. Null if it can, else why not.
+export function pageProblem(info: Info, def: Id, names: Names = {}): string | null {
+  const t = info.typeOf.get(def);
+  if (!t || t.t !== "fn" || t.params.length) return "a page's main takes nothing and returns the page (an Html)";
+  const ret = info.subst.zonk(t.ret);
+  if (ret.t !== "con" || ret.id !== HTML) return "a page's main returns the page (an Html)";
   return leftover(t, names);
 }
 

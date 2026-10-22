@@ -4,6 +4,7 @@
 //   lab run <program> [arguments…]       run `main` with the evaluator
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //   lab check <program>                  type-check, and list the definitions with their types
+//   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //
 // A program is a file saved by the editor (Save file), or a folder of side
 // tables like projectional/examples/sort. `main` gets the arguments as a list
@@ -24,16 +25,18 @@ import { fromFile } from "../editor/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { mainProblem, runProgram } from "../src/lang/run.ts";
+import { mainProblem, pageProblem, runProgram } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, represent, type Representation } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
+import { webPage } from "./web.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab check <program>                   type-check, and list the definitions and their types
+  lab build-web <program> [-o app.html] one HTML file running the page main returns
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore representations.json and run the definitions as written
@@ -82,13 +85,13 @@ function represented(p: Program, main: Id): Program {
   return { ...p, code, info };
 }
 
-function entry(p: Program, name: string): Id {
+function entry(p: Program, name: string, web = false): Id {
   const errors = p.info.errors;
   if (errors.length) fail(`${p.title} has ${errors.length} error${errors.length === 1 ? "" : "s"}:\n${errors.map((e) => `  ${p.names[e.id] ?? e.id}: ${e.message}`).join("\n")}`);
   const def = p.own.find((d) => p.names[d] === name);
   if (!def) fail(`${p.title} has no definition named ${name}`);
-  const problem = mainProblem(p.info, def, p.names);
-  if (problem) fail(`${name} can't be run from the command line: ${problem}`);
+  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names);
+  if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
 }
 
@@ -163,7 +166,7 @@ if (!command || command === "help" || command === "--help" || !path) {
 }
 
 const loaded = load(path);
-const main = command === "run" || command === "compile" ? entry(loaded, mainName) : "";
+const main = command === "run" || command === "compile" || command === "build-web" ? entry(loaded, mainName, command === "build-web") : "";
 const p = main && defined < 0 ? represented(loaded, main) : loaded;
 switch (command) {
   case "run": {
@@ -188,6 +191,13 @@ switch (command) {
       process.stderr.write("lab: esbuild isn't installed (npm install in projectional/), so the output imports the runtime from this checkout\n");
     }
     process.stderr.write(`lab: wrote ${out}; run it with: node ${out} [arguments…]\n`);
+    break;
+  }
+  case "build-web": {
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
+    writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main));
+    process.stderr.write(`lab: wrote ${out}; open it in a browser\n`);
     break;
   }
   case "check": {
