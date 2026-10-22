@@ -110,7 +110,11 @@ export const $close = (l, r) => $ok(l) && $ok(r) && Math.abs(l - r) <= 1e-9 * (1
 export function* $oneOf(xs) { for (let l = xs; l.tag === CONS; l = l.fields[1]) yield l.fields[0]; }
 export function* $fail() {}
 // A function without Choice, passed where a Choice function is expected.
-export const $lift = (f) => function* (...a) { yield f(...a); };
+export function $lift(f) {
+  const g = function* (...a) { yield f(...a); };
+  if (f[META]) Object.defineProperty(g, META, { value: f[META] });
+  return g;
+}
 export function $one(results) {
   for (const x of results) return x;
   throw new Error('a solve with exactly one answer had none (a non-finite number?)');
@@ -121,3 +125,64 @@ let printer = (s) => console.log(s);
 export function $setPrint(p) { printer = p; }
 export function $print(s) { printer(s); return $unit; }
 export { FN as $FN } from '../../invertible/src/expr.js';
+
+// ---- reflection: functions that are looked inside at run time -------------
+// The relational interpreter (relate.ts) runs a function backwards from its
+// nodes, and `derivative` builds a new function from them. Both are
+// interpreters over the node table, so a program that uses them carries
+// its node table, and its functions carry the node they came from (the
+// evaluator's META). Making these directions compile too is the next stage
+// (projectional/COMPILER.md).
+
+import { META, makeRunner } from '../../projectional/src/lang/run.ts';
+import { relate, toValue } from '../../projectional/src/lang/relate.ts';
+import { ownerOfTypeParts } from '../../projectional/src/model.ts';
+
+export function $loadProgram(code, divergent) {
+  let runner;
+  return {
+    code,
+    // The evaluator, for functions made while the program runs (derivatives).
+    runner: () => (runner ??= makeRunner(code, { divergent: new Set(divergent), owner: ownerOfTypeParts(code) }, { print: (s) => printer(s) })),
+  };
+}
+
+// Remember where a compiled function came from: its lambda node, and the
+// values it closed over (made only when something asks).
+export function $meta(f, lambda, env) {
+  Object.defineProperty(f, META, { value: { lambda, get env() { return new Map(env ? env() : []); } } });
+  return f;
+}
+
+// The evaluator calls every function as a stream of results; compiled
+// functions without Choice return one value.
+export function $toEval(f, streams) {
+  if (streams || typeof f !== 'function') return f;
+  const g = (...a) => [f(...a)];
+  if (f[META]) Object.defineProperty(g, META, { value: f[META] });
+  return g;
+}
+
+function fromEval(g, streams) {
+  if (streams) return g;
+  const f = (...a) => {
+    for (const x of g(...a)) return x;
+    throw new Error('a function without Choice gave no result');
+  };
+  if (g[META]) Object.defineProperty(f, META, { value: g[META] });
+  return f;
+}
+
+export function* $relate(program, fn, known, binds) {
+  for (const sol of relate(program.code, fn, known, { spend: $spend })) {
+    const out = binds.map((b) => toValue(sol.values[b]));
+    if (out.some((v) => v === undefined)) continue; // not pinned down: not an answer
+    yield out;
+  }
+}
+
+export function $derivative(program, f, streams) {
+  const derivative = program.runner().value('builtin.derivative');
+  for (const g of derivative(f)) return fromEval(g, streams);
+  throw new Error('no derivative');
+}

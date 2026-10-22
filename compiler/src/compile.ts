@@ -25,7 +25,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
-import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
+import { subtree, type Code, type Id, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -82,8 +82,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const idents = new Map<string, string>();
   const ident = (key: string, hint: string): string => {
     if (idents.has(key)) return idents.get(key)!;
-    let base = hint.replace(/[^\p{L}\p{N}_$]+/gu, "_").replace(/^_+|_+$/g, "") || "v";
-    if (/^\p{N}/u.test(base)) base = "_" + base;
+    let base = hint.replace(/[^\p{ID_Continue}$]+/gu, "_").replace(/^_+|_+$/g, "") || "v";
+    if (!/^[\p{ID_Start}$]/u.test(base)) base = "_" + base;
     let name = base;
     for (let i = 2; used.has(name) || RESERVED.has(name); i++) name = `${base}${i}`;
     used.add(name);
@@ -98,6 +98,27 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const referenced = new Set<Id>();
   for (const n of Object.values(code.nodes)) if (n.kind === "ref") referenced.add(n.target);
+
+  // ---- reflection
+  // Some things look inside a function at run time: a relation run
+  // backwards by the relational interpreter (relate.ts), when a function is
+  // passed to it, and `derivative`. In a program that does either, compiled
+  // functions remember the node they came from and the values they closed
+  // over, the same as the evaluator's (META), and the module carries its
+  // own node table for the interpreter to read.
+  const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
+  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && n.target === S.derivative));
+  // The binders a lambda closes over: used inside it, bound outside it.
+  function captured(lambda: Id): Id[] {
+    const inside = subtree(code, lambda);
+    const own = new Set(inside.filter((id) => code.nodes[id].kind === "binder"));
+    const out = new Set<Id>();
+    for (const id of inside) {
+      const n = code.nodes[id];
+      if (n.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !own.has(n.target)) out.add(n.target);
+    }
+    return [...out];
+  }
 
   // ---- effects under a specialization
   const choice = (row: Row, rho: Rho) => {
@@ -162,7 +183,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
       const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
-      solverCode.push(compileSolve(name, planSolve(code, n).rel, Object.keys(n.given), Object.keys(n.binds), names[n.fn] ?? n.fn, label));
+      if (relational(n)) {
+        // Through cases, folds and text: the relational interpreter runs it.
+        // A static mode analysis that compiles these too is the next stage.
+        const given = Object.keys(n.given), ps = given.map((_, i) => `g${i}`);
+        solverCode.push(`// ${names[n.fn] ?? n.fn}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
+          `solve for ${Object.keys(n.binds).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +
+          `return $relate($program, ${JSON.stringify(n.fn)}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
+        return name;
+      }
+      solverCode.push(compileSolve(name, planSolve(code, n).rel!, Object.keys(n.given), Object.keys(n.binds), names[n.fn] ?? n.fn, label));
     }
     return solvers.get(n.id)!;
   }
@@ -253,7 +283,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
       switch (t.kind) {
         case "binder": return local(n.target);
-        case "def": { const s = specAt(n.id, n.target, rho); return isFnDef(n.target) ? s.name : `${s.name}()`; }
+        case "def": {
+          const s = specAt(n.id, n.target, rho);
+          if (!isFnDef(n.target)) return `${s.name}()`;
+          // A function without Choice, where a Choice function goes (a list
+          // holding both kinds): lifted to a stream of one result.
+          return wrap(s.name, s.streams);
+        }
         case "variant":
           if (n.target === TRUE) return "$T";
           if (n.target === FALSE) return "$F";
@@ -292,6 +328,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     function lambda(n: NodeOf<"lambda">): string {
+      if (!reflective) return plainLambda(n);
+      // The evaluator calls every function as a stream, so a plain function
+      // it might call is wrapped.
+      const env = captured(n.id).map((b) => {
+        const t = ty(b);
+        return `[${JSON.stringify(b)}, ${t.t === "fn" ? `$toEval(${local(b)}, ${streamsFn(t, rho)})` : local(b)}]`;
+      });
+      return `$meta(${plainLambda(n)}, ${JSON.stringify(n.id)}${env.length ? `, () => [${env.join(", ")}]` : ""})`;
+    }
+    function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
       if (streamsFn(ty(n.id), rho)) return `(function* (${ps}) {\n${st(n.body, (v) => `yield ${v};`)}\n})`;
       const b = code.nodes[n.body].kind;
@@ -312,6 +358,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
           if (f.target === S.equal) return `$bool(${equality(n)})`;
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
+          if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
         }
         if (t.kind === "variant") return construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
@@ -488,6 +535,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
           c = OPS[target!].bool ? `$bool(${js})` : js;
         } else if (target === S.equal) c = `$bool($eq(${args.join(", ")}))`;
+        else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
         else c = `${fn}(${args.join(", ")})`;
         let out: string;
         if (callStreams(n)) {
@@ -537,8 +585,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (isFnDef(sp.def)) {
       const lam = node<"lambda">(b);
       const ps = lam.params.map(local).join(", ");
-      if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}`;
-      return `${header}\nfunction ${sp.name}(${ps}) {\n${ret(lam.body)}\n}`;
+      const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
+      if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
+      return `${header}\nfunction ${sp.name}(${ps}) {\n${ret(lam.body)}\n}${meta}`;
     }
     const cell = temp("value");
     return `${header}\nlet ${cell};\nfunction ${sp.name}() {\nreturn ${cell} ??= ${ex(b)};\n}`;
@@ -556,11 +605,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$planned", "$solveRuntime", "$print", "$FN"];
+    "$close", "$planned", "$solveRuntime", "$print", "$FN",
+    ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative"] : [])];
+  // The interpreter's copy of the program, and which definitions spend fuel.
+  const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
   return indent([
     `// Generated by compiler/src/compile.ts from a typed program. Do not edit.`,
     `import { ${helpers.join(", ")} } from ${JSON.stringify(opts.runtime)};`,
     ``,
+    ...program,
     ...solverCode,
     ``,
     out.join("\n\n"),
