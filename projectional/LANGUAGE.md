@@ -407,6 +407,12 @@ the program, so a search may draw (`all(() => x = one of(xs); random() <
 0.5 …)`). Under `seeded`, each alternative takes the next numbers, depth
 first, and an abandoned alternative doesn't give its numbers back.
 
+Run backwards (`relate`), `seeded` only reads forward: once its seed and
+action are known, the action runs with the same generator, so a function
+like the dice page's `a hundred rolls(seed)` agrees in both directions.
+Finding a seed from its rolls would mean searching the seeds, which it
+doesn't do.
+
 ### Time
 
 `Time` is a std effect with one operation, `now()`: milliseconds since
@@ -615,7 +621,7 @@ type Html      = element(tag: Text, attributes: List Attribute, children: List H
                | text(shows: () -[Cells, Diverge, Time, Network]-> Text)
                | part(view: () -[Cells, Diverge, Time, Network]-> Html)
 type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
-               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time, Network]-> Unit)
+               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time, Network, Random]-> Unit)
 type Event     = event(value: Text, key: Text)
 ```
 
@@ -626,7 +632,14 @@ guarantees: a view can't write or print, a handler can't leave a search
 open around a write. In the browser, `print` goes to the console and
 files are `localStorage` entries named after the program. A view that
 reads `now()` runs again every animation frame ("Time" above), and one
-that fetches shows its reply when it lands ("The web").
+that fetches shows its reply when it lands ("The web"). Handlers may draw
+random numbers; views may not, since they run again whenever a cell they
+read changes, and a different number each time isn't a view.
+`examples/dice`, live at
+[apps/dice.html](https://ersagunkuruca.github.io/language-lab/apps/dice.html),
+uses all three: Roll draws from the world, "Roll 100 with seed 7" adds the
+same hundred rolls every time (`seeded`), and the status line counts the
+seconds since the last roll by reading `now()`.
 
 ```
 node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
