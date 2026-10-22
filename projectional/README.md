@@ -13,7 +13,8 @@ For a candid review of the whole project (holes, what's achievable, and a
 roadmap towards real programs, shaders, websites and apps), see
 [REVIEW.md](REVIEW.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
 the design ideas we've discussed, with the current answer to each, are in
-[NOTES.md](NOTES.md).
+[NOTES.md](NOTES.md). Where the ideas and code come from (influences, prior
+work, adapted code) is in [CREDITS.md](CREDITS.md).
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
@@ -349,6 +350,8 @@ dimensionless, and zero is every unit at once.
 What seems less explored is putting all of it together: Unison-style
 identity, MPS-style per-user notation, and Enso-style multiple views, with
 every non-semantic thing in independent, mergeable side tables.
+The full list of influences and prior work, for every feature, is in
+[CREDITS.md](CREDITS.md).
 
 ## Open questions
 
