@@ -159,16 +159,30 @@ that variable comes from, so a value used twice visibly fans out. In
 `discriminant` above, `linear coefficient` has two wires because it's used
 twice.
 
-**Values on wires.** Teal text next to an output is the value it made when
+**Values on wires.** A small teal chip next to an output is the value it made when
 the definition last ran on its example inputs (*Show values* in the *Run*
 panel; the inputs are kept in `examples.json`, not in the code). That's
 different from a name: a name is brown or black, belongs to a dot, and is
 part of the names file. A value is a result and changes when the inputs do.
+Chips are placed where they cover no node and no other chip; one with no
+room shrinks to a dot, and hovering shows it.
 
 **Gestures.** Drag from an output (or a dot) onto an input to use that value
 there. Drag an input's wire into empty space to remove it; the input becomes a
-hole. Drag a node to move it, which only changes `layout.json`. *Fit* and
-*100%* zoom the canvas, which is unbounded in every direction.
+hole. Drag a node to move it, which only changes `layout.json`: it stays
+exactly where you put it, and nothing else moves (alt-drag moves a dot).
+Shift-click or shift-drag picks several, and dragging one moves them all.
+*Fit* and *100%* zoom the canvas, which is unbounded in every direction;
+the gutters between panes resize it.
+
+**Right-click** anywhere in the graph for what you can do there: on a hole,
+the palette, searched; on empty space, *Add a value here* (a new dot holding
+a hole, to fill and wire in); on a node, open, show inline, put a dot on it,
+clear it; on a dot or port, *Show as let and get nodes*. *Tidy* spaces out
+the whole graph or the picked nodes, moving them off wires too; *Reset the
+layout* goes back to the automatic one. Where wires still cross, one hops
+over the other (a bridge); where a wire runs under a node, its hidden
+stretch shows faintly over it (a tunnel). NODE-EDITOR.md has the reasons.
 
 ### 3.3 Dots: where a value starts and branches
 
@@ -621,6 +635,13 @@ per type, the way NUMBERS.md chooses a representation.
 - A right-click menu on the canvas and on nodes: add (the palette, searched),
   inline, open, put a dot, lay out the selection.
 
+**Done** (NODE-EDITOR.md): value chips placed off nodes and each other,
+free positions, Tidy for everything or the picked nodes (wires included),
+bridges and tunnels, let and get nodes per binding, the right-click menu,
+Fit centred, a resizable canvas. Still open: Tidy spaces
+nodes out but doesn't reorder them to cut crossings (the Sugiyama-style
+layout above), and wires don't route around nodes.
+
 ### 3. Captioned wires and named dots look alike, and mean different things
 
 **Today.** Text next to a wire is either a **value** (teal: what this output
@@ -635,6 +656,9 @@ for values), not to merge them. Between a *name* drawn on a wire and a name
 drawn on a dot, no: both name the same let, so a captioned wire would be one
 more way to draw a named dot, next to the junction and the let/get pair
 (NOTES.md, "The node editor").
+
+**Done.** Values are chips with a border, names are plain text on a dot,
+a port or a let node, and nothing else puts text on a wire.
 
 ### 4. Cases that are values are drawn as functions
 

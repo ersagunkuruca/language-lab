@@ -2,14 +2,18 @@
 // flow, left to right:
 //   a call       a node; its inputs are ports, its arguments are wired in
 //   a variable   a wire: every use fans out from where it's bound (a
-//                function's or case's port, or a let's dot)
-//   a function   a region; its parameters are ports on the region's left edge
+//                function's or case's port, or a let's dot). Any binding can
+//                instead be shown as named: a let node where it's bound and a
+//                small get node next to every use, with no long wires. Same
+//                binding, another look; it's a view (layout.json).
+//   a function   a frame; its parameters are ports on the frame's left edge
 //   a let        a dot on a wire, as in Blender's node editor: the value flows
 //                into the dot and a wire runs from it to every use. The name
-//                is an optional label (unnamed dots show a handle, •1).
+//                sits on the dot (unnamed dots show a handle, •1).
 //   match, fold  a node like any call: the value, then one function per case
 //                (a frame whose parameters are the case's fields and, for a
 //                fold, the already-folded parts). `if` is a match on Bool.
+//   a list       [3, 1, 2] is one node with an input per item
 //   effects      a badge on every node whose call performs one (Choice,
 //                Console, Diverge), and on handlers the effect they remove.
 //
@@ -19,29 +23,28 @@
 // there: that puts a dot on its wire. Click a wire to put a dot on it. Drag an
 // input's wire into empty space to leave a hole there.
 //
-// Drag a node to move it. The automatic layout places everything; a moved
-// node keeps an offset from that place (layout.json), so edits elsewhere
-// don't scatter it. What it feeds into keeps it inside: a node can't leave
-// its function or case, and frames grow to hold what's dragged out.
-// Drawn on the shared canvas (canvas.ts), like networks.
+// Where things are: the automatic layout places everything; a node you move
+// keeps the place you gave it (layout.json), in world coordinates, so moving
+// one never moves another. Frames are drawn around whatever they hold.
+// Shift-click or shift-drag picks several; dragging one of them moves them
+// all. Tidy (right-click) spaces out all of them or the picked ones
+// (graphLayout.ts). Where wires cross, the later one hops over (a bridge);
+// where one runs under a node, the hidden stretch is drawn faintly over it
+// (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
-import { absOf, connectDrag, curve, infiniteCanvas, moveDrag, s, type Canvas, type Pos } from "./canvas.ts";
+import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
+import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
-// A laid-out piece: its group, how far it reaches right (w) and down (h), and
-// left (x0) and up (y0) when something inside was dragged past its origin;
-// and where its output is (outX, outY). The output isn't always at the right
-// edge: a node's argument can be dragged further right than the node.
-interface L { g: SVGGElement; w: number; h: number; outY: number; outX?: number; id?: Id; x0?: number; y0?: number }
-const outX = (l: L) => l.outX ?? l.w;
+export type MenuTarget = { kind: "hole" | "node" | "binder" | "frame" | "space"; id?: Id };
 
 export interface GraphHooks {
   selected: Id | null;
@@ -55,68 +58,128 @@ export interface GraphHooks {
   // Sharing a node's output: a check per input, and the edit.
   canShare: (from: Id) => (slot: Id) => string | null;
   share: (from: Id, slot: Id) => void;
-  // Offsets from the automatic layout, and saving one.
-  offsets: Record<Id, Pos>;
-  moved: (id: Id, off: Pos) => void;
+  // Where nodes were put (world coordinates), and saving some.
+  at: Record<Id, Pos>;
+  moved: (to: Record<Id, Pos>, note?: string) => void;
+  // Bindings shown as a let node with get nodes instead of wires.
+  named: Set<Id>;
+  // Right-click: what was under the pointer, where (screen and world).
+  menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
   // as text, by node and by variable.
   values?: Map<Id, string>;
 }
 
-const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
-
-// `key` names the window onto this graph, so redrawing keeps where you were.
-export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): Canvas {
-  const canvas = infiniteCanvas(key, "tgraph");
-  const draw = (offsets: Record<Id, Pos>) => canvas.world.replaceChildren(...build(code, pres, info, defId, hooks, offsets));
-  draw(hooks.offsets);
-  interact(canvas, hooks, draw);
-  return canvas;
+// What the editor can ask of a drawn graph.
+export interface GraphView extends Canvas {
+  // Space out every node, or only these (a frame stands for what it holds).
+  tidy: (only: Id[] | null) => void;
+  picked: () => Id[];
+  // The nodes these stand for: themselves, and a frame's contents.
+  expand: (ids: Id[]) => Id[];
 }
 
-function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, offsets: Record<Id, Pos>): SVGElement[] {
+const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
+
+// Picked nodes, per graph: kept across redraws, not saved.
+const pickedBy = new Map<string, Set<Id>>();
+
+// `key` names the window onto this graph, so redrawing keeps where you were.
+export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
+  const canvas = infiniteCanvas(key, "tgraph");
+  const picked = pickedBy.get(key) ?? new Set<Id>();
+  pickedBy.set(key, picked);
+  const scene = build(code, pres, info, defId, hooks);
+  for (const p of [...picked]) if (!scene.items.has(p)) picked.delete(p);
+  const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(scene, hooks, at, picked));
+  draw(hooks.at);
+  interact(canvas, scene, hooks, picked, draw);
+  return {
+    ...canvas,
+    picked: () => [...picked],
+    expand: (ids) => [...expand(scene, ids)],
+    tidy: (only) => {
+      const moved = tidyScene(scene, hooks.at, only ? expand(scene, only) : null);
+      const n = Object.keys(moved).length;
+      hooks.moved(moved, n ? `Tidied ${only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : "Already tidy: nothing overlaps.");
+    },
+  };
+}
+
+// ---------------------------------------------------------------- the scene
+//
+// The graph as flat lists: items (anything drawn at one place: a node, a
+// pill, a dot), frames (drawn around what they hold), and wires between
+// ends. The automatic layout gives every item a place; saved places win.
+
+type End =
+  | { item: Id; dx: number; dy: number }   // a point on an item
+  | { frame: Id; port: number }            // a frame's parameter port
+  | { frameOut: Id };                      // a frame's output, on its right edge
+interface Item {
+  key: Id;
+  frame: Id | null;
+  w: number; h: number;
+  auto: Pos;
+  draw: (g: SVGGElement) => void;
+  out?: Pos;            // where its value leaves, for the value chip
+  value?: Id;           // whose value the chip shows
+  solid: boolean;       // wires running under it are drawn as tunnels
+}
+interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
+interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
+interface Scene {
+  items: Map<Id, Item>;
+  frames: Map<Id, Frame>;
+  wires: Wire[];
+  sources: Map<Id, End>;     // where each binder's value comes from
+  result: End | null;        // the definition's result
+  defId: Id;
+  lit: Set<Id>;              // highlighted with the selection: a binding's uses
+}
+
+// A laid-out piece, in its own coordinates: how far it reaches, where its
+// output is (as a point for the layout and an end for wires), and where
+// each of its items goes.
+interface Sub { w: number; h: number; outX: number; outY: number; out: End; at: Map<Id, Pos> }
+const shift = (into: Map<Id, Pos>, sub: Sub, x: number, y: number) => { for (const [k, p] of sub.at) into.set(k, { x: p.x + x, y: p.y + y }); };
+
+function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks): Scene {
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
   const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showType(info!.subst.zonk(t), names) : ""; };
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   const errs = new Set((info?.errors ?? []).map((e) => e.id));
-  // Where each variable comes from (a port or a dot), and its uses: every
-  // use is drawn as a wire from its source, so a value used twice fans out.
-  const dots = new Map<Id, { el: SVGElement; x: number; y: number }>();
-  const uses: { dot: Id; ref: Id; el: SVGElement; x: number; y: number }[] = [];
   const dotOf = (id: Id): Id | null => {
     const n = node(id);
     return n?.kind === "ref" && node(n.target)?.kind === "binder" ? n.target : null;
   };
-
-  const group = (): SVGGElement => s("g") as SVGGElement;
-  // Put a node where the layout says, moved by its saved offset. Returns
-  // where it went; containers grow (in every direction) to hold it.
-  const place = (l: L, x: number, y: number): Pos => {
-    const o = (l.id && offsets[l.id]) || { x: 0, y: 0 };
-    const p = { x: x + o.x, y: y + o.y };
-    l.g.setAttribute("transform", `translate(${p.x},${p.y})`);
-    return p;
-  };
-  // Mark the shape you grab to move a node.
-  const grab = (el: SVGElement, id: Id) => { el.setAttribute("data-move", id); return el; };
-  // `edge`: the node whose value runs along this wire; clicking it puts a
-  // dot there. Only for values worth sharing (not holes or variables).
-  const wire = (g: SVGGElement, x1: number, y1: number, x2: number, y2: number, cls = "", edge?: Id) => {
-    const d = curve(x1, y1, x2, y2);
-    const e = edge ? node(edge) : null;
-    if (e && e.kind !== "hole" && !(e.kind === "ref" && node(e.target)?.kind === "binder")) {
-      g.prepend(s("path", { d, class: "edge-hit", "data-edge": edge! }), s("path", { d, class: `tw ${cls}`, "data-edge": edge! }));
-      (g.firstChild as SVGElement).append(s("title", {}, "Click to put a dot on this wire"));
-    } else g.prepend(s("path", { d, class: `tw ${cls}` }));
-  };
+  const named = (b: Id) => hooks.named.has(b) && name(b) !== "_";
   const titled = (el: SVGElement, t: string) => { if (t) el.append(s("title", {}, t)); return el; };
 
-  // Effects this call itself brings in: from the callee's own signature,
-  // not from the row it was unified with here (that also carries whatever
-  // the surrounding code does).
+  const items = new Map<Id, Item>();
+  const frames = new Map<Id, Frame>();
+  const wires: Wire[] = [];
+  const sources = new Map<Id, End>();
+  const usesOf = new Map<Id, Id[]>();
+  let frame: Id | null = null;   // the frame being laid out
+
+  const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw, solid: true, ...extra });
+    return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
+  };
+  // A use of a binding wired into (item, dx, dy): a wire from its source,
+  // or nothing here when the use is drawn as a get node.
+  const useAt = (ref: Id, dot: Id, to: End) => {
+    // The source is filled in once every source is known.
+    wires.push({ from: { item: "", dx: 0, dy: 0 }, to, cls: "use", use: { dot, ref }, flow: false });
+    usesOf.set(dot, [...(usesOf.get(dot) ?? []), ref]);
+  };
+
   const effectsOf = (call: NodeOf<"call">): { does: string[]; handles?: string } => {
+    // Effects this call itself brings in: from the callee's own signature,
+    // not from the row it was unified with here.
     const f = node(call.fn);
     if (f.kind !== "ref" || !info) return { does: [] };
     let t: Type | undefined;
@@ -128,49 +191,52 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { does, handles };
   };
 
-  const pill = (id: Id, text: string, cls: string, src?: Id): L => {
-    const g = group();
+  const pill = (id: Id, text: string, cls: string, src?: Id): Sub => {
     const w = Math.max(28, tw(text) + 18), h = 24;
-    const r = titled(s("rect", { width: w, height: h, rx: 12, class: `pill ${cls}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), typeOf(id));
-    g.append(r, s("text", { x: w / 2, y: 16, class: "pl", "text-anchor": "middle" }, text));
-    if (src) r.setAttribute("data-src", src);
-    if (cls.includes("hole")) r.setAttribute("data-slot", id);
-    else grab(r, id);
-    return { g, w, h, outY: h / 2 };
+    return item(id, w, h, (g) => {
+      const r = titled(s("rect", { width: w, height: h, rx: 12, class: `pill ${cls}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), typeOf(id));
+      g.append(r, s("text", { x: w / 2, y: 16, class: "pl", "text-anchor": "middle" }, text));
+      if (src) r.setAttribute("data-src", src);
+      if (cls.includes("hole")) r.setAttribute("data-slot", id);
+      else r.setAttribute("data-move", id);
+    }, { value: cls.includes("hole") ? undefined : id, out: { x: w, y: h / 2 } });
   };
 
-  // Where a dot's wire ends when the use isn't an input of a call.
-  const stub = (id: Id, dot: Id): L => {
-    const g = group();
-    g.append(titled(s("circle", { cx: 5, cy: 9, r: 4, class: `inp use${sel(id)}`, "data-slot": id, "data-id": id }), `${name(dot)}${typeOf(id) ? ` : ${typeOf(id)}` : ""}`));
-    uses.push({ dot, ref: id, el: g, x: 1, y: 9 });
-    return { g, w: 10, h: 18, outY: 9 };
-  };
-
-  // A value, when there is one, sits just above the output it leaves by.
-  const valueTag = (text: string, x: number, y: number) => {
-    const t = text.length > 24 ? `${text.slice(0, 23)}…` : text;
-    return titled(s("text", { x, y, class: "val" }, t), text);
-  };
-  const lay = (id: Id): L => {
-    const l = { ...layNode(id), id };
-    const v = hooks.values?.get(id);
-    if (v !== undefined && !dotOf(id)) l.g.append(valueTag(v, outX(l) + 6, l.outY - 6));
-    return l;
-  };
-  const listItems = (id: Id): Id[] | null => {
-    const items: Id[] = [];
-    for (let n = node(id); ; n = node((n as NodeOf<"call">).args[1])) {
-      if (n.kind === "ref" && n.target === NIL) return items;
-      const f = n.kind === "call" ? node(n.fn) : null;
-      if (f?.kind !== "ref" || f.target !== CONS || n.kind !== "call" || dotOf(n.args[1])) return null;
-      items.push(n.args[0]);
+  // A use that isn't wired straight into a call's input: a small end for
+  // the wire, or a get node.
+  const useNode = (ref: Id, dot: Id): Sub => {
+    if (named(dot)) {
+      const sub = pill(ref, name(dot), "var get");
+      const it = items.get(ref)!;
+      it.value = undefined;
+      const draw = it.draw;
+      it.draw = (g) => {
+        draw(g);
+        const r = g.firstChild as SVGElement;
+        r.setAttribute("data-slot", ref);
+        titled(r, `${name(dot)}${typeOf(ref) ? ` : ${typeOf(ref)}` : ""}: a get node, a use of ${name(dot)}. Drag its dot to use ${name(dot)} elsewhere too`);
+        g.append(s("circle", { cx: it.w, cy: it.h / 2, r: 4, class: "src", "data-src": dot }));
+      };
+      usesOf.set(dot, [...(usesOf.get(dot) ?? []), ref]);
+      return sub;
     }
+    const sub = item(ref, 10, 18, (g) => g.append(titled(s("circle", { cx: 5, cy: 9, r: 4, class: `inp use${sel(ref)}`, "data-slot": ref, "data-id": ref }), `${name(dot)}${typeOf(ref) ? ` : ${typeOf(ref)}` : ""}`)), { solid: false });
+    useAt(ref, dot, { item: ref, dx: 1, dy: 9 });
+    return sub;
   };
-  const layNode = (id: Id): L => {
+
+  // An input's argument: laid out to its left, or (a variable shown as a
+  // wire) nothing, the wire comes from the variable's source.
+  const arg = (a: Id): Sub | null => {
+    const d = dotOf(a);
+    if (d && !named(d)) return null;
+    return lay(a);
+  };
+
+  const lay = (id: Id): Sub => {
     const n = node(id);
     const d = dotOf(id);
-    if (d) return stub(id, d);
+    if (d) return useNode(id, d);
     switch (n.kind) {
       case "lit": return pill(id, typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value), "lit");
       case "hole": {
@@ -179,111 +245,114 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       }
       case "ref": {
         const t = node(n.target);
-        return t?.kind === "binder" ? pill(id, name(n.target), "var", n.target) : pill(id, name(n.target), t?.kind === "variant" ? "con" : "fnref");
+        return pill(id, name(n.target), t?.kind === "variant" ? "con" : "fnref");
       }
-      case "lambda": return region(id, `(${n.params.map(name).join(", ")}) =>`, n.params, n.body, "lam");
+      case "lambda": {
+        // (y) => (angle) => … is one function of two things to the reader:
+        // one frame with both parameters.
+        const params = [...n.params];
+        let body = n.body;
+        for (let b = node(body); b?.kind === "lambda"; b = node(body)) { params.push(...b.params); body = b.body; }
+        return region(id, `(${params.map(name).join(", ")}) =>`, params, body, "lam");
+      }
       case "match": case "fold": return cases(id, n);
-      case "call": return node(n.fn).kind === "lambda" ? letRegion(id, n) : call(id, n);
+      case "call": return node(n.fn).kind === "lambda" ? letRegion(n) : call(id, n);
       case "solve": return solve(id, n);
       default: return pill(id, n.kind, "lit");
     }
   };
 
+  // [3, 1, 2] is cons(3, cons(1, cons(2, nil))): drawn as the one list it
+  // is, an input per item, as the text shows it.
+  const listItems = (id: Id): Id[] | null => {
+    const out: Id[] = [];
+    for (let n = node(id); ; n = node((n as NodeOf<"call">).args[1])) {
+      if (n.kind === "ref" && n.target === NIL) return out;
+      const f = n.kind === "call" ? node(n.fn) : null;
+      if (f?.kind !== "ref" || f.target !== CONS || n.kind !== "call" || dotOf(n.args[1])) return null;
+      out.push(n.args[0]);
+    }
+  };
+
+  // Arguments stacked in a column left of a box, each wired into its input.
+  // `box` is drawn at (bx, by); portY gives each input's height on it.
+  const withArgs = (inputs: Id[], kids: (Sub | null)[], bw: number, bh: number, boxKey: Id, portY: (i: number, by: number) => number, cls: (i: number) => string = () => ""): { sub: Omit<Sub, "out" | "outX" | "outY">; bx: number; by: number } => {
+    const gap = 8;
+    const ks = kids.map((k) => k ?? { w: 0, h: 18 });
+    const colW = Math.max(0, ...ks.map((k) => k.w));
+    const kidsH = ks.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, ks.length - 1);
+    const h = Math.max(kidsH, bh);
+    const bx = kids.length ? colW + 34 : 0, by = (h - bh) / 2;
+    const at = new Map<Id, Pos>();
+    at.set(boxKey, { x: bx, y: by });
+    let y = (h - kidsH) / 2;
+    kids.forEach((k, i) => {
+      const to: End = { item: boxKey, dx: 0, dy: portY(i, 0) };
+      if (!k) {
+        const dt = dotOf(inputs[i]);
+        if (dt) useAt(inputs[i], dt, to);
+      } else {
+        shift(at, k, colW - k.w, y);
+        wires.push({ from: k.out, to, cls: cls(i), edge: inputs[i], flow: true });
+      }
+      y += ks[i].h + gap;
+    });
+    return { sub: { w: bx + bw, h, at }, bx, by };
+  };
+
   // A call: arguments stacked on the left, wired into the node's inputs.
-  const call = (id: Id, n: NodeOf<"call">): L => {
+  const call = (id: Id, n: NodeOf<"call">): Sub => {
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-    // [3, 1, 2] is cons(3, cons(1, cons(2, nil))), drawn as the one list it
-    // is: one input per item, as the text shows it, not a cons per item.
-    const items = listItems(id);
-    const label = items ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
-    const inputs = items ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
-    const kids = inputs.map((a): L => (dotOf(a) ? { g: group(), w: 0, h: 18, outY: 9 } : lay(a)));
+    const list = listItems(id);
+    const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
+    const inputs = list ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
+    const kids = inputs.map(arg);
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
-    const gap = 8;
-    const colW = Math.max(0, ...kids.map((k) => k.w));
-    const kidsH = kids.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, kids.length - 1);
     const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0);
     const bh = Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0);
-    let h = Math.max(kidsH, bh);
-    const bx = kids.length ? colW + 34 : 0, by = (h - bh) / 2;
-    const g = group();
-    let y = (h - kidsH) / 2;
     const top = badge ? 14 : 0;
-    const portY = (i: number) => by + top + ((bh - top) / (inputs.length + 1)) * (i + 1);
-    let w = bx + bw, x0 = 0, y0 = 0;
-    kids.forEach((k, i) => {
-      const d = dotOf(inputs[i]);
-      if (d) uses.push({ dot: d, ref: inputs[i], el: g, x: bx, y: portY(i) });
-      else {
-        const p = place(k, colW - k.w, y);
-        g.append(k.g);
-        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), "", inputs[i]);
-        w = Math.max(w, p.x + k.w);
-        h = Math.max(h, p.y + k.h);
-        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
-        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
-      }
-      y += k.h + gap;
-    });
-    const box = titled(grab(s("rect", { x: bx, y: by, width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), id), typeOf(id));
-    g.append(box);
-    if (badge) g.append(s("text", { x: bx + bw / 2, y: by + 11, class: "badge", "text-anchor": "middle" }, badge));
-    g.append(s("text", { x: bx + bw / 2, y: by + top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
-    inputs.forEach((a, i) => g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
-    g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    return { g, w, h, x0, y0, outX: bx + bw, outY: by + bh / 2 };
+    const portY = (i: number) => top + ((bh - top) / (inputs.length + 1)) * (i + 1);
+    item(id, bw, bh, (g) => {
+      g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
+      if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
+      g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
+      inputs.forEach((a, i) => g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
+      g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
+    }, { value: id, out: { x: bw, y: bh / 2 } });
+    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
+    return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
 
-  // Binder ports on a region's left edge; the body inside; out on the right.
+  // A frame: binder ports on its left edge, the body inside, out on the right.
   const PAD = 10, HEAD = 20;
   const portsW = (binders: Id[]) => Math.max(0, ...binders.map((b) => tw(name(b), 6.8) + 18));
-  const ports = (g: SVGGElement, binders: Id[], x: number, y0: number) => {
-    binders.forEach((b, i) => {
-      const y = y0 + i * 22 + 11;
-      g.append(titled(s("circle", { cx: x, cy: y, r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), typeOf(b)));
-      g.append(s("text", { x: x + 9, y: y - 6, class: "portl" }, name(b)));
-      dots.set(b, { el: g, x, y });
-    });
-  };
-  // A frame spans (x0, y0) to (x1, y1) in its group; x0, y0 go negative when
-  // something inside was dragged up or left past where the frame began.
-  const frame = (g: SVGGElement, id: Id, title: string, x0: number, y0: number, x1: number, y1: number, cls: string) => {
-    const r = s("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 9, class: `rg ${cls}${sel(id)}`, "data-id": id });
-    if (id !== defId) grab(r, id);
-    titled(r, typeOf(id));
-    g.prepend(r);
-    g.append(s("text", { x: x0 + 10, y: y0 + 14, class: "rt" }, title));
-  };
-
-  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string): L => {
-    const g = group();
+  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string): Sub => {
+    const outer = frame;
+    frame = id;
     const pw = portsW(binders), ph = binders.length * 22;
+    binders.forEach((b, i) => sources.set(b, { frame: id, port: i }));
     const b = lay(body);
+    frame = outer;
     const bx = Math.max(pw + 14, PAD), innerH = Math.max(ph + 8, b.h);
-    const at = place(b, bx, HEAD + (innerH - b.h) / 2);
-    g.append(b.g);
-    // The parameters stay on the frame's left edge, however far it grew.
-    const x0 = Math.min(0, at.x + (b.x0 ?? 0) - bx), y0 = Math.min(0, at.y + (b.y0 ?? 0) - HEAD);
-    ports(g, binders, x0, y0 + HEAD + 4);
-    const h = Math.max(y0 + HEAD + innerH + PAD, at.y + b.h + PAD), w = Math.max(at.x + b.w + 22, x0 + tw(title, 6.6) + 20);
-    const outY = at.y + b.outY;
-    wire(g, at.x + outX(b), outY, w, outY);
-    frame(g, id, title, x0, y0, w, h, cls);
-    g.append(s("circle", { cx: w, cy: outY, r: 4, class: "outp" }));
-    return { g, w, h, outY, id, x0, y0 };
+    const by = HEAD + (innerH - b.h) / 2;
+    const at = new Map<Id, Pos>();
+    shift(at, b, bx, by);
+    const w = Math.max(bx + b.w + 22, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
+    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), out: b.out, pad: [bx, HEAD, 22, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 20 });
+    return { w, h, outX: w, outY: by + b.outY, out: { frameOut: id }, at };
   };
 
-  // A relation used in one direction: the given ports are inputs on the left,
-  // the solved ones are sources on the right (all from the same solution),
-  // and what follows uses them. The badge says whether it's pure: Choice when
-  // the solver can find several answers or none.
-  const solve = (id: Id, n: NodeOf<"solve">): L => {
+  // A relation used in one direction: the given ports are inputs on the
+  // left, the solved ones are sources on the right (all from the same
+  // solution), and what follows uses them. The badge says whether it's
+  // pure: Choice when the solver can find several answers or none.
+  const solve = (id: Id, n: NodeOf<"solve">): Sub => {
     const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
     const givenKeys = Object.keys(n.given), boundKeys = Object.keys(n.binds);
     const inputs = givenKeys.map((k) => n.given[k]);
-    const kids = inputs.map((a): L => (dotOf(a) ? { g: group(), w: 0, h: 18, outY: 9 } : lay(a)));
+    const kids = inputs.map(arg);
     let badge = "";
     try {
       const plan = planSolve(code, n);
@@ -296,53 +365,33 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, lw + rw + 36);
     const top = 34;
     const bh = top + rows * 20 + 6;
-    const gap = 8;
-    const colW = Math.max(0, ...kids.map((k) => k.w));
-    const kidsH = kids.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, kids.length - 1);
-    const g = group();
-    let h = Math.max(kidsH, bh);
-    const bx = kids.length ? colW + 34 : 0, by = (h - bh) / 2;
-    const portY = (i: number) => by + top + i * 20 + 8;
-    let w = bx + bw, x0 = 0, y0 = 0;
-    let y = (h - kidsH) / 2;
-    kids.forEach((k, i) => {
-      const d = dotOf(inputs[i]);
-      if (d) uses.push({ dot: d, ref: inputs[i], el: g, x: bx, y: portY(i) });
-      else {
-        const p = place(k, colW - k.w, y);
-        g.append(k.g);
-        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), "", inputs[i]);
-        w = Math.max(w, p.x + k.w);
-        h = Math.max(h, p.y + k.h);
-        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
-        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
-      }
-      y += k.h + gap;
+    const portY = (i: number) => top + i * 20 + 8;
+    boundKeys.forEach((k, i) => sources.set(n.binds[k], { item: id, dx: bw + 6, dy: portY(i) }));
+    item(id, bw, bh, (g) => {
+      g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
+      g.append(s("text", { x: bw / 2, y: 12, class: "badge", "text-anchor": "middle" }, badge));
+      g.append(s("text", { x: bw / 2, y: 27, class: "cl", "text-anchor": "middle" }, title));
+      givenKeys.forEach((k, i) => {
+        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
+        g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, label(k)));
+      });
+      boundKeys.forEach((k, i) => {
+        const b = n.binds[k];
+        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
+        g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
+      });
     });
-    g.append(titled(grab(s("rect", { x: bx, y: by, width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), id), typeOf(id)));
-    g.append(s("text", { x: bx + bw / 2, y: by + 12, class: "badge", "text-anchor": "middle" }, badge));
-    g.append(s("text", { x: bx + bw / 2, y: by + 27, class: "cl", "text-anchor": "middle" }, title));
-    givenKeys.forEach((k, i) => {
-      g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
-      g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, label(k)));
-    });
-    boundKeys.forEach((k, i) => {
-      const b = n.binds[k];
-      const py = portY(i);
-      g.append(s("text", { x: bx + bw - 9, y: py + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
-      g.append(titled(s("circle", { cx: bx + bw, cy: py, r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
-      dots.set(b, { el: g, x: bx + bw, y: py });
-    });
+    const { sub, bx } = withArgs(inputs, kids, bw, bh, id, portY);
     const body = lay(n.body);
-    const at = place(body, bx + bw + 40 + Math.max(0, ...boundKeys.map((k) => tw(name(n.binds[k]), 6.8))), Math.max(0, (h - body.h) / 2));
-    g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outX: at.x + outX(body), outY: at.y + body.outY };
+    const x = bx + bw + 40, y = Math.max(0, (sub.h - body.h) / 2);
+    shift(sub.at, body, x, y);
+    return { w: Math.max(sub.w, x + body.w), h: Math.max(sub.h, y + body.h), outX: x + body.outX, outY: y + body.outY, out: body.out, at: sub.at };
   };
 
-  // A let: each value flows into its dot; wires from the dots run to the
-  // uses. No box: the dot is the whole construct. A dot nothing reads
-  // (`_ = print(…)`) is a step done for its effect, before what follows.
-  const letRegion = (_id: Id, n: NodeOf<"call">): L => {
+  // A let: each value flows into its dot; wires from the dot run to the
+  // uses. A dot nothing reads (`_ = print(…)`) is a step done for its
+  // effect, before what follows. Shown named, the dot is a let node.
+  const letRegion = (n: NodeOf<"call">): Sub => {
     // A run of lets is one column of steps, then what they lead to.
     const steps: [Id, Id][] = [];
     let rest: Id = n.id;
@@ -351,27 +400,44 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       lam.params.forEach((p, i) => steps.push([p, (c as NodeOf<"call">).args[i]]));
       rest = lam.body;
     }
-    const g = group();
+    const at = new Map<Id, Pos>();
     const vals = steps.map(([, v]) => lay(v));
     const colW = Math.max(0, ...vals.map((v) => v.w));
-    const labW = Math.max(0, ...steps.map(([p]) => (name(p) === "_" ? 0 : tw(name(p), 6.8) / 2))) + 26;
-    let y = 0, w = 0, h = 0, x0 = 0, y0 = 0;
+    let y = 0, w = 0, h = 0, right = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
       const silent = name(b) === "_";
-      const at = place(v, colW - v.w, y);
-      g.append(v.g);
-      // The dot rides along with its value.
-      const py = at.y + v.outY, dotX = Math.max(colW, at.x + outX(v)) + 22;
-      wire(g, at.x + outX(v), py, dotX, py);
-      w = Math.max(w, dotX + labW);
-      h = Math.max(h, at.y + v.h);
-      x0 = Math.min(x0, at.x + (v.x0 ?? 0));
-      y0 = Math.min(y0, at.y + (v.y0 ?? 0));
-      const t = silent ? "a step done for its effect; nothing reads it" : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; select it to name it`;
-      g.append(titled(s("circle", { cx: dotX, cy: py, r: silent ? 4 : 6, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b }), t));
-      if (!silent) g.append(s("text", { x: dotX, y: py - 10, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
-      dots.set(b, { el: g, x: dotX, y: py });
+      const vx = colW - v.w;
+      shift(at, v, vx, y);
+      const py = y + v.outY, x = Math.max(colW, vx + v.outX) + 22;
+      if (named(b)) {
+        // A let node: `name =`, its value wired in; its uses are get nodes.
+        const label = `${name(b)} =`;
+        const bw = Math.max(44, tw(label, 8.2) + 20), bh = 26;
+        item(b, bw, bh, (g) => {
+          g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn letn${sel(b)}`, "data-id": b, "data-move": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}: a let node. Its uses are get nodes; drag its dot to use it elsewhere`));
+          g.append(s("text", { x: bw / 2, y: 17, class: "cl", "text-anchor": "middle" }, label));
+          g.append(s("circle", { cx: 0, cy: bh / 2, r: 5, class: "inp" }));
+          g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: `src${sel(b)}`, "data-src": b, "data-id": b }), "Drag onto an input to use it there"));
+        }, { value: b, out: { x: bw, y: bh / 2 } });
+        at.set(b, { x, y: py - bh / 2 });
+        wires.push({ from: v.out, to: { item: b, dx: 0, dy: bh / 2 }, cls: "", flow: true });
+        sources.set(b, { item: b, dx: bw, dy: bh / 2 });
+        right = Math.max(right, x + bw);
+      } else {
+        const r = silent ? 4 : 6;
+        const t = silent ? "a step done for its effect; nothing reads it" : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
+        item(b, 2 * r, 2 * r, (g) => {
+          g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
+          if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
+        }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false });
+        at.set(b, { x, y: py - r });
+        wires.push({ from: v.out, to: { item: b, dx: 0, dy: r }, cls: "", flow: true });
+        sources.set(b, { item: b, dx: 2 * r, dy: r });
+        right = Math.max(right, x + 2 * r + (silent ? 0 : tw(name(b), 6.8) / 2));
+      }
+      w = Math.max(w, right);
+      h = Math.max(h, y + v.h);
       y += v.h + 18;
     });
     const valsH = Math.max(0, y - 18);
@@ -379,70 +445,51 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // Steps done only for their effects (print this, then that) read top
     // to bottom, the last one included: nothing flows sideways.
     const sequence = steps.every(([b]) => name(b) === "_");
-    const bx = sequence ? Math.max(0, colW - body.w) : colW + 22 + labW;
-    const at = place(body, bx, sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2));
-    g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outX: at.x + outX(body), outY: at.y + body.outY };
+    const bx = sequence ? Math.max(0, colW - body.w) : right + 26;
+    const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
+    shift(at, body, bx, by);
+    return { w: Math.max(w, bx + body.w), h: Math.max(h, valsH, by + body.h), outX: bx + body.outX, outY: by + body.outY, out: body.out, at };
   };
 
   // if, match and fold are ordinary nodes: the value goes in first, then one
   // function per case, each drawn as a frame whose parameters are that
   // case's fields (and, for a fold, the parts already folded). Only the
-  // chosen case's function runs. A case can't be missing: there is one
-  // input per case of the type.
-  const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">): L => {
-    const armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
+  // chosen case's function runs.
+  const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">): Sub => {
+    let armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
     const isIf = n.kind === "match" && armNodes.length === 2 && armNodes.every((a) => [TRUE, FALSE].includes(a.variant));
+    // An if reads then, else, whatever order the arms were stored in.
+    if (isIf) armNodes = [...armNodes].sort((a, b) => (a.variant === TRUE ? -1 : b.variant === TRUE ? 1 : 0));
     const type = armNodes[0] && info?.owner.get(armNodes[0].variant);
     const title = isIf ? "if" : `${n.kind}${type ? ` ${name(type)}` : ""}`;
-    const ins: { label: string; slot?: Id; kid: L | null; ref?: Id }[] = [];
-    const sd = dotOf(n.scrutinee);
-    ins.push({ label: isIf ? "condition" : "value", slot: n.scrutinee, kid: sd ? null : lay(n.scrutinee), ref: sd ? n.scrutinee : undefined });
+    const labels = [isIf ? "condition" : "value"];
+    const inputs: Id[] = [n.scrutinee];
+    const kids: (Sub | null)[] = [arg(n.scrutinee)];
     for (const arm of armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
       const params = [...arm.binds, ...results];
-      const label = isIf ? (arm.variant === TRUE ? "then" : "else") : name(arm.variant);
-      ins.push({ label, kid: region(arm.id, `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm") });
+      labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : name(arm.variant));
+      inputs.push(arm.id);
+      kids.push(region(arm.id, `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm"));
     }
-    if (n.kind === "match" && n.otherwise) ins.push({ label: "otherwise", kid: lay(n.otherwise) });
-
-    const gap = 8;
-    const kids = ins.map((x) => x.kid ?? { g: group(), w: 0, h: 18, outY: 9 });
-    const colW = Math.max(0, ...kids.map((k) => k.w));
-    const kidsH = kids.reduce((a, k) => a + k.h, 0) + gap * Math.max(0, kids.length - 1);
-    const lw = Math.max(0, ...ins.map((x) => tw(x.label, 6.6)));
+    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
+    const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
     const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
-    const bh = 30 + ins.length * 20;
-    let h = Math.max(kidsH, bh);
-    const bx = colW + 34;
-    const g = group();
-    // Line each input up with its case where there's room; never overlap.
-    let y = (h - kidsH) / 2;
-    const by = (h - bh) / 2;
-    const portY = (i: number) => by + 30 + i * 20;
-    let w = bx + bw, x0 = 0, y0 = 0;
-    kids.forEach((k, i) => {
-      const x = ins[i];
-      if (x.ref) uses.push({ dot: dotOf(x.ref)!, ref: x.ref, el: g, x: bx, y: portY(i) });
-      else {
-        const p = place(k, colW - k.w, y);
-        g.append(k.g);
-        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), i ? "fn" : "", x.slot);
-        w = Math.max(w, p.x + k.w);
-        h = Math.max(h, p.y + k.h);
-        x0 = Math.min(x0, p.x + (k.x0 ?? 0));
-        y0 = Math.min(y0, p.y + (k.y0 ?? 0));
-      }
-      y += k.h + gap;
-    });
-    g.append(titled(grab(s("rect", { x: bx, y: by, width: bw, height: bh, rx: 7, class: `cn case${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), id), typeOf(id)));
-    g.append(s("text", { x: bx + bw / 2, y: by + 19, class: "cl", "text-anchor": "middle" }, title));
-    ins.forEach((x, i) => {
-      g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: i ? "inp fn" : "inp", ...(x.slot ? { "data-slot": x.slot } : {}) }), i ? `the function for ${x.label}` : typeOf(n.scrutinee)));
-      g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, x.label));
-    });
-    g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp" }), typeOf(id)));
-    return { g, w, h, x0, y0, outX: bx + bw, outY: by + bh / 2 };
+    const bh = 30 + inputs.length * 20;
+    const portY = (i: number) => 30 + i * 20;
+    item(id, bw, bh, (g) => {
+      g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn case${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
+      g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, title));
+      labels.forEach((l, i) => {
+        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: i ? "inp fn" : "inp", ...(i === 0 || (n.kind === "match" && n.otherwise === inputs[i]) ? { "data-slot": inputs[i] } : {}) }), i ? `the function for ${l}` : typeOf(n.scrutinee)));
+        g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l));
+      });
+      g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), typeOf(id)));
+    }, { value: id, out: { x: bw, y: bh / 2 } });
+    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i ? "fn" : ""));
+    // Only the value's wire can take a dot: a case's function isn't a value.
+    for (const wr of wires) if (wr.to && "item" in wr.to && wr.to.item === id && wr.cls === "fn") wr.edge = undefined;
+    return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
 
   // A data type: each case is a constructor, so it's drawn as one: a node
@@ -453,99 +500,275 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const r = t as NodeOf<"tref">;
     return [name(r.target), ...r.args.map((a) => { const x = typeText(a); return x.includes(" ") ? `(${x})` : x; })].join(" ");
   };
-  const constructor = (v: Id): L => {
-    const g = group();
-    const fs = (node(v) as NodeOf<"variant">).fields;
-    const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
-    const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22));
-    const bh = Math.max(30, 28 + fs.length * 18);
-    g.append(titled(grab(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v }), v), `${name(v)}: makes a ${name(defId)}`));
-    g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(v)));
-    fs.forEach((f, i) => {
-      const y = 32 + i * 18;
-      g.append(titled(s("circle", { cx: 0, cy: y, r: 5, class: `inp${sel(f)}`, "data-id": f }), labels[i]));
-      g.append(s("text", { x: 9, y: y + 4, class: "portl" }, labels[i]));
-    });
-    g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), name(defId)));
-    return { g, w: bw, h: bh, outY: bh / 2, id: v };
-  };
-  const typeFrame = (td: NodeOf<"typedef">): L => {
-    const g = group();
-    let y = 30, w = 0, x0 = 0, y0 = 0, h = 0;
-    for (const v of td.variants) {
-      const k = constructor(v);
-      const p = place(k, 22, y);
-      g.append(k.g);
-      w = Math.max(w, p.x + k.w + 22);
-      h = Math.max(h, p.y + k.h + 14);
-      x0 = Math.min(x0, p.x - 22);
-      y0 = Math.min(y0, p.y - 30);
-      y += k.h + 12;
-    }
+  const typeFrame = (td: NodeOf<"typedef">): Sub => {
     const title = `type ${name(defId)}: one constructor per case`;
-    w = Math.max(w, tw(title, 6.6) + 24);
-    g.prepend(s("rect", { x: x0, y: y0, width: w - x0, height: h - y0, rx: 9, class: `rg def${sel(defId)}`, "data-id": defId }), s("text", { x: x0 + 10, y: y0 + 14, class: "rt" }, title));
-    return { g, w, h, x0, y0, outY: h / 2, outX: w };
+    frames.set(defId, { id: defId, parent: null, title, cls: "def", binders: [], labels: [], out: null, pad: [22, 30, 22, 14], minH: 0, minW: tw(title, 6.6) + 24 });
+    frame = defId;
+    const at = new Map<Id, Pos>();
+    let y = 30, w = 0;
+    for (const v of td.variants) {
+      const fs = (node(v) as NodeOf<"variant">).fields;
+      const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
+      const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22));
+      const bh = Math.max(30, 28 + fs.length * 18);
+      const k = item(v, bw, bh, (g) => {
+        g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v, "data-move": v }), `${name(v)}: makes a ${name(defId)}`));
+        g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(v)));
+        fs.forEach((f, i) => {
+          g.append(titled(s("circle", { cx: 0, cy: 32 + i * 18, r: 5, class: `inp${sel(f)}`, "data-id": f }), labels[i]));
+          g.append(s("text", { x: 9, y: 36 + i * 18, class: "portl" }, labels[i]));
+        });
+        g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), name(defId)));
+      });
+      shift(at, k, 22, y);
+      w = Math.max(w, 22 + bw + 22);
+      y += bh + 12;
+    }
+    frame = null;
+    return { w, h: y, outX: w, outY: y / 2, out: { frameOut: defId }, at };
   };
 
   // The definition itself: its parameters, its body, its result.
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
-  let top: L;
+  let top: Sub;
   if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
-  else if (body && body.kind !== "typedef") top = lay(def.body!);
   else if (body?.kind === "typedef") top = typeFrame(body);
+  else if (body) top = lay(def.body!);
   else top = pill(defId, `${name(defId)}: nothing yet`, "lit");
-  // World coordinates: the definition's frame starts at the origin and
-  // nothing moves to make room when a node is dragged past it.
-  const at = place(top, 0, 0);
-  const result = s("text", { x: at.x + outX(top) + 8, y: at.y + top.outY + 4, class: "portl" }, body?.kind === "typedef" ? "" : "result");
+  for (const [k, p] of top.at) items.get(k)!.auto = p;
 
-  // Wires from each source to its uses, drawn last, in the picture's
-  // coordinates. The groups aren't in the svg yet, so start from top.g.
-  const shared = s("g", { class: "uses" });
-  const holder = s("g");
-  holder.append(top.g);
-  for (const u of uses) {
-    const d = dots.get(u.dot);
-    if (!d) continue;
-    const a = absOf(holder, d.el, d.x, d.y), b = absOf(holder, u.el, u.x, u.y);
-    const path = curve(a.x + 6, a.y, b.x, b.y);
-    shared.append(titled(s("path", { d: path, class: "use-hit", "data-id": u.ref }), `${name(u.dot)}: click to select this use`), s("path", { d: path, class: `tw use${hooks.selected === u.dot || hooks.selected === u.ref ? " lit" : ""}` }));
+  // Use wires get their source now that every source is known; uses whose
+  // binding is shown named are get nodes and have no wire.
+  const all: Wire[] = [];
+  for (const w of wires) {
+    if (!w.use) { all.push(w); continue; }
+    const src = sources.get(w.use.dot);
+    if (src) all.push({ ...w, from: src });
   }
-  // Values of variables, next to their dots.
-  const vals = s("g");
-  for (const [b, d] of dots) {
-    const v = hooks.values?.get(b);
-    if (v === undefined) continue;
-    const a = absOf(holder, d.el, d.x, d.y);
-    vals.append(valueTag(v, a.x + 8, a.y - 8));
-  }
-  return [top.g, result, shared, vals];
+  // What lights up with the selection: a binding and all its uses.
+  const lit = new Set<Id>();
+  const sb = hooks.selected ? (usesOf.has(hooks.selected) ? hooks.selected : dotOf(hooks.selected)) : null;
+  if (sb) { lit.add(sb); for (const u of usesOf.get(sb) ?? []) lit.add(u); }
+  return { items, frames, wires: all, sources, result: body?.kind === "typedef" ? null : top.out, defId, lit };
 }
 
-// Clicks select; double-click opens a definition. Dragging: a node's body
-// moves it; a port or dot wires that variable into an input; a node's output
-// shares its value with an input; an input dragged into space is cleared.
-function interact(canvas: Canvas, hooks: GraphHooks, draw: (offsets: Record<Id, Pos>) => void) {
+// ---------------------------------------------------------------- drawing
+
+const HEADH = 20;
+interface Placed { pos: Map<Id, Pos>; boxes: Map<Id, Box>; point: (e: End) => Pos }
+function placeAll(scene: Scene, at: Record<Id, Pos>): Placed {
+  const pos = new Map<Id, Pos>();
+  for (const [k, it] of scene.items) pos.set(k, at[k] ?? it.auto);
+  const fb = frameBoxes(
+    [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: it.w, h: it.h, frame: it.frame })),
+    [...scene.frames.values()].map((f) => ({ id: f.id, parent: f.parent, pad: f.pad, minH: f.minH })),
+  );
+  for (const [id, b] of fb) { const f = scene.frames.get(id)!; if (b.w < f.minW) b.w = f.minW; }
+  const point = (e: End): Pos => {
+    if ("item" in e) { const p = pos.get(e.item) ?? { x: 0, y: 0 }; return { x: p.x + e.dx, y: p.y + e.dy }; }
+    if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x, y: b.y + HEADH + 4 + e.port * 22 + 11 }; }
+    const b = fb.get(e.frameOut)!, f = scene.frames.get(e.frameOut)!;
+    return { x: b.x + b.w, y: f.out ? point(f.out).y : b.y + b.h / 2 };
+  };
+  return { pos, boxes: fb, point };
+}
+
+function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Set<Id>): SVGElement[] {
+  const { pos, boxes, point } = placeAll(scene, at);
+  const depth = (f: Id | null): number => (f ? 1 + depth(scene.frames.get(f)!.parent) : 0);
+
+  // Frames, outermost first, so inner ones sit on top.
+  const frameG = s("g", { class: "frames" });
+  const portG = s("g", { class: "ports" });
+  const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
+  for (const f of [...scene.frames.values()].sort((a, b) => depth(a.parent) - depth(b.parent))) {
+    const b = boxes.get(f.id)!;
+    const r = s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 9, class: `rg ${f.cls}${sel(f.id)}${picked.has(f.id) ? " picked" : ""}`, "data-id": f.id, "data-frame": f.id });
+    if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
+    frameG.append(r, s("text", { x: b.x + 10, y: b.y + 14, class: "rt" }, f.title));
+    f.binders.forEach((bd, i) => {
+      const p = point({ frame: f.id, port: i });
+      portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
+    });
+    if (f.out) {
+      const o = point({ frameOut: f.id });
+      portG.append(s("circle", { cx: o.x, cy: o.y, r: 4, class: "outp" }));
+    }
+  }
+
+  // Wires: each as points, so crossings can be found; a wire that crosses
+  // one drawn before it hops over it.
+  const wireG = s("g", { class: "wires" });
+  const marks = s("g", { class: "tunnels" });
+  const solid: { key: Id; box: Box }[] = [];
+  for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: it.w, h: it.h } }); }
+  const endItem = (e: End) => ("item" in e ? e.item : null);
+  const drawn: { pts: ReturnType<typeof curvePoints> }[] = [];
+  const all = [...scene.wires];
+  // A frame's own result wire: from what it holds to its right edge.
+  for (const f of scene.frames.values()) if (f.out) all.push({ from: f.out, to: { frameOut: f.id }, cls: "", flow: false });
+  for (const w of all) {
+    const a = point(w.from), b = point(w.to);
+    const pts = curvePoints(a.x, a.y, b.x, b.y, 28);
+    const hops = crossingsOf(pts, drawn.map((d) => d.pts));
+    const d = hops.length ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
+    drawn.push({ pts });
+    if (w.use) {
+      const on = hooks.selected === w.use.dot || hooks.selected === w.use.ref;
+      wireG.append(s("path", { d, class: "use-hit", "data-id": w.use.ref }), s("path", { d, class: `tw use${on ? " lit" : ""}` }));
+    } else if (w.edge) {
+      wireG.append(s("path", { d, class: "edge-hit", "data-edge": w.edge }), s("path", { d, class: `tw ${w.cls}`, "data-edge": w.edge }));
+    } else wireG.append(s("path", { d, class: `tw ${w.cls}` }));
+    // Under a node: the hidden stretch, drawn faintly over it.
+    const ends = new Set([endItem(w.from), endItem(w.to)]);
+    for (const run of tunnels(pts, solid.filter((x) => !ends.has(x.key)).map((x) => x.box))) {
+      marks.append(s("path", { d: `M${run.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}`, class: `tunnel${w.use ? " use" : ""}` }));
+    }
+  }
+
+  // Items.
+  const itemG = s("g", { class: "items" });
+  for (const it of scene.items.values()) {
+    const p = pos.get(it.key)!;
+    const g = s("g", { transform: `translate(${p.x},${p.y})` }) as SVGGElement;
+    it.draw(g);
+    if (picked.has(it.key)) g.prepend(s("rect", { x: -4, y: -4, width: it.w + 8, height: it.h + 8, rx: 9, class: "picked" }));
+    if (scene.lit.has(it.key)) g.classList.add("lit");
+    itemG.append(g);
+  }
+  // Frame parameter names, above everything in their frame.
+  const nameG = s("g");
+  for (const f of scene.frames.values()) f.binders.forEach((bd, i) => {
+    const p = point({ frame: f.id, port: i });
+    nameG.append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl" }, f.labels[i]));
+  });
+
+  // The definition's result.
+  const out = s("g");
+  if (scene.result) { const r = point(scene.result); out.append(s("text", { x: r.x + 8, y: r.y + 4, class: "portl" }, "result")); }
+
+  // Values: chips near the output they label, placed where they cover no
+  // node and no other chip. With no room, a chip shrinks to a dot; hover it.
+  const vals = s("g", { class: "vals" });
+  if (hooks.values) {
+    const want: { text: string; full: string; at: Pos; w: number; h: number; left?: boolean }[] = [];
+    const add = (id: Id, at: Pos, left = false) => {
+      const v = hooks.values!.get(id);
+      if (v === undefined) return;
+      const text = v.length > 24 ? `${v.slice(0, 23)}…` : v;
+      want.push({ text, full: v, at, w: tw(text, 6.4) + 8, h: 15, left });
+    };
+    for (const it of scene.items.values()) if (it.value && it.out) { const p = pos.get(it.key)!; add(it.value, { x: p.x + it.out.x, y: p.y + it.out.y }); }
+    for (const f of scene.frames.values()) f.binders.forEach((bd, i) => add(bd, point({ frame: f.id, port: i }), true));
+    for (const [b, e] of scene.sources) if ("item" in e && e.item !== b && !scene.items.has(b)) add(b, point(e));
+    // Nodes, and the words already on the picture: parameter names, frame
+    // titles, the result.
+    const obstacles = solid.map((x) => x.box);
+    for (const f of scene.frames.values()) {
+      const b = boxes.get(f.id)!;
+      obstacles.push({ x: b.x + 6, y: b.y + 2, w: tw(f.title, 6.2) + 8, h: 16 });
+      f.labels.forEach((l, i) => { const p = point({ frame: f.id, port: i }); obstacles.push({ x: p.x + 6, y: p.y - 17, w: tw(l, 6.8) + 6, h: 14 }); });
+    }
+    if (scene.result) { const r = point(scene.result); obstacles.push({ x: r.x + 6, y: r.y - 8, w: 50, h: 16 }); }
+    const spots = placeLabels(want, obstacles);
+    want.forEach((v, i) => {
+      const sp = spots[i];
+      if (sp) {
+        const g = s("g", { class: "val", transform: `translate(${sp.x},${sp.y})` });
+        g.append(s("rect", { width: v.w, height: v.h, rx: 4 }), s("text", { x: 4, y: 11 }, v.text), s("title", {}, v.full));
+        vals.append(g);
+      } else vals.append(s("circle", { cx: v.at.x + 5, cy: v.at.y - 7, r: 3, class: "val-more" }, ), s("title", {}, v.full));
+    });
+    // A title can't hang off a circle that's a sibling: put it inside.
+    for (const c of vals.querySelectorAll("circle.val-more")) { const t = c.nextElementSibling; if (t?.tagName === "title") c.append(t); }
+  }
+  return [frameG, wireG, portG, marks, itemG, nameG, out, vals];
+}
+
+// ---------------------------------------------------------------- tidy
+
+// Items to move together: a frame stands for everything inside it.
+function expand(scene: Scene, ids: Id[]): Set<Id> {
+  const out = new Set<Id>();
+  const inside = (it: Item, f: Id) => { for (let p = it.frame; p; p = scene.frames.get(p)?.parent ?? null) if (p === f) return true; return false; };
+  for (const id of ids) {
+    if (scene.items.has(id)) out.add(id);
+    if (scene.frames.has(id)) for (const it of scene.items.values()) if (inside(it, id)) out.add(it.key);
+  }
+  return out;
+}
+
+function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Record<Id, Pos> {
+  const { pos, boxes } = placeAll(scene, at);
+  const nodes: TNode[] = [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: it.w, h: it.h, frame: it.frame }));
+  const frames: TFrame[] = [...scene.frames.values()].map((f) => ({ id: f.id, parent: f.parent, pad: f.pad, minH: f.minH }));
+  const wires: TWire[] = [];
+  for (const w of scene.wires) {
+    const end = (e: End): [string, number, number] | null => {
+      if ("item" in e) return [e.item, e.dx, e.dy];
+      if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, 0, HEADH + 4 + e.port * 22 + 11] : null; }
+      return null;
+    };
+    const a = end(w.from), b = end(w.to);
+    if (a && b) wires.push({ from: a[0], fx: a[1], fy: a[2], to: b[0], tx: b[1], ty: b[2], flow: w.flow });
+  }
+  return Object.fromEntries(tidy(nodes, frames, wires, only));
+}
+
+// ---------------------------------------------------------------- gestures
+
+// Clicks select (shift-click picks several); double-click opens a
+// definition. Dragging: a node's body moves it (and every other picked
+// node); a port or dot wires that variable into an input; a node's output
+// shares its value with an input; an input dragged into space is cleared;
+// shift-drag on empty space picks what the box touches. Right-click asks
+// the editor for a menu.
+function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void) {
   const root = canvas.root;
   root.addEventListener("click", (e) => {
     const edge = (e.target as Element).closest("[data-edge]");
-    if (edge) return hooks.addDot(edge.getAttribute("data-edge")!);
-    const t = (e.target as Element).closest("[data-id]");
-    if (t) hooks.select(t.getAttribute("data-id")!);
+    if (edge && !e.shiftKey) return hooks.addDot(edge.getAttribute("data-edge")!);
+    const t = (e.target as Element).closest("[data-move], [data-id]");
+    if (e.shiftKey) {
+      const k = t?.getAttribute("data-move") ?? t?.getAttribute("data-id");
+      if (k && (scene.items.has(k) || scene.frames.has(k))) { picked.has(k) ? picked.delete(k) : picked.add(k); draw(hooks.at); }
+      return;
+    }
+    const id = (e.target as Element).closest("[data-id]")?.getAttribute("data-id");
+    if (id) { if (picked.size) picked.clear(); hooks.select(id); }
+    else if (picked.size) { picked.clear(); draw(hooks.at); }
   });
   root.addEventListener("dblclick", (e) => {
     const t = (e.target as Element).closest("[data-id]");
     if (t) hooks.open(t.getAttribute("data-id")!);
   });
+  root.addEventListener("contextmenu", (e) => {
+    if (!hooks.menu) return;
+    e.preventDefault();
+    const el = e.target as Element;
+    const hole = el.closest(".pill.hole")?.getAttribute("data-slot");
+    const src = el.closest("[data-src]")?.getAttribute("data-src");
+    const fr = el.closest("[data-frame]")?.getAttribute("data-frame");
+    const id = el.closest("[data-id]")?.getAttribute("data-id");
+    const slot = el.closest("[data-slot]")?.getAttribute("data-slot");
+    const target: MenuTarget = hole ? { kind: "hole", id: hole }
+      : src ? { kind: "binder", id: src }
+      : fr && fr !== scene.defId ? { kind: "frame", id: fr }
+      : id && !fr ? { kind: "node", id }
+      : slot ? { kind: "node", id: slot }
+      : { kind: "space" };
+    hooks.menu(target, { x: e.clientX, y: e.clientY }, world(canvas, e));
+  });
   root.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
     const start = ev.target as Element;
     const src = start.closest("[data-src]")?.getAttribute("data-src");
     const out = start.closest("[data-out]")?.getAttribute("data-out");
     const slot = start.closest("circle.inp")?.getAttribute("data-slot");
     const mv = start.closest("[data-move]")?.getAttribute("data-move");
-    if (src || out || slot) {
+    // Alt-drag moves anything, dots included (a plain drag from a dot wires).
+    if (!ev.altKey && (src || out || slot)) {
       ev.preventDefault();
       const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : null;
       connectDrag(root, ev, "[data-slot]", check && ((t) => check(t.getAttribute("data-slot")!)), (target) => {
@@ -556,10 +779,45 @@ function interact(canvas: Canvas, hooks: GraphHooks, draw: (offsets: Record<Id, 
       });
     } else if (mv) {
       ev.preventDefault();
-      const o = hooks.offsets[mv] ?? { x: 0, y: 0 };
-      let now = o;
-      moveDrag(root, ev, (dx, dy) => { now = { x: Math.round(o.x + dx), y: Math.round(o.y + dy) }; draw({ ...hooks.offsets, [mv]: now }); },
-        (moved) => { if (moved) hooks.moved(mv, now); }, canvas.zoom());
+      const group = picked.has(mv) && picked.size > 1 ? [...picked] : [mv];
+      const keys = [...expand(scene, group)];
+      const { pos } = placeAll(scene, hooks.at);
+      const from = new Map(keys.map((k) => [k, pos.get(k)!]));
+      let now: Record<Id, Pos> = {};
+      moveDrag(root, ev, (dx, dy) => {
+        now = Object.fromEntries(keys.map((k) => [k, { x: Math.round(from.get(k)!.x + dx), y: Math.round(from.get(k)!.y + dy) }]));
+        draw({ ...hooks.at, ...now });
+      }, (moved) => { if (moved) hooks.moved(now); }, canvas.zoom());
+    } else if (ev.shiftKey && !start.closest("[data-id]")) {
+      // Pick with a box.
+      ev.preventDefault();
+      const a = world(canvas, ev);
+      const box = s("rect", { class: "marquee" });
+      canvas.world.append(box);
+      const mv2 = (e: PointerEvent) => {
+        const b = world(canvas, e);
+        box.setAttribute("x", String(Math.min(a.x, b.x))); box.setAttribute("y", String(Math.min(a.y, b.y)));
+        box.setAttribute("width", String(Math.abs(b.x - a.x))); box.setAttribute("height", String(Math.abs(b.y - a.y)));
+      };
+      const up = (e: PointerEvent) => {
+        window.removeEventListener("pointermove", mv2);
+        window.removeEventListener("pointerup", up);
+        const b = world(canvas, e);
+        const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+        const { pos } = placeAll(scene, hooks.at);
+        for (const it of scene.items.values()) { const p = pos.get(it.key)!; if (overlaps(r, { x: p.x, y: p.y, w: it.w, h: it.h })) picked.add(it.key); }
+        draw(hooks.at);
+      };
+      window.addEventListener("pointermove", mv2);
+      window.addEventListener("pointerup", up);
     }
   });
+}
+
+// The pointer in world coordinates.
+function world(canvas: Canvas, e: { clientX: number; clientY: number }): Pos {
+  const p = svgPoint(canvas.root, e);
+  const m = canvas.world.transform.baseVal.consolidate()?.matrix;
+  if (!m) return p;
+  return { x: (p.x - m.e) / m.a, y: (p.y - m.f) / m.d };
 }
