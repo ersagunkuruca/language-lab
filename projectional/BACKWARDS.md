@@ -58,8 +58,11 @@ node --test test/backwards.test.ts
 
 ## What can't run backwards, and why
 
-Each of these throws `NotInvertible` with the reason, or the checker
-reports it before anything runs.
+The checker refuses the first and the last two before anything runs. The
+rest only run forward: they wait, inside the search, until what they need
+is known, and then run. An answer that leaves one of them waiting isn't
+pinned down, so the evaluator's `solve` doesn't count it (`relate` returns
+it with the wait in `residual`).
 
 | what | why |
 |---|---|
@@ -67,10 +70,10 @@ reports it before anything runs.
 | `floor`, `mod` | Many inputs give the same output, a whole interval or every multiple of `b`. That's a continuum, not a list to choose from, so these wait until their input is known and only run forward. An answer whose input never becomes known keeps the constraint as a residual. |
 | `less` producing a number | `x < 3` has a continuum of answers, so comparisons only check. `magnitude` backwards works because its arms produce the numbers and the condition only rejects. |
 | calling an unknown function | Functions can't be enumerated. `map` runs backwards only when its function is given. |
-| `first`, `all`, `count` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They run forward inside a backwards search as long as their action needs nothing unknown from outside, and say so otherwise. |
-| `with fuel` inside the function | Fuel counts steps of the search, so it belongs around the whole search, not inside the function being inverted. |
-| `derivative` | Backwards it would be integration. |
-| a function made while running backwards, as an answer | It has no value outside the search to hand back. |
+| `first`, `all`, `count` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |
+| `with fuel` inside the function | Runs its action with its own budget once the action is known: each step of the search that might repeat forever spends one. |
+| `derivative` | Backwards it would be integration. Once its function is known it runs forward, so `slope(x) = derivative(y ↦ y·y)(x)` run backwards from 1 gives 0.5. |
+| a function, as an answer | It has no value outside the search to hand back, and functions can't be guessed. The checker refuses to solve for anything with a function in it. |
 | text from nothing: `show(n) = t` with neither known | Waits. If nothing else pins `n` or `t` down, the answer says they're free. |
 
 "Free" deserves a word. `total(xs) = 10`, with `total` a fold that adds a
@@ -128,8 +131,13 @@ editor. The rules:
 | `fail()` | `fail()`: where `sinc` has no value, `sinc′` has none either |
 
 Not differentiable: taking apart data built from x (that needs
-derivatives of data), and `solve` nodes (implicit differentiation would do
-it). `differentiate` throws `NotDifferentiable` for those.
+derivatives of data), calls of builtins that aren't arithmetic (`floor`),
+and `solve` nodes (implicit differentiation would do it). `differentiate`,
+the editor's gesture, refuses those with `NotDifferentiable`. At run time
+`derivative` can't refuse, so it puts `fail()` where it can't read a slope:
+its result may fail, `(Number) -[Choice]-> Number`, and only the pieces
+that need the missing slope fail. `derivative(sqrt)` works too: a builtin
+is read as `x ↦ sqrt(x)`.
 
 Finding zeros uses the other half: `zeros of cubic` is `cubic` run
 backwards from 0. The solver can't isolate x in `x·x·x − x − 1`, so it

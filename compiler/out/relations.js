@@ -113,7 +113,7 @@ function missing_addend(known, total) {
 
 // show numbers
 function show_numbers(numbers) {
-  const fold$5 = (s$6) => {
+  const step$5 = (s$6, rs$7) => {
     switch (s$6.tag) {
       case "std.list.nil" /* nil */: {
         return "";
@@ -121,9 +121,9 @@ function show_numbers(numbers) {
       case "std.list.cons" /* cons */: {
         const n = s$6.fields[0];
         const rest = s$6.fields[1];
-        const rest_shown = fold$5(s$6.fields[1]);
-        const s$7 = rest;
-        switch (s$7.tag) {
+        const rest_shown = rs$7;
+        const s$8 = rest;
+        switch (s$8.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n);
           }
@@ -134,7 +134,15 @@ function show_numbers(numbers) {
       }
     }
   };
-  return fold$5(numbers);
+  const spine$11 = [];
+  let v$9 = numbers;
+  for (let k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1; k$13 >= 0; k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$11.push(v$9);
+    v$9 = v$9.fields[k$13];
+  }
+  let r$10 = step$5(v$9);
+  for (let i$12 = spine$11.length - 1; i$12 >= 0; i$12--) r$10 = step$5(spine$11[i$12], r$10);
+  return r$10;
 }
 
 export const defs = {

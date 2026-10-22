@@ -1,6 +1,7 @@
 // Holes found by the review (REVIEW.md). Each test states what *should*
-// happen and is marked todo, so it runs and reports without failing the
-// suite. When a fix lands, drop the todo and the test guards it.
+// happen. One still open is marked todo, so it runs and reports without
+// failing the suite; when a fix lands, the todo is dropped and the test
+// guards it.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +26,7 @@ function program(build: (k: Lang) => Id) {
 const params = (code: Code, def: Id) => get(code, get(code, def, "def").body!, "lambda").params;
 const add = (k: Lang, n: NodeData) => (k as unknown as { add: (n: NodeData) => Id }).add(n);
 
-test("§1.1 a data type that contains a function of itself can loop without Diverge (Landin's knot)", { todo: "strict positivity check, or Diverge for negative types" }, () => {
+test("§1.1 a data type that contains a function of itself can loop without Diverge (Landin's knot)", () => {
   let apply = "";
   const p = program((k) => {
     const knot = k.type("knot", [], [["wrap", [["f", (self) => add(k, { kind: "tfun", params: [k.tref(self)], result: k.tref("type.number") })]]]]);
@@ -39,7 +40,7 @@ test("§1.1 a data type that contains a function of itself can loop without Dive
   assert.ok(p.info.errors.length > 0 || p.effects(apply).includes(DIVERGE), "apply(wrap(apply)) never ends, and its type says it's total");
 });
 
-test("§1.1 every recursive call shrinks some argument, and it still never ends", { todo: "one decreasing argument per group, or size-change termination" }, () => {
+test("§1.1 every recursive call shrinks some argument, and it still never ends", () => {
   let ping = "";
   const p = program((k) => {
     ping = k.def("ping");
@@ -57,7 +58,7 @@ test("§1.1 every recursive call shrinks some argument, and it still never ends"
   assert.ok(p.effects(ping).includes(DIVERGE), "ping([0], [0]) runs forever, and its type says it's total");
 });
 
-test("§1.1 naming the smaller piece with a dot shouldn't cost the totality proof", { todo: "follow lets in the guard check" }, () => {
+test("§1.1 naming the smaller piece with a dot shouldn't cost the totality proof", () => {
   let len = "";
   const p = program((k) => {
     len = k.def("length");
@@ -70,7 +71,7 @@ test("§1.1 naming the smaller piece with a dot shouldn't cost the totality proo
   assert.ok(!p.effects(len).includes(DIVERGE));
 });
 
-test("§2.1 the evaluator can fold a list of ten thousand numbers", { todo: "evaluate without the JS stack (or folds over lists as loops)" }, () => {
+test("§2.1 the evaluator can fold a list of ten thousand numbers", () => {
   const p = program((k) => {
     const total = k.def("total");
     k.define(total, k.fn(["xs"], (xs) => k.fold(xs, [
@@ -84,16 +85,19 @@ test("§2.1 the evaluator can fold a list of ten thousand numbers", { todo: "eva
   assert.deepEqual(p.run(), ["49995000"]);
 });
 
-test("§1.2 derivative of a builtin passed as a value", { todo: "derivative of prims from the FN table" }, () => {
+test("§1.2 derivative of a builtin passed as a value", () => {
   const p = program((k) => {
     const main = k.def("main");
-    k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(k.call(S.derivative, B.sqrt), k.lit(4))))));
+    // A derivative may not exist (Choice), so it's asked for under `first`.
+    k.define(main, k.thunk(() => k.call(S.print, k.call(S.first,
+      k.thunk(() => k.call(S.show, k.call(k.call(S.derivative, B.sqrt), k.lit(4)))),
+      k.thunk(() => k.lit("none"))))));
     return main;
   });
   assert.deepEqual(p.run(), ["0.25"]);
 });
 
-test("§1.2 a well-typed backwards solve must not throw NotInvertible at run time", { todo: "decide invertibility in the checker (mode analysis)" }, () => {
+test("§1.2 a well-typed backwards solve must not throw NotInvertible at run time", () => {
   const p = program((k) => {
     const g = k.def("g");
     k.define(g, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(B.mul, x, k.lit(2))), k.thunk(() => k.lit(0)))));
@@ -103,11 +107,14 @@ test("§1.2 a well-typed backwards solve must not throw NotInvertible at run tim
       k.solve(g, { out: k.lit(6) }, { [x]: "x" }, (b) => b[x])))))));
     return main;
   });
-  // Either the checker refuses it, or it runs.
-  if (p.info.errors.length === 0) assert.doesNotThrow(() => p.run());
+  // Either the checker refuses it, or it runs. It runs: `first` waits until
+  // what its action uses is known, and x never is, so there's no answer
+  // that's pinned down (as for floor and mod run backwards).
+  assert.deepEqual(p.info.errors, []);
+  assert.deepEqual(p.run(), ["0"]);
 });
 
-test("§1.3 equal on functions should be refused, not compare by identity", { todo: "equal only on plain data" }, () => {
+test("§1.3 equal on functions should be refused, not compare by identity", () => {
   const p = program((k) => {
     const main = k.def("main");
     const square = () => k.fn(["x"], (x) => k.call(B.mul, x, x));

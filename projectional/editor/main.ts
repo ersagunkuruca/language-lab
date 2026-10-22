@@ -38,7 +38,7 @@ import lispStyle from "../styles/lisp.json" with { type: "json" };
 import graphStyle from "../styles/graph.json" with { type: "json" };
 import { evaluate } from "../src/eval.ts";
 import { hashDef } from "../src/hash.ts";
-import { freshId, get, merge, parentOf, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../src/model.ts";
+import { freshId, get, ID_PATTERN, merge, parentOf, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../src/model.ts";
 import { showType as showTypeOf } from "../src/lang/types.ts";
 import { check, CLASSES, type Problem } from "../src/check.ts";
 import * as E from "../src/edits.ts";
@@ -952,12 +952,14 @@ function wireName(namer: Namer, p: Presentation, id: Id): string {
 function solverPrinter(namer: Namer, p: Presentation) {
   const varName = (n: string): string => {
     if (n.startsWith("#k")) return "k" + n.slice(2).split("").map((d) => "₀₁₂₃₄₅₆₇₈₉"[+d] ?? d).join("");
-    let m = n.match(/^([0-9a-f]{8})$/);
+    let m = n.match(new RegExp(`^(${ID_PATTERN})$`));
     if (m) return wireName(namer, p, m[1]);
-    m = n.match(/^([0-9a-f]{8}):(.+)$/);
+    m = n.match(new RegExp(`^(${ID_PATTERN}):(.+)$`));
     if (m) { const part = node(m[1]) as Extract<Node, { kind: "part" }>; return `${part?.fn ? labelOf(part.fn) : "const"}.${portLabel(doc.code, p.names, part?.fn ?? null, m[2])}`; }
+    m = n.match(new RegExp(`^(${ID_PATTERN})\\d+\\.(.+)$`));
+    if (m) return `${namer.name(m[1])}.${varName(m[2])}`;
     m = n.match(/^(.*?)\d+\.(.+)$/);
-    if (m) return `${/^[0-9a-f]{8}$/.test(m[1]) ? namer.name(m[1]) : m[1]}.${varName(m[2])}`;
+    if (m) return `${m[1]}.${varName(m[2])}`;
     return n;
   };
   const glyphs: Record<string, [string, number]> = { add: ["+", 6], sub: ["−", 6], mul: ["·", 7], div: ["/", 7], pow: ["^", 8] };

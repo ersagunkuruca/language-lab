@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../io.ts";
-import { get } from "../model.ts";
+import { get, ID_PATTERN } from "../model.ts";
 import { infer } from "./infer.ts";
 import { loadProgram } from "./load.ts";
 import { relate, showTerm } from "./relate.ts";
@@ -56,7 +56,7 @@ let six: unknown = { tag: variant("zero"), fields: [] };
 for (let i = 0; i < 6; i++) six = { tag: variant("succ"), fields: [six] };
 let i = 0;
 for (const a of relate(p.code, p.named("meaning"), { out: six })) {
-  console.log(`    ${i === 0 ? "canonical" : "also     "}  ${showTerm(a.values[bits]).replace(/[0-9a-f]{8}/g, (m) => names[m] ?? m)}`);
+  console.log(`    ${i === 0 ? "canonical" : "also     "}  ${showTerm(a.values[bits]).replace(new RegExp(ID_PATTERN, "g"), (m) => names[m] ?? m)}`);
   if (++i === 3) break;
 }
 console.log("    (6 = 2·(2·(2·0 + 1) + 1); the others have leading zeros, which the representation's own functions never make)");

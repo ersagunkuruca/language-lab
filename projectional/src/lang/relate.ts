@@ -28,8 +28,13 @@
 //                value is known it is pushed into the function first, else
 //                the inputs are computed first.
 //
-// What can't run backwards, and why, is listed in BACKWARDS.md. Those cases
-// throw NotInvertible with the reason.
+// Some things only run forward: floor and mod (many inputs, one output),
+// first/all/count (they look at every answer of an action at once),
+// derivative, `with fuel`, and calling a function. Each waits until what it
+// needs is known, then runs; an answer that leaves one waiting isn't pinned
+// down, so it isn't an answer. What can't run backwards at all, and why, is
+// listed in BACKWARDS.md; the checker refuses those (solving for a
+// function, printing), and the few left throw NotInvertible.
 //
 // The search is miniKanren's: a lazy stream of states with fair
 // interleaving, so an infinite branch (unfolding a list forever) can't
@@ -39,7 +44,8 @@
 import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf } from "../model.ts";
-import { dependencies, ownerOfTypeParts } from "../model.ts";
+import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
+import { derivativeLambda } from "./derive.ts";
 import { impl } from "../prelude.ts";
 import { META, equal as valueEqual, type Data, type Value } from "./run.ts";
 import { RELATIONS, VARIADIC } from "../relational.ts";
@@ -90,7 +96,9 @@ type Wait =
   | { k: "show"; n: Term; s: Term }
   | { k: "test"; args: Term[]; f: (...xs: Value[]) => boolean; text: string }
   | { k: "compute"; args: Term[]; out: Term; f: (...xs: Value[]) => Value; text: string }
-  | { k: "range"; n: Term; out: Term };
+  | { k: "range"; n: Term; out: Term }
+  // Runs `then` once `ready` says enough is known.
+  | { k: "later"; ready: (s: State) => boolean; then: Goal; text: string };
 
 interface State { sub: Map<number, Term>; eqs: Eq[]; waits: Wait[]; next: number }
 
@@ -283,6 +291,7 @@ function wake(w: Wait, s: State): Goal | null {
       if (xs.some((x) => x === undefined)) return null;
       return eq(w.out, fromValue(w.f(...(xs as Value[]))));
     }
+    case "later": return w.ready(s) ? w.then : null;
     case "range": {
       const n = walk(w.n, s);
       if (typeof n === "number") return eq(w.out, list(Array.from({ length: Math.max(0, n) }, (_, i) => i)));
@@ -386,7 +395,8 @@ export function interpreter(code: Code, opts: Options = {}) {
   }
 
   function apply(f: Term, args: Term[], out: Term): Goal {
-    if (f instanceof LVar) throw new NotInvertible("calling a function that isn't known yet: functions can't be guessed");
+    // Functions can't be guessed: wait until it's known which one this is.
+    if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out)(s), text: "call" });
     if (typeof f !== "object" || isData(f)) throw new NotInvertible("calling something that isn't a function");
     if (f.k === "closure") {
       const lam = nodes[f.lambda] as NodeOf<"lambda">;
@@ -455,8 +465,24 @@ export function interpreter(code: Code, opts: Options = {}) {
       case S.fail: return failG;
       case S.first: case S.all: case S.count: return aggregate(id, args, out);
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
-      case S.derivative: throw new NotInvertible("derivative only runs forward; backwards it would be integration");
-      case S.fuel: throw new NotInvertible("with fuel can't be used inside something run backwards; put it around the whole search");
+      // Backwards, derivative would be integration: it waits for its function.
+      case S.derivative:
+        return wait({
+          k: "later", text: "derivative", ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
+            const f = walk(a, s) as Closure | Prim;
+            const lambda = derivativeLambda(code, f.k === "closure" ? { lambda: f.lambda } : { prim: f.id });
+            return eq(out, { k: "closure", lambda, env: f.k === "closure" ? f.env : new Map() })(s);
+          },
+        });
+      // The action runs with its own budget: every step that might repeat
+      // forever spends one, and when they're gone that branch has no answer.
+      case S.fuel:
+        return wait({
+          k: "later", text: "with fuel", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
+            let left = walk(a, s) as number;
+            return interpreter(code, { spend: () => left-- > 0 && spend() }).apply(walk(b, s), [], out)(s);
+          },
+        });
     }
     throw new NotInvertible(`${id} has no backwards reading`);
   }
@@ -493,27 +519,42 @@ export function interpreter(code: Code, opts: Options = {}) {
 
   // first, all and count look at every answer of their action at once. Run
   // forward that's fine. Run backwards it would mean "find inputs for which
-  // the set of answers is this", which is not a choice per answer; so the
-  // action must not need to guess anything from outside.
+  // the set of answers is this", which is not a choice per answer; so they
+  // wait until everything their action uses is known, then run it forward.
+  // An answer of the action that still has unknowns in it isn't pinned
+  // down, so it doesn't count (as in the evaluator's solve).
   function aggregate(id: Id, args: Term[], out: Term): Goal {
-    return (s) => {
-      const body = walk(args[0], s);
-      const [[r], inner] = freshVars(s, 1);
-      const answers: Term[] = [];
-      for (const t of pull(apply(body, [], r)(inner))) {
-        for (const n of t.sub.keys()) {
-          if (n < s.next && !s.sub.has(n)) {
-            throw new NotInvertible(`${id === S.first ? "first" : id === S.all ? "all" : "count"} can't be run backwards while its action depends on something unknown`);
-          }
+    return wait({
+      k: "later", text: id === S.first ? "first" : id === S.all ? "all" : "count", ready: (s) => known(args[0], s), then: (s) => {
+        const body = walk(args[0], s);
+        const [[r], inner] = freshVars(s, 1);
+        const answers: Term[] = [];
+        for (const t of pull(apply(body, [], r)(inner))) {
+          if (t.waits.length) continue;
+          const v = ground(r, t);
+          if (v === undefined) continue;
+          answers.push(v);
+          if (id === S.first) break;
         }
-        const v = ground(r, t);
-        if (v === undefined) throw new NotInvertible("an answer inside first/all/count is not fully known");
-        answers.push(v);
-        if (id === S.first) break;
-      }
-      if (id === S.first) return answers.length ? eq(out, answers[0])(s) : apply(walk(args[1], s), [], out)(s);
-      return eq(out, id === S.all ? list(answers) : answers.length)(s);
-    };
+        if (id === S.first) return answers.length ? eq(out, answers[0])(s) : apply(walk(args[1], s), [], out)(s);
+        return eq(out, id === S.all ? list(answers) : answers.length)(s);
+      },
+    });
+  }
+
+  // Is t fully known: no unknowns in it, and for a function, none in the
+  // variables its body uses?
+  const freeIn = new Map<Id, Id[]>();
+  function known(t: Term, s: State): boolean {
+    t = walk(t, s);
+    if (t instanceof LVar) return false;
+    if (isData(t)) return t.fields.every((f) => known(f, s));
+    if (typeof t === "object" && t.k === "closure") {
+      if (!freeIn.has(t.lambda)) freeIn.set(t.lambda, subtree(code, t.lambda).flatMap((x) => (nodes[x].kind === "ref" ? [(nodes[x] as NodeOf<"ref">).target] : [])));
+      const env = t.env;
+      return freeIn.get(t.lambda)!.every((b) => !env.has(b) || known(fromValue(env.get(b)), s));
+    }
+    return true;
   }
 
   function matchGoal(n: NodeOf<"match">, env: Env, out: Term): Goal {
@@ -671,7 +712,7 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     const rn = (e: Expr): Expr => e.k === "var" && e.name!.startsWith("?") ? evar(name(+e.name!.slice(1))) as Expr : e.k === "call" ? { ...e, args: e.args!.map(rn) } : e;
     const residual = [
       ...tidy(st.eqs, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
-      ...st.waits.map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k),
+      ...st.waits.map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
     ];
     yield { values, free: ports.filter((p) => hasVars(values[p])), residual };
   }

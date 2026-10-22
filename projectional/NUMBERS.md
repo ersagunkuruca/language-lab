@@ -525,9 +525,9 @@ In order. Each stage says when to start it.
   total, and the laws make the rewrite correct, so the compiler should keep
   the effects of the original. For now the rewritten program's type is
   less precise than it should be.
-- **The evaluator recurses on the JS stack.** `is even` of 300 on binary
-  already overflows it (each level of recursion is many generator frames).
-  That's the evaluator, not representations. It's why the demo uses 100.
+- ~~**The evaluator recurses on the JS stack.**~~ Fixed: the evaluator is
+  now a machine with its continuation on the heap (LANGUAGE.md, "How it
+  runs"), so `is even` of any size runs.
 - **One representation per type, per program**, as said above.
 - **Costs are declared.** Stage 7 makes them checked, then computed.
 - **Representation rewrites inside a user's own types** (a record with a

@@ -76,7 +76,7 @@ $meta(for_each, "fe3a9477");
 
 // show numbers
 function show_numbers(numbers) {
-  const fold$4 = (s$5) => {
+  const step$4 = (s$5, rs$6) => {
     switch (s$5.tag) {
       case "std.list.nil" /* nil */: {
         return "";
@@ -84,9 +84,9 @@ function show_numbers(numbers) {
       case "std.list.cons" /* cons */: {
         const n = s$5.fields[0];
         const rest2 = s$5.fields[1];
-        const rest_shown = fold$4(s$5.fields[1]);
-        const s$6 = rest2;
-        switch (s$6.tag) {
+        const rest_shown = rs$6;
+        const s$7 = rest2;
+        switch (s$7.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n);
           }
@@ -97,53 +97,61 @@ function show_numbers(numbers) {
       }
     }
   };
-  return fold$4(numbers);
+  const spine$10 = [];
+  let v$8 = numbers;
+  for (let k$12 = v$8.tag === "std.list.cons" /* cons */ ? 1 : -1; k$12 >= 0; k$12 = v$8.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$10.push(v$8);
+    v$8 = v$8.fields[k$12];
+  }
+  let r$9 = step$4(v$8);
+  for (let i$11 = spine$10.length - 1; i$11 >= 0; i$11--) r$9 = step$4(spine$10[i$11], r$9);
+  return r$9;
 }
 $meta(show_numbers, "b81a25a8");
 
 // samples
-let value$7;
+let value$13;
 function samples() {
-  return value$7 ??= $cons(({ tag: "std.pair.pair" /* pair */, fields: ["cubic", $lift(cubic)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["wave", $lift(wave)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["kink", $lift(kink)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["bump", $lift(bump)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["parabola", $lift(parabola)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["sinc", sinc] }), $nil))))));
+  return value$13 ??= $cons(({ tag: "std.pair.pair" /* pair */, fields: ["cubic", $lift(cubic)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["wave", $lift(wave)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["kink", $lift(kink)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["bump", $lift(bump)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["parabola", $lift(parabola)] }), $cons(({ tag: "std.pair.pair" /* pair */, fields: ["sinc", sinc] }), $nil))))));
 }
 
 // root near (called with a Choice function)
 function* root_near$choice(f2, guess) {
-  for (const r$9 of $fuel(100, $meta((function* () {
+  for (const r$15 of $fuel(100, $meta((function* () {
             if ($spend()) {
-              for (const r$8 of newton$choice(f2, $derivative($program, f2, true), guess)) {
-                yield r$8;
+              for (const r$14 of newton$choice(f2, $derivative($program, f2, true), guess)) {
+                yield r$14;
               }
             }
           }), "27d057a4", () => [["62b005d3", $toEval(f2, true)], ["d8b7c0d2", guess]]), true)) {
-    yield r$9;
+    yield r$15;
   }
 }
 $meta(root_near$choice, "2fde7dc8");
 
 // zeros of cubic
-let value$10;
+let value$16;
 function zeros_of_cubic() {
-  return value$10 ??= (() => {
-      const all$11 = [];
-      for (const sol$12 of solve$0(0)) {
-        const x = sol$12[0];
-        all$11.push(x);
+  return value$16 ??= (() => {
+      const all$17 = [];
+      for (const sol$18 of solve$0(0)) {
+        const x = sol$18[0];
+        all$17.push(x);
       }
-      return $toList(all$11);
+      return $toList(all$17);
     })();
 }
 
 // zeros of x² − 2
-let value$13;
+let value$19;
 function zeros_of_x_2() {
-  return value$13 ??= (() => {
-      const all$14 = [];
-      for (const sol$15 of solve$1(0)) {
-        const x2 = sol$15[0];
-        all$14.push(x2);
+  return value$19 ??= (() => {
+      const all$20 = [];
+      for (const sol$21 of solve$1(0)) {
+        const x2 = sol$21[0];
+        all$20.push(x2);
       }
-      return $toList(all$14);
+      return $toList(all$20);
     })();
 }
 
@@ -193,17 +201,17 @@ $meta(sinc, "087a3b53");
 
 // newton (called with a Choice function)
 function* newton$choice(f3, slope, guess2) {
-  for (const r$16 of f3(guess2)) {
-    for (const r$17 of slope(guess2)) {
-      const t$18 = (r$16 / r$17);
-      const t$19 = (guess2 - t$18);
-      const next = t$19;
+  for (const r$22 of f3(guess2)) {
+    for (const r$23 of slope(guess2)) {
+      const t$24 = (r$22 / r$23);
+      const t$25 = (guess2 - t$24);
+      const next = t$25;
       if ((Math.abs((next - guess2)) < 1e-12)) {
         yield next;
       } else {
         if ($spend()) {
-          for (const r$20 of newton$choice(f3, slope, next)) {
-            yield r$20;
+          for (const r$26 of newton$choice(f3, slope, next)) {
+            yield r$26;
           }
         }
       }
@@ -214,19 +222,27 @@ $meta(newton$choice, "653a5cce");
 
 // polynomial
 function polynomial(coefficients, x9) {
-  const fold$21 = (s$22) => {
-    switch (s$22.tag) {
+  const step$27 = (s$28, rs$29) => {
+    switch (s$28.tag) {
       case "std.list.nil" /* nil */: {
         return 0;
       }
       case "std.list.cons" /* cons */: {
-        const c = s$22.fields[0];
-        const higher = fold$21(s$22.fields[1]);
+        const c = s$28.fields[0];
+        const higher = rs$29;
         return (c + (x9 * higher));
       }
     }
   };
-  return fold$21(coefficients);
+  const spine$32 = [];
+  let v$30 = coefficients;
+  for (let k$34 = v$30.tag === "std.list.cons" /* cons */ ? 1 : -1; k$34 >= 0; k$34 = v$30.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$32.push(v$30);
+    v$30 = v$30.fields[k$34];
+  }
+  let r$31 = step$27(v$30);
+  for (let i$33 = spine$32.length - 1; i$33 >= 0; i$33--) r$31 = step$27(spine$32[i$33], r$31);
+  return r$31;
 }
 $meta(polynomial, "6ba2cd7d");
 

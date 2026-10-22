@@ -32,40 +32,66 @@ export function fromList(v: Value): Value[] {
   return out;
 }
 
+// With its own stack, so two long lists can be compared.
 export function equal(a: Value, b: Value): boolean {
-  if (typeof a !== "object" || typeof b !== "object") return a === b;
-  return a.tag === b.tag && a.fields.every((f, i) => equal(f, b.fields[i]));
+  const todo: [Value, Value][] = [[a, b]];
+  for (let p; (p = todo.pop());) {
+    const [x, y] = p;
+    if (typeof x !== "object" || typeof y !== "object") { if (x !== y) return false; continue; }
+    if (x.tag !== y.tag) return false;
+    for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
+  }
+  return true;
 }
 
 // Function values remember the node they came from (a lambda and the
 // variables it closed over, or a builtin, constructor or projection), so the
 // relational interpreter and `derivative` can look inside them.
 export const META = Symbol("node");
-const tag = <F extends Fn>(f: F, meta: { lambda: Id; env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
+const tag = <F extends Fn>(f: F, meta: { lambda: Id; readonly env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
+
+interface Fuel { left: number }
+// The variables in scope, as a linked list: binding one more shares the
+// rest, so a call costs one cell per parameter, not a copy of the scope.
+type Env = { b: Id; v: Value; up: Env } | null;
+const lookup = (env: Env, b: Id): Value | undefined => {
+  for (let e = env; e; e = e.up) if (e.b === b) return e.v;
+  return undefined;
+};
+const toMap = (env: Env) => {
+  const out = new Map<Id, Value>(), cells: { b: Id; v: Value }[] = [];
+  for (let e = env; e; e = e.up) cells.push(e);
+  for (let i = cells.length - 1; i >= 0; i--) out.set(cells[i].b, cells[i].v);
+  return out;
+};
+const fromMap = (m: Map<Id, Value>): Env => { let e: Env = null; for (const [b, v] of m) e = { b, v, up: e }; return e; };
+interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; base: number; fuel: Fuel | null; next: Frame | null }
+interface FoldCtx { arms: Map<Id, { arm: NodeOf<"arm">; rec: number[] }>; env: Env }
+type Frame = { next: Frame | null } & (
+  | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: NodeOf<"call"> | NodeOf<"solve"> }
+  | { t: "match"; n: NodeOf<"match">; env: Env }
+  | { t: "fold"; n: NodeOf<"fold">; env: Env }
+  | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: NodeOf<"arm">; rec: number[]; results: Value[] }
+  | { t: "fuelExit"; saved: Fuel | null }
+  | HandlerFrame
+);
+type Choice = { barrier: HandlerFrame } | { it: Iterator<unknown>; k: Frame | null; fuel: Fuel | null; use: (x: unknown) => void };
 
 export interface Runtime {
   print: (line: string) => void;
 }
 
-// Runs `gen` with `enter`/`exit` around every step, so a handler's dynamic
-// state (fuel) is in place exactly while its body is running.
-function* scoped<T>(gen: Iterable<T>, enter: () => void, exit: () => void): Generator<T> {
-  const it = gen[Symbol.iterator]();
-  while (true) {
-    enter();
-    let r: IteratorResult<T>;
-    try { r = it.next(); } finally { exit(); }
-    if (r.done) return;
-    yield r.value;
-  }
-}
-
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Our own copy of the node table: `derivative` writes new code into it.
   code = { nodes: { ...code.nodes }, defs: code.defs };
-  const fuel: { left: number }[] = [];
   const defs = new Map<Id, Value>();
   const one = (x: Value): Iterable<Value> => [x];
+  // Closures made by this runner, so the machine can enter them directly
+  // instead of calling them as JS functions.
+  const closures = new WeakMap<Fn, { lambda: NodeOf<"lambda">; env: Env }>();
+  // The innermost `with fuel` frame, for code the machine calls out to (a
+  // builtin that calls back in): each machine starts from it.
+  let ambient: Fuel | null = null;
 
   const builtins: Record<Id, Fn> = {};
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = (...a) => one(f(...(a as number[])));
@@ -80,127 +106,300 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.oneOf]: (xs) => fromList(xs),
     [S.fail]: () => [],
     [S.print]: (s) => (rt.print(s as string), one(unit)),
+    // The handlers are run by the machine itself (see `apply`); these are
+    // for when something outside it calls them.
     [S.all]: function* (body) { yield toList([...(body as Fn)()]); },
     [S.count]: function* (body) { let n = 0; for (const _ of (body as Fn)()) n++; yield n; },
     [S.first]: function* (body, otherwise) {
       for (const x of (body as Fn)()) { yield x; return; }
       yield* (otherwise as Fn)();
     },
+    [S.fuel]: (n, body) => run((m) => m.handle(S.fuel, [n, body])),
+    // Every function value carries its node, so this can always look inside.
     [S.derivative]: (f) => {
-      const m = (f as unknown as Record<symbol, { lambda?: Id; env?: Map<Id, Value> }>)[META];
-      if (!m?.lambda) throw new Error("derivative needs a function written in the program, to look inside it");
-      return ev(derivativeLambda(code, m.lambda), m.env!);
-    },
-    [S.fuel]: (n, body) => {
-      const frame = { left: n as number };
-      return scoped((body as Fn)(), () => fuel.push(frame), () => fuel.pop());
+      const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
+      return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
+  const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.fuel].map((h) => [builtins[h], h]));
 
-  // Every combination of the results of `ids`, in order (left to right,
-  // earlier choices varying slowest).
-  function* each(ids: Id[], env: Map<Id, Value>, i = 0, acc: Value[] = []): Generator<Value[]> {
-    if (i === ids.length) { yield acc; return; }
-    for (const v of ev(ids[i], env)) yield* each(ids, env, i + 1, [...acc, v]);
-  }
+  const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
+    const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), { lambda: n.id, get env() { return toMap(env); } });
+    closures.set(f, { lambda: n, env });
+    return f;
+  };
 
-  function* ev(id: Id, env: Map<Id, Value>): Generator<Value> {
-    const n = code.nodes[id];
-    switch (n.kind) {
-      case "lit": yield n.value; return;
-      case "ref": yield refValue(n.target, env); return;
-      case "lambda":
-        yield tag((...args: Value[]) => {
-          const inner = new Map(env);
-          n.params.forEach((p, i) => inner.set(p, args[i]));
-          return ev(n.body, inner);
-        }, { lambda: id, env });
-        return;
-      case "call": {
-        const head = code.nodes[n.fn];
-        const target = head.kind === "ref" ? head.target : null;
-        // Each call into a possibly-divergent definition spends fuel, if a
-        // `with fuel` handler is active. Out of fuel means no result.
-        if (target && info.divergent.has(target) && fuel.length && --fuel[fuel.length - 1].left < 0) return;
-        for (const [f, ...args] of each([n.fn, ...n.args], env)) yield* (f as Fn)(...args);
-        return;
-      }
-      case "match":
-        for (const v of ev(n.scrutinee, env)) {
-          const d = v as Data;
-          const arm = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
-          if (arm) yield* ev(arm.body, bind(env, arm.binds, d.fields));
-          else yield* ev(n.otherwise!, env);
-        }
-        return;
-      case "fold": {
-        const arms = new Map(n.arms.map((a) => { const arm = code.nodes[a] as NodeOf<"arm">; return [arm.variant, arm]; }));
-        // Children are folded before their parent (bottom-up), as a fold
-        // does. With Choice, each combination of the children's results is
-        // a separate branch.
-        const fold = function* (v: Value): Generator<Value> {
-          const d = v as Data;
-          const arm = arms.get(d.tag)!;
-          const rec = arm.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
-          const combos = function* (k: number, acc: Value[]): Generator<Value[]> {
-            if (k === rec.length) { yield acc; return; }
-            for (const r of fold(d.fields[rec[k]])) yield* combos(k + 1, [...acc, r]);
-          };
-          for (const results of combos(0, [])) {
-            const inner = bind(env, arm.binds, d.fields);
-            rec.forEach((i, k) => inner.set(arm.results[i]!, results[k]));
-            yield* ev(arm.body, inner);
-          }
-        };
-        for (const v of ev(n.scrutinee, env)) yield* fold(v);
-        return;
-      }
-      case "solve": {
-        const keys = Object.keys(n.given);
-        const p = planSolve(code, n);
-        if (p.mode === "relational") {
-          // Each step that might unfold forever spends the innermost fuel.
-          const spend = () => !(fuel.length && --fuel[fuel.length - 1].left < 0);
-          for (const vals of each(keys.map((k) => n.given[k]), env)) {
-            for (const sol of relate(code, n.fn, Object.fromEntries(keys.map((k, i) => [k, vals[i]])), { spend })) {
-              const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
-              if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
-              yield* ev(n.body, bind(env, Object.values(n.binds), bound as Value[]));
-            }
-          }
-          return;
-        }
-        const rel = p.rel!;
-        for (const vals of each(keys.map((k) => n.given[k]), env)) {
-          for (const sol of solutions(rel, Object.fromEntries(keys.map((k, i) => [k, vals[i] as number])))) {
-            // A port the equations leave free has no value: not a solution.
-            if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
-            yield* ev(n.body, bind(env, Object.values(n.binds), Object.keys(n.binds).map((k) => sol[k]!)));
-          }
-        }
-        return;
-      }
-      case "hole": throw new Error("the program reached a hole");
-      default: throw new Error(`can't evaluate a ${n.kind}`);
+  // ---- the machine
+  //
+  // A small-step machine with its continuation and its choice points on the
+  // heap, so neither a deep recursion nor a long fold uses the JS stack.
+  // The continuation `k` is a linked list of frames, each saying what to do
+  // with the value being returned. It is never mutated, so a choice point
+  // can keep it and resume it later: that is all backtracking is. A choice
+  // point holds an iterator of the remaining alternatives; failing pulls
+  // the next one from the newest choice point. A handler pushes a barrier
+  // below its body's choice points: `first` cuts back to it, `all` and
+  // `count` fail until the search reaches it, and reaching it ends the body.
+  function* run(start: (m: Machine) => void): Generator<Value> {
+    const m = new Machine(ambient);
+    start(m);
+    while (true) {
+      const v = m.go();
+      if (v === DONE) return;
+      yield v as Value;
+      m.fail();
     }
   }
 
-  const bind = (env: Map<Id, Value>, binders: Id[], values: Value[]) => {
-    const inner = new Map(env);
-    binders.forEach((b, i) => inner.set(b, values[i]));
-    return inner;
+  const DONE = Symbol("done");
+  const EVAL = 0, RET = 1, FAIL = 2;
+
+  class Machine {
+    mode = EVAL;
+    id: Id = "";
+    env: Env = null;
+    val: Value = 0;
+    k: Frame | null = null;
+    fuel: Fuel | null;
+    cps: Choice[] = [];
+    constructor(fuel: Fuel | null) { this.fuel = fuel; }
+
+    eval(id: Id, env: Env) { this.mode = EVAL; this.id = id; this.env = env; }
+    ret(v: Value) { this.mode = RET; this.val = v; }
+    fail() { this.mode = FAIL; }
+    push(f: Frame) { f.next = this.k; this.k = f; }
+
+    // Call a function value with its arguments, in the current continuation.
+    apply(f: Value, args: Value[]) {
+      const c = closures.get(f as Fn);
+      if (c) {
+        return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
+      }
+      const h = HANDLED.get(f as Fn);
+      if (h) return this.handle(h, args);
+      ambient = this.fuel;
+      this.from((f as Fn)(...args), (x) => this.ret(x as Value));
+    }
+
+    handle(h: Id, args: Value[]) {
+      if (h === S.fuel) {
+        this.push({ t: "fuelExit", saved: this.fuel, next: null });
+        this.fuel = { left: args[0] as number };
+        return this.apply(args[1], []);
+      }
+      const frame: HandlerFrame = { t: "handler", h, acc: [], otherwise: args[1], base: this.cps.length, fuel: this.fuel, next: null };
+      this.cps.push({ barrier: frame });
+      this.push(frame);
+      this.apply(args[0], []);
+    }
+
+    // Continue with the first of a stream of alternatives, and leave a choice
+    // point for the rest. A stream of exactly one (an array, from a builtin)
+    // makes no choice point.
+    from<T>(xs: Iterable<T>, use: (x: T) => void) {
+      if (Array.isArray(xs) && xs.length <= 1) return xs.length ? use(xs[0]) : this.fail();
+      const it = xs[Symbol.iterator]();
+      const r = it.next();
+      if (r.done) return this.fail();
+      this.cps.push({ it, k: this.k, fuel: this.fuel, use: use as (x: unknown) => void });
+      use(r.value);
+    }
+
+    // Run until a value reaches the end of the continuation, or nothing is left.
+    go(): Value | typeof DONE {
+      while (true) {
+        if (this.mode === EVAL) this.step();
+        else if (this.mode === RET) {
+          const f = this.k;
+          if (!f) return this.val;
+          this.k = f.next;
+          this.resume(f);
+        } else {
+          const cp = this.cps[this.cps.length - 1];
+          if (!cp) return DONE;
+          if ("barrier" in cp) {
+            this.cps.pop();
+            const f = cp.barrier;
+            this.k = f.next;
+            this.fuel = f.fuel;
+            if (f.h === S.all) this.ret(toList(f.acc));
+            else if (f.h === S.count) this.ret(f.acc.length);
+            else this.apply(f.otherwise, []);
+            continue;
+          }
+          ambient = cp.fuel;
+          const r = cp.it.next();
+          if (r.done) { this.cps.pop(); continue; }
+          this.k = cp.k;
+          this.fuel = cp.fuel;
+          cp.use(r.value);
+        }
+      }
+    }
+
+    // Values that need no step: literals, variables, lambdas.
+    atom(id: Id, env: Env): Value | undefined {
+      const n = code.nodes[id];
+      if (n.kind === "lit") return n.value;
+      if (n.kind === "ref") return refValue(n.target, env);
+      if (n.kind === "lambda") return closure(n, env);
+      return undefined;
+    }
+
+    step() {
+      const id = this.id, env = this.env;
+      const n = code.nodes[id];
+      switch (n.kind) {
+        case "lit": case "ref": case "lambda": return this.ret(this.atom(id, env)!);
+        case "call": {
+          const head = code.nodes[n.fn];
+          const target = head.kind === "ref" ? head.target : null;
+          // Each call into a possibly-divergent definition spends fuel, if a
+          // `with fuel` handler is active. Out of fuel means no result.
+          if (target && info.divergent.has(target) && this.fuel && --this.fuel.left < 0) return this.fail();
+          // A lambda written in place (a let, a dot) is entered, not made.
+          if (head.kind === "lambda") return this.parts(n.args, 0, [], env, n);
+          return this.parts([n.fn, ...n.args], 0, [], env, n);
+        }
+        case "match": case "fold":
+          this.push({ t: n.kind, n, env, next: null } as Frame);
+          return this.eval(n.scrutinee, env);
+        case "solve":
+          return this.parts(Object.values(n.given), 0, [], env, n);
+        case "hole": throw new Error("the program reached a hole");
+        default: throw new Error(`can't evaluate a ${n.kind}`);
+      }
+    }
+
+    // Evaluate the parts of a call (or a solve's givens) left to right,
+    // earlier choices varying slowest.
+    parts(ids: Id[], i: number, vals: Value[], env: Env, n: NodeOf<"call"> | NodeOf<"solve">) {
+      for (; i < ids.length; i++) {
+        const a = this.atom(ids[i], env);
+        if (a === undefined) {
+          this.push({ t: "parts", ids, i, vals: [...vals], env, n, next: null });
+          return this.eval(ids[i], env);
+        }
+        vals.push(a);
+      }
+      if (n.kind === "call") {
+        const head = code.nodes[n.fn];
+        if (head.kind === "lambda") return this.eval(head.body, bind(env, head.params, vals));
+        return this.apply(vals[0], vals.slice(1));
+      }
+      this.solve(n, vals, env);
+    }
+
+    resume(f: Frame) {
+      const v = this.val;
+      switch (f.t) {
+        case "parts": return this.parts(f.ids, f.i + 1, [...f.vals, v], f.env, f.n);
+        case "match": {
+          const d = v as Data;
+          const arm = f.n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
+          if (arm) return this.eval(arm.body, bind(f.env, arm.binds, d.fields));
+          return this.eval(f.n.otherwise!, f.env);
+        }
+        // Children are folded before their parent (bottom-up), as a fold
+        // does: the first recursive field of the value is folded, then the
+        // next, then the arm runs with their results. The frames waiting
+        // for children are the stack, on the heap.
+        case "fold": return this.foldValue({ arms: foldArms(f.n), env: f.env }, v as Data);
+        case "foldChild": {
+          const results = [...f.results, v];
+          if (results.length < f.rec.length) {
+            this.push({ ...f, results, next: null });
+            return this.foldValue(f.ctx, f.d.fields[f.rec[results.length]] as Data);
+          }
+          return this.foldBody(f.ctx, f.d, f.arm, f.rec, results);
+        }
+        case "handler":
+          if (f.h === S.first) {
+            this.cps.length = f.base;
+            this.fuel = f.fuel;
+            return this.ret(v);
+          }
+          f.acc.push(v);
+          return this.fail();
+        case "fuelExit":
+          this.fuel = f.saved;
+          return this.ret(v);
+      }
+    }
+
+    // Walk down the first recursive field until a case without one, leaving
+    // a frame at each level.
+    foldValue(ctx: FoldCtx, d: Data) {
+      for (let arm = ctx.arms.get(d.tag)!; arm.rec.length; arm = ctx.arms.get(d.tag)!) {
+        this.push({ t: "foldChild", ctx, d, arm: arm.arm, rec: arm.rec, results: [], next: null });
+        d = d.fields[arm.rec[0]] as Data;
+      }
+      this.foldBody(ctx, d, ctx.arms.get(d.tag)!.arm, [], []);
+    }
+
+    foldBody(ctx: FoldCtx, d: Data, arm: NodeOf<"arm">, rec: number[], results: Value[]) {
+      let inner = bind(ctx.env, arm.binds, d.fields);
+      rec.forEach((i, k) => (inner = { b: arm.results[i]!, v: results[k], up: inner }));
+      this.eval(arm.body, inner);
+    }
+
+    solve(n: NodeOf<"solve">, vals: Value[], env: Env) {
+      const keys = Object.keys(n.given);
+      const known = Object.fromEntries(keys.map((k, i) => [k, vals[i]]));
+      const p = planSolve(code, n);
+      const fuel = () => this.fuel;
+      const bodies = function* (): Generator<Value[]> {
+        if (p.mode === "relational") {
+          // Each step that might unfold forever spends the innermost fuel.
+          const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
+          for (const sol of relate(code, n.fn, known, { spend })) {
+            const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
+            if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
+            yield bound as Value[];
+          }
+          return;
+        }
+        for (const sol of solutions(p.rel!, known as Record<string, number>)) {
+          // A port the equations leave free has no value: not a solution.
+          if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
+          yield Object.keys(n.binds).map((k) => sol[k]!);
+        }
+      };
+      this.from(bodies(), (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound)));
+    }
+  }
+
+  // The arms of a fold by variant, with the indices of the recursive fields.
+  const armsOf = new Map<Id, Map<Id, { arm: NodeOf<"arm">; rec: number[] }>>();
+  const foldArms = (n: NodeOf<"fold">) => {
+    if (!armsOf.has(n.id)) armsOf.set(n.id, new Map(n.arms.map((a) => {
+      const arm = code.nodes[a] as NodeOf<"arm">;
+      return [arm.variant, { arm, rec: arm.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0) }];
+    })));
+    return armsOf.get(n.id)!;
   };
 
-  function refValue(target: Id, env: Map<Id, Value>): Value {
-    if (env.has(target)) return env.get(target)!;
+  const ev = (id: Id, env: Map<Id, Value>): Generator<Value> => run((m) => m.eval(id, fromMap(env)));
+
+  // Constructors and projections as function values, made once each.
+  const parts = new Map<Id, Fn>();
+
+  const bind = (env: Env, binders: Id[], values: Value[]): Env => {
+    for (let i = 0; i < binders.length; i++) env = { b: binders[i], v: values[i], up: env };
+    return env;
+  };
+
+  function refValue(target: Id, env: Env): Value {
+    const local = lookup(env, target);
+    if (local !== undefined) return local;
     const t = code.nodes[target];
     switch (t.kind) {
       case "def": {
         if (!defs.has(target)) {
           // Definition values are pure (the checker sees to it), so exactly
           // one result.
-          for (const v of ev(t.body!, new Map())) { defs.set(target, v); break; }
+          for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); break; }
         }
         return defs.get(target)!;
       }
@@ -208,12 +407,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (!builtins[target]) throw new Error(`no implementation for ${target}`);
         return builtins[target];
       case "variant":
-        return t.fields.length ? tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }) : { tag: target, fields: [] };
+        if (!t.fields.length) return { tag: target, fields: [] };
+        if (!parts.has(target)) parts.set(target, tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }));
+        return parts.get(target)!;
       case "field": {
-        const v = info.owner.get(target)!;
-        const variant = (code.nodes[(code.nodes[v] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
-        const i = (code.nodes[variant] as NodeOf<"variant">).fields.indexOf(target);
-        return tag((d) => one((d as Data).fields[i]), { prim: target });
+        if (!parts.has(target)) {
+          const v = info.owner.get(target)!;
+          const variant = (code.nodes[(code.nodes[v] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+          const i = (code.nodes[variant] as NodeOf<"variant">).fields.indexOf(target);
+          parts.set(target, tag((d) => one((d as Data).fields[i]), { prim: target }));
+        }
+        return parts.get(target)!;
       }
       default: throw new Error(`unbound ${target}`);
     }
@@ -221,7 +425,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
   return {
     ev,
-    value: (def: Id) => refValue(def, new Map()),
+    value: (def: Id) => refValue(def, null),
     // Call a function value and stream its results.
     call: (f: Value, ...args: Value[]) => (f as Fn)(...args),
   };
