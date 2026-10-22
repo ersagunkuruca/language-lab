@@ -1,7 +1,7 @@
 // The graph's coordinate math, on a tiny stand-in for the DOM: a node moved
 // by an offset lands exactly that far from where it was, every frame around
-// it grows to hold it (left and up too), and a frame's parameters stay on
-// its left edge.
+// it grows to hold it (left and up too), a frame's parameters stay on its
+// left edge, and every wire still ends on the output it comes from.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -27,7 +27,8 @@ class El {
   get firstChild() { return this.children[0] ?? null; }
   all(): El[] { return [this, ...this.children.flatMap((c) => c.all())]; }
 }
-(globalThis as unknown as { document: unknown }).document = { createElementNS: (_: string, tag: string) => new El(tag) };
+(globalThis as unknown as { document: unknown }).document = { createElementNS: (_: string, tag: string) => new El(tag), createElement: (tag: string) => new El(tag) };
+(globalThis as unknown as { requestAnimationFrame: unknown }).requestAnimationFrame = () => 0;
 const { typedGraph } = await import("../editor/typedGraph.ts");
 
 const p = loadProgram(join(root, "examples", "queens"));
@@ -36,7 +37,7 @@ const def = p.named("queens");
 const draw = (offsets: Record<Id, { x: number; y: number }>) => typedGraph(p.code, p.pres, info, def, {
   selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
   canShare: () => () => null, share() {}, offsets, moved() {},
-}) as unknown as El;
+}).root as unknown as El;
 
 // Top-left corner of an element in the picture's coordinates.
 const at = (svg: El, el: El) => {
@@ -72,3 +73,20 @@ for (const off of [{ x: 120, y: 80 }, { x: -90, y: -40 }, { x: -170, y: 30 }]) {
     }
   });
 }
+
+// Each call's output circle, and the wire leaving it, must meet, however far
+// its arguments were dragged (to the right of the call, for instance).
+test("wires leave from the outputs they belong to, after any move", () => {
+  const offsets: Record<Id, { x: number; y: number }> = {};
+  for (const n of Object.values(calls)) if (n.kind === "call" && calls[n.fn].kind === "ref") offsets[n.id] = { x: 260, y: 20 };
+  const svg = draw(offsets);
+  const outs = svg.all().filter((e) => e.tagName === "circle" && /\boutp\b/.test(e.getAttribute("class") ?? "")).map((c) => at(svg, c));
+  const starts = svg.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "") && !/use/.test(e.getAttribute("class") ?? ""))
+    .map((w) => { const m = /^M([-\d.e]+),([-\d.e]+)/.exec(w.getAttribute("d")!)!; const p = at(svg, w); return { x: p.x + Number(m[1]), y: p.y + Number(m[2]) }; });
+  const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
+  // Every wire that starts at a node's output height starts at its circle.
+  for (const o of outs) {
+    const same = starts.filter((p) => Math.abs(p.y - o.y) < 0.5 && p.x >= o.x - 0.5);
+    if (same.length) assert.ok(same.some((p) => near(p, o)), `a wire near the output at (${o.x}, ${o.y}) doesn't start on it`);
+  }
+});

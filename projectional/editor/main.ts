@@ -52,7 +52,10 @@ import { renderBlocks } from "../src/lang/render.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import * as T from "./typed.ts";
 import { typedGraph } from "./typedGraph.ts";
-import { connectDrag, moveDrag, type Pos } from "./canvas.ts";
+import { builtinName, builtinOf, definitionOf } from "./define.ts";
+import { connectDrag, infiniteCanvas, moveDrag, type Pos } from "./canvas.ts";
+// One window per graph: the program and the definition shown.
+const viewKey = () => `${doc.program}/${ui.def}`;
 
 // ---------------------------------------------------------------- state
 
@@ -724,12 +727,8 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
 
   const pos = new Map(boxes.map((b) => [b.key, doc.layout.positions[lkey(b.key)] ?? auto.get(b.key)!]));
   const byKey = new Map(boxes.map((b) => [b.key, b]));
-  const extent = () => ({
-    w: Math.max(480, ...boxes.map((b) => pos.get(b.key)!.x + sized(b))) + 40,
-    h: Math.max(260, ...boxes.map((b) => pos.get(b.key)!.y + PH(b))) + 40,
-  });
-  const { w: maxX, h: maxY } = extent();
-  const root = svg("svg", { viewBox: `0 0 ${maxX} ${maxY}`, width: maxX, height: maxY, class: "graph net" }) as SVGSVGElement;
+  const canvas = infiniteCanvas(viewKey(), "graph net");
+  const root = canvas.root;
 
   const anchor = (end: string): Pos & { side: number } => {
     const [bk, k] = end.split("|");
@@ -742,7 +741,7 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
   };
 
   const wireLayer = svg("g");
-  root.append(wireLayer);
+  canvas.world.append(wireLayer);
   const drawWires = () => {
     wireLayer.replaceChildren();
     for (const [w, es] of ends) {
@@ -820,18 +819,18 @@ function networkEditor(namer: Namer, p: Presentation, values: Record<Id, number>
     g.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
       const orig = { ...pos.get(b.key)! };
-      moveDrag(root, ev, (dx, dy) => { pos.set(b.key, { x: Math.max(0, Math.round(orig.x + dx)), y: Math.max(0, Math.round(orig.y + dy)) }); place(); drawWires(); },
-        (moved) => moved ? savePositions(pos, "Moved a node. Positions live in layout.json; the code is untouched.") : select(b.id));
+      moveDrag(root, ev, (dx, dy) => { pos.set(b.key, { x: Math.round(orig.x + dx), y: Math.round(orig.y + dy) }); place(); drawWires(); },
+        (moved) => moved ? savePositions(pos, "Moved a node. Positions live in layout.json; the code is untouched.") : select(b.id), canvas.zoom());
     });
     g.addEventListener("dblclick", () => { const d = calleeDef(b.id); if (d) openDef(d); });
-    root.append(g);
+    canvas.world.append(g);
   }
 
   const bar = h("div", { class: "net-bar" },
     h("button", { class: `btn${ui.mode === "add" ? " on" : ""}`, type: "button", "data-act": "add" }, "Add node…"),
     h("button", { class: "btn", type: "button", "data-act": "add-port" }, "Add outer port"),
     h("span", { class: "legend" }, h("i", { class: "lg in" }), "given to the node", h("i", { class: "lg out" }), "solved by the node", h("i", { class: "lg free" }), "not connected", h("span", { class: "punit" }, "m/s"), "inferred unit"));
-  return h("div", {}, bar, ui.mode === "add" ? picker(null, namer) : null, h("div", { class: "graph-wrap" }, root));
+  return h("div", {}, bar, ui.mode === "add" ? picker(null, namer) : null, canvas.el);
 }
 
 const fmt = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e6) / 1e6));
@@ -1565,6 +1564,19 @@ function guide(): HTMLElement {
     h("p", { class: "hint" }, "Drag a node to move it (that only changes layout.json). Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."));
 }
 
+// A built-in isn't a black box: show its equation, its code, and every
+// direction the solver can run it in (editor/define.ts).
+function definitionPanel(p: Presentation): HTMLElement | null {
+  const fn = builtinOf(doc.code, ui.selected);
+  const d = fn ? definitionOf(doc.code, fn) : null;
+  if (!fn || !d) return null;
+  return h("div", { class: "define" },
+    h("div", { class: "sub-head" }, `How ${builtinName(p.names, fn, d)} is defined`),
+    h("p", { class: "hint" }, "It's built in: this equation is the whole definition. Give it any of the port sets below and the solver works out the rest."),
+    ...d.equations.map((e) => h("pre", { class: "eq" }, e)),
+    h("ul", { class: "ways" }, ...d.ways.map((w) => h("li", {}, h("span", { class: "given" }, `given ${w.given.join(", ")}`), ...w.steps.map((t) => h("code", {}, t)), w.several ? h("span", { class: "hint" }, " several answers") : null))));
+}
+
 function render() {
   view = buildView();
   const app = document.getElementById("app")!;
@@ -1586,7 +1598,7 @@ function render() {
   const main = typed
     ? [
       h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
-        h("div", { class: "graph-wrap" }, typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info!)))),
+        typedGraph(doc.code, typedPres(), info, ui.def, graphHooks(info!), viewKey()).el),
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks ", h("small", {}, "hover for types; click a □ to fill it; double-click a name to open it")),
         h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "As text"), h("small", {}, "the same tree, printed")),
@@ -1599,9 +1611,9 @@ function render() {
     ]
     : [
       h("section", { class: "panel p-blocks" }, h("h2", {}, "Blocks"), h("div", { class: "blocks-wrap" }, blocks(namer, p))),
-      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)), h("div", { class: "graph-wrap" }, (() => {
+      h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)), h("div", {}, (() => {
         const gi = inferAny();
-        return gi ? typedGraph(doc.code, withHandles(p), gi, ui.def, graphHooks(gi)) : h("p", { class: "hint" }, "This definition can't be drawn.");
+        return gi ? typedGraph(doc.code, withHandles(p), gi, ui.def, graphHooks(gi), viewKey()).el : h("p", { class: "hint" }, "This definition can't be drawn.");
       })())),
       h("section", { class: "panel p-text" }, h("div", { class: "text-head" }, h("h2", {}, "Text views"), seg("text", ui.text, [["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]])), textPanel(namer, p, null)),
     ];
@@ -1625,7 +1637,7 @@ function render() {
     h("main", { class: `grid${net ? " is-net" : typed ? " is-typed" : ""}` },
       ...main,
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Selected"), typed ? typedInspector(namer, typedPres(), info!) : inspector(namer, p)),
+        h("section", { class: "panel" }, h("h2", {}, "Selected"), typed ? typedInspector(namer, typedPres(), info!) : inspector(namer, p), definitionPanel(p)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), typed ? typedRunPanel(namer, info!) : net ? netRunPanel(namer, solved!) : exprRunPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Checks ", h("small", {}, "what can go wrong, and what stops it")), typed ? typedChecks(namer, info!) : checksPanel(namer)),
         h("section", { class: "panel" }, h("h2", {}, "Files"), filesPanel()))),

@@ -30,15 +30,18 @@ import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
-import { absOf, connectDrag, curve, moveDrag, s, type Pos } from "./canvas.ts";
+import { absOf, connectDrag, curve, infiniteCanvas, moveDrag, s, type Canvas, type Pos } from "./canvas.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/relational.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
 // A laid-out piece: its group, how far it reaches right (w) and down (h), and
-// left (x0) and up (y0) when something inside was dragged past its origin.
-interface L { g: SVGGElement; w: number; h: number; outY: number; id?: Id; x0?: number; y0?: number }
+// left (x0) and up (y0) when something inside was dragged past its origin;
+// and where its output is (outX, outY). The output isn't always at the right
+// edge: a node's argument can be dragged further right than the node.
+interface L { g: SVGGElement; w: number; h: number; outY: number; outX?: number; id?: Id; x0?: number; y0?: number }
+const outX = (l: L) => l.outX ?? l.w;
 
 export interface GraphHooks {
   selected: Id | null;
@@ -59,15 +62,16 @@ export interface GraphHooks {
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
 
-export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks): SVGSVGElement {
-  const root = s("svg", { class: "tgraph" }) as SVGSVGElement;
-  const draw = (offsets: Record<Id, Pos>) => root.replaceChildren(...build(code, pres, info, defId, hooks, offsets, root));
+// `key` names the window onto this graph, so redrawing keeps where you were.
+export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): Canvas {
+  const canvas = infiniteCanvas(key, "tgraph");
+  const draw = (offsets: Record<Id, Pos>) => canvas.world.replaceChildren(...build(code, pres, info, defId, hooks, offsets));
   draw(hooks.offsets);
-  interact(root, hooks, draw);
-  return root;
+  interact(canvas, hooks, draw);
+  return canvas;
 }
 
-function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, offsets: Record<Id, Pos>, svgEl: SVGSVGElement): SVGElement[] {
+function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, offsets: Record<Id, Pos>): SVGElement[] {
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
@@ -190,7 +194,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       else {
         const p = place(k, colW - k.w, y);
         g.append(k.g);
-        wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), "", inputs[i]);
+        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), "", inputs[i]);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
         x0 = Math.min(x0, p.x + (k.x0 ?? 0));
@@ -204,7 +208,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     g.append(s("text", { x: bx + bw / 2, y: by + top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
     inputs.forEach((a, i) => g.append(titled(s("circle", { cx: bx, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
     g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    return { g, w, h, x0, y0, outY: by + bh / 2 };
+    return { g, w, h, x0, y0, outX: bx + bw, outY: by + bh / 2 };
   };
 
   // Binder ports on a region's left edge; the body inside; out on the right.
@@ -240,7 +244,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     ports(g, binders, x0, y0 + HEAD + 4);
     const h = Math.max(y0 + HEAD + innerH + PAD, at.y + b.h + PAD), w = Math.max(at.x + b.w + 22, x0 + tw(title, 6.6) + 20);
     const outY = at.y + b.outY;
-    wire(g, at.x + b.w, outY, w, outY);
+    wire(g, at.x + outX(b), outY, w, outY);
     frame(g, id, title, x0, y0, w, h, cls);
     g.append(s("circle", { cx: w, cy: outY, r: 4, class: "outp" }));
     return { g, w, h, outY, id, x0, y0 };
@@ -282,7 +286,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       else {
         const p = place(k, colW - k.w, y);
         g.append(k.g);
-        wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), "", inputs[i]);
+        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), "", inputs[i]);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
         x0 = Math.min(x0, p.x + (k.x0 ?? 0));
@@ -307,7 +311,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const body = lay(n.body);
     const at = place(body, bx + bw + 40 + Math.max(0, ...boundKeys.map((k) => tw(name(n.binds[k]), 6.8))), Math.max(0, (h - body.h) / 2));
     g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outY: at.y + body.outY };
+    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outX: at.x + outX(body), outY: at.y + body.outY };
   };
 
   // A let: each value flows into its dot; wires from the dots run to the
@@ -333,8 +337,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const at = place(v, colW - v.w, y);
       g.append(v.g);
       // The dot rides along with its value.
-      const py = at.y + v.outY, dotX = Math.max(colW, at.x + v.w) + 22;
-      wire(g, at.x + v.w, py, dotX, py);
+      const py = at.y + v.outY, dotX = Math.max(colW, at.x + outX(v)) + 22;
+      wire(g, at.x + outX(v), py, dotX, py);
       w = Math.max(w, dotX + labW);
       h = Math.max(h, at.y + v.h);
       x0 = Math.min(x0, at.x + (v.x0 ?? 0));
@@ -350,7 +354,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const bx = colW + 22 + labW;
     const at = place(body, bx, Math.max(0, (Math.max(valsH, body.h) - body.h) / 2));
     g.append(body.g);
-    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outY: at.y + body.outY };
+    return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outX: at.x + outX(body), outY: at.y + body.outY };
   };
 
   // if, match and fold are ordinary nodes: the value goes in first, then one
@@ -395,7 +399,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       else {
         const p = place(k, colW - k.w, y);
         g.append(k.g);
-        wire(g, p.x + k.w, p.y + k.outY, bx, portY(i), i ? "fn" : "", x.slot);
+        wire(g, p.x + outX(k), p.y + k.outY, bx, portY(i), i ? "fn" : "", x.slot);
         w = Math.max(w, p.x + k.w);
         h = Math.max(h, p.y + k.h);
         x0 = Math.min(x0, p.x + (k.x0 ?? 0));
@@ -410,7 +414,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(s("text", { x: bx + 9, y: portY(i) + 4, class: "portl" }, x.label));
     });
     g.append(titled(s("circle", { cx: bx + bw, cy: by + bh / 2, r: 5, class: "outp" }), typeOf(id)));
-    return { g, w, h, x0, y0, outY: by + bh / 2 };
+    return { g, w, h, x0, y0, outX: bx + bw, outY: by + bh / 2 };
   };
 
   // The definition itself: its parameters, its body, its result.
@@ -420,14 +424,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body && body.kind !== "typedef") top = lay(def.body!);
   else top = pill(defId, `type ${name(defId)}: see the blocks`, "lit");
-  const M = 14;
-  // Anything dragged above or left of the whole picture moves its origin.
-  const at = place(top, M + 8 - (top.x0 ?? 0), M - (top.y0 ?? 0));
-  const W = at.x + top.w + M + 48, H = at.y + top.h + M;
-  svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svgEl.setAttribute("width", String(W));
-  svgEl.setAttribute("height", String(H));
-  const result = s("text", { x: at.x + top.w + 8, y: at.y + top.outY + 4, class: "portl" }, "result");
+  // World coordinates: the definition's frame starts at the origin and
+  // nothing moves to make room when a node is dragged past it.
+  const at = place(top, 0, 0);
+  const result = s("text", { x: at.x + outX(top) + 8, y: at.y + top.outY + 4, class: "portl" }, "result");
 
   // Wires from each source to its uses, drawn last, in the picture's
   // coordinates. The groups aren't in the svg yet, so start from top.g.
@@ -447,7 +447,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
 // Clicks select; double-click opens a definition. Dragging: a node's body
 // moves it; a port or dot wires that variable into an input; a node's output
 // shares its value with an input; an input dragged into space is cleared.
-function interact(root: SVGSVGElement, hooks: GraphHooks, draw: (offsets: Record<Id, Pos>) => void) {
+function interact(canvas: Canvas, hooks: GraphHooks, draw: (offsets: Record<Id, Pos>) => void) {
+  const root = canvas.root;
   root.addEventListener("click", (e) => {
     const edge = (e.target as Element).closest("[data-edge]");
     if (edge) return hooks.addDot(edge.getAttribute("data-edge")!);
@@ -478,7 +479,7 @@ function interact(root: SVGSVGElement, hooks: GraphHooks, draw: (offsets: Record
       const o = hooks.offsets[mv] ?? { x: 0, y: 0 };
       let now = o;
       moveDrag(root, ev, (dx, dy) => { now = { x: Math.round(o.x + dx), y: Math.round(o.y + dy) }; draw({ ...hooks.offsets, [mv]: now }); },
-        (moved) => { if (moved) hooks.moved(mv, now); });
+        (moved) => { if (moved) hooks.moved(mv, now); }, canvas.zoom());
     }
   });
 }

@@ -1,6 +1,10 @@
 // The one canvas every graph in the editor is drawn on: typed programs,
 // plain expressions and networks alike. It knows nothing about code; it
 // gives the views the same pieces and the same gestures:
+//   the world    an unbounded plane; everything is placed in its coordinates.
+//                The panel is a window onto it: drag empty space to pan, use
+//                the wheel to zoom, Fit to see it all. Nothing is ever pushed
+//                around to make room: the window moves, not the picture.
 //   wires        one curve shape, left to right
 //   moving       drag a node's body; the view saves where it ended up
 //   connecting   drag from a source onto a target; every target says ahead
@@ -49,10 +53,8 @@ export function svgPoint(root: SVGSVGElement, e: { clientX: number; clientY: num
 
 // Drag to move: `move` gets the offset from where the drag began (in svg
 // units), `done` whether it moved at all (a press without moving is a click).
-export function moveDrag(root: SVGSVGElement, ev: PointerEvent, move: (dx: number, dy: number) => void, done: (moved: boolean) => void) {
-  // Measured in screen pixels, scaled once: the picture may grow or shift
-  // its origin while you drag, which would skew svg-unit deltas.
-  const scale = moveScale(root);
+export function moveDrag(root: SVGSVGElement, ev: PointerEvent, move: (dx: number, dy: number) => void, done: (moved: boolean) => void, scale = moveScale(root)) {
+  // Measured in screen pixels and divided by the zoom: world units.
   let moved = false;
   const mv = (e: PointerEvent) => {
     const dx = (e.clientX - ev.clientX) / scale, dy = (e.clientY - ev.clientY) / scale;
@@ -117,4 +119,76 @@ export function connectDrag(root: SVGSVGElement, ev: PointerEvent, targets: stri
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+}
+
+// ---------------------------------------------------------------- the world
+
+export interface Canvas {
+  el: HTMLElement;          // the window: put it in the page
+  root: SVGSVGElement;      // the svg filling it; drag feedback is drawn here
+  world: SVGGElement;       // the plane: draw everything in here
+  zoom: () => number;       // screen pixels per world unit
+}
+type View = { x: number; y: number; z: number };
+
+// Where each graph's window was, so editing (which redraws) doesn't move it.
+const views = new Map<string, View>();
+
+export function infiniteCanvas(key: string, cls: string): Canvas {
+  const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
+  const world = s("g", { class: "world" }) as SVGGElement;
+  root.append(world);
+  let view = views.get(key);
+  const apply = () => { if (view) world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); };
+  const set = (v: View) => { view = v; views.set(key, v); apply(); };
+  const fit = () => {
+    const b = world.getBBox(), r = root.getBoundingClientRect();
+    if (!b.width || !r.width) return;
+    const z = Math.min(1, (r.width - 32) / b.width, (r.height - 32) / b.height);
+    set({ z, x: 16 - b.x * z, y: 16 - b.y * z });
+  };
+  apply();
+  // First time this graph is shown: fit it, once it has a size.
+  if (!view) requestAnimationFrame(() => { if (root.isConnected) fit(); });
+
+  const el = document.createElement("div");
+  el.className = "canvas-wrap";
+  // Pan: a press on the svg that nothing in it took (a node, a port, a
+  // wire). Listening on the window around the svg means every handler on
+  // the svg and inside it has already had its turn.
+  el.addEventListener("pointerdown", (ev) => {
+    if (ev.defaultPrevented || ev.button !== 0 || !root.contains(ev.target as Node)) return;
+    const v0 = view ?? { x: 0, y: 0, z: 1 };
+    root.classList.add("panning");
+    const mv = (e: PointerEvent) => set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY });
+    const up = () => { root.classList.remove("panning"); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", up);
+  });
+  // Zoom about the pointer.
+  root.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const v = view ?? { x: 0, y: 0, z: 1 };
+    const p = svgPoint(root, e);
+    const z = Math.min(3, Math.max(0.15, v.z * Math.exp(-e.deltaY * 0.0015)));
+    set({ z, x: p.x - ((p.x - v.x) * z) / v.z, y: p.y - ((p.y - v.y) * z) / v.z });
+  }, { passive: false });
+
+  const btn = (label: string, title: string, f: () => void) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn";
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener("click", f);
+    return b;
+  };
+  const tools = document.createElement("div");
+  tools.className = "canvas-tools";
+  tools.append(
+    btn("Fit", "Show the whole graph", fit),
+    btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
+  );
+  el.append(root, tools);
+  return { el, root, world, zoom: () => view?.z ?? 1 };
 }
