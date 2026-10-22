@@ -1,26 +1,31 @@
 // Bundles editor/main.ts (and the core it imports) into one self-contained
 // HTML file. Needs esbuild: npm install, then npm run build-editor.
-//   editor/dist/index.html    open locally in a browser
-//   editor/dist/page.html     the same page without the document wrapper
-//   editor/dist/tutorial.html TUTORIAL.md as a page, with its screenshots
+// It writes to the repository root, which is the published site as it is
+// (Pages serves the branch as-is, and the Pages workflow publishes the same
+// files), so the editor is the site's home page:
+//   index.html     the editor; open it locally too
+//   tutorial.html  TUTORIAL.md as a page, its screenshots read from
+//                  projectional/tutorial/
 
 import { build } from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { markdown } from "./markdown.ts";
 
 const here = new URL(".", import.meta.url).pathname;
+const site = here + "../../";
 const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `<script>${js}</script>`);
-mkdirSync(here + "dist", { recursive: true });
-writeFileSync(here + "dist/page.html", page);
-writeFileSync(here + "dist/index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
-console.log(`editor/dist: ${(page.length / 1024).toFixed(0)} KB`);
+writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
+console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
 const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[0] ?? "";
-writeFileSync(here + "dist/tutorial.html", `<!doctype html>
+// Links in TUTORIAL.md are relative to projectional/; the page is at the root.
+const body = markdown(readFileSync(here + "../TUTORIAL.md", "utf8"))
+  .replace(/(src|href)="(?![a-z]+:|#|\/)/g, '$1="projectional/');
+writeFileSync(site + "tutorial.html", `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -51,9 +56,8 @@ figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
 <body>
 <main>
 <nav><a href="./">← Back to the editor</a></nav>
-${markdown(readFileSync(here + "../TUTORIAL.md", "utf8"))}
+${body}
 </main>
 </body>
 </html>
 `);
-cpSync(here + "../tutorial", here + "dist/tutorial", { recursive: true });

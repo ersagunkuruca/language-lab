@@ -1,12 +1,11 @@
 # Builds the projectional editor and publishes it to GitHub Pages on every
 # push to main.
 #
-# The site has the same layout as the repository: the root index.html sends
-# visitors to projectional/editor/dist/. That matters because Pages may also
-# be building straight from the branch ("Deploy from a branch"); both deploys
-# then publish the same files, so whichever finishes last, every URL stays
-# the same. Setting Settings → Pages → Source to "GitHub Actions" turns the
-# branch build off.
+# The site is the repository as it is: the editor build writes index.html
+# and tutorial.html at the root, so the editor is the home page. GitHub's
+# own branch build ("Deploy from a branch") publishes those same files, so
+# both deploys agree. Setting Settings → Pages → Source to "GitHub Actions"
+# turns the duplicate branch build off.
 name: Pages
 
 on:
@@ -41,8 +40,7 @@ jobs:
         run: |
           mkdir _site
           git archive HEAD | tar -x -C _site
-          rm -rf _site/projectional/editor/dist
-          cp -r projectional/editor/dist _site/projectional/editor/dist
+          cp index.html tutorial.html _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
