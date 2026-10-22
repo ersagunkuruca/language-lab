@@ -642,14 +642,29 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 }
 
 function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
-  if (t.t !== "fn") throw new Error("not a function");
-  const extra = t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
-  if (extra.length) throw new Error(`unhandled effect: ${extra.join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`);
+  const problem = leftover(t, rt.names ?? {});
+  if (problem) throw new Error(problem);
   const r = makeRunner(code, info, rt);
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
 const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT];
+
+// Why an action can't be run as it is: an effect only the program could
+// handle is left over. Null when it can.
+function leftover(t: Type, names: Names): string | null {
+  if (t.t !== "fn") return "not a function";
+  const extra = t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
+  if (!extra.length) return null;
+  return `unhandled effect: ${extra.map((e) => names[e] ?? e).join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`;
+}
+
+// Can `def` be a command-line main? Null if it can, else why not.
+export function mainProblem(info: Info, def: Id, names: Names = {}): string | null {
+  const t = info.typeOf.get(def);
+  if (!t || t.t !== "fn" || t.params.length > 1) return "main takes the arguments (a list of texts), or nothing";
+  return leftover(t, names);
+}
 
 // A program run from the command line (cli/lab.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an

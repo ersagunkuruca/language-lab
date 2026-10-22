@@ -400,6 +400,7 @@ editor/               browser editor (main.ts, page.html, build.ts → /index.ht
 examples/             the example programs, one folder of side tables each (code.json,
                       names, comments, layout, examples). They are the source: edit
                       them in the editor, Save file, then examples/unpack.ts
+cli/lab.ts            the command line: run, compile or check a saved program (LANGUAGE.md, "The command line")
 test/                 core, lang, backwards, numbers, oneworld (networks as
                       predicates), guarantees, scale, dots, graph, toplevel, and
                       known-holes (holes found by REVIEW.md, as todo tests)

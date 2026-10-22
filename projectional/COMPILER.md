@@ -346,8 +346,12 @@ makes them portable:
 - **World effects** (files, console) are host imports in every target. A
   host failure becomes an `Abort` at the call site.
 
-The effects thread owns this part in the JS backend: `$perform`, `$handle`
-and `$handleS` in runtime.js. The other targets follow the same scheme.
+The JS backend does this now: `$perform`, `$handle` and `$handleS` in
+runtime.js. A handled computation with `Choice` is a generator, and
+`$handleS` keeps its handler on the stack during each of its steps. The
+world builtins call the runtime's `World` (`$setWorld`, Node's in
+`src/lang/world.ts`). `compiler/test/effects.test.ts` checks each case
+against the evaluator. The other targets follow the same scheme.
 
 **`Choice`.** JS uses generators. WebAssembly and C have none, so `Choice`
 code becomes **success continuations**: a nondeterministic function takes
@@ -424,7 +428,7 @@ program outside a JS host, and the C route covers that too.
 | 1b | mode analysis, so relational directions compile; `derivative` at compile time when the function is known | next; worth it once a backwards search shows up in a profile |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
 | 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflows at 10,000 steps) | next small fix |
-| 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops) | in progress in the effects thread |
+| 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `lab compile` (projectional/cli/lab.ts) | done, except `Cells` |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
 | 5 | other targets: WASM scalar profile (done), WGSL, single-file executables, native via C, WasmGC | the order in "Targets beyond JavaScript" |
 

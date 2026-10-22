@@ -181,8 +181,8 @@ STD_MANY[S.valueOf] = (o: { tag: Id; fields: unknown[] }) => (o.tag === SOME ? [
 const world = (op: string, name: string, params: Type[], ret: Type, effs: Id[]) => builtin(op, name, (s) => fn(params, ret, s.freshRow(effs)));
 export const IO = {
   printError: world("io.printError", "print error", [str], unit, [CONSOLE]),
-  readInput: world("io.readInput", "read input", [], str, [CONSOLE]),
-  readLine: world("io.readLine", "read line", [], optional(str), [CONSOLE]),
+  readInput: world("io.readInput", "read input", [], str, [CONSOLE, ABORT]),
+  readLine: world("io.readLine", "read line", [], optional(str), [CONSOLE, ABORT]),
   readFile: world("io.readFile", "read file", [str], str, [FILES, ABORT]),
   writeFile: world("io.writeFile", "write file", [str, str], unit, [FILES, ABORT]),
   appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),

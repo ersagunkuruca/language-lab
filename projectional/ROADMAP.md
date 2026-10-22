@@ -56,11 +56,13 @@ run in parallel because they touch different files.
    current editor (navigator, effects, modules, one world), and strike what
    got fixed from its critique list. *Why here:* cheap, and it should follow
    the visual changes above so the screenshots stay current.
-3. **Finish effects for the world.** Compiler support (`$perform` with a
-   handler stack, escapes as exceptions), the `lab` command line (run and
-   compile saved editor files on Node), and one real CLI program (a `wc` or
-   todo tool, crediting Unix `wc`). *Why:* this is "regular programs", and
-   the checker half is already merged.
+3. ~~**Finish effects for the world.**~~ **Done** (this PR): the compiler
+   handles operations, handler matches, `Optional` and the world builtins
+   (`$perform` with a handler stack, escapes as exceptions), `cli/lab.ts`
+   runs, compiles and checks saved programs on Node, and `examples/wc` is a
+   word count in the language, after Unix `wc`. Open: `Cells` in the
+   compiler, a compiled program as one portable file, time, randomness and
+   HTTP effects.
 4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
    (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`
    (`write`), one runtime handler that gives Solid.js-style signals and lazy,
