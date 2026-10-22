@@ -604,6 +604,12 @@ column; the blocks should too). A `cons` chain that ends in `nil` is drawn as
 The same rule could later show `succ(succ(zero))` as `2`: a view that's chosen
 per type, the way NUMBERS.md chooses a representation.
 
+**Done, as a view.** Runs of steps are one column of rows and a list is one
+`list` node with an input per item. A chain of one operator whose grouping
+doesn't matter (`++`, `+`, `·`, `and`, `or`) is one node with an input per
+operand, and the text writes it one operand per line, each after the
+operator, however the pairs nest in the tree. `−` and `/` keep their pairs.
+
 ### 2. The graph doesn't scale yet
 
 **Today.** Look at *Eight queens* → `main` in the graph:

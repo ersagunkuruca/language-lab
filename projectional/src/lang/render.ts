@@ -13,7 +13,7 @@ import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
-import { CONS, FALSE, NIL, TRUE } from "./std.ts";
+import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showType } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -90,7 +90,13 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
         if (items) return atom(`[${items.map((i) => inline(i).text).join(", ")}]`);
         const f = node(n.fn);
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-        const args = n.args.map(inline);
+        const ops = chainOperands(code, id);
+        const args = (ops ?? n.args).map(inline);
+        if (nota?.fixity === "infix" && ops) {
+          // a ++ b ++ c: one chain, whichever way the pairs nest.
+          const p = nota.prec ?? 5;
+          return { text: args.map((a) => paren(a, a.prec > p)).join(` ${nota.glyph} `), prec: p };
+        }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
@@ -176,10 +182,21 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       // A call with a tall argument: the tall parts go on their own lines.
       const f = node(n.fn);
       const head = f.kind === "ref" ? nameOf(f.target) : `(${inline(n.fn).text})`;
+      // An operator's operands one under another, each after the operator:
+      //   show(…)
+      //   ++ " · "
+      //   ++ handle …
+      const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
+      const ops = chainOperands(code, id) ?? n.args;
+      if (nota?.fixity === "infix" && ops.length >= 2) {
+        const p = nota.prec ?? 5;
+        const one = (a: Id, lead: string) => (tall(a) ? block(a, ind, lead) : [`${ind}${lead}${paren(inline(a), inline(a).prec > p)}`]);
+        return ops.flatMap((a, i) => one(a, i ? `${nota.glyph} ` : lead));
+      }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return [...block(n.fn, ind, `${lead}apply `), `${ind}  to (${n.args.map((a) => inline(a).text).join(", ")})`];
-      const args = n.args.map((a, i) => {
+      const args = ops.map((a, i) => {
         const lines = block(a, ind + "  ", "");
-        if (i < n.args.length - 1) lines[lines.length - 1] += ",";
+        if (i < ops.length - 1) lines[lines.length - 1] += ",";
         return lines;
       });
       return [`${ind}${lead}${head}(`, ...args.flat(), `${ind})`];

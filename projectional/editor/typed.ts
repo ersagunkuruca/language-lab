@@ -13,7 +13,7 @@ import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
+import { chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
@@ -103,8 +103,14 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
         if (items) return [x(id, "call", sep("["), ...list(items, (i) => inline(i)[0]), sep("]")), 100];
         const f = node(n.fn);
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-        const args = n.args.map(inline);
+        const ops = chainOperands(code, id);
+        const args = (ops ?? n.args).map(inline);
         const paren = ([e, p]: [HTMLElement, number], ok: boolean): Kid[] => (ok ? [e] : [sep("("), e, sep(")")]);
+        if (nota?.fixity === "infix" && ops) {
+          // a ++ b ++ c: one chain, whichever way the pairs nest.
+          const p = nota.prec ?? 5;
+          return [x(id, "call", ...args.flatMap((a, i) => [...(i ? [h("span", { class: "op x", "data-id": n.fn }, ` ${nota.glyph} `)] : []), ...paren(a, a[1] > p)])), p];
+        }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
@@ -178,9 +184,21 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       if (tall(n.fn) && !n.args.some(tall)) {
         return x(id, "blk", line(kw("apply")), indent(block(n.fn)), line(kw("to "), sep("("), ...list(n.args, (a) => inline(a)[0]), sep(")")));
       }
+      // An operator's operands one under another, each after the operator.
+      const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
+      const ops = chainOperands(code, id) ?? n.args;
+      if (nota?.fixity === "infix" && ops.length >= 2) {
+        const p = nota.prec ?? 5;
+        return x(id, "blk", ...ops.map((a, i) => {
+          const op = i ? [h("span", { class: "op x", "data-id": n.fn }, `${nota.glyph} `)] : [];
+          if (tall(a)) return op.length ? h("div", { class: "chain" }, ...op, block(a)) : block(a);
+          const [e, q] = inline(a);
+          return line(...op, ...(q > p ? [e] : [sep("("), e, sep(")")]));
+        }));
+      }
       const head = f.kind === "ref" ? x(n.fn, "ref fn", name(f.target)) : inline(n.fn)[0];
-      const comma = (i: number) => (i < n.args.length - 1 ? sep(",") : null);
-      return x(id, "blk", line(head, sep("(")), indent(...n.args.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
+      const comma = (i: number) => (i < ops.length - 1 ? sep(",") : null);
+      return x(id, "blk", line(head, sep("(")), indent(...ops.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
     }
     return line(inline(id)[0]);
   };

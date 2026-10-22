@@ -35,7 +35,7 @@
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
-import { CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
+import { chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
@@ -306,7 +306,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
     const list = listItems(id);
     const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
-    const inputs = list ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
+    // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
+    // an inner ++ with a dot on it stays its own node.
+    const inputs = list ?? chainOperands(code, id, (a) => !!dotOf(a)) ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
     const kids = inputs.map(arg);
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
