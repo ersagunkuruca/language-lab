@@ -65,28 +65,41 @@ shapes come first for shaders.
 *The idea.* The review listed exact reals by continued fractions as a dream;
 on-demand calculation could be done with something like effects.
 
-*Current answer.* Agreed, and it moves out of "dreams". A computation that
-needs another term performs an "ask for the next term" operation, and a
-handler decides how far to go: produce terms until a comparison is decided,
-or until a precision is reached. That keeps laziness out of the type
-(no `() → CF` fields needed for the common case) and puts the stopping rule
-in one place. Built together with reactivity (ROADMAP item 4).
+*Answer, built (PR "Cells").* Agreed, it is out of "dreams", but not with
+an "ask for the next term" operation. Such an operation needs its handler
+to remember how far each stream got (state) and to resume the producer
+where it stopped (a continuation); handlers here have neither. And a
+shared input (`x` in `x + x`) would be computed twice. What's wanted is
+call-by-need: computed when asked, once. So the rest of a continued
+fraction is a *formula cell*, `term(whole: Int, rest: Cell CF)`, and reading
+it is an operation of the `Cells` effect whose handler (the runtime's)
+computes it on first read and remembers it. Laziness does show in the
+type, as `Cells`, which is honest: reading may compute. The stopping rule
+stays with the consumer (`terms(x, n)`), and `with fuel` stops what can't
+be decided (√2 · √2 never gives a first term). Gosper's `+ − × ÷` on these
+is an ordinary program; see LANGUAGE.md "Cells" and the live
+[Cells page](https://ersagunkuruca.github.io/language-lab/reactive.html).
 
 ## Effects and Solid.js reactivity (2026-10-22)
 
 *The idea.* Is the effect system like Solid.js's? Then reactivity demos
 should be possible.
 
-*Current answer.* Roughly yes. In Solid, reading a signal inside a
-tracking context records a dependency, and writing it re-runs what depended
-on it. Here, reading a signal would be an effect operation, and the
-tracking context its handler: the handler records the read and answers it.
-Solid's fine-grained updates (Ryan Carniato's design) come from the handler,
-not from the language. One gap: re-running a dependent computation needs
-the handler to keep the computation, which our one-shot handlers allow
-because it re-runs from the start rather than resuming twice. Demos: a
-counter and a derived value, then the web runtime on top (ROADMAP items 4
-and 7).
+*Answer, built (PR "Cells").* Yes, in a precise sense. In Solid,
+reading a signal inside an effect or memo records a dependency through a
+global "current listener", and writing re-runs what read it. Here `read` is
+an operation of the `Cells` effect and the tracking context is its handler:
+a deep handler's dynamic scope is exactly that "current listener". The
+handler is the runtime's (it keeps values and readers, and handlers in the
+language have no state), with Milo's "Reactively" update order: mark dirty
+on write, recompute lazily on read, only if a source really changed. What
+the types add: a view is `() -[Cells]-> Text` and can only read, a formula
+can't write (its row is closed), and `write` is `Update`, a world effect,
+so it can't run inside a search. The same handler is what makes
+continued fractions lazy (above): Solid's memo and Haskell's thunk are one
+mechanism, as Adapton (PLDI 2014) showed. The page is a value whose
+changing parts are functions, one watcher each, so updates need no diffing:
+that changes ROADMAP item 7's "diffing representation".
 
 ## Conjugation and commutators (2026-10-22)
 
