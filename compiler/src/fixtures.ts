@@ -4,7 +4,8 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { S } from "../../projectional/src/lang/std.ts";
+import { CONS, NIL, NONE, PAIR_V, S, SECOND, SOME } from "../../projectional/src/lang/std.ts";
+import { NUMBER } from "../../projectional/src/lang/types.ts";
 
 // The area under x·x·x − x − 1 from `from`, in `steps` strips of width
 // `width`: a numeric loop written as tail recursion, the way the language
@@ -52,4 +53,51 @@ export function corners() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs: { clampish, pick, near, cube, powers, gcd, fact, even, odd, twice } };
+}
+
+// Records in the shader profile: a 3D vector, a ray made of two of them,
+// the standard library's Pair, a match that takes a record apart, and a
+// loop (tail recursion) whose state is a record. And two types that
+// aren't records of numbers: a list (recursive) and Optional (two cases).
+export function vectors() {
+  const k = new Lang();
+  const n = (v: number) => k.lit(v);
+  const num = () => k.tref(NUMBER);
+  const Vec = k.type("Vec", [], [["vec", [["x", num], ["y", num], ["z", num]]]]);
+  const vec = Vec.v.vec, X = Vec.f["vec.x"], Y = Vec.f["vec.y"], Z = Vec.f["vec.z"];
+  const Ray = k.type("Ray", [], [["ray", [["origin", () => k.tref(Vec.def)], ["direction", () => k.tref(Vec.def)]]]]);
+  const along = k.def("along");
+  // origin + t · direction
+  k.define(along, k.fn(["ray", "t"], (r, t) => k.match(r, [{ variant: Ray.v.ray, names: ["o", "d"], body: ([o, d]) =>
+    k.call(vec, k.call(B.add, k.call(X, o), k.call(B.mul, t, k.call(X, d))), k.call(B.add, k.call(Y, o), k.call(B.mul, t, k.call(Y, d))), k.call(B.add, k.call(Z, o), k.call(B.mul, t, k.call(Z, d)))) }])));
+  const length = k.def("length");
+  k.define(length, k.fn(["v"], (v) => k.call(B.sqrt, k.call(B.add, k.call(B.add, k.call(B.mul, k.call(X, v), k.call(X, v)), k.call(B.mul, k.call(Y, v), k.call(Y, v))), k.call(B.mul, k.call(Z, v), k.call(Z, v))))));
+  const farther = k.def("farther");
+  k.define(farther, k.fn(["a", "b"], (a, b) => k.if(k.call(S.less, k.call(length, a), k.call(length, b)), b, a)));
+  // Walk along the ray until 4 away from the start: a loop whose state is a Vec.
+  const walk = k.def("walk");
+  k.define(walk, k.fn(["p", "step", "n"], (p, step, m) => k.if(k.call(S.less, n(4), k.call(length, p)), k.call(PAIR_V, k.call(length, p), m),
+    k.call(walk, k.call(vec, k.call(B.add, k.call(X, p), step), k.call(Y, p), k.call(B.add, k.call(Z, p), k.call(B.mul, n(0.5), step))), step, k.call(B.add, m, n(1))))));
+  const shoot = k.def("shoot");
+  k.define(shoot, k.fn(["x", "y", "t"], (x, y, t) => k.call(along, k.call(Ray.v.ray, k.call(vec, x, y, n(-2)), k.call(vec, k.call(B.neg, x), n(0.5), n(1))), t)));
+  const steps = k.def("steps");
+  k.define(steps, k.fn(["x", "step"], (x, step) => k.call(SECOND, k.call(walk, k.call(vec, x, n(1), n(0)), step, n(0)))));
+  const sum = k.def("sum");
+  k.define(sum, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => n(0) },
+    { variant: CONS, names: ["x", "rest"], results: [null, "s"], body: ([x], [, s]) => k.call(B.add, x, s!) },
+  ])));
+  const orZero = k.def("or zero");
+  k.define(orZero, k.fn(["o"], (o) => k.match(o, [{ variant: SOME, names: ["x"], body: ([x]) => x }, { variant: NONE, names: [], body: () => n(0) }])));
+  // An input never looked at can be anything; the profile takes it as a
+  // Number, so passing it a Vec is refused.
+  const twice = k.def("twice ignoring");
+  k.define(twice, k.fn(["x", "ignored"], (x) => k.call(B.mul, n(2), x)));
+  const numbers = k.def("twice a number");
+  k.define(numbers, k.fn(["x"], (x) => k.call(twice, x, x)));
+  const vecs = k.def("twice a vec");
+  k.define(vecs, k.fn(["x"], (x) => k.call(twice, x, k.call(vec, x, x, x))));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs: { along, length, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
 }

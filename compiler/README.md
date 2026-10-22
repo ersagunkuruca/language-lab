@@ -12,8 +12,9 @@ calls) also compiles to WebAssembly (`src/scalar.ts`, `src/wasm.ts`), with
 tail calls as `return_call`. `out/calculus.wat` shows the output. The same
 lowering prints as WGSL for the GPU (`src/wgsl.ts`, `out/calculus.wgsl`):
 `f32`, no recursion except a call to itself as the last step, which is
-printed as a loop. `npm run gpu` runs it with WebGPU in headless Chromium
-and compares it with the evaluator.
+printed as a loop. For the GPU the profile also takes records of Numbers
+and Bools (a point, a colour), printed as structs. `npm run gpu` runs it
+with WebGPU in headless Chromium and compares it with the evaluator.
 
 ```sh
 npm run build   # projectional/examples/{queens,algebra,relations,backwards,calculus} -> out/*.js
