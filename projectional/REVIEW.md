@@ -159,6 +159,13 @@ machine with a heap-allocated continuation, which also gives stepping and
 
 ### 2.2 Speed of the things that make it special
 
+- *Update, real-data work:* reading 1,000 numbers back now takes 0.3 s
+  (it was 4 minutes for 400). The substitution is a persistent trie
+  instead of a map copied on every binding, and a call into `join text`
+  run backwards sets up its arguments' constraints first, so the cut is
+  only tried where they allow (after a number, at a space). Past about
+  1,300 numbers the relational interpreter's own JS recursion overflows;
+  it needs the evaluator's treatment (continuations on the heap).
 - **The printer-as-parser is a demo, not a parser.** `show numbers`
   backwards reads 50 numbers in 0.27 s, 100 in 2.5 s, 200 in 25 s and 400
   in 228 s, roughly cubic. `join text` with neither side known enumerates

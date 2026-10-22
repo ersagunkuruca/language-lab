@@ -213,8 +213,8 @@ the examples back.
 
 ### Typed programs in the editor
 
-The editor's program switcher has the two typed programs from `src/lang/`
-(see LANGUAGE.md): eight queens and the small algebra system. They show as
+The editor's program switcher has the typed example programs (see
+LANGUAGE.md) and any programs of your own. They show as
 clickable blocks (`editor/typed.ts`) with every node's inferred type on
 hover. Clicking a hole opens a palette of only the fillings that
 type-check (`fillings()`), "Split by cases" turns an expression into a match
@@ -258,6 +258,23 @@ core changed. The value moves to the start of the innermost body around it
 only bodies bind names, so nothing changes scope on the way. The one thing
 a dataflow picture can't show is order, so a step done only for its effect
 (`_ = print(…)`) is a hollow dot nothing reads, in the column of steps.
+
+**Writing a program from nothing.** *New program* starts with one empty
+action, `main`. *+ New* next to the definition tabs adds a function (with
+its inputs), a value or a data type. Selecting a definition, input, case or
+field shows what can be done to it (`src/lang/toplevel.ts`), and every edit
+keeps the rest of the program in step: a new input gives every call a hole
+for it, a new field gives every constructor call a hole and every arm a
+name for it, and removing one drops the argument everywhere. What can't be
+kept in step is refused with the reason (an input still used, a definition
+something calls), and the result is type-checked like any other edit. A
+new input has no type until something says what it is, so the palette
+offers splitting it by the cases of any data type. A data type is drawn as
+its constructors: one node per case, its fields as inputs. Filling a hole
+moves on to the next one. *Save file* writes the program's own code, names,
+comments and layout as one JSON file (`editor/files.ts`); *Open file*
+checks that every id it refers to exists, then opens it as a program of
+your own. Programs are also kept in the browser as you edit.
 
 The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
