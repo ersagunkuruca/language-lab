@@ -6,8 +6,14 @@
 // That is all Choice is: backtracking search, the same as the relation
 // solver's branches (canonical first, more on demand). The handlers just
 // consume the stream: `first` takes the first result (or runs the fallback),
-// `all` collects, `count` counts. Console is a callback. Diverge is
-// handled by the runtime, or turned into failure by `with fuel`.
+// `all` collects, `count` counts, `optional` keeps the first as data.
+// Diverge is handled by the runtime, or turned into failure by `with fuel`.
+//
+// Effects a program defines are performed by calling an operation, and
+// handled by a match on the operations (infer.ts `handle`): performing
+// looks up the continuation for the nearest such match. The world effects
+// (Console, Files) have one handler, the runtime's `World`; Log and Abort,
+// when nothing in the program handles them, go to it too.
 
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -17,11 +23,10 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { CONS, FALSE, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
+import { ABORT, ABORT_OP, CONS, FALSE, IO, LOG, LOG_OP, NIL, NONE, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
-import { INT } from "./types.ts";
-import { CONSOLE, DIVERGE } from "./types.ts";
+import { CHOICE, DIVERGE, INT, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -78,6 +83,10 @@ const toMap = (env: Env) => {
 };
 const fromMap = (m: Map<Id, Value>): Env => { let e: Env = null; for (const [b, v] of m) e = { b, v, up: e }; return e; };
 interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; base: number; fuel: Fuel | null; next: Frame | null }
+// A match handling an effect, waiting for its computation. `base`: the
+// choice points there were when it started, which an operation that never
+// returns cuts back to.
+interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
 // An arm of a fold: the fields with folded values, and whether each holds
 // the type nested in a container (List Tree) rather than directly.
 interface FoldArm { arm: NodeOf<"arm">; rec: number[]; nested: boolean[]; shapes: (Shape | null)[] }
@@ -91,7 +100,12 @@ type Frame = { next: Frame | null } & (
   | { t: "fold"; n: NodeOf<"fold">; env: Env }
   | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Value[] }
   | { t: "fuelExit"; saved: Fuel | null }
+  // A handler's answer on its way back to where the operation was
+  // performed. Looking for a handler from here skips to outside `handler`:
+  // a case runs outside the match it belongs to.
+  | { t: "answer"; handler: HandleFrame }
   | HandlerFrame
+  | HandleFrame
 );
 type Choice = { barrier: HandlerFrame } | { it: Iterator<unknown>; k: Frame | null; fuel: Fuel | null; use: (x: unknown) => void };
 
@@ -99,6 +113,33 @@ export interface Runtime {
   print: (line: string) => void;
   // The names `show` prints cases with; std's if not given.
   names?: Names;
+  // The rest of the world, for programs that use it (world.ts has Node's).
+  // Without one, those operations abort saying so.
+  world?: Partial<World>;
+}
+
+// What the world effects do. A failure throws, with a message that becomes
+// the reason the program's Abort is given.
+export interface World {
+  error(line: string): void;
+  // Log's handler when the program has none.
+  log(line: string): void;
+  input(): string;
+  readLine(): string | null;
+  readFile(path: string): string;
+  writeFile(path: string, text: string): void;
+  appendFile(path: string, text: string): void;
+  fileExists(path: string): boolean;
+  listFolder(path: string): string[];
+}
+
+// An Abort that nothing in the program handled.
+export class Aborted extends Error {
+  reason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.reason = reason;
+  }
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
@@ -129,6 +170,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     [S.print]: (s) => (rt.print(s as string), one(unit)),
+    [IO.printError]: (s) => (world("error")(s as string), one(unit)),
+    [IO.readInput]: () => one(world("input")()),
+    [IO.readLine]: () => { const l = world("readLine")(); return one(l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l] }); },
+    [IO.readFile]: (p) => one(world("readFile")(p as string)),
+    [IO.writeFile]: (p, t) => (world("writeFile")(p as string, t as string), one(unit)),
+    [IO.appendFile]: (p, t) => (world("appendFile")(p as string, t as string), one(unit)),
+    [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
+    [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
@@ -144,6 +193,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       for (const x of (body as Fn)()) { yield x; return; }
       yield* (otherwise as Fn)();
     },
+    [S.optional]: function* (body) {
+      for (const x of (body as Fn)()) { yield { tag: SOME, fields: [x] }; return; }
+      yield { tag: NONE, fields: [] };
+    },
     [S.fuel]: (n, body) => run((m) => m.handle(S.fuel, [n, body])),
     // Every function value carries its node, so this can always look inside.
     [S.derivative]: (f) => {
@@ -152,7 +205,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
-  const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.fuel].map((h) => [builtins[h], h]));
+  const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel].map((h) => [builtins[h], h]));
+  // Builtins that touch the world and can fail: a failure is an Abort,
+  // performed where they were called.
+  const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine].map((id) => builtins[id]));
+  function world<K extends keyof World>(k: K): World[K] {
+    const f = rt.world?.[k];
+    if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
+    return f.bind(rt.world) as World[K];
+  }
+  // Operations of effects, as function values.
+  const effectOf = (variant: Id): Id | null => {
+    const def = info.owner.get(variant);
+    const body = def ? (code.nodes[def] as NodeOf<"def">).body : null;
+    return body && (code.nodes[body] as NodeOf<"typedef">).effect ? def! : null;
+  };
+  const operations = new Map<Fn, Id>();
 
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
     const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), { lambda: n.id, get env() { return toMap(env); } });
@@ -208,8 +276,46 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       }
       const h = HANDLED.get(f as Fn);
       if (h) return this.handle(h, args);
+      const op = operations.get(f as Fn);
+      if (op) return this.perform(op, args);
       ambient = this.fuel;
+      if (FALLIBLE.has(f as Fn)) {
+        let r: Iterable<Value>;
+        try { r = (f as Fn)(...args); } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        return this.from(r, (x) => this.ret(x as Value));
+      }
       this.from((f as Fn)(...args), (x) => this.ret(x as Value));
+    }
+
+    // Perform an operation: find the nearest match handling its effect,
+    // skipping the ones whose cases are running (their own effects go
+    // further out). An operation that returns is answered and the
+    // computation carries on; one that doesn't ends the handled computation,
+    // with its alternatives (a cut, as in Prolog's catch/3).
+    perform(op: Id, args: Value[]) {
+      const effect = effectOf(op)!;
+      let f = this.k;
+      while (f && !(f.t === "handle" && f.effect === effect)) f = f.t === "answer" ? f.handler.next : f.next;
+      if (!f) return this.unhandled(op, args);
+      const h = f as HandleFrame;
+      const arm = h.arms.get(op)!;
+      const env = bind(h.env, arm.binds, args);
+      if ((code.nodes[op] as NodeOf<"variant">).returns) {
+        this.push({ t: "answer", handler: h, next: null });
+        return this.eval(arm.body, env);
+      }
+      this.cps.length = h.base;
+      this.k = h.next;
+      this.fuel = h.fuel;
+      this.eval(arm.body, env);
+    }
+
+    // What the program leaves unhandled, the runtime handles: Log goes to
+    // standard error and an Abort ends the run.
+    unhandled(op: Id, args: Value[]) {
+      if (op === LOG_OP) return ((rt.world?.log ?? rt.print)(args[0] as string), this.ret(unit));
+      if (op === ABORT_OP) throw new Aborted(args[0] as string);
+      throw new Error(`nothing handles ${op}`);
     }
 
     handle(h: Id, args: Value[]) {
@@ -255,6 +361,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             this.fuel = f.fuel;
             if (f.h === S.all) this.ret(toList(f.acc));
             else if (f.h === S.count) this.ret(f.acc.length);
+            else if (f.h === S.optional) this.ret({ tag: NONE, fields: [] });
             else this.apply(f.otherwise, []);
             continue;
           }
@@ -292,9 +399,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (head.kind === "lambda") return this.parts(n.args, 0, [], env, n);
           return this.parts([n.fn, ...n.args], 0, [], env, n);
         }
-        case "match": case "fold":
-          this.push({ t: n.kind, n, env, next: null } as Frame);
+        case "match": case "fold": {
+          const h = n.kind === "match" ? handlerOf(n) : null;
+          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, env, base: this.cps.length, fuel: this.fuel, next: null });
+          else this.push({ t: n.kind, n, env, next: null } as Frame);
           return this.eval(n.scrutinee, env);
+        }
         case "solve":
           return this.parts(Object.values(n.given), 0, [], env, n);
         case "hole": throw new Error("the program reached a hole");
@@ -345,16 +455,19 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return this.foldBody(f.ctx, f.d, f.arm, f.kids.folded(results));
         }
         case "handler":
-          if (f.h === S.first) {
+          if (f.h === S.first || f.h === S.optional) {
             this.cps.length = f.base;
             this.fuel = f.fuel;
-            return this.ret(v);
+            return this.ret(f.h === S.optional ? { tag: SOME, fields: [v] } : v);
           }
           f.acc.push(v);
           return this.fail();
         case "fuelExit":
           this.fuel = f.saved;
           return this.ret(v);
+        // The computation a handler watched has its value: that's the
+        // match's value. An answer goes back to where it was asked for.
+        case "handle": case "answer": return this.ret(v);
       }
     }
 
@@ -403,6 +516,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       this.from(bodies(), (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound)));
     }
   }
+
+  // A match whose cases are an effect's operations is a handler.
+  const handlers = new Map<Id, { effect: Id; arms: Map<Id, NodeOf<"arm">> } | null>();
+  const handlerOf = (n: NodeOf<"match">) => {
+    if (!handlers.has(n.id)) {
+      const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+      const effect = arms.length ? effectOf(arms[0].variant) : null;
+      handlers.set(n.id, effect ? { effect, arms: new Map(arms.map((a) => [a.variant, a])) } : null);
+    }
+    return handlers.get(n.id)!;
+  };
 
   // The arms of a fold by variant, with the indices of the recursive fields.
   const armsOf = new Map<Id, Map<Id, FoldArm>>();
@@ -459,6 +583,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (!builtins[target]) throw new Error(`no implementation for ${target}`);
         return builtins[target];
       case "variant":
+        if (effectOf(target)) {
+          if (!parts.has(target)) {
+            const op = tag((...args: Value[]) => run((m) => m.perform(target, args)), { prim: target });
+            operations.set(op, target);
+            parts.set(target, op);
+          }
+          return parts.get(target)!;
+        }
         if (!t.fields.length) return { tag: target, fields: [] };
         if (!parts.has(target)) parts.set(target, tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }));
         return parts.get(target)!;
@@ -484,16 +616,40 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 }
 
 // Run an action (a definition of type () -> ...). Only effects the runtime
-// can handle may be left: Console and Diverge. Anything else (an unhandled
-// Choice) is reported before anything runs.
+// can handle may be left: the world's, Diverge, Log and Abort (which ends
+// the run with Aborted). Anything else (an unhandled Choice) is reported
+// before anything runs.
 export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: (s) => console.log(s) }): Value {
   const t = info.typeOf.get(def);
   if (!t || t.t !== "fn" || t.params.length) throw new Error("only an action (a function with no inputs) can be run");
-  const extra = t.eff.effs.filter((e) => e !== CONSOLE && e !== DIVERGE);
-  if (extra.length) throw new Error(`unhandled effect: ${extra.join(", ")}; wrap it in first, all or count`);
+  return start(code, info, def, t, [], rt);
+}
+
+function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
+  if (t.t !== "fn") throw new Error("not a function");
+  const extra = t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
+  if (extra.length) throw new Error(`unhandled effect: ${extra.join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`);
   const r = makeRunner(code, info, rt);
-  for (const v of r.call(r.value(def))) return v;
+  for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
+}
+const RUNTIME_HANDLES = [...WORLD, DIVERGE, LOG, ABORT];
+
+// A program run from the command line (cli/lab.ts): `main` takes the
+// arguments as a list of texts, or nothing, and returns the exit code (an
+// Int or a Number), or anything else for 0. An Abort that nothing handles
+// prints its reason to standard error and exits with 1.
+export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: Runtime): number {
+  const t = info.typeOf.get(def);
+  if (!t || t.t !== "fn" || t.params.length > 1) throw new Error("main takes the arguments (a list of texts), or nothing");
+  try {
+    const v = start(code, info, def, t, t.params.length ? [toList(args)] : [], rt);
+    return typeof v === "number" || typeof v === "bigint" ? Number(v) : 0;
+  } catch (e) {
+    if (!(e instanceof Aborted)) throw e;
+    (rt.world?.error ?? rt.print)(e.reason);
+    return 1;
+  }
 }
 
 export function showValue(v: Value, code: Code, names: Names): string {

@@ -220,14 +220,120 @@ The effects:
 
 | effect | operations | handled by |
 |---|---|---|
-| `Choice` | `one of(list)`, `fail()` | `first(action, fallback)`, `all(action)`, `count(action)` |
-| `Console` | `print(text)` | the runtime |
+| `Choice` | `one of(list)`, `fail()`, `value of(optional)` | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
+| `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | the runtime |
+| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | the runtime |
+| `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
+| `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
+| yours | the operations you declare | a match on them |
 
 Two rules make this checkable. A definition's own value must be pure, and
 anything that acts is an action, a function with no inputs. `runMain`
 accepts an action only if its remaining effects are ones the runtime handles,
 so an unhandled `Choice` at the top is reported before anything runs.
+
+### Effects you define
+
+An effect is declared exactly like a data type, with one flag: its cases are
+its *operations*, and each case's fields are what the operation is given.
+An operation either returns a value of a declared type, or never returns:
+
+```
+effect Ask   = ask(question: Text) returns Number
+effect Abort = abort(reason: Text)                  -- never returns (std)
+effect Log   = log(line: Text) returns Unit          -- std
+```
+
+Calling an operation performs it: `ask("width")` has type
+`Number` and adds `Ask` to the caller's row, so a function that asks is
+`() -[Ask]-> Number`. Handling it is a **match on the operations**, with the
+computation that performs them as the value examined:
+
+```
+match width() + height()
+| ask(question) → if question = "width" then 30 else 12      -- the answer
+```
+
+```
+match show(check(n))
+| abort(why) → "refused: " ++ why                            -- the value of the match
+```
+
+That is OCaml 5.3's effect cases in `match` (`match f () with effect (Ask q), k -> …`),
+minus the continuation `k`, and it's why there is no new node kind: a
+handler is a match, an operation is a case, performing is calling. The
+match's value is the computation's value when it finishes normally. Each
+case runs *outside* its handler (deep handlers), so a `Log` case that logs
+reaches the next handler out, and in the end the runtime.
+
+The continuation isn't a value, on purpose. Every operation is one of two
+shapes, and those two cover what programs need (errors, configuration,
+logging, IO, mocking IO in tests) without first-class continuations:
+
+- **It returns** (`ask`, `log`): the case gives the answer and the
+  computation carries on with it, once. The answer must be one value: a
+  case that may give several or none (`Choice`) is an error, so a handler
+  can't secretly resume twice.
+- **It never returns** (`abort`): the case's value becomes the value of the
+  whole match and the rest of the computation is dropped, including any
+  alternatives it still had (a cut, like ISO Prolog's `catch/3`).
+
+Both can compile to plain JavaScript without capturing continuations (the
+compiler doesn't do it yet, see "What's next"): an
+answer is a call to the handler's case found on a stack of handlers, an
+abort is an exception caught by its match (this is how Koka and Effekt
+compile tail-resumptive and abortive handlers). Effects take no type
+parameters, because rows hold effect ids: for an error that carries data
+of its own, declare an effect for it (`effect Invalid = invalid(line: Int,
+why: Text)`), which also makes the type say *which* error a function can
+raise.
+
+Errors with reasons are now `Abort` (REVIEW.md §4.3): `read file` aborts
+with "no such file: notes.txt", and `Choice` stays reason-free, for search.
+
+### `Optional`: the data form of Choice
+
+`Choice` is how absence is *computed*; it can't be stored in a record or a
+list. `Optional a = none | some(value: a)` is how it's stored, and two
+functions cross between them: `optional(action)`, the at-most-one sibling of
+`all` (the first answer as `some(answer)`, or `none`), and `value of(o)`,
+which is `Choice` again. There is still no null: `none` is a case you
+match on.
+
+### The world and Choice
+
+`count(() => x = one of([1, 2, 3]); print("trying " ++ show(x)); fail())`
+used to print three lines and return 0: printing on a path that was then
+abandoned still happened. With files or payments that is a bug factory. So
+the **world effects** (`Console`, `Files`) may not run while a `Choice` is
+open: a function that does both is an error ("this does Console while a
+Choice is open … handle the Choice first and act on its result"), and so is
+handing a world action to something that runs it under `Choice`
+(`first(say, …)` where `say` prints). Handle the search first, then act on
+its result. `Log` isn't the world (it is debugging output), so it may run
+anywhere, searches included.
+
+Types alone can't express this rule: a handler's thunk has the type
+"`Choice`, and whatever the code around it does", so its type mentions
+`Console` whenever the surrounding code prints. The check
+(`worldUnderChoice` in `src/lang/infer.ts`) looks at what each function does
+itself: the declared effects of the calls in its body, plus those of the
+functions it passes to callees that call them right away. One gap remains:
+a printing function kept in a variable (not a let) and called under
+`Choice` inside a definition that takes it as a parameter.
+
+### The world
+
+The world effects have one handler, the runtime's `World` (`run.ts`): the
+evaluator takes one (`Runtime.world`); a Node one comes with the command
+line. Operations that can fail (`read file`, `write file`, `list folder`,
+`read input`) abort with the reason, at the place they were called, so an
+ordinary `match … | abort(why) → …` catches a missing file. A command-line
+`main` takes the arguments as `List Text` and returns the exit code
+(`runProgram`); an `Abort` nothing handles prints its reason to standard
+error and exits with 1. Command-line arguments aren't an effect: they're
+`main`'s input.
 
 ### How it runs: no stack limit
 
@@ -443,7 +549,9 @@ class considered, and where each one ends up:
 | type mismatch | prevented by the editor | typed holes; the palette offers only fillings that type-check, and fillings that would change a definition's type for its callers are confirmed against the whole program |
 | missing case / non-exhaustive match | prevented by the editor | arms come from the type; adding a variant adds hole arms everywhere |
 | unreachable case | checked | `otherwise` when every case is covered is reported |
-| null / undefined | impossible by construction | there is no null; absence is `Choice`, and an unhandled `Choice` can't reach `main` |
+| null / undefined | impossible by construction | there is no null; absence is `Choice` when computed and `Optional` (a case you match on) when stored, and an unhandled `Choice` can't reach `main` |
+| errors without a reason | checked | `Abort` carries a reason, and effects you declare carry typed ones; a `match` with their cases catches them |
+| side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") |
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects |
 | non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
@@ -537,9 +645,13 @@ back into the group being hashed is named by its position.
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
-- **User-defined effects and handlers.** The evaluator's stream model handles
-  `Choice` naturally. General handlers with resumable continuations need a
-  CPS evaluator.
+- **Effects in the compiler, and a `lab` command line.** The evaluator runs
+  every effect above; the compiler doesn't compile operations, handler
+  matches or the world builtins yet. Then a `lab run file.json args…` /
+  `lab compile` command and a real CLI program written in the language.
+  Also open: a time and randomness effect, HTTP as an async one-shot
+  effect, and handlers for `Console`/`Files` written in the program (to
+  mock IO in tests).
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Number m/s`) and
   a function generic over its unit.

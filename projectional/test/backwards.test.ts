@@ -153,7 +153,7 @@ test("backwards: types say Choice, Diverge when it may unfold forever, and print
     const [x] = (k.code.nodes[(k.code.nodes[say] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
     k.define(back, k.fn(["y"], (y) => k.call(S.all, k.thunk(() => k.solve(say, { out: y }, { [x]: "x" }, ({ [x]: v }) => v)))));
   });
-  assert.ok(q.info.errors.some((e) => /printing can't be run backwards/.test(e.message)), JSON.stringify(q.info.errors));
+  assert.ok(q.info.errors.some((e) => /performs Console, and a function that acts can't be run backwards/.test(e.message)), JSON.stringify(q.info.errors));
 });
 
 test("backwards: main prints what each function run backwards gives", () => {
