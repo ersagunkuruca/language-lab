@@ -296,6 +296,69 @@ function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id): 
   return go(root);
 }
 
+// ---------------------------------------------------------------- copy and paste
+//
+// A copied piece is its nodes and the names of what it binds. Pasted into a
+// hole it gets fresh ids, so the copy is a new piece with the same shape;
+// variables it binds itself come along, variables from outside are kept
+// where the hole can see them and become holes where it can't, and anything
+// the program doesn't have (a definition from another program) becomes a
+// hole too. Then it's type-checked like any other edit.
+
+export interface Clip { nodes: Record<Id, Node>; root: Id; names: Names }
+
+export function copyOf(code: Code, names: Names, id: Id): Clip {
+  const ids = subtree(code, id);
+  return { nodes: Object.fromEntries(ids.map((x) => [x, code.nodes[x]])), root: id, names: Object.fromEntries(ids.filter((x) => names[x] !== undefined).map((x) => [x, names[x]])) };
+}
+
+export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Clip, hole: Id): TEdit {
+  if (code.nodes[hole]?.kind !== "hole") return { ok: false, reason: "select a hole to paste into" };
+  const scope = new Set(scopeAt(code, defId, hole));
+  const nodes = { ...code.nodes };
+  const nn = { ...names };
+  const map = new Map<Id, Id>();
+  let lost = 0;
+  const mk = (d: NodeData, id = freshId()): Id => { nodes[id] = { id, ...d } as Node; return id; };
+  const bind = (b: Id): Id => { const nb = mk({ kind: "binder" }); map.set(b, nb); if (clip.names[b] !== undefined) nn[nb] = clip.names[b]; return nb; };
+  const go = (id: Id, at = freshId()): Id => {
+    const n = clip.nodes[id];
+    switch (n.kind) {
+      case "ref": {
+        if (map.has(n.target)) return mk({ kind: "ref", target: map.get(n.target)! }, at);
+        const t = code.nodes[n.target];
+        if (!t || (t.kind === "binder" && !scope.has(n.target))) { lost++; return mk({ kind: "hole" }, at); }
+        return mk({ kind: "ref", target: n.target }, at);
+      }
+      case "call": { const fn = go(n.fn); return mk({ kind: "call", fn, args: n.args.map((a) => go(a)) }, at); }
+      case "lambda": { const params = n.params.map(bind); return mk({ kind: "lambda", params, body: go(n.body) }, at); }
+      case "match": case "fold": {
+        if (n.arms.some((a) => !code.nodes[(clip.nodes[a] as NodeOf<"arm">).variant])) { lost++; return mk({ kind: "hole" }, at); }
+        const scrutinee = go(n.scrutinee);
+        const arms = n.arms.map((a) => {
+          const arm = clip.nodes[a] as NodeOf<"arm">;
+          const binds = arm.binds.map(bind);
+          const results = arm.results.map((r) => (r ? bind(r) : null));
+          return mk({ kind: "arm", variant: arm.variant, binds, results, body: go(arm.body) });
+        });
+        return n.kind === "match" ? mk({ kind: "match", scrutinee, arms, otherwise: n.otherwise ? go(n.otherwise) : null }, at) : mk({ kind: "fold", scrutinee, arms }, at);
+      }
+      case "solve": {
+        if (!code.nodes[n.fn]) { lost++; return mk({ kind: "hole" }, at); }
+        const given = Object.fromEntries(Object.entries(n.given).map(([k, g]) => [k, go(g)]));
+        const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)]));
+        return mk({ kind: "solve", fn: n.fn, given, binds, body: go(n.body) }, at);
+      }
+      case "lit": return mk({ kind: "lit", value: n.value }, at);
+      default: return mk({ kind: "hole" }, at);
+    }
+  };
+  // The root takes the hole's id, so what was attached to the hole stays.
+  go(clip.root, hole);
+  const note = `Pasted a copy.${lost ? ` ${lost} part${lost === 1 ? "" : "s"} that can't be reached here became hole${lost === 1 ? "" : "s"}.` : ""}`;
+  return guardTyped(info, { nodes, defs: code.defs }, nn, hole, note);
+}
+
 // Case split: replace an expression by a match on a variable, with one arm
 // per case of its type, each starting as a copy of the expression. The
 // arms come from the type, so no case is missing; each copy can then be

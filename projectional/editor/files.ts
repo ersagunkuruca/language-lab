@@ -19,6 +19,8 @@ export interface ProgramFile {
   descriptive: Names;
   comments: Comments;
   layout: { positions: Record<string, { x: number; y: number }>; known: Record<Id, Id[]>; expanded: Id[] };
+  // Example inputs per definition, as text.
+  examples: Record<Id, string[]>;
 }
 
 // The program's own nodes: everything not in `base`.
@@ -70,6 +72,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     names: x.names as Names,
     descriptive: (x.descriptive as Names) ?? {},
     comments: (x.comments as Comments) ?? {},
+    examples: isObj(x.examples) ? (Object.fromEntries(Object.entries(x.examples).filter(([, v]) => Array.isArray(v) && v.every((t) => typeof t === "string"))) as Record<Id, string[]>) : {},
     layout: {
       positions: isObj(l.positions) ? (l.positions as ProgramFile["layout"]["positions"]) : {},
       known: isObj(l.known) ? (l.known as Record<Id, Id[]>) : {},

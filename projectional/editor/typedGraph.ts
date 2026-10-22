@@ -58,6 +58,9 @@ export interface GraphHooks {
   // Offsets from the automatic layout, and saving one.
   offsets: Record<Id, Pos>;
   moved: (id: Id, off: Pos) => void;
+  // Values from a run on example inputs (src/lang/trace.ts), already shown
+  // as text, by node and by variable.
+  values?: Map<Id, string>;
 }
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
@@ -144,7 +147,17 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { g, w: 10, h: 18, outY: 9 };
   };
 
-  const lay = (id: Id): L => ({ ...layNode(id), id });
+  // A value, when there is one, sits just above the output it leaves by.
+  const valueTag = (text: string, x: number, y: number) => {
+    const t = text.length > 24 ? `${text.slice(0, 23)}…` : text;
+    return titled(s("text", { x, y, class: "val" }, t), text);
+  };
+  const lay = (id: Id): L => {
+    const l = { ...layNode(id), id };
+    const v = hooks.values?.get(id);
+    if (v !== undefined && !dotOf(id)) l.g.append(valueTag(v, outX(l) + 6, l.outY - 6));
+    return l;
+  };
   const layNode = (id: Id): L => {
     const n = node(id);
     const d = dotOf(id);
@@ -485,7 +498,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const path = curve(a.x + 6, a.y, b.x, b.y);
     shared.append(titled(s("path", { d: path, class: "use-hit", "data-id": u.ref }), `${name(u.dot)}: click to select this use`), s("path", { d: path, class: `tw use${hooks.selected === u.dot || hooks.selected === u.ref ? " lit" : ""}` }));
   }
-  return [top.g, result, shared];
+  // Values of variables, next to their dots.
+  const vals = s("g");
+  for (const [b, d] of dots) {
+    const v = hooks.values?.get(b);
+    if (v === undefined) continue;
+    const a = absOf(holder, d.el, d.x, d.y);
+    vals.append(valueTag(v, a.x + 8, a.y - 8));
+  }
+  return [top.g, result, shared, vals];
 }
 
 // Clicks select; double-click opens a definition. Dragging: a node's body
