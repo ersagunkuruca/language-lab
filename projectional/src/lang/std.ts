@@ -6,7 +6,7 @@
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CHOICE, CONSOLE, DIVERGE, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 
@@ -17,18 +17,21 @@ const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
 for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"]]) named(node({ id, kind: "builtin", op: id }), name);
-for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
-// type expressions.
-function typedef(id: Id, name: string, params: string[], variants: [string, [string, (p: Id[], self: Id) => Id][]][]) {
+// type expressions. An effect is written the same way (`effect`): its
+// variants are operations, and an operation's third entry is the type it
+// returns (none: it never returns).
+type TypeOf = (p: Id[], self: Id) => Id;
+function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false) {
   const ps = params.map((p) => named(node({ id: `${id}.${p}`, kind: "binder" }), p));
-  const vs = variants.map(([vname, fields]) => {
+  const vs = variants.map(([vname, fields, returns]) => {
     const vid = `${id}.${vname}`;
     const fs = fields.map(([fname, ty]) => named(node({ id: `${vid}.${fname}`, kind: "field", type: ty(ps, id) }), fname));
-    return named(node({ id: vid, kind: "variant", fields: fs }), vname);
+    return named(node({ id: vid, kind: "variant", fields: fs, ...(returns ? { returns: returns(ps, id) } : {}) }), vname);
   });
-  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs });
+  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}) });
   return named(node({ id, kind: "def", body: `${id}.type` }), name);
 }
 let tn = 0;
@@ -44,6 +47,24 @@ export const PAIR = typedef("std.pair", "Pair", ["a", "b"], [
   ["pair", [["fst", ([a]) => tref(a)], ["snd", ([, b]) => tref(b)]]],
 ]);
 
+// The data form of Choice: a value that may be missing, for storing what
+// a Choice computes (LANGUAGE.md, "Optional"). `optional` turns a Choice
+// into one, `value of` turns one back.
+export const OPTIONAL = typedef("std.optional", "Optional", ["a"], [
+  ["none", []],
+  ["some", [["value", ([a]) => tref(a)]]],
+]);
+export const NONE = "std.optional.none", SOME = "std.optional.some";
+
+// Effects written in the language itself, the way a program writes its own.
+// Abort ends a computation with a reason; a match with an `abort(reason)`
+// case catches it. Log is debug output: not a world effect (it may run
+// under Choice), and when nothing handles it the runtime writes it to
+// standard error.
+export const ABORT = typedef("std.abort", "Abort", [], [["abort", [["reason", () => tref(STRING)]]]], true);
+export const LOG = typedef("std.log", "Log", [], [["log", [["line", () => tref(STRING)]], () => tref(UNIT)]], true);
+export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
+
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
 export const PAIR_V = "std.pair.pair", FIRST = "std.pair.pair.fst", SECOND = "std.pair.pair.snd";
@@ -57,6 +78,7 @@ const int: Type = { t: "con", id: INT, args: [] };
 const bool: Type = { t: "con", id: BOOL, args: [] };
 const unit: Type = { t: "con", id: UNIT, args: [] };
 const list = (a: Type): Type => ({ t: "con", id: LIST, args: [a] });
+const optional = (a: Type): Type => ({ t: "con", id: OPTIONAL, args: [a] });
 const fn = (params: Type[], ret: Type, eff: { effs: Id[]; tail: number | null }): Type => ({ t: "fn", params, ret, eff });
 
 export const SIGS: Record<Id, Sig> = {};
@@ -138,12 +160,34 @@ export const S = {
     const a = s.fresh(), e = s.freshRow();
     return fn([fn([], a, { effs: [CHOICE], tail: e.tail }), fn([], a, e)], a, e);
   }),
+  // The at-most-one sibling of all: the first answer as some(answer), or
+  // none. This is how a Choice becomes data that can be stored.
+  optional: builtin("optional", "optional", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], optional(a), e); }),
+  // ... and back: the value, or no answer at all.
+  valueOf: builtin("valueOf", "value of", (s) => { const a = s.fresh(); return fn([optional(a)], a, s.freshRow([CHOICE])); }),
   // Turns "might not terminate" into "might fail": at most n calls to
   // possibly-divergent definitions, then fail.
   fuel: builtin("fuel", "with fuel", (s) => {
     const a = s.fresh(), e = s.freshRow();
     return fn([num, fn([], a, { effs: [DIVERGE], tail: e.tail })], a, { effs: [CHOICE], tail: e.tail });
   }),
+};
+
+STD_MANY[S.valueOf] = (o: { tag: Id; fields: unknown[] }) => (o.tag === SOME ? [o.fields[0]] : []);
+
+// The world: the console, files. Their implementations are the runtime's
+// (run.ts `World`), which is the only handler world effects have. Those
+// that can go wrong (a missing file) abort with the reason.
+const world = (op: string, name: string, params: Type[], ret: Type, effs: Id[]) => builtin(op, name, (s) => fn(params, ret, s.freshRow(effs)));
+export const IO = {
+  printError: world("io.printError", "print error", [str], unit, [CONSOLE]),
+  readInput: world("io.readInput", "read input", [], str, [CONSOLE]),
+  readLine: world("io.readLine", "read line", [], optional(str), [CONSOLE]),
+  readFile: world("io.readFile", "read file", [str], str, [FILES, ABORT]),
+  writeFile: world("io.writeFile", "write file", [str, str], unit, [FILES, ABORT]),
+  appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),
+  fileExists: world("io.fileExists", "file exists", [str], bool, [FILES]),
+  listFolder: world("io.listFolder", "list folder", [str], list(str), [FILES, ABORT]),
 };
 
 // Int: whole numbers that never overflow. Same names as Number's, because
@@ -201,5 +245,5 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };

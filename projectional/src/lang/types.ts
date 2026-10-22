@@ -19,6 +19,12 @@ export interface Row { effs: Id[]; tail: number | null }
 export const CHOICE = "effect.choice";
 export const CONSOLE = "effect.console";
 export const DIVERGE = "effect.diverge";
+// Reading and writing files.
+export const FILES = "effect.files";
+// The world effects: what they do can't be taken back. They may not happen
+// while a Choice is still open (LANGUAGE.md, "The world and Choice"), and
+// only the runtime handles them.
+export const WORLD: readonly Id[] = [CONSOLE, FILES];
 
 export const NUMBER = "type.number";
 export const STRING = "type.string";
