@@ -41,7 +41,13 @@ same app, packaged.
   row `[Cells, Update]` is the whole story: it can't print, can't search
   (`Update` is world, so a write under `Choice` is already refused), and a
   view (`() -[Cells]-> Text`) can't write. Those are the guarantees Solid
-  only warns about at run time.
+  only warns about at run time. **They need one checker fix first**,
+  found while writing this: a function type inside a data type has no
+  effect row today (infer.ts gives it a fresh one each time), so a
+  printing function put in a field and called back out under `Choice`
+  passes the checker. The fix, its own PR before any web code: a field's
+  function type lists its effects (`() -[Cells]-> Text`), and one that
+  lists none is pure.
 - **Where is the state?** In cells, made by `main` before it returns the
   page. There is no `update(model, msg)` function and no message type.
   The Elm architecture (Evan Czaplicki, https://guide.elm-lang.org/architecture/)
@@ -185,6 +191,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 ## The order of the work, one PR each
 
 1. This document.
+1. (bug, before the rest) Effect rows on function types inside data types.
 2. `Html`, `Attribute`, `Event` in std; mount over them for both calling
    conventions; the browser world; `lab build-web`; differential tests
    (evaluator and compiled draw the same page and react the same to the
