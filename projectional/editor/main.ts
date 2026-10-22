@@ -1365,7 +1365,7 @@ function toggleInline(call: Id) {
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
-    select: (id: Id) => select(id),
+    select: (id: Id | null) => select(id),
     open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
     canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
@@ -1807,6 +1807,7 @@ document.addEventListener("dblclick", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && ui.menu) { ui.menu = null; return render(); }
   const typing = (e.target as HTMLElement).closest("input, textarea");
+  if (e.key === "Escape" && !typing && ui.selected) return select(null);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !typing) {
     e.preventDefault();
     return e.shiftKey ? travel(redo, undo, "Redid") : travel(undo, redo, "Undid");
