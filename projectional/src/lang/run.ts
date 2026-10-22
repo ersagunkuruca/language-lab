@@ -17,7 +17,7 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { CONS, FALSE, NIL, S, SET, STD_IMPL, STD_MANY, TRUE, UNIT_V } from "./std.ts";
+import { CONS, FALSE, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
@@ -90,6 +90,8 @@ type Choice = { barrier: HandlerFrame } | { it: Iterator<unknown>; k: Frame | nu
 
 export interface Runtime {
   print: (line: string) => void;
+  // The names `show` prints cases with; std's if not given.
+  names?: Names;
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
@@ -118,6 +120,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.oneOf]: (xs) => fromList(xs),
     [S.fail]: () => [],
     [S.print]: (s) => (rt.print(s as string), one(unit)),
+    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
       const path = m?.prim ? [m.prim] : m?.lambda ? fieldPath(code, m.lambda) : null;
@@ -373,7 +376,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, n.fn, known, { spend })) {
+          for (const sol of relate(code, n.fn, known, { spend, names: rt.names })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];

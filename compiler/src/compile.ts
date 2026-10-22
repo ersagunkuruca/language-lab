@@ -31,7 +31,7 @@ import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { CONS, FALSE, INT_OPS, NIL, S, SET, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
+import { CONS, FALSE, INT_OPS, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
@@ -80,6 +80,8 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [INT_OPS.show]: { js: ([a]) => `String(${a})` },
   [INT_OPS.toNumber]: { js: ([a]) => `Number(${a})` },
   [TEXT_OPS.less]: { js: ([a, b]) => `$text.less(${a}, ${b})`, bool: true },
+  // Cases print with the names the program was compiled with ($names).
+  [SHOW_ANY]: { js: ([a]) => `$showAny(${a}, $names)` },
 };
 // Other std builtins run their implementation from std.ts: `$impl` for
 // those with one answer, `$many` (an array of answers) for those with Choice.
@@ -695,7 +697,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
   for (let s; (s = queue.shift());) out.push(body(s));
 
-  const helpers = ["$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
+  const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$planned", "$solveRuntime", "$print", "$FN", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative"] : [])];
@@ -706,6 +708,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     `import { ${helpers.join(", ")} } from ${JSON.stringify(opts.runtime)};`,
     ``,
     ...program,
+    ...(referenced.has(SHOW_ANY) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...solverCode,
     ``,
     out.join("\n\n"),

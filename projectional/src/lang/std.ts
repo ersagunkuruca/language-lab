@@ -176,6 +176,12 @@ export const TEXT_OPS = {
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
 };
 
+// show for any plain value: [1, 2, 3], circle(2), "text". Cases print
+// with the program's names, which the runtime is given (names are
+// presentation, so they're an input to the run, like the console). Number's
+// own show stays: run backwards, it is what reads numbers.
+export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
+
 // Records: set(field, record, value) is the record with that field changed.
 // `field` is a field, or a path of fields (p ↦ p.address.city), which the
 // checker insists on; the update is that path run backwards, with every

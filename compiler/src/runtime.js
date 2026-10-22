@@ -47,6 +47,8 @@ export * as $int from '../../projectional/src/lang/int.ts';
 export * as $text from '../../projectional/src/lang/text.ts';
 export { STD_IMPL as $impl, STD_MANY as $many } from '../../projectional/src/lang/std.ts';
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
+import { showValue } from '../../projectional/src/lang/run.ts';
+export const $showAny = (v, names) => showValue(v, null, names);
 
 export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));
 export const $mod = (a, b) => ((a % b) + b) % b;

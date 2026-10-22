@@ -141,3 +141,26 @@ test("the relational interpreter runs Int, text and set forward", () => {
   assert.equal(one(big, { [param(big)]: 7 }), "7000000000000000000000");
   void person;
 });
+
+test("show prints any plain value: lists, cases with the program's names, text, Int", async () => {
+  const { SHOW_ANY } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const shape = k.type("shape", [], [["circle", [["r", () => k.tref(INT)]]], ["dot", []]]);
+  const main = lines(k,
+    k.call(SHOW_ANY, k.list(k.int(1), k.int(2), k.int(3))),
+    k.call(SHOW_ANY, k.list(k.call(shape.v.circle, k.int(2)), k.x(shape.v.dot))),
+    k.call(SHOW_ANY, k.lit("text")),
+    k.call(SHOW_ANY, k.true));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(code, info, main, { print: (s) => out.push(s), names });
+  assert.deepEqual(out, ["[1, 2, 3]", "[circle(2), dot]", '"text"', "true"]);
+  // A function isn't plain data: refused before running.
+  const k2 = new Lang();
+  const m2 = lines(k2, k2.call(SHOW_ANY, k2.fn(["x"], (x) => x)));
+  const c2 = base(k2.code);
+  assert.equal(infer(c2, baseNames(k2.names)).errors.length, 1);
+  void m2;
+});

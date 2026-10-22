@@ -199,7 +199,7 @@ test("$eq compares long lists without the JS stack", async () => {
 });
 
 test("Int, text and set compile to what the evaluator does", async () => {
-  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, TEXT_OPS: T, SET, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
   const { INT, STRING } = await import("../../projectional/src/lang/types.ts");
   const k = new Lang();
   const orNone = (body: () => string) => k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")));
@@ -221,10 +221,11 @@ test("Int, text and set compile to what the evaluator does", async () => {
     orNone(() => k.call(I.show, k.call(T.find, k.lit("hello"), k.lit("l")))),
     k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(pt.f["point.label"], k.call(SET, pt.f["point.label"], p, k.lit("b")))),
     k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(I.show, k.call(pt.f["point.x"], k.call(SET, k.fn(["q"], (q) => k.call(pt.f["point.x"], q)), p, k.int(5))))),
+    k.call(SHOW_ANY, k.list(k.call(pt.v.point, k.int(1), k.lit("a")), k.call(pt.v.point, k.int("100000000000000000000"), k.lit("b")))),
   ].map((t) => k.call(S.print, t)))));
   const { defs, code, info } = await compiledDefs(k, ["main"], "data.js");
   const want: string[] = [];
-  runMain(code, info, main, { print: (s) => want.push(s) });
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
-  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5"]);
+  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]']);
 });

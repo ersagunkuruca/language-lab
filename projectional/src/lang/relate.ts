@@ -44,14 +44,15 @@
 import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf } from "../model.ts";
+import type { Names } from "../presentation.ts";
 import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
-import { META, equal as valueEqual, type Data, type Value } from "./run.ts";
+import { META, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { RELATIONS, VARIADIC } from "../relational.ts";
 import { relationFor } from "./solve.ts";
-import { CONS, FALSE, NIL, S, SET, SIGS, STD_IMPL, STD_MANY, TRUE } from "./std.ts";
+import { CONS, FALSE, NIL, S, SET, SHOW_ANY, SIGS, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
@@ -381,6 +382,8 @@ export interface Options {
   // calling a recursive definition). Returning false ends the search there:
   // this is how `with fuel` bounds a backwards search.
   spend?: () => boolean;
+  // The names generic `show` prints cases with; std's if not given.
+  names?: Names;
 }
 
 // Numeric builtins, by the name the solver knows them under.
@@ -583,7 +586,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         },
       });
     }
-    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : null);
+    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames)] : null);
     if (many) {
       return wait({
         k: "later", text: id, ready: (s) => args.every((a) => known(a, s)), then: (s) => {
