@@ -76,6 +76,10 @@ test("records are structs: built by their case, read by fields or a one-arm matc
   assert.match(s.wgsl, /return walk_3\(Vec_0\(p0, 1\.0, 0\.0\), p1, 0\.0\)\.snd;/);
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
+  // An input that's never used is a Number, and only a Number may be passed.
+  assert.match(s.wgsl, /fn twice_ignoring_\d+\(p0: f32, p1: f32\) -> f32/);
+  assert.ok(!s.refused.has(v.defs.numbers));
+  assert.match(why(s.refused, v.defs.vecs), /^passes twice ignoring something other than/);
   // Without records (what WebAssembly takes), they're refused as before.
   const plain = lowerScalar(v.code, v.info, v.names, roots);
   assert.match(why(plain.refused, v.defs.length), /other than Number or Bool/);

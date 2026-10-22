@@ -89,7 +89,15 @@ export function vectors() {
   ])));
   const orZero = k.def("or zero");
   k.define(orZero, k.fn(["o"], (o) => k.match(o, [{ variant: SOME, names: ["x"], body: ([x]) => x }, { variant: NONE, names: [], body: () => n(0) }])));
+  // An input never looked at can be anything; the profile takes it as a
+  // Number, so passing it a Vec is refused.
+  const twice = k.def("twice ignoring");
+  k.define(twice, k.fn(["x", "ignored"], (x) => k.call(B.mul, n(2), x)));
+  const numbers = k.def("twice a number");
+  k.define(numbers, k.fn(["x"], (x) => k.call(twice, x, x)));
+  const vecs = k.def("twice a vec");
+  k.define(vecs, k.fn(["x"], (x) => k.call(twice, x, k.call(vec, x, x, x))));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), defs: { along, length, farther, walk, shoot, steps, sum, orZero } };
+  return { code, names, info: infer(code, names), defs: { along, length, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
 }
