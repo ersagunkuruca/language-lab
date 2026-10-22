@@ -245,8 +245,9 @@ What isn't a loop yet:
   runs out of stack at a few thousand levels (calc's nested parentheses,
   GAPS.md G1). The evaluator has no such limit. The fix is the
   evaluator's (continuations on the heap) for the functions the checker
-  finds recursive, or a bigger stack for the program. Mutual tail calls
-  aren't loops either.
+  finds recursive, or a bigger stack for the program. `lab compile`
+  does the second: its output runs `main` on a worker thread with a 1 GB
+  stack. Mutual tail calls aren't loops either.
 - **A fold with `Choice`** is a recursive generator, one per level.
 
 ### Data
