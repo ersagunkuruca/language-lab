@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { freshId, ownerOfTypeParts, replace } from "../model.ts";
+import { freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 
@@ -74,7 +74,8 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling): Edit {
       break;
     }
   }
-  return { code: replace({ nodes, defs: code.defs }, hole, () => data), names: nn };
+  nodes[hole] = { ...data, id: hole } as Node;
+  return { code: { nodes, defs: code.defs }, names: nn };
 }
 
 // Add a case to a data type. Every match and fold over that type that
