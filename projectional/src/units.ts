@@ -80,9 +80,11 @@ const unitOf = (n: Node | undefined): Unit | undefined => (n as { unit?: Unit } 
 // so a def used twice can take different units each time (it's polymorphic
 // in whatever its own body leaves free). Every number-valued expression node
 // has a unit; Bool-valued ones (equal, and, for some) just pass constraints
-// through.
-export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id, string> = new Map(), depth = 0): Constraint[] {
-  if (depth > 20) return [];
+// through. A recursive call isn't inlined again (`path` holds the defs being
+// inlined): unfolding it 20 deep was exponential once a def called a
+// recursive group more than once, and froze the editor.
+export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id, string> = new Map(), path: Id[] = []): Constraint[] {
+  if (path.length > 20 || path.includes(defId)) return [];
   const out: Constraint[] = [];
   const def = get(code, defId, "def");
   if (!def.body) return out;
@@ -129,7 +131,7 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         if (callee.kind === "builtin") { out.push(...rules(callee.op, port, id, id)); return; }
         if (callee.kind === "def") {
           const keys = paramsOf(fn.target);
-          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, depth));
+          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId]));
         }
         return;
       }
@@ -147,7 +149,7 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         // A call read sideways: each port is a given expression or a binder.
         Object.values(n.given).forEach(visit);
         const term = (k: string) => (n.given[k] ? t(n.given[k]) : n.binds[k] ? t(n.binds[k]) : `${prefix}${id}:${k}`);
-        if (code.nodes[n.fn]?.kind === "def") out.push(...calleeConstraints(code, n.fn, term, `${prefix}${id}/`, depth));
+        if (code.nodes[n.fn]?.kind === "def") out.push(...calleeConstraints(code, n.fn, term, `${prefix}${id}/`, [...path, defId]));
         else if (code.nodes[n.fn]?.kind === "builtin") out.push(...rules((code.nodes[n.fn] as { op: string }).op, term, id, id));
         visit(n.body);
         same(id, n.body, "solve", id);
@@ -161,7 +163,7 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
 }
 
 // A callee's constraints with its ports bound to the caller's terms.
-function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, depth: number): Constraint[] {
+function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[]): Constraint[] {
   const cdef = get(code, fn, "def");
   const cb = cdef.body ? code.nodes[cdef.body] : null;
   if (!cb) return [];
@@ -170,7 +172,7 @@ function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, pref
     cb.params.forEach((p) => map.set(p, port(p)));
     map.set(cb.body, port("out"));
   }
-  return constraints(code, fn, prefix, map, depth + 1);
+  return constraints(code, fn, prefix, map, path);
 }
 
 // ---------------------------------------------------------------- solving
