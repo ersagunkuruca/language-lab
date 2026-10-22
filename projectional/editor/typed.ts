@@ -124,8 +124,18 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     const n = node(id);
     if (!tall(id)) return line(inline(id)[0]);
     if (n.kind === "call" && isLet(n)) {
-      const lam = node(n.fn) as NodeOf<"lambda">;
-      return x(id, "blk let", ...lam.params.flatMap((p, i) => hang(name(p) === "_" ? [] : [bind(p), sep(" = ")], n.args[i])), block(lam.body));
+      // A run of steps is one column, each step its own box: x = …, then
+      // the next, not each one nested inside the one before (the right-
+      // nested lets are how the tree holds an order, not how it reads).
+      const steps: HTMLElement[] = [];
+      let rest: Id = id;
+      for (let c = node(rest); c.kind === "call" && isLet(c); c = node(rest)) {
+        const lam = node(c.fn) as NodeOf<"lambda">;
+        const args = c.args;
+        steps.push(x(c.id, "step", ...lam.params.flatMap((p, i) => hang(name(p) === "_" ? [] : [bind(p), sep(" = ")], args[i]))));
+        rest = lam.body;
+      }
+      return h("div", { class: "blk let" }, ...steps, block(rest));
     }
     if (n.kind === "match" && isBool(n)) {
       const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
