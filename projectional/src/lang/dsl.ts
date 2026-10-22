@@ -2,7 +2,7 @@
 // makes nodes with fresh ids and records names in a side table.
 
 import { Builder } from "../builder.ts";
-import { merge, type Id } from "../model.ts";
+import { merge, type Code, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { BOOL, CONS, FALSE, NIL, S, std, TRUE, UNIT_V } from "./std.ts";
 import { INT } from "./types.ts";
@@ -16,8 +16,10 @@ export interface Case {
 }
 
 export class Lang extends Builder {
-  constructor() {
-    super(merge(prelude, std));
+  // `known`: what the program can refer to besides itself. Give it the
+  // library (src/lang/library.ts) to use the modules' definitions.
+  constructor(known: Code = merge(prelude, std)) {
+    super(known);
   }
 
   // A data type. `variants` maps each case to its fields; a field's type is

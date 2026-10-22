@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -126,7 +126,8 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A case nothing makes can go; its arm goes with it.
   s.ok(Top.removeCase(s.code, s.names, shape, sq.variant));
   assert.equal(binds(circle).length, 1);
-  assert.equal((Object.values(s.code.nodes).find((n) => n.kind === "match") as NodeOf<"match">).arms.length, 1);
+  // (the program's own match: the prelude's published code has some too)
+  assert.equal((Object.values(s.code.nodes).find((n) => n.kind === "match" && !isPublished(n.id)) as NodeOf<"match">).arms.length, 1);
   // main can go (nothing uses it), then area, then Shape.
   for (const d of [main, area, shape]) s.ok(Top.deleteDefinition(s.code, s.names, d));
   assert.deepEqual(s.code.defs, base({ nodes: {}, defs: [] }).defs);
@@ -229,7 +230,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   const h = s.holes(size)[0];
   void h;
   s.fill(size, call(B.mul));
-  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons") as NodeOf<"arm">;
+  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
   s.fill(size, ref(cons.binds[0]));
   s.number(size, 10);
   const all = s.all();
@@ -241,7 +242,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   assert.equal(t.result, 40);
   assert.equal(t.values.get(cons.binds[0]), 4);
   assert.equal(t.values.get(cons.body), 40);
-  const nil = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.nil") as NodeOf<"arm">;
+  const nil = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.nil" && !isPublished(n.id)) as NodeOf<"arm">;
   assert.equal(t.values.has(nil.body), false);
   assert.equal(t.values.get(xs) !== undefined, true);
   assert.ok("error" in parseValue("[4, ", s.code, all));
@@ -264,7 +265,7 @@ test("insertion sort, the textbook algorithm, written with palette picks and a t
   const e = fillHole(s.code, s.names, s.holes(insert)[0], offers.find((f) => f.kind === "fold" && f.on === items && f.type === "std.list")!, baseNames({}));
   s.code = e.code; s.names = e.names;
   // The arm binders are named after the library's fields.
-  const arm = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === CONS) as NodeOf<"arm">;
+  const arm = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === CONS && !isPublished(n.id)) as NodeOf<"arm">;
   assert.deepEqual([...arm.binds, arm.results[1]!].map((b) => s.names[b]), ["head", "tail", "tail′"]);
   s.fill(insert, call(CONS)); s.fill(insert, ref(x)); s.fill(insert, ref(NIL));
   // if x < head: a match on a value given next, whose scrutinee is a hole.

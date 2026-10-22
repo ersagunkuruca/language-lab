@@ -18,6 +18,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { BOOL, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
+import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
   CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
@@ -37,7 +38,14 @@ export interface Info {
   divergent: Set<Id>;
   subst: Subst;
   owner: Map<Id, Id>;
+  // Definitions the palette doesn't offer: a module's helpers.
+  hidden: Set<Id>;
 }
+
+// pins: signatures that definitions must keep and callers see
+// (signatures.ts). hidden: definitions that can be used where they are
+// but aren't offered for new uses.
+export interface Options { pins?: Pins; hidden?: Iterable<Id> }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const str: Type = { t: "con", id: STRING, args: [] };
@@ -46,11 +54,11 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
-export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id> }): Info {
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id> }, opts: Options = {}): Info {
   const s = new Subst();
   if (reuse) s.next = reuse.from.subst.next;
   const owner = ownerOfTypeParts(code);
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []) };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -264,10 +272,30 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
-      info.schemes.set(d, { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)) });
+      let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)) };
+      // A pinned definition must keep its pin, and its callers see the pin
+      // whatever the body says, so a change that breaks it is an error here
+      // and nowhere else.
+      const pin = opts.pins?.[d];
+      if (pin && code.nodes[d]) {
+        const p = fresh(pin, s);
+        if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${show(p.type)}, and this makes it ${show(t)}`);
+        sc = p;
+      }
+      info.schemes.set(d, sc);
       mono.delete(d);
-      info.typeOf.set(d, t);
+      info.typeOf.set(d, sc.type);
     }
+  }
+
+  // Does a body of type `sc` keep the pin `p`? Its type, instantiated,
+  // must unify with the pin's type with the pin's variables held rigid.
+  function fitsPin(sc: Scheme, p: Scheme): boolean {
+    const t = s.clone();
+    const plainArgs = t.plainArgs;
+    t.plainArgs = (id, args) => (id.startsWith(`${RIGID}any.`) ? null : plainArgs(id, args));
+    try { t.unify(instantiate(sc, t), rigid(p)); return true; }
+    catch (e) { if (e instanceof TypeError) return false; throw e; }
   }
 
   function refType(id: Id, target: Id, env: Map<Id, Type>): Type {
@@ -859,6 +887,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // Referring to the group itself, or to a def that depends on it, makes a
   // recursive group whose checks (does it end?) see the body: confirmed.
   for (const [d, sc] of info.schemes) {
+    if (info.hidden.has(d)) continue;
     if (h.group.includes(d)) consider(d, sc.type, true);
     else consider(d, instantiate(sc, info.subst), affected.has(d));
   }

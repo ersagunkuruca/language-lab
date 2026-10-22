@@ -27,6 +27,11 @@ npm test        # includes test/lang.test.ts
   `Diverge`. Handlers are ordinary functions that remove an effect.
 - **Verse's thing?** Yes, it's `Choice`, and it's the same idea as the
   relation solver's branches: a stream of answers, canonical first.
+- **Modules? Imports?** A module is published definitions plus the same
+  side tables a program has. Publishing names a definition by its content
+  hash, so the hash is its id; a reference to it is the import, and there
+  are no import statements. Signatures are *pins*: inferred types, frozen.
+  See "Signatures and modules" below.
 - **Can the editor stop type errors?** Holes have types, and the palette
   offers only fillings that keep the whole program error-free. A test punches
   holes all over both programs, tries every option the palette offers (over
@@ -525,6 +530,146 @@ joining two values, instead of as a node, would bring the network look back
 without a second kind of thing; that's a rendering question now, not a
 language one.
 
+## Signatures and modules
+
+A program that uses `map` doesn't import it. It has a ref to `map`'s id,
+and `map`'s id is its content hash, so the ref says exactly which `map`,
+forever. Everything else follows from that one decision, and nothing in it
+is a new kind of node. Code: `src/lang/modules.ts`, `src/lang/signatures.ts`,
+`src/hash.ts`; the first module is `library/prelude.json`; tests in
+`test/modules.test.ts`.
+
+### Drafts have ids; published code is named by its hash
+
+Every node is born with a random id, and while you edit, that's what it
+keeps: a draft can change, and everything attached to it (names, comments,
+layout) stays attached. **Publishing** a definition renames it to its
+content hash: the def becomes `@` and 26 characters (130 bits of SHA-256,
+the size of a fresh id), and each node inside it becomes `@hash:n`, `n`
+its place in the definition. Publishing takes every draft the definition
+uses along with it, and refuses a definition with a hole, an error or no
+body: its hash will be its name forever, so it has to be finished.
+
+That makes ids do what they couldn't before (REVIEW.md §4.5):
+
+- **Two copies of a library are one library.** Two people who publish the
+  same function, with different names for everything, publish the same
+  nodes byte for byte, so putting their code together is a no-op instead
+  of a clash. The six examples each carried their own copy of `for each`,
+  `map`, `keep` and `show numbers`; their hashes matched the prelude's, so
+  `adopt` replaced every copy with a ref to the published one (about 3,600
+  lines of JSON gone, and the examples run unchanged).
+- **A module can be checked against itself.** `verify` rehashes every
+  definition; each must come out as its own id, every node must sit where
+  its id says, and every pin must be the type the checker gives. Change one
+  number inside `sum` and the module says "sum was changed after it was
+  published".
+- **Regenerating published code loses nothing.** Publishing is
+  deterministic, so building the prelude from the DSL again gives the same
+  file, byte for byte (tested). REVIEW.md §4.7's complaint, that rebuilding
+  examples from TypeScript makes new ids, is gone for anything published.
+
+The hash had to change for this. A mutually recursive group used to hash
+according to which member was asked about first, so the same group could
+get two hashes. It is now hashed as a unit the way Unison does it: each
+member is hashed with references inside the group left anonymous, the
+members are sorted by that, then the group is hashed with those references
+numbered by the sorted order. `is even` and `is odd` get the same hashes
+whichever is written or asked about first (tested). FNV-64 became SHA-256,
+written out from FIPS 180-4 in `src/sha256.ts` so it runs synchronously in
+the browser.
+
+### Signatures are pins
+
+Types are still never written by hand. A **pin** freezes the type the
+checker inferred for a definition (`signatures.ts`), and makes it an
+interface:
+
+- an edit inside the definition must keep the pin, and if it doesn't, the
+  error is at the definition: "area is pinned to (Number) -> Number, and
+  this makes it (a) -> Text". Without the pin the same edit is an error at
+  some caller far away (tested both ways);
+- callers are checked against the pin, not the body;
+- so checking stops at pins. `recheck(code, names, before, changed)` checks
+  the changed definitions, then the callers of any whose type moved, and
+  so on outwards; a pinned definition's type can't move, so an edit inside
+  one rechecks that one definition and nothing else, and gives the same
+  errors a whole check would (tested). That is REVIEW.md §2.2's
+  incremental checking.
+
+A body may be more general than its pin (the pin promises less) but not
+less general, and not with more effects. The pin is checked by unifying
+the body's type with the pin's type with the pin's variables held rigid.
+Every published definition is pinned, with the type it had when it was
+published, and a module carries its pins. A pin is a side table keyed by
+id, like names, and the type isn't part of the hash: it's derived from the
+content, so the same content can't come with two pins.
+
+### Modules
+
+A module (`MODULE_FORMAT`, `library/prelude.json`) is: published nodes,
+the author's names for them, their pins, comments, and **which definitions
+it offers**. The rest are helpers. `reverse onto` is used by `reverse`
+and kept out of the palette, so a library can have internals without a
+`private` keyword: visibility is one more side table, and the checker's
+`hidden` option is all it takes (tested).
+
+Names stay presentation. A module's names are a layer under the
+program's, like std's: a program can call `map` "transform" and only that
+program sees it, and `adopt` keeps a program's names for adopted code
+only where they differ from the module's. A namespace is the same thing:
+a name layer. When two modules offer the same display name, the palette
+already shows both with their types, and the hash says which is which;
+paths like `list.map` would be one more layer, and nothing has needed them
+yet.
+
+**Updates.** A new version is a new hash. A module can say which old
+definition a new one replaces (`replaces`), and `upgrade(code, old, new)`
+moves a program over: every ref, and the ports of every place it's run
+backwards. It does it only when the two have the same pin, so nothing that
+uses it can break and nothing needs checking again; a changed type is
+refused with both types named. Data type upgrades (where constructors and
+fields move too) need a migration, which is a next step.
+
+**The prelude**, the first module, is `for each`, `map`, `keep`, `show
+numbers`, `length`, `sum`, `append`, `reverse` and the helper `reverse
+onto`. It is written once with the DSL in `src/lang/prelude-source.ts` and
+published by `node library/build.ts`, which also moves the examples onto it.
+Every program is loaded with it (`src/lang/library.ts`): the editor, the
+loader, the tests, the compiler.
+
+**Published code can't be edited.** The editor refuses any edit that would
+change a node under an `@` id. Changing a library definition means making a
+draft copy of it in your program and, if you like, publishing that: a new
+hash, which can `replace` the old one. (The "copy into my program" gesture
+is the editor's next step.)
+
+### Files and the compiler
+
+The program file (`editor/files.ts`) is version 2. It still holds only the
+program's own nodes, plus two side tables: `needs`, the published
+definitions it uses and where they were found ("map from prelude"), and
+`signatures`, its own pins. `needs` is not an import list: the refs are
+the imports, and opening a file only uses `needs` to say what's missing
+("it uses length from prelude, which isn't in any module loaded here").
+Version 1 files open unchanged.
+
+The compiler compiles a program together with the modules it uses, into
+one file. Identity is by hash, so a definition that two modules share is
+compiled once and there is nothing to link; separate compilation, when it
+is needed, is a cache keyed by hash (COMPILER.md's step 2 already plans
+one), not a module system.
+
+### Where the ideas come from
+
+Naming definitions by the hash of their syntax tree, hashing cycles as a
+group in a content-derived order, and names as a separate layer are
+Unison's (Paul Chiusano, Rúnar Bjarnason, Arya Irani and the Unison team,
+https://www.unison-lang.org/docs/the-big-idea/). Content-addressed stores
+in general go back further (Git's object store, Nix's store paths). Pins,
+visibility as a side table, refusing upgrades unless the pin is kept, and
+adopting copies by hash are this project's.
+
 ## The errors, class by class
 
 "Never a syntax error again" holds by construction. Below is every other
@@ -630,6 +775,11 @@ src/lang/equations.ts code as equations: numeric expressions and predicates, for
 src/lang/solve.ts     a solve node's plan: solver direction, or run backwards
 src/lang/relate.ts    runs any function backwards (BACKWARDS.md)
 src/lang/demo.ts      npm run lang
+src/lang/modules.ts   publish by hash, verify, modules, adopt, upgrade
+src/lang/signatures.ts pins, and recheck (incremental checking that stops at pins)
+src/lang/library.ts   the modules every program is loaded with
+src/lang/prelude-source.ts  the prelude, written with the DSL; library/build.ts publishes it
+src/sha256.ts         SHA-256 (FIPS 180-4), for hashes
 ```
 
 The model gained `typedef`, `variant`, `field`, `tref`, `tfun`, `match`,

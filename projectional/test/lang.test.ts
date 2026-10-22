@@ -171,7 +171,7 @@ test("scope: a variable moved out of the case that binds it is caught", () => {
 });
 
 test("hashes ignore ids and names, and recursive definitions hash", () => {
-  for (const [name, defs] of [["queens", ["main", "for each", "queens"]], ["algebra", ["simplify", "derivative"]]] as const) {
+  for (const [name, defs] of [["queens", ["main", "safe", "queens"]], ["algebra", ["simplify", "derivative"]]] as const) {
     const p = load(name);
     const b = reId(p.own);
     const cb = base(b.code);

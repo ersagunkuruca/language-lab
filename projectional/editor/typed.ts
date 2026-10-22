@@ -8,7 +8,9 @@
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
-import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
+import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
+import { isPublished } from "../src/model.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
@@ -200,7 +202,21 @@ let display: Names = {};
 export const setDisplayNames = (n: Names) => { display = n; };
 
 // Accept only if the program has no more type errors than before.
+// Every program is checked with the modules' pins, and without offering
+// their helpers.
+export const infer = (code: Code, names: Names = {}): Info => check(code, names, undefined, { pins: LIBRARY.pins, hidden: LIBRARY.hidden });
+
+// A published definition is named by its content, so it can't change: an
+// edit that would change one is refused.
+const published = Object.values(LIBRARY.code.nodes).filter((n) => isPublished(n.id));
+export function changesPublished(code: Code): Id | null {
+  const n = published.find((n) => code.nodes[n.id] !== n && JSON.stringify(code.nodes[n.id]) !== JSON.stringify(n));
+  return n ? n.id.split(":")[0] : null;
+}
+
 export function guardTyped(before: Info, code: Code, names: Names, select: Id | undefined, note: string): TEdit {
+  const lib = changesPublished(code);
+  if (lib) return { ok: false, reason: `${names[lib] ?? display[lib] ?? "that"} is published in a module: it is named by what it says, so it can't change` };
   const after = infer(code, { ...display, ...names });
   if (after.errors.length > before.errors.length) return { ok: false, reason: after.errors.at(-1)!.message };
   return { ok: true, code, names, select, note };
@@ -567,4 +583,4 @@ export function addCase(code: Code, names: Names, info: Info, type: Id, name: st
   return { ...r, note: `Added ${name.trim()}. ${holes ? `${holes} match${holes === 1 ? "" : "es"} and fold${holes === 1 ? "" : "s"} got a new case with a hole to fill, so none is missing a case.` : "Nothing matches on this type yet."}` };
 }
 
-export { fillings, infer, type Filling, type Info };
+export { fillings, type Filling, type Info };

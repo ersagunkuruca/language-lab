@@ -9,9 +9,7 @@
 // Nothing here generates code: the JSON is the program.
 
 import { mkdirSync, readFileSync } from "node:fs";
-import { prelude } from "../src/prelude.ts";
-import { std } from "../src/lang/std.ts";
-import { merge } from "../src/model.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { save } from "../src/io.ts";
 import { fromFile } from "../editor/files.ts";
 
@@ -20,7 +18,8 @@ if (!from || !dir) {
   console.error("usage: node examples/unpack.ts <saved program.json> <examples/folder>");
   process.exit(1);
 }
-const r = fromFile(readFileSync(from, "utf8"), () => merge(prelude, std));
+// opened on top of the modules, so it may use the prelude
+const r = fromFile(readFileSync(from, "utf8"), () => LIBRARY.code);
 if ("error" in r) {
   console.error(`can't open ${from}: ${r.error}`);
   process.exit(1);
