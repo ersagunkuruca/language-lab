@@ -9,6 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
+import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
 import { fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
 import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
@@ -248,4 +249,20 @@ test("differentiate: recursion, functions passed in, and what isn't differentiab
   assert.ok(code.defs.some((d) => names[d] === "∂power/∂x"), "power's own derivative was generated, and calls itself");
   close(at("sin sin′", 0.5), Math.cos(Math.sin(0.5)) * Math.cos(0.5));
   assert.throws(() => differentiate(p.code, p.names, p.named("first item")), NotDifferentiable);
+});
+
+// A function's ports are its parameters' ids, and an id can be all digits
+// (the backwards example's greet has one, 19718686). The solve node's label
+// read it as port number 19718686 and the editor stopped drawing.
+test("a parameter whose id is all digits is labelled by its name", () => {
+  const { code, pres: { names } } = load("backwards");
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "solve") continue;
+    for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) {
+      assert.equal(typeof portLabel(code, names, n.fn, k), "string", `${n.id} ${k}`);
+    }
+  }
+  const greet = Object.values(code.nodes).find((n): n is NodeOf<"solve"> => n.kind === "solve" && "19718686" in n.binds)!;
+  assert.equal(portLabel(code, names, greet.fn, "19718686"), names["19718686"]);
+  assert.equal(portLabel(code, names, "builtin.concat", "1"), "b");
 });

@@ -244,8 +244,9 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
 function readingOrder(code: Code, root: Id): Id[] {
   const out: Id[] = [];
   const walk = (id: Id) => {
-    out.push(id);
     const n = code.nodes[id];
+    if (!n) return;
+    out.push(id);
     const cs = children(n);
     if (n.kind === "match") {
       const t = cs.findIndex((c) => (code.nodes[c] as NodeOf<"arm">).variant === TRUE);
