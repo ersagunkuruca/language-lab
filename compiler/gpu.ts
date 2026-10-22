@@ -72,7 +72,11 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   let r = ${f.wgsl}(${f.params.map(arg).join(", ")});
   outp[i] = ${f.result === "i32" ? "select(0.0, 1.0, r)" : "r"};
 }`;
-    const got = await page.evaluate(run, { wgsl: kernel, inputs: inputs.flat(), count: inputs.length });
+    // A GPU that never answers is a failure, not a hang.
+    const got = await Promise.race([
+      page.evaluate(run, { wgsl: kernel, inputs: inputs.flat(), count: inputs.length }),
+      new Promise<string>((done) => setTimeout(() => done("no answer from the GPU in 60 s"), 60_000).unref()),
+    ]);
     if (typeof got === "string") { console.log(`✗ ${c.label}: ${f.name}: ${got}`); failures++; continue; }
     let bad = 0;
     inputs.forEach((args, k) => {
