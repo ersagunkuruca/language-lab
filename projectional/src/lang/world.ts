@@ -60,5 +60,8 @@ export function nodeWorld(): World {
     fileExists: (path) => existsSync(path),
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
     random: worldRandom,
+    now: Date.now,
+    // Sleeping without spinning: wait on a word nobody will ever change.
+    wait: (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); },
   };
 }

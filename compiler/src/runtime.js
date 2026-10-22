@@ -177,7 +177,7 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // abortive handlers the same way).
 
 import { Aborted } from '../../projectional/src/lang/run.ts';
-import { ABORT, ABORT_OP, LOG_OP, NONE, RANDOM, RANDOM_OP, SOME } from '../../projectional/src/lang/std.ts';
+import { ABORT, ABORT_OP, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, SOME, WAIT_OP } from '../../projectional/src/lang/std.ts';
 import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
 export { Aborted as $Aborted };
 
@@ -195,10 +195,17 @@ export function $perform(effect, op, args) {
     try { return h.answers[op](...args); } finally { handlers.push(...above); }
   }
   // What the program doesn't handle, the runtime does: Log goes to standard
-  // error, an Abort ends the run, and the world draws Random's numbers.
+  // error, an Abort ends the run, and the world draws Random's numbers, reads
+  // the clock and waits.
   if (op === LOG_OP) { (world.log ?? printer)(args[0]); return $unit; }
   if (op === ABORT_OP) throw new Aborted(args[0]);
   if (op === RANDOM_OP) return (world.random ?? worldRandom)();
+  if (op === NOW_OP) return (world.now ?? Date.now)();
+  if (op === WAIT_OP) {
+    if (!world.wait) throw new Error("this runtime can't wait");
+    world.wait(args[0]);
+    return $unit;
+  }
   throw new Error(`nothing handles ${op}`);
 }
 

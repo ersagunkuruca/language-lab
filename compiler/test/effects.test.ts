@@ -13,7 +13,7 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { Aborted, makeRunner, runMain, type Value, type World } from "../../projectional/src/lang/run.ts";
 import { fractionsProgram } from "../../projectional/src/lang/cells-programs.ts";
-import { ABORT_OP, CELL_OPS, IO, LOG_OP, RANDOM_OP, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, IO, LOG_OP, NOW_OP, RANDOM_OP, S, SHOW_ANY, WAIT_OP } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint, $setWorld } from "../src/runtime.js";
@@ -35,6 +35,8 @@ function fakeWorld(files: Record<string, string>, input: string) {
     fileExists: (p) => p in files,
     listFolder: () => Object.keys(files).sort(),
     random: () => 0.75,
+    now: () => 1000,
+    wait: (ms) => out.push(`wait ${ms}`),
   };
   return { world, out };
 }
@@ -210,4 +212,25 @@ test("Random: seeded draws are the evaluator's bit for bit, with and without Cho
   assert.equal(r.lines[0], "5950297428061403 1006121846472570");
   assert.equal(r.lines[1], r.lines[2]);
   assert.deepEqual(r.lines.slice(3), ["0.25", "0.75"]);
+});
+
+test("Time and Wait: the world's clock, a match's clock, and waiting", async () => {
+  const r = await both((k) => {
+    const print = (x: Id) => k.call(S.print, x);
+    const now = () => k.call(NOW_OP);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(
+      print(show(k, now())),
+      k.call(WAIT_OP, k.lit(250)),
+      // A test's clock: a match answers now().
+      print(show(k, k.handle(k.call(B.add, now(), now()), [{ variant: NOW_OP, names: [], body: () => k.lit(21) }]))),
+      // Waiting skipped by a match, under a search reading the clock.
+      print(k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.handle(
+        k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), (x) => k.seq(k.call(WAIT_OP, k.lit(5)), k.call(B.add, x, now()))),
+        [{ variant: WAIT_OP, names: ["ms"], body: () => k.unitValue }]))))),
+    )));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["1000", "42", "[1001, 1002]"]);
+  assert.deepEqual(r.out, ["wait 250"]);
 });

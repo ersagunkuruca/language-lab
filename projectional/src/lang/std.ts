@@ -71,10 +71,20 @@ export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
 // what nothing handles, the world answers.
 export const RANDOM = typedef("std.random", "Random", [], [["random", [], () => tref(NUMBER)]], true);
 export const RANDOM_OP = "std.random.random";
+// Time: `now()` is the time in milliseconds since 1970 (UTC). Reading the
+// clock changes nothing, so like Random it may run under Choice, and a
+// match can answer it (a test's fixed clock). In a page, a part that reads
+// it runs again every animation frame (browser.ts), so a clock is a part
+// that shows `now()`. Wait: `wait(ms)` pauses the program, on the command
+// line. Its own effect, so a page, whose parts and handlers may not wait,
+// says so in their types.
+export const TIME = typedef("std.time", "Time", [], [["now", [], () => tref(NUMBER)]], true);
+export const WAIT = typedef("std.wait", "Wait", [], [["wait", [["milliseconds", () => tref(NUMBER)]], () => tref(UNIT)]], true);
+export const NOW_OP = "std.time.now", WAIT_OP = "std.wait.wait";
 
 // A page (WEB.md): an ordinary rose tree, whose changing parts are
 // functions the page runs in watchers (src/lang/html.ts). Views may read
-// cells; event handlers may also write them, print, and use files (the
+// cells and the clock; event handlers may also write cells, print, and use files (the
 // browser keeps those in localStorage), and so may abort (the page logs it). Buttons, rows and fields are
 // functions that build `element`s, not more variants.
 const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn++}`, kind: "tfun", params, result, effects });
@@ -82,13 +92,13 @@ export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
-  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
-  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT])]]],
+  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT, TIME])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
-  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
-  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE])]]],
+  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME])]]],
+  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE, TIME])]]],
 ]);
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", event: "std.event.event" } as const;
 
@@ -293,7 +303,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, EVENT, ATTRIBUTE, HTML] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, ATTRIBUTE, HTML] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
