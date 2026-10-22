@@ -11,7 +11,9 @@ non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 For a candid review of the whole project (holes, what's achievable, and a
 roadmap towards real programs, shaders, websites and apps), see
-[REVIEW.md](REVIEW.md).
+[REVIEW.md](REVIEW.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
+the design ideas we've discussed, with the current answer to each, are in
+[NOTES.md](NOTES.md).
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
@@ -256,8 +258,14 @@ something calls), and the result is type-checked like any other edit. A
 new input has no type until something says what it is, so the palette
 offers splitting it by the cases of any data type. A data type is drawn as
 its constructors: one node per case, its fields as inputs. Filling a hole
-moves on to the next one. *Save file* writes the program's own code, names,
-comments and layout as one JSON file (`editor/files.ts`); *Open file*
+moves on to the next one. *Pin this type* freezes a definition's inferred
+type as its signature (`signatures` in the file, `src/lang/signatures.ts`):
+an edit inside that would change it is refused at the definition, and
+callers see only the pin. A published library definition can't change,
+since its id is its content; opening one offers *Copy into my program*, a
+copy under fresh ids (named `my …`, recursive calls calling the copy) that
+this program's own calls switch to. *Save file* writes the program's own
+code, names, comments, pins and layout as one JSON file (`editor/files.ts`); *Open file*
 checks that every id it refers to exists, then opens it as a program of
 your own. Programs are also kept in the browser as you edit. The palette
 also takes a value typed into its search (`3`, `"text"`, `[3, 1, 2]`,
@@ -289,7 +297,7 @@ nothing changed, if the result has an error the code before it didn't. The
 editor asks ahead of time, too: a hole's palette lists only what fits,
 while you drag a wire the inputs it can legally reach light up and the
 others say why not, and unit chips that would make units disagree are
-disabled. The *Checks* panel and TUTORIAL.md §3.10 list every kind.
+disabled. The *Checks* panel and TUTORIAL.md §3.12 list every kind.
 
 **Units are part of the type.** `src/units.ts` gives every number a
 dimension, a vector of exponents over m, s, kg and A. Each builtin says how

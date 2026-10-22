@@ -4,6 +4,14 @@
 import { makeRunner, runMain, type Value } from "../projectional/src/lang/run.ts";
 import { load } from "./src/program.ts";
 import { $setPrint } from "./src/runtime.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { compile } from "./src/compile.ts";
+import { lowerScalar } from "./src/scalar.ts";
+import { emitWasm, instantiate } from "./src/wasm.ts";
+import { area } from "./src/fixtures.ts";
 
 const time = (f: () => unknown, runs = 3) => {
   f();
@@ -27,4 +35,20 @@ for (const name of ["queens", "algebra", "relations", "backwards", "calculus"]) 
   const c = (await import(`./out/${name}.js`)).defs;
   $setPrint(() => {});
   row(`${name}: main`, time(() => runMain(p.code, p.info, p.named("main"), { print: () => {} }), 1), time(() => c.main()));
+}
+
+// A numeric loop (tail recursion), three ways: evaluated, compiled to JS,
+// and compiled to WebAssembly (scalar profile).
+const a = area();
+const ar = makeRunner(a.code, a.info, { print: () => {} });
+const tmp = mkdtempSync(join(tmpdir(), "bench-"));
+writeFileSync(join(tmp, "area.js"), compile(a.code, a.info, a.names, { runtime: pathToFileURL(join(import.meta.dirname, "src/runtime.js")).href, exports: ["area"] }));
+const aj = (await import(pathToFileURL(join(tmp, "area.js")).href)).defs.area as (...x: number[]) => number;
+const aw = (await instantiate(emitWasm(lowerScalar(a.code, a.info, a.names, [a.area])))).area;
+const steps = (n: number) => [0, 2 / n, n, 0];
+console.log(`\narea under a cubic, by tail recursion   evaluator         JS       WASM`);
+for (const n of [1e3, 1e4, 1e6]) {
+  const tryJs = () => { try { return time(() => aj(...steps(n))).toFixed(2).padStart(7) + " ms"; } catch { return "stack overflow"; } };
+  const ev = n <= 1e4 ? time(() => [...ar.call(ar.value(a.area), ...steps(n))], 1).toFixed(1).padStart(7) + " ms" : "(skipped)";
+  console.log(`${String(n).padStart(9)} steps ${ev.padStart(26)} ${tryJs().padStart(14)} ${time(() => aw(...steps(n))).toFixed(2).padStart(7)} ms`);
 }

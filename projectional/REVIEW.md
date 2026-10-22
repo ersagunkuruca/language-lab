@@ -585,6 +585,9 @@ programs.
 
 ## 10. Roadmap, in priority order
 
+*Superseded:* the current roadmap is [ROADMAP.md](ROADMAP.md) (updated
+2026-10-22, after PR #51). The list below is kept as it was written.
+
 Each step says why it comes where it does.
 
 1. **Make the claims true** (weeks). Strict positivity, size-change
