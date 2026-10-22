@@ -10,6 +10,10 @@
 // of texts (or nothing, if it takes none) and returns the exit code; an
 // Abort nothing handles prints its reason and exits with 1 (LANGUAGE.md,
 // "The world"). `--main <name>` picks another entry point.
+//
+// A folder with a representations.json (NUMBERS.md) runs and compiles on
+// the representation the chooser picks for each type `main` uses, e.g.
+// Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -22,6 +26,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { mainProblem, runProgram } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
+import { choose, represent, type Representation } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
@@ -31,9 +36,10 @@ const USAGE = `usage:
   lab check <program>                   type-check, and list the definitions and their types
 options:
   --main <name>    the entry point (default: main)
+  --as-defined     ignore representations.json and run the definitions as written
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
-interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info }
+interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
 
 function fail(message: string): never {
   process.stderr.write(`lab: ${message}\n`);
@@ -44,13 +50,36 @@ function load(path: string): Program {
   if (!existsSync(path)) fail(`no such program: ${path}`);
   if (statSync(path).isDirectory()) {
     const p = loadProgram(path);
-    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info: infer(p.code, p.pres.names, undefined, p.options) };
+    const table = join(path, "representations.json");
+    const reps = existsSync(table) ? JSON.parse(readFileSync(table, "utf8")) as Representation[] : [];
+    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info: infer(p.code, p.pres.names, undefined, p.options), reps, options: p.options };
   }
   // opened on top of the modules, as the editor does
   const r = fromFile(readFileSync(path, "utf8"), () => LIBRARY.code);
   if ("error" in r) fail(`can't open ${path}: ${r.error}`);
   const names = baseNames(r.file.names);
-  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info: infer(r.code, names, undefined, checkOptions) };
+  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info: infer(r.code, names, undefined, checkOptions), reps: [] };
+}
+
+// The program from `main`, with each type it uses stored the way the
+// chooser picks from the declared costs (the definition itself is one of
+// the choices). The rewrite is checked again, like any program.
+function represented(p: Program, main: Id): Program {
+  let code = p.code;
+  const chosen: string[] = [];
+  // Every definition the program has, so the ones main shares with others
+  // change together; types stay as they are.
+  const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return !b || p.code.nodes[b]?.kind !== "typedef"; });
+  for (const of of new Set(p.reps.map((r) => r.of))) {
+    const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
+    if (rep.type === rep.of) continue;
+    code = represent(code, defs, rep);
+    chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
+  }
+  if (!chosen.length) return p;
+  const info = infer(code, p.names, undefined, p.options as Parameters<typeof infer>[3]);
+  if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
+  return { ...p, code, info };
 }
 
 function entry(p: Program, name: string): Id {
@@ -123,6 +152,8 @@ if ($$isMain) {
 
 const argv = process.argv.slice(2);
 let mainName = "main";
+const defined = argv.indexOf("--as-defined");
+if (defined >= 0) argv.splice(defined, 1);
 const at = argv.indexOf("--main");
 if (at >= 0) { mainName = argv[at + 1] ?? fail("--main needs a name"); argv.splice(at, 2); }
 const [command, path, ...rest] = argv;
@@ -131,15 +162,15 @@ if (!command || command === "help" || command === "--help" || !path) {
   process.exit(command && command !== "help" && command !== "--help" ? 2 : 0);
 }
 
-const p = load(path);
+const loaded = load(path);
+const main = command === "run" || command === "compile" ? entry(loaded, mainName) : "";
+const p = main && defined < 0 ? represented(loaded, main) : loaded;
 switch (command) {
   case "run": {
-    const main = entry(p, mainName);
     process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: nodeWorld() });
     break;
   }
   case "compile": {
-    const main = entry(p, mainName);
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.mjs`;
     // One file with the runtime in it, so it runs anywhere Node does and
