@@ -115,6 +115,7 @@ export interface Canvas {
   world: SVGGElement;       // the plane: draw everything in here
   zoom: () => number;       // screen pixels per world unit
   fit: () => void;
+  reveal: (els: Element[]) => void;
 }
 
 type View = { x: number; y: number; z: number };
@@ -141,6 +142,17 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     if (readable) z = Math.max(z, READABLE);
     const place = (room: number, size: number, at: number) => (size * z <= room - 32 ? (room - size * z) / 2 : 16) - at * z;
     set({ z, x: place(r.width, b.width, b.x), y: place(r.height, b.height, b.y) });
+  };
+  // Reveal: pan the least that brings these on screen (their top-left
+  // corner first, if they're bigger than the window).
+  const reveal = (els: Element[]) => {
+    if (!els.length || !view) return;
+    const r = root.getBoundingClientRect(), m = 24;
+    const bs = els.map((e) => e.getBoundingClientRect());
+    const box = { l: Math.min(...bs.map((b) => b.left)), t: Math.min(...bs.map((b) => b.top)), r: Math.max(...bs.map((b) => b.right)), b: Math.max(...bs.map((b) => b.bottom)) };
+    const shift = (lo: number, hi: number, min: number, max: number) => (hi > max - m ? Math.max(max - m - hi, min + m - lo) : lo < min + m ? min + m - lo : 0);
+    const dx = shift(box.l, box.r, r.left, r.right), dy = shift(box.t, box.b, r.top, r.bottom);
+    if (dx || dy) set({ ...view, x: view.x + dx, y: view.y + dy });
   };
   apply();
   // First time this graph is shown: fit it readably, once it has a size.
@@ -185,5 +197,5 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
   );
   el.append(root, tools);
-  return { el, root, world, zoom: () => view?.z ?? 1, fit };
+  return { el, root, world, zoom: () => view?.z ?? 1, fit, reveal };
 }
