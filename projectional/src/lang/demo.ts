@@ -50,7 +50,7 @@ const arm = get(algebra.code, evaluate.body, "fold").arms.map((a) => get(algebra
 const holed = replace(algebra.code, arm.body, () => ({ kind: "hole" }));
 const hi = infer(holed, names);
 const hole = hi.holes.get(arm.body)!;
-const label = (f: Filling) => ("target" in f ? `${f.kind === "call" ? "call " : ""}${names[f.target] ?? f.target}` : f.kind === "lit" ? `a ${f.of}` : f.kind === "lambda" ? "a function" : `${f.kind} on ${names[f.on]}`);
+const label = (f: Filling) => ("target" in f ? `${f.kind === "call" ? "call " : ""}${names[f.target] ?? f.target}` : f.kind === "lit" ? `a ${f.of}` : f.kind === "lambda" ? "a function" : `${f.kind} on ${f.on ? names[f.on] : "a value"}`);
 console.log(`  Delete the body of evaluate's sum case. The hole needs ${showType(hole.expected, names)}; errors: ${hi.errors.length}.`);
 console.log(`  The palette offers only what fits:\n    ${fillings(holed, hi, arm.body).map(label).join(", ")}`);
 const forced = fillHole(holed, names, arm.body, { kind: "call", target: algebra.named("display"), arity: 1, type: hole.expected });

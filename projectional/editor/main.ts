@@ -1461,6 +1461,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (n.kind === "lit") {
     const input = h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" }) as HTMLInputElement;
     input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    // Enter on an unchanged value (an empty text, say) moves on too.
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
     out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 
@@ -1505,7 +1507,7 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
     case "lit": return [f.of === "number" ? "a number" : "a text", f.of === "number" ? "Number" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
-    default: return [`${f.kind} ${nm(f.on)} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}`, "case analysis"];
+    default: return [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
 }
 
@@ -1525,9 +1527,19 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     again?.focus();
     if (again && at !== null) again.setSelectionRange(at, at);
   });
+  // What's typed may itself be a value: 3, "hi", [3, 1, 2], circle(2).
+  // Offered first, and only if it fits. A bare case name is already listed.
+  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? T.fillValue(doc.code, doc.names.short, info, hole, ui.query, ui.def) : null;
+  const value = typed?.ok ? typed : null;
   const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0], ui.def)); };
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && shown[0]) run(shown[0]); });
+  const runValue = () => { ui.query = ""; applyT(value!); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (value) runValue(); else if (shown[0]) run(shown[0]); } });
   const list = h("div", { class: "opts palette" });
+  if (value) {
+    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this value, written out"));
+    b.addEventListener("click", runValue);
+    list.append(h("div", { class: "pal-g" }, "the value typed"), b);
+  }
   let group = "";
   for (const x of shown.slice(0, 40)) {
     if (x.l[2] !== group) { group = x.l[2]; list.append(h("div", { class: "pal-g" }, group)); }
@@ -1535,7 +1547,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names): HTMLElement {
     b.addEventListener("click", () => run(x));
     list.append(b);
   }
-  if (!shown.length) list.append(h("p", { class: "hint" }, "Nothing that fits matches."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values can be typed too: 3, \"text\", [1, 2]."));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 

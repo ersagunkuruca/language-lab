@@ -611,7 +611,8 @@ export type Filling =
   | { kind: "ref"; target: Id; type: Type }
   | { kind: "call"; target: Id; arity: number; type: Type }
   | { kind: "lit"; of: "number" | "text" }
-  | { kind: "match" | "fold"; on: Id; type: Id }
+  // `on` null: on a value given next (the scrutinee starts as a hole).
+  | { kind: "match" | "fold"; on: Id | null; type: Id }
   | { kind: "lambda"; arity: number };
 
 // Everything that can go in a hole without a type or effect error: variables
@@ -690,27 +691,46 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const ex = info.subst.resolve(h.expected);
   if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length });
   const dataTypes = [...new Set(info.owner.values())];
+  const splittable = dataTypes.filter((t) => !t.startsWith("std.") || t === "std.bool" || t === "std.list");
   for (const b of h.scope) {
     const bt = info.subst.resolve(b.type);
     if (bt.t === "con" && dataTypes.includes(bt.id)) {
       out.push({ kind: "match", on: b.id, type: bt.id });
-      out.push({ kind: "fold", on: b.id, type: bt.id });
+      if (recursiveType(code, bt.id)) out.push({ kind: "fold", on: b.id, type: bt.id });
     } else if (bt.t === "var") {
       // Nothing says what it is yet (a new input, say): splitting it by the
       // cases of a type is what says so. Checked like any filling that pins
       // a variable down.
-      for (const type of dataTypes.filter((t) => !t.startsWith("std.") || t === "std.bool" || t === "std.list")) {
+      for (const type of splittable) {
         const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
         const s = info.subst.clone();
         try { s.unify(bt, { t: "con", id: type, args: td.params.map(() => s.fresh()) }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
-        for (const kind of ["match", "fold"] as const) {
+        for (const kind of recursiveType(code, type) ? ["match", "fold"] as const : ["match"] as const) {
           const f: Filling = { kind, on: b.id, type };
           if (safe(s, f, false)) out.push(f);
         }
       }
     }
   }
+  // A case analysis of a value still to be given: `if` is this on a Bool.
+  // Its arms are holes and its value is the hole's, so its type always
+  // fits; running the group backwards may still not go through it.
+  for (const type of splittable) {
+    for (const kind of recursiveType(code, type) ? ["match", "fold"] as const : ["match"] as const) {
+      const f: Filling = { kind, on: null, type };
+      if (safe(info.subst, f, false)) out.push(f);
+    }
+  }
   return out;
+}
+
+// A type with a case that holds the type itself: a fold has something to fold.
+function recursiveType(code: Code, type: Id): boolean {
+  const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  return td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => {
+    const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type];
+    return t.kind === "tref" && t.target === type;
+  }));
 }
 
 // The definitions in `group` and every definition that reaches one of them.
