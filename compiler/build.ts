@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { compileProgram, load } from "./src/program.ts";
 import { lowerScalar } from "./src/scalar.ts";
 import { emitWasm } from "./src/wasm.ts";
+import { emitWgsl } from "./src/wgsl.ts";
 
 const programs: Record<string, string[]> = {
   queens: ["main", "queens"],
@@ -24,6 +25,12 @@ for (const [name, exports] of Object.entries(programs)) {
 
 // The scalar part of calculus, as WebAssembly text, for reading.
 const calculus = load("calculus");
-const wasm = emitWasm(lowerScalar(calculus.code, calculus.info, calculus.pres.names, calculus.own.defs));
+const scalar = lowerScalar(calculus.code, calculus.info, calculus.pres.names, calculus.own.defs);
+const wasm = emitWasm(scalar);
 writeFileSync(join(import.meta.dirname, "out", "calculus.wat"), wasm.wat);
 console.log(`out/calculus.wat: ${wasm.exports.join(", ")}`);
+
+// And as WGSL, for the GPU.
+const wgsl = emitWgsl(scalar);
+writeFileSync(join(import.meta.dirname, "out", "calculus.wgsl"), wgsl.wgsl);
+console.log(`out/calculus.wgsl: ${wgsl.funcs.map((f) => f.name).join(", ")}`);
