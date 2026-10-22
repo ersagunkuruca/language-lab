@@ -147,7 +147,8 @@ ms).** `digit` and `letter` call `$text.less(c, "0")`. That function runs a
 surrogate regex over both texts on every call, so code points order
 correctly. When one side is a constant with no surrogates, plain `<` gives
 the same answer. *Fix:* special-case `less` with a constant side at
-compile time. The constant-folding also helps `slice` and `length` on
+compile time. **Done**: when one side is a text constant whose characters
+all come before U+D800, `comes before` compiles to `<`. The constant-folding also helps `slice` and `length` on
 texts known to be narrow, but those don't show up in this profile. The
 bigger form of G7 is *fusion*. `fold(characters(line))` builds a list of
 one-character strings, then walks it into a spine array, then folds the

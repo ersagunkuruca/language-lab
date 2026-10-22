@@ -329,12 +329,12 @@ function blank(c2) {
 
 // digit
 function digit(c3) {
-  return $bool((!$text.less(c3, "0") && !$text.less("9", c3)));
+  return $bool((!(c3 < "0") && !("9" < c3)));
 }
 
 // letter
 function letter(c4) {
-  return $bool(((!$text.less(c4, "a") && !$text.less("z", c4)) || ((!$text.less(c4, "A") && !$text.less("Z", c4)) || (c4 === "_"))));
+  return $bool(((!(c4 < "a") && !("z" < c4)) || ((!(c4 < "A") && !("Z" < c4)) || (c4 === "_"))));
 }
 
 // keep
