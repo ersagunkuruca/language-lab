@@ -257,7 +257,8 @@ a dataflow picture can't show is order, so a step done only for its effect
 (`_ = print(…)`) is a hollow dot nothing reads, in the column of steps.
 
 The editor is published by `.github/workflows/pages.yml` on every push to
-main: https://ersagunkuruca.github.io/language-lab/
+main: https://ersagunkuruca.github.io/language-lab/projectional/editor/dist/ (the site
+root and /projectional/ redirect there)
 
 ## Networks in the core
 
