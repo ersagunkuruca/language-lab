@@ -1087,13 +1087,48 @@ const typeText = (tid: Id, names: Names): string => {
   const r = t as NodeOf<"tref">;
   return [names[r.target] ?? r.target, ...r.args.map((a) => { const s = typeText(a, names); return s.includes(" ") ? `(${s})` : s; })].join(" ");
 };
-const specText = (t: Top.TypeSpec, names: Names): string =>
-  [names[t.target] ?? t.target, ...t.args.map((a) => { const s = specText(a, names); return s.includes(" ") ? `(${s})` : s; })].join(" ");
 
-function typeChoice(id: string, type: Id, names: Names, current: string | null) {
-  const specs = Top.fieldTypes(doc.code, type);
-  const select = h("select", { id }, ...specs.map((t, i) => h("option", { value: String(i), selected: specText(t, names) === current }, specText(t, names)))) as HTMLSelectElement;
-  return { select, spec: () => specs[Number(select.value)] };
+// A type, picked the way it's written: what it starts with (Number, Int, a
+// data type, one of the type's own parameters) and, for one that takes
+// arguments, a picker for each, nested: Pair, then Int and Text. `none`
+// adds a first choice of no type at all; a type the pickers can't show
+// (a function's) is kept until another is picked.
+function typePicker(id: string, type: Id, names: Names, current: Id | null, changed: () => void, none?: string) {
+  const heads = Top.typeHeads(doc.code, type);
+  const specOf = (t: Id): Top.TypeSpec | null => {
+    const n = node(t);
+    if (n.kind !== "tref") return null;
+    const args = n.args.map(specOf);
+    return args.every(Boolean) ? { target: n.target, args: args as Top.TypeSpec[] } : null;
+  };
+  const kept = current ? specOf(current) : null;
+  const one = (at: Top.TypeSpec | null, sid: string | undefined, top: boolean): { el: HTMLElement; spec: () => Top.TypeSpec | null } => {
+    const odd = top && current && !kept ? typeText(current, names) : null;
+    const select = h("select", sid ? { id: sid } : { "aria-label": "argument" },
+      top && none ? h("option", { value: "none", selected: !current }, none) : null,
+      odd ? h("option", { value: "kept", selected: true }, odd) : null,
+      ...heads.map((x, i) => h("option", { value: String(i), selected: !odd && at?.target === x.target }, names[x.target] ?? x.target))) as HTMLSelectElement;
+    if (!at && !odd && !(top && none)) select.value = "0";
+    const args = h("div", { class: "type-args" });
+    let parts: { spec: () => Top.TypeSpec | null }[] = [];
+    const fill = (given: Top.TypeSpec[]) => {
+      const head = heads[Number(select.value)];
+      parts = head ? Array.from({ length: head.arity }, (_, i) => one(given[i] ?? null, undefined, false)) : [];
+      args.replaceChildren(...parts.map((p) => p.el));
+    };
+    fill(at?.args ?? []);
+    select.addEventListener("change", (e) => { e.stopPropagation(); fill([]); changed(); });
+    return {
+      el: h("div", { class: "type-pick" }, select, args),
+      spec: () => {
+        const head = heads[Number(select.value)];
+        if (!head) return null;
+        const xs = parts.map((p) => p.spec());
+        return xs.every(Boolean) ? { target: head.target, args: xs as Top.TypeSpec[] } : null;
+      },
+    };
+  };
+  return one(kept, id, true);
 }
 
 // Run a top-level edit; `then` adjusts what's shown once it's in.
@@ -1172,19 +1207,19 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
         edit("×", `Remove this ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
     }
     const c = textField("f-new-field", `New ${w.field}`, "its name");
-    const t = typeChoice("f-new-field-type", type, names, null);
+    const t = typePicker("f-new-field-type", type, names, null, () => {});
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.field}`);
-    add.addEventListener("click", () => runTop(info, Top.addField(code, sh, type, sel, c.input.value, t.spec())));
-    out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.select), h("div", { class: "acts" }, add),
+    add.addEventListener("click", () => { const sp = t.spec(); if (sp) runTop(info, Top.addField(code, sh, type, sel, c.input.value, sp)); });
+    out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.el), h("div", { class: "acts" }, add),
       h("p", { class: "hint" }, w.effect ? "Every call of it gets a hole for a new input, and every case that handles it a name." : "Every place that makes this case gets a hole for a new field, and every arm for it a name."));
     if (w.effect) {
       // What the handler answers it with: the value the call gives back.
-      const specs = Top.fieldTypes(code, type);
       const now = n.returns ? typeText(n.returns, names) : null;
-      const r = h("select", { id: "f-returns" }, h("option", { value: "", selected: !now }, "nothing: it never returns"),
-        ...specs.map((sp, i) => h("option", { value: String(i), selected: specText(sp, names) === now }, specText(sp, names)))) as HTMLSelectElement;
-      r.addEventListener("change", () => runTop(info, Top.setReturns(code, sh, sel, r.value === "" ? null : specs[Number(r.value)])));
-      out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r),
+      const r = typePicker("f-returns", type, names, n.returns ?? null, () => {
+        const sp = r.spec();
+        if (sp || (r.el.querySelector("select") as HTMLSelectElement).value === "none") runTop(info, Top.setReturns(code, sh, sel, sp));
+      }, "nothing: it never returns");
+      out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r.el),
         h("p", { class: "hint" }, now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with.` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead.`));
     }
     out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
@@ -1192,11 +1227,10 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   } else if (n?.kind === "field") {
     const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
     const type = info.owner.get(sel)!;
-    const t = typeChoice("f-field-type", type, names, typeText(n.type, names));
-    t.select.addEventListener("change", () => runTop(info, Top.setFieldType(code, sh, sel, t.spec())));
+    const t = typePicker("f-field-type", type, names, n.type, () => { const sp = t.spec(); if (sp) runTop(info, Top.setFieldType(code, sh, sel, sp)); });
     const w = words(type);
     out.append(h("div", { class: "sub-head" }, `${cap(w.field)} of `, pick(variant.id, names[variant.id] ?? `a ${w.case}`), " · code.json"),
-      h("label", { class: "field", for: "f-field-type" }, h("span", {}, "Holding"), t.select),
+      h("label", { class: "field", for: "f-field-type" }, h("span", {}, "Holding"), t.el),
       h("div", { class: "acts" }, edit(`Remove this ${w.field}`, `Remove it from the ${w.case}`, Top.removeField(code, sh, variant.id, sel), () => runTop(info, Top.removeField(code, sh, variant.id, sel), () => { ui.selected = variant.id; }), "btn danger")));
     return out;
   } else return null;

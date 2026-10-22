@@ -263,6 +263,11 @@ of "type errors prevented by the editor": you can't pick what doesn't fit.
   layout together. Every edit is also kept in the browser as you go.
 - **+ New definition** makes a function (give its inputs, or none for an
   action you can run), a value, or a data type (give its first case).
+- Select a case of a data type to add fields to it. A field's type is
+  picked the way it's written: first what it is (Number, Int, Text, Bool, a
+  data type of the standard library or your own, or the type itself), then,
+  for one that takes arguments, each of those the same way: *Pair*, then
+  *Int* and *Text*.
 - The *Definition* tab lets you rename it, add, reorder and remove inputs
   (every call gets a hole for a new input, so none is missing an argument),
   delete it, and *Pin this type* so edits inside must keep it. A definition
