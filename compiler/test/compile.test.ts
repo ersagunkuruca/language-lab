@@ -332,6 +332,36 @@ test("a fold over characters(t) runs on the text, and splits it as characters do
   assert.match(fn("tails"), /builtin\.text\.characters/);
 });
 
+test("a fold over range(n) counts down from n − 1, without the list, for Number and Int", async () => {
+  const { INT_OPS: I, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const marks = (name: string, range: Id, raw: boolean) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["n"], (n) => k.fold(k.call(range, n), [
+      { variant: NIL, names: [], body: () => k.list() },
+      { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i, rest], [, r]) => k.call(CONS, raw ? k.call(SHOW_ANY, rest) : i, r!) },
+    ])));
+    return d;
+  };
+  const num = marks("numbers", S.range, false), int = marks("ints", I.range, false), tails = marks("tails", S.range, true);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...[
+    ...[4, 2.5, 0, -3].map((x) => k.call(num, k.lit(x))),
+    k.call(num, k.call(B.div, k.lit(0), k.lit(0))),
+    ...[4, 0].map((x) => k.call(int, k.int(x))),
+    k.call(tails, k.lit(3)),
+  ].map((x) => k.call(SHOW_ANY, x)))))));
+  const { defs, code, info, source } = await compiledDefs(k, ["main"], "counted.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  assert.equal(want[0], '["[0, 1, 2, 3]", "[0, 1]", "[]", "[]", "[]", "[0, 1, 2, 3]", "[]", "[\\"[1, 2]\\", \\"[2]\\", \\"[]\\"]"]');
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.doesNotMatch(fn("numbers"), /\$range/);
+  assert.doesNotMatch(fn("ints"), /range/);
+  assert.match(fn("tails"), /\$range/);
+});
+
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
 // Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
 test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {

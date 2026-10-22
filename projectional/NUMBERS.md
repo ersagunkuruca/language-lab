@@ -310,7 +310,7 @@ Other representations run the same fold differently:
 |---|---|---|---|---|---|
 | `cells` | any data type | one object per case | itself | spine loop (chains), explicit stack (trees), `parts` (nested) | today's loops |
 | `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | built |
-| `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | next |
+| `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
 | `int` | `Nat` | an `Int` | `natural` | a counted loop: Peano `succ` folded n times | later |
 | `array` | `List a` | a JS array | `items` | an index loop | later |
@@ -385,7 +385,10 @@ text, characters outside the basic plane, `range(0)`.
    about 31 ms (best of 40 runs, the ideal takes about 21 ms). The rest
    of the tokenizer's cost is the token list it builds and `keep`'s second
    one, which is the `build` row's job.
-3. `counted`: a fold over `range(n)` (`queens` uses it).
+3. `counted`: a fold over `range(n)`. **Done**, for `range` on Number
+   and on Int, without `Choice`. `queens` folds over `range` with
+   `Choice`, which is a generator and still builds the list; a fold with
+   `Choice` asking the table too is a later step.
 4. User representations per value: `fold(meaning(x))` → `fold′(x)` when
    `meaning` is a definition, tested on `binary`.
 5. Later, when a program needs them: `build` for user functions that make

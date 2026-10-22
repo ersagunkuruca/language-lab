@@ -15,7 +15,7 @@
 // replaces, through `meaning`.
 
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
-import { CONS, LIST, TEXT_OPS } from "./std.ts";
+import { CONS, INT_OPS, LIST, S, TEXT_OPS } from "./std.ts";
 
 export interface Representation {
   name: string;
@@ -243,7 +243,15 @@ export const TEXT: Storage = {
   name: "text", of: LIST, meaning: TEXT_OPS.characters, jobs: { fold: "text.reverse" },
   cost: { fold: "n", space: "n" }, hidden: { [CONS]: [1] },
 };
-export const STORAGES: Storage[] = [CELLS, TEXT];
+// 0, 1, …, n − 1, kept as n. Its fold counts down from n − 1, running the
+// cons arm on each number. The rest of such a list is a count too, so it
+// is hidden like text's.
+const counted = (name: string, meaning: Id): Storage => ({
+  name, of: LIST, meaning, jobs: { fold: "count.down" }, cost: { fold: "n", space: "1" }, hidden: { [CONS]: [1] },
+});
+export const COUNTED = counted("counted", S.range);
+export const COUNTED_INT = counted("counted Int", INT_OPS.range);
+export const STORAGES: Storage[] = [CELLS, TEXT, COUNTED, COUNTED_INT];
 
 // Which storage runs a fold, and the node whose value it runs on: the
 // argument of a `meaning` when the fold's input is made by one (the law
