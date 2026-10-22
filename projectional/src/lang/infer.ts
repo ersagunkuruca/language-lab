@@ -20,7 +20,7 @@ import { BOOL, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
+  CELL, CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -141,6 +141,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const plainShape = (def: Id): Set<number> | null => {
     if (plainParams.has(def)) return plainParams.get(def)!;
     const td = typedefOf(def);
+    // a cell is a place, not a value: two of them holding the same thing differ
+    if (def === CELL) { plainParams.set(def, null); return null; }
     plainParams.set(def, new Set()); // builtins; and a type's mention of itself adds nothing
     if (!td) return new Set();
     const need = new Set<number>();

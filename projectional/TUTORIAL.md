@@ -159,16 +159,30 @@ that variable comes from, so a value used twice visibly fans out. In
 `discriminant` above, `linear coefficient` has two wires because it's used
 twice.
 
-**Values on wires.** Teal text next to an output is the value it made when
+**Values on wires.** A small teal chip next to an output is the value it made when
 the definition last ran on its example inputs (*Show values* in the *Run*
 panel; the inputs are kept in `examples.json`, not in the code). That's
 different from a name: a name is brown or black, belongs to a dot, and is
 part of the names file. A value is a result and changes when the inputs do.
+Chips are placed where they cover no node and no other chip; one with no
+room shrinks to a dot, and hovering shows it.
 
 **Gestures.** Drag from an output (or a dot) onto an input to use that value
 there. Drag an input's wire into empty space to remove it; the input becomes a
-hole. Drag a node to move it, which only changes `layout.json`. *Fit* and
-*100%* zoom the canvas, which is unbounded in every direction.
+hole. Drag a node to move it, which only changes `layout.json`: it stays
+exactly where you put it, and nothing else moves (alt-drag moves a dot).
+Shift-click or shift-drag picks several, and dragging one moves them all.
+*Fit* and *100%* zoom the canvas, which is unbounded in every direction;
+the gutters between panes resize it.
+
+**Right-click** anywhere in the graph for what you can do there: on a hole,
+the palette, searched; on empty space, *Add a value here* (a new dot holding
+a hole, to fill and wire in); on a node, open, show inline, put a dot on it,
+clear it; on a dot or port, *Show as let and get nodes*. *Tidy* spaces out
+the whole graph or the picked nodes, moving them off wires too; *Reset the
+layout* goes back to the automatic one. Where wires still cross, one hops
+over the other (a bridge); where a wire runs under a node, its hidden
+stretch shows faintly over it (a tunnel). NODE-EDITOR.md has the reasons.
 
 ### 3.3 Dots: where a value starts and branches
 
@@ -324,6 +338,8 @@ effects:
 | `Console` | reads and prints | `print(text)`, `read line()` | the runtime |
 | `Files` | reads and writes files | `read file`, `write file`, … | the runtime |
 | `Diverge` | might not finish | recursion the checker can't see ends | the runtime, or `with fuel(n, action)` |
+| `Cells` | reads cells, makes cells and formulas | `cell(x)`, `formula(action)`, `read(c)` | the runtime (below) |
+| `Update` | changes a cell | `write(c, x)` | the runtime |
 | yours | what you declare | its operations | a `match` on them |
 
 **Choice is the interesting one.** It covers several things other languages
@@ -372,6 +388,20 @@ has (`e`), `map` has too. There's no `map` vs `mapM`.
 
 **Try it.** Open *Eight queens* → `main` and press *Run main*: the first
 solution for 8, the count (92), and all four solutions for 6.
+
+**Cells: values that change, and values computed when asked.** One more
+effect is how a page reacts to clicks, the way Solid.js does it.
+`count = cell(0)` makes a cell; `read(count)` reads it; `write(count, 1)`
+changes it (that's the effect `Update`, and like printing it can't happen
+inside a search). `formula(() => read(count) * 2)` is a cell computed from
+others: the first time something reads it, and again only after a cell it
+read has changed. A page is a value whose changing parts are actions like
+`() => show(read(count))`; the runtime notes which cells each one read and
+runs again exactly those that read a cell that changed. Because a formula
+runs only when read and only once, it is also how data can go on forever:
+a continued fraction whose rest is a formula computes its terms as you ask
+for them. Both run live on the [Cells page](https://ersagunkuruca.github.io/language-lab/reactive.html);
+LANGUAGE.md, "Cells", has the details.
 
 ### 3.10 Running any function backwards
 
@@ -607,6 +637,13 @@ per type, the way NUMBERS.md chooses a representation.
 - A right-click menu on the canvas and on nodes: add (the palette, searched),
   inline, open, put a dot, lay out the selection.
 
+**Done** (NODE-EDITOR.md): value chips placed off nodes and each other,
+free positions, Tidy for everything or the picked nodes (wires included),
+bridges and tunnels, let and get nodes per binding, the right-click menu,
+Fit centred, a resizable canvas. Still open: Tidy spaces
+nodes out but doesn't reorder them to cut crossings (the Sugiyama-style
+layout above), and wires don't route around nodes.
+
 ### 3. Captioned wires and named dots look alike, and mean different things
 
 **Today.** Text next to a wire is either a **value** (teal: what this output
@@ -621,6 +658,9 @@ for values), not to merge them. Between a *name* drawn on a wire and a name
 drawn on a dot, no: both name the same let, so a captioned wire would be one
 more way to draw a named dot, next to the junction and the let/get pair
 (NOTES.md, "The node editor").
+
+**Done.** Values are chips with a border, names are plain text on a dot,
+a port or a let node, and nothing else puts text on a wire.
 
 ### 4. Cases that are values are drawn as functions
 
@@ -723,7 +763,20 @@ couldn't see", and fuel as "recursion with a budget".
   tutorial each restate parts of the model and the error table. LANGUAGE.md
   should be the reference, the rest should link to it.
 
-### 13. Things that are good and should stay
+### 13. Cells: the handler is the runtime's, and lazy producers say Diverge
+
+Today: `Cells` (reactivity and values on demand) is handled only by the
+runtime, because its handler keeps state and handlers in the language
+can't. And a formula's action may loop, so a lazy producer like √2's terms
+has `Diverge` in its type even though each step makes a term.
+
+Proposal: a handler form with state (a `match` that carries a value from
+one operation to the next) would let a program write its own Cells handler,
+for example a server-side renderer or a test that answers reads. A guarded
+corecursion check (a recursive call under a `formula`, inside a
+constructor) would drop `Diverge` from productive producers.
+
+### 14. Things that are good and should stay
 
 So the list above isn't read as "everything is wrong":
 

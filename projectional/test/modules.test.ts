@@ -252,7 +252,7 @@ test("a saved file lists what it uses from modules, and opening it without them 
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(prelude("length"), k.list(k.lit(1)))))));
   const code = base(k.code);
-  const text = toFile({ title: "Uses length", typed: true, code, names: k.names, descriptive: {}, comments: {}, layout: { positions: {}, known: {} }, examples: {} }, LIBRARY.code);
+  const text = toFile({ title: "Uses length", typed: true, code, names: k.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {} }, LIBRARY.code);
   const file = JSON.parse(text);
   assert.equal(file.version, 2);
   assert.deepEqual(Object.values(file.needs), ["length from prelude"]);

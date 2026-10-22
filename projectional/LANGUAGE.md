@@ -231,6 +231,8 @@ The effects:
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
+| `Cells` | `cell(x)`, `formula(action)`, `read(c)` | the runtime (see "Cells" below) |
+| `Update` | `write(c, x)` | the runtime; a world effect, like `Console` |
 | yours | the operations you declare | a match on them |
 
 Two rules make this checkable. A definition's own value must be pure, and
@@ -339,6 +341,94 @@ ordinary `match … | abort(why) → …` catches a missing file. A command-line
 (`runProgram`); an `Abort` nothing handles prints its reason to standard
 error and exits with 1. Command-line arguments aren't an effect: they're
 `main`'s input.
+
+### Cells: reactivity and values on demand
+
+Is this effect system the same thing as Solid.js's reactivity? In one
+precise sense, yes. In Solid (Ryan Carniato, https://www.solidjs.com),
+reading a signal inside an effect or a memo records a dependency through a
+global "current listener"; writing the signal runs again exactly the
+effects and memos that read it. Seen through effects, reading is an
+*operation*, and the tracking context is its *handler*: the code that
+reads doesn't say who is listening, the nearest handler around it decides.
+A deep handler's dynamic scope is that "current listener". So the language
+has one more effect, with its handler in the runtime (`src/lang/cells.ts`):
+
+```
+cell    : (a) -[Cells]-> Cell a                       -- Solid's createSignal
+formula : (() -[Cells, Diverge]-> a) -[Cells]-> Cell a  -- createMemo, lazy
+read    : (Cell a) -[Cells]-> a                       -- reading either
+write   : (Cell a, a) -[Update]-> Unit                -- the setter
+```
+
+The handler records, for every formula and every *watcher* (Solid's
+`createEffect`; the page that shows a program makes one per changing part),
+which cells it read on its last run. A write marks the readers dirty and
+their readers "check"; nothing is recomputed until it is read, and a
+"check" formula recomputes only if a source's value really changed. That is
+Milo's "Reactively" algorithm ("Super-charging fine-grained reactive
+performance", 2022), credited in the code. Dependencies are found while
+running, so a branch not taken isn't tracked: a text that shows the count
+only when details are on stops running when the count changes while
+they're off.
+
+What the types add over Solid:
+
+- **A view can only read.** `text(() => show(read(count)))` is
+  `() -[Cells]-> Text`. A button is `() -[Cells, Update]-> Unit`.
+- **A formula can't write.** Its action's row is closed, `[Cells,
+  Diverge]`, so `formula(() => write(…))` is a type error. Solid warns
+  about writes in memos at run time; here they can't be written.
+- **No writes on abandoned paths.** `Update` is a world effect, so a write
+  under an open `Choice` is the same error as printing there. Reading isn't
+  world, so a search may read cells.
+- **`Cell a` isn't plain data.** Two cells holding the same value are two
+  cells, so cells can't be compared or shown, and neither can data holding
+  them.
+
+**Values on demand are the same handler.** A formula runs when first read
+and is kept until a cell it read changes: with no cells to change, that is
+call-by-need, Haskell's laziness. So data with a `Cell` in a field is lazy
+data, computed once, which is what NUMBERS.md wanted for infinite
+continued fractions:
+
+```
+type CF = end | term(whole: Int, rest: Cell CF)
+square root(n) = … term(a, formula(() => root terms(…)))
+```
+
+Reading more terms reads more `rest` cells; each one runs its formula once.
+Gosper's arithmetic on these (`plus`, `minus`, `times`, `over`) is an
+ordinary program in `src/lang/cells-programs.ts`, and showing one more term
+of six numbers runs about nine formulas and watchers instead of
+recomputing them. Adapton (Hammer, Phang, Hicks, Foster, PLDI 2014) is the
+paper that made "demand-driven" and "incremental" one mechanism; this is a
+small version of it.
+
+Both programs run live at
+[reactive.html](https://ersagunkuruca.github.io/language-lab/reactive.html) (built by
+`editor/build.ts` from `editor/reactive.ts`). The page is a value: `main`
+runs once and returns a `UI` (`text`, `button`, `entry`, `slider`, `row`,
+`column`, `dynamic`), whose changing parts are functions; `src/lang/ui.ts`
+puts each one in a watcher, so a change touches only its own element. That
+is Solid's compiled JSX, as data.
+
+What is deliberately not there, and why:
+
+- **No handler for Cells written in the program.** The handler keeps
+  state (values, readers) and handlers in the language have neither state
+  nor continuations, so it is the runtime's, like `Console`'s. A program
+  can't swap it for, say, a server-side renderer that answers every read
+  with the initial value; with handler state that would be one `match`.
+- **`Cells` covers `Diverge` inside formulas.** A formula's action runs at
+  some later read, so its effects can't show up where it was made; the
+  ones it may have are the handler's: `Cells`, and `Diverge`, because a
+  lazy producer of endless data (`√2`'s terms) is recursion the checker
+  can't see end. So `read` can loop. A check for *guarded corecursion*
+  (each step builds a `term` before recursing, under a `formula`) would
+  give productive producers no `Diverge` at all; it isn't written yet.
+- **The compiler doesn't compile Cells yet**, like the other effects'
+  operations (see What's next).
 
 ### How it runs: no stack limit
 
@@ -766,6 +856,9 @@ src/lang/types.ts     types, effect rows, unification, display
 src/lang/std.ts       Bool, Unit, List, Pair as typedef nodes; builtins with signatures
 src/lang/infer.ts     inference, exhaustiveness, totality, typed holes, fillings()
 src/lang/run.ts       evaluator: results as lazy streams; handlers; runMain
+src/lang/cells.ts     the Cells handler: cells, lazy formulas, watchers
+src/lang/ui.ts        draws a UI value on a page, one watcher per changing part
+src/lang/cells-programs.ts  the reactive page and continued fractions
 src/lang/refactor.ts  fillHole(), addVariant(): the gestures that prevent errors
 src/lang/render.ts    the block view (if/match/fold as indented blocks, types on top)
 src/lang/dsl.ts       building programs from TypeScript
@@ -806,3 +899,8 @@ back into the group being hashed is named by its position.
   the type now; what's missing is writing them in a type (`Number m/s`) and
   a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.
+  (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
+- **Cells, further.** Guarded corecursion, so productive lazy producers
+  have no `Diverge`; `Cells` in the compiler; a stateful handler form so a
+  program can write its own Cells handler (server-side rendering, tests);
+  async cells (HTTP results) as Solid's resources.

@@ -65,11 +65,14 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
   the types, and the program stores its id. Generic code takes its
   operations as an argument, which the editor fills in when exactly one
   candidate fits. No type classes.
-- **Infinite continued fractions?** A data type with a function in a field,
-  `term(whole: Int, rest: () → CF)`, so the rest is computed on demand. No
-  new kind of node. Exact real arithmetic on them is Gosper's algorithm.
-  Comparing two exact reals might never finish, and the type says so:
-  `Diverge`, which `with fuel` turns into "undecided".
+- **Infinite continued fractions?** Done, through an effect: a data type
+  with a cell in a field, `term(whole: Int, rest: Cell CF)`, where the rest
+  is a `formula`, computed when first read and then remembered (LANGUAGE.md,
+  "Cells"). No new kind of node. Exact real arithmetic on them is Gosper's
+  algorithm, written in the language (`src/lang/cells-programs.ts`, live
+  at [reactive.html](https://ersagunkuruca.github.io/language-lab/reactive.html)).
+  Comparing two exact reals might never finish: √2 · √2 never gives its
+  first term, and `with fuel` turns that into "undecided".
 - **Derivatives?** Dual numbers (`Cl(0, 0, 1)`, ε² = 0) are a
   representation of `Number` that carries a slope. Running a function on
   them is forward-mode automatic differentiation: a second implementation
@@ -331,6 +334,29 @@ Finite ones are exactly the rationals. Infinite ones are the irrationals,
 and many have patterns: `√2 = [1; 2, 2, 2, …]`, the golden ratio is
 `[1; 1, 1, …]`, `e = [2; 1, 2, 1, 1, 4, 1, 1, 6, …]`.
 
+**Update (2026-10-22): this is built, with an effect instead of a
+function field.** A field of type `() → CF` would compute the rest every
+time it is called (call-by-name), so a number used twice, like `x` in
+`x + x` or `√2` in `√2 · √2`, would compute its terms twice, and Gosper's
+algorithm on shared inputs gets exponential. What's wanted is call-by-need:
+computed once, on demand. That needs a place to keep the result, which is
+state, which is an effect. The Cells effect (LANGUAGE.md, "Cells") is that
+place, and the same handler is Solid.js-style reactivity:
+
+```
+type CF
+  | end
+  | term(whole: Int, rest: Cell CF)
+
+‹root terms›(n, a0, m, d, a) = term(a, formula(() => … root terms(n, a0, m′, d′, a′)))
+```
+
+`formula` doesn't run its action; the first `read` of the cell does, and
+later reads get the remembered value. A rest that depends on a cell the
+page can write (`√n` with `n` on a slider) is recomputed when `n` changes,
+so lazy numbers are also reactive ones. The original plan, kept for the
+record:
+
 The language has no lazy data today. The plan adds none as a node kind: a
 field can hold a function, so "the rest, when you ask" is a field of type
 `() → CF`:
@@ -512,7 +538,7 @@ In order. Each stage says when to start it.
 | 2 | **Overloading by name.** Several defs displayed as `+`, the palette picks by type; operation records as arguments the editor fills | with stage 1, since Int and Rational need `+` |
 | 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations; the editor's representation picker | a program in the editor is slow because of list length or indexing |
 | 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | after 2 (it needs `·` on multivectors to be the same `·`) |
-| 5 | **Infinite data.** Function-typed fields as lazy data; guarded corecursion in the checker; continued fractions with Gosper's arithmetic; exact reals, with `Diverge` comparisons | anyone wants an exact real, or a stream |
+| 5 | **Infinite data.** ~~Function-typed fields as lazy data~~ `Cell` fields as lazy, remembered data (done, the Cells effect); guarded corecursion in the checker; ~~continued fractions with Gosper's arithmetic~~ (done as a program: `+ − × ÷` of two CFs, √n, e, rationals); exact reals as a representation of `Real`, with `Diverge` comparisons | **partly done**; the rest when anyone wants an exact real as a number type, or a stream |
 | 6 | **Tensors.** Contraction + map, the representations above, shape inference on the units machinery | a numeric example needs a matrix bigger than 3 × 3 |
 | 7 | **Costs worked out, laws proved.** Cost inference from folds and representation sizes, checked by fitted benchmarks; laws for folds proved by fusion; choice per value flow, with conversion costs | the declared costs turn out wrong, or a program needs two representations of one type |
 | 8 | **Dual numbers as a second `derivative`**, to test `derive.ts` against | with stage 4 |

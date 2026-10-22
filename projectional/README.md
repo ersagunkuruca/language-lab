@@ -222,8 +222,11 @@ Dragging a source onto an input uses that variable there (refused, with the
 reason, if it's out of scope or the wrong type); dragging a node's output
 onto a second input shares the value by giving it a dot; dragging an
 input's wire into empty space leaves a hole. Drag a node to move it: it
-keeps an offset from the automatic layout in layout.json, frames grow to
-hold it, and it can't leave its scope. Networks move and wire the same way.
+keeps the place you gave it (layout.json, world coordinates), nothing else
+moves, and frames grow to hold it. Right-click for a menu (fill a hole,
+add a value, tidy, show a binding as let and get nodes); crossings are
+drawn as bridges and tunnels. NODE-EDITOR.md has the design and its
+sources; the geometry is editor/graphLayout.ts.
 
 A relation used inside a typed program (a `solve` node, `examples/relations`)
 is a node too: the ports it is given are inputs, the ones it solves for are
