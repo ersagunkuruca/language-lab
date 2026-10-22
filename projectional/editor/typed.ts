@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
-import { collect, freshId, replace, swapIn } from "../src/model.ts";
+import { collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer, type Filling, type Info } from "../src/lang/infer.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -175,7 +175,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     out.append(indent(...body.variants.map((v) => {
       const fs = (node(v) as NodeOf<"variant">).fields;
       return h("div", { class: `ln x variant${selected === v ? " sel" : ""}`, "data-id": v }, sep("| "), h("span", { class: "con" }, name(v)),
-        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", {}, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []));
+        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", { class: `x fld${selected === f ? " sel" : ""}`, "data-id": f }, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []));
     })));
     return out;
   }
@@ -203,13 +203,21 @@ export function guardTyped(before: Info, code: Code, names: Names, select: Id | 
   return { ok: true, code, names, select, note };
 }
 
-export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling, label: string): TEdit {
+export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling, label: string, defId?: Id): TEdit {
   const e = fillHole(code, names, hole, f);
-  const n = e.code.nodes[hole];
-  // Select the first new hole, so filling continues where it should.
-  const firstHole = n.kind === "call" ? n.args.find((a) => e.code.nodes[a].kind === "hole")
-    : n.kind === "lambda" || n.kind === "match" || n.kind === "fold" ? Object.keys(e.code.nodes).find((k) => !code.nodes[k] && e.code.nodes[k].kind === "hole") : undefined;
-  return guardTyped(info, e.code, e.names, firstHole ?? hole, `Filled with ${label}.`);
+  // Select the next hole in reading order, so filling goes on where it
+  // should: inside what was just placed, else further on, else from the top.
+  // A literal stays selected, to type its value.
+  const next = defId && f.kind !== "lit" ? nextHole(e.code, defId, hole) : undefined;
+  return guardTyped(info, e.code, e.names, next ?? hole, `Filled with ${label}.${defId && f.kind !== "lit" && !next ? " No holes left in this definition." : ""}`);
+}
+
+// The next hole after `id` in reading order, or the first one.
+export function nextHole(code: Code, defId: Id, id: Id): Id | undefined {
+  const order = subtree(code, defId);
+  const holes = order.filter((x) => code.nodes[x].kind === "hole");
+  const at = order.indexOf(id);
+  return holes.find((h) => order.indexOf(h) > at) ?? holes[0];
 }
 
 export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {

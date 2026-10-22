@@ -495,11 +495,22 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   lit("text", str);
   const ex = info.subst.resolve(h.expected);
   if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length });
+  const dataTypes = [...new Set(info.owner.values())];
   for (const b of h.scope) {
     const bt = info.subst.resolve(b.type);
-    if (bt.t === "con" && info.owner.size && [...info.owner.values()].includes(bt.id)) {
+    if (bt.t === "con" && dataTypes.includes(bt.id)) {
       out.push({ kind: "match", on: b.id, type: bt.id });
       out.push({ kind: "fold", on: b.id, type: bt.id });
+    } else if (bt.t === "var") {
+      // Nothing says what it is yet (a new input, say): splitting it by the
+      // cases of a type is what says so. Checked like any filling that pins
+      // a variable down.
+      for (const type of dataTypes.filter((t) => !t.startsWith("std.") || t === "std.bool" || t === "std.list")) {
+        for (const kind of ["match", "fold"] as const) {
+          const f: Filling = { kind, on: b.id, type };
+          if (infer(fillHole(code, {}, hole, f).code).errors.length <= info.errors.length) out.push(f);
+        }
+      }
     }
   }
   return out;
