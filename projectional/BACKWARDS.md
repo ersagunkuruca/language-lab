@@ -22,7 +22,10 @@ node --test test/backwards.test.ts
   **unification**: a constructor run backwards takes its value apart, like
   Prolog. Numbers become **equations**, handed to the existing solver as
   soon as one can be solved. The search is miniKanren's, a lazy fair
-  stream, so an infinite branch can't starve a finite one.
+  stream, so an infinite branch can't starve a finite one (miniKanren by
+  Friedman, Byrd and Kiselyov, [minikanren.org](http://minikanren.org); the
+  stream code follows Hemann and Friedman's
+  [μKanren](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)).
 - **Does a function have to be written specially?** No. Every example
   below is an ordinary function, written forward.
 - **What does it cost in the types?** Running something backwards always
@@ -54,7 +57,8 @@ node --test test/backwards.test.ts
 | `one of(list)` | each item | the value is somewhere in the list; if the list isn't known, lists that contain it, one length at a time |
 | `fail()` | no answers | no answers |
 | `solve` | a relation in a direction | the same as a call, read sideways: its given ports are inputs, its bound ports are unknowns |
-| networks, `polar`, `sum`, `product` | (relations already) | their equations go to the solver with everything else |
+| `for some(f)` | is there an `x` with `f(x)`? (a search) | `x` is a fresh unknown, and `f(x)` must hold |
+| `a hence b` | `a and b` | `a`'s equations, with `b`'s as laws: usable to solve, not counted as constraints |
 
 ## What can't run backwards, and why
 
@@ -159,11 +163,15 @@ types, since adding a case to `expression` exercises every fold.
 - **Pattern matching is relation solving.** A match arm run backwards is
   its constructor run backwards. Matching a value against `cons(h, t)` and
   building `cons(h, t)` are the same unification, read in two directions.
-- **Tree code and networks meet in the solver.** A `solve` node over a
-  lambda definition, a network, `polar` or the `sum` atom goes through the
-  same path. The lambda's body is interpreted and its arithmetic becomes
-  equations; the network contributes its equations directly. Both end up as
-  constraints in the same state.
+- **A network is a predicate.** What used to be a network is a function
+  returning `Bool` built from `equal`, `and`, `hence` and `for some`
+  (LANGUAGE.md, "One world"). Run backwards with its result `true`, each
+  `equal` unifies, each `for some` adds unknowns, and the arithmetic becomes
+  constraints in the same state as everything else. `polar` is such a
+  predicate, not a built-in relation.
+- **Periodic answers are cut off.** An angle solved from a cosine is a whole
+  family (`θ + 2πk`). When none of its first 64 members fits what else is
+  known, `relate.ts` stops there instead of walking every `k`.
 
 ## For the compiler
 

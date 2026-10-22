@@ -214,6 +214,7 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   // Polar given only x: not enough to solve, and the checker says so.
   const toPolar = get(p.code, get(p.code, p.named("to polar"), "def").body!, "lambda");
   const solve = get(p.code, toPolar.body, "solve");
-  const code = replace(p.code, solve.id, () => ({ ...solve, given: { x: solve.given.x } }));
+  const [x] = Object.keys(solve.given);
+  const code = replace(p.code, solve.id, () => ({ ...solve, given: { [x]: solve.given[x], out: solve.given.out } }));
   assert.ok(infer(code, p.pres.names).errors.some((e) => /needs 1 more known port/.test(e.message)));
 });

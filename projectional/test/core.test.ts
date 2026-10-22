@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Builder } from "../src/builder.ts";
-import { evaluate } from "../src/eval.ts";
+import { infer } from "../src/lang/infer.ts";
+import { makeRunner } from "../src/lang/run.ts";
 import { hashDef } from "../src/hash.ts";
 import { loadCode, loadPresentation, root } from "../src/io.ts";
-import { get, merge, replace, type Id } from "../src/model.ts";
+import { get, merge, replace, type Code, type Id } from "../src/model.ts";
 import { rename, type Presentation } from "../src/presentation.ts";
 import { B, prelude, preludeNames } from "../src/prelude.ts";
 import { renderLet } from "../src/render/letseq.ts";
@@ -15,6 +16,13 @@ import plainStyle from "../styles/plain.json" with { type: "json" };
 
 const pres = (names: Record<Id, string>, style: unknown, comments = {}): Presentation =>
   ({ names: { ...preludeNames, ...names }, comments, hints: {}, style: style as Presentation["style"] });
+
+// A definition as a plain JS function: its first result. There is one
+// evaluator (src/lang/run.ts); this is just a way to call it.
+const evaluate = (code: Code, def: Id) => {
+  const r = makeRunner(code, infer(code), { print: () => {} });
+  return (...args: number[]) => { for (const v of r.call(r.value(def), ...args)) return v; throw new Error("no result"); };
+};
 
 const discriminant = (names: string[]) => {
   const k = new Builder(prelude);
@@ -41,7 +49,7 @@ test("renaming changes the rendering and nothing else", () => {
   assert.match(renderNested(code, pres(renamed, mathStyle), def), /linear coefficient · linear coefficient/);
   assert.deepEqual(code, before);
   assert.equal(hashDef(code, def), hashDef(before, def));
-  assert.equal((evaluate(code, def) as Function)(1, -3, 2), 1);
+  assert.equal(evaluate(code, def)(1, -3, 2), 1);
 });
 
 test("independently written, differently named copies hash the same", () => {
@@ -61,7 +69,7 @@ test("a real change changes the hash", () => {
 test("same display name on different binders is disambiguated, not captured", () => {
   const { code, names, def } = discriminant(["k", "k", "k"]);
   assert.equal(renderNested(code, pres(names, mathStyle), def), "Δ = (k₁, k₂, k₃) => k₂ · k₂ − 4 · k₁ · k₃");
-  assert.equal((evaluate(code, def) as Function)(1, -3, 2), 1);
+  assert.equal(evaluate(code, def)(1, -3, 2), 1);
 });
 
 test("parentheses come from precedence at render time", () => {

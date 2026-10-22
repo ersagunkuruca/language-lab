@@ -11,7 +11,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
-import { portLabel } from "../relational.ts";
+import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showType } from "./types.ts";

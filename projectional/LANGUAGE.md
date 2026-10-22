@@ -236,9 +236,10 @@ mechanism covers:
 
 ## Relations inside programs: `solve`
 
-A `solve` node uses a relation in the direction chosen where it's used.
-The relation can be a network def, an expression def, `polar`, the variadic
-`sum`/`product` atoms, or a numeric builtin read as `out = f(…)`. The node's
+A `solve` node uses a function in the direction chosen where it's used.
+The function can be any definition (a predicate like `polar` is solved with
+its result given as `true`, see "One world" below), or a numeric builtin
+read as `out = f(…)`. The node's
 `given` ports are computed by expressions. Its `binds` ports are solved for
 and bound to binders the body can use, all from the same solution, so several
 outputs stay consistent with each other (`src/lang/solve.ts`,
@@ -255,7 +256,7 @@ outputs stay consistent with each other (`src/lang/solve.ts`,
 ```
 
 The effect comes from the solver's static `direction()`. Exactly one answer
-that can't fail is pure: the missing addend of a `sum`, for instance. Several
+that can't fail is pure: the missing addend of `+`, for instance. Several
 answers, or possibly none, is `Choice`, a lazy stream with the canonical
 answer first. A direction that the given ports don't determine is a checked
 error ("needs 1 more known port"). So `square` read backwards gives both
@@ -280,6 +281,108 @@ backwards is a parser:
 The full table of what each node does backwards, and what can't be done
 and why, is in [BACKWARDS.md](BACKWARDS.md). So is the calculus example,
 which differentiates real functions by reading their graphs.
+
+## One world: a network is a predicate
+
+There used to be two kinds of definition. Functions had a direction:
+arguments in, result out. Networks had none: a graph of relations (`polar`,
+`sum`, `product`) wired together, with outer ports you marked known or
+unknown, solved by `invertible/`. They had their own node kinds (`network`,
+`part`), their own editor, their own evaluator (`eval.ts`) and checker
+(`check.ts`), and units existed only there. Now there is one kind.
+
+**A network is a function that returns `Bool`.** Each wire is an `equal`,
+`and` collects them, and the outer ports are the parameters. Solving it
+means asking for values of the unknown parameters that make it `true`:
+
+```
+fall(distance m, speed m/s, gravity m/s², time s) =
+  drift = speed · time
+  drop = 0.5 · gravity · time · time
+  equal(distance, drift + drop)
+
+polar(x, y, length, angle) =
+  and(equal(x, length · cos(angle)), equal(y, length · sin(angle)))
+    hence equal(x · x + y · y, length · length)
+
+rotate(x, y, turn, x′, y′) =
+  for some length, angle:
+    and(polar(x, y, length, angle), polar(x′, y′, length, angle + turn))
+```
+
+Those are `examples/physics`. The pieces:
+
+- **`equal` is a wire.** One equation. Numbers are equal when they agree to
+  1e-9 relative (`close` in `run.ts`), forward and backwards and compiled,
+  because a wire in a network meant "these are the same quantity", and
+  `0.1 + 0.2` should be the same quantity as `0.3`. The cost is that `equal`
+  on numbers isn't transitive at the 1e-9 scale. Bit-exact comparison is a
+  different question and should get its own name when something needs it.
+- **A let is a dot on a wire.** `drift` names a sub-expression. Lets of
+  non-numbers (a `Bool`, a function) are read where they're used, so a dot
+  anywhere leaves the equations as they were.
+- **`for some` is a wire inside.** `rotate`'s `length` and `angle` aren't
+  ports, so they can't be parameters. `for some` takes a function and says
+  some argument makes it true. Read as equations, its parameters are fresh
+  unknowns; run forward, it searches (`satisfiable` in `relate.ts`). An
+  existential is the honest name for an internal wire, and it scopes it:
+  two `rotate`s inlined into one predicate get separate `length`s.
+- **`hence` is a consequence.** `a hence b` is `a and b` when run, but read
+  as equations `b` is a *law*: it follows from `a`, so it may be used to
+  solve but doesn't count as a constraint. From `x` and `y`, `polar` finds
+  `length` by a square root instead of a numeric search; from `x` alone it
+  stays correctly underdetermined (a circle of answers), where adding
+  `x² + y² = length²` as a third equation would have made it look solved.
+- **Calls inline.** A call to another predicate (`polar` inside `rotate`) or
+  to a numeric function is inlined into the equations, so its inside is
+  solved too. Nothing is a black box, including `polar`, which used to be a
+  built-in relation and is now three lines.
+
+**Running one, any direction.** A function's ports are its parameters and
+its result. `solve` nodes and the editor's *Run* panel give some ports and
+ask for the rest; for a predicate the result is given as `true`. If the
+function reads as equations (`src/lang/equations.ts`), the solver plans the
+direction ahead of time, the type checker gets its effect from the plan, and
+the compiler writes the plan out as arithmetic. Anything else (cases, folds,
+text) goes through `relate.ts`, the one interpreter that runs things
+backwards, which hands the same solver whatever arithmetic it meets.
+
+**Where the direction lives.** In a program, in the `solve` node, because
+the program needs it. In the editor, as ticks in `layout.json`: exploring a
+function backwards is like running a test, not a change to the program.
+
+**Units are part of the type.** They were the type system of networks; now
+`infer.ts` checks them in every program (`unitProblems` in `src/units.ts`).
+Declare a unit on a parameter, or write a number with one (`9.81 m/s²`), and
+the rest is inferred: `period` is in seconds, `drift` and `drop` in metres.
+A plain number is dimensionless, so a plain `29.62` where a length is needed
+is a type error. Radians are gone as a base unit: an angle is a plain number,
+as in SI.
+
+**Where the ideas come from.** Reading a constraint network as a predicate
+and running it in any direction is constraint logic programming: Jaffar and
+Lassez, "Constraint Logic Programming" (POPL 1987), and Prolog's CLP(R).
+Equations between physical quantities as undirected relations is the idea
+behind Modelica's acausal modelling (Elmqvist, Mattsson and others,
+[modelica.org](https://modelica.org)). The search that runs it backwards is
+miniKanren's (Friedman, Byrd, Kiselyov; [minikanren.org](http://minikanren.org)),
+with streams as in Hemann and Friedman's μKanren (2013). `for some` is the
+ordinary existential quantifier, and units as exponent vectors solved by
+linear algebra is Kennedy's dimension types ("Dimension Types", ESOP 1994).
+`hence` (a consequence that guides solving without counting as a
+constraint) and the editor around it are this project's own as far as I
+know.
+
+**What went away.** `network` and `part` (19 node kinds to 17), `eval.ts`,
+`check.ts`, `edits.ts`, `relational.ts`, the `polar`, `sumDiff` and `ohm`
+relation builtins and the variadic `sum`/`product` atoms, the vectors
+example, and the free-wiring network editor with its `+`/`−`/`neg` glyph that
+flipped with direction. What replaces the free wiring is the typed editor:
+you build a predicate from holes (`equal(□, □)`, `and(□, □)`) and dots, and
+every edit is type- and unit-checked. Drawing an `equal` as a plain wire
+joining two values, instead of as a node, would bring the network look back
+without a second kind of thing; that's a rendering question now, not a
+language one.
 
 ## The errors, class by class
 
@@ -315,7 +418,7 @@ class considered, and where each one ends up:
 | incomplete program | allowed | holes have types and the program runs until it reaches one |
 | division by zero | runtime, but typed | `evaluate` fails instead of returning NaN; builtin `/` is IEEE (Infinity/NaN) |
 | other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix |
-| unit mismatches | prevented by the editor in networks | dimension vectors, in `src/units.ts` (editor thread); could become a parameter of `Number` |
+| unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) |
 | merge conflicts | mostly avoided | conflicts are per node and per side-table entry, not per line |
 | logic errors | not preventable | invertible relations provide round-trip laws (`parse(print(v)) = v`) as properties to test |
@@ -379,6 +482,9 @@ src/lang/render.ts    the block view (if/match/fold as indented blocks, types on
 src/lang/dsl.ts       building programs from TypeScript
 src/lang/programs.ts  queens and algebra
 src/lang/load.ts      load a program on top of prelude + std
+src/lang/equations.ts code as equations: numeric expressions and predicates, for the solver
+src/lang/solve.ts     a solve node's plan: solver direction, or run backwards
+src/lang/relate.ts    runs any function backwards (BACKWARDS.md)
 src/lang/demo.ts      npm run lang
 ```
 
@@ -398,6 +504,7 @@ back into the group being hashed is named by its position.
 - **User-defined effects and handlers.** The evaluator's stream model handles
   `Choice` naturally. General handlers with resumable continuations need a
   CPS evaluator.
-- **Units as a type parameter.** `Number m/s`, unifying the editor thread's
-  dimension vectors with these types.
+- **Units written in types.** Units are inferred and checked as part of
+  the type now; what's missing is writing them in a type (`Number m/s`) and
+  a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.

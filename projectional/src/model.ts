@@ -6,7 +6,8 @@ import type { Unit } from "./units.ts";
 export type Id = string;
 
 export type Node =
-  | { id: Id; kind: "lit"; value: number | string }
+  // A number may carry a unit (9.81 m/s²); without one it is a plain number.
+  | { id: Id; kind: "lit"; value: number | string; unit?: Unit }
   // A binder is the identity of a variable. It has no name; names live in the
   // presentation layer, keyed by this id. A unit, if given, is its type.
   | { id: Id; kind: "binder"; unit?: Unit }
@@ -21,13 +22,6 @@ export type Node =
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.
   | { id: Id; kind: "hole" }
-  // A network is a function without a direction: external ports (params),
-  // internal wires, and parts wired to them. Which ports are inputs is decided
-  // when it is used, by a solver. Params and wires are binders.
-  | { id: Id; kind: "network"; params: Id[]; wires: Id[]; parts: Id[] }
-  // One node in a network: a builtin, relation or def, with each of its ports
-  // bound to a wire. fn === null makes it a constant with `value` (and `unit`).
-  | { id: Id; kind: "part"; fn: Id | null; value?: number; unit?: Unit; bind: Record<string, Id> }
   // Data types (src/lang/). A typedef is a def body: a sum of variants, each a
   // product of fields. Variant and field ids are the tags and labels, so a
   // ref to a variant is its constructor and a ref to the field of a
@@ -90,7 +84,6 @@ export function children(n: Node): Id[] {
     case "call": return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "def": return n.body ? [n.body] : [];
-    case "network": return [...n.params, ...n.wires, ...n.parts];
     case "typedef": return [...n.params, ...n.variants];
     case "variant": return n.fields;
     case "field": return [n.type];
@@ -123,7 +116,7 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      let target = node.kind === "ref" ? node.target : node.kind === "part" || node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      let target = node.kind === "ref" ? node.target : node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
       if (target && owner.has(target)) target = owner.get(target)!;
       if (!target || seen.has(target)) continue;
       const t = code.nodes[target];
