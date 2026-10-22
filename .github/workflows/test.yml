@@ -23,6 +23,11 @@ jobs:
         run: |
           npm ci
           npm test
+      - name: projectional editor in a browser
+        working-directory: projectional
+        run: |
+          npm run build-editor
+          npm run smoke
       - name: invertible
         working-directory: invertible
         run: npm test

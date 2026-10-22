@@ -1301,7 +1301,23 @@ function definitionPanel(p: Presentation): HTMLElement | null {
     h("ul", { class: "ways" }, ...d.ways.map((w) => h("li", {}, h("span", { class: "given" }, `given ${w.given.join(", ")}`), ...w.steps.map((t) => h("code", {}, t)), w.several ? h("span", { class: "hint" }, " several answers") : null))));
 }
 
+// A view that throws leaves the page as it was, so every click after it
+// fails too. Say what broke and keep the way out: the program picker, Undo,
+// and Reset to the example as shipped.
 function render() {
+  try { draw(); } catch (e) {
+    console.error(e);
+    document.getElementById("app")!.replaceChildren(
+      h("header", { class: "bar" }, h("div", { class: "controls" },
+        seg("program", doc.program, [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])]),
+        h("div", { class: "seg" },
+          h("button", { type: "button", "data-act": "undo", disabled: !undo.length }, "Undo"),
+          h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program) }, "Reset")))),
+      h("p", { class: "status refused", role: "status" }, `The editor failed to draw this program (${e instanceof Error ? e.message : String(e)}). It's a bug in the editor, not your program: Undo, Reset to the example, or open another program.`));
+  }
+}
+
+function draw() {
   const app = document.getElementById("app")!;
   const p = pres();
   const namer = new Namer(doc.code, p, ui.def);

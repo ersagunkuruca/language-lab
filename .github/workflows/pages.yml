@@ -36,6 +36,7 @@ jobs:
           npm ci
           npm test
           npm run build-editor
+          npm run smoke
       - name: Lay out the site like the repository
         run: |
           mkdir _site
