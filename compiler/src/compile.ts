@@ -667,6 +667,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       switch (plan.rep.jobs.fold) {
         case "cells.loop": return foldCells(n, ex(plan.on));
         case "text.reverse": return foldText(n, ex(plan.on));
+        case "count.down": return foldCount(n, ex(plan.on), plan.rep.meaning === INT_OPS.range);
         default: throw new Error(`no template for ${plan.rep.jobs.fold}`);
       }
     }
@@ -703,16 +704,33 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A fold over `characters(t)`, run on t: the characters from the end,
     // a surrogate pair taken as one, as `characters` splits them. No list.
     function foldText(n: NodeOf<"fold">, input: string): string {
-      const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v)!;
-      const nil = arm(NIL), cons = arm(CONS);
-      const ifNil = temp("nil"), ifCons = temp("cons"), t = temp("t"), i = temp("i"), j = temp("j"), r = temp("r");
-      const c = referenced.has(cons.binds[0]) ? local(cons.binds[0]) : temp("c");
-      const after = cons.results[1] ? local(cons.results[1]) : temp("after");
-      return `const ${ifNil} = () => {\n${ret(nil.body)}\n};\nconst ${ifCons} = (${c}, ${after}) => {\n${ret(cons.body)}\n};\n` +
-        `const ${t} = ${input};\nlet ${r} = ${ifNil}();\n` +
+      const [nil, cons, nilFn, consFn, i, r] = foldArms(n);
+      const t = temp("t"), j = temp("j");
+      return `${nilFn}${consFn}const ${t} = ${input};\nlet ${r} = ${nil}();\n` +
         `for (let ${i} = ${t}.length, ${j}; ${i} > 0; ${i} = ${j}) {\n${j} = ${i} - 1;\n` +
         `if (${j} > 0 && (${t}.charCodeAt(${j}) & 0xfc00) === 0xdc00 && (${t}.charCodeAt(${j} - 1) & 0xfc00) === 0xd800) ${j}--;\n` +
-        `${r} = ${ifCons}(${t}.slice(${j}, ${i}), ${r});\n}\nreturn ${r};`;
+        `${r} = ${cons}(${t}.slice(${j}, ${i}), ${r});\n}\nreturn ${r};`;
+    }
+
+    // A fold over `range(n)`, run on n: the cons arm for n − 1 down to 0,
+    // as many as `range` makes (the whole part of n for a Number, none for
+    // NaN or below 1). No list.
+    function foldCount(n: NodeOf<"fold">, input: string, int: boolean): string {
+      const [nil, cons, nilFn, consFn, i, r] = foldArms(n);
+      return `${nilFn}${consFn}let ${r} = ${nil}();\n` +
+        `for (let ${i} = ${int ? `Number(${input})` : `Math.floor(${input})`} - 1; ${i} >= 0; ${i}--) ${r} = ${cons}(${i}, ${r});\nreturn ${r};`;
+    }
+
+    // The two arms of a fold over a list as local functions, for the
+    // templates that run it on other storage: () for nil, (item, folded
+    // rest) for cons.
+    function foldArms(n: NodeOf<"fold">): [string, string, string, string, string, string] {
+      const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v)!;
+      const nil = arm(NIL), cons = arm(CONS);
+      const ifNil = temp("nil"), ifCons = temp("cons");
+      const c = referenced.has(cons.binds[0]) ? local(cons.binds[0]) : temp("c");
+      const after = cons.results[1] ? local(cons.results[1]) : temp("after");
+      return [ifNil, ifCons, `const ${ifNil} = () => {\n${ret(nil.body)}\n};\n`, `const ${ifCons} = (${c}, ${after}) => {\n${ret(cons.body)}\n};\n`, temp("i"), temp("r")];
     }
 
     function foldNested(input: string, arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]): string {
