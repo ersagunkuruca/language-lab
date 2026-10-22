@@ -372,9 +372,9 @@ work in §6.
 
 | area | today | needed |
 |---|---|---|
-| integers | floats only; `range(2.5)` is allowed | `Int` and `Nat` that never overflow, represented by JS numbers or BigInt (NUMBERS.md stage 1), plus `Float32` as a representation for GPUs |
-| text | `join text` and `show` (numbers only) | length, slicing, characters, comparison, search, formatting, Unicode. Opinion: text's *meaning* is `List Char`, represented by JS strings or ropes, so everything that works on lists (folds, running backwards) works on text, and stays fast |
-| records | one-variant types with projections; no update | an update for every field, generated like constructors. It's the projection run backwards with the other fields given, so it's a relation, not a new feature (§5.3) |
+| integers | *now: `Int`, unbounded, machine numbers with BigInt fallback (LANGUAGE.md)*; was floats only; `range(2.5)` is allowed | `Int` and `Nat` that never overflow, represented by JS numbers or BigInt (NUMBERS.md stage 1), plus `Float32` as a representation for GPUs |
+| text | *now also length, slice, characters, split, join all, find, comparison, codes*; was `join text` and `show` (numbers only) | length, slicing, characters, comparison, search, formatting, Unicode. Opinion: text's *meaning* is `List Char`, represented by JS strings or ropes, so everything that works on lists (folds, running backwards) works on text, and stays fast |
+| records | *now: `set(field or path, record, value)`*; was one-variant types with projections; no update | an update for every field, generated like constructors. It's the projection run backwards with the other fields given, so it's a relation, not a new feature (§5.3) |
 | collections | `List` | `Map` and `Set`, with meaning "sorted list of pairs" and representations hash map or HAMT; arrays (NUMBERS.md stage 3) |
 | modules | none | §4.5: hashes for identity, paths and visibility as names layers |
 | IO | `print` | files, arguments, environment, time, randomness, network, storage, each an effect |

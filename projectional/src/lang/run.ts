@@ -17,12 +17,16 @@ import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
-import { CONS, FALSE, NIL, S, STD_IMPL, TRUE, UNIT_V } from "./std.ts";
+import { CONS, FALSE, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, stdNames, TRUE, UNIT_V } from "./std.ts";
+import { intLit } from "./int.ts";
+import { fieldIndex, fieldPath, setPath } from "./records.ts";
+import { INT } from "./types.ts";
 import { CONSOLE, DIVERGE } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
-export type Value = number | string | Data | Fn;
+// An Int is a number while it's a safe integer, a bigint beyond (int.ts).
+export type Value = number | bigint | string | Data | Fn;
 
 export const bool = (b: boolean): Data => ({ tag: b ? TRUE : FALSE, fields: [] });
 export const unit: Data = { tag: UNIT_V, fields: [] };
@@ -93,6 +97,8 @@ type Choice = { barrier: HandlerFrame } | { it: Iterator<unknown>; k: Frame | nu
 
 export interface Runtime {
   print: (line: string) => void;
+  // The names `show` prints cases with; std's if not given.
+  names?: Names;
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
@@ -110,6 +116,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const builtins: Record<Id, Fn> = {};
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = (...a) => one(f(...(a as number[])));
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = (...a) => one(f(...a));
+  for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {
     [S.less]: (a, b) => one(bool((a as number) < (b as number))),
     [S.equal]: (a, b) => one(bool(equal(a, b))),
@@ -122,6 +129,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     [S.print]: (s) => (rt.print(s as string), one(unit)),
+    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
+    [SET]: (get, record, value) => {
+      const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
+      const path = m?.prim ? [m.prim] : m?.lambda ? fieldPath(code, m.lambda) : null;
+      if (!path) throw new Error("set needs a field, or a path of fields");
+      return one(setPath(record as Data, path.map((f) => fieldIndex(code, f)), value));
+    },
     // The handlers are run by the machine itself (see `apply`); these are
     // for when something outside it calls them.
     [S.all]: function* (body) { yield toList([...(body as Fn)()]); },
@@ -257,7 +271,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // Values that need no step: literals, variables, lambdas.
     atom(id: Id, env: Env): Value | undefined {
       const n = code.nodes[id];
-      if (n.kind === "lit") return n.value;
+      if (n.kind === "lit") return n.of === INT ? intLit(n.value) : n.value;
       if (n.kind === "ref") return refValue(n.target, env);
       if (n.kind === "lambda") return closure(n, env);
       return undefined;
@@ -371,7 +385,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, n.fn, known, { spend })) {
+          for (const sol of relate(code, n.fn, known, { spend, names: rt.names })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];
@@ -483,6 +497,7 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 }
 
 export function showValue(v: Value, code: Code, names: Names): string {
+  if (typeof v === "bigint") return String(v);
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return "<function>";

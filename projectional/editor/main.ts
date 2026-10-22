@@ -38,7 +38,7 @@ import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
 import { freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
-import { showType as showTypeOf } from "../src/lang/types.ts";
+import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { prelude, preludeNames } from "../src/prelude.ts";
@@ -807,7 +807,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
     // Enter on an unchanged value (an empty text, say) moves on too.
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
-    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
+    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
@@ -852,7 +852,7 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   switch (f.kind) {
     case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
-    case "lit": return [f.of === "number" ? "a number" : "a text", f.of === "number" ? "Number" : "Text", "literals"];
+    case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
     default: return [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
@@ -1162,7 +1162,7 @@ function runTyped(info: T.Info) {
   const lines: string[] = [];
   let error: string | undefined;
   try {
-    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line) });
+    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line), names: pres().names });
     const shown = showValue(v, doc.code, pres().names);
     if (shown !== "unit") lines.push(`→ ${shown}`);
   } catch (e) { error = (e as Error).message; }

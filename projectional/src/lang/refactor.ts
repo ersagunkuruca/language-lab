@@ -8,6 +8,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
 import { freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
+import { INT } from "./types.ts";
 
 export interface Edit { code: Code; names: Names }
 
@@ -62,7 +63,7 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
   switch (f.kind) {
     case "ref": data = { kind: "ref", target: f.target }; break;
     case "call": data = { kind: "call", fn: add({ kind: "ref", target: f.target }), args: holes(f.arity) }; break;
-    case "lit": data = { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
+    case "lit": data = f.of === "int" ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
     case "lambda": {
       const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = `input ${i + 1}`; return b; });
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };

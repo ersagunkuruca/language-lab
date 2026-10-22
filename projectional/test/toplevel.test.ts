@@ -287,5 +287,5 @@ test("the sort example, written in the editor, type-checks and runs", async () =
   assert.deepEqual(info.errors, []);
   const out: string[] = [];
   runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
-  assert.deepEqual(out, ["1 2 3 "]);
+  assert.deepEqual(out, ["[1, 2, 3]"]);
 });
