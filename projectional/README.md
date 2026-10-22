@@ -256,7 +256,22 @@ its constructors: one node per case, its fields as inputs. Filling a hole
 moves on to the next one. *Save file* writes the program's own code, names,
 comments and layout as one JSON file (`editor/files.ts`); *Open file*
 checks that every id it refers to exists, then opens it as a program of
-your own. Programs are also kept in the browser as you edit.
+your own. Programs are also kept in the browser as you edit. The palette
+also takes a value typed into its search (`3`, `"text"`, `[3, 1, 2]`,
+`circle(2)`), and offers `match □` on a value still to be given, which on a
+Bool is if/then/else.
+
+*Show inline* (on a selected call) draws the call as its definition's
+body in place: `f(a, b)` is `((x, y) => body)(a, b)`, a let, so the
+arguments flow into dots named after the inputs and on through the body.
+It is a view kept in layout.json (`editor/inline.ts`); its copies can't be
+edited, and a call inside one can be shown inline too.
+
+The examples are written this way too: `examples/sort` (insertion sort)
+was built with palette picks only, saved, and unpacked into the folder
+with `node examples/unpack.ts saved.json examples/sort`. Nothing
+regenerates the examples from TypeScript any more; their JSON is the
+program.
 
 The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
@@ -371,9 +386,9 @@ src/lang/             the typed core: types + effects, inference, evaluator,
                       differentiates functions (BACKWARDS.md); represent.ts
                       runs a program on another representation of its data (NUMBERS.md)
 editor/               browser editor (main.ts, page.html, build.ts → /index.html, /tutorial.html)
-examples/build.ts     regenerates compose and quadratic (new random ids)
-examples/build-lang.ts  regenerates the typed examples (queens, algebra, relations,
-                      backwards, calculus, numbers, physics); name some to rebuild only those
+examples/             the example programs, one folder of side tables each (code.json,
+                      names, comments, layout, examples). They are the source: edit
+                      them in the editor, Save file, then examples/unpack.ts
 test/                 core, lang, backwards, numbers, oneworld (networks as
                       predicates), guarantees, scale, dots, graph, toplevel, and
                       known-holes (holes found by REVIEW.md, as todo tests)

@@ -6,11 +6,11 @@ import { root } from "../src/io.ts";
 import { get, replace, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
-import { algebra, queens } from "../src/lang/programs.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
+import { reId } from "./helpers.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const run = (code: Code, info: ReturnType<typeof infer>, main: Id) => {
@@ -171,14 +171,14 @@ test("scope: a variable moved out of the case that binds it is caught", () => {
 });
 
 test("hashes ignore ids and names, and recursive definitions hash", () => {
-  const a = queens(), b = queens();
-  const ca = base(a.code), cb = base(b.code);
-  assert.notDeepEqual(Object.keys(a.code.nodes), Object.keys(b.code.nodes));
-  assert.equal(hashDef(ca, a.defs.main), hashDef(cb, b.defs.main));
-  assert.equal(hashDef(ca, a.defs.each), hashDef(cb, b.defs.each));
-  assert.notEqual(hashDef(ca, a.defs.each), hashDef(ca, a.defs.map));
-  const x = algebra(), y = algebra();
-  assert.equal(hashDef(base(x.code), x.defs.simplify), hashDef(base(y.code), y.defs.simplify));
+  for (const [name, defs] of [["queens", ["main", "safe", "queens"]], ["algebra", ["simplify", "derivative"]]] as const) {
+    const p = load(name);
+    const b = reId(p.own);
+    const cb = base(b.code);
+    for (const d of defs) assert.equal(hashDef(p.code, p.named(d)), hashDef(cb, b.ids.get(p.named(d))!), `${name}: ${d}`);
+  }
+  const q = load("queens");
+  assert.notEqual(hashDef(q.code, q.named("for each")), hashDef(q.code, q.named("map")));
 });
 
 test("the block view shows if, folds and lets, with the inferred type on top", () => {

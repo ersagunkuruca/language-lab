@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
-import { collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
+import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished } from "../src/model.ts";
@@ -15,6 +15,8 @@ import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
+import type { Value } from "../src/lang/run.ts";
+import { parseValue } from "../src/lang/values.ts";
 import { portLabel } from "../src/lang/equations.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
@@ -221,7 +223,7 @@ export function guardTyped(before: Info, code: Code, names: Names, select: Id | 
 }
 
 export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling, label: string, defId?: Id): TEdit {
-  const e = fillHole(code, names, hole, f);
+  const e = fillHole(code, names, hole, f, display);
   // Select the next hole in reading order, so filling goes on where it
   // should: inside what was just placed, else further on, else from the top.
   // A literal stays selected, to type its value.
@@ -229,9 +231,51 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
   return guardTyped(info, e.code, e.names, next ?? hole, `Filled with ${label}.${defId && f.kind !== "lit" && !next ? " No holes left in this definition." : ""}`);
 }
 
+// Fill a hole with a value written out, the way values print: 3, "text",
+// [3, 1, 2], circle(2). It becomes the code that builds it (literals and
+// constructor calls), type-checked like any other filling.
+export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: string, defId?: Id): TEdit {
+  const r = parseValue(text, code, { ...display, ...names });
+  if ("error" in r) return { ok: false, reason: r.error };
+  const nodes = { ...code.nodes };
+  const build = (v: Value, at?: Id): Id => {
+    const id = at ?? freshId();
+    if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
+    else if (typeof v === "object" && "tag" in v) {
+      const fn = v.fields.length ? freshId() : id;
+      nodes[fn] = { id: fn, kind: "ref", target: v.tag };
+      if (v.fields.length) nodes[id] = { id, kind: "call", fn, args: v.fields.map((x) => build(x)) };
+    } else throw new Error("only plain values can be written out");
+    return id;
+  };
+  build(r.value, hole);
+  const next = { nodes, defs: code.defs };
+  const after = defId ? nextHole(next, defId, hole) : undefined;
+  return guardTyped(info, next, names, after ?? hole, `Filled with ${text.trim()}.`);
+}
+
 // The next hole after `id` in reading order, or the first one.
+// Reading order is the order the views show: the tree's, except that a
+// match on a Bool reads as if/then/else, so its true case comes first.
+function readingOrder(code: Code, root: Id): Id[] {
+  const out: Id[] = [];
+  const walk = (id: Id) => {
+    out.push(id);
+    const n = code.nodes[id];
+    const cs = children(n);
+    if (n.kind === "match") {
+      const t = cs.findIndex((c) => (code.nodes[c] as NodeOf<"arm">).variant === TRUE);
+      const f = cs.findIndex((c) => (code.nodes[c] as NodeOf<"arm">).variant === FALSE);
+      if (t >= 0 && f >= 0 && f < t) [cs[t], cs[f]] = [cs[f], cs[t]];
+    }
+    cs.forEach(walk);
+  };
+  walk(root);
+  return out;
+}
+
 export function nextHole(code: Code, defId: Id, id: Id): Id | undefined {
-  const order = subtree(code, defId);
+  const order = readingOrder(code, defId);
   const holes = order.filter((x) => code.nodes[x].kind === "hole");
   const at = order.indexOf(id);
   return holes.find((h) => order.indexOf(h) > at) ?? holes[0];
