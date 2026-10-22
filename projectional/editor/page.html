@@ -268,7 +268,7 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 /* run backwards: one row per port, ticked when you give it */
 .port-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; font-size: 13px; }
 .port-row input[type=checkbox] { width: auto; margin: 0; }
-.port-row .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.port-row .pname { overflow-wrap: anywhere; color: var(--muted); }
 .port-row.known .pname { color: var(--fg); }
 .port-row input[type=text], .port-row output { font: 13px var(--font-code); min-width: 0; }
 .port-row output { padding: 4px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
