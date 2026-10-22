@@ -67,12 +67,40 @@ export interface Code {
 // size two programs of a billion nodes each share an id with a chance of
 // about 1 in 10^21, so ids from different authors can be mixed freely.
 // Older programs have 8-character ids; both kinds live side by side.
+// Published code (src/lang/modules.ts) is named by its content hash instead:
+// a def is `@` and its 26-character hash, and the nodes inside it are that
+// and their place in it (`@…:3`).
 // What a generated id looks like, for finding ids inside text (comment
 // references, solver variable names). Longer form first.
-export const ID_PATTERN = "[0-9a-v]{26}|[0-9a-f]{8}";
+export const ID_PATTERN = "@[0-9a-v]{26}(?::[0-9]+)?|[0-9a-v]{26}|[0-9a-f]{8}";
+export const isPublished = (id: Id) => id.startsWith("@");
 export function freshId(): Id {
   const b = crypto.getRandomValues(new Uint8Array(26));
   return Array.from(b, (x) => (x & 31).toString(32)).join("");
+}
+
+// The same node with every id in it passed through f: its own, its
+// children's, and the ones it points at. Record keys that are ids (a solve's
+// ports) are renamed too, and kept in a fixed order.
+export function mapIds(n: Node, f: (id: Id) => Id): Node {
+  const rec = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [f(k), f(v)] as const).sort(([a], [b]) => (a < b ? -1 : 1)));
+  switch (n.kind) {
+    case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
+    case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
+    case "ref": return { ...n, id: f(n.id), target: f(n.target) };
+    case "call": return { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
+    case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body) };
+    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body) };
+    case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f) };
+    case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f) };
+    case "field": return { ...n, id: f(n.id), type: f(n.type) };
+    case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
+    case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result) };
+    case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };
+    case "fold": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f) };
+    case "arm": return { ...n, id: f(n.id), variant: f(n.variant), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
+    case "solve": return { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) };
+  }
 }
 
 export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {

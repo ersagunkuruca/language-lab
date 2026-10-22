@@ -36,7 +36,6 @@ import { freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node
 import { showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
-import { prelude, preludeNames } from "../src/prelude.ts";
 import { relationFor } from "../src/lang/equations.ts";
 import { relate, showTerm } from "../src/lang/relate.ts";
 import { analyze } from "../../invertible/src/index.js";
@@ -44,7 +43,7 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, std, stdNames, TRUE } from "../src/lang/std.ts";
+import { BOOL, TRUE } from "../src/lang/std.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain, showValue, type Value } from "../src/lang/run.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -55,6 +54,7 @@ import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
 import * as Top from "../src/lang/toplevel.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
 
@@ -116,9 +116,9 @@ const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, 
 // v5: tree nodes keep an offset from the automatic layout, not a position.
 const STORE = "projectional-editor-v5";
 
-// What every program is merged onto: the builtins and the standard
-// library. A file holds only what's on top.
-const BASE = merge(prelude, std);
+// What every program is merged onto: the builtins, the standard library
+// and the modules (src/lang/library.ts). A file holds only what's on top.
+const BASE = LIBRARY.code;
 const baseFor = (_typed: boolean) => BASE;
 
 const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
@@ -402,7 +402,7 @@ function typesOf(): T.Info | null {
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
 const pres = (names: Names = {}, comments: Comments = doc.comments): Presentation => ({
-  names: layer<Names>(preludeNames, stdNames, doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
+  names: layer<Names>(LIBRARY.names, doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
   comments,
   hints: doc.hints,
   style: { ...styles[ui.style], quote: undefined },

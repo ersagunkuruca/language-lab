@@ -1,6 +1,8 @@
 // Regenerates the typed example programs (examples/queens, examples/algebra,
 // …) from src/lang/programs.ts. Ids are random, so each run gives a different
-// but equivalent program; the committed JSON is the source of truth.
+// but equivalent program; the committed JSON is the source of truth. The
+// list helpers each program builds are the prelude's, so they're replaced
+// by references to the published ones (library/build.ts, adopt).
 // Name programs to rebuild only those: node examples/build-lang.ts calculus
 
 import { mkdirSync } from "node:fs";
@@ -10,6 +12,7 @@ import type { Code } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { differentiate } from "../src/lang/derive.ts";
 import { base, baseNames } from "../src/lang/load.ts";
+import { adoptLibrary } from "../src/lang/library.ts";
 import { algebra, backwards, calculus, physics, queens, relations } from "../src/lang/programs.ts";
 import { numbers } from "../src/lang/numbers.ts";
 
@@ -49,7 +52,6 @@ const comments: Record<string, Record<string, string>> = {
   queens: {
     queens: "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
     safe: "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
-    keep: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
   },
   numbers: {
     Nat: "The meaning: a natural number is zero or one more than a natural number. This is the program; how the machine stores it is a separate choice.",
@@ -92,7 +94,9 @@ const all = [
 const only = process.argv.slice(2);
 for (const [dir, build] of all) {
   if (only.length && !only.includes(dir)) continue;
-  const p = build();
+  const built = build();
+  const a = adoptLibrary(built.code, built.names);
+  const p = { ...built, code: a.code, names: a.names };
   const d = join(root, "examples", dir);
   mkdirSync(d, { recursive: true });
   const byName = Object.fromEntries(Object.entries(p.names).map(([id, n]) => [n, id]));

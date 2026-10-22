@@ -37,7 +37,9 @@ types and `solve` are covered in LANGUAGE.md):
 
 There is no `let`: `((d) => body)(x)` *is* a let, and the let view shows it
 as one. There are no modules, imports or files inside the code: a def refers
-to what it needs by id.
+to what it needs by id, and published code's id is its content hash, so a
+module is just published nodes plus side tables (LANGUAGE.md, "Signatures
+and modules").
 
 Everything else is a side table keyed by node id, each in its own file:
 
@@ -339,8 +341,9 @@ every non-semantic thing in independent, mergeable side tables.
 5. **Units beyond exponents.** Offsets (°C vs K), named-but-equal units
    (J vs N·m are the same here) and a fractional exponent from `√` of an odd
    power all fall out of the vector model unevenly.
-6. **Recursive and mutually recursive defs** need SCC-based hashing
-   (Unison's approach); `hashDef` currently refuses them.
+6. ~~**Recursive and mutually recursive defs** need SCC-based hashing
+   (Unison's approach).~~ Done: groups hash as a unit, in a content-derived
+   order (LANGUAGE.md, "Signatures and modules").
 
 ## The typed core
 

@@ -316,6 +316,12 @@ Each feature is consistent alone. Together:
 
 ### 4.5 Identity: random ids, content hashes, and packages
 
+> **Status (2026-10-22): done.** Published code is named by its hash
+> (`@…`), groups hash as a unit in a canonical order, modules carry names,
+> pins and visibility, `upgrade` moves programs to a replacement with the
+> same pin. Not yet: data type upgrades, path namespaces. See LANGUAGE.md,
+> "Signatures and modules". The rest of this section is the review as written.
+
 The README says hashing gives "the module/package story for free". It gives
 half of it. Identity is a random id, and the hash is computed on the side
 and not used for anything but display. So two copies of a library get
@@ -335,6 +341,10 @@ hashed first (`["rec", index in stack]`), so the same group can hash two
 ways. Hash the group as a unit, in a canonical order.
 
 ### 4.6 Types are never written, so nothing is stable
+
+> **Status (2026-10-22): done in the core.** Pins are in the checker and
+> `recheck` stops at them; published definitions are always pinned. The
+> editor doesn't offer a "pin" gesture for drafts yet.
 
 Inference with no annotations is pleasant inside a definition, and a
 problem at its boundary. Filling a hole can change a definition's type and
@@ -593,8 +603,11 @@ Each step says why it comes where it does.
    units on `Number`; mode analysis in the checker so backwards directions
    are static. *Why now:* every feature
    added before this is added twice.
-5. **Signatures, identity, modules** (a month). Pins, incremental checking,
-   publish by hash, namespaces and visibility. *Why:* needed before any
+5. **Signatures, identity, modules** (a month). *Done (2026-10-22), except
+   data type upgrades and path namespaces:* pins, incremental checking that
+   stops at pins, publish by hash with canonical group hashing, modules
+   with visibility, the prelude as the first module; see LANGUAGE.md,
+   "Signatures and modules". *Why:* needed before any
    program is bigger than one screen of definitions, and before libraries.
 6. **Effects for the world** (a month). User-defined effects with one-shot
    handlers, `Abort e`, IO effects, `Log`, the rule that world effects

@@ -551,7 +551,20 @@ can't be written down).
   typedef variant field tref tfun match fold arm solve`). Proposal 3 would
   remove `match`/`arm` as separate from `solve`.
 
-### 11. Things that are good and should stay
+### 11. Modules: library code is visible but frozen
+
+Every program is loaded with the prelude (`map`, `keep`, `reverse`, …),
+whose definitions are named by their content hash (LANGUAGE.md,
+"Signatures and modules"). Two things are still awkward:
+
+- You can open a library function and read it, but any edit inside it is
+  refused, because changing it would change its name. The gesture that's
+  missing is "copy into my program", which makes a draft you can change
+  and, later, publish as a replacement.
+- Pins (frozen signatures) exist in the checker, but the editor can't pin
+  one of your own definitions yet, and doesn't show which ones are pinned.
+
+### 12. Things that are good and should stay
 
 So the list above isn't read as "everything is wrong":
 

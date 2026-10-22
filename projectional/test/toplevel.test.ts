@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -126,7 +126,8 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A case nothing makes can go; its arm goes with it.
   s.ok(Top.removeCase(s.code, s.names, shape, sq.variant));
   assert.equal(binds(circle).length, 1);
-  assert.equal((Object.values(s.code.nodes).find((n) => n.kind === "match") as NodeOf<"match">).arms.length, 1);
+  // (the program's own match: the prelude's published code has some too)
+  assert.equal((Object.values(s.code.nodes).find((n) => n.kind === "match" && !isPublished(n.id)) as NodeOf<"match">).arms.length, 1);
   // main can go (nothing uses it), then area, then Shape.
   for (const d of [main, area, shape]) s.ok(Top.deleteDefinition(s.code, s.names, d));
   assert.deepEqual(s.code.defs, base({ nodes: {}, defs: [] }).defs);
@@ -229,7 +230,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   const h = s.holes(size)[0];
   void h;
   s.fill(size, call(B.mul));
-  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons") as NodeOf<"arm">;
+  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
   s.fill(size, ref(cons.binds[0]));
   s.number(size, 10);
   const all = s.all();
