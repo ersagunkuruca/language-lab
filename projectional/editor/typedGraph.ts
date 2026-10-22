@@ -417,17 +417,61 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { g, w, h, x0, y0, outX: bx + bw, outY: by + bh / 2 };
   };
 
+  // A data type: each case is a constructor, so it's drawn as one: a node
+  // whose inputs are its fields and whose output is a value of the type.
+  const typeText = (tid: Id): string => {
+    const t = node(tid);
+    if (t.kind === "tfun") return `(${t.params.map(typeText).join(", ")}) -> ${typeText(t.result)}`;
+    const r = t as NodeOf<"tref">;
+    return [name(r.target), ...r.args.map((a) => { const x = typeText(a); return x.includes(" ") ? `(${x})` : x; })].join(" ");
+  };
+  const constructor = (v: Id): L => {
+    const g = group();
+    const fs = (node(v) as NodeOf<"variant">).fields;
+    const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
+    const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22));
+    const bh = Math.max(30, 28 + fs.length * 18);
+    g.append(titled(grab(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v }), v), `${name(v)}: makes a ${name(defId)}`));
+    g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(v)));
+    fs.forEach((f, i) => {
+      const y = 32 + i * 18;
+      g.append(titled(s("circle", { cx: 0, cy: y, r: 5, class: `inp${sel(f)}`, "data-id": f }), labels[i]));
+      g.append(s("text", { x: 9, y: y + 4, class: "portl" }, labels[i]));
+    });
+    g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), name(defId)));
+    return { g, w: bw, h: bh, outY: bh / 2, id: v };
+  };
+  const typeFrame = (td: NodeOf<"typedef">): L => {
+    const g = group();
+    let y = 30, w = 0, x0 = 0, y0 = 0, h = 0;
+    for (const v of td.variants) {
+      const k = constructor(v);
+      const p = place(k, 22, y);
+      g.append(k.g);
+      w = Math.max(w, p.x + k.w + 22);
+      h = Math.max(h, p.y + k.h + 14);
+      x0 = Math.min(x0, p.x - 22);
+      y0 = Math.min(y0, p.y - 30);
+      y += k.h + 12;
+    }
+    const title = `type ${name(defId)}: one constructor per case`;
+    w = Math.max(w, tw(title, 6.6) + 24);
+    g.prepend(s("rect", { x: x0, y: y0, width: w - x0, height: h - y0, rx: 9, class: `rg def${sel(defId)}`, "data-id": defId }), s("text", { x: x0 + 10, y: y0 + 14, class: "rt" }, title));
+    return { g, w, h, x0, y0, outY: h / 2, outX: w };
+  };
+
   // The definition itself: its parameters, its body, its result.
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   let top: L;
   if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body && body.kind !== "typedef") top = lay(def.body!);
-  else top = pill(defId, `type ${name(defId)}: see the blocks`, "lit");
+  else if (body?.kind === "typedef") top = typeFrame(body);
+  else top = pill(defId, `${name(defId)}: nothing yet`, "lit");
   // World coordinates: the definition's frame starts at the origin and
   // nothing moves to make room when a node is dragged past it.
   const at = place(top, 0, 0);
-  const result = s("text", { x: at.x + outX(top) + 8, y: at.y + top.outY + 4, class: "portl" }, "result");
+  const result = s("text", { x: at.x + outX(top) + 8, y: at.y + top.outY + 4, class: "portl" }, body?.kind === "typedef" ? "" : "result");
 
   // Wires from each source to its uses, drawn last, in the picture's
   // coordinates. The groups aren't in the svg yet, so start from top.g.
