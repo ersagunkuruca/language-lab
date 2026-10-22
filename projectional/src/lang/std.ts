@@ -65,6 +65,26 @@ export const ABORT = typedef("std.abort", "Abort", [], [["abort", [["reason", ()
 export const LOG = typedef("std.log", "Log", [], [["log", [["line", () => tref(STRING)]], () => tref(UNIT)]], true);
 export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
 
+// A page (WEB.md): an ordinary rose tree, whose changing parts are
+// functions the page runs in watchers (src/lang/html.ts). Views may read
+// cells; event handlers may also write them, print, and use files (the
+// browser keeps those in localStorage), and so may abort (the page logs it). Buttons, rows and fields are
+// functions that build `element`s, not more variants.
+const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn++}`, kind: "tfun", params, result, effects });
+export const EVENT = typedef("std.event", "Event", [], [
+  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
+]);
+export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
+  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT])]]],
+]);
+export const HTML = typedef("std.html", "Html", [], [
+  ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
+  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
+  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE])]]],
+]);
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", event: "std.event.event" } as const;
+
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
 export const PAIR_V = "std.pair.pair", FIRST = "std.pair.pair.fst", SECOND = "std.pair.pair.snd";
@@ -261,7 +281,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, EVENT, ATTRIBUTE, HTML] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

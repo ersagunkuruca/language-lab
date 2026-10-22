@@ -22,12 +22,12 @@ same app, packaged.
   ```
   type Html =
     | element(tag: Text, attributes: List Attribute, children: List Html)
-    | text(shows: () -[Cells]-> Text)
-    | part(view: () -[Cells]-> Html)            -- a piece whose shape changes
+    | text(shows: () -[Cells, Diverge]-> Text)
+    | part(view: () -[Cells, Diverge]-> Html)   -- a piece whose shape changes
   type Attribute =
-    | property(name: Text, value: () -[Cells]-> Text)
-    | on(event: Text, then: (Event) -[Cells, Update]-> Unit)
-  type Event = event(value: Text, key: Text, checked: Bool)
+    | property(name: Text, value: () -[Cells, Diverge]-> Text)
+    | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort]-> Unit)
+  type Event = event(value: Text, key: Text)
   ```
 
   That is all of it. `element("button", …)`, `element("svg", …)` and
@@ -37,17 +37,18 @@ same app, packaged.
   prelude functions that build `element`s (below), not variants: the
   uniformity rule says a button is a function, not a node kind.
 - **What do events do?** An `on` handler gets the `Event` (the target's
-  value, the key, whether it's checked) and may read and write cells. Its
-  row `[Cells, Update]` is the whole story: it can't print, can't search
-  (`Update` is world, so a write under `Choice` is already refused), and a
-  view (`() -[Cells]-> Text`) can't write. Those are the guarantees Solid
-  only warns about at run time. **They need one checker fix first**,
-  found while writing this: a function type inside a data type has no
-  effect row today (infer.ts gives it a fresh one each time), so a
-  printing function put in a field and called back out under `Choice`
-  passes the checker. The fix, its own PR before any web code: a field's
-  function type lists its effects (`() -[Cells]-> Text`), and one that
-  lists none is pure.
+  value, or `"true"`/`"false"` for a checkbox, and the key) and may read
+  and write cells, print to the browser console, and save files (which
+  can fail, so `Abort`: the page logs it and carries on). Its row
+  `[Cells, Update, Console, Files, Abort]` is the whole story: it can't search
+  unhandled (the world isn't touched under an open `Choice`), and a view
+  (`() -[Cells, Diverge]-> Text`, the same row as a formula's) can't write
+  or print. Those are the guarantees Solid only warns about at run time.
+  **They needed one checker fix first** (PR #102), found while writing
+  this: a function type inside a data type had no effect row (infer.ts
+  gave it a fresh one each time), so a printing function put in a field
+  and called back out under `Choice` passed the checker. Now a field's
+  function type lists its effects, and one that lists none is pure.
 - **Where is the state?** In cells, made by `main` before it returns the
   page. There is no `update(model, msg)` function and no message type.
   The Elm architecture (Evan Czaplicki, https://guide.elm-lang.org/architecture/)
@@ -96,6 +97,8 @@ cells changes, the watcher runs the function again and sets one text node
 or one attribute. A `part` is a watcher that owns everything it drew: its
 next run disposes of those watchers (Solid's owner tree, already in
 cells.ts) and draws again. `part` is Solid's `<Show>` and `<For>` at once.
+On the page a part is a `<lab-part>` element styled `display: contents`,
+so it holds its piece without taking part in the layout.
 
 A function that reads no cell runs once and is never watched, so a static
 page costs one call per text. The types tell the two apart only at run
@@ -148,11 +151,10 @@ field(() => as fahrenheit(read(celsius)),
 arithmetic (the equation solver), so "68" gives 20 and "68.0" or "hot"
 give nothing. Typing in the Fahrenheit field writes `celsius`, which
 re-runs the Celsius field's `shows`, and the Fahrenheit field's own
-`shows`, which now prints what was typed. The field doesn't overwrite text
-the user is in the middle of typing: the mount skips setting `value` on
-the focused input when it equals what `edit` just accepted (this is the
-same rule every two-way binding library has; Svelte's `bind:value`, by
-Rich Harris, documents it).
+`shows`, which now prints what was typed. The field doesn't disturb text
+the user is in the middle of typing: the mount sets an input's `value`
+only when it differs from what the input already shows, which is Svelte's
+rule for `bind:value` (Rich Harris).
 
 A `solve` names a definition, not a function value (LANGUAGE.md, "solve"),
 so the binding is written at each field rather than once as a library
@@ -181,12 +183,11 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   on one origin don't share files by accident.
 - **`lab build-web`** (cli/lab.ts): compiles the program, bundles it with
   the runtime, the mount and the browser world by esbuild (already a dev
-  dependency, as for `lab compile`), and writes one HTML file with a
-  small default stylesheet for the prelude's classes. A program's own
-  styles are a `style` element in its page, like any other element.
+  dependency, as for `lab compile`), and writes one HTML file. There is
+  no stylesheet of its own: a program's styles are a `style` element in
+  its page, like any other element.
 - **What `main` may do**: return `Html`; take no arguments; use `Cells`,
-  `Update` (only inside handlers, by the types), `Console`, `Files`.
-  `mainProblem` gets a web variant that says so.
+  `Update`, `Console`, `Files` (run.ts `pageProblem` says why not).
 
 ## The order of the work, one PR each
 
@@ -217,7 +218,7 @@ showing a page program live, like its shader picture.
   architecture (Evan Czaplicki).
 - Elements as `(tag, attributes, children)`: HyperScript's `h()` (Dominic
   Tarr), as every virtual-DOM library since uses it.
-- Two-way binding: Svelte's `bind:value` (Rich Harris) for the focused-
-  input rule; lenses (Foster et al., 2007) for "a setter is a projection
+- Two-way binding: Svelte's `bind:value` (Rich Harris) for when an
+  input's value is set; lenses (Foster et al., 2007) for "a setter is a projection
   run backwards".
 - Mobile packaging: Capacitor (Ionic), and PWAs (web app manifests, W3C).
