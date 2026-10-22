@@ -7,7 +7,7 @@
 // of code:
 //
 //   - code without Choice is ordinary JavaScript: expressions, ternaries for
-//     `if`, recursive functions for `fold`, `&&` for `and`;
+//     `if`, loops for `fold` (no JS stack per item), `&&` for `and`;
 //   - code with Choice becomes nested `for … of` loops, one per choice point,
 //     with the rest of the computation (the continuation) inside the
 //     innermost loop. `one of` is a loop over a list, `fail` is the absence
@@ -410,7 +410,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return [arm(TRUE), arm(FALSE)];
     };
 
-    // fold: a local recursive function, children first (bottom-up).
+    // fold: a loop, children first (bottom-up).
     const foldEx = (n: NodeOf<"fold">) => block(n.id);
 
     // An expression that needs statements (a let, a match, a fold) inside
@@ -436,16 +436,45 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise)}\n}`);
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
-      if (n.kind === "fold") {
-        // Children before parents, as the evaluator does it.
-        const f = temp("fold"), s = temp("s");
-        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => {
-          const rec = a.results.map((r, i) => (r ? `\nconst ${local(r)} = ${f}(${s}.fields[${i}]);` : "")).join("");
-          return `case ${tag(a.variant)}: {${binds(a, s)}${rec}\n${ret(a.body)}\n}`;
-        });
-        return `const ${f} = (${s}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\nreturn ${f}(${ex(n.scrutinee)});`;
-      }
+      if (n.kind === "fold") return foldLoop(n);
       return `return ${ex(id)};`;
+    }
+
+    // A fold without Choice is a loop, not a recursion, so a list of a
+    // million items needs no JS stack. One function, `step`, runs an arm
+    // given a value and the folded results of its recursive fields. Children
+    // are folded before parents, as the evaluator does it.
+    //  - When no case has more than one recursive field (lists, Nat, any
+    //    chain), walk down the spine into an array, then run the steps back
+    //    up it.
+    //  - Otherwise (trees), keep an explicit stack of values whose children
+    //    are being folded.
+    function foldLoop(n: NodeOf<"fold">): string {
+      const arms = n.arms.map((a) => node<"arm">(a));
+      const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
+      const chain = arms.every((a) => recOf(a).length <= 1);
+      const step = temp("step"), s = temp("s"), rs = temp("rs");
+      const cases = arms.map((a) => {
+        const rec = recOf(a).map((i, k) => `\nconst ${local(a.results[i]!)} = ${chain ? rs : `${rs}[${k}]`};`).join("");
+        return `case ${tag(a.variant)}: {${binds(a, s)}${rec}\n${ret(a.body)}\n}`;
+      });
+      const recursive = arms.filter((a) => recOf(a).length);
+      const fn = `const ${step} = (${s}, ${rs}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n`;
+      const v = temp("v"), r = temp("r");
+      if (chain) {
+        const spine = temp("spine"), i = temp("i");
+        const next = recursive.map((a) => `${v}.tag === ${tag(a.variant)} ? ${recOf(a)[0]} : `).join("") + "-1";
+        const k = temp("k");
+        return `${fn}const ${spine} = [];\nlet ${v} = ${ex(n.scrutinee)};\n` +
+          `for (let ${k} = ${next}; ${k} >= 0; ${k} = ${next}) {\n${spine}.push(${v});\n${v} = ${v}.fields[${k}];\n}\n` +
+          `let ${r} = ${step}(${v});\nfor (let ${i} = ${spine}.length - 1; ${i} >= 0; ${i}--) ${r} = ${step}(${spine}[${i}], ${r});\nreturn ${r};`;
+      }
+      const todo = temp("todo"), top = temp("top"), ix = temp("ix");
+      const fields = `{ ${recursive.map((a) => `${tag(a.variant).split(" ")[0]}: [${recOf(a).join(", ")}]`).join(", ")} }`;
+      return `${fn}const ${ix} = ${fields};\nconst ${todo} = [{ v: ${ex(n.scrutinee)}, i: 0, rs: [] }];\n` +
+        `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\nconst ${v} = ${ix}[${top}.v.tag];\n` +
+        `if (${v} && ${top}.i < ${v}.length) {\n${todo}.push({ v: ${top}.v.fields[${v}[${top}.i++]], i: 0, rs: [] });\ncontinue;\n}\n` +
+        `const ${r} = ${step}(${top}.v, ${top}.rs);\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
     }
 
     // `let x = v`, or just `v;` for the `_` of a sequence.

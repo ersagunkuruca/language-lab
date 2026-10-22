@@ -61,7 +61,7 @@ function* queens(size) {
 
 // show numbers
 function show_numbers(numbers) {
-  const fold$10 = (s$11) => {
+  const step$10 = (s$11, rs$12) => {
     switch (s$11.tag) {
       case "std.list.nil" /* nil */: {
         return "";
@@ -69,9 +69,9 @@ function show_numbers(numbers) {
       case "std.list.cons" /* cons */: {
         const n2 = s$11.fields[0];
         const rest = s$11.fields[1];
-        const rest_shown = fold$10(s$11.fields[1]);
-        const s$12 = rest;
-        switch (s$12.tag) {
+        const rest_shown = rs$12;
+        const s$13 = rest;
+        switch (s$13.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n2);
           }
@@ -82,19 +82,27 @@ function show_numbers(numbers) {
       }
     }
   };
-  return fold$10(numbers);
+  const spine$16 = [];
+  let v$14 = numbers;
+  for (let k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1; k$18 >= 0; k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$16.push(v$14);
+    v$14 = v$14.fields[k$18];
+  }
+  let r$15 = step$10(v$14);
+  for (let i$17 = spine$16.length - 1; i$17 >= 0; i$17--) r$15 = step$10(spine$16[i$17], r$15);
+  return r$15;
 }
 
 // for each
 function for_each(list, action) {
-  const s$13 = list;
-  switch (s$13.tag) {
+  const s$19 = list;
+  switch (s$19.tag) {
     case "std.list.nil" /* nil */: {
       return $unit;
     }
     case "std.list.cons" /* cons */: {
-      const item = s$13.fields[0];
-      const rest2 = s$13.fields[1];
+      const item = s$19.fields[0];
+      const rest2 = s$19.fields[1];
       action(item);
       return for_each(rest2, action);
     }
@@ -104,38 +112,46 @@ function for_each(list, action) {
 // keep
 function keep(list2, test) {
   return (() => {
-      const all$14 = [];
-      for (let l$15 = list2; l$15.tag === "std.list.cons"; l$15 = l$15.fields[1]) {
-        const x$16 = l$15.fields[0];
-        const item2 = x$16;
-        for (const r$17 of test(item2)) {
-          if ((r$17.tag === "std.bool.true")) {
-            all$14.push(item2);
+      const all$20 = [];
+      for (let l$21 = list2; l$21.tag === "std.list.cons"; l$21 = l$21.fields[1]) {
+        const x$22 = l$21.fields[0];
+        const item2 = x$22;
+        for (const r$23 of test(item2)) {
+          if ((r$23.tag === "std.bool.true")) {
+            all$20.push(item2);
           } else {
             /* fail */
           }
         }
       }
-      return $toList(all$14);
+      return $toList(all$20);
     })();
 }
 
 // safe
 function safe(column2, placed) {
   return (() => {
-      const fold$18 = (s$19) => {
-        switch (s$19.tag) {
+      const step$24 = (s$25, rs$26) => {
+        switch (s$25.tag) {
           case "std.list.nil" /* nil */: {
             return ((distance) => $T);
           }
           case "std.list.cons" /* cons */: {
-            const queen = s$19.fields[0];
-            const others_safe = fold$18(s$19.fields[1]);
+            const queen = s$25.fields[0];
+            const others_safe = rs$26;
             return ((distance2) => $bool(((!(queen === column2) && !(Math.abs((queen - column2)) === distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
           }
         }
       };
-      return fold$18(placed);
+      const spine$29 = [];
+      let v$27 = placed;
+      for (let k$31 = v$27.tag === "std.list.cons" /* cons */ ? 1 : -1; k$31 >= 0; k$31 = v$27.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+        spine$29.push(v$27);
+        v$27 = v$27.fields[k$31];
+      }
+      let r$28 = step$24(v$27);
+      for (let i$30 = spine$29.length - 1; i$30 >= 0; i$30--) r$28 = step$24(spine$29[i$30], r$28);
+      return r$28;
     })()(1);
 }
 

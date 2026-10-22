@@ -48,7 +48,7 @@ function samples() {
 // display
 function display(expression) {
   return (() => {
-      const fold$4 = (s$5) => {
+      const step$4 = (s$5, rs$6) => {
         switch (s$5.tag) {
           case "6bce4e58" /* number */: {
             const value = s$5.fields[0];
@@ -61,47 +61,60 @@ function display(expression) {
             return ({ tag: "std.pair.pair" /* pair */, fields: ["x", 9] });
           }
           case "b50d2f46" /* sum */: {
-            const l = fold$4(s$5.fields[0]);
-            const r = fold$4(s$5.fields[1]);
+            const l = rs$6[0];
+            const r = rs$6[1];
             return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l, 1) + " + ") + parenthesize(r, 1)), 1] });
           }
           case "f2da4c50" /* difference */: {
-            const l2 = fold$4(s$5.fields[0]);
-            const r2 = fold$4(s$5.fields[1]);
+            const l2 = rs$6[0];
+            const r2 = rs$6[1];
             return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l2, 1) + " − ") + parenthesize(r2, 2)), 1] });
           }
           case "24d4c71f" /* product */: {
-            const l3 = fold$4(s$5.fields[0]);
-            const r3 = fold$4(s$5.fields[1]);
+            const l3 = rs$6[0];
+            const r3 = rs$6[1];
             return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l3, 2) + "·") + parenthesize(r3, 3)), 2] });
           }
           case "af14d535" /* negative */: {
-            const a = fold$4(s$5.fields[0]);
+            const a = rs$6[0];
             return ({ tag: "std.pair.pair" /* pair */, fields: [("−" + parenthesize(a, 3)), 3] });
           }
           case "563662e0" /* quotient */: {
-            const t = fold$4(s$5.fields[0]);
-            const b = fold$4(s$5.fields[1]);
+            const t = rs$6[0];
+            const b = rs$6[1];
             return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(t, 2) + " / ") + parenthesize(b, 3)), 2] });
           }
           case "a9186a8d" /* sine */: {
-            const a2 = fold$4(s$5.fields[0]);
+            const a2 = rs$6[0];
             return ({ tag: "std.pair.pair" /* pair */, fields: [(("sin(" + a2.fields[0]) + ")"), 9] });
           }
           case "9a6512de" /* cosine */: {
-            const a3 = fold$4(s$5.fields[0]);
+            const a3 = rs$6[0];
             return ({ tag: "std.pair.pair" /* pair */, fields: [(("cos(" + a3.fields[0]) + ")"), 9] });
           }
         }
       };
-      return fold$4(expression);
+      const ix$11 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
+      const todo$9 = [{ v: expression, i: 0, rs: [] }];
+      for (;;) {
+        const top$10 = todo$9[todo$9.length - 1];
+        const v$7 = ix$11[top$10.v.tag];
+        if (v$7 && top$10.i < v$7.length) {
+          todo$9.push({ v: top$10.v.fields[v$7[top$10.i++]], i: 0, rs: [] });
+          continue;
+        }
+        const r$8 = step$4(top$10.v, top$10.rs);
+        todo$9.pop();
+        if (!todo$9.length) return r$8;
+        todo$9[todo$9.length - 1].rs.push(r$8);
+      }
     })().fields[0];
 }
 
 // derivative
 function derivative(expression2) {
-  const fold$6 = (s$7) => {
-    switch (s$7.tag) {
+  const step$12 = (s$13, rs$14) => {
+    switch (s$13.tag) {
       case "6bce4e58" /* number */: {
         return ({ tag: "6bce4e58" /* number */, fields: [0] });
       }
@@ -109,110 +122,123 @@ function derivative(expression2) {
         return ({ tag: "6bce4e58" /* number */, fields: [1] });
       }
       case "b50d2f46" /* sum */: {
-        const u = fold$6(s$7.fields[0]);
-        const v = fold$6(s$7.fields[1]);
+        const u = rs$14[0];
+        const v = rs$14[1];
         return ({ tag: "b50d2f46" /* sum */, fields: [u, v] });
       }
       case "f2da4c50" /* difference */: {
-        const u2 = fold$6(s$7.fields[0]);
-        const v2 = fold$6(s$7.fields[1]);
+        const u2 = rs$14[0];
+        const v2 = rs$14[1];
         return ({ tag: "f2da4c50" /* difference */, fields: [u2, v2] });
       }
       case "24d4c71f" /* product */: {
-        const u4 = s$7.fields[0];
-        const v4 = s$7.fields[1];
-        const u3 = fold$6(s$7.fields[0]);
-        const v3 = fold$6(s$7.fields[1]);
+        const u4 = s$13.fields[0];
+        const v4 = s$13.fields[1];
+        const u3 = rs$14[0];
+        const v3 = rs$14[1];
         return ({ tag: "b50d2f46" /* sum */, fields: [({ tag: "24d4c71f" /* product */, fields: [u3, v4] }), ({ tag: "24d4c71f" /* product */, fields: [u4, v3] })] });
       }
       case "af14d535" /* negative */: {
-        const u5 = fold$6(s$7.fields[0]);
+        const u5 = rs$14[0];
         return ({ tag: "af14d535" /* negative */, fields: [u5] });
       }
       case "563662e0" /* quotient */: {
-        const u7 = s$7.fields[0];
-        const v6 = s$7.fields[1];
-        const u6 = fold$6(s$7.fields[0]);
-        const v5 = fold$6(s$7.fields[1]);
+        const u7 = s$13.fields[0];
+        const v6 = s$13.fields[1];
+        const u6 = rs$14[0];
+        const v5 = rs$14[1];
         return ({ tag: "563662e0" /* quotient */, fields: [({ tag: "f2da4c50" /* difference */, fields: [({ tag: "24d4c71f" /* product */, fields: [u6, v6] }), ({ tag: "24d4c71f" /* product */, fields: [u7, v5] })] }), ({ tag: "24d4c71f" /* product */, fields: [v6, v6] })] });
       }
       case "a9186a8d" /* sine */: {
-        const u9 = s$7.fields[0];
-        const u8 = fold$6(s$7.fields[0]);
+        const u9 = s$13.fields[0];
+        const u8 = rs$14[0];
         return ({ tag: "24d4c71f" /* product */, fields: [({ tag: "9a6512de" /* cosine */, fields: [u9] }), u8] });
       }
       case "9a6512de" /* cosine */: {
-        const u11 = s$7.fields[0];
-        const u10 = fold$6(s$7.fields[0]);
+        const u11 = s$13.fields[0];
+        const u10 = rs$14[0];
         return ({ tag: "af14d535" /* negative */, fields: [({ tag: "24d4c71f" /* product */, fields: [({ tag: "a9186a8d" /* sine */, fields: [u11] }), u10] })] });
       }
     }
   };
-  return fold$6(expression2);
+  const ix$19 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
+  const todo$17 = [{ v: expression2, i: 0, rs: [] }];
+  for (;;) {
+    const top$18 = todo$17[todo$17.length - 1];
+    const v$15 = ix$19[top$18.v.tag];
+    if (v$15 && top$18.i < v$15.length) {
+      todo$17.push({ v: top$18.v.fields[v$15[top$18.i++]], i: 0, rs: [] });
+      continue;
+    }
+    const r$16 = step$12(top$18.v, top$18.rs);
+    todo$17.pop();
+    if (!todo$17.length) return r$16;
+    todo$17[todo$17.length - 1].rs.push(r$16);
+  }
 }
 
 // simplify
 function simplify(expression3) {
-  const fold$8 = (s$9) => {
-    switch (s$9.tag) {
+  const step$20 = (s$21, rs$22) => {
+    switch (s$21.tag) {
       case "6bce4e58" /* number */: {
-        const value2 = s$9.fields[0];
+        const value2 = s$21.fields[0];
         return ({ tag: "6bce4e58" /* number */, fields: [value2] });
       }
       case "2de4e5d2" /* x */: {
         return ({ tag: "2de4e5d2" /* x */, fields: [] });
       }
       case "b50d2f46" /* sum */: {
-        const l4 = fold$8(s$9.fields[0]);
-        const r4 = fold$8(s$9.fields[1]);
+        const l4 = rs$22[0];
+        const r4 = rs$22[1];
         return (() => {
-            for (const r$10 of constant(l4)) {
-              for (const r$11 of constant(r4)) {
-                const t$12 = (r$10 + r$11);
-                return ({ tag: "6bce4e58" /* number */, fields: [t$12] });
+            for (const r$23 of constant(l4)) {
+              for (const r$24 of constant(r4)) {
+                const t$25 = (r$23 + r$24);
+                return ({ tag: "6bce4e58" /* number */, fields: [t$25] });
               }
             }
             return ($eq(l4, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? r4 : ($eq(r4, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
           })();
       }
       case "f2da4c50" /* difference */: {
-        const l5 = fold$8(s$9.fields[0]);
-        const r5 = fold$8(s$9.fields[1]);
+        const l5 = rs$22[0];
+        const r5 = rs$22[1];
         return (() => {
-            for (const r$13 of constant(l5)) {
-              for (const r$14 of constant(r5)) {
-                const t$15 = (r$13 - r$14);
-                return ({ tag: "6bce4e58" /* number */, fields: [t$15] });
+            for (const r$26 of constant(l5)) {
+              for (const r$27 of constant(r5)) {
+                const t$28 = (r$26 - r$27);
+                return ({ tag: "6bce4e58" /* number */, fields: [t$28] });
               }
             }
             return ($eq(r5, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? l5 : ($eq(l5, ({ tag: "6bce4e58" /* number */, fields: [0] })) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
           })();
       }
       case "24d4c71f" /* product */: {
-        const l6 = fold$8(s$9.fields[0]);
-        const r6 = fold$8(s$9.fields[1]);
+        const l6 = rs$22[0];
+        const r6 = rs$22[1];
         return (() => {
-            for (const r$16 of constant(l6)) {
-              for (const r$17 of constant(r6)) {
-                const t$18 = (r$16 * r$17);
-                return ({ tag: "6bce4e58" /* number */, fields: [t$18] });
+            for (const r$29 of constant(l6)) {
+              for (const r$30 of constant(r6)) {
+                const t$31 = (r$29 * r$30);
+                return ({ tag: "6bce4e58" /* number */, fields: [t$31] });
               }
             }
             return (($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [0] })) || $eq(r6, ({ tag: "6bce4e58" /* number */, fields: [0] }))) ? ({ tag: "6bce4e58" /* number */, fields: [0] }) : ($eq(l6, ({ tag: "6bce4e58" /* number */, fields: [1] })) ? r6 : ($eq(r6, ({ tag: "6bce4e58" /* number */, fields: [1] })) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
           })();
       }
       case "af14d535" /* negative */: {
-        const a4 = fold$8(s$9.fields[0]);
+        const a4 = rs$22[0];
         return (() => {
-            for (const r$19 of constant(a4)) {
-              const t$20 = (-r$19);
-              return ({ tag: "6bce4e58" /* number */, fields: [t$20] });
+            for (const r$32 of constant(a4)) {
+              const t$33 = (-r$32);
+              return ({ tag: "6bce4e58" /* number */, fields: [t$33] });
             }
             return (() => {
-                const s$21 = a4;
-                switch (s$21.tag) {
+                const s$34 = a4;
+                switch (s$34.tag) {
                   case "af14d535" /* negative */: {
-                    const inner = s$21.fields[0];
+                    const inner = s$34.fields[0];
                     return inner;
                   }
                   default: {
@@ -223,32 +249,45 @@ function simplify(expression3) {
           })();
       }
       case "563662e0" /* quotient */: {
-        const t2 = fold$8(s$9.fields[0]);
-        const b2 = fold$8(s$9.fields[1]);
+        const t2 = rs$22[0];
+        const b2 = rs$22[1];
         if ($eq(b2, ({ tag: "6bce4e58" /* number */, fields: [1] }))) {
           return t2;
         }
         return ({ tag: "563662e0" /* quotient */, fields: [t2, b2] });
       }
       case "a9186a8d" /* sine */: {
-        const a5 = fold$8(s$9.fields[0]);
+        const a5 = rs$22[0];
         return ({ tag: "a9186a8d" /* sine */, fields: [a5] });
       }
       case "9a6512de" /* cosine */: {
-        const a6 = fold$8(s$9.fields[0]);
+        const a6 = rs$22[0];
         return ({ tag: "9a6512de" /* cosine */, fields: [a6] });
       }
     }
   };
-  return fold$8(expression3);
+  const ix$39 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
+  const todo$37 = [{ v: expression3, i: 0, rs: [] }];
+  for (;;) {
+    const top$38 = todo$37[todo$37.length - 1];
+    const v$35 = ix$39[top$38.v.tag];
+    if (v$35 && top$38.i < v$35.length) {
+      todo$37.push({ v: top$38.v.fields[v$35[top$38.i++]], i: 0, rs: [] });
+      continue;
+    }
+    const r$36 = step$20(top$38.v, top$38.rs);
+    todo$37.pop();
+    if (!todo$37.length) return r$36;
+    todo$37[todo$37.length - 1].rs.push(r$36);
+  }
 }
 
 // evaluate
 function* evaluate(expression4, at) {
-  const fold$22 = function* (s$23) {
-    switch (s$23.tag) {
+  const fold$40 = function* (s$41) {
+    switch (s$41.tag) {
       case "6bce4e58" /* number */: {
-        const value3 = s$23.fields[0];
+        const value3 = s$41.fields[0];
         yield value3;
         break;
       }
@@ -257,38 +296,38 @@ function* evaluate(expression4, at) {
         break;
       }
       case "b50d2f46" /* sum */: {
-        for (const l7 of fold$22(s$23.fields[0])) {
-          for (const r7 of fold$22(s$23.fields[1])) {
+        for (const l7 of fold$40(s$41.fields[0])) {
+          for (const r7 of fold$40(s$41.fields[1])) {
             yield (l7 + r7);
           }
         }
         break;
       }
       case "f2da4c50" /* difference */: {
-        for (const l8 of fold$22(s$23.fields[0])) {
-          for (const r8 of fold$22(s$23.fields[1])) {
+        for (const l8 of fold$40(s$41.fields[0])) {
+          for (const r8 of fold$40(s$41.fields[1])) {
             yield (l8 - r8);
           }
         }
         break;
       }
       case "24d4c71f" /* product */: {
-        for (const l9 of fold$22(s$23.fields[0])) {
-          for (const r9 of fold$22(s$23.fields[1])) {
+        for (const l9 of fold$40(s$41.fields[0])) {
+          for (const r9 of fold$40(s$41.fields[1])) {
             yield (l9 * r9);
           }
         }
         break;
       }
       case "af14d535" /* negative */: {
-        for (const a7 of fold$22(s$23.fields[0])) {
+        for (const a7 of fold$40(s$41.fields[0])) {
           yield (-a7);
         }
         break;
       }
       case "563662e0" /* quotient */: {
-        for (const t3 of fold$22(s$23.fields[0])) {
-          for (const b3 of fold$22(s$23.fields[1])) {
+        for (const t3 of fold$40(s$41.fields[0])) {
+          for (const b3 of fold$40(s$41.fields[1])) {
             if ((b3 === 0)) {
               /* fail */
             } else {
@@ -299,34 +338,34 @@ function* evaluate(expression4, at) {
         break;
       }
       case "a9186a8d" /* sine */: {
-        for (const a8 of fold$22(s$23.fields[0])) {
+        for (const a8 of fold$40(s$41.fields[0])) {
           yield Math.sin(a8);
         }
         break;
       }
       case "9a6512de" /* cosine */: {
-        for (const a9 of fold$22(s$23.fields[0])) {
+        for (const a9 of fold$40(s$41.fields[0])) {
           yield Math.cos(a9);
         }
         break;
       }
     }
   };
-  for (const r$24 of fold$22(expression4)) {
-    yield r$24;
+  for (const r$42 of fold$40(expression4)) {
+    yield r$42;
   }
 }
 
 // root near
 function* root_near(f2, guess) {
-  for (const r$26 of $fuel(100, (function* () {
+  for (const r$44 of $fuel(100, (function* () {
           if ($spend()) {
-            for (const r$25 of newton(f2, simplify(derivative(f2)), guess)) {
-              yield r$25;
+            for (const r$43 of newton(f2, simplify(derivative(f2)), guess)) {
+              yield r$43;
             }
           }
         }), true)) {
-    yield r$26;
+    yield r$44;
   }
 }
 
@@ -341,10 +380,10 @@ function parenthesize(shown, needed) {
 // constant
 function* constant(expression5) {
   {
-    const s$27 = expression5;
-    switch (s$27.tag) {
+    const s$45 = expression5;
+    switch (s$45.tag) {
       case "6bce4e58" /* number */: {
-        const value4 = s$27.fields[0];
+        const value4 = s$45.fields[0];
         yield value4;
         break;
       }
@@ -357,17 +396,17 @@ function* constant(expression5) {
 
 // newton
 function* newton(f3, slope, guess2) {
-  for (const r$28 of evaluate(f3, guess2)) {
-    for (const r$29 of evaluate(slope, guess2)) {
-      const t$30 = (r$28 / r$29);
-      const t$31 = (guess2 - t$30);
-      const next = t$31;
+  for (const r$46 of evaluate(f3, guess2)) {
+    for (const r$47 of evaluate(slope, guess2)) {
+      const t$48 = (r$46 / r$47);
+      const t$49 = (guess2 - t$48);
+      const next = t$49;
       if ((Math.abs((next - guess2)) < 1e-12)) {
         yield next;
       } else {
         if ($spend()) {
-          for (const r$32 of newton(f3, slope, next)) {
-            yield r$32;
+          for (const r$50 of newton(f3, slope, next)) {
+            yield r$50;
           }
         }
       }

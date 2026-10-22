@@ -131,7 +131,8 @@ as JS's own `String(x)` does.
 |---|---:|---:|
 | evaluator, plain recursion | 341 | memory-bound (1,000,000 in 5 s) |
 | evaluator, `fold` | 1,640 | memory-bound (1,000,000 in 1.4 s) |
-| compiled, recursion or `fold` | between 1,000 and 10,000 | see below |
+| compiled, `fold` | between 1,000 and 10,000 | memory-bound (a loop) |
+| compiled, plain recursion | between 1,000 and 10,000 | unchanged (COMPILER.md, "Folds are loops") |
 
 The evaluator is a generator per node, and each level of recursion is
 several JS frames. The compiled code is ordinary JS recursion. Neither is

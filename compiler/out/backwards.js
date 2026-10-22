@@ -92,7 +92,7 @@ $meta(magnitudes_to, "5e7740e4");
 
 // show numbers
 function show_numbers(numbers) {
-  const fold$10 = (s$11) => {
+  const step$10 = (s$11, rs$12) => {
     switch (s$11.tag) {
       case "std.list.nil" /* nil */: {
         return "";
@@ -100,9 +100,9 @@ function show_numbers(numbers) {
       case "std.list.cons" /* cons */: {
         const n = s$11.fields[0];
         const rest = s$11.fields[1];
-        const rest_shown = fold$10(s$11.fields[1]);
-        const s$12 = rest;
-        switch (s$12.tag) {
+        const rest_shown = rs$12;
+        const s$13 = rest;
+        switch (s$13.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n);
           }
@@ -113,15 +113,23 @@ function show_numbers(numbers) {
       }
     }
   };
-  return fold$10(numbers);
+  const spine$16 = [];
+  let v$14 = numbers;
+  for (let k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1; k$18 >= 0; k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$16.push(v$14);
+    v$14 = v$14.fields[k$18];
+  }
+  let r$15 = step$10(v$14);
+  for (let i$17 = spine$16.length - 1; i$17 >= 0; i$17--) r$15 = step$10(spine$16[i$17], r$15);
+  return r$15;
 }
 $meta(show_numbers, "1a9868cb");
 
 // who was greeted
 function who_was_greeted(greeting) {
   return (() => {
-      for (const sol$13 of solve$1(greeting)) {
-        const name = sol$13[0];
+      for (const sol$19 of solve$1(greeting)) {
+        const name = sol$19[0];
         return name;
       }
       return "nobody";
@@ -132,29 +140,29 @@ $meta(who_was_greeted, "b1d446d8");
 // cuts
 function cuts(text) {
   return (() => {
-      const all$14 = [];
-      for (const sol$15 of solve$2(text)) {
-        const front = sol$15[0]; const back = sol$15[1];
-        all$14.push(((front + "|") + back));
+      const all$20 = [];
+      for (const sol$21 of solve$2(text)) {
+        const front = sol$21[0]; const back = sol$21[1];
+        all$20.push(((front + "|") + back));
       }
-      return $toList(all$14);
+      return $toList(all$20);
     })();
 }
 $meta(cuts, "a59962e7");
 
 // words
 function words(texts) {
-  const fold$16 = (s$17) => {
-    switch (s$17.tag) {
+  const step$22 = (s$23, rs$24) => {
+    switch (s$23.tag) {
       case "std.list.nil" /* nil */: {
         return "";
       }
       case "std.list.cons" /* cons */: {
-        const w = s$17.fields[0];
-        const rest2 = s$17.fields[1];
-        const rest_shown2 = fold$16(s$17.fields[1]);
-        const s$18 = rest2;
-        switch (s$18.tag) {
+        const w = s$23.fields[0];
+        const rest2 = s$23.fields[1];
+        const rest_shown2 = rs$24;
+        const s$25 = rest2;
+        switch (s$25.tag) {
           case "std.list.nil" /* nil */: {
             return w;
           }
@@ -165,37 +173,45 @@ function words(texts) {
       }
     }
   };
-  return fold$16(texts);
+  const spine$28 = [];
+  let v$26 = texts;
+  for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$28.push(v$26);
+    v$26 = v$26.fields[k$30];
+  }
+  let r$27 = step$22(v$26);
+  for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$22(spine$28[i$29], r$27);
+  return r$27;
 }
 $meta(words, "84b6b4ae");
 
 // square roots of each
 function square_roots_of_each(squares) {
   return (() => {
-      const all$19 = [];
-      for (const r$21 of $fuel(10000, $meta((function* () {
-                for (const sol$20 of solve$3(square, squares)) {
-                  const list = sol$20[0];
+      const all$31 = [];
+      for (const r$33 of $fuel(10000, $meta((function* () {
+                for (const sol$32 of solve$3(square, squares)) {
+                  const list = sol$32[0];
                   yield list;
                 }
               }), "05bcb9b1", () => [["9225986f", squares]]), true)) {
-        all$19.push(r$21);
+        all$31.push(r$33);
       }
-      return $toList(all$19);
+      return $toList(all$31);
     })();
 }
 $meta(square_roots_of_each, "1b81256b");
 
 // map
 function map(list2, change) {
-  const s$22 = list2;
-  switch (s$22.tag) {
+  const s$34 = list2;
+  switch (s$34.tag) {
     case "std.list.nil" /* nil */: {
       return $nil;
     }
     case "std.list.cons" /* cons */: {
-      const item = s$22.fields[0];
-      const rest3 = s$22.fields[1];
+      const item = s$34.fields[0];
+      const rest3 = s$34.fields[1];
       return $cons(change(item), map(rest3, change));
     }
   }
@@ -204,21 +220,21 @@ $meta(map, "42836a32");
 
 // read numbers
 function* read_numbers(text2) {
-  for (const r$24 of $fuel(10000, $meta((function* () {
-            for (const sol$23 of solve$4(text2)) {
-              const numbers2 = sol$23[0];
+  for (const r$36 of $fuel(10000, $meta((function* () {
+            for (const sol$35 of solve$4(text2)) {
+              const numbers2 = sol$35[0];
               yield numbers2;
             }
           }), "25893be1", () => [["dc158ebb", text2]]), true)) {
-    yield r$24;
+    yield r$36;
   }
 }
 $meta(read_numbers, "5f51968c");
 
 // height on the ray
 function* height_on_the_ray(angle, x2) {
-  for (const sol$25 of solve$5(angle, x2)) {
-    const y = sol$25[0];
+  for (const sol$37 of solve$5(angle, x2)) {
+    const y = sol$37[0];
     yield y;
   }
 }
