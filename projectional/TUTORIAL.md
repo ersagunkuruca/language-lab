@@ -23,7 +23,7 @@ The window is in panes. The menu bar across the top switches *Short names* /
 with a tab for each definition you've opened, and the same definition as
 text below it (*Blocks*, *Steps*, *Nested* or *Lisp*). On the right, the
 inspector has five tabs: *Definition* (or *Selected* when something is
-picked), *Program*, *Checks*, *Files* and the *Guide*, which a first visit
+picked; click empty graph space or press Escape to go back), *Program*, *Checks*, *Files* and the *Guide*, which a first visit
 opens on; *Run* sits above them. Drag the
 gutters between panes to resize them. Colour means something only in a few
 places: blue for what's selected and for values, purple for dots, amber for

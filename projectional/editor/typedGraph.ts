@@ -48,7 +48,7 @@ export type MenuTarget = { kind: "hole" | "node" | "binder" | "frame" | "space";
 
 export interface GraphHooks {
   selected: Id | null;
-  select: (id: Id) => void;
+  select: (id: Id | null) => void;
   open: (id: Id) => void;
   // null when allowed, else why not
   canUse: (binder: Id, slot: Id) => string | null;
@@ -741,6 +741,9 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
 // the editor for a menu.
 function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void) {
   const root = canvas.root;
+  // A click on empty space deselects; a press that panned doesn't.
+  let down = { x: 0, y: 0 };
+  root.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
   root.addEventListener("click", (e) => {
     const edge = (e.target as Element).closest("[data-edge]");
     if (edge && !e.shiftKey) return hooks.addDot(edge.getAttribute("data-edge")!);
@@ -752,7 +755,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     }
     const id = (e.target as Element).closest("[data-id]")?.getAttribute("data-id");
     if (id) { if (picked.size) picked.clear(); hooks.select(id); }
-    else if (picked.size) { picked.clear(); draw(hooks.at); }
+    else if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) { if (picked.size) { picked.clear(); draw(hooks.at); } hooks.select(null); }
   });
   root.addEventListener("dblclick", (e) => {
     const t = (e.target as Element).closest("[data-id]");
