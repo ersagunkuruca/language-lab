@@ -28,7 +28,7 @@
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
-import { S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
+import { CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { absOf, connectDrag, curve, infiniteCanvas, moveDrag, s, type Canvas, type Pos } from "./canvas.ts";
 import { planSolve } from "../src/lang/solve.ts";
@@ -158,6 +158,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     if (v !== undefined && !dotOf(id)) l.g.append(valueTag(v, outX(l) + 6, l.outY - 6));
     return l;
   };
+  const listItems = (id: Id): Id[] | null => {
+    const items: Id[] = [];
+    for (let n = node(id); ; n = node((n as NodeOf<"call">).args[1])) {
+      if (n.kind === "ref" && n.target === NIL) return items;
+      const f = n.kind === "call" ? node(n.fn) : null;
+      if (f?.kind !== "ref" || f.target !== CONS || n.kind !== "call" || dotOf(n.args[1])) return null;
+      items.push(n.args[0]);
+    }
+  };
   const layNode = (id: Id): L => {
     const n = node(id);
     const d = dotOf(id);
@@ -184,8 +193,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const call = (id: Id, n: NodeOf<"call">): L => {
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-    const label = f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
-    const inputs = f.kind === "ref" ? n.args : [n.fn, ...n.args];
+    // [3, 1, 2] is cons(3, cons(1, cons(2, nil))), drawn as the one list it
+    // is: one input per item, as the text shows it, not a cons per item.
+    const items = listItems(id);
+    const label = items ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
+    const inputs = items ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
     const kids = inputs.map((a): L => (dotOf(a) ? { g: group(), w: 0, h: 18, outY: 9 } : lay(a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
@@ -364,8 +376,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     });
     const valsH = Math.max(0, y - 18);
     const body = lay(rest);
-    const bx = colW + 22 + labW;
-    const at = place(body, bx, Math.max(0, (Math.max(valsH, body.h) - body.h) / 2));
+    // Steps done only for their effects (print this, then that) read top
+    // to bottom, the last one included: nothing flows sideways.
+    const sequence = steps.every(([b]) => name(b) === "_");
+    const bx = sequence ? Math.max(0, colW - body.w) : colW + 22 + labW;
+    const at = place(body, bx, sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2));
     g.append(body.g);
     return { g, w: Math.max(w, at.x + body.w), h: Math.max(h, valsH, at.y + body.h), x0: Math.min(x0, at.x + (body.x0 ?? 0)), y0: Math.min(y0, at.y + (body.y0 ?? 0)), outX: at.x + outX(body), outY: at.y + body.outY };
   };
