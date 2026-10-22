@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Language tutorial</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #e9ece6;
+  --panel: #f7f8f4;
+  --fg: #1c2420;
+  --muted: #5b6760;
+  --line: #d0d6ce;
+  --accent: #17706a;
+  --accent-soft: #d3ebe7;
+  --hot: #b4570f;
+  --hot-soft: #f8e4d0;
+  --op-bg: #dcebd4; --op-ln: #5f9150;
+  --def-bg: #d8e5f3; --def-ln: #4a78a8;
+  --var-bg: #f5e3c6; --var-ln: #b07c26;
+  --let-bg: #e7def1; --let-ln: #7a5aa6;
+  --lit-bg: #ecebe5; --lit-ln: #8a887c;
+  --wire: #7d8a83;
+  --font-ui: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
+    --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
+    --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
+    --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
+    --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121614; --panel: #1a1f1c; --fg: #e2e8e3; --muted: #97a39c; --line: #2c3530;
+  --accent: #5cc4b9; --accent-soft: #19332f; --hot: #f0a15c; --hot-soft: #3a2615;
+  --op-bg: #22321e; --op-ln: #80b56e; --def-bg: #1d2a38; --def-ln: #7ca8d8;
+  --var-bg: #372a15; --var-ln: #dfa94e; --let-bg: #2b2338; --let-ln: #a98bd4;
+  --lit-bg: #262624; --lit-ln: #a3a296; --wire: #6f7c75;
+  color-scheme: dark;
+}
+
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
+main { max-width: 46rem; margin: 0 auto; padding: 24px 16px 80px; }
+nav { font-size: 14px; margin-bottom: 8px; }
+a { color: var(--accent); }
+h1, h2, h3 { line-height: 1.25; margin: 1.6em 0 0.5em; }
+h1 { font-size: 30px; margin-top: 0.4em; }
+h2 { font-size: 23px; } h3 { font-size: 18px; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2.5em 0; }
+code, pre { font-family: var(--font-code); font-size: 0.88em; }
+:not(pre) > code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; line-height: 1.45; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+figure { margin: 1.2em 0; }
+img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="./">← Back to the editor</a></nav>
+<h1 id="a-tutorial-for-the-projectional-language">A tutorial for the projectional language</h1>
+<p>This tutorial has two jobs. Right now it's for us: to understand the language as it actually is in the code, and to find the parts that are confusing or could be simpler. Later, cleaned up, it's for showing the language to other people. The last part, <a href="#whats-confusing-and-what-could-be-simpler">What's confusing, and what could be simpler</a>, is the reason it exists today.</p>
+<p>Everything here can be tried in the editor: <a href="https://ersagunkuruca.github.io/language-lab/">https://ersagunkuruca.github.io/language-lab/</a> (or open <code>projectional/editor/dist/index.html</code> locally). The examples are the ones that ship with it: <code>fall</code>, <code>to polar</code>, <code>rotate</code>, eight queens, the algebra system and the relations program.</p>
+<p>The tutorial is in three parts:</p>
+<ol><li><a href="#part-1-for-a-five-year-old">For a five-year-old</a>: what this is, with no programming words at all.</li><li><a href="#part-2-for-programmers-who-havent-done-functional-programming">For programmers who haven't done functional programming</a>: the handful of ideas the language takes from that world, in plain words.</li><li><a href="#part-3-the-language">The language</a>, one idea at a time, each one in the editor.</li></ol>
+<hr>
+<h2 id="part-1-for-a-five-year-old">Part 1: For a five-year-old</h2>
+<p>Imagine a big table covered in little machines. Each machine has holes on its left where you put things in and a spout on its right where something comes out. One machine adds two numbers. One machine makes a number bigger. One machine looks at a picture and tells you whether it's a cat.</p>
+<p>You connect the machines with strings. A string goes from one machine's spout to another machine's hole, and whatever comes out of the first goes into the second. If you want the same thing to go to two places, the string splits in two.</p>
+<p>That's a program here: machines and strings. There's nothing to type, so you can't make a typo. If you try to tie a string to a hole where it doesn't fit, the string won't stick, and a little note tells you why.</p>
+<p>Some machines are special: they work backwards, too. A machine that turns &quot;how fast and how long&quot; into &quot;how far&quot; can also be asked &quot;I went this far, how long did it take?&quot;, and it figures it out.</p>
+<p>Some holes are still empty. That's fine: the machine knows what kind of thing should go there, and when you point at the hole it shows you only the things that fit.</p>
+<p>And each machine has a sticker with its name. You can put your own stickers on, in your own words, and the machines don't care: they still do exactly the same thing. Your friend can use their own stickers on the same table.</p>
+<hr>
+<h2 id="part-2-for-programmers-who-havent-done-functional-programming">Part 2: For programmers who haven't done functional programming</h2>
+<p>You don't need to know Haskell or Lisp. You need six ideas, and the editor shows all of them as pictures.</p>
+<h3 id="1-a-program-is-values-flowing-through-functions">1. A program is values flowing through functions</h3>
+<p>In most languages a program is a list of instructions that change things: <code>x = 3; x = x + 1; print(x)</code>. Here a program is a description of how each value is made from other values: &quot;the discriminant is b·b minus 4·a·c&quot;. There is no <code>x = x + 1</code>, because nothing changes after it's made. That's why it can be drawn: every value is a node, and every use of it is a wire.</p>
+<figure><img src="tutorial/discriminant.png" alt="The discriminant: three parameters, four calls, one result"><figcaption>The discriminant: three parameters, four calls, one result</figcaption></figure>
+<h3 id="2-functions-are-values-too">2. Functions are values too</h3>
+<p>A function is something you can pass around like a number. <code>for each(list, action)</code> takes a function <code>action</code> and calls it on every item. In the editor a function that hasn't been called yet is a <strong>frame</strong>: a box whose parameters are on its left edge and whose result leaves on its right.</p>
+<h3 id="3-let-is-just-naming-a-value-so-you-can-use-it-twice">3. &quot;Let&quot; is just naming a value so you can use it twice</h3>
+<p><code>column = one of(range(size))</code> in the queens program doesn't store anything anywhere. It means: this value, used in these two places. In the editor that's a <strong>dot</strong> on a wire with two wires coming out of it.</p>
+<h3 id="4-data-comes-in-cases">4. Data comes in cases</h3>
+<p>A list is either empty (<code>nil</code>) or an item followed by the rest of a list (<code>cons(item, rest)</code>). A Boolean is <code>true</code> or <code>false</code>. An algebra expression is a number, or <code>x</code>, or a sum of two expressions, and so on. These are <strong>data types</strong>, and each case is a <strong>variant</strong> with <strong>fields</strong>. When you look inside a value of such a type, you say what to do in every case. That's <code>match</code>. <code>if</code> is the same thing for <code>true</code>/<code>false</code>.</p>
+<h3 id="5-no-loops-you-walk-the-data-instead">5. No loops: you walk the data instead</h3>
+<p>There's no <code>for (i = 0; i &lt; n; i++)</code>. To do something to every item of a list, you describe what to do for <code>nil</code> and what to do for <code>cons(item, rest)</code>, given the answer for <code>rest</code>. That's a <strong>fold</strong>. Because each step works on a smaller piece, a fold always finishes. Plain recursion (a function calling itself) is allowed too; the language works out whether it obviously finishes, and if it can't tell, it says so in the function's type.</p>
+<h3 id="6-what-a-function-does-besides-return-a-value-is-in-its-type">6. What a function <em>does</em> besides return a value is in its type</h3>
+<p>Printing, failing, giving several answers, and maybe never finishing are called <strong>effects</strong>. Instead of being hidden, they're listed in the function's type:</p>
+<pre><code>queens : (Number) -[Choice]-&gt; List Number
+main   : () -[Console]-&gt; Unit</code></pre>
+<p>Read <code>-[Choice]-&gt;</code> as &quot;an arrow that may give several answers, or none&quot;. You never write types; the editor works them out and shows them on hover and in the frame's title.</p>
+<p>That's all the functional programming you need.</p>
+<hr>
+<h2 id="part-3-the-language">Part 3: The language</h2>
+<h3 id="31-the-program-is-the-tree-names-are-stickers">3.1 The program is the tree; names are stickers</h3>
+<p>There is no source text. The program is stored as nodes keyed by random ids in <code>code.json</code>. Names live in separate files (<code>names.*.json</code>), as do comments (<code>comments.json</code>) and positions on the canvas (<code>layout.json</code>).</p>
+<p>What this buys:</p>
+<ul><li><strong>No syntax errors</strong>, because there's no syntax.</li><li><strong>No unknown names or typos.</strong> A reference is an id you picked from a list.</li><li><strong>Renaming is free.</strong> It changes a names file, not the program. The meaning hash in the Files panel doesn't move.</li><li><strong>Names can collide harmlessly.</strong> Name three parameters <code>k</code> and they show as <code>k₁</code>, <code>k₂</code>, <code>k₃</code>. Nothing is looked up by name, so there's no shadowing.</li><li><strong>Notation is personal.</strong> The <code>a · b</code> / <code>a * b</code> / <code>(* a b)</code> switch and the Short names / Descriptive switch change only what you see.</li></ul>
+<p><strong>Try it.</strong> Open <em>Numbers &amp; networks</em> → <code>discriminant</code>. Switch between <em>Short names</em> and <em>Descriptive</em>, and between the three notations. Watch the Files panel: <code>code.json</code> is never touched.</p>
+<h3 id="32-nodes-and-wires">3.2 Nodes and wires</h3>
+<p>A <strong>node</strong> computes a value: a function call, an <code>if</code>, a <code>match</code>, a <code>fold</code>, a relation. Inputs are hollow circles on its left; its output is the filled circle on its right. A <strong>wire</strong> carries a value from an output to an input.</p>
+<p>There are no variable boxes. Every use of a variable is a wire from where that variable comes from, so a value used twice visibly fans out. In <code>discriminant</code> above, <code>leading coefficient</code> has two wires because it's used twice.</p>
+<p><strong>Gestures.</strong> Drag from an output (or a dot) onto an input to use that value there. Drag an input's wire into empty space to remove it; the input becomes a hole. Drag a node to move it. That only changes <code>layout.json</code>.</p>
+<h3 id="33-dots-where-a-value-starts-and-branches">3.3 Dots: where a value starts and branches</h3>
+<p>A <strong>dot</strong> is where a value starts and branches out to every place that uses it. Two things are dots:</p>
+<ul><li><strong>A function's parameters</strong>, on its frame's left edge.</li><li><strong>A let.</strong> Click any wire to put a dot on it. Select the dot to give it a name, or leave it unnamed: then it shows as <code>•1</code>, <code>•2</code>, a handle that's never stored. Drag from the dot to another input to share the value there.</li></ul>
+<p>In the code, a dot is the binder of <code>((b) =&gt; body)(value)</code>. There is no <code>let</code> node. Removing a dot with one wire out puts the value back on that wire.</p>
+<p>A dot that nothing reads is a step done only for its effect, like a <code>print</code> in <code>main</code>. Those are drawn hollow, in a column, in order.</p>
+<h3 id="34-frames-functions-not-called-yet">3.4 Frames: functions not called yet</h3>
+<p>A <strong>frame</strong> is a function as a value. Its parameters are dots on its left; what it gives back leaves on its right. A whole definition is a frame too: its title shows its name and inferred type, e.g. <code>queens : (Number) -[Choice]-&gt; List Number</code>.</p>
+<p>Frames nest, and a node can't leave the frame its inputs come from. If you drag a node out, the frame grows to keep it inside.</p>
+<h3 id="35-holes-the-program-is-allowed-to-be-unfinished">3.5 Holes: the program is allowed to be unfinished</h3>
+<p>A <strong>hole</strong> (<code>□</code>) is a value not filled in yet. It knows its type. Select it and the side panel lists only fillings that fit: variables in scope, calls (which arrive with one hole per argument), constructors, numbers, text, functions, and &quot;match on …&quot; / &quot;fold on …&quot; for each variable whose type has cases. A program with holes runs until it reaches one.</p>
+<p><strong>Try it.</strong> Open <em>Algebra</em> → <code>evaluate</code>. Select the body of the <code>sum</code> case and press <em>Clear to a hole</em>. The hole needs a <code>Number</code>. The palette offers <code>at</code>, <code>l′</code>, <code>r′</code>, calls like <code>add(□, □)</code>, and so on, but not <code>display(…)</code>, which returns text. That's the whole idea of &quot;type errors prevented by the editor&quot;: you can't pick what doesn't fit.</p>
+<h3 id="36-data-types-match-if">3.6 Data types, <code>match</code>, <code>if</code></h3>
+<p>A data type is a definition whose body is a list of variants, each with fields:</p>
+<pre><code>type expression
+  | number(value: Number)
+  | x
+  | sum(left: expression, right: expression)
+  | product(left: expression, right: expression)
+  | sine(of: expression)
+  | ...</code></pre>
+<p>A variant used as a function is its constructor: <code>sum(a, b)</code>. The standard types <code>Bool</code>, <code>Unit</code>, <code>List a</code> and <code>Pair a b</code> are ordinary data types, not built in.</p>
+<p><code>match</code> looks at a value and has one case per variant. In the graph it's an ordinary node: the value goes into its first input, then one frame per case, whose parameters are that case's fields. <code>if</code> is a match on <code>Bool</code>, drawn the same way with inputs labelled <code>condition</code>, <code>then</code> and <code>else</code>.</p>
+<p>Two gestures keep matches complete:</p>
+<ul><li><strong>Split by cases…</strong> on any expression replaces it with a match on a variable you pick, one case per variant, each starting as a copy of what was there.</li><li><strong>Add a case</strong> on a data type adds a case with a hole to <em>every</em> match and fold over that type. Adding <code>tangent</code> to <code>expression</code> produces exactly four holes, in <code>evaluate</code>, <code>derivative</code>, <code>simplify</code> and <code>display</code>. A missing case can't be written.</li></ul>
+<h3 id="37-loops-are-folds">3.7 Loops are folds</h3>
+<p>A <strong>fold</strong> is a match where each recursive field also comes with its already-computed result. In <code>derivative</code>, the <code>product</code> case gets <code>u</code>, <code>v</code> (the parts) and <code>u′</code>, <code>v′</code> (their derivatives), so the product rule reads like the textbook:</p>
+<pre><code>derivative(expression) =
+  fold expression
+    number(value) → number(0)
+    x → number(1)
+    product(u, v) with u′, v′ → sum(product(u′, v), product(u, v′))
+    sine(u) with u′ → product(cosine(u), u′)
+    ...</code></pre>
+<p>In the graph a fold is the same shape as a match; the case frames just have the extra parameters. A fold always finishes.</p>
+<p>The eight queens program is a fold over the rows: for each row, pick a column and keep it only if it's safe.</p>
+<figure><img src="tutorial/queens.png" alt="queens: a fold over range(size), with one of, if and fail inside the cons case"><figcaption>queens: a fold over range(size), with one of, if and fail inside the cons case</figcaption></figure>
+<p><strong>Plain recursion</strong> is allowed. The checker accepts it as finishing when each recursive call passes something a match took apart from the same parameter (<code>for each(rest, action)</code> inside the <code>cons(item, rest)</code> case). Anything else gets the <code>Diverge</code> effect in its type, and so does everything that calls it. <code>newton</code> in the algebra program has <code>-[Choice, Diverge]-&gt;</code> because nothing in it gets smaller.</p>
+<h3 id="38-effects-choice-console-diverge">3.8 Effects: Choice, Console, Diverge</h3>
+<p>There are exactly three effects. A node whose call performs one carries a <strong>badge</strong>.</p>
+<table><thead><tr><th>effect</th><th>what it means</th><th>made by</th><th>removed by</th></tr></thead><tbody><tr><td><code>Choice</code></td><td>may give several answers, or none</td><td><code>one of(list)</code>, <code>fail()</code>, some relations</td><td><code>first(action, fallback)</code>, <code>all(action)</code>, <code>count(action)</code></td></tr><tr><td><code>Console</code></td><td>prints</td><td><code>print(text)</code></td><td>the runtime (only <code>main</code> may keep it)</td></tr><tr><td><code>Diverge</code></td><td>might not finish</td><td>recursion the checker can't see ends</td><td>the runtime, or <code>with fuel(n, action)</code></td></tr></tbody></table>
+<p><strong>Choice is the interesting one.</strong> It replaces several things other languages have separately:</p>
+<ul><li><strong>Search.</strong> <code>queens</code> picks <code>one of(range(size))</code> for each row and calls <code>fail()</code> if it isn't safe. There's no search code. <code>first</code> gives one board, <code>count</code> gives 92, <code>all</code> gives every board.</li><li><strong>Absence.</strong> There's no <code>null</code> and no <code>Option</code>. &quot;Might not have a value&quot; is <code>Choice</code> in the type. <code>evaluate</code> fails on division by zero, and <code>main</code> handles that with <code>first(…, &quot;undefined&quot;)</code>.</li><li><strong>Filtering.</strong> <code>keep(list, test)</code> is <code>all(() =&gt; item = one of(list); if test(item) then item else fail())</code>.</li><li><strong>Several answers from a relation.</strong> See 3.9.</li></ul>
+<p>The handlers (<code>first</code>, <code>all</code>, <code>count</code>, <code>with fuel</code>) take <strong>actions</strong>, functions with no inputs, which appear as <code>() =&gt;</code> frames. A handler is marked with the effect it removes, and the effect stops there.</p>
+<p>Effects compose with no extra machinery. <code>map</code> has type <code>(List a, (a) -[e]-&gt; b) -[e]-&gt; List b</code>: whatever effects the function you pass has (<code>e</code>), <code>map</code> has too. There's no <code>map</code> vs <code>mapM</code>.</p>
+<p>The checker won't run a program whose <code>main</code> still has <code>Choice</code> or any effect the runtime can't handle; that's reported before anything runs.</p>
+<p><strong>Try it.</strong> Open <em>Eight queens</em> → <code>main</code> and press <em>Run</em>: the first solution for 8, the count (92), and all four solutions for 6.</p>
+<h3 id="39-relations-nodes-with-no-fixed-direction">3.9 Relations: nodes with no fixed direction</h3>
+<p>A <strong>relation</strong> is a node whose ports aren't inputs or outputs until you say which ones you know. <code>polar</code> relates <code>x, y</code> with <code>length, angle</code>. Give it <code>x, y</code> and it solves for <code>length, angle</code>; give it <code>length, angle</code> and it solves for <code>x, y</code>. Underneath, the solver from <code>invertible/</code> derives an ordinary program for whichever direction you picked.</p>
+<p>Relations show up in two places.</p>
+<p><strong>Networks</strong> (the <code>◇</code> definitions in <em>Numbers &amp; networks</em>: <code>to polar</code>, <code>rotate</code>, <code>fall</code>) are graphs of relations with outer ports. Each outer port is either known or solved for, and that choice is stored in <code>layout.json</code>, not in the code. Known ports are filled dots on the left; solved ports are hollow on the right, with their values.</p>
+<figure><img src="tutorial/fall.png" alt="fall: distance = speed·time + ½·gravity·time²"><figcaption>fall: distance = speed·time + ½·gravity·time²</figcaption></figure>
+<p><code>fall</code> computes <code>distance</code> from <code>speed</code>, <code>gravity</code> and <code>time</code>. Make <code>distance</code> known and <code>time</code> unknown, and it answers &quot;when does it land?&quot;. The answer comes from the same network: thrown down at 5 m/s, 29.62 m takes 2 s. The solver also reports the other root, about −3.02 s, as a second branch.</p>
+<p>Arithmetic in networks is two relations, not six functions. A <strong>sum</strong> is <code>a + b + … = total</code>. It draws as <code>+</code> when the total is unknown, as <code>−</code> when an addend is unknown, and as <code>neg</code> when the total is zero. A <strong>product</strong> is the same with <code>×</code> and <code>÷</code>. There's always one spare addend port; connecting it adds a term.</p>
+<p><strong>Units are the types in networks.</strong> Every value has a dimension (m, s, kg, A, rad). Declare units on a few ports and the rest are inferred; a connection that would mix them is refused while you drag. In <code>fall</code> only the outer ports have units; every wire inside gets its own.</p>
+<p><strong>Solve nodes</strong> use a relation in one direction inside a typed program (<em>Relations in programs</em>). The ports you give it are inputs; the ones it solves for come out on its right, all from the same solution:</p>
+<figure><img src="tutorial/to-polar-solve.png" alt="to polar as a solve node inside a typed program"><figcaption>to polar as a solve node inside a typed program</figcaption></figure>
+<p>Its effect comes from the direction: one answer that can't fail is pure (the missing addend of a sum, splitting a sum and difference); several answers, or possibly none, is <code>Choice</code>. <code>square</code> read backwards (<code>x · x = y</code>) gives both roots of 9 under <code>all</code> (canonical first, so <code>first</code> gives 3), and none for −1. This is the &quot;x² = 4 has a canonical answer&quot; idea, written as a program, and it uses the same <code>Choice</code> as queens.</p>
+<h3 id="310-the-errors-you-cant-make">3.10 The errors you can't make</h3>
+<p>Every edit is a pure function from program to program, and it's refused, with the reason in the status line, if the result has an error the program didn't have before. The editor also asks ahead of time: while you drag, the inputs you can reach light up and the others say why not.</p>
+<table><thead><tr><th>error</th><th>status</th><th>why</th></tr></thead><tbody><tr><td>syntax</td><td>impossible</td><td>there is no text</td></tr><tr><td>unknown name, typo</td><td>impossible</td><td>references are ids picked from a list</td></tr><tr><td>name clash, shadowing, capture</td><td>impossible</td><td>binders are ids; equal names get a subscript on screen</td></tr><tr><td>wrong number of arguments</td><td>prevented</td><td>a call is made with one hole per parameter</td></tr><tr><td>type mismatch</td><td>prevented</td><td>holes only offer what fits; edits that add one are refused</td></tr><tr><td>missing case</td><td>prevented</td><td>cases come from the type; <em>Add a case</em> adds hole cases everywhere</td></tr><tr><td>null / undefined</td><td>impossible</td><td>there is no null; absence is <code>Choice</code>, which must be handled</td></tr><tr><td>unhandled effect</td><td>checked</td><td>effects are in types; <code>main</code> can't keep <code>Choice</code></td></tr><tr><td>non-termination</td><td>inferred</td><td>it shows up as <code>Diverge</code> in the type</td></tr><tr><td>unit mismatch (networks)</td><td>prevented</td><td>refused while you wire</td></tr><tr><td>unfinished program</td><td>allowed</td><td>holes have types; it runs until it reaches one</td></tr><tr><td><code>sqrt</code> of a negative, <code>÷ 0</code> in builtins</td><td>runtime</td><td>builtins follow IEEE (NaN, Infinity)</td></tr><tr><td>logic errors</td><td>not prevented</td><td>relations give round-trip laws to test against</td></tr></tbody></table>
+<p>The <em>Checks</em> panel lists these live for whatever program is open. A test (<code>test/lang.test.ts</code>) punches holes all over both typed programs, tries every filling the palette offers (over a thousand), and checks none causes an error.</p>
+<h3 id="311-summary-the-vocabulary">3.11 Summary: the vocabulary</h3>
+<p>These are the words the in-editor Guide uses, one word per thing:</p>
+<table><thead><tr><th>word</th><th>what it is</th></tr></thead><tbody><tr><td>node</td><td>something that computes a value: a call, an if, a match, a fold, a relation</td></tr><tr><td>wire</td><td>carries a value from an output (or dot) to an input</td></tr><tr><td>dot</td><td>where a value starts and branches: a parameter, or a let</td></tr><tr><td>frame</td><td>a function not called yet: parameters on the left, result on the right</td></tr><tr><td>hole</td><td>a value not filled in yet, with a type</td></tr><tr><td>badge</td><td>the effects a node has, or the effect it handles</td></tr><tr><td>relation</td><td>a node with no fixed direction: you pick what's given, it solves the rest</td></tr></tbody></table>
+<hr>
+<h2 id="whats-confusing-and-what-could-be-simpler">What's confusing, and what could be simpler</h2>
+<p>This is the candid part. Each item says what's there today, why it's a problem, and a proposal. They're ordered roughly by how much they'd simplify the language.</p>
+<h3 id="1-there-are-still-two-worlds-of-functions">1. There are still two worlds of functions</h3>
+<p><strong>Today.</strong> Tree code (typed definitions, plus the plain expression defs like <code>discriminant</code>) has a direction: arguments in, result out. Networks have no direction and are solved. <code>solve</code> nodes bridge the two. The <em>Numbers &amp; networks</em> program even has <code>to polar</code> as a network, while <em>Relations in programs</em> has a different <code>to polar</code> as a typed definition with a <code>solve</code> node. They look different (the network has no frame, its <code>polar</code> node is green; the solve node is orange and says &quot;solve polar&quot;) and they're edited with different panels.</p>
+<p><strong>Why it matters.</strong> A newcomer has to learn when they're in which world, and the same idea (which ports are known) lives in <code>layout.json</code> for networks but in <code>code.json</code> for solve nodes.</p>
+<p><strong>Proposal.</strong> Make every definition a network, and make &quot;a function&quot; mean a network plus a chosen direction. Tree code becomes the special case where the direction is fixed, and a call is a solve node whose direction happens to be the forward one. Then there is one kind of definition, one panel and one place where &quot;known&quot; is stored.</p>
+<h3 id="2-builtins-are-black-boxes-and-arithmetic-exists-three-times">2. Builtins are black boxes, and arithmetic exists three times</h3>
+<p><strong>Today.</strong> Double-clicking <code>+</code> shows nothing, because <code>add</code> is a JavaScript function in <code>src/prelude.ts</code>. The same arithmetic exists again in <code>invertible/src/expr.js</code>, where each function carries a hand-written inverse per argument and a symbolic derivative. And the algebra example builds a <em>third</em> copy: an <code>expression</code> data type with <code>sum</code>, <code>product</code>, <code>sine</code>, plus <code>evaluate</code> and <code>derivative</code> written over it.</p>
+<p>Also, tree code has <code>add</code>, <code>subtract</code> and <code>negate</code> as separate builtins, while networks have one <code>sum</code> relation. So <code>+</code> means different things in different places.</p>
+<p><strong>Why it matters.</strong> The pitch is that functions aren't black boxes, but the most basic ones are. And the algebra example teaches the opposite lesson from the one we want: it differentiates a data structure <em>about</em> functions instead of differentiating functions.</p>
+<p><strong>Proposal.</strong></p>
+<ul><li>One <code>sum</code> and one <code>product</code> everywhere; <code>+</code>, <code>−</code>, <code>neg</code>, <code>×</code>, <code>÷</code> are only how they're drawn, as networks already do.</li><li>Give each builtin a visible definition: the equation it satisfies (for <code>sum</code>, <code>a + b + … = total</code>) and its inverses, shown when you open it, even if the evaluator still runs JavaScript underneath.</li><li>Make <code>derivative</code> an operation on any definition, like <code>solve</code> is. The solver already differentiates its expression trees for Newton's method, so the machinery exists. The algebra example would then become <code>derivative(f)</code> for a real <code>f</code>, and the <code>expression</code> type would be an example of data types, not of calculus.</li></ul>
+<h3 id="3-relations-only-cover-arithmetic">3. Relations only cover arithmetic</h3>
+<p><strong>Today.</strong> The relations are <code>sum</code>, <code>product</code>, the numeric builtins (<code>sqrt</code>, <code>pow</code>, <code>sin</code>, <code>cos</code>, <code>exp</code>, <code>log</code>), <code>polar</code>, <code>sum &amp; difference</code> and <code>Ohm's law</code>. Text, <code>if</code>, lists and folds can't be run backwards.</p>
+<p><strong>Proposal.</strong> Some of these come almost for free, and one of them would remove a concept:</p>
+<ul><li><strong>Constructors are relations already.</strong> <code>cons(item, rest) = list</code> read backwards is &quot;take this list apart&quot;, and it fails if the list is <code>nil</code>. That's exactly one case of a <code>match</code>. So a <code>match</code> could be &quot;try each constructor backwards&quot;, and <code>if</code> a match on <code>Bool</code>. That would make match a solve node, and would make pattern matching and relation solving the same thing.</li><li><strong>Join text</strong> backwards (<code>join(a, b) = &quot;hello&quot;</code>) has several answers, which is <code>Choice</code>: every way to split the text. With <code>a</code> known it's one answer or none (a prefix check).</li><li><strong>Folds</strong> backwards are unfolds: given the result, find the data. That's hard in general, but small cases (<code>length</code>, <code>sum of list</code>) are useful demos.</li></ul>
+<h3 id="4-cases-that-are-values-are-drawn-as-functions">4. Cases that are values are drawn as functions</h3>
+<p><strong>Today.</strong> The <code>then</code> and <code>else</code> of an <code>if</code>, and every case with no fields (<code>nil</code>, <code>x</code>), are drawn as <code>() =&gt;</code> frames, because internally they're actions that run only when chosen. Look at queens: <code>fail</code> sits inside its own frame under <code>else</code>, and <code>nil</code> inside another.</p>
+<p><strong>Why it matters.</strong> A reader sees &quot;a function with no inputs&quot; where they expected &quot;a value&quot;. It's honest about laziness but it adds boxes.</p>
+<p><strong>Proposal.</strong> Draw a zero-parameter frame as just its contents with no box, unless it's a real action passed to a handler like <code>first</code> or <code>all</code>.</p>
+<h3 id="5-output-and-dot-are-almost-the-same-thing">5. &quot;Output&quot; and &quot;dot&quot; are almost the same thing</h3>
+<p><strong>Today.</strong> A node's output is a filled circle on its right. Dragging it to a second input creates a dot on its wire. A parameter is a dot, a solved port of a relation is a dot, a known outer port of a network is a dot, but a node's output isn't.</p>
+<p><strong>Proposal.</strong> Every output is a dot. A value used once is a dot with one wire; there's nothing to create when you use it a second time. That removes one shape and one gesture.</p>
+<h3 id="6-order-is-invisible">6. Order is invisible</h3>
+<p><strong>Today.</strong> A dataflow picture has no order, so steps done only for their effect (<code>print</code>) are hollow dots in a column. Also, a fold computes its children before the parent, so effects inside a fold run bottom-up, and the docs say &quot;use <code>for each</code> when order matters&quot;.</p>
+<p><strong>Why it matters.</strong> This is the one place where the picture doesn't tell you what happens. It will bite anyone who prints inside a fold.</p>
+<p><strong>Proposal.</strong> Either draw a sequencing wire between effectful steps (a thin &quot;then&quot; wire, the way Unreal Blueprints have execution pins), or make folds lazy so effects run top-down. The first is more uniform with &quot;everything is a wire&quot;.</p>
+<h3 id="7-the-type-syntax-has-a-variable-most-people-wont-understand">7. The type syntax has a variable most people won't understand</h3>
+<p><strong>Today.</strong> Types like <code>(List a, (a) -[e]-&gt; b) -[e]-&gt; List b</code> show <code>e</code>, a row variable meaning &quot;whatever effects the caller's function has&quot;.</p>
+<p><strong>Proposal.</strong> Show it in words when hovering (&quot;has the effects of <code>action</code>&quot;) and hide <code>e</code> by default. The badges already say what a node does; the type in the frame title could drop effect variables entirely.</p>
+<h3 id="8-three-ways-to-repeat">8. Three ways to repeat</h3>
+<p><strong>Today.</strong> <code>fold</code>, plain recursion (with totality inferred) and <code>with fuel</code> (recursion with a limit). They exist for good reasons, but a newcomer will ask which to use.</p>
+<p><strong>Proposal.</strong> Teach fold first and present recursion as &quot;a fold the checker couldn't see&quot;. If folds over numbers (<code>range</code>) are cheap enough, most programs never need the others.</p>
+<h3 id="9-units-only-exist-in-networks">9. Units only exist in networks</h3>
+<p><strong>Today.</strong> Networks have units as types. Typed programs have <code>Number</code> with no unit. <code>period</code> in <em>Numbers &amp; networks</em> infers seconds; the same expression in a typed program wouldn't.</p>
+<p><strong>Proposal.</strong> Make the unit a parameter of <code>Number</code> (LANGUAGE.md lists this as next). It's the same kind of inference, and it would remove one more difference between the two worlds.</p>
+<h3 id="10-small-inconsistencies-worth-fixing">10. Small inconsistencies worth fixing</h3>
+<ul><li><code>equal</code> is defined for any type, including functions, which can't really be compared. <code>show</code> only works on numbers.</li><li>Three kinds of definition tabs: plain, <code>◇</code> network, <code>▤</code> data type. With proposal 1 there'd be two (functions and data types).</li><li>Three panel layouts: typed programs show <em>Graph / Blocks / As text</em>; expression defs show <em>Blocks / Graph / Text views</em>; networks show the network and <em>Derived program</em>.</li><li>The model has 19 node kinds (<code>lit binder ref call lambda def builtin hole network part typedef variant field tref tfun match fold arm solve</code>). Proposals 1 and 3 would remove <code>network</code>/<code>part</code> vs <code>call</code>/<code>solve</code> as separate pairs, and <code>match</code>/<code>arm</code> as separate from <code>solve</code>.</li></ul>
+<h3 id="11-things-that-are-good-and-should-stay">11. Things that are good and should stay</h3>
+<p>So the list above isn't read as &quot;everything is wrong&quot;:</p>
+<ul><li>Names, comments and layout outside the code. Rename, notation and layout never change meaning, and you can see it in the Files panel.</li><li>Holes with types and a palette of only what fits.</li><li><em>Add a case</em> adding holes everywhere.</li><li>One <code>Choice</code> effect covering search, absence, filtering and relation branches.</li><li>Non-termination as an inferred effect, rather than a promise.</li><li>The canonical-first answer for multi-valued inverses.</li></ul>
+<hr>
+<h2 id="where-this-lives">Where this lives</h2>
+<ul><li>This file: <code>projectional/TUTORIAL.md</code>. The editor build also turns it into <code>tutorial.html</code> next to the editor, linked from the editor's header.</li><li>The language reference: <a href="https://github.com/ersagunkuruca/language-lab/blob/main/projectional/LANGUAGE.md">LANGUAGE.md</a>. The prototype and editor: <a href="https://github.com/ersagunkuruca/language-lab/blob/main/projectional/README.md">README.md</a>. The solver: <a href="https://github.com/ersagunkuruca/language-lab/blob/main/invertible/README.md">../invertible/README.md</a>.</li><li>Screenshots are in <code>projectional/tutorial/</code>.</li></ul>
+</main>
+</body>
+</html>

@@ -6,6 +6,10 @@ everything you normally fight about (formatting, operator symbols, infix vs
 prefix, naming style, whether to nest or use temporaries) is a *view* chosen
 per person. No parser exists, on purpose.
 
+New here? Start with [TUTORIAL.md](TUTORIAL.md): an introduction for
+non-programmers and for people new to functional programming, a tour of the
+language in the editor, and a list of what's confusing or could be simpler.
+
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
                # networks use the solver in ../invertible)
