@@ -167,3 +167,14 @@ test('laws hold wherever the defining equations hold', () => {
     }
   }
 });
+
+test('atan2 is a primitive with inverses on its ray and derivatives', () => {
+  const rel = relation({ name: 'angle', ports: ['y', 'x', 't'], eqs: ['t = atan2(y, x)'] });
+  const fwd = solve(rel, { x: -1, y: 1 }).canonical;
+  close(fwd.t, 3 * Math.PI / 4);
+  // given the angle and x, y is on the ray at that angle
+  assert.ok(Math.abs(solve(rel, { t: 3 * Math.PI / 4, x: -2 }).canonical.y - 2) < 1e-9);
+  // x = 2 is on the opposite ray: no solution
+  assert.equal(solve(rel, { t: 3 * Math.PI / 4, x: 2 }).solutions.length, 0);
+  assert.ok(Math.abs(solve(rel, { t: Math.PI / 6, y: 1 }).canonical.x - Math.sqrt(3)) < 1e-9);
+});

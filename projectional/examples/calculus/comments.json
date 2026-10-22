@@ -1,0 +1,9 @@
+{
+  "312088c5": "An ordinary function. Its derivative cubic′ below was made by reading this graph, and derivative(f) does the same while the program runs.",
+  "03653370": "Generated from cubic: the chain rule at every node, with each operation's partial derivatives taken from the same table that evaluates and inverts it.",
+  "2431e6dd": "The derivative of an if is the same if with each arm differentiated.",
+  "5bf4774e": "A let differentiates to a let of the value and its slope.",
+  "caadc237": "A fold differentiates to a fold that carries each partial result with its slope, as a pair.",
+  "386f43dd": "Where sinc fails (at 0), so does its derivative.",
+  "5d7fcec2": "cubic run backwards from 0: the solver scans for every root, where Newton finds one."
+}

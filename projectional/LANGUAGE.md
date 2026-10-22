@@ -231,6 +231,24 @@ roots of 9 under `all`, none for −1, and `2` under `first`. That's the
 "x² = 4 has a canonical answer" idea from the original pitch, written as a
 program.
 
+### Beyond arithmetic
+
+`solve` isn't limited to arithmetic. A function with cases, folds, text or
+data in it is run backwards by the relational interpreter
+(`src/lang/relate.ts`): an `if` becomes a choice over its arms, a fold
+becomes an unfold, `join text` enumerates the ways to cut its result. Its
+type is `Choice`, plus `Diverge` when it might unfold forever. Printing
+can't be run backwards, and the checker says so. `show numbers` run
+backwards is a parser:
+
+```
+‹read numbers›(text) = with fuel(10000, () => solve ‹show numbers›(result = text) for numbers)
+```
+
+The full table of what each node does backwards, and what can't be done
+and why, is in [BACKWARDS.md](BACKWARDS.md). So is the calculus example,
+which differentiates real functions by reading their graphs.
+
 ## The errors, class by class
 
 "Never a syntax error again" holds by construction. Below is every other

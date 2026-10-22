@@ -13,6 +13,8 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
+import { derivativeLambda } from "./derive.ts";
+import { relate, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { CONS, FALSE, NIL, S, STD_IMPL, TRUE, UNIT_V } from "./std.ts";
 import { CONSOLE, DIVERGE } from "./types.ts";
@@ -35,6 +37,12 @@ export function equal(a: Value, b: Value): boolean {
   return a.tag === b.tag && a.fields.every((f, i) => equal(f, b.fields[i]));
 }
 
+// Function values remember the node they came from (a lambda and the
+// variables it closed over, or a builtin, constructor or projection), so the
+// relational interpreter and `derivative` can look inside them.
+export const META = Symbol("node");
+const tag = <F extends Fn>(f: F, meta: { lambda: Id; env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
+
 export interface Runtime {
   print: (line: string) => void;
 }
@@ -53,6 +61,8 @@ function* scoped<T>(gen: Iterable<T>, enter: () => void, exit: () => void): Gene
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
+  // Our own copy of the node table: `derivative` writes new code into it.
+  code = { nodes: { ...code.nodes }, defs: code.defs };
   const fuel: { left: number }[] = [];
   const defs = new Map<Id, Value>();
   const one = (x: Value): Iterable<Value> => [x];
@@ -76,11 +86,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       for (const x of (body as Fn)()) { yield x; return; }
       yield* (otherwise as Fn)();
     },
+    [S.derivative]: (f) => {
+      const m = (f as unknown as Record<symbol, { lambda?: Id; env?: Map<Id, Value> }>)[META];
+      if (!m?.lambda) throw new Error("derivative needs a function written in the program, to look inside it");
+      return ev(derivativeLambda(code, m.lambda), m.env!);
+    },
     [S.fuel]: (n, body) => {
       const frame = { left: n as number };
       return scoped((body as Fn)(), () => fuel.push(frame), () => fuel.pop());
     },
   } satisfies Record<Id, Fn>);
+  for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
 
   // Every combination of the results of `ids`, in order (left to right,
   // earlier choices varying slowest).
@@ -95,11 +111,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       case "lit": yield n.value; return;
       case "ref": yield refValue(n.target, env); return;
       case "lambda":
-        yield (...args: Value[]) => {
+        yield tag((...args: Value[]) => {
           const inner = new Map(env);
           n.params.forEach((p, i) => inner.set(p, args[i]));
           return ev(n.body, inner);
-        };
+        }, { lambda: id, env });
         return;
       case "call": {
         const head = code.nodes[n.fn];
@@ -142,7 +158,20 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       }
       case "solve": {
         const keys = Object.keys(n.given);
-        const rel = planSolve(code, n).rel;
+        const p = planSolve(code, n);
+        if (p.mode === "relational") {
+          // Each step that might unfold forever spends the innermost fuel.
+          const spend = () => !(fuel.length && --fuel[fuel.length - 1].left < 0);
+          for (const vals of each(keys.map((k) => n.given[k]), env)) {
+            for (const sol of relate(code, n.fn, Object.fromEntries(keys.map((k, i) => [k, vals[i]])), { spend })) {
+              const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
+              if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
+              yield* ev(n.body, bind(env, Object.values(n.binds), bound as Value[]));
+            }
+          }
+          return;
+        }
+        const rel = p.rel!;
         for (const vals of each(keys.map((k) => n.given[k]), env)) {
           for (const sol of solutions(rel, Object.fromEntries(keys.map((k, i) => [k, vals[i] as number])))) {
             // A port the equations leave free has no value: not a solution.
@@ -179,12 +208,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (!builtins[target]) throw new Error(`no implementation for ${target}`);
         return builtins[target];
       case "variant":
-        return t.fields.length ? (...fields: Value[]) => one({ tag: target, fields }) : { tag: target, fields: [] };
+        return t.fields.length ? tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }) : { tag: target, fields: [] };
       case "field": {
         const v = info.owner.get(target)!;
         const variant = (code.nodes[(code.nodes[v] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
         const i = (code.nodes[variant] as NodeOf<"variant">).fields.indexOf(target);
-        return (d) => one((d as Data).fields[i]);
+        return tag((d) => one((d as Data).fields[i]), { prim: target });
       }
       default: throw new Error(`unbound ${target}`);
     }
