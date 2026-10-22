@@ -386,3 +386,22 @@ test("an input added to a function that is solved somewhere is given there as a 
   for (const sv of solves(back.code)) assert.ok(!(r.select in sv.given));
   assert.equal(infer(back.code, back.names).errors.length, before);
 });
+
+test("two things in scope together can't share a name; cases each have their own scope", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const fall = p.named("fall");
+  const named = (n: string) => subtree(p.code, fall).find((b) => p.pres.names[b] === n)!;
+  assert.match(Top.nameClash(p.code, p.pres.names, named("time"), "speed") ?? "", /fall already has a variable named speed/);
+  assert.match(Top.nameClash(p.code, p.pres.names, named("time"), "drift") ?? "", /variable named drift/);
+  assert.equal(Top.nameClash(p.code, p.pres.names, named("time"), "t"), null);
+  assert.equal(Top.nameClash(p.code, p.pres.names, named("time"), "_"), null);
+  assert.match(Top.nameClash(p.code, p.pres.names, fall, "period") ?? "", /already a definition named period/);
+  const r = Top.addParameter(p.code, p.pres.names, fall, "speed");
+  assert.ok(!r.ok && /already has an input named speed/.test(r.reason));
+  // algebra's evaluate binds l and r in several cases: no clash between them.
+  const a = loadProgram(join(import.meta.dirname, "../examples/algebra"));
+  const ev = a.named("evaluate");
+  for (const b of subtree(a.code, ev)) if (a.code.nodes[b]?.kind === "binder" && a.pres.names[b]) assert.equal(Top.nameClash(a.code, a.pres.names, b, a.pres.names[b]), null);
+});

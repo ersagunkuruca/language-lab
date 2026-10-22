@@ -533,6 +533,13 @@ function openDef(d: Id) {
 // ---------------------------------------------------------------- gestures
 
 function rename(id: Id, value: string) {
+  const clash = Top.nameClash(doc.code, pres().names, id, value);
+  if (clash) {
+    ui.note = `Refused: ${clash}. Nothing changed.`;
+    ui.touched = [];
+    ui.refused = true;
+    return render();
+  }
   const names = { ...doc.names[ui.layer] };
   if (value.trim()) names[id] = value; else delete names[id];
   const k = node(id).kind;

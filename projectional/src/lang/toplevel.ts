@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { collect, freshId, ownerOfTypeParts, replace, subtree } from "../model.ts";
+import { children, collect, freshId, ownerOfTypeParts, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
 export type Top = { ok: true; code: Code; names: Names; select: Id; note: string } | { ok: false; reason: string };
@@ -33,6 +33,46 @@ const nameOf = (names: Names, id: Id) => names[id] ?? "it";
 
 function nameTaken(code: Code, names: Names, name: string, except?: Id): boolean {
   return code.defs.some((d) => d !== except && names[d] === name);
+}
+
+// Two things with one name in the same place read ambiguously in every
+// view: two definitions in a program, two variables in a definition, two
+// cases of a type, two fields of a case. The reason a rename to `name`
+// would do that, or null. `_` is "not used", so any number may share it.
+export function nameClash(code: Code, names: Names, id: Id, rawName: string): string | null {
+  const name = trim(rawName);
+  const n = code.nodes[id];
+  if (!name || name === "_" || !n) return null;
+  if (n.kind === "def") return nameTaken(code, names, name, id) ? `there is already a definition named ${name}` : null;
+  const def = ownerOfTypeParts(code).get(id) ?? code.defs.find((d) => subtree(code, d).includes(id));
+  if (!def) return null;
+  const peers = n.kind === "field"
+    ? Object.values(code.nodes).find((v): v is NodeOf<"variant"> => v.kind === "variant" && v.fields.includes(id))?.fields ?? []
+    : n.kind === "binder" ? scopesWith(code, def, id)
+    : subtree(code, def).filter((o) => code.nodes[o]?.kind === n.kind);
+  if (!peers.some((o) => o !== id && names[o] === name)) return null;
+  const what = n.kind === "binder" ? "variable" : n.kind === "variant" ? "case" : "field";
+  return `${nameOf(names, def)} already has a ${what} named ${name}; two would read the same`;
+}
+
+// Every variable that is in scope together with `binder` somewhere in the
+// definition. Cases of a match each have their own, so `l` in one case and
+// `l` in the next don't meet.
+function scopesWith(code: Code, def: Id, binder: Id): Id[] {
+  const out = new Set<Id>();
+  const walk = (id: Id, scope: Id[]) => {
+    const x = code.nodes[id];
+    if (!x) return;
+    const fresh = x.kind === "lambda" ? x.params
+      : x.kind === "arm" ? [...x.binds, ...x.results.filter((r): r is Id => r !== null)]
+      : x.kind === "solve" ? Object.values(x.binds)
+      : x.kind === "typedef" ? x.params : [];
+    const inner = fresh.length ? [...scope, ...fresh] : scope;
+    if (inner.includes(binder)) inner.forEach((b) => out.add(b));
+    for (const c of children(x)) walk(c, inner);
+  };
+  walk(def, []);
+  return [...out];
 }
 
 const refsTo = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && n.target === target);
@@ -136,6 +176,7 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
   const d = code.nodes[def] as NodeOf<"def">;
   const name = trim(rawName) || "input";
   const lam = lambdaOf(code, def);
+  if (lam?.params.some((p) => names[p] === name)) return { ok: false, reason: `${nameOf(names, def)} already has an input named ${name}` };
   const { nodes, add } = builder(code);
   const nn: Names = { ...names };
   const b = add({ kind: "binder" });
