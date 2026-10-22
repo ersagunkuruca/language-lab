@@ -259,6 +259,12 @@ also takes a value typed into its search (`3`, `"text"`, `[3, 1, 2]`,
 `circle(2)`), and offers `match □` on a value still to be given, which on a
 Bool is if/then/else.
 
+*Show inline* (on a selected call) draws the call as its definition's
+body in place: `f(a, b)` is `((x, y) => body)(a, b)`, a let, so the
+arguments flow into dots named after the inputs and on through the body.
+It is a view kept in layout.json (`editor/inline.ts`); its copies can't be
+edited, and a call inside one can be shown inline too.
+
 The examples are written this way too: `examples/sort` (insertion sort)
 was built with palette picks only, saved, and unpacked into the folder
 with `node examples/unpack.ts saved.json examples/sort`. Nothing
