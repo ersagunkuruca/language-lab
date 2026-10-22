@@ -4,6 +4,7 @@
 // with a message, which becomes the reason of the program's Abort.
 
 import { appendFileSync, existsSync, readdirSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { worldRandom } from "./random.ts";
 import type { World } from "./run.ts";
 
 export function nodeWorld(): World {
@@ -58,5 +59,6 @@ export function nodeWorld(): World {
     appendFile: (path, text) => { try { appendFileSync(path, text); } catch (e) { plain(e, path); } },
     fileExists: (path) => existsSync(path),
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
+    random: worldRandom,
   };
 }

@@ -5,6 +5,7 @@
 // don't share files by accident, and a list that saves itself with
 // `write file` keeps it across visits. A page has no standard input.
 
+import { worldRandom } from "./random.ts";
 import type { World } from "./run.ts";
 
 // What's used of localStorage (Storage), so tests can pass a map.
@@ -41,5 +42,6 @@ export function browserWorld(store: Store, program: string, console_ = console):
       }
       return out.sort();
     },
+    random: worldRandom,
   };
 }

@@ -351,6 +351,26 @@ ordinary `match … | abort(why) → …` catches a missing file. A command-line
 error and exits with 1. Command-line arguments aren't an effect: they're
 `main`'s input.
 
+### Random
+
+`Random` is an effect declared in std like any other, with one operation:
+`random()`, a Number in [0, 1). There are three ways to answer it:
+
+- `seeded(seed, action)` runs `action` with numbers that are the same on
+  every run for the same seed (xoshiro128** by Blackman and Vigna, seeded
+  with SplitMix32: `src/lang/random.ts`). The evaluator and compiled code
+  use the same generator, so they draw the same numbers bit for bit, which
+  is what makes a program that rolls dice testable.
+- A match answers it like any operation that returns:
+  `match roll() | random() → 0.5` is a die that always lands in the middle.
+- What nothing handles, the world answers, from the platform's
+  cryptographic randomness (`World.random`).
+
+`Random` is not a world effect: drawing a number changes nothing outside
+the program, so a search may draw (`all(() => x = one of(xs); random() <
+0.5 …)`). Under `seeded`, each alternative takes the next numbers, depth
+first, and an abandoned alternative doesn't give its numbers back.
+
 ### Cells: reactivity and values on demand
 
 Is this effect system the same thing as Solid.js's reactivity? In one
