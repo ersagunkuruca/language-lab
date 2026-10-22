@@ -95,10 +95,19 @@ run in parallel because they touch different files.
      LLVM, once WASM works.
    *Why after the items above:* each target is a month, and the editor and
    effects should be solid before they are compiled three ways.
-7. **Web apps.** The runtime built on item 4 (a page is a value whose
-   changing parts are watched functions, Solid-style, so no diffing is
-   needed; `src/lang/ui.ts` is the seed), two-way binding by relations, static site
-   output. Mobile follows as a packaged web app.
+7. ~~**Web apps.**~~ **Done** (PRs #100, #102, #104, #106, #107):
+   a page is a value of std's `Html` whose changing parts are watched
+   functions, Solid-style, so no diffing is needed (WEB.md); events are
+   handlers that write cells; the browser is a world (files in
+   `localStorage`); `lab build-web` writes one HTML file; two-way binding
+   is a field's display function run backwards, and
+   [apps/converter.html](https://ersagunkuruca.github.io/language-lab/apps/converter.html)
+   is written that way. On the way, functions kept in data got their
+   effect rows (#102). Open: reactive.html's programs moved onto `Html`,
+   keyed lists, `solve` over a function value (one generic `bind`),
+   static output from `lab run`, time, randomness and HTTP, a page shown
+   live in the editor. Mobile follows as a packaged web app (a PWA, or
+   Capacitor).
 8. **Research items** as they become blocking: costs worked out from folds,
    laws proved by fusion, fast invertible parsing, exact reals as a practical
    numeric type, Clifford algebras (NUMBERS.md stage 4).
