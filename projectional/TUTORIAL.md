@@ -7,6 +7,10 @@ people. The last part, [What's confusing, and what could be simpler](#whats-conf
 is the reason it exists today, and it's meant to be the project's one list of
 open problems.
 
+Many of the ideas here were had by other people first, and some of the code
+is adapted from theirs: [Credits](#credits) at the end says where each
+comes from.
+
 Everything here can be tried in the editor:
 https://ersagunkuruca.github.io/language-lab/ (or open the repository's
 `index.html` locally). The examples ship with it, in the *Programs* list on
@@ -812,3 +816,21 @@ So the list above isn't read as "everything is wrong":
   the discussion behind it: [NOTES.md](NOTES.md). The prototype and editor:
   [README.md](README.md).
 - Screenshots are in `projectional/tutorial/`.
+
+## Credits
+
+The ideas are mostly Ersagun's, but many were had by others first, and the
+language borrows freely: content-addressed definitions from Unison, typed
+holes from Hazel, effect handlers from Koka and OCaml 5, `Choice` from
+Verse, running functions backwards from Prolog and miniKanren (whose search
+`relate.ts` adapts), fusion from Wadler and from Gill, Launchbury and Peyton
+Jones, continued-fraction arithmetic from Gosper, cells from Solid.js, and
+reroute dots from Blender. The *Shader: ray marching* example uses John C.
+Hart's sphere tracing and Inigo Quilez's torus, smooth minimum and soft
+shadow formulas; each definition's comment says so. The example programs
+*wc*, *Insertion sort* and *Eight queens* are classics (Unix `wc`, the
+textbook sort, Bezzel's puzzle).
+
+The full list, feature by feature, saying what's an influence, what's prior
+work and what's adapted code, with the rule for crediting new work, is
+[CREDITS.md](https://github.com/ersagunkuruca/language-lab/blob/main/projectional/CREDITS.md).
