@@ -1725,11 +1725,11 @@ function draw() {
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
+        h("section", { class: "panel" }, h("h2", {}, "Run"), typedRunPanel(namer, info)),
         h("section", { class: "panel", "aria-label": shown[1] },
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
-          ...shown[2]()),
-        h("section", { class: "panel" }, h("h2", {}, "Run"), typedRunPanel(namer, info)))),
+          ...shown[2]()))),
     h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
   );
   document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });

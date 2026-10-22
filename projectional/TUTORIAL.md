@@ -15,8 +15,8 @@ the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Relations in programs*. *+ New program* starts an empty one of your own.
 
 ![The editor: programs on the left, the graph in the middle with the text
-below it, and on the right the inspector (Definition, Program, Checks, Files)
-above Run](tutorial/editor.png)
+below it, and on the right Run above the inspector (Definition, Program,
+Checks, Files, Guide)](tutorial/editor.png)
 
 The window is in panes. The menu bar across the top switches *Short names* /
 *Descriptive* and the notation, and has *Undo*, *Redo* and this tutorial. The *Programs* outline is on the left. The graph is in the middle,
@@ -24,7 +24,7 @@ with a tab for each definition you've opened, and the same definition as
 text below it (*Blocks*, *Steps*, *Nested* or *Lisp*). On the right, the
 inspector has five tabs: *Definition* (or *Selected* when something is
 picked), *Program*, *Checks*, *Files* and the *Guide*, which a first visit
-opens on; *Run* sits under them. Drag the
+opens on; *Run* sits above them. Drag the
 gutters between panes to resize them. Colour means something only in a few
 places: blue for what's selected and for values, purple for dots, amber for
 holes and refusals. Everything else is grey.
