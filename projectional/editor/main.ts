@@ -1246,6 +1246,19 @@ function programPanel(): HTMLElement {
 let view: InlineView | null = null;
 // The graph last drawn, so the menu can ask it to tidy.
 let graph: GraphView | null = null;
+// Nodes to bring on screen once the next render has drawn them: what an
+// edit just put somewhere the window may not reach.
+let revealNext: ((id: Id) => boolean) | null = null;
+function revealDrawn() {
+  if (!revealNext) return;
+  // After the frame, so the graph drawn last (a gesture may render twice)
+  // has its size.
+  requestAnimationFrame(() => {
+    const want = revealNext, g = graph;
+    revealNext = null;
+    if (want && g) g.reveal([...g.world.querySelectorAll("[data-id]")].filter((e) => want(e.getAttribute("data-id")!)));
+  });
+}
 function graphOf(info: T.Info): HTMLElement {
   const calls = (doc.layout.inline ?? []).filter((c) => c.includes("~") || node(c));
   const p = typedPres();
@@ -1341,6 +1354,7 @@ function menuAction(act: string, target: Id | undefined) {
       if (!r.ok || !m) return void applyT(r);
       const hole = r.select!, w = m.world;
       ui.selected = hole;
+      revealNext = (id) => id === hole || id === r.dot;
       commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } } },
         ["code.json", "names.short.json", "layout.json"], r.note);
       ui.menu = { ...m, target: { kind: "hole", id: hole } };
@@ -1374,6 +1388,7 @@ function toggleInline(call: Id) {
   // Collapsing a call collapses what was shown inline inside it too.
   const inline = on ? now.filter((x) => x !== call && !x.endsWith(`~${call}`)) : [...now, call];
   ui.selected = call;
+  if (!on) revealNext = (id) => id === call || id.endsWith(`~${call}`);
   commit({ layout: { ...doc.layout, inline } }, ["layout.json"],
     on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
 }
@@ -1698,7 +1713,7 @@ document.addEventListener("pointerdown", (e) => {
 // fails too. Say what broke and keep the way out: the program picker, Undo,
 // and Reset to the example as shipped.
 function render() {
-  try { draw(); } catch (e) {
+  try { draw(); revealDrawn(); } catch (e) {
     console.error(e);
     document.getElementById("app")!.replaceChildren(
       h("header", { class: "bar" }, h("div", { class: "controls" },
