@@ -40,6 +40,15 @@ first.
 
 ## 1. Soundness: what the checker promises and doesn't keep
 
+> **Status (2026-10-22, "claims true").** Fixed: strict positivity, size-change
+> termination with transparent lets, recursive values refused, `derivative`
+> of builtins and never throwing (its result is `Choice`), forward-only
+> things wait inside a backwards search instead of throwing, solving for a
+> function is a checked error, and `equal` needs plain data (a constraint on
+> type variables). Open: folds over nested types (§1.1, next), carrying
+> totality over from a meaning to its representation, exact float equality
+> in `relate.ts`, and a round-tripping `show` (§1.3).
+
 ### 1.1 Totality has holes
 
 The error table says non-termination is *inferred*: structural recursion is

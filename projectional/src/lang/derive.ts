@@ -32,6 +32,12 @@
 // Not differentiable: a case analysis that takes apart data built from the
 // variable (it would need derivatives of data), comparisons and text as
 // results, and solve nodes (implicit differentiation would do it; not yet).
+// Generating a derivative as a definition (the editor's gesture) refuses
+// those with NotDifferentiable. At run time, `derivative` can't refuse, so
+// it reads what it can and puts `fail` where it can't: no slope there,
+// which is why derivative's result may fail (Choice). Only the part that
+// needs the missing slope fails; a piecewise function keeps the slopes of
+// its other pieces.
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
@@ -46,8 +52,9 @@ export class NotDifferentiable extends Error {}
 // fresh nodes each time it is placed (a node can't have two parents).
 // `neg` and `recip` remember −y and 1/y, so a + (−y) prints as a − y and
 // a · (1/y) as a / y.
-type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E };
+type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E } | { k: "none" };
 const numE = (v: number): E => ({ k: "num", v });
+const NONE: E = { k: "none" };
 const isNum = (e: E, v?: number) => e.k === "num" && (v === undefined || e.v === v);
 
 interface Ctx {
@@ -62,7 +69,8 @@ const PRIMS = FN as unknown as Record<string, { d: ((args: SolverTree[]) => Solv
 const OPS: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
 const BUILTIN: Record<string, Id> = Object.fromEntries(Object.entries(OPS).map(([id, op]) => [op, id]));
 
-export function deriver(code: Code, names: Names = {}) {
+// lenient: put `fail` where the slope can't be read, instead of refusing.
+export function deriver(code: Code, names: Names = {}, lenient = false) {
   // New nodes go into code.nodes itself, so they can be run right away.
   const nodes = code.nodes;
   const outNames: Names = {};
@@ -78,17 +86,22 @@ export function deriver(code: Code, names: Names = {}) {
   const binder = (name: string) => { const id = add({ kind: "binder" }); if (name) outNames[id] = name; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
   const callN = (fn: Id, ...args: Id[]) => add({ kind: "call", fn, args });
-  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v }) : e.build());
+  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v }) : e.k === "none" ? callN(ref(S.fail)) : e.build());
+  const cant = (why: string): E => {
+    if (!lenient) throw new NotDifferentiable(why);
+    return NONE;
+  };
 
   // Arithmetic on derivatives, simplifying as it goes so the result reads
   // like something a person would write.
   function op(name: string, ...xs: E[]): E {
+    if (xs.some((x) => x.k === "none")) return NONE;
     if (xs.every((x) => x.k === "num")) {
       const r = (impl as Record<string, (...a: number[]) => number>)[name]?.(...xs.map((x) => (x as { v: number }).v)) ?? (name === "abs" ? Math.abs((xs[0] as { v: number }).v) : NaN);
       if (Number.isFinite(r)) return numE(r);
     }
     const [a, b] = xs;
-    const neg = (e: E) => (e.k === "build" ? e.neg : e.v < 0 ? numE(-e.v) : undefined);
+    const neg = (e: E) => (e.k === "build" ? e.neg : e.k === "num" && e.v < 0 ? numE(-e.v) : undefined);
     const recip = (e: E) => (e.k === "build" ? e.recip : undefined);
     switch (name) {
       case "add":
@@ -202,13 +215,13 @@ export function deriver(code: Code, names: Names = {}) {
           if (OPS[head.target]) return chain(OPS[head.target], n.args, ctx);
           if (t.kind === "def" && t.body && nodes[t.body].kind === "lambda") return defD(head.target, n.args, ctx);
           if (t.kind === "binder") return unknownD(n, ctx);
-          throw new NotDifferentiable(`the derivative goes through ${names[head.target] ?? head.target}, which isn't arithmetic`);
+          return cant(`the derivative goes through ${names[head.target] ?? head.target}, which isn't arithmetic`);
         }
         return unknownD(n, ctx);
       }
       case "match": return matchD(n, ctx);
       case "fold": return foldD(n, ctx);
-      default: throw new NotDifferentiable(`can't differentiate through a ${n.kind}`);
+      default: return cant(`can't differentiate through a ${n.kind}`);
     }
   }
 
@@ -242,6 +255,7 @@ export function deriver(code: Code, names: Names = {}) {
           args.push(copy(n.args[i], ctx));
           const dv = D(n.args[i], ctx);
           if (isNum(dv, 0)) return;
+          if (dv.k === "none") { d.set(p, NONE); return; }
           const dp = binder(`${nm(p)}′`);
           d.set(p, { k: "build", build: () => ref(dp) });
           dParams.push(dp);
@@ -282,8 +296,8 @@ export function deriver(code: Code, names: Names = {}) {
   // A function value we can't see statically: ask for its derivative when
   // the program runs.
   function unknownD(n: NodeOf<"call">, ctx: Ctx): E {
-    if (n.args.length !== 1) throw new NotDifferentiable("only functions of one number can be differentiated at run time");
-    if (depends(n.fn, new Set(ctx.d.keys()))) throw new NotDifferentiable("the function being called depends on the variable itself");
+    if (n.args.length !== 1) return cant("only functions of one number can be differentiated at run time");
+    if (depends(n.fn, new Set(ctx.d.keys()))) return cant("the function being called depends on the variable itself");
     const du = D(n.args[0], ctx);
     const at: E = { k: "build", build: () => callN(callN(ref(S.derivative), copy(n.fn, ctx)), copy(n.args[0], ctx)) };
     return op("mul", at, du);
@@ -292,7 +306,7 @@ export function deriver(code: Code, names: Names = {}) {
   function matchD(n: NodeOf<"match">, ctx: Ctx): E {
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
     if (depends(n.scrutinee, new Set(ctx.d.keys())) && arms.some((a) => a.binds.length)) {
-      throw new NotDifferentiable("this case analysis takes apart data built from the variable");
+      return cant("this case analysis takes apart data built from the variable");
     }
     return {
       k: "build", build: () => add({
@@ -311,7 +325,7 @@ export function deriver(code: Code, names: Names = {}) {
   // coefficients, say), whose cases compute numbers that do. Each folded
   // value becomes a pair (value, derivative).
   function foldD(n: NodeOf<"fold">, ctx: Ctx): E {
-    if (depends(n.scrutinee, new Set(ctx.d.keys()))) throw new NotDifferentiable("this fold takes apart data built from the variable");
+    if (depends(n.scrutinee, new Set(ctx.d.keys()))) return cant("this fold takes apart data built from the variable");
     return {
       k: "build", build: () => {
         const arms = n.arms.map((a) => {
@@ -357,12 +371,28 @@ export function differentiate(code: Code, names: Names, def: Id, wrt = 0): { cod
   return { code: out, names: d.names, def: id, defs: d.defs };
 }
 
-// For the evaluator: the derivative of a lambda as another lambda, written
-// into `code` (cached, so asking twice is free).
+// For the evaluator: the derivative of a function value as a lambda,
+// written into `code` (cached, so asking twice is free). The function is a
+// lambda of the program, or a builtin (sqrt), read as x ↦ sqrt(x). Never
+// refuses: where a slope can't be read, the lambda fails.
 const cache = new WeakMap<object, Map<Id, Id>>();
-export function derivativeLambda(code: Code, lambda: Id): Id {
+export function derivativeLambda(code: Code, fn: { lambda: Id } | { prim: Id }): Id {
   let c = cache.get(code.nodes);
   if (!c) cache.set(code.nodes, (c = new Map()));
-  if (!c.has(lambda)) c.set(lambda, deriver(code).lambda(lambda, 0));
-  return c.get(lambda)!;
+  const key = "lambda" in fn ? fn.lambda : fn.prim;
+  if (!c.has(key)) {
+    let lambda = key;
+    if ("prim" in fn) {
+      const x = freshId(), r = freshId(), body = freshId();
+      lambda = freshId();
+      code.nodes[x] = { id: x, kind: "binder" };
+      code.nodes[r] = { id: r, kind: "ref", target: x };
+      const head = freshId();
+      code.nodes[head] = { id: head, kind: "ref", target: fn.prim };
+      code.nodes[body] = { id: body, kind: "call", fn: head, args: [r] };
+      code.nodes[lambda] = { id: lambda, kind: "lambda", params: [x], body };
+    }
+    c.set(key, deriver(code, {}, true).lambda(lambda, 0));
+  }
+  return c.get(key)!;
 }

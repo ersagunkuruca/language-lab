@@ -115,10 +115,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       yield* (otherwise as Fn)();
     },
     [S.fuel]: (n, body) => run((m) => m.handle(S.fuel, [n, body])),
+    // Every function value carries its node, so this can always look inside.
     [S.derivative]: (f) => {
-      const m = (f as unknown as Record<symbol, { lambda?: Id; env?: Map<Id, Value> }>)[META];
-      if (!m?.lambda) throw new Error("derivative needs a function written in the program, to look inside it");
-      return run((machine) => machine.eval(derivativeLambda(code, m.lambda!), fromMap(m.env!)));
+      const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
+      return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
