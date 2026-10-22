@@ -251,3 +251,148 @@ calc on 4,000 lines is about 31 ms against the ideal's 21.
 Next round: a bigger program with more `Choice` in it (a solver or a
 search, not one with `Choice` only at the edges), and one that writes
 files, so the handler stack and generators get measured too.
+
+## Round 2: Countdown (2026-10-22)
+
+Round 1's programs were all generated from TypeScript with the DSL. This
+round's first program was written in the editor instead, by clicks:
+headless Chromium driving the built page the way a person would (palette
+picks, typed values, the case and field forms, renames, *Add a value
+here*), then *Save file* and `examples/unpack.ts`. Nothing was edited by
+hand. What the editor made hard is listed at the end.
+
+`projectional/examples/countdown` is the Countdown numbers game: every way
+to reach a target from some of the numbers with `+ − × ÷`, each number used
+at most once. The search is Graham Hutton's, from "The countdown problem",
+*Journal of Functional Programming* 12(6), 2002
+(https://www.cs.nott.ac.uk/~pszgmh/countdown.pdf). It uses his `valid`,
+which skips answers that only differ by commutativity or by 1. For 765 from
+1, 3, 7, 10, 25 and 50 it finds his 49 solutions.
+
+```
+$ node projectional/cli/lab.ts run projectional/examples/countdown | head -2
+(((3 − 1) + 7) × (10 + (25 + 50)))
+(((3 − 1) + 7) × ((10 + 25) + 50))
+```
+
+It has 17 definitions: four data types and 13 functions. Unlike calc,
+`Choice` is the whole program, not its edges. `split`, `subsequence`,
+`insert anywhere`, `permutation`, `choices`, `join` and `results` all have
+`Choice` in their types. `one of` picks a Bool or an operator, `fail` prunes,
+`all` collects the answers. `results` recurses on the halves `split` gives,
+so the checker can't see it end and it carries `Diverge`.
+
+Files: `compiler/out/countdown.js` (what the compiler emits),
+`compiler/gaps/countdown.ideal.js` (the ideal, marked with gap numbers),
+`compiler/gaps/bench-countdown.ts` (`npm run gaps` runs it after calc's),
+`compiler/test/countdown.test.ts`.
+
+### Results
+
+All three ways give the same answers in the same order. In one process:
+
+| instance | answers | evaluator | compiled | ideal | compiled / ideal |
+|---|---:|---:|---:|---:|---:|
+| 1 3 7 10 25 → 765 | 0 | 783 ms | 9.2 ms | 1.5 ms | 6.3× |
+| 2 3 5 7 11 → 100 | 30 | 830 ms | 11 ms | 1.7 ms | 6.3× |
+| 1 3 7 10 25 50 → 765 | 49 | (17 s from `lab run`) | 248 ms | 40 ms | 6.1× |
+| 4 6 8 25 50 100 → 952 | 118 | (skipped) | 339 ms | 60 ms | 5.6× |
+
+So a program made of `Choice` is 6× slower than the ideal, against 1.5 to 2×
+for calc. The evaluator is another 80× slower than compiled code. No stack
+limits were hit: the depth of the search is the count of numbers.
+
+In a profile of the compiled code, `results` alone is 56% of the time, then
+`join` 11%, the garbage collector 9% and `split` 6%. The perf numbers below
+come from patching the emitted code by hand, one gap at a time, on Hutton's
+instance (240 ms before).
+
+### The gaps, ranked
+
+**G14. A Choice function with at most one answer is still a generator
+(perf: 240 → 159 ms, the largest single gap).** `join` either gives one
+`found` or fails. It's compiled as a generator, and `results` drains it
+with `for (const r of join(…)) yield r`, so every operator tried makes a
+generator object and runs the iterator protocol.
+*Fix:* when every path through a `Choice` function ends in one value or
+`fail`, with no `one of` and no call that can give more than one, compile it
+as a plain function that returns the value or a "no answer" sentinel. The
+caller tests the sentinel. This is the effect-type version of "this
+function returns an Optional". `valid`-style tests (`if test then x else
+fail()`) are common in search code, so this pays everywhere.
+
+**G9 again. Constant data is rebuilt each time (perf: 240 → 202 ms).**
+`one of([plus, minus, times, over])` builds four operator objects and four
+cons cells on every combination of two results. Round 1 found the cheap
+part of G9 (hoist nullary variants as constants); here it's worth 16%. *Fix:*
+a closed constant expression (no variables, no effects) is built once, at
+module level. That covers nullary variants and lists of them.
+
+**G11. Choice is compiled as nested generators (perf: most of what's left,
+116 → 40 ms).** Each `Choice` function is a generator, and each answer of
+`results` passes up through every enclosing `for … of … yield` of the
+recursion. The ideal passes the rest of the search down as a callback `k`
+and calls it once per answer, so an answer costs one call, whatever the
+depth. *Fix:* compile `Choice` functions in continuation-passing style when
+their callers are all compiled code (no `first` that has to stop a
+search halfway: that needs either generators or an exception to unwind,
+so `first` would keep the generator form or throw a sentinel). This is the
+big one, and it changes the calling convention of a whole class of
+functions, so it needs its own design note in COMPILER.md before code.
+
+**G13. Records taken apart at once are still built (perf: part of G11's
+remainder).** `split` returns a `halves` and `results` a `found`, and the
+caller matches on it straight away. With G11, they become two arguments to
+`k`. Without it, they're the "return two values" form of G9 from round 1.
+
+**G1 again (fuel).** `if ($spend())` before each recursive call: unmeasurable
+here (240 → 242 ms), because `$spend` is cheap when no fuel is active. The
+whole-program "no `with fuel` reachable" check from round 1 would still
+remove it. Low priority.
+
+**G12. `one of([true, false])` is a list and a loop.** It builds the list
+each time (hoisting it: 240 → 234 ms) and tests the Bool it picked. The
+ideal runs the two branches one after the other. Small, and G9 covers the
+building part.
+
+The cheap ones together (G14, G9, G1, G12, all patched by hand) bring 240 ms
+to 116 ms. The remaining 3× to the ideal is G11 and G13.
+
+### What the editor made hard
+
+Countdown took about 150 palette picks in 17 definitions, and the search
+ran the first time it was run. Filling holes is fast: after each pick the
+next hole is selected, typed values work (`[1, 3, 7, 10, 25, 50]`, `"+"`),
+`match` and `fold` are offered for every value with cases, and *Add a
+value here* plus a rename gave `main` its named list. What got in the way:
+
+1. **A field can't be an `Int`.** The field form's "Holding" list has
+   Number, Text, Bool, Unit, the web types, the program's own types, and
+   Lists of those. There's no Int, no type parameter, no Pair or Optional.
+   So the Countdown numbers are `Number`, not `Int` as they should be.
+2. **Field reads aren't in the palette.** Neither std `Pair`'s `fst`/`snd`
+   nor the program's own record fields (`front`, `back`) are offered, so a
+   record can only be read with a `match`. (`fillings` in `infer.ts` offers
+   variants, not fields.)
+3. **Std types other than Bool and List can't be matched on.** `match □ ·
+   Pair` isn't offered. Together with 2, std `Pair` can't be taken apart at
+   all, so the program has its own `Halves` and `Found` records.
+4. **Nested matches name their binders the same.** A `match tail` inside
+   `cons(head, tail)` gets `cons(head, tail)` again. The palette then offers
+   two `head`s and two `tail`s, with nothing telling them apart. They have
+   to be renamed first.
+5. **Search hides exact matches.** The palette shows at most 40 rows, and
+   the query also matches descriptions, so typing `all` doesn't show
+   `all(□)`. Typing `all(` does. A row whose name starts with the query
+   should come first.
+6. **Bug: deleting the open definition throws.** *Delete* in the
+   Definition panel raises "TypeError: Cannot read properties of undefined
+   (reading 'kind')" in the page, every time (seen three times).
+7. **A rename only changes the current naming.** Renames made with
+   *Descriptive* names on go to `names.descriptive.json`. `names.default.json`,
+   which `lab` and the compiler use, keeps `head` and `tail`, and the dot
+   named `numbers` comes out of the compiler as `x`. Names of deleted nodes
+   stay in the file.
+8. **The Definition panel is behind Escape.** While a hole is selected,
+   the tab row shows *Selected*, and the panel with *Delete*, *Inputs* and
+   the type only comes back after Escape.
