@@ -2,7 +2,7 @@
 // by precedence, and attaching comments. Parentheses are computed here, at
 // display time; the tree never contains them.
 
-import { ID_PATTERN, type Code, type Id, type Node } from "../model.ts";
+import { resolveRefs, type Code, type Id, type Node } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import type { Namer } from "./namer.ts";
 
@@ -58,7 +58,7 @@ export class Footnotes {
 // variable updates the prose that talks about it.
 export function comment(pres: Presentation, namer: Namer, id: Id): string | undefined {
   const c = pres.style.comments === false ? undefined : pres.comments[id];
-  return c?.replace(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"), (_, ref) => namer.name(ref));
+  return c === undefined ? undefined : resolveRefs(c, (ref) => namer.name(ref));
 }
 
 export function lambdaText(code: Code, namer: Namer, params: Id[], body: R): R {

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
@@ -194,6 +195,13 @@ test("the block view shows if, folds and lets, with the inferred type on top", (
   const type = renderBlocks(p.code, p.pres, info, p.named("expression"));
   assert.match(type, /^type expression\n {2}\| number\(value: Number\)\n {2}\| x\n/);
   void baseNames;
+});
+
+test("a comment's {id} references show as the names they point at", () => {
+  const p = load("quadratic");
+  const names = baseNames(JSON.parse(readFileSync(join(root, "examples", "quadratic", "names.short.json"), "utf8")));
+  const text = renderBlocks(p.code, { ...p.pres, names }, infer(p.code, names), "0f886080");
+  assert.equal(text.split("\n")[0], "-- b² − 4·a·c; negative means no real roots");
 });
 
 test("relations: a direction is chosen at the use site, and its effect is inferred", () => {

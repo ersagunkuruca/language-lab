@@ -9,6 +9,7 @@
 // confused on screen.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
+import { resolveRefs } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
@@ -209,7 +210,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   const body = def.body ? node(def.body) : null;
   const out: string[] = [];
   const comment = pres.comments[defId];
-  if (comment) out.push(`-- ${comment}`);
+  if (comment) out.push(`-- ${resolveRefs(comment, nameOf)}`);
   if (body?.kind === "typedef") {
     enter(body.params);
     const head = `${body.effect ? "effect" : "type"} ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;

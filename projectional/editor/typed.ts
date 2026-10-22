@@ -9,7 +9,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
-import { isPublished } from "../src/model.ts";
+import { isPublished, resolveRefs } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -206,7 +206,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   const out = h("div", { class: "typed" });
-  if (pres.comments[defId]) out.append(h("div", { class: "cmt" }, `-- ${pres.comments[defId]}`));
+  if (pres.comments[defId]) out.append(h("div", { class: "cmt" }, `-- ${resolveRefs(pres.comments[defId], name)}`));
   if (body?.kind === "typedef") {
     out.append(line(kw(body.effect ? "effect " : "type "), x(defId, "def", name(defId)), ...body.params.map((p) => h("span", {}, " ", bind(p)))));
     const tt = (id: Id): string => {
