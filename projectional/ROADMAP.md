@@ -61,11 +61,12 @@ run in parallel because they touch different files.
    compile saved editor files on Node), and one real CLI program (a `wc` or
    todo tool, crediting Unix `wc`). *Why:* this is "regular programs", and
    the checker half is already merged.
-4. **Reactivity and on-demand values through effects.** A `read` operation
-   handled by a tracking handler gives Solid.js-style signals; an "ask for
-   the next term" operation gives continued fractions computed on demand.
-   One demo of each. *Why here:* it needs effects working end to end, and it
-   is the first step towards the web runtime.
+4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
+   (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`
+   (`write`), one runtime handler that gives Solid.js-style signals and lazy,
+   remembered values; a reactive page and continued fractions with Gosper's
+   arithmetic, live at reactive.html. Open: guarded corecursion, Cells in
+   the compiler, a stateful handler form so programs can write their own.
 5. **Fold-as-loop as a representation.** Move "compile a fold to a loop"
    out of the compiler's special cases and into the representation table
    from NUMBERS.md, next to Peano `Nat` → binary. *Why:* one mechanism for
@@ -83,8 +84,9 @@ run in parallel because they touch different files.
      LLVM, once WASM works.
    *Why after the items above:* each target is a month, and the editor and
    effects should be solid before they are compiled three ways.
-7. **Web apps.** The Elm-architecture runtime built on item 4, HTML as data
-   with a diffing representation, two-way binding by relations, static site
+7. **Web apps.** The runtime built on item 4 (a page is a value whose
+   changing parts are watched functions, Solid-style, so no diffing is
+   needed; `src/lang/ui.ts` is the seed), two-way binding by relations, static site
    output. Mobile follows as a packaged web app.
 8. **Research items** as they become blocking: costs worked out from folds,
    laws proved by fusion, fast invertible parsing, exact reals as a practical

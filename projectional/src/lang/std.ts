@@ -6,7 +6,7 @@
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 
@@ -16,8 +16,8 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"]]) named(node({ id, kind: "builtin", op: id }), name);
-for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
 // type expressions. An effect is written the same way (`effect`): its
@@ -188,6 +188,22 @@ export const IO = {
   appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),
   fileExists: world("io.fileExists", "file exists", [str], bool, [FILES]),
   listFolder: world("io.listFolder", "list folder", [str], list(str), [FILES, ABORT]),
+};
+
+// Cells (src/lang/cells.ts, LANGUAGE.md "Cells"): Solid.js's signals and
+// memos as an effect. `cell` makes one you write, `formula` one computed
+// from others when first read and remembered until a cell it read
+// changes. Reading is the operation the runtime's handler tracks. A
+// formula's computation runs later, at some read, so the effects it may
+// have are the handler's own: Cells, and Diverge (a lazy producer of
+// endless data is recursion the checker can't see end). Not Update: a
+// formula reads, it doesn't write. Writing is Update, a world effect.
+const cellOf = (a: Type): Type => ({ t: "con", id: CELL, args: [a] });
+export const CELL_OPS = {
+  cell: builtin("cells.cell", "cell", (s) => { const a = s.fresh(); return fn([a], cellOf(a), s.freshRow([CELLS])); }),
+  formula: builtin("cells.formula", "formula", (s) => { const a = s.fresh(); return fn([fn([], a, { effs: [CELLS, DIVERGE], tail: null })], cellOf(a), s.freshRow([CELLS])); }),
+  read: builtin("cells.read", "read", (s) => { const a = s.fresh(); return fn([cellOf(a)], a, s.freshRow([CELLS])); }),
+  write: builtin("cells.write", "write", (s) => { const a = s.fresh(); return fn([cellOf(a), a], unit, s.freshRow([UPDATE])); }),
 };
 
 // Int: whole numbers that never overflow. Same names as Number's, because
