@@ -74,10 +74,13 @@ run in parallel because they touch different files.
    "how this runs" instead of two, before the backends multiply.
 6. **Compile targets.** All are profiles (REVIEW.md §5.2) plus a code
    generator:
-   - **Shaders (WGSL)** first: vectors and matrices with static shapes,
-     `Float32`, the shader profile, a live preview, an SDF ray marcher with
-     normals from `derivative`. Famous demos may be ported, with the author
-     named and the source linked.
+   - **Shaders (WGSL)** first. *Done (PRs #80, #82, #85, #86):* the
+     scalar profile printed as WGSL, records as structs, self tail calls as
+     loops, [shaders.html](https://ersagunkuruca.github.io/language-lab/shaders.html)
+     checked against the evaluator on a GPU, and an SDF ray marcher with
+     normals from generated derivatives (COMPILER.md, "WGSL shaders").
+     *Left:* native vectors and matrices with static shapes, `Float32`,
+     `derivative` in the source, and a live preview in the editor.
    - **WebAssembly** second, for the same profile: no recursive data and no
      closures means no garbage collector, so the shader profile compiles to
      plain WASM. Full programs need WasmGC or our own GC, and come later.
