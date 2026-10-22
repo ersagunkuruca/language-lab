@@ -125,6 +125,7 @@ interface Item {
   out?: Pos;            // where its value leaves, for the value chip
   value?: Id;           // whose value the chip shows
   solid: boolean;       // wires running under it are drawn as tunnels
+  label?: Box;          // words drawn outside it (a dot's name), relative to it
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
@@ -199,7 +200,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       if (src) r.setAttribute("data-src", src);
       if (cls.includes("hole")) r.setAttribute("data-slot", id);
       else r.setAttribute("data-move", id);
-    }, { value: cls.includes("hole") ? undefined : id, out: { x: w, y: h / 2 } });
+    // A literal says its value already; a hole has none.
+    }, { value: cls.includes("hole") || cls === "lit" ? undefined : id, out: { x: w, y: h / 2 } });
   };
 
   // A use that isn't wired straight into a call's input: a small end for
@@ -432,8 +434,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         item(b, 2 * r, 2 * r, (g) => {
           g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
           if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
-        }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false });
+        }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false, label: silent ? undefined : { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
         at.set(b, { x, y: py - r });
+        // The dot shows the value; the node feeding it needn't say it again.
+        if (!silent && "item" in v.out && items.get(v.out.item)) items.get(v.out.item)!.value = undefined;
         wires.push({ from: v.out, to: { item: b, dx: 0, dy: r }, cls: "", flow: true });
         sources.set(b, { item: b, dx: 2 * r, dy: r });
         right = Math.max(right, x + 2 * r + (silent ? 0 : tw(name(b), 6.8) / 2));
@@ -673,6 +677,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       f.labels.forEach((l, i) => { const p = point({ frame: f.id, port: i }); obstacles.push({ x: p.x + 6, y: p.y - 17, w: tw(l, 6.8) + 6, h: 14 }); });
     }
     if (scene.result) { const r = point(scene.result); obstacles.push({ x: r.x + 6, y: r.y - 8, w: 50, h: 16 }); }
+    for (const it of scene.items.values()) if (it.label) { const p = pos.get(it.key)!; obstacles.push({ ...it.label, x: p.x + it.label.x, y: p.y + it.label.y }); }
     const spots = placeLabels(want, obstacles);
     want.forEach((v, i) => {
       const sp = spots[i];
