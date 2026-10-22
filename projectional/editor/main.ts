@@ -74,6 +74,7 @@ import { fromFile, toFile } from "./files.ts";
 import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
+import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -1444,6 +1445,30 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
+// A program with a colour, or a red, green and blue, of (x, y, time) is a
+// picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
+// again after every edit. When the compiler can't take it to the GPU, its
+// reason shows instead. The canvas outlives renders, so the drawing goes on.
+const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint" }), for: null as Code | null, now: null as Picture | null };
+const picBox = h("div", { class: "picture-box" }, pic.canvas, pic.status);
+function pictureSection(info: T.Info | null): HTMLElement | null {
+  const entries = pictureEntries(doc.code.defs, pres().names);
+  if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
+  if (pic.for !== doc.code) {
+    const code = pic.for = doc.code;
+    pic.now?.stop();
+    pic.now = null;
+    pic.canvas.hidden = false;
+    pic.status.textContent = "Drawing…";
+    const shown = (e: unknown) => { pic.canvas.hidden = true; pic.status.textContent = `Can't draw the picture: ${e instanceof Error ? e.message : String(e)}.`; };
+    if (info.errors.length) shown(new Error("the program has errors; fix them first"));
+    else drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })
+      .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
+        (e) => { if (pic.for === code) shown(info.holes.size ? new Error("the program has holes; fill them first") : e); });
+  }
+  return picBox;
+}
+
 // An action's values come from running it, so they're asked for.
 function showValues() {
   commit({ examples: { ...(doc.examples ?? {}), [ui.def]: [] } }, ["examples.json"], "Values on the wires: each node shows what it made. Printing is left out.");
@@ -1743,7 +1768,7 @@ function draw() {
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Run"), typedRunPanel(namer, info)),
+        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), typedRunPanel(namer, info)),
         h("section", { class: "panel", "aria-label": shown[1] },
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),

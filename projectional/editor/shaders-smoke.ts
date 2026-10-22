@@ -1,8 +1,8 @@
-// The built shaders.html in a real browser, twice: with WebGPU (headless
-// Chromium draws with SwiftShader, a GPU in software), where the page's own
-// check of the GPU against the evaluator must pass for each picture; and
-// without, where each picture must still be drawn on the CPU. Fails on any error the
-// page throws or logs.
+// The built shaders.html, and the same pictures in the editor, in a real
+// browser, twice: with WebGPU (headless Chromium draws with SwiftShader, a
+// GPU in software), where the page's own check of the GPU against the
+// evaluator must pass for each picture; and without, where each picture must
+// still be drawn on the CPU. Fails on any error the page throws or logs.
 //
 //   npm run build-editor && npm run smoke-shaders
 //
@@ -50,6 +50,16 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
       return sum / (d.length / 4) / 3;
     }, shot.toString("base64"));
     if (!box || lit < 20) errors.push(`${where}: the middle of the picture is black (average ${lit.toFixed(0)} of 255)`);
+  }
+  // The editor draws the same pictures above Run (editor/picture.ts).
+  await page.goto(new URL("../../index.html", import.meta.url).href);
+  for (const program of ["Shader: ripples", "Shader: ray marching"]) {
+    await page.locator(".nav-row:not([data-def])", { hasText: program }).first().click();
+    const said = page.locator(".picture-box p");
+    await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box p")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});
+    const status = await said.innerText().catch(() => "no picture");
+    console.log(`${label}, the editor's ${program}: ${status}`);
+    if (label === "with WebGPU" ? !status.startsWith("WebGPU") : !status.includes("on the CPU")) errors.push(`${label}: the editor didn't draw ${program}: ${status}`);
   }
   await browser.close();
 }
