@@ -25,22 +25,53 @@ export const STRING = "type.string";
 
 export class TypeError extends Error {}
 
+// A type that must be plain data: no functions anywhere inside it. Only
+// plain data can be compared, shown, saved or sent, and only plain data can
+// be solved for (a function can't be guessed). Type variables can carry the
+// requirement, the way a type class constraint would: `equal` is
+// (a, a) → Bool for every plain a.
+export class PlainError extends TypeError {}
+
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
 export class Subst {
   types = new Map<number, Type>();
   rows = new Map<number, Row>();
   next = 0;
+  // Type variables that may only stand for plain data.
+  plain = new Set<number>();
+  // For a data type applied to args: the args that must be plain for the
+  // whole to be plain, or null if it holds a function whatever its args.
+  // Set by the checker, which can see the data types' fields.
+  plainArgs: (id: Id, args: Type[]) => Type[] | null = (_, args) => args;
 
   clone(): Subst {
     const s = new Subst();
     s.types = new Map(this.types);
     s.rows = new Map(this.rows);
     s.next = this.next;
+    s.plain = new Set(this.plain);
+    s.plainArgs = this.plainArgs;
     return s;
   }
 
-  fresh(): Type { return { t: "var", v: this.next++ }; }
+  fresh(plain = false): Type {
+    if (plain) this.plain.add(this.next);
+    return { t: "var", v: this.next++ };
+  }
+
+  // Require t to be plain data, now (for what's known of it) and later (its
+  // variables become plain).
+  requirePlain(t: Type): void {
+    t = this.resolve(t);
+    if (t.t === "var") this.plain.add(t.v);
+    else if (t.t === "fn") throw new PlainError("a function is not plain data");
+    else {
+      const args = this.plainArgs(t.id, t.args);
+      if (!args) throw new PlainError("this data holds functions");
+      args.forEach((a) => this.requirePlain(a));
+    }
+  }
   freshRow(effs: Id[] = []): Row { return { effs, tail: this.next++ }; }
 
   resolve(t: Type): Type {
@@ -82,6 +113,7 @@ export class Subst {
       const [v, t] = a.t === "var" ? [a, b] : [b as { t: "var"; v: number }, a];
       if (this.occurs(v.v, t)) throw new TypeError("this would need an infinite type");
       this.types.set(v.v, t);
+      if (this.plain.has(v.v)) this.requirePlain(t);
       return;
     }
     if (a.t === "con" && b.t === "con" && a.id === b.id && a.args.length === b.args.length) {
@@ -105,8 +137,11 @@ export class Subst {
     b = this.resolveRow(b);
     const onlyA = a.effs.filter((e) => !b.effs.includes(e));
     const onlyB = b.effs.filter((e) => !a.effs.includes(e));
+    // Rows are sets, so {Choice | r} = {r} has a solution: r has Choice in
+    // it. That's what lets f and derivative(f), which may fail where f
+    // doesn't, be passed to the same function.
     if (a.tail !== null && a.tail === b.tail) {
-      if (onlyA.length || onlyB.length) throw new TypeError("effects don't match");
+      if (onlyA.length || onlyB.length) this.rows.set(a.tail, { effs: [...onlyA, ...onlyB], tail: this.next++ });
       return;
     }
     if (onlyA.length && b.tail === null) throw new EffectError(onlyA);
@@ -126,7 +161,8 @@ export class EffectError extends TypeError {
 }
 
 // A type scheme: a type with its own variables, copied fresh at each use.
-export interface Scheme { vars: number[]; rows: number[]; type: Type }
+// `plain` lists the variables that may only stand for plain data.
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -142,7 +178,8 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
 }
 
 export function instantiate(sc: Scheme, s: Subst): Type {
-  const vm = new Map(sc.vars.map((v) => [v, s.fresh()]));
+  const plain = new Set(sc.plain ?? []);
+  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v))]));
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   const go = (t: Type): Type => {
     t = s.resolve(t);

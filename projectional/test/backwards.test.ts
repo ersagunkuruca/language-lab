@@ -118,8 +118,15 @@ test("what can't run backwards says why", () => {
     k.define(apply, k.fn(["f", "x"], (f, x) => k.call(f, x)));
   });
   assert.throws(() => [...relate(p.code, p.named("say"), { out: 1 })], (e) => e instanceof NotInvertible && /printing/.test(e.message));
-  assert.throws(() => [...relate(p.code, p.named("slope"), { out: 1 })], (e) => e instanceof NotInvertible && /integration/.test(e.message));
-  assert.throws(() => [...relate(p.code, p.named("apply"), { out: 1 })], (e) => e instanceof NotInvertible && /functions can't be guessed/.test(e.message));
+  // derivative and calling a function only run forward: they wait until
+  // their function is known. Here it is, so slope(x) = 2x is solved...
+  const [x] = (p.code.nodes[(p.code.nodes[p.named("slope")] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  assert.deepEqual([...relate(p.code, p.named("slope"), { out: 1 })].map((a) => a.values[x]), [0.5]);
+  // ...but a function that isn't known can't be guessed: the call is left
+  // waiting, so nothing is pinned down.
+  const [answer] = relate(p.code, p.named("apply"), { out: 1 });
+  assert.deepEqual(answer.free.length, 2);
+  assert.deepEqual(answer.residual, ["call"]);
 });
 
 test("backwards: types say Choice, Diverge when it may unfold forever, and printing is refused", () => {

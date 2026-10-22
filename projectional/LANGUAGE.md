@@ -91,10 +91,23 @@ and its result, which is what the product and chain rules need. Unused
 binders cost nothing, and a view can hide them. A fold is structural
 recursion, so it always ends.
 
-Plain recursion is allowed too. The checker (`structural` in
-`src/lang/infer.ts`, a small version of Coq's guard condition) accepts it as
-total when every recursive call passes, in some position, a piece that a
-match took apart from that same parameter:
+Plain recursion is allowed too. The checker (`terminates` in
+`src/lang/infer.ts`) uses size-change termination (Lee, Jones and
+Ben-Amram, 2001): each recursive call says, for each input, whether it is
+a parameter passed on as it is or a piece a match took apart from one, and
+following every chain of calls that comes back to where it started, some
+input must strictly shrink. That accepts one decreasing argument,
+lexicographic orders (Ackermann), arguments that swap places and mutual
+recursion, and rejects "ping-pong" recursion, where each call shrinks one
+argument while growing the other. A let (a dot) is transparent: naming the
+smaller piece keeps it the smaller piece.
+
+Two rules make "a piece is smaller" true. Data types are strictly
+positive: a type may not take itself as an input in its own fields
+(`knot = wrap(f: knot → Number)` is refused, since through it a function
+could call itself without any recursion), while taking itself as an output
+is fine (`rest: () → Stream` is lazy data). And only functions can be
+recursive: `ones = cons(1, ones)` is refused, so all data is finite.
 
 ```
 ‹for each›(list, action) =
@@ -286,7 +299,10 @@ class considered, and where each one ends up:
 | unreachable case | checked | `otherwise` when every case is covered is reported |
 | null / undefined | impossible by construction | there is no null; absence is `Choice`, and an unhandled `Choice` can't reach `main` |
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects |
-| non-termination | inferred | structural recursion is total; everything else carries `Diverge`, which `with fuel` turns into `Choice` |
+| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive |
+| comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
+| a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data built from x), there is none |
+| running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker |
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error |
 | incomplete program | allowed | holes have types and the program runs until it reaches one |
 | division by zero | runtime, but typed | `evaluate` fails instead of returning NaN; builtin `/` is IEEE (Infinity/NaN) |
