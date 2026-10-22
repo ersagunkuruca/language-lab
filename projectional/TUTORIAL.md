@@ -393,7 +393,8 @@ These are the words the in-editor Guide uses, one word per thing:
 ## What's confusing, and what could be simpler
 
 This is the candid part. Each item says what's there today, why it's a
-problem, and a proposal. They're ordered roughly by how much they'd simplify
+problem, and a proposal. [REVIEW.md](REVIEW.md) goes further: soundness
+holes, scale, and a roadmap. They're ordered roughly by how much they'd simplify
 the language.
 
 ### 1. There are still two worlds of functions
