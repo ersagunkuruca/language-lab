@@ -106,7 +106,7 @@ export const S = {
   floor: builtin("floor", "floor", pure([num], num), Math.floor),
   mod: builtin("mod", "mod", pure([num, num], num), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
-  show: builtin("show", "show", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
+  show: builtin("show", "show number", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
   range: builtin("range", "range", pure([num], list(num))),
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
@@ -160,7 +160,7 @@ export const INT_OPS = {
   quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
   remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
   power: choice("int.power", "power", [int, int], int, I.power),
-  show: builtin("int.show", "show", pure([int], str), I.show),
+  show: builtin("int.show", "show int", pure([int], str), I.show),
   read: choice("int.read", "read whole number", [str], int, I.read),
   toNumber: builtin("int.toNumber", "as number", pure([int], num), I.toNumber),
   wholePart: choice("int.wholePart", "whole part", [num], int, I.wholePart),
