@@ -112,6 +112,8 @@ interface UI {
   back: Id[];
   selected: Id | null;
   layer: Layer;
+  // What the navigator is filtered by.
+  find: string;
   style: StyleName;
   text: TextView;
   touched: string[];
@@ -207,6 +209,7 @@ const ui: UI = {
   back: [],
   selected: null,
   layer: "descriptive",
+  find: "",
   style: "math",
   text: "blocks",
   touched: [],
@@ -266,7 +269,7 @@ function showProgram() {
 
 function addProgram(d: Omit<Doc, "program">, note: string) {
   const id = `${MINE}${freshId()}`;
-  // Two programs with one title would be two tabs you can't tell apart.
+  // Two programs with one title would be two rows you can't tell apart.
   const titles = new Set(Object.values({ ...docs, [doc.program]: doc }).map(titleOf));
   if (d.title) { let t = d.title, k = 2; while (titles.has(t)) t = `${d.title} (${k++})`; d = { ...d, title: t }; }
   docs[id] = { ...d, program: id };
@@ -1327,6 +1330,46 @@ function definitionPanel(p: Presentation): HTMLElement | null {
     h("ul", { class: "ways" }, ...d.ways.map((w) => h("li", {}, h("span", { class: "given" }, `given ${w.given.join(", ")}`), ...w.steps.map((t) => h("code", {}, t)), w.several ? h("span", { class: "hint" }, " several answers") : null))));
 }
 
+// Programs and their definitions are one outline, the same rows at two
+// depths: the open program lists its definitions under it. It scrolls on
+// its own and filters as you type, so it stays one column however many
+// programs and definitions there are.
+const programList = (): [Program, string][] => [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])];
+
+function navigator(p: Presentation) {
+  const row = (attrs: Record<string, string>, on: boolean, ...kids: Kid[]) =>
+    h("button", { type: "button", class: `nav-row${on ? " on" : ""}`, "aria-current": on ? "true" : "false", ...attrs }, ...kids);
+  const defs = ownDefs().filter((d) => defBody(d));
+  const list = h("div", { class: "nav-list" });
+  for (const [k, label] of programList()) {
+    list.append(row({ "data-set": "program", "data-value": k }, false, label));
+    if (k !== doc.program) continue;
+    list.lastElementChild!.classList.add("open");
+    list.append(h("div", { class: "nav-defs", role: "group", "aria-label": `Definitions in ${label}` },
+      ...defs.map((d) => row({ "data-def": d }, d === ui.def, defBody(d)?.kind === "typedef" ? h("span", { class: "netmark", title: "data type" }, "▤ ") : null, p.names[d] ?? d)),
+      row({ "data-act": "new-def", title: "A new function, value or data type" }, ui.mode === "new-def", "+ New definition")));
+  }
+  list.append(row({ "data-act": "new-program" }, false, "+ New program"));
+  const find = h("input", { id: "nav-find", class: "nav-find", type: "search", placeholder: "Find a program or definition", "aria-label": "Find a program or definition", value: ui.find, autocomplete: "off" }) as HTMLInputElement;
+  // Filtering hides rows; it doesn't redraw the program.
+  const filter = () => {
+    const q = find.value.trim().toLowerCase();
+    ui.find = find.value;
+    for (const r of list.querySelectorAll<HTMLElement>(".nav-row")) r.hidden = !!q && !r.classList.contains("open") && !r.textContent!.toLowerCase().includes(q) && !r.dataset.act;
+  };
+  find.addEventListener("input", filter);
+  find.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { find.value = ""; filter(); }
+    const first = (sel: string) => list.querySelector<HTMLElement>(`${sel}:not([hidden]):not([data-act])`);
+    const r = e.key === "Enter" ? first(".nav-defs .nav-row") ?? first(".nav-row:not(.open)") : null;
+    // A program found is opened with all its definitions showing.
+    if (r && !r.dataset.def) ui.find = "";
+    r?.click();
+  });
+  filter();
+  return h("nav", { class: "panel p-nav", "aria-label": "Programs and definitions" }, h("h2", {}, "Programs"), find, list);
+}
+
 // A view that throws leaves the page as it was, so every click after it
 // fails too. Say what broke and keep the way out: the program picker, Undo,
 // and Reset to the example as shipped.
@@ -1353,11 +1396,6 @@ function draw() {
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
 
-  const defTabs = h("div", { class: "seg", role: "group", "aria-label": "Definition" },
-    ...ownDefs().filter((d) => defBody(d)).map((d) => h("button", { type: "button", class: d === ui.def ? "on" : "", "data-def": d },
-      defBody(d)?.kind === "typedef" ? h("span", { class: "netmark", title: "data type" }, "▤ ") : null, p.names[d] ?? d)),
-    h("button", { type: "button", class: ui.mode === "new-def" ? "on" : "", "data-act": "new-def", title: "A new function, value or data type" }, "+ New"));
-
   const main = [
     h("section", { class: "panel p-graph" }, h("h2", {}, "Graph ", h("small", {}, GRAPH_HINT)),
       graphOf(info)),
@@ -1372,9 +1410,7 @@ function draw() {
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Projectional"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
-        seg("program", doc.program, [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])]),
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
-        defTabs,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
         seg("style", ui.style, [["math", "a · b"], ["plain", "a * b"], ["lisp", "(* a b)"]]),
         h("div", { class: "seg" },
@@ -1386,6 +1422,7 @@ function draw() {
     ...(guideOpen ? [guide()] : []),
     h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
     h("main", { class: "grid is-typed" },
+      navigator(p),
       ...main,
       h("aside", { class: "side" },
         h("section", { class: "panel" }, h("h2", {}, "Program"), programPanel()),

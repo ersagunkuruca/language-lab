@@ -195,8 +195,10 @@ the examples back.
 
 ### Typed programs in the editor
 
-The editor's program switcher has the typed example programs (see
-LANGUAGE.md) and any programs of your own. They show as
+The navigator on the left lists the example programs (see LANGUAGE.md) and
+any programs of your own, one outline with the open program's definitions
+under it. It scrolls on its own and filters as you type (Enter opens the
+first match), so it stays one column however many there are. Programs show as
 clickable blocks (`editor/typed.ts`) with every node's inferred type on
 hover. Clicking a hole opens a palette of only the fillings that
 type-check (`fillings()`), "Split by cases" turns an expression into a match
@@ -242,7 +244,8 @@ a dataflow picture can't show is order, so a step done only for its effect
 (`_ = print(…)`) is a hollow dot nothing reads, in the column of steps.
 
 **Writing a program from nothing.** *New program* starts with one empty
-action, `main`. *+ New* next to the definition tabs adds a function (with
+action, `main`. *+ New definition*, under the program's definitions in the
+navigator on the left, adds a function (with
 its inputs), a value or a data type. Selecting a definition, input, case or
 field shows what can be done to it (`src/lang/toplevel.ts`), and every edit
 keeps the rest of the program in step: a new input gives every call a hole
