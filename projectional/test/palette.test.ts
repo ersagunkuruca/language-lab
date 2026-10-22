@@ -27,3 +27,17 @@ for (const name of ["calculus", "backwards", "queens"]) {
     assert.deepEqual(bad, []);
   });
 }
+
+// Fillings that leave the group's types the same don't always pass or fail
+// together: units come from what's called (multiply multiplies them, add
+// needs them equal). One function failing on units used to hide every
+// other function of the same type.
+test("a call's function as a hole: every function of the right type is offered, checked on its own units", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const mul = Object.values(p.code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === "builtin.mul")!;
+  const code = replace(p.code, mul.fn, () => ({ kind: "hole" }));
+  const info = infer(code);
+  const offered = fillings(code, info, mul.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
+  for (const op of ["builtin.mul", "builtin.add", "builtin.sub"]) assert.ok(offered.includes(op), `${op} is offered`);
+  for (const target of offered) assert.equal(infer(fillHole(code, {}, mul.fn, { kind: "ref", target, type: null as never }).code).errors.length, info.errors.length, target);
+});

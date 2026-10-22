@@ -909,7 +909,11 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (risky || solvedOn) return whole(f);
     const touches = pinned.some((k) => (k[0] === "t" ? s.types.has(+k.slice(1)) : s.rows.has(+k.slice(1))));
     if (!touches) return true;
-    const key = groupKey(s, h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; }));
+    // Units are the exception: what a call does to them is the callee's
+    // own (multiply multiplies them, add needs them equal), so a ref or a
+    // call is checked for each thing it names.
+    const named = f.kind === "ref" || f.kind === "call" ? `|${f.target}` : "";
+    const key = groupKey(s, h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; })) + named;
     if (!checked.has(key)) checked.set(key, whole(f));
     return checked.get(key)!;
   };
