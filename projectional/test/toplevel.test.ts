@@ -278,3 +278,14 @@ test("insertion sort, the textbook algorithm, written with palette picks and a t
   assert.ok(r.ok);
   assert.equal(T.fillValue(s.code, s.names, s.info(), then, '"text"', insert).ok, false, "a Text doesn't fit a List Number");
 });
+
+test("the sort example, written in the editor, type-checks and runs", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const info = infer(p.code, p.pres.names);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
+  assert.deepEqual(out, ["1 2 3 "]);
+});

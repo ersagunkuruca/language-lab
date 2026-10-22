@@ -15,6 +15,11 @@ import quadHints from "../examples/quadratic/hints.json" with { type: "json" };
 import phyCode from "../examples/physics/code.json" with { type: "json" };
 import phyNames from "../examples/physics/names.default.json" with { type: "json" };
 import phyComments from "../examples/physics/comments.json" with { type: "json" };
+import phyLayout from "../examples/physics/layout.json" with { type: "json" };
+import sortCode from "../examples/sort/code.json" with { type: "json" };
+import sortNames from "../examples/sort/names.default.json" with { type: "json" };
+import sortComments from "../examples/sort/comments.json" with { type: "json" };
+import sortExamples from "../examples/sort/examples.json" with { type: "json" };
 import queensCode from "../examples/queens/code.json" with { type: "json" };
 import queensNames from "../examples/queens/names.default.json" with { type: "json" };
 import queensComments from "../examples/queens/comments.json" with { type: "json" };
@@ -74,7 +79,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -121,16 +126,20 @@ const STORE = "projectional-editor-v5";
 const BASE = merge(prelude, std);
 const baseFor = (_typed: boolean) => BASE;
 
-const typedDoc = (program: Program, code: Code, names: Names, comments: Comments): Doc => ({
+// An example is a folder of the same side tables a saved file holds
+// (examples/unpack.ts writes one from a file the editor saved).
+const typedDoc = (program: Program, code: Code, names: Names, comments: Comments, more: { layout?: Partial<Layout>; examples?: Record<Id, string[]> } = {}): Doc => ({
   program, typed: true,
   code: merge(BASE, code),
   names: { short: names, descriptive: {} },
   comments, hints: {},
-  layout: { positions: {}, known: {} },
+  layout: { positions: {}, known: {}, ...more.layout },
+  examples: more.examples,
 });
 
 const initialFor = (program: Program): Doc =>
-  program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
+  program === "sort" ? typedDoc("sort", sortCode as Code, sortNames, sortComments, { examples: sortExamples })
+  : program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
   : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
   : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
   : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
@@ -138,21 +147,12 @@ const initialFor = (program: Program): Doc =>
 
 // The quadratic and the physics: plain arithmetic, and predicates with
 // units that run in every direction.
-// Each starts out run the way you'd first ask: how far it falls, where the
-// point lands.
+// Each starts out run the way you'd first ask (layout.json): how far it
+// falls, where the point lands.
 const initial = (): Doc => {
-  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments });
-  const known: Record<Id, Id[]> = {};
-  const ask = (name: string, unknown: number[]) => {
-    const def = d.code.defs.find((x) => d.names.short[x] === name);
-    const lam = def ? defBodyIn(d.code, def) : null;
-    if (def && lam?.kind === "lambda") known[def] = [...lam.params.filter((_, i) => !unknown.includes(i)), "out"];
-  };
-  ask("fall", [0]);
-  ask("rotate", [3, 4]);
-  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints, layout: { ...d.layout, known } };
+  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments }, { layout: phyLayout });
+  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints };
 };
-const defBodyIn = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && n.body ? code.nodes[n.body] : null; };
 
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
@@ -167,7 +167,7 @@ try {
   }
 } catch {}
 
-const START: Record<Program, string> = { numbers: "fall", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
+const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];

@@ -351,6 +351,10 @@ already draws. Nothing is typed by hand.
 
 ### 4.7 The DSL is the real source, and examples get regenerated
 
+*Done (2026-10-22): the generators are gone; examples are JSON edited in the
+editor and unpacked with `examples/unpack.ts`. `examples/sort` was written
+in the editor from nothing.*
+
 `npm run build-lang-examples` rebuilds examples from TypeScript with new
 random ids. Anything attached by id that isn't in the generator (layout,
 comments added in the editor) is lost on regeneration. For a language whose

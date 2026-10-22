@@ -466,9 +466,9 @@ Printing works out the fewest parentheses from precedence, the same job
 `src/render/expr.ts` does for the views. The fold returns the text and how
 tightly it binds, and wraps a part only when it has to.
 
-Both programs are built once by `examples/build-lang.ts` from
-`src/lang/programs.ts`. After that, the JSON is the program, and the
-TypeScript is just how it was first typed in, since there's no parser.
+Both programs were first typed in TypeScript through the builder, since
+the editor couldn't yet make definitions. The JSON is the program now; it
+is changed in the editor, and nothing regenerates it.
 
 ## Files
 
@@ -480,7 +480,7 @@ src/lang/run.ts       evaluator: results as lazy streams; handlers; runMain
 src/lang/refactor.ts  fillHole(), addVariant(): the gestures that prevent errors
 src/lang/render.ts    the block view (if/match/fold as indented blocks, types on top)
 src/lang/dsl.ts       building programs from TypeScript
-src/lang/programs.ts  queens and algebra
+src/lang/programs.ts  list helpers through the builder, for tests and benchmarks
 src/lang/load.ts      load a program on top of prelude + std
 src/lang/equations.ts code as equations: numeric expressions and predicates, for the solver
 src/lang/solve.ts     a solve node's plan: solver direction, or run backwards

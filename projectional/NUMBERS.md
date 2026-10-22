@@ -77,7 +77,7 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
 
 ## The proof of concept
 
-`examples/numbers` (built by `src/lang/numbers.ts`) has three parts, all
+`examples/numbers` (first typed in through the builder, now JSON) has three parts, all
 ordinary definitions.
 
 The meaning, and a program written against it:
@@ -538,7 +538,6 @@ In order. Each stage says when to start it.
 ```
 NUMBERS.md                        this plan
 src/lang/represent.ts             Representation, represent() (the rewrite), choose() (the chooser)
-src/lang/numbers.ts               the example: Nat, a program on it, Binary and its implementations
 src/lang/numbers-demo.ts          npm run numbers
 examples/numbers/                 the example as code.json + names + comments + representations.json
 test/numbers.test.ts              laws, the rewrite, encoding by running meaning backwards
