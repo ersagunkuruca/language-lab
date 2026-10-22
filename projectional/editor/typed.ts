@@ -13,7 +13,7 @@ import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
+import { chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
@@ -60,6 +60,13 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const sep = (s: string) => h("span", { class: "pn" }, s);
   const list = (ids: Id[], f: (id: Id) => Kid, between = ", ") => ids.flatMap((id, i) => (i ? [sep(between), f(id)] : [f(id)]));
 
+  // The typedef an arm's variant belongs to.
+  const ownerTypedef = (arm: Id): Node | null => {
+    const v = (node(arm) as NodeOf<"arm">).variant;
+    const def = info?.owner.get(v);
+    const d = def ? code.nodes[def] : null;
+    return d?.kind === "def" && d.body ? node(d.body) : null;
+  };
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
   const isLet = (n: Node) => n.kind === "call" && node(n.fn).kind === "lambda";
   const tall = (id: Id): boolean => {
@@ -96,8 +103,14 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
         if (items) return [x(id, "call", sep("["), ...list(items, (i) => inline(i)[0]), sep("]")), 100];
         const f = node(n.fn);
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-        const args = n.args.map(inline);
+        const ops = chainOperands(code, id);
+        const args = (ops ?? n.args).map(inline);
         const paren = ([e, p]: [HTMLElement, number], ok: boolean): Kid[] => (ok ? [e] : [sep("("), e, sep(")")]);
+        if (nota?.fixity === "infix" && ops) {
+          // a ++ b ++ c: one chain, whichever way the pairs nest.
+          const p = nota.prec ?? 5;
+          return [x(id, "call", ...args.flatMap((a, i) => [...(i ? [h("span", { class: "op x", "data-id": n.fn }, ` ${nota.glyph} `)] : []), ...paren(a, a[1] > p)])), p];
+        }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
@@ -154,7 +167,9 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
         return h("div", { class: `arm x${selected === a ? " sel" : ""}`, "data-id": a }, ...hang([...pat, sep(" → ")], arm.body));
       });
       if (n.kind === "match" && n.otherwise) arms.push(h("div", { class: "arm" }, ...hang([kw("otherwise"), sep(" → ")], n.otherwise)));
-      return x(id, "blk", line(kw(`${n.kind} `), inline(n.scrutinee)[0]), indent(...arms));
+      // A match on a computation, by an effect's operations, is a handler.
+      const handles = n.kind === "match" && n.arms.length > 0 && !!(ownerTypedef(n.arms[0]) as { effect?: true } | null)?.effect;
+      return x(id, "blk", line(kw(handles ? "handle " : `${n.kind} `), inline(n.scrutinee)[0]), indent(...arms));
     }
     if (n.kind === "lambda") return x(id, "blk", line(sep("("), ...list(n.params, bind), sep(") =>")), indent(block(n.body)));
     if (n.kind === "solve") {
@@ -169,9 +184,21 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       if (tall(n.fn) && !n.args.some(tall)) {
         return x(id, "blk", line(kw("apply")), indent(block(n.fn)), line(kw("to "), sep("("), ...list(n.args, (a) => inline(a)[0]), sep(")")));
       }
+      // An operator's operands one under another, each after the operator.
+      const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
+      const ops = chainOperands(code, id) ?? n.args;
+      if (nota?.fixity === "infix" && ops.length >= 2) {
+        const p = nota.prec ?? 5;
+        return x(id, "blk", ...ops.map((a, i) => {
+          const op = i ? [h("span", { class: "op x", "data-id": n.fn }, `${nota.glyph} `)] : [];
+          if (tall(a)) return op.length ? h("div", { class: "chain" }, ...op, block(a)) : block(a);
+          const [e, q] = inline(a);
+          return line(...op, ...(q > p ? [e] : [sep("("), e, sep(")")]));
+        }));
+      }
       const head = f.kind === "ref" ? x(n.fn, "ref fn", name(f.target)) : inline(n.fn)[0];
-      const comma = (i: number) => (i < n.args.length - 1 ? sep(",") : null);
-      return x(id, "blk", line(head, sep("(")), indent(...n.args.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
+      const comma = (i: number) => (i < ops.length - 1 ? sep(",") : null);
+      return x(id, "blk", line(head, sep("(")), indent(...ops.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
     }
     return line(inline(id)[0]);
   };
@@ -181,7 +208,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const out = h("div", { class: "typed" });
   if (pres.comments[defId]) out.append(h("div", { class: "cmt" }, `-- ${pres.comments[defId]}`));
   if (body?.kind === "typedef") {
-    out.append(line(kw("type "), x(defId, "def", name(defId)), ...body.params.map((p) => h("span", {}, " ", bind(p)))));
+    out.append(line(kw(body.effect ? "effect " : "type "), x(defId, "def", name(defId)), ...body.params.map((p) => h("span", {}, " ", bind(p)))));
     const tt = (id: Id): string => {
       const t = node(id);
       if (t.kind === "tfun") return `(${t.params.map(tt).join(", ")}) -> ${tt(t.result)}`;
@@ -189,9 +216,10 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       return [name(r.target), ...r.args.map((a) => { const s = tt(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
     };
     out.append(indent(...body.variants.map((v) => {
-      const fs = (node(v) as NodeOf<"variant">).fields;
+      const { fields: fs, returns } = node(v) as NodeOf<"variant">;
       return h("div", { class: `ln x variant${selected === v ? " sel" : ""}`, "data-id": v }, sep("| "), h("span", { class: "con" }, name(v)),
-        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", { class: `x fld${selected === f ? " sel" : ""}`, "data-id": f }, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []));
+        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", { class: `x fld${selected === f ? " sel" : ""}`, "data-id": f }, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []),
+        ...(returns ? [kw(" returns "), h("span", { class: "ty" }, tt(returns))] : []));
     })));
     return out;
   }

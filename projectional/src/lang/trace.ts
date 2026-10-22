@@ -7,7 +7,8 @@
 // values, a fold's is the evaluator's. Only what ran gets a value: the arm
 // a match didn't take has none, and a function's body has none until it's
 // called (with its own example). A fold shows its outermost pass: the case
-// the value took, with the rest already folded. A Choice shows its first answer. Printing
+// the value took, with the rest already folded. A handler shows its result.
+// A Choice shows its first answer. Printing
 // is swallowed. Definitions that might not finish aren't traced, and
 // neither is anything that calls one.
 
@@ -28,6 +29,12 @@ export function trace(code: Code, info: Info, def: Id, args: Value[]): Trace {
   };
   const divergent = (id: Id) => { const n = code.nodes[id]; return n.kind === "call" && code.nodes[n.fn].kind === "ref" && info.divergent.has((code.nodes[n.fn] as NodeOf<"ref">).target); };
 
+  const handler = (n: NodeOf<"match">) => {
+    const owner = n.arms.length ? info.owner.get((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : undefined;
+    const d = owner ? code.nodes[owner] : null;
+    return d?.kind === "def" && !!d.body && !!(code.nodes[d.body] as { effect?: true }).effect;
+  };
+
   const walk = (id: Id, env: Map<Id, Value>): Value => {
     const n = code.nodes[id];
     let v: Value;
@@ -46,6 +53,10 @@ export function trace(code: Code, info: Info, def: Id, args: Value[]): Trace {
         break;
       }
       case "match": {
+        // A handler's value examined is a computation that performs its
+        // effect, which only the evaluator can run with the handler around
+        // it: the handler shows its result.
+        if (handler(n)) { v = first(r.ev(id, env), id); break; }
         const d = walk(n.scrutinee, env) as Data;
         const arm = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
         if (!arm) { v = walk(n.otherwise!, env); break; }

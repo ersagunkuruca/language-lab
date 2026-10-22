@@ -218,3 +218,22 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   const code = replace(p.code, solve.id, () => ({ ...solve, given: { [x]: solve.given[x], out: solve.given.out } }));
   assert.ok(infer(code, p.pres.names).errors.some((e) => /needs 1 more known port/.test(e.message)));
 });
+
+test("a chain of one associative operator is one call however it nests; others keep their pairs", async () => {
+  const { chainOperands, S } = await import("../src/lang/std.ts");
+  const { B } = await import("../src/prelude.ts");
+  const nodes: Code["nodes"] = {};
+  const lit = (id: Id, value: string | number) => (nodes[id] = { id, kind: "lit", value }, id);
+  const call = (id: Id, op: Id, a: Id, b: Id) => { nodes[`${id}f`] = { id: `${id}f`, kind: "ref", target: op }; nodes[id] = { id, kind: "call", fn: `${id}f`, args: [a, b] }; return id; };
+  // ("a" ++ "b") ++ ("c" ++ "d"), and 1 − (2 − 3)
+  call("t", S.concat, call("l", S.concat, lit("a", "a"), lit("b", "b")), call("r", S.concat, lit("c", "c"), lit("d", "d")));
+  call("s", B.sub, lit("1", 1), call("s2", B.sub, lit("2", 2), lit("3", 3)));
+  const code: Code = { nodes, defs: [] };
+  assert.deepEqual(chainOperands(code, "t"), ["a", "b", "c", "d"]);
+  assert.deepEqual(chainOperands(code, "t", (id) => id === "r"), ["a", "b", "r"]);
+  assert.equal(chainOperands(code, "l"), null, "two operands are just the call");
+  assert.equal(chainOperands(code, "s"), null, "subtraction isn't associative");
+  const p = load("effects");
+  const text = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("main"));
+  assert.match(text, /\n {4}\)\n {4}\+\+ " · "\n {4}\+\+ handle show/);
+});

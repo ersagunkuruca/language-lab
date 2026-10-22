@@ -56,7 +56,10 @@ const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1
 export type Shape =
   | { kind: "function"; params: string[] }
   | { kind: "value" }
-  | { kind: "type"; firstCase: string };
+  | { kind: "type"; firstCase: string }
+  // An effect is declared like a data type whose cases are its operations
+  // (model.ts): the first one takes nothing and answers nothing until said.
+  | { kind: "effect"; firstOperation: string };
 
 export function newDefinition(code: Code, names: Names, rawName: string, shape: Shape): Top {
   const name = trim(rawName);
@@ -72,16 +75,19 @@ export function newDefinition(code: Code, names: Names, rawName: string, shape: 
   } else if (shape.kind === "value") {
     body = select = add({ kind: "hole" });
   } else {
-    const first = trim(shape.firstCase) || name.toLowerCase();
+    const effect = shape.kind === "effect";
+    const first = trim(effect ? shape.firstOperation : shape.firstCase) || name.toLowerCase();
     const variant = add({ kind: "variant", fields: [] });
     nn[variant] = first;
-    body = add({ kind: "typedef", params: [], variants: [variant] });
+    body = add({ kind: "typedef", params: [], variants: [variant], ...(effect ? { effect: true as const } : {}) });
     select = variant;
   }
   const def = add({ kind: "def", body });
   nn[def] = name;
-  const what = shape.kind === "type" ? "a data type with one case" : shape.kind === "value" ? "a value: fill its hole" : `a function of ${shape.params.length || "no"} input${shape.params.length === 1 ? "" : "s"}: fill its hole`;
-  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: shape.kind === "type" ? def : select, note: `New definition ${name}, ${what}.` };
+  const what = shape.kind === "type" ? "a data type with one case"
+    : shape.kind === "effect" ? "an effect with one operation: calling it performs it, and a match on what performs it handles it"
+    : shape.kind === "value" ? "a value: fill its hole" : `a function of ${shape.params.length || "no"} input${shape.params.length === 1 ? "" : "s"}: fill its hole`;
+  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: shape.kind === "type" || shape.kind === "effect" ? def : select, note: `New definition ${name}, ${what}.` };
 }
 
 // Everything outside `def` that points into it: calls, uses as a value,
@@ -273,6 +279,18 @@ export function removeField(code: Code, names: Names, variant: Id, field: Id): T
     note: `Removed the field ${nameOf(names, field)}.${calls.length ? ` Its value was dropped from ${calls.length} place${calls.length === 1 ? "" : "s"} making ${nameOf(names, variant)}.` : ""}` };
 }
 
+// What a handler answers an operation with (the value the call gives
+// back), or nothing: an operation that never returns ends what it's
+// performed in, like abort.
+export function setReturns(code: Code, names: Names, variant: Id, t: TypeSpec | null): Top {
+  const v = code.nodes[variant];
+  if (v?.kind !== "variant") return { ok: false, reason: "that isn't an operation" };
+  const { nodes, add } = builder(code);
+  const { returns: _, ...rest } = v;
+  nodes[variant] = t ? { ...rest, returns: buildType(add, t) } : rest;
+  return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: variant, note: t ? `${nameOf(names, variant)} now gives back what its handler answers.` : `${nameOf(names, variant)} now never returns: it ends what performs it.` };
+}
+
 export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): Top {
   const f = code.nodes[field] as NodeOf<"field">;
   const { nodes, add } = builder(code);
@@ -288,7 +306,7 @@ export function fieldTypes(code: Code, type: Id): TypeSpec[] {
   for (const d of code.defs) {
     const n = code.nodes[d];
     const b = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
-    if (b?.kind === "typedef" && b.params.length === 0) out.push(simple(d));
+    if (b?.kind === "typedef" && b.params.length === 0 && !b.effect) out.push(simple(d));
   }
   const list = code.defs.find((d) => d === "std.list");
   return list ? [...out, ...out.map((t) => ({ target: list, args: [t] }))] : out;

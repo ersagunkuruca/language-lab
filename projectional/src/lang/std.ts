@@ -263,3 +263,24 @@ export const SET = builtin("set", "set", (s) => {
 
 export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
+
+// Operations where the grouping doesn't change the answer. A chain of one
+// of them, a ++ (b ++ c), is shown as the one call it means, with every
+// operand side by side, however the tree pairs them up: a view, like a
+// list drawn as [x, y] (the program keeps its pairs). `keep` stops at an
+// inner call that has to stay visible on its own (a graph's named dot).
+export const ASSOCIATIVE = new Set<Id>([B.add, B.mul, S.and, S.or, S.concat]);
+export function chainOperands(code: Code, id: Id, keep: (id: Id) => boolean = () => false): Id[] | null {
+  const head = (n: Node | undefined) => (n?.kind === "call" && n.args.length === 2 ? code.nodes[n.fn] : undefined);
+  const f = head(code.nodes[id]);
+  if (f?.kind !== "ref" || !ASSOCIATIVE.has(f.target)) return null;
+  const op = f.target;
+  const out: Id[] = [];
+  const walk = (a: Id) => {
+    const g = head(code.nodes[a]);
+    if (a !== id && (g?.kind !== "ref" || g.target !== op || keep(a))) { out.push(a); return; }
+    for (const b of (code.nodes[a] as { args: Id[] }).args) walk(b);
+  };
+  walk(id);
+  return out.length > 2 ? out : null;
+}
