@@ -671,9 +671,11 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     const cb = h("input", { type: "checkbox", checked: on, title: on ? "Known: you give it. Untick to solve for it." : "Solved for. Tick to give it instead." }) as HTMLInputElement;
     cb.addEventListener("change", () => setKnown(info, p, cb.checked));
     const shown = r.answers[0]?.values[p];
+    // Left free: every value fits (the angle of the origin).
+    const any = !!r.answers[0]?.free.includes(p) && shown !== undefined && /^_\d+$/.test(shown);
     const input = on
       ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
-      : h("output", { class: shown === undefined ? "none" : "" }, shown === undefined ? "?" : nice(shown));
+      : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : nice(shown));
     if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }

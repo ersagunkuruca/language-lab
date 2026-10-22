@@ -278,6 +278,12 @@ const PERIODS = 64;
 // where simultaneous equations like a + b = 10, a − b = 4 get eliminated.
 function solveSome(s: State): Stream | undefined {
   if (!s.eqs.length) return undefined;
+  // An equation that holds whatever its unknown is (0 = 0 · angle, at the
+  // origin) says nothing about it: it's dropped, and the unknown stays free.
+  const vars = (e: Eq) => [...new Set([...varsOf(e.lhs), ...varsOf(e.rhs)])];
+  const always = (e: Eq) => { const [x] = vars(e); return [0.37, -1.9, 2.6].every((t) => { const l = evalExpr(e.lhs, { [x]: t }), r = evalExpr(e.rhs, { [x]: t }); return Number.isFinite(l) && close(l, r); }); };
+  const empty = s.eqs.filter((e) => vars(e).length === 1 && always(e));
+  if (empty.length) return settle({ ...s, eqs: s.eqs.filter((e) => !empty.includes(e)) });
   const one = s.eqs.filter((e) => new Set([...varsOf(e.lhs), ...varsOf(e.rhs)]).size === 1);
   const tries = [...one.map((e) => [e]), ...(s.eqs.length <= 6 && s.eqs.length > 1 ? [s.eqs] : [])];
   for (const group of tries) {
@@ -488,6 +494,12 @@ export function interpreter(code: Code, opts: Options = {}) {
       // can only be cut at a space after a number) instead of guessing.
       const waits = n.args.map((a, i) => !cheap(a) && waitsOnly(a) && waitsOnly(n.id));
       const before = argGoals.filter((_, i) => waits[i]), after = argGoals.filter((_, i) => !cheap(n.args[i]) && !waits[i]);
+      // a, hence b: b is the way in, so it goes first. In polar, x² + y² =
+      // length² gives the length from x and y in closed form; the two
+      // equations on their own have two unknowns each, and from x = 0 the
+      // numeric tear can't start (0 = length · cos(angle) splits).
+      const head = nodes[n.fn];
+      if (head?.kind === "ref" && head.target === S.hence) after.reverse();
       return conj(ev(n.fn, env, f), ...easy, ...before, applyG, ...after)(s);
     };
   }
