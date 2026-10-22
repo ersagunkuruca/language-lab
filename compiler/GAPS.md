@@ -177,7 +177,18 @@ the evaluator. Also lift a match out of expression position into
 statements with a temporary, instead of an IIFE. The same goes for the
 26-character variant ids in `switch`. Small integers are cheaper, but
 values have to stay comparable with the evaluator's, so measure this
-before changing it.
+before changing it. **Measured, then partly done**: in the profile the
+parser, where these are, is about 8% of compiled calc's time, while
+`tokens` (the G7 fusion) and the garbage collector are about 40%. A
+copy of `calc.js` patched by hand came out about 5% faster. So the change
+is kept to what stays inside compiled code. A function that returns
+`Bool` returns a JS boolean when it's called directly (`blank`, `digit`,
+`letter`, queens' `safe`). Where it's used as a value it's wrapped to give
+Bool data. A match that decides a condition (`isMark`) sets a JS boolean
+in statements, with no function called in place. Measured in one process
+against the previous output, compiled calc is 3 to 7% faster. Bool stays
+data in values and in lists, and in functions passed as arguments, which
+`keep`'s test still is. The variant ids stay as they are.
 
 **G8. Start-up and output (perf of a command-line program, not of the
 code).** The compiled module imports `runtime.js`, which imports the
