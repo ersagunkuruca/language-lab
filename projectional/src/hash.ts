@@ -18,7 +18,7 @@ export function hashDef(code: Code, defId: Id, memo = new Map<Id, string>(), sta
   const canon = (id: Id): Canon => {
     const n = code.nodes[id];
     switch (n.kind) {
-      case "lit": return ["lit", n.value];
+      case "lit": return n.of ? ["lit", n.value, n.of] : ["lit", n.value];
       case "hole": return ["hole"];
       case "binder": binders.set(id, binders.size); return n.unit ? ["bind", unitKey(n.unit)] : ["bind"];
       case "ref": {

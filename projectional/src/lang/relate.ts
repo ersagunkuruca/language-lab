@@ -50,7 +50,10 @@ import { impl } from "../prelude.ts";
 import { META, equal as valueEqual, type Data, type Value } from "./run.ts";
 import { RELATIONS, VARIADIC } from "../relational.ts";
 import { relationFor } from "./solve.ts";
-import { CONS, FALSE, NIL, S, SIGS, STD_IMPL, TRUE } from "./std.ts";
+import { CONS, FALSE, NIL, S, SET, SIGS, STD_IMPL, STD_MANY, TRUE } from "./std.ts";
+import { intLit } from "./int.ts";
+import { fieldIndex, fieldPath, setPath } from "./records.ts";
+import { INT } from "./types.ts";
 import { Subst } from "./types.ts";
 
 export class NotInvertible extends Error {}
@@ -66,7 +69,7 @@ interface Closure { k: "closure"; lambda: Id; env: Env; orig?: unknown }
 // A builtin, a constructor (a variant with fields) or a projection (a field).
 interface Prim { k: "prim"; id: Id; orig?: unknown }
 interface DataT { tag: Id; fields: Term[] }
-export type Term = number | string | DataT | Closure | Prim | LVar;
+export type Term = number | bigint | string | DataT | Closure | Prim | LVar;
 
 const isData = (t: unknown): t is DataT => typeof t === "object" && t !== null && "tag" in t;
 const dataT = (tag: Id, fields: Term[] = []): DataT => ({ tag, fields });
@@ -407,7 +410,7 @@ export function interpreter(code: Code, opts: Options = {}) {
   function ev(id: Id, env: Env, out: Term): Goal {
     const n = nodes[id];
     switch (n.kind) {
-      case "lit": return eq(out, n.value);
+      case "lit": return eq(out, n.of === INT ? intLit(n.value) as Term : n.value);
       case "ref": return refGoal(n.target, env, out);
       case "lambda": return eq(out, { k: "closure", lambda: id, env });
       case "call": return callGoal(n, env, out);
@@ -565,8 +568,32 @@ export function interpreter(code: Code, opts: Options = {}) {
           },
         });
     }
+    // The rest (Int and text operations, set) run forward: once their inputs
+    // are known, each of their answers is a branch.
+    if (id === SET) {
+      // The path is read off the function's nodes, so only the record and
+      // the value need to be known.
+      return wait({
+        k: "later", text: "set", ready: (s) => !(walk(a, s) instanceof LVar) && known(b, s) && known(args[2], s), then: (s) => {
+          const get = walk(a, s) as Closure | Prim;
+          const path = get.k === "prim" ? [get.id] : fieldPath(code, get.lambda);
+          if (!path) throw new NotInvertible("set needs a field, or a path of fields");
+          return eq(out, setPath(deep(b, s) as DataT, path.map((f) => fieldIndex(code, f)), deep(args[2], s)))(s);
+        },
+      });
+    }
+    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : null);
+    if (many) {
+      return wait({
+        k: "later", text: id, ready: (s) => args.every((a) => known(a, s)), then: (s) => {
+          const xs = args.map((a) => toValue(deep(a, s))!);
+          return disj(...many(...xs).map((v: Value) => eq(out, fromValue(v))))(s);
+        },
+      });
+    }
     throw new NotInvertible(`${id} has no backwards reading`);
   }
+
 
   // less, as a relation: when its answer is known, a check that waits until
   // both sides are known. When the answer isn't known, it's a choice.

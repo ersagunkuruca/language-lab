@@ -28,9 +28,10 @@
 import { subtree, type Code, type Id, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { CHOICE, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { CONS, FALSE, NIL, S, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
+import { CONS, FALSE, INT_OPS, NIL, S, SET, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
+import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { compileSolve } from "./relation.ts";
 
@@ -68,7 +69,21 @@ const OPS: Record<Id, { js: (a: string[]) => string; bool?: true }> = {
   [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
   [S.or]: { js: ([a, b]) => `(${a} || ${b})`, bool: true },
   [S.not]: { js: ([a]) => `!${a}`, bool: true },
+  // Int: a number while it's a safe integer, a BigInt beyond (int.ts), so
+  // comparisons are plain JS ones.
+  [INT_OPS.add]: { js: ([a, b]) => `$int.add(${a}, ${b})` },
+  [INT_OPS.sub]: { js: ([a, b]) => `$int.sub(${a}, ${b})` },
+  [INT_OPS.mul]: { js: ([a, b]) => `$int.mul(${a}, ${b})` },
+  [INT_OPS.neg]: { js: ([a]) => `$int.neg(${a})` },
+  [INT_OPS.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
+  [INT_OPS.show]: { js: ([a]) => `String(${a})` },
+  [INT_OPS.toNumber]: { js: ([a]) => `Number(${a})` },
+  [TEXT_OPS.less]: { js: ([a, b]) => `$text.less(${a}, ${b})`, bool: true },
 };
+// Other std builtins run their implementation from std.ts: `$impl` for
+// those with one answer, `$many` (an array of answers) for those with Choice.
+const implOf = (id: Id) => (OPS[id] ? null : STD_IMPL[id] ? `$impl[${JSON.stringify(id)}]` : null);
+const manyOf = (id: Id) => (STD_MANY[id] ? `$many[${JSON.stringify(id)}]` : null);
 const BOOL_ARGS = new Set([S.and, S.or, S.not]);
 const HANDLERS = new Set([S.first, S.all, S.count, S.fuel]);
 
@@ -232,7 +247,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "def") return specAt(f.id, f.target, rho).streams;
         if (t.kind === "variant" || t.kind === "field") return false;
         if (t.kind === "builtin") {
-          if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel) return true;
+          if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel || manyOf(f.target)) return true;
           if (f.target === S.first) return streamsFn(ty(n.args[1]), rho);
           return false;
         }
@@ -245,7 +260,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       const n = code.nodes[id];
       switch (n.kind) {
-        case "lit": return typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
+        case "lit":
+          if (n.of === INT && typeof n.value === "string") return `${n.value}n`;
+          return typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
         case "ref": return refValue(n);
         case "hole": return `$hole(${JSON.stringify(id)})`;
         case "lambda": return lambda(n);
@@ -275,7 +292,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function equality(n: NodeOf<"call">): string {
       const [a, b] = n.args.map(ex);
       const t = ty(n.args[0]);
-      return t.t === "con" && (t.id === NUMBER || t.id === STRING) ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
+      return t.t === "con" && (t.id === NUMBER || t.id === STRING || t.id === INT) ? `(${a} === ${b})` : `$eq(${a}, ${b})`;
     }
 
     function refValue(n: NodeOf<"ref">): string {
@@ -309,6 +326,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             [S.equal]: ["((a, b) => $bool($eq(a, b)))", false],
           };
           if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
+          if (manyOf(n.target)) return wrap(manyOf(n.target)!, true);
+          if (implOf(n.target)) return wrap(implOf(n.target)!, false);
           if (runtime[n.target]) return wrap(...runtime[n.target]);
           throw new Error(`${names[n.target] ?? n.target} can't be used as a value yet`);
         }
@@ -316,6 +335,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
     }
     const arity = (id: Id) => { const t = ty(id); return t.t === "fn" ? t.params.length : 0; };
+
+    // set: the checker made sure the path is fields written in place, so
+    // the positions are known now.
+    function setCall(get: Id, record: string, value: string): string {
+      const path = fieldPath(code, get)!.map(fieldIndex);
+      return `$setPath(${record}, ${JSON.stringify(path)}, ${value})`;
+    }
 
     function construct(variant: Id, fields: string[]): string {
       if (variant === CONS) return `$cons(${fields.join(", ")})`;
@@ -359,6 +385,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === S.equal) return `$bool(${equality(n)})`;
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
           if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
+          if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
+          if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
         if (t.kind === "variant") return construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
@@ -565,6 +593,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           c = OPS[target!].bool ? `$bool(${js})` : js;
         } else if (target === S.equal) c = `$bool($eq(${args.join(", ")}))`;
         else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
+        else if (target === SET) c = setCall(n.args[0], args[1], args[2]);
+        else if (kind === "builtin" && (manyOf(target!) ?? implOf(target!))) c = `${manyOf(target!) ?? implOf(target!)}(${args.join(", ")})`;
         else c = `${fn}(${args.join(", ")})`;
         let out: string;
         if (callStreams(n)) {
@@ -632,7 +662,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
   for (let s; (s = queue.shift());) out.push(body(s));
 
-  const helpers = ["$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
+  const helpers = ["$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$planned", "$solveRuntime", "$print", "$FN",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative"] : [])];

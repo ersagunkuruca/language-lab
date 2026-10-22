@@ -162,3 +162,34 @@ test("$eq compares long lists without the JS stack", async () => {
   assert.ok($eq($range(1_000_000), $range(1_000_000)));
   assert.ok(!$eq($range(1_000_000), $range(999_999)));
 });
+
+test("Int, text and set compile to what the evaluator does", async () => {
+  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../projectional/src/lang/std.ts");
+  const { INT, STRING } = await import("../../projectional/src/lang/types.ts");
+  const k = new Lang();
+  const orNone = (body: () => string) => k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")));
+  const fact = k.def("factorial");
+  k.define(fact, k.fn(["n"], (n) => k.fold(k.call(I.range, n), [
+    { variant: NIL, names: [], body: () => k.int(1) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.call(I.mul, k.call(I.add, i, k.int(1)), r!) },
+  ])));
+  const pt = k.type("point", [], [["point", [["x", () => k.tref(INT)], ["label", () => k.tref(STRING)]]]]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(...[
+    k.call(I.show, k.call(fact, k.int(25))),
+    k.call(I.show, k.call(I.add, k.int("9007199254740993"), k.int(-2))),
+    orNone(() => k.call(I.show, k.call(I.quotient, k.int(-7), k.int(2)))),
+    orNone(() => k.call(I.show, k.call(I.quotient, k.int(1), k.int(0)))),
+    k.if(k.call(S.equal, k.call(I.mul, k.int(3), k.int(4)), k.int(12)), k.lit("equal"), k.lit("not equal")),
+    k.call(T.joinAll, k.call(T.split, k.lit("a b c"), k.lit(" ")), k.lit("+")),
+    k.call(I.show, k.call(T.length, k.lit("👋👋"))),
+    orNone(() => k.call(I.show, k.call(T.find, k.lit("hello"), k.lit("l")))),
+    k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(pt.f["point.label"], k.call(SET, pt.f["point.label"], p, k.lit("b")))),
+    k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(I.show, k.call(pt.f["point.x"], k.call(SET, k.fn(["q"], (q) => k.call(pt.f["point.x"], q)), p, k.int(5))))),
+  ].map((t) => k.call(S.print, t)))));
+  const { defs, code, info } = await compiledDefs(k, ["main"], "data.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s) });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5"]);
+});

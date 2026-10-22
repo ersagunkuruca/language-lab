@@ -5,6 +5,7 @@ import { Builder } from "../builder.ts";
 import { merge, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { BOOL, CONS, FALSE, NIL, S, std, TRUE, UNIT_V } from "./std.ts";
+import { INT } from "./types.ts";
 
 export interface Case {
   variant: Id;
@@ -87,6 +88,13 @@ export class Lang extends Builder {
     const binds = Object.fromEntries(Object.entries(want).map(([k, name]) => [k, this.binder(name)]));
     const g = Object.fromEntries(Object.entries(given).map(([k, e]) => [k, this.x(e)]));
     return this.add({ kind: "solve", fn, given: g, binds, body: this.x(body(binds)) });
+  }
+
+  // An Int literal: exact at any size.
+  int(value: number | bigint | string): Id {
+    const v = typeof value === "number" ? value : BigInt(value);
+    const safe = typeof v === "number" || (v >= -9007199254740991n && v <= 9007199254740991n);
+    return this.add({ kind: "lit", value: safe ? Number(v) : String(v), of: INT });
   }
 
   hole(): Id {

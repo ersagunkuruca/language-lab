@@ -22,6 +22,8 @@ export const DIVERGE = "effect.diverge";
 
 export const NUMBER = "type.number";
 export const STRING = "type.string";
+// Whole numbers that never overflow (src/lang/int.ts).
+export const INT = "type.int";
 
 export class TypeError extends Error {}
 
