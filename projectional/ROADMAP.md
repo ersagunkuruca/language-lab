@@ -1,6 +1,7 @@
 # Roadmap
 
-Updated 2026-10-22, after PR #51. This replaces §10 of
+Updated 2026-10-22, after PR #51, and again after the second review
+(evening). This replaces §10 of
 [REVIEW.md](REVIEW.md), which stays as the review it was written as. The
 ideas behind the new items, and the current answer to each, are in
 [NOTES.md](NOTES.md).
@@ -27,6 +28,33 @@ Still open from steps 1 to 5: mode analysis through cases and folds (step
 4), data-type upgrades and path namespaces (step 5), the editor's "copy into
 my program" and pin gestures, compiled plain recursion past about 10k
 levels, relational reads past about 1,300 items.
+
+## First, after the second review (2026-10-22, evening)
+
+[REVIEW-2026-10-22b.md](REVIEW-2026-10-22b.md) found holes that come
+before any item below, bugs before features. In order, one PR each (its §9
+has the detail):
+
+1. **The shader freeze:** `shadow` gets a step limit; the preview waits
+   for each frame and handles a lost device (editor thread).
+2. **The shader profile refuses loops it can't see end**, instead of
+   dropping `Diverge`.
+3. **Equality exact everywhere**, `near` as a function, backwards too, and
+   a round-tripping `show`.
+4. **A backwards `one of` waits for its list**, and forward/backwards
+   agreement over every example in CI.
+5. **Reading a formula stops hiding `Diverge`.**
+6. **Systematic checks:** the effect ledger and container matrix, equality
+   laws, save/open round trip of every example, a shader soak test.
+7. **Docs** brought up to date, and the error table generated from tests.
+
+After those, the order of the remaining open work changes. **The editor
+comes before the next target**: its "can't edit" list (inner lambda
+parameters, swapping a call's function, statement order) is fixed first,
+so that the next bigger program (GAPS.md round 2) is written in the editor
+rather than in the TypeScript DSL. Then time, randomness and HTTP as world
+effects (they serve the CLI and web legs at once), one page model
+(reactive.html onto `Html`), and only then WebAssembly (item 6).
 
 ## Next, in priority order
 
