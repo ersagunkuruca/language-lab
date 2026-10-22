@@ -70,7 +70,7 @@ test("§1.1 naming the smaller piece with a dot shouldn't cost the totality proo
   assert.ok(!p.effects(len).includes(DIVERGE));
 });
 
-test("§2.1 the evaluator can fold a list of ten thousand numbers", { todo: "evaluate without the JS stack (or folds over lists as loops)" }, () => {
+test("§2.1 the evaluator can fold a list of ten thousand numbers", () => {
   const p = program((k) => {
     const total = k.def("total");
     k.define(total, k.fn(["xs"], (xs) => k.fold(xs, [
