@@ -10,7 +10,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
-import { runMain } from "../src/lang/run.ts";
+import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
 import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
 import { DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -194,4 +194,91 @@ test("backwards, derivative and with fuel run forward once their function is kno
   const g = p.code.defs.find((d) => p.names[d] === "g")!;
   const [x] = params(p.code, g);
   assert.deepEqual([...relate(p.code, g, { out: 6 })].map((a) => a.values[x]), [3]);
+});
+
+// ---------------------------------------------------------------- nested data
+
+// A rose tree: each node has a list of children. size and depth are folds;
+// the folded value of `children` is the list of the children's sizes.
+function roseTree() {
+  let size = "", depth = "", tree = "", node = "", sum = "", most = "";
+  const p = program((k) => {
+    const t = k.type("tree", [], [["node", [["value", () => k.tref(NUM)], ["children", (self) => k.tref("std.list", k.tref(self))]]]]);
+    tree = t.def;
+    node = t.v.node;
+    const listFold = (name: string, f: (h: Id, r: Id) => Id) => {
+      const d = k.def(name);
+      k.define(d, k.fn(["xs"], (xs) => k.fold(xs, [
+        { variant: NIL, names: [], body: () => k.lit(0) },
+        { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => f(h, r!) },
+      ])));
+      return d;
+    };
+    sum = listFold("sum", (h, r) => k.call(B.add, h, r));
+    most = listFold("most", (h, r) => k.if(k.call(S.less, h, r), r, h));
+    size = k.def("size");
+    k.define(size, k.fn(["t"], (x) => k.fold(x, [
+      { variant: node, names: ["v", "cs"], results: [null, "sizes"], body: (_, [, sizes]) => k.call(B.add, k.lit(1), k.call(sum, sizes!)) },
+    ])));
+    depth = k.def("depth");
+    k.define(depth, k.fn(["t"], (x) => k.fold(x, [
+      { variant: node, names: ["v", "cs"], results: [null, "depths"], body: (_, [, ds]) => k.call(B.add, k.lit(1), k.call(most, ds!)) },
+    ])));
+    const leaf = (v: number) => k.call(node, k.lit(v), k.x(NIL));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.let("t", k.call(node, k.lit(1), k.list(leaf(2), k.call(node, k.lit(3), k.list(leaf(4))))), (t) =>
+      k.call(S.print, k.text(k.call(S.show, k.call(size, t)), k.lit(" "), k.call(S.show, k.call(depth, t)))))));
+    return main;
+  });
+  return { ...p, size, depth, tree, node };
+}
+
+test("nested data: a rose tree folds, and the children's folded values are a list", () => {
+  const p = roseTree();
+  assert.deepEqual(p.errors, []);
+  assert.equal(p.type(p.size), "(tree) -> Number");
+  assert.ok(!p.effects(p.size).includes(DIVERGE));
+  const arm = Object.values(p.code.nodes).find((n) => n.kind === "arm" && n.variant === p.node && n.results[1] && p.names[n.results[1]] === "sizes") as { results: Id[] };
+  assert.equal(showType(p.info.typeOf.get(arm.results[1])!, p.names), "List Number");
+  assert.deepEqual(p.run(), ["4 3"]);
+});
+
+test("nested data: a fold reaches no deeper than the data, and needs no JS stack for wide or deep trees", () => {
+  const p = roseTree();
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const leaf = (v: number) => ({ tag: p.node, fields: [v, toList([])] });
+  const wide = { tag: p.node, fields: [0, toList(Array.from({ length: 100000 }, (_, i) => leaf(i)))] };
+  let deep: Value = leaf(0);
+  for (let i = 1; i < 100000; i++) deep = { tag: p.node, fields: [i, toList([deep])] };
+  const at = (f: Id, v: Value) => [...r.call(r.value(f), v)][0];
+  assert.equal(at(p.size, wide), 100001);
+  assert.equal(at(p.depth, wide), 2);
+  assert.equal(at(p.depth, deep), 100000);
+});
+
+test("nested data: a rose tree folds backwards too", () => {
+  const p = roseTree();
+  // trees of size 2: a node with one leaf child
+  const [first] = relate(p.code, p.size, { out: 2 });
+  const [t] = params(p.code, p.size);
+  const shape = (x: unknown): string => {
+    const d = x as { tag?: Id; fields?: unknown[] };
+    if (!d || typeof d !== "object" || !("tag" in d)) return "_";
+    if (d.tag === NIL) return "[]";
+    if (d.tag === CONS) return `[${shape(d.fields![0])}${shape(d.fields![1]) === "[]" ? "" : "," + shape(d.fields![1])}]`;
+    return `node(${shape(d.fields![1])})`;
+  };
+  assert.equal(shape(first.values[t]), "node([node([])])");
+});
+
+test("nested data: a container defined together with the type is refused, not looped on", () => {
+  const p = program((k) => {
+    const forest = k.def("forest");
+    const t = k.type("t", [], [["node", [["kids", () => k.tref(forest)]]]]);
+    const f = k.type("forest-body", [], [["none", []], ["some", [["head", () => k.tref(t.def)], ["rest", () => k.tref(forest)]]]]);
+    k.code.nodes[forest] = { ...k.code.nodes[f.def], id: forest };
+    const count = k.def("count");
+    k.define(count, k.fn(["x"], (x) => k.fold(x, [{ variant: t.v.node, names: ["kids"], results: ["n"], body: () => k.lit(1) }])));
+  });
+  assert.ok(p.errors.some((m) => /can't be folded/.test(m)), p.errors.join("\n"));
 });

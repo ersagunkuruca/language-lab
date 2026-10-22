@@ -86,16 +86,34 @@ export function infer(code: Code, names: Names = {}): Info {
     const params = new Map(td.params.map((p) => [p, s.fresh()] as const));
     const self: Type = { t: "con", id: def, args: [...params.values()] };
     const fields = (variant: Id) => (code.nodes[variant] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
-    return { td, self, fields };
+    return { td, params, self, fields };
   };
 
-  // A field is recursive if its type is the data type itself, applied to its
-  // own params in order. Those are the fields a fold folds.
-  const isRecursiveField = (def: Id, field: Id) => {
+  // The folded value of a field: its type with the data type itself
+  // replaced by the fold's result. A field of type Tree gives R; one of type
+  // List Tree (a rose tree's children) gives List R, the fold mapped over
+  // the container; null if the field has no Tree in it. A string says why
+  // the fold can't reach a Tree that is in it.
+  const foldedType = (def: Id, tid: Id, params: Map<Id, Type>, result: Type): Type | null | string => {
+    const t = code.nodes[tid];
+    const targets = trefTargets(tid);
+    const via = [...targets].find((x) => x !== def && isTypeDef(x) && reachOf(x).has(def));
+    if (via) return `${nm(via)} is defined together with ${nm(def)}, so a fold over ${nm(def)} can't see inside it`;
+    if (!targets.has(def)) return null;
+    if (t.kind === "tfun") return `a fold can't go inside a function`;
+    if (t.kind !== "tref") return null;
     const td = typedefOf(def)!;
-    const t = code.nodes[(code.nodes[field] as NodeOf<"field">).type];
-    return t.kind === "tref" && t.target === def && t.args.length === td.params.length &&
-      t.args.every((a, i) => { const x = code.nodes[a]; return x.kind === "tref" && x.target === td.params[i]; });
+    if (t.target === def) {
+      const same = t.args.length === td.params.length && t.args.every((a, i) => { const x = code.nodes[a]; return x.kind === "tref" && x.target === td.params[i]; });
+      return same ? result : `${nm(def)} is used here with other arguments, so this isn't the same data a fold folds`;
+    }
+    const args: Type[] = [];
+    for (const a of t.args) {
+      const r = foldedType(def, a, params, result);
+      if (typeof r === "string") return r;
+      args.push(r ?? typeExpr(a, params));
+    }
+    return { t: "con", id: t.target, args };
   };
 
   // --- plain data
@@ -406,7 +424,7 @@ export function infer(code: Code, names: Names = {}): Info {
     if (!def) {
       if (n.kind === "fold" || !n.otherwise) err(n.id, "a case analysis needs at least one case");
     } else {
-      const { td, self, fields } = dataType(def);
+      const { td, params, self, fields } = dataType(def);
       unifyAt(n.scrutinee, self, scrut, "the value examined");
       const seen = new Set<Id>();
       for (const arm of arms) {
@@ -421,9 +439,12 @@ export function infer(code: Code, names: Names = {}): Info {
         if (n.kind === "fold") {
           arm.results.forEach((r, i) => {
             if (r === null) return;
-            if (!isRecursiveField(def, fids[i])) err(arm.id, `${nm(fids[i])} is not recursive, so it has no folded value`);
-            inner.set(r, result);
-            info.typeOf.set(r, result);
+            const ft = foldedType(def, (code.nodes[fids[i]] as NodeOf<"field">).type, params, result);
+            if (ft === null) err(arm.id, `${nm(fids[i])} is not recursive, so it has no folded value`);
+            else if (typeof ft === "string") err(arm.id, `${nm(fids[i])} can't be folded: ${ft}`);
+            const rt = ft && typeof ft !== "string" ? ft : s.fresh();
+            inner.set(r, rt);
+            info.typeOf.set(r, rt);
           });
         }
         unifyAt(arm.body, result, expr(arm.body, inner, row), "this case");

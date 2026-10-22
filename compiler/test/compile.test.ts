@@ -8,7 +8,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { runMain, makeRunner, fromList, type Value } from "../../projectional/src/lang/run.ts";
+import { runMain, makeRunner, fromList, toList, type Value } from "../../projectional/src/lang/run.ts";
+import type { Id } from "../../projectional/src/model.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
@@ -155,6 +156,40 @@ test("a fold over a deep tree compiles to a loop with its own stack, children fi
   let deep: unknown = leaf(0);
   for (let i = 1; i < 100_000; i++) deep = node(deep, leaf(i));
   assert.equal(defs.size(deep), 100_000);
+});
+
+test("a rose tree (children in a list) folds the same compiled, with and without Choice", async () => {
+  const k = new Lang();
+  const tree = k.type("rose", [], [["node", [["value", () => k.tref("type.number")], ["kids", (self) => k.tref("std.list", k.tref(self))]]]]);
+  const listFold = (name: string, f: (h: Id, r: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["xs"], (xs) => k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => f(h, r!) },
+    ])));
+    return d;
+  };
+  const sum = listFold("sum", (h, r) => k.call(B.add, h, r));
+  // total of the values
+  const total = k.def("total");
+  k.define(total, k.fn(["t"], (t) => k.fold(t, [
+    { variant: tree.v.node, names: ["v", "ks"], results: [null, "totals"], body: ([v], [, ts]) => k.call(B.add, v, k.call(sum, ts!)) },
+  ])));
+  // with Choice: each node may count or not
+  const some = k.def("some");
+  k.define(some, k.fn(["t"], (t) => k.fold(t, [
+    { variant: tree.v.node, names: ["v", "ks"], results: [null, "totals"], body: ([v], [, ts]) => k.call(B.add, k.call(S.oneOf, k.list(k.lit(0), v)), k.call(sum, ts!)) },
+  ])));
+  const { defs, code, info } = await compiledDefs(k, ["total", "some"], "rosefold.js");
+  const node = (v: number, ...kids: unknown[]) => ({ tag: tree.v.node, fields: [v, toList(kids as Value[])] });
+  const t = node(1, node(2), node(3, node(4)));
+  const r = makeRunner(code, info, { print: () => {} });
+  const ev = (name: string) => [...r.call(r.value(code.defs.find((d) => k.names[d] === name)!), t as Value)];
+  assert.equal(defs.total(t), 10);
+  assert.deepEqual([...(defs.some(t) as Iterable<number>)], ev("some"));
+  assert.equal(ev("some").length, 16);
+  const wide = node(0, ...Array.from({ length: 100_000 }, (_, i) => node(i)));
+  assert.equal(defs.total(wide), 4999950000);
 });
 
 test("$eq compares long lists without the JS stack", async () => {

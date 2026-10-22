@@ -131,6 +131,18 @@ export function $one(results) {
   for (const x of results) return x;
   throw new Error('a solve with exactly one answer had none (a non-finite number?)');
 }
+// Folds over nested data (a rose tree's List Tree): the trees inside a
+// field, and the field rebuilt from their folded values.
+export { spread as $spread } from '../../projectional/src/lang/nested.ts';
+export const $self = (v) => ({ children: [v], rebuild: (r) => r[0] });
+// With Choice: every combination of the children's folded values.
+export function* $foldNested(fold, part) {
+  const go = function* (i, acc) {
+    if (i === part.children.length) { yield part.rebuild(acc); return; }
+    for (const r of fold(part.children[i])) yield* go(i + 1, [...acc, r]);
+  };
+  yield* go(0, []);
+}
 export function $hole(id) { throw new Error(`the program reached a hole (${id})`); }
 
 let printer = (s) => console.log(s);

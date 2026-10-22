@@ -45,9 +45,10 @@ first.
 > of builtins and never throwing (its result is `Choice`), forward-only
 > things wait inside a backwards search instead of throwing, solving for a
 > function is a checked error, and `equal` needs plain data (a constraint on
-> type variables). Open: folds over nested types (§1.1, next), carrying
-> totality over from a meaning to its representation, exact float equality
-> in `relate.ts`, and a round-tripping `show` (§1.3).
+> type variables). Folds over nested types (rose trees) work in the checker,
+> the evaluator, backwards and compiled. Open: carrying totality over from
+> a meaning to its representation, exact float equality in `relate.ts`, a
+> round-tripping `show` (§1.3), and derivatives through nested folds.
 
 ### 1.1 Totality has holes
 

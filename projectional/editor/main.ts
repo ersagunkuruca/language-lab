@@ -52,7 +52,9 @@ import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { std, stdNames } from "../src/lang/std.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { runMain, showValue } from "../src/lang/run.ts";
+import { runMain, showValue, type Value } from "../src/lang/run.ts";
+import { trace, type Trace } from "../src/lang/trace.ts";
+import { parseValue } from "../src/lang/values.ts";
 import * as T from "./typed.ts";
 import { typedGraph } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
@@ -94,6 +96,9 @@ interface Doc {
   comments: Comments;
   hints: Hints;
   layout: Layout;
+  // Example inputs per definition, as text (src/lang/values.ts): what the
+  // graph shows values for. A side table like names: never code.
+  examples?: Record<Id, string[]>;
 }
 
 interface UI {
@@ -111,6 +116,7 @@ interface UI {
   args: Record<Id, string>;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string } | null;
+  exError: string | null;
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -178,6 +184,7 @@ const ui: UI = {
   args: {},
   refused: false,
   output: null,
+  exError: null,
   newKind: "function",
 };
 
@@ -279,7 +286,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: doc.typed, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: doc.typed, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {} }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -300,7 +307,7 @@ function openFile() {
     const r = fromFile(await f.text(), baseFor);
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
-    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout },
+    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -322,6 +329,36 @@ function renameProgram(title: string) {
   save();
   ui.note = "Renamed the program.";
   render();
+}
+
+// ---------------------------------------------------------------- copy and paste
+
+// One clipboard for every program, kept with the programs in this browser.
+const CLIP = "projectional-clipboard";
+let clip: T.Clip | null = (() => { try { return JSON.parse(localStorage.getItem(CLIP) ?? "null"); } catch { return null; } })();
+
+const copyable = (id: Id | null): id is Id => {
+  const n = id ? node(id) : null;
+  return !!n && ["lit", "ref", "call", "lambda", "match", "fold", "solve"].includes(n.kind) && !doc.code.defs.includes(id!);
+};
+
+function copySelected(cut = false) {
+  if (!doc.typed || !copyable(ui.selected)) return;
+  clip = T.copyOf(doc.code, { ...pres().names, ...doc.names.short }, ui.selected);
+  try { localStorage.setItem(CLIP, JSON.stringify(clip)); } catch {}
+  if (cut && typesOf()) {
+    if (applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected))) ui.note = "Cut it: copied, and left a hole. Select a hole and paste to put it there.";
+    return render();
+  }
+  ui.touched = [];
+  ui.note = "Copied. Select a hole (here or in another definition or program) and paste: Ctrl+V, or Paste in the panel.";
+  render();
+}
+
+function pasteIntoSelected() {
+  const info = typesOf();
+  if (!clip || !info || !ui.selected) return;
+  applyT(T.paste(doc.code, doc.names.short, info, ui.def, clip, ui.selected));
 }
 
 function applyT(e: T.TEdit): boolean {
@@ -408,6 +445,7 @@ const files = () => [
   { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
   { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
   { name: "layout.json", get: (d: Doc) => JSON.stringify(d.layout) },
+  { name: "examples.json", get: (d: Doc) => JSON.stringify(d.examples ?? {}) },
 ];
 
 function fnv(s: string) {
@@ -1417,6 +1455,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
   }
 
+  if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
   if (hole) out.append(fillPalette(id, info, names));
 
   if (n.kind === "lit") {
@@ -1429,6 +1468,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (isExprNode) {
     const splittable = T.scopeAt(doc.code, ui.def, id).filter((b) => T.dataTypeOf(doc.code, info, b));
     out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
+      h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
       splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
     if (ui.mode === "split") {
@@ -1678,6 +1718,10 @@ function graphHooks(info: T.Info) {
       return (slot: Id) => { if (slot === from) return "that's where it already goes"; const r = T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot); return r.ok ? null : r.reason; };
     },
     share: (from: Id, slot: Id) => void applyT(T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
+    values: (() => {
+      const tr = traced(info);
+      return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;
+    })(),
     offsets: Object.fromEntries(Object.entries(doc.layout.positions).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
     moved: (id: Id, off: Pos) => commit({ layout: { ...doc.layout, positions: { ...doc.layout.positions, [lkey(id)]: off } } }, ["layout.json"], "Moved a node. Where it sits lives in layout.json; the code is untouched."),
   };
@@ -1688,18 +1732,71 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const t = info.typeOf.get(ui.def);
   const z = t ? info.subst.zonk(t) : null;
   const action = z?.t === "fn" && z.params.length === 0;
-  const main = doc.code.defs.find((d) => doc.names.short[d] === "main");
-  if (!action) {
-    box.append(h("p", { class: "hint" }, "Only an action (no inputs) runs on its own."),
-      main ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": main }, "Open main") : "");
-    return box;
+  const body = defBody(ui.def);
+  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, "A data type doesn't run; its constructors are called from functions.");
+  if (action) {
+    box.append(h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
+    if (ui.output?.def === ui.def) {
+      box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || "(no output)"));
+      if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
+    }
   }
-  box.append(h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
-  if (ui.output?.def === ui.def) {
-    box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || "(no output)"));
-    if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
-  }
+  // Values on wires: example inputs, and every node's value for them.
+  const params = body.kind === "lambda" ? body.params : [];
+  const ex = doc.examples?.[ui.def];
+  const fields = params.map((p, i) => {
+    const pt = info.typeOf.get(p);
+    const fn = !!pt && info.subst.resolve(pt).t === "fn";
+    const input = h("input", { id: `f-ex-${i}`, type: "text", value: ex?.[i] ?? "", disabled: fn, placeholder: fn ? "a function: try it from a definition that calls this" : pt ? typeName(info, pt, pres().names) : "", autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") showValues(); });
+    return h("label", { class: "field", for: `f-ex-${i}` }, h("span", {}, namer.name(p)), input);
+  });
+  box.append(h("div", { class: "sub-head" }, "Values on the wires · examples.json"),
+    h("p", { class: "hint" }, params.length ? "Example inputs, written like 3, \"text\", [1, 2] or circle(2). The graph shows what every node makes of them." : "Run it once and the graph shows what every node made (printing is left out)."),
+    ...fields,
+    h("div", { class: "acts" },
+      h("button", { class: "btn", type: "button", "data-act": "t-values" }, ex ? "Update values" : "Show values"),
+      ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
+  const tr = ex ? traced(info) : null;
+  if (tr?.result !== undefined) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
+  if (tr?.error) box.append(h("p", { class: "status-line bad" }, `Stopped: ${tr.error.message}.`));
+  if (ui.exError) box.append(h("p", { class: "status-line bad" }, ui.exError));
   return box;
+}
+
+// Read the example inputs and keep them (they're part of the program's files).
+function showValues() {
+  const body = defBody(ui.def);
+  const n = body?.kind === "lambda" ? body.params.length : 0;
+  const texts = Array.from({ length: n }, (_, i) => (document.getElementById(`f-ex-${i}`) as HTMLInputElement | null)?.value ?? "");
+  ui.exError = null;
+  for (const [i, t] of texts.entries()) {
+    const r = parseValue(t, doc.code, pres().names);
+    if ("error" in r) { ui.exError = `Input ${i + 1}: ${r.error}.`; return render(); }
+  }
+  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: texts } }, ["examples.json"], "Values on the wires: each node shows what it made of these inputs. They're saved in examples.json, not in the code.");
+}
+
+function hideValues() {
+  const examples = { ...(doc.examples ?? {}) };
+  delete examples[ui.def];
+  commit({ examples }, ["examples.json"], "Values hidden.");
+}
+
+// The run on the examples, once per version of the code and examples.
+const traces = new WeakMap<Code, Map<string, Trace>>();
+function traced(info: T.Info): Trace | null {
+  const ex = doc.examples?.[ui.def];
+  if (!ex) return null;
+  const key = `${ui.def}\u0000${ex.join("\u0000")}`;
+  let m = traces.get(doc.code);
+  if (!m) traces.set(doc.code, (m = new Map()));
+  if (!m.has(key)) {
+    const args = ex.map((t) => parseValue(t, doc.code, pres().names));
+    m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "an example input doesn't read as a value" } }
+      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value)));
+  }
+  return m.get(key)!;
 }
 
 function runTyped(info: T.Info) {
@@ -1911,6 +2008,10 @@ document.addEventListener("click", (e) => {
     if (a === "delete") return removeSelected();
     if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();
+    if (a === "copy") return copySelected();
+    if (a === "t-values") return showValues();
+    if (a === "t-novalues") return hideValues();
+    if (a === "paste") return pasteIntoSelected();
     if (a === "open-file") return openFile();
     if (a === "save-file") return saveFile();
     if (a === "delete-program") return deleteProgram();
@@ -1937,6 +2038,11 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !typing) {
     e.preventDefault();
     return e.shiftKey ? travel(redo, undo, "Redid") : travel(undo, redo, "Undid");
+  }
+  if ((e.metaKey || e.ctrlKey) && !typing && doc.typed) {
+    const k = e.key.toLowerCase();
+    if (k === "c" || k === "x") { if (copyable(ui.selected)) { e.preventDefault(); copySelected(k === "x"); } return; }
+    if (k === "v" && clip && ui.selected) { e.preventDefault(); return pasteIntoSelected(); }
   }
   if (!typing && (e.key === "Delete" || e.key === "Backspace") && ui.selected) {
     e.preventDefault();

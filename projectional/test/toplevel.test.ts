@@ -170,7 +170,7 @@ test("a program saved to a file opens again as the same program, and a broken fi
   s.fill(main, call(S.print));
   s.fill(main, (f) => f.kind === "lit" && f.of === "text");
   const empty = base({ nodes: {}, defs: [] });
-  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {}, expanded: [] } }, empty);
+  const text = toFile({ title: "Hello", typed: true, code: s.code, names: s.names, descriptive: {}, comments: { [main]: "says hi" }, layout: { positions: {}, known: {}, expanded: [] }, examples: {} }, empty);
   // Only the program's own nodes are in the file.
   assert.ok(JSON.parse(text).code.defs.length === 1);
   const r = fromFile(text, () => empty);
@@ -188,4 +188,63 @@ test("a program saved to a file opens again as the same program, and a broken fi
   assert.ok("error" in e && /points at nowhere/.test(e.error));
   assert.ok("error" in fromFile("{", () => empty));
   assert.ok("error" in fromFile(JSON.stringify({ format: "something else" }), () => empty));
+});
+
+test("a pasted copy is a new piece: what it binds comes along, what it can't reach becomes a hole", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "twice", { kind: "function", params: ["x"] }));
+  const twice = s.def("twice");
+  const x = (s.code.nodes[(s.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0];
+  s.fill(twice, call(B.add));
+  s.fill(twice, ref(x));
+  s.fill(twice, ref(x));
+  const sum = (s.code.nodes[(s.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
+  const clip = T.copyOf(s.code, s.names, sum);
+
+  // Into a definition without x: both uses of x become holes.
+  s.ok(Top.newDefinition(s.code, s.names, "other", { kind: "function", params: ["y"] }));
+  const other = s.def("other");
+  const r = T.paste(s.code, s.names, s.info(), other, clip, s.holes(other)[0]);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.match(r.note, /2 parts/);
+  s.code = r.code; s.names = r.names;
+  assert.equal(s.holes(other).length, 2);
+  // The copy has its own ids: changing it leaves the original alone.
+  assert.ok(subtree(s.code, other).every((id) => !subtree(s.code, twice).includes(id)));
+
+});
+
+test("values on wires: every node that ran shows its value; the arm not taken shows none", async () => {
+  const { trace } = await import("../src/lang/trace.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "size", { kind: "function", params: ["xs"] }));
+  const size = s.def("size");
+  const xs = (s.code.nodes[(s.code.nodes[size] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0];
+  s.fill(size, (f) => f.kind === "match" && f.type === "std.list");
+  // nil → 0; cons(head, tail) → head · 10
+  s.number(size, 0);
+  const h = s.holes(size)[0];
+  void h;
+  s.fill(size, call(B.mul));
+  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons") as NodeOf<"arm">;
+  s.fill(size, ref(cons.binds[0]));
+  s.number(size, 10);
+  const all = s.all();
+  const arg = parseValue("[4, 5]", s.code, all);
+  assert.ok("value" in arg);
+  if (!("value" in arg)) return;
+  const t = trace(s.code, s.info(), size, [arg.value]);
+  assert.equal(t.error, undefined);
+  assert.equal(t.result, 40);
+  assert.equal(t.values.get(cons.binds[0]), 4);
+  assert.equal(t.values.get(cons.body), 40);
+  const nil = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.nil") as NodeOf<"arm">;
+  assert.equal(t.values.has(nil.body), false);
+  assert.equal(t.values.get(xs) !== undefined, true);
+  assert.ok("error" in parseValue("[4, ", s.code, all));
+  assert.ok("error" in parseValue("nosuch(1)", s.code, all));
+  assert.deepEqual(parseValue("true", s.code, all), { value: { tag: "std.bool.true", fields: [] } });
 });

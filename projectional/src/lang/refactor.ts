@@ -26,11 +26,14 @@ const variantsOf = (code: Code, def: Id) => {
   return td.variants;
 };
 
-// True if field `f` of type `def` holds the type itself (a fold folds it).
+// True if field `f` of type `def` holds the type itself, directly or in a
+// container (a rose tree's List Tree): a fold folds it.
 function recursiveField(code: Code, def: Id, f: Id): boolean {
-  const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
-  const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type];
-  return t.kind === "tref" && t.target === def && t.args.length === td.params.length;
+  const mentions = (tid: Id): boolean => {
+    const t = code.nodes[tid];
+    return t.kind === "tref" && (t.target === def || t.args.some(mentions));
+  };
+  return mentions((code.nodes[f] as NodeOf<"field">).type);
 }
 
 // Arms for every variant of `def`, each with fresh binders named after the

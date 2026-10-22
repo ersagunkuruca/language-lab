@@ -14,6 +14,7 @@ import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
 import { derivativeLambda } from "./derive.ts";
+import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { CONS, FALSE, NIL, S, SET, STD_IMPL, STD_MANY, TRUE, UNIT_V } from "./std.ts";
@@ -70,12 +71,18 @@ const toMap = (env: Env) => {
 };
 const fromMap = (m: Map<Id, Value>): Env => { let e: Env = null; for (const [b, v] of m) e = { b, v, up: e }; return e; };
 interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; base: number; fuel: Fuel | null; next: Frame | null }
-interface FoldCtx { arms: Map<Id, { arm: NodeOf<"arm">; rec: number[] }>; env: Env }
+// An arm of a fold: the fields with folded values, and whether each holds
+// the type nested in a container (List Tree) rather than directly.
+interface FoldArm { arm: NodeOf<"arm">; rec: number[]; nested: boolean[]; shapes: (Shape | null)[] }
+interface FoldCtx { arms: Map<Id, FoldArm>; env: Env }
+// The children of one value to fold first, and how their results become
+// the arm's folded values.
+interface Kids { kids: Data[]; folded: (results: Value[]) => Value[] }
 type Frame = { next: Frame | null } & (
   | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: NodeOf<"call"> | NodeOf<"solve"> }
   | { t: "match"; n: NodeOf<"match">; env: Env }
   | { t: "fold"; n: NodeOf<"fold">; env: Env }
-  | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: NodeOf<"arm">; rec: number[]; results: Value[] }
+  | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Value[] }
   | { t: "fuelExit"; saved: Fuel | null }
   | HandlerFrame
 );
@@ -319,11 +326,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         case "fold": return this.foldValue({ arms: foldArms(f.n), env: f.env }, v as Data);
         case "foldChild": {
           const results = [...f.results, v];
-          if (results.length < f.rec.length) {
+          if (results.length < f.kids.kids.length) {
             this.push({ ...f, results, next: null });
-            return this.foldValue(f.ctx, f.d.fields[f.rec[results.length]] as Data);
+            return this.foldValue(f.ctx, f.kids.kids[results.length]);
           }
-          return this.foldBody(f.ctx, f.d, f.arm, f.rec, results);
+          return this.foldBody(f.ctx, f.d, f.arm, f.kids.folded(results));
         }
         case "handler":
           if (f.h === S.first) {
@@ -342,17 +349,19 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // Walk down the first recursive field until a case without one, leaving
     // a frame at each level.
     foldValue(ctx: FoldCtx, d: Data) {
-      for (let arm = ctx.arms.get(d.tag)!; arm.rec.length; arm = ctx.arms.get(d.tag)!) {
-        this.push({ t: "foldChild", ctx, d, arm: arm.arm, rec: arm.rec, results: [], next: null });
-        d = d.fields[arm.rec[0]] as Data;
+      for (;;) {
+        const arm = ctx.arms.get(d.tag)!;
+        const kids = kidsOf(arm, d);
+        if (!kids.kids.length) return this.foldBody(ctx, d, arm, kids.folded([]));
+        this.push({ t: "foldChild", ctx, d, arm, kids, results: [], next: null });
+        d = kids.kids[0];
       }
-      this.foldBody(ctx, d, ctx.arms.get(d.tag)!.arm, [], []);
     }
 
-    foldBody(ctx: FoldCtx, d: Data, arm: NodeOf<"arm">, rec: number[], results: Value[]) {
-      let inner = bind(ctx.env, arm.binds, d.fields);
-      rec.forEach((i, k) => (inner = { b: arm.results[i]!, v: results[k], up: inner }));
-      this.eval(arm.body, inner);
+    foldBody(ctx: FoldCtx, d: Data, arm: FoldArm, folded: Value[]) {
+      let inner = bind(ctx.env, arm.arm.binds, d.fields);
+      arm.rec.forEach((i, k) => (inner = { b: arm.arm.results[i]!, v: folded[k], up: inner }));
+      this.eval(arm.arm.body, inner);
     }
 
     solve(n: NodeOf<"solve">, vals: Value[], env: Env) {
@@ -382,13 +391,31 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   }
 
   // The arms of a fold by variant, with the indices of the recursive fields.
-  const armsOf = new Map<Id, Map<Id, { arm: NodeOf<"arm">; rec: number[] }>>();
+  const armsOf = new Map<Id, Map<Id, FoldArm>>();
   const foldArms = (n: NodeOf<"fold">) => {
     if (!armsOf.has(n.id)) armsOf.set(n.id, new Map(n.arms.map((a) => {
       const arm = code.nodes[a] as NodeOf<"arm">;
-      return [arm.variant, { arm, rec: arm.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0) }];
+      const def = info.owner.get(arm.variant)!;
+      const shapes = fieldShapes(code, def, arm.variant);
+      const rec = arm.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
+      const fields = (code.nodes[arm.variant] as NodeOf<"variant">).fields;
+      const nested = rec.map((i) => shapes[i] === "nested");
+      return [arm.variant, { arm, rec, nested, shapes: rec.map((i, k) => (nested[k] ? shapeOf(code, def, (code.nodes[fields[i]] as NodeOf<"field">).type) : null)) }];
     })));
     return armsOf.get(n.id)!;
+  };
+  const kidsOf = (arm: FoldArm, d: Data): Kids => {
+    if (!arm.nested.includes(true)) return { kids: arm.rec.map((i) => d.fields[i] as Data), folded: (r) => r };
+    const parts = arm.rec.map((i, k) => arm.nested[k]
+      ? spread<Data>(arm.shapes[k]!, d.fields[i])
+      : { children: [d.fields[i] as Data], rebuild: (r: unknown[]) => r[0] });
+    return {
+      kids: parts.flatMap((p) => p.children),
+      folded: (results) => {
+        let at = 0;
+        return parts.map((p) => p.rebuild(results.slice(at, (at += p.children.length))) as Value);
+      },
+    };
   };
 
   const ev = (id: Id, env: Map<Id, Value>): Generator<Value> => run((m) => m.eval(id, fromMap(env)));

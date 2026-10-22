@@ -30,6 +30,7 @@ import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
+import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
 import { CONS, FALSE, INT_OPS, NIL, S, SET, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
@@ -110,6 +111,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const local = (binder: Id) => ident(binder, names[binder] ?? "x");
   let temps = 0;
   const temp = (hint = "t") => `${hint}$${temps++}`;
+  // A fold's field that holds the type in a container: its shape.
+  const nestedShape = (a: NodeOf<"arm">, i: number): Shape | null => {
+    const def = info.owner.get(a.variant)!;
+    if (fieldShapes(code, def, a.variant)[i] !== "nested") return null;
+    return shapeOf(code, def, node<"field">(node<"variant">(a.variant).fields[i]).type);
+  };
 
   const referenced = new Set<Id>();
   for (const n of Object.values(code.nodes)) if (n.kind === "ref") referenced.add(n.target);
@@ -477,9 +484,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     //    up it.
     //  - Otherwise (trees), keep an explicit stack of values whose children
     //    are being folded.
+    //  - When a field holds the type nested in a container (a rose tree's
+    //    List Tree), `parts` lists the trees inside it (projectional/src/
+    //    lang/nested.ts) and puts their results back in a copy of it.
     function foldLoop(n: NodeOf<"fold">): string {
       const arms = n.arms.map((a) => node<"arm">(a));
       const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
+      if (arms.some((a) => recOf(a).some((i) => nestedShape(a, i)))) return foldNested(n, arms, recOf);
       const chain = arms.every((a) => recOf(a).length <= 1);
       const step = temp("step"), s = temp("s"), rs = temp("rs");
       const cases = arms.map((a) => {
@@ -503,6 +514,27 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\nconst ${v} = ${ix}[${top}.v.tag];\n` +
         `if (${v} && ${top}.i < ${v}.length) {\n${todo}.push({ v: ${top}.v.fields[${v}[${top}.i++]], i: 0, rs: [] });\ncontinue;\n}\n` +
         `const ${r} = ${step}(${top}.v, ${top}.rs);\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
+    }
+
+    function foldNested(n: NodeOf<"fold">, arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]): string {
+      const step = temp("step"), s = temp("s"), rs = temp("rs"), parts = temp("parts");
+      const cases = arms.map((a) => {
+        const rec = recOf(a).map((i, k) => `\nconst ${local(a.results[i]!)} = ${rs}[${k}];`).join("");
+        return `case ${tag(a.variant)}: {${binds(a, s)}${rec}\n${ret(a.body)}\n}`;
+      });
+      const partCases = arms.filter((a) => recOf(a).length).map((a) => `case ${tag(a.variant)}: return [${recOf(a).map((i) => {
+        const shape = nestedShape(a, i);
+        return shape ? `$spread(${JSON.stringify(shape)}, ${s}.fields[${i}])` : `$self(${s}.fields[${i}])`;
+      }).join(", ")}];`);
+      const todo = temp("todo"), top = temp("top"), r = temp("r"), at = temp("at");
+      return `const ${step} = (${s}, ${rs}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n` +
+        `const ${parts} = (${s}) => {\nswitch (${s}.tag) {\n${partCases.join("\n")}\ndefault: return [];\n}\n};\n` +
+        `const ${todo} = [{ v: ${ex(n.scrutinee)}, ps: null, kids: null, i: 0, rs: [] }];\n` +
+        `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\n` +
+        `if (!${top}.ps) { ${top}.ps = ${parts}(${top}.v); ${top}.kids = ${top}.ps.flatMap((p) => p.children); }\n` +
+        `if (${top}.i < ${top}.kids.length) {\n${todo}.push({ v: ${top}.kids[${top}.i++], ps: null, kids: null, i: 0, rs: [] });\ncontinue;\n}\n` +
+        `let ${at} = 0;\nconst ${r} = ${step}(${top}.v, ${top}.ps.map((p) => p.rebuild(${top}.rs.slice(${at}, (${at} += p.children.length)))));\n` +
+        `${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
     }
 
     // `let x = v`, or just `v;` for the `_` of a sequence.
@@ -629,7 +661,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         let inner = st(a.body, (v) => `yield ${v};`);
         for (let i = a.results.length - 1; i >= 0; i--) {
           const r = a.results[i];
-          if (r) inner = `for (const ${local(r)} of ${f}(${s}.fields[${i}])) {\n${inner}\n}`;
+          const shape = r ? nestedShape(a, i) : null;
+          if (r) inner = `for (const ${local(r)} of ${shape ? `$foldNested(${f}, $spread(${JSON.stringify(shape)}, ${s}.fields[${i}]))` : `${f}(${s}.fields[${i}])`}) {\n${inner}\n}`;
         }
         return `case ${tag(a.variant)}: {${binds(a, s)}\n${inner}\nbreak;\n}`;
       });
@@ -664,7 +697,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
-    "$close", "$planned", "$solveRuntime", "$print", "$FN",
+    "$close", "$planned", "$solveRuntime", "$print", "$FN", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];

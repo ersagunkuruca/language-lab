@@ -41,7 +41,8 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId } from "../model.ts";
+import { children, freshId, ownerOfTypeParts } from "../model.ts";
+import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { FIRST, PAIR_V, S, SECOND } from "./std.ts";
@@ -326,6 +327,13 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // value becomes a pair (value, derivative).
   function foldD(n: NodeOf<"fold">, ctx: Ctx): E {
     if (depends(n.scrutinee, new Set(ctx.d.keys()))) return cant("this fold takes apart data built from the variable");
+    // Folded values of nested data (a rose tree's List R) would need pairs
+    // inside the container; not yet.
+    if (n.arms.some((a) => {
+      const arm = nodes[a] as NodeOf<"arm">;
+      const shapes = fieldShapes(code, ownerOfTypeParts(code).get(arm.variant)!, arm.variant);
+      return arm.results.some((r, i) => r && shapes[i] === "nested");
+    })) return cant("this fold goes through nested data (a container of the type), which isn't differentiated yet");
     return {
       k: "build", build: () => {
         const arms = n.arms.map((a) => {
