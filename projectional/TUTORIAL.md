@@ -351,12 +351,14 @@ operations: `effect Ask = ask(question: Text) returns Number`. Calling
 performs it, with one case per operation:
 
 ```
-match width() + height()
-| ask(question) → if question = "width" then 30 else 12
+handle width() + height()
+  ask(question) → if question = "width" then 30 else 12
 ```
 
 So there's no new node for handlers: a handler is a match, an operation is a
-case, performing is calling.
+case, performing is calling. The blocks and the text write such a match as `handle`,
+and the **Effects** example is this program, with `Abort` handled too. To
+declare your own, *+ New definition* → *Effect*.
 
 **Two safety rules.** A definition's own value must be pure; anything that
 acts is an *action*, a function with no inputs (the `() =>` frames handlers
@@ -662,23 +664,18 @@ isn't an input" is two boxes and two nodes.
 **Proposal.** One `for some` with several inputs, or draw an existential as a
 dot inside the frame with no wire coming in, labelled "some".
 
-### 8. Effects: seven of them, and the editor shows three
+### 8. ~~Effects: seven of them, and the editor shows three~~ (done)
 
-**Today.** The language has `Choice`, `Abort`, `Log`, `Console`, `Files`,
-`Diverge` and effects you declare. The guide's badge text still mentions only
-Choice, Console and Diverge, the examples don't use `Abort`, `Log` or a
-declared effect, and the editor can't declare an effect (*+ New definition*
-offers function, value and data type). A handler is a `match` on a
-*computation*, which is the same node as a match on *data* doing a different
-job.
+*+ New definition* has a fourth kind, **Effect**: its cases are called
+operations, their fields inputs, and each operation says what it gives back
+(or "nothing: it never returns", like `abort`). The palette offers
+`handle Ask in □` for every effect, and the blocks view writes a handler
+match as `handle`, so it reads differently from a match on data while staying
+the same node. The guide lists all seven effects, and the **Effects** example
+uses a declared effect and `Abort`, built in the editor by clicks only.
 
-There are also three ways to say "no answer": `Choice` (no reason, maybe
-many), `Abort` (a reason, one) and `Optional` (stored).
-
-**Proposal.** An example that uses `Abort` and a declared effect, the guide
-updated, and "Effect" as a fourth kind in *+ New definition*. Draw a handler
-match with its cases labelled as operations ("when it asks…"), so it's
-visibly a handler. Teach the three absences with the rule of thumb in 3.9.
+What's left is the three ways to say "no answer" (`Choice`, `Abort`,
+`Optional`); 3.9 gives the rule of thumb.
 
 ### 9. The type syntax has a variable most people won't understand
 

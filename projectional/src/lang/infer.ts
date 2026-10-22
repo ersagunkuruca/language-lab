@@ -932,6 +932,13 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       if (safe(info.subst, f, false)) out.push(f);
     }
   }
+  // A handler: a match on a computation still to be given, one case per
+  // operation of an effect (handle above).
+  for (const type of new Set(info.owner.values())) {
+    if (!(code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect || info.hidden.has(type)) continue;
+    const f: Filling = { kind: "match", on: null, type };
+    if (safe(info.subst, f, false)) out.push(f);
+  }
   return out;
 }
 

@@ -39,6 +39,12 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
   const isLet = (n: Node): boolean => n.kind === "call" && node(n.fn).kind === "lambda";
+  // A match whose arms are an effect's operations handles it.
+  const isHandler = (n: NodeOf<"match">) => {
+    const owner = n.arms.length ? info?.owner.get((node(n.arms[0]) as NodeOf<"arm">).variant) : undefined;
+    const d = owner ? node(owner) : null;
+    return d?.kind === "def" && !!d.body && !!(node(d.body) as { effect?: true }).effect;
+  };
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -136,7 +142,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       return [`${ind}${lead}if ${cond}`, ...block(t, ind + "  ", "then "), ...block(f, ind + "  ", "else ")];
     }
     if (n.kind === "match" || n.kind === "fold") {
-      const out = [`${ind}${lead}${n.kind} ${inline(n.scrutinee).text}`];
+      const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];
       for (const a of n.arms) {
         const arm = node(a) as NodeOf<"arm">;
         const results = arm.results.filter((r): r is Id => r !== null);
@@ -189,11 +195,12 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   if (comment) out.push(`-- ${comment}`);
   if (body?.kind === "typedef") {
     enter(body.params);
-    const head = `type ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;
+    const head = `${body.effect ? "effect" : "type"} ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;
     out.push(head);
     for (const v of body.variants) {
-      const fs = (node(v) as NodeOf<"variant">).fields.map((f) => `${nameOf(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
-      out.push(`  | ${nameOf(v)}${fs.length ? `(${fs.join(", ")})` : ""}`);
+      const vn = node(v) as NodeOf<"variant">;
+      const fs = vn.fields.map((f) => `${nameOf(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
+      out.push(`  | ${nameOf(v)}${fs.length ? `(${fs.join(", ")})` : ""}${vn.returns ? ` returns ${typeText(vn.returns)}` : ""}`);
     }
     return out.join("\n");
   }

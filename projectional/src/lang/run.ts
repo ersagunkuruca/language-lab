@@ -627,13 +627,16 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 
 function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
   if (t.t !== "fn") throw new Error("not a function");
-  const extra = t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
+  const extra = needsHandling(t);
   if (extra.length) throw new Error(`unhandled effect: ${extra.join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`);
   const r = makeRunner(code, info, rt);
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
 const RUNTIME_HANDLES = [...WORLD, DIVERGE, LOG, ABORT];
+// The effects of a function's type that something in the program has to
+// handle before it can run: an unhandled Choice, effects you declared.
+export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
 
 // A program run from the command line (cli/lab.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an
