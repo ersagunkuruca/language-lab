@@ -545,7 +545,7 @@ can't be written down).
 
 - `equal` is defined for any type, including functions, which can't really
   be compared. `show` only works on numbers.
-- Two kinds of definition tabs now (functions and `▤` data types) and one
+- Two kinds of definition in the navigator now (functions and `▤` data types) and one
   panel layout, since every program is typed.
 - The model has 17 node kinds (`lit binder ref call lambda def builtin hole
   typedef variant field tref tfun match fold arm solve`). Proposal 3 would
