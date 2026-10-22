@@ -292,6 +292,101 @@ ever counts down from 3, while another needs binary. Conversions at the
 boundaries have costs too, which makes this a small optimization problem
 over the data-flow graph. The coarse version comes first.
 
+### Folds run the way their value is stored
+
+The compiler makes one decision on its own today: a `fold` without
+`Choice` becomes a loop (a spine array for lists and other chains, an
+explicit stack for trees, `parts` for trees nested in containers;
+COMPILER.md, "Folds are loops"). That is the stackless half of the
+Peano problem, and it was built as a special case in the code generator.
+It belongs in the representation table, because *how a fold runs is a job
+of the representation*, like `add` or `match`. The loop the compiler makes
+today is the fold of one particular representation: objects linked by
+fields, which is the definition stored as it is written. Call it `cells`.
+
+Other representations run the same fold differently:
+
+| representation | of | stored as | `meaning` | its `fold` runs as | |
+|---|---|---|---|---|---|
+| `cells` | any data type | one object per case | itself | spine loop (chains), explicit stack (trees), `parts` (nested) | today's loops |
+| `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | first new row |
+| `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | next |
+| `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
+| `int` | `Nat` | an `Int` | `natural` | a counted loop: Peano `succ` folded n times | later |
+| `array` | `List a` | a JS array | `items` | an index loop | later |
+| `build` | `List a` | a function of `cons` and `nil` | `build` | apply it | later |
+
+**The rule is the law read backwards.** Every representation promises
+`meaning(fold′(x)) = fold(meaning(x))`, and for a fold, whose result isn't
+in T, simply `fold′(x) = fold(meaning(x))`. So wherever a fold's input is
+*made by* a representation's `meaning`, the fold can run on the
+representation instead, and the structure in between is never built:
+
+```
+fold characters(line)          the definition: a list of one-character texts,
+  nil → …                       then a spine array, then the loop
+  cons(c) with after → …
+
+text′s fold of line            the same arms, run on the string's code points
+                                from the end: no list, no array
+```
+
+That is **deforestation** (Wadler, 1990), in the form GHC uses, **short-cut
+fusion** (Gill, Launchbury and Peyton Jones, *A short cut to
+deforestation*, 1993): `foldr k z (build g) = g k z`. In this table,
+`build` is the `meaning` of the `build` representation (a list stored as
+the function that folds it, Church's encoding), and the foldr/build rule is
+its fold job. Stream fusion (Coutts, Leshchinskiy and Stewart, 2007) is
+another row of the same table, with a step function as the storage. None
+of them needs a rule of its own: each is a representation, and fusion is
+what choosing it for one value means.
+
+**Chosen per value, not per type.** The chooser of PR #30 picks one
+representation per type for the whole program. Fusion picks one for a
+single value: in calc's `tokens`, the `characters(line)` that is folded is
+`text`, and every other list in calc stays `cells`. This is the simplest
+case of "choice per value flow" (roadmap stage 7): a value made by a
+`meaning` and consumed once, by the fold it is made for, so there is no
+conversion at any boundary. The conditions are:
+
+1. The fold has no `Choice` (as today; a fold with `Choice` is a generator).
+2. Each arm uses a recursive field only through its folded result. An arm
+   that reads the raw rest of the list needs that rest as a list, which
+   `text` doesn't have without building it. (Later, the representation can
+   provide it as `meaning` of a slice, built only when read.)
+3. The producer is pure (`characters` and `range` are).
+
+**Where it lives.** The table is in `src/lang/represent.ts`, next to the
+user representations. A builtin row names its jobs by template (`"loop"`,
+`"text.reverse"`) instead of by definition, because its code is a loop in
+the target language, not a definition in this one. `foldPlan(code, fold)`
+returns which representation runs a fold and on what. The compiler keeps
+one emitter per template and no longer decides how a fold runs, so the
+next backends ask the same question: in WGSL, `fold(range(n))` becomes a
+GPU loop through the `counted` row, with no list to store. A
+representation whose fold is a definition (`binary`) takes the code → code
+route that `represent` already has: `fold(meaning(x))` becomes a call of
+`fold Nat′` on `x`, for that one value.
+
+**What makes it correct.** The evaluator keeps running the definition,
+building the list. The compiled program runs the representation. So the
+differential tests (evaluator against compiled, for every example) are the
+law tests for each row, and each row gets its own cases at its edges: empty
+text, characters outside the basic plane, `range(0)`.
+
+**Steps**, each its own PR, measured on calc where it applies:
+
+1. The table and `foldPlan`, with `cells` as the only row, and the compiler
+   asking it. The compiled output doesn't change.
+2. `text`: a fold over `characters(t)`. This is the fusion GAPS.md G7
+   left for here; the measure is calc's tokenizer.
+3. `counted`: a fold over `range(n)` (`queens` uses it).
+4. User representations per value: `fold(meaning(x))` → `fold′(x)` when
+   `meaning` is a definition, tested on `binary`.
+5. Later, when a program needs them: `build` for user functions that make
+   a list from `cons` and `nil` (so `keep` over a list made by a fold runs
+   in one pass), `array`, and `int` for Peano `Nat`.
+
 ## Number systems, one by one
 
 Each row is a meaning, written as ordinary definitions in std, and the
@@ -586,5 +681,10 @@ test/numbers.test.ts              laws, the rewrite, encoding by running meaning
   here resolved at edit time.
 - **Resource analysis**: Hoffmann, Aehlig, Hofmann, RAML (automatic
   amortized resource analysis).
+- **Deforestation and fusion**: Wadler, "Deforestation: transforming
+  programs to eliminate trees" (1990); Gill, Launchbury, Peyton Jones, "A
+  short cut to deforestation" (1993), the foldr/build rule; Coutts,
+  Leshchinskiy, Stewart, "Stream fusion" (2007). Here each is a
+  representation, and fusion is choosing one for a single value.
 - **Transport between representations**: the univalence idea in homotopy
   type theory, of which this is the practical, tested version.

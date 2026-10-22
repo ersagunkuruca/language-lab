@@ -72,6 +72,10 @@ run in parallel because they touch different files.
    out of the compiler's special cases and into the representation table
    from NUMBERS.md, next to Peano `Nat` → binary. *Why:* one mechanism for
    "how this runs" instead of two, before the backends multiply.
+   *Design:* NUMBERS.md, "Folds run the way their value is stored": the
+   loop is the fold of the `cells` representation, and fusion (a fold over
+   `characters(t)`, `range(n)`, later `build`) is choosing another
+   representation for one value. In progress.
 6. **Compile targets.** All are profiles (REVIEW.md §5.2) plus a code
    generator:
    - **Shaders (WGSL)** first. *Done (PRs #80, #82, #85, #86):* the

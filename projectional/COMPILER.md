@@ -235,6 +235,12 @@ an explicit stack of values whose children are still being folded. Either
 way the arms are run children first, as the evaluator does. A million-item
 fold and a 100,000-deep tree are in the tests.
 
+These loops are the fold job of one representation, `cells` (values stored
+as linked objects, the way the definition is written). How a fold runs is
+being moved into the representation table, so a fold over a value made by
+`characters` or `range` runs on the string or the count without building
+the list: NUMBERS.md, "Folds run the way their value is stored".
+
 What isn't a loop yet:
 
 - **Plain recursion that isn't a tail call.** A function that calls
