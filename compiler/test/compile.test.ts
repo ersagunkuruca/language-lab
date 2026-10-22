@@ -106,6 +106,36 @@ test("an effect-polymorphic function gets one copy per calling convention", asyn
   assert.equal(fromList(defs.choices()).length, 8);
 });
 
+test("a function that may choose, given one that doesn't, gets a copy that calls it plainly", async () => {
+  // keep's test is typed (a) -[Choice, e]-> Bool; most tests never choose
+  const k = new Lang();
+  const keep = k.def("keep");
+  k.define(keep, k.fn(["list", "test"], (xs, p) => k.call(S.all, k.thunk(() =>
+    k.let("item", k.call(S.oneOf, xs), (x) => k.if(k.call(p, x), x, k.call(S.fail)))))));
+  const small = k.def("small");
+  k.define(small, k.thunk(() => k.call(keep, k.call(S.range, k.lit(5)), k.fn(["n"], (n) => k.call(S.less, n, k.lit(2))))));
+  const twice = k.def("twice");
+  k.define(twice, k.thunk(() => k.call(keep, k.call(S.range, k.lit(3)), k.fn(["n"], () => k.call(S.oneOf, k.list(k.true, k.false, k.true))))));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const source = compile(code, info, names, { runtime, exports: ["small", "twice"] });
+  assert.match(source, /^function keep\$plain\(/m);
+  assert.match(source, /^function keep\(/m);
+  assert.match(source, /keep\$plain\(\$range\(5\), \(\(n\) =>/);
+  const file = join(dir, "plain.js");
+  writeFileSync(file, source);
+  const defs = (await import(pathToFileURL(file).href)).defs;
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const name of ["small", "twice"]) {
+    const def = code.defs.find((d) => names[d] === name)!;
+    assert.deepEqual(defs[name](), [...r.call(r.value(def))][0]);
+  }
+  assert.deepEqual(fromList(defs.small()), [0, 1]);
+  assert.deepEqual(fromList(defs.twice()), [0, 0, 1, 1, 2, 2]);
+});
+
 // Real-sized data: a fold without Choice is a loop, so it needs no JS stack
 // per item, for chains (lists) and for trees.
 async function compiledDefs(k: Lang, exports: string[], file: string) {

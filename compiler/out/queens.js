@@ -25,9 +25,7 @@ function main() {
         }
         return $toList(all$3);
       })(), ((board) => $print(("  " + show_numbers(board)))));
-  return $print(("even numbers below 10: " + show_numbers(keep($range(10), (function* (n) {
-              yield $bool($near($mod(n, 2), 0));
-            })))));
+  return $print(("even numbers below 10: " + show_numbers(keep$plain($range(10), ((n) => $bool($near($mod(n, 2), 0)))))));
 }
 
 // queens
@@ -115,18 +113,16 @@ function for_each(list$in, action$in) {
 }
 
 // keep
-function keep(list2, test) {
+function keep$plain(list2, test) {
   return (() => {
       const all$20 = [];
       for (let l$21 = list2; l$21.tag === "std.list.cons"; l$21 = l$21.fields[1]) {
         const x$22 = l$21.fields[0];
         const item2 = x$22;
-        for (const r$23 of test(item2)) {
-          if ((r$23.tag === "std.bool.true")) {
-            all$20.push(item2);
-          } else {
-            /* fail */
-          }
+        if ((test(item2).tag === "std.bool.true")) {
+          all$20.push(item2);
+        } else {
+          /* fail */
         }
       }
       return $toList(all$20);
@@ -136,27 +132,27 @@ function keep(list2, test) {
 // safe
 function safe(column2, placed) {
   return (() => {
-      const step$24 = (s$25, rs$26) => {
-        switch (s$25.tag) {
+      const step$23 = (s$24, rs$25) => {
+        switch (s$24.tag) {
           case "std.list.nil" /* nil */: {
             return ((distance) => $T);
           }
           case "std.list.cons" /* cons */: {
-            const queen = s$25.fields[0];
-            const others_safe = rs$26;
+            const queen = s$24.fields[0];
+            const others_safe = rs$25;
             return ((distance2) => $bool(((!$near(queen, column2) && !$near(Math.abs((queen - column2)), distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
           }
         }
       };
-      const spine$29 = [];
-      let v$27 = placed;
-      for (let k$31 = v$27.tag === "std.list.cons" /* cons */ ? 1 : -1; k$31 >= 0; k$31 = v$27.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-        spine$29.push(v$27);
-        v$27 = v$27.fields[k$31];
+      const spine$28 = [];
+      let v$26 = placed;
+      for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+        spine$28.push(v$26);
+        v$26 = v$26.fields[k$30];
       }
-      let r$28 = step$24(v$27);
-      for (let i$30 = spine$29.length - 1; i$30 >= 0; i$30--) r$28 = step$24(spine$29[i$30], r$28);
-      return r$28;
+      let r$27 = step$23(v$26);
+      for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$23(spine$28[i$29], r$27);
+      return r$27;
     })()(1);
 }
 

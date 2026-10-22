@@ -137,7 +137,10 @@ on what the argument really does. When the lambda at the call site is
 inferred pure, call a copy `keep$pure`, where the test is a plain call and
 its "no answer" can't happen. This is the same one-bit specialization the
 compiler already does for effect variables, applied to a parameter whose
-row is fixed. It also makes `keep` cheaper everywhere else (wc uses it too).
+row is fixed. It also makes `keep` cheaper everywhere else (wc uses it too). **Done**: compiled calc on 4,000 lines went from 88 ms to 69 ms. The
+ideal takes 22 ms, so compiled is now 2.7× slower instead of 4×. The
+compiler makes the plain copy only for a parameter the callee never passes
+on or stores, and only in programs that don't reflect.
 
 **G7. Text comparisons go through the general builtin (perf: 12 to 15
 ms).** `digit` and `letter` call `$text.less(c, "0")`. That function runs a
