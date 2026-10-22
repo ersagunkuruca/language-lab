@@ -1405,6 +1405,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const t = info.typeOf.get(ui.def);
   const z = t ? info.subst.zonk(t) : null;
   const action = z?.t === "fn" && z.params.length === 0;
+  // A value (no inputs, not a function) runs like an action: asked for,
+  // then its result and the values on its wires show.
+  const value = !!z && z.t !== "fn";
   const body = defBody(ui.def);
   if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
   // An action that performs an effect nothing answers yet runs only inside
@@ -1424,11 +1427,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // action, once you ask (it may take a while, and its printing is left out).
   const ex = doc.examples?.[ui.def];
   const tr = traced(info);
-  if (action && !needs.length) box.append(h("div", { class: "acts" },
+  if ((action || value) && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn") box.append(h("p", { class: "hint" }, "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."));
-  if (tr?.result !== undefined && action) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
+  if (tr?.result !== undefined && (action || value)) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
   if (tr?.error) box.append(h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
