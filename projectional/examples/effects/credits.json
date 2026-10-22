@@ -1,0 +1,4 @@
+[
+ "Influence: algebraic effects and handlers (Plotkin and Pretnar, 2009; the Eff language by Bauer and Pretnar), and effect rows in types as in Koka (Daan Leijen, 2014): https://koka-lang.github.io",
+ "Adapted: a handler is a match whose cases are the effect's operations, as OCaml 5.3 writes effect cases in match."
+]

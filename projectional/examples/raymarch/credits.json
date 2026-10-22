@@ -1,0 +1,7 @@
+[
+ "Adapted: march is sphere tracing, John C. Hart's method (\"Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces\", The Visual Computer, 1996).",
+ "Adapted: the ring's distance, the smooth minimum and the soft shadow are Inigo Quilez's formulas: https://iquilezles.org/articles/distfunctions/ https://iquilezles.org/articles/smin/ https://iquilezles.org/articles/rmshadows/",
+ "Our own: the scene (a drop in a ring over a checker floor), and normals read off the scene by gradient before the shader is compiled.",
+ "Prior art: differentiating a program before compiling it for the GPU is what Enzyme does (Moses and Churavy, NeurIPS 2020).",
+ "Influence: the fuel budget is an old idea: gas in Ethereum, fuel in Wasmtime."
+]
