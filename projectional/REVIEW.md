@@ -557,7 +557,7 @@ programs.
 | strict positivity; lets in the guard check; size-change termination | incremental checking with pinned signatures | invertible parsing of arbitrary printers at real speed |
 | folds as loops (no stack) | mode analysis in the checker: no runtime `NotInvertible` | proved (not tested) representation laws by fusion |
 | `derivative` of builtins; `equal`/`show` only on plain data; shortest round-trip `show` | network = predicate; `network`/`part` and `eval.ts`/`check.ts` removed | costs worked out from folds, representation chosen per value flow |
-| 128-bit ids, collision-checked `merge` | user-defined effects, `Abort`, `Optional`; world effects not under `Choice` | exact reals with Gosper arithmetic as a practical numeric type |
+| 128-bit ids, collision-checked `merge` | user-defined effects, `Abort`, `Optional`; world effects not under `Choice` | exact reals with Gosper arithmetic as a practical numeric type (on-demand terms and Gosper's `+ − × ÷` now work as a program through the Cells effect, LANGUAGE.md "Cells"; what is left is speed and making it a representation of `Real`) |
 | editor: new def/type/param, save/open files, copy/paste | units on `Number` everywhere | native mobile compilation |
 | Int/Nat/Text basics, record updates | WGSL backend and an SDF shader demo | relational UI layout (constraints solved live, Cassowary-style) at app scale |
 | values on wires for example inputs | Elm-architecture web runtime with two-way binding by relations | a package ecosystem by hash, with propagated updates |

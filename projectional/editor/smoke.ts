@@ -58,12 +58,30 @@ async function stopped(p: Page) {
   for (const line of await p.locator(".status-line.bad").allInnerTexts()) errors.push(`${where}: ${line}`);
 }
 
+// reactive.html, next to the editor: both Cells programs run, and a click
+// and a slider change what they should.
+async function cellsPage() {
+  where = "reactive.html";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
+  await p.goto(new URL("reactive.html", page).href);
+  await p.locator("#counter .ui-button", { hasText: "+" }).click();
+  const count = await p.locator("#counter .ui-text").first().innerText();
+  if (count !== "1") errors.push(`${where}: the counter shows ${count} after one click`);
+  await p.locator("#fractions input[type=range]").nth(1).fill("4");
+  const square = await p.locator("#fractions .ui-text").last().innerText();
+  if (!square.endsWith("= [4]")) errors.push(`${where}: √4 × √4 shows ${square}`);
+  await p.close();
+}
+
 const saved = readFileSync(new URL("smoke-saved.json", import.meta.url), "utf8");
 const edited = JSON.stringify({ ...JSON.parse(saved), docs: { relations: { ...JSON.parse(saved).docs.relations, edited: true } } });
 await visit(null);
 const fresh = defs;
 await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
+await cellsPage();
 await browser.close();
 console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor`);
 if (errors.length) {

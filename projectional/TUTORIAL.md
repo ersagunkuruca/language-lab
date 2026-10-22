@@ -300,6 +300,20 @@ the runtime can't handle; that's reported before anything runs.
 **Try it.** Open *Eight queens* → `main` and press *Run*: the first solution
 for 8, the count (92), and all four solutions for 6.
 
+**Cells: values that change, and values computed when asked.** One more
+effect is how a page reacts to clicks, the way Solid.js does it.
+`count = cell(0)` makes a cell; `read(count)` reads it; `write(count, 1)`
+changes it (that's the effect `Update`, and like printing it can't happen
+inside a search). `formula(() => read(count) * 2)` is a cell computed from
+others: the first time something reads it, and again only after a cell it
+read has changed. A page is a value whose changing parts are actions like
+`() => show(read(count))`; the runtime notes which cells each one read and
+runs again exactly those that read a cell that changed. Because a formula
+runs only when read and only once, it is also how data can go on forever:
+a continued fraction whose rest is a formula computes its terms as you ask
+for them. Both run live on the [Cells page](https://ersagunkuruca.github.io/language-lab/reactive.html);
+LANGUAGE.md, "Cells", has the details.
+
 ### 3.9 Running a function backwards
 
 Every function has **ports**: its parameters and its result. Running it
@@ -564,7 +578,20 @@ whose definitions are named by their content hash (LANGUAGE.md,
 - Pins (frozen signatures) exist in the checker, but the editor can't pin
   one of your own definitions yet, and doesn't show which ones are pinned.
 
-### 12. Things that are good and should stay
+### 12. Cells: the handler is the runtime's, and lazy producers say Diverge
+
+Today: `Cells` (reactivity and values on demand) is handled only by the
+runtime, because its handler keeps state and handlers in the language
+can't. And a formula's action may loop, so a lazy producer like √2's terms
+has `Diverge` in its type even though each step makes a term.
+
+Proposal: a handler form with state (a `match` that carries a value from
+one operation to the next) would let a program write its own Cells handler,
+for example a server-side renderer or a test that answers reads. A guarded
+corecursion check (a recursive call under a `formula`, inside a
+constructor) would drop `Diverge` from productive producers.
+
+### 13. Things that are good and should stay
 
 So the list above isn't read as "everything is wrong":
 

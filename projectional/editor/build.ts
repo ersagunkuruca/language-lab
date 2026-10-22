@@ -6,6 +6,7 @@
 //   index.html     the editor; open it locally too
 //   tutorial.html  TUTORIAL.md as a page, its screenshots read from
 //                  projectional/tutorial/
+//   reactive.html  the Cells programs running live (editor/reactive.ts)
 
 import { build } from "esbuild";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -58,6 +59,55 @@ figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
 <nav><a href="./">← Back to the editor</a></nav>
 ${body}
 </main>
+</body>
+</html>
+`);
+
+// The Cells page: reactive.html's text around editor/reactive.ts.
+const rout = await build({ entryPoints: [here + "reactive.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
+const rjs = rout.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
+writeFileSync(site + "reactive.html", `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cells: reactivity and values on demand</title>
+${fonts}
+<style>
+${tokens}
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
+main { max-width: 72rem; margin: 0 auto; padding: 24px 16px 80px; }
+nav { font-size: 14px; }
+a { color: var(--accent); }
+h1 { font-size: 30px; line-height: 1.25; margin: 0.6em 0 0.4em; }
+h2 { font-size: 21px; margin: 0 0 12px; }
+p { max-width: 46rem; }
+code, pre { font-family: var(--font-code); font-size: 0.86em; }
+:not(pre) > code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+.hint, .credits, .log { color: var(--muted); font-size: 14px; }
+.log { font-variant-numeric: tabular-nums; min-height: 1.6em; margin: 8px 0; }
+.demo { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 28px 0; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+pre.code { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow: auto; max-height: 34rem; line-height: 1.45; font-size: 12.5px; }
+.live { font-size: 15px; }
+.ui-column { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ui-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ui-dynamic .ui-column { gap: 6px; }
+.ui-text { padding: 1px 6px; border-radius: 6px; font-family: var(--font-code); font-size: 14px; overflow-wrap: anywhere; }
+.ui-button { font: inherit; font-size: 14px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+.ui-button:hover { border-color: var(--accent); }
+.ui-entry { font: inherit; font-size: 14px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); min-width: 16rem; }
+.ui-slider { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.ui-slider-label { min-width: 3.5em; color: var(--muted); }
+.ui-slider input { width: 14rem; accent-color: var(--accent); }
+.ui-slider output { font-variant-numeric: tabular-nums; min-width: 2em; }
+@keyframes ran { from { background: var(--hot-soft); box-shadow: 0 0 0 2px var(--hot); } to { background: transparent; box-shadow: 0 0 0 2px transparent; } }
+.ran { animation: ran 0.9s ease-out; }
+</style>
+</head>
+<body>
+${readFileSync(here + "reactive.html", "utf8")}<script>${rjs}</script>
 </body>
 </html>
 `);
