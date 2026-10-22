@@ -237,12 +237,16 @@ fold and a 100,000-deep tree are in the tests.
 
 What isn't a loop yet:
 
-- **Plain recursion** (a function that calls itself, not a `fold`) is JS
-  recursion, so it runs out of stack at around 10,000 levels. The
-  evaluator has no such limit. The fix is the same as the evaluator's
-  (continuations on the heap) for the functions the checker finds
-  recursive, or self tail calls as loops for the common case. Until then,
-  `fold` is the way to walk long data in compiled code.
+- **Plain recursion that isn't a tail call.** A function that calls
+  itself as its last step (a self tail call: `run lines`, `lookup`, a loop
+  written as tail recursion) compiles to a loop. Its parameters are the
+  loop's inputs, and each pass binds them afresh, so a closure made in one
+  pass keeps that pass's values. Any other recursion is JS recursion, so it
+  runs out of stack at a few thousand levels (calc's nested parentheses,
+  GAPS.md G1). The evaluator has no such limit. The fix is the
+  evaluator's (continuations on the heap) for the functions the checker
+  finds recursive, or a bigger stack for the program. Mutual tail calls
+  aren't loops either.
 - **A fold with `Choice`** is a recursive generator, one per level.
 
 ### Data
@@ -314,14 +318,14 @@ this:
 
 | steps | evaluator | compiled JS | WASM |
 |---:|---:|---:|---:|
-| 1,000 | 11 ms | 0.17 ms | 0.01 ms |
-| 10,000 | 83 ms | stack overflow | 0.05 ms |
-| 1,000,000 | (skipped) | stack overflow | 3.1 ms |
+| 1,000 | 9 ms | 0.16 ms | 0.01 ms |
+| 10,000 | 60 ms | 0.08 ms | 0.04 ms |
+| 1,000,000 | (skipped) | 8.5 ms | 2.1 ms |
 
-The JS failure is the backend's known limit: plain recursion is JS
-recursion. Compiling self tail calls as loops in the JS backend is the
-cheap fix and belongs in stage 2 below. It's still a real point for WASM:
-tail calls are native, not a transformation we have to get right.
+Until stage 2½ the JS column overflowed the stack at 10,000 steps.
+Now self tail calls are loops in JS too. It's still a real point for
+WASM: tail calls are native there, not a transformation we have to get
+right.
 
 ### How the rest maps, when it comes
 
@@ -427,7 +431,7 @@ program outside a JS host, and the C route covers that too.
 | 1a | relational directions and `derivative` through their interpreters, linked as the runtime; compiled functions carry their nodes | done (all five examples match the evaluator) |
 | 1b | mode analysis, so relational directions compile; `derivative` at compile time when the function is known | next; worth it once a backwards search shows up in a profile |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
-| 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflows at 10,000 steps; compiled calc crashes on 5,000 lines, GAPS.md G1) | next small fix |
+| 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflowed at 10,000 steps, compiled calc at 5,000 lines: GAPS.md G1) | done |
 | 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `lab compile` (projectional/cli/lab.ts); `Cells` as calls on one runtime `Cells` instance | done |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
 | 5 | other targets: WASM scalar profile (done), WGSL, single-file executables, native via C, WasmGC | the order in "Targets beyond JavaScript" |
