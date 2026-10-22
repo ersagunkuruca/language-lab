@@ -39,7 +39,7 @@ import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
-import { freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { children, freshId, get, ID_PATTERN, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
@@ -102,6 +102,9 @@ interface Doc {
   // Example inputs per definition, as text (src/lang/values.ts): what the
   // graph shows values for. A side table like names: never code.
   examples?: Record<Id, string[]>;
+  // Changed by you since it was loaded (an example as shipped is not saved
+  // as yours, so it keeps up with the shipped one).
+  edited?: boolean;
 }
 
 interface UI {
@@ -165,10 +168,33 @@ try {
   // Programs that have left the picker (the old data-type algebra) are
   // dropped, and so are untyped ones saved before one world.
   if (saved?.docs && saved.current) {
-    docs = Object.fromEntries(Object.entries(saved.docs as Record<Program, Doc>).filter(([k, d]) => (isExample(k) || k.startsWith(MINE)) && d.typed));
-    doc = docs[saved.current] ?? doc;
+    docs = Object.fromEntries(Object.entries(saved.docs as Record<Program, Doc>)
+      .filter(([k, d]) => (isExample(k) || k.startsWith(MINE)) && d.typed)
+      .map(([k, d]) => [k, isExample(k) && !d.edited ? null : onToday(d)] as const)
+      .filter(([k, d]) => d && (!isExample(k) || resolves(d.code)))) as Record<Program, Doc>;
+    doc = docs[saved.current] ?? (isExample(saved.current) ? initialFor(saved.current) : doc);
   }
 } catch {}
+
+// A saved program holds the library it was saved with, and the library
+// moves on: builtins are renamed and removed (sum-and-difference became an
+// ordinary definition in one world). So a saved program is put on today's
+// library: its own nodes on top of the current one. An example you never
+// changed isn't kept at all, so it's always the one shipped; one you did
+// change is kept unless it uses something the library no longer has.
+function onToday(d: Doc): Doc {
+  const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
+  return { ...d, code: {
+    nodes: { ...BASE.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
+    defs: [...BASE.defs, ...d.code.defs.filter(own)],
+  } };
+}
+
+// Every id a node names is there: its children, and what a ref or a solve
+// refers to.
+function resolves(code: Code): boolean {
+  return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : n.kind === "solve" ? [n.fn] : [])].every((c) => code.nodes[c]));
+}
 
 const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar" };
 // The program's own definitions, without the standard library's.
@@ -199,7 +225,7 @@ const redo: Doc[] = [];
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   undo.push(doc);
   redo.length = 0;
-  doc = { ...doc, ...next };
+  doc = { ...doc, ...next, edited: true };
   ui.touched = touched;
   ui.note = note;
   ui.mode = null;
