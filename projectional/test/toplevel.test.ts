@@ -334,7 +334,7 @@ test("an effect of your own: declared, given back a type, and handled by a match
   const ask = td.variants[0];
   s.ok(Top.addField(s.code, s.names, Ask, ask, "question", { target: "type.string", args: [] }));
   s.ok(Top.setReturns(s.code, s.names, ask, { target: "type.number", args: [] }));
-  assert.ok(!Top.fieldTypes(s.code, Ask).some((t) => t.target === Ask), "an effect isn't data a field holds");
+  assert.ok(!Top.typeHeads(s.code, Ask).some((t) => t.target === Ask), "an effect isn't data a field holds");
   s.ok(Top.newDefinition(s.code, s.names, "answer", { kind: "value" }));
   const answer = s.def("answer");
   // handle Ask in ask("width"), answering 30.
@@ -404,4 +404,27 @@ test("two things in scope together can't share a name; cases each have their own
   const a = loadProgram(join(import.meta.dirname, "../examples/algebra"));
   const ev = a.named("evaluate");
   for (const b of subtree(a.code, ev)) if (a.code.nodes[b]?.kind === "binder" && a.pres.names[b]) assert.equal(Top.nameClash(a.code, a.pres.names, b, a.pres.names[b]), null);
+});
+
+test("a field can hold Int, Pair, Optional, List of anything, or the type itself through them", () => {
+  const s = new Session();
+  const Chapter = s.ok(Top.newDefinition(s.code, s.names, "Chapter", { kind: "type", firstCase: "chapter" }));
+  const td = () => s.code.nodes[(s.code.nodes[Chapter] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  const chapter = td().variants[0];
+  const heads = Top.typeHeads(s.code, Chapter);
+  const arity = (t: Id) => heads.find((h) => h.target === t)?.arity;
+  assert.equal(arity("type.int"), 0);
+  assert.equal(arity("std.pair"), 2);
+  assert.equal(arity("std.optional"), 1);
+  assert.equal(arity(Chapter), 0);
+  const T = (target: Id, ...args: Top.TypeSpec[]): Top.TypeSpec => ({ target, args });
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "pages", T("type.int")));
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "span", T("std.pair", T("type.int"), T("type.string"))));
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "next", T("std.optional", T(Chapter))));
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "sections", T("std.list", T("std.pair", T("type.string"), T("type.int")))));
+  const fields = (s.code.nodes[chapter] as NodeOf<"variant">).fields;
+  const spec = (t: Id): Top.TypeSpec => { const n = s.code.nodes[t] as NodeOf<"tref">; return { target: n.target, args: n.args.map(spec) }; };
+  assert.deepEqual(spec((s.code.nodes[fields[1]] as NodeOf<"field">).type), T("std.pair", T("type.int"), T("type.string")));
+  s.ok(Top.setFieldType(s.code, s.names, fields[0], T("std.optional", T("type.int"))));
+  assert.equal(s.info().errors.length, 0);
 });

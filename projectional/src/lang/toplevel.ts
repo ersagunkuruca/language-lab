@@ -352,16 +352,16 @@ export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): 
   return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: field, note: `Changed the type of ${nameOf(names, field)}.` };
 }
 
-// Data types a field can hold, for a picker: the builtin types, every data
-// type without parameters, and the type being edited (recursion).
-export function fieldTypes(code: Code, type: Id): TypeSpec[] {
-  const simple = (target: Id): TypeSpec => ({ target, args: [] });
-  const out: TypeSpec[] = [simple("type.number"), simple("type.string")];
+// What a field's type can start with, for a picker that then asks for
+// each argument the same way: the builtin types, the type's own parameters,
+// and every data type with how many arguments it takes (Bool, List, Pair,
+// Optional, the program's own, and the type being edited, for recursion).
+export function typeHeads(code: Code, type: Id): { target: Id; arity: number }[] {
+  const out = ["type.number", "type.int", "type.string", ...typedefOf(code, type).params].map((target) => ({ target, arity: 0 }));
   for (const d of code.defs) {
     const n = code.nodes[d];
     const b = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
-    if (b?.kind === "typedef" && b.params.length === 0 && !b.effect) out.push(simple(d));
+    if (b?.kind === "typedef" && !b.effect) out.push({ target: d, arity: b.params.length });
   }
-  const list = code.defs.find((d) => d === "std.list");
-  return list ? [...out, ...out.map((t) => ({ target: list, args: [t] }))] : out;
+  return out;
 }
