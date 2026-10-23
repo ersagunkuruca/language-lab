@@ -219,6 +219,31 @@ test("a search whose answers are one record passes its fields, and builds it onl
   assert.deepEqual(fromList(defs.products() as Value), [9, 16, 21]);
 });
 
+test("steps over a list run as one loop: no list between split, keep and length (GAPS.md G16)", async () => {
+  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const [keep, map, length] = [lib("keep"), lib("map"), lib("length")];
+  const words = k.def("words");
+  k.define(words, k.fn(["line"], (line) => k.call(length, k.call(keep, k.call(T.split, line, k.lit(" ")), k.fn(["w"], (w) => k.call(S.not, k.call(S.equal, w, k.lit(""))))))));
+  const shout = k.def("shout");
+  k.define(shout, k.fn(["t"], (t) => k.call(T.joinAll, k.call(map, k.call(T.characters, t), k.fn(["c"], (c) => k.text(c, k.lit("!")))), k.lit(""))));
+  // A test that chooses isn't fused: it stays a call of keep.
+  const either = k.def("either way");
+  k.define(either, k.fn(["line"], (line) => k.call(length, k.call(keep, k.call(T.split, line, k.lit(" ")), k.fn(["w"], () => k.call(S.oneOf, k.list(k.true, k.false)))))));
+  const { code, info, names, source, defs } = await compiledDefs(k, ["words", "shout", "either way"], "fused.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("words"), /for \(const x\$\d+ of \$text\.split\(line, " "\)\)/);
+  assert.doesNotMatch(body("words") + body("shout"), /keep|map\(|\$toList|builtin\.text/);
+  assert.match(body("either_way"), /keep/);
+  assert.equal(defs.words("  the night  rain "), 3);
+  assert.equal(defs.shout("ab"), "a!b!");
+  const r = makeRunner(code, info, { print: () => {} });
+  const run = (name: string, arg: string) => [...r.call(r.value(code.defs.find((d) => names[d] === name)!), arg)];
+  assert.deepEqual(defs["either way"]("a b"), run("either way", "a b")[0]);
+});
+
 test("a fold over a million items compiles to a loop", async () => {
   const k = new Lang();
   const total = k.def("total");

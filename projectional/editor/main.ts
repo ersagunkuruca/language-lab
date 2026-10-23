@@ -1870,7 +1870,6 @@ function select(id: Id | null) {
   if (ui.selected === id) return;
   if (ui.selected !== id) { ui.mode = null; ui.query = ""; }
   ui.selected = id;
-  if (id && ui.panel === "guide") ui.panel = "node";
   render();
 }
 
@@ -1999,7 +1998,12 @@ document.addEventListener("pointerdown", (e) => {
 // A view that throws leaves the page as it was, so every click after it
 // fails too. Say what broke and keep the way out: the program picker, Undo,
 // and Reset to the example as shipped.
+// Whatever selects something (a click, a menu's edit, a new program's
+// hole) shows it: the side column leaves the Guide for the Selected tab.
+let shownSelected: Id | null = null;
 function render() {
+  if (ui.selected && ui.selected !== shownSelected && ui.panel === "guide") ui.panel = "node";
+  shownSelected = ui.selected;
   try { draw(); revealDrawn(); } catch (e) {
     console.error(e);
     document.getElementById("app")!.replaceChildren(

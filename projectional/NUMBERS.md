@@ -313,7 +313,7 @@ Other representations run the same fold differently:
 | `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
 | `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program |
-| `array` | `List a` | a JS array | `items` | an index loop | later |
+| `array` | `List a` | a JS array and a start | `items` | an index loop | planned: design below (GAPS.md G21) |
 | `build` | `List a` | a function of `cons` and `nil` | `build` | apply it | later |
 
 **The rule is the law read backwards.** Every representation promises
@@ -393,7 +393,56 @@ text, characters outside the basic plane, `range(0)`.
    `meaning` is a definition, tested on `binary`.
 5. Later, when a program needs them: `build` for user functions that make
    a list from `cons` and `nil` (so `keep` over a list made by a fold runs
-   in one pass), and `array`.
+   in one pass), and `array`. Part of `build` is done in the compiler: a
+   chain of `keep`- and `map`-shaped steps between `split`/`characters`
+   and a fold, `joinAll` or a list runs as one loop (COMPILER.md, "Folds
+   are loops"; GAPS.md G16). `array` is designed below.
+
+**The `array` row (design, GAPS.md G21).** chapters is still 2.3× the
+hand-written ideal. Most of what's left is lists that a builtin made as
+a JS array (`split(book, "\n")`), which the runtime turns into cons cells
+for the program to walk once, and lists the program builds and only ever
+walks (`taken` in `number`, which `times in` walks for each chapter).
+
+- **What it is.** A list value stored as a JS array and a start index, so
+  its tail is the same array one further on. Making it costs nothing.
+  `split`, `characters` and `all` already make arrays, and `$toList` is
+  the step this skips. Its meaning is `items(arr, i)`, the cons list of
+  `arr[i..]`.
+- **Its jobs.** `match xs { nil → …; cons(h, t) → … }` becomes `i <
+  arr.length`, with `h = arr[i]` and `t` being `(arr, i + 1)`. `fold` is an
+  index loop, run backwards for a fold from the end, so no spine array is
+  needed. `length` is `arr.length - i`, and `one of` loops over the
+  indices.
+- **What needs cons cells.** Anything that isn't a walk: `cons(x, xs)` onto
+  it, storing it in data, `equal`, `show`, passing it to a function value
+  or to the runtime, exporting it, and the evaluator. At those points the
+  value is converted with `items`, once. A `cons` onto an array list is
+  the one conversion that happens inside the program, so a list that is
+  built by consing (`taken`) would need a second representation, an array
+  grown at the end and read from the end. That comes after.
+- **How it's chosen.** It's whole-program, like the monomorphic generics of
+  G17 and the `$k` copies of G11. For each definition's list parameter,
+  a fixpoint over the call graph asks whether every use of it is a walk.
+  The uses that count are match, fold, `length`, `one of`, the fused steps
+  of G16, and passing it on to a parameter that is itself walk-only. A
+  definition with such a parameter gets an `$arr` copy that takes
+  `(arr, i)` in its place. A call whose argument is known to be an array
+  (made by `split`, `characters`, `all`, or an `$arr` parameter) calls
+  that copy, and other calls keep the cons version. Copies nothing
+  reaches are left out, as now.
+- **What doesn't change.** Meaning: every array list is `items` of
+  itself, and the agreement and compile tests compare every example with
+  the evaluator. The order of effects doesn't change either, since walks
+  are the same walks.
+- **Measure.** chapters' 3000-chapter book: 200 ms compiled, 86 ms ideal.
+  The lines (`sections`) and `taken` are the two lists to move.
+
+Prior art: cdr-coding, the Lisp machines' representation of a list as
+consecutive memory, with its tail as the next cell, and conversion to
+ordinary conses on demand (Wilfred J. Hansen, "Compact list
+representation", CACM 1969; used on the MIT Lisp Machine and Symbolics).
+Ours is decided at compile time, by the uses, rather than per cell.
 
 **Peano `Nat` stored as an `Int` (done).** This one needs no template. It
 is a representation written in the language, in `examples/numbers` next

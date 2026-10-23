@@ -327,6 +327,28 @@ don't care about order, and nothing can see the order of effect-free
 items. Number `+` keeps the spine: floating point isn't associative. This
 is how `length`, sums and counts compile (compiler/GAPS.md, G15).
 
+A chain of steps over a list runs as one loop, with no list in between
+(GAPS.md G16). `length(keep(split(line, " "), w ≠ ""))` counts as it cuts,
+and `joinAll(map(characters(t), f), "")` joins as it maps. Each kind of
+part is recognised by its shape, so the program's own definitions of the
+same shape fuse too:
+- **The list comes from** `split` or `characters`, which make a JS array,
+  or from any list, walked as it is.
+- **Each step** keeps or changes each item in order. That is prelude's
+  `keep` (`all(() => let x = one of(list) in …)`), `map` (`cons(f(x),
+  map(rest, f))`), or any definition of either shape. The step is inlined.
+- **The end** is a fold that runs from the front (G15, such as `length`),
+  `joinAll`, or a list.
+- **When it applies.** The steps' other arguments must have no effects, and
+  the functions they're given must not choose. A test that chooses or
+  aborts leaves the chain as calls.
+
+This is the special case of deforestation (Philip Wadler, "Deforestation:
+transforming programs to eliminate trees", 1990) and short-cut fusion
+(Andrew Gill, John Launchbury and Simon Peyton Jones, "A short cut to
+deforestation", FPCA 1993) where the steps are known definitions, done by
+inlining.
+
 These loops are the fold job of one representation, `cells` (values stored
 as linked objects, the way the definition is written). How a fold runs is
 being moved into the representation table, so a fold over a value made by

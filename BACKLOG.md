@@ -57,8 +57,7 @@ editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C1 | G16 builder/consumer fusion: `length ∘ keep ∘ split`, `join all ∘ map` as one loop (credit Wadler; Gill, Launchbury, Peyton Jones) | GAPS G16, folds follow-up | P1 | M | ▶ local, chapters 550 → 200 ms |
-| C2 | G21 lists that are only walked are arrays (and ropes later) | GAPS G21, folds follow-up | P1 | L | |
+| C2 | G21 lists that are only walked are arrays (and ropes later) | GAPS G21, folds follow-up | P1 | L | ▶ design note (NUMBERS.md), code next |
 | C3 | GAPS round 3: a program bigger than chapters, built in the editor with the DSL off-limits; what hurts goes to lane E | quality practice 3, R2 §7 | P1 | L | after C1, C2 |
 | C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test) | GAPS G3 | P2 | S | |
 | C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer | GAPS G14 | P2 | S | |
@@ -124,6 +123,7 @@ section keeps about a week.
 | id | item | PR |
 |---|---|---|
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
+| C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
 | | Countdown in the program list (Hutton credited) | #174 |
 | | QA2 H1, H2, M1 to M4 | #137, #139, #159, #160, #158, #156 |
 | | Can't-edit: change a call's function keeping its inputs; field types | #151, #147 |
