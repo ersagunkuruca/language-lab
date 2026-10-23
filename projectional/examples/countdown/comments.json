@@ -1,0 +1,3 @@
+{
+  "prkbt7ilpm6q2fk2tkp8iijes0": "The Countdown numbers game: every way to reach the target from some of the numbers with + − × ÷, each number used at most once. The search is Graham Hutton's, from \"The countdown problem\", Journal of Functional Programming 12(6), 2002 (https://www.cs.nott.ac.uk/~pszgmh/countdown.pdf), with his valid that skips answers that only differ by commutativity or by 1. For 765 from 1, 3, 7, 10, 25 and 50 it finds his 49 solutions. Written in the editor with palette picks only."
+}
