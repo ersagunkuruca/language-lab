@@ -148,15 +148,16 @@ is per definition and doesn't look at what a caller passes, so a call of a
 "maybe more". A recursive call to the definition itself counts as one
 (GAPS.md G14).
 
-#### Planned: searches in continuation-passing style (GAPS.md G11)
+#### Searches in continuation-passing style (GAPS.md G11)
 
 Generators cost the most in what's left. In Countdown, each answer of
 `results` resumes every `for … of … yield` between the answer and the
 search's handler, so its cost grows with the depth of the recursion. The
 hand-written ideal passes the rest of the search down as a function `k`
 and calls it once per answer: 116 ms for the generators, 40 ms for the
-ideal. The plan is a fourth kind of `Choice` function, built next to the
-generator one and not replacing it:
+ideal. So there is a fourth kind of `Choice` function, built next to the
+generator one and not replacing it. With it, Countdown's biggest instance
+went from 322 ms (2.9× the ideal) to 189 ms (1.5×):
 
 - **The convention.** `name$k(args…, k)` calls `k(v)` once per answer, in
   the order the generator would yield them. `k` returns `true` to say
@@ -191,10 +192,13 @@ generator one and not replacing it:
   The JS stack is about twice as deep as with generators, one closure per
   level, so compiled programs keep running on the worker with the big stack
   (G1).
+- **Copies nobody calls are left out.** Choosing a copy for a call makes
+  that copy, so a search that is only ever called through `$k` would also
+  have a generator. The module keeps only what its exports reach.
 - **Tests.** The existing agreement and compile tests run every example
-  both ways. New ones: a `first` over a search that prints, which must stop
-  at the same answer the evaluator stops at; a search with no end under
-  `first`; and Countdown's numbers in GAPS.md.
+  both ways, and Countdown's benchmark checks its answers against the
+  ideal. A new test runs a search with no end under `first` and checks it
+  stops at the evaluator's answer.
 
 Not covered: `Choice` lambdas and parameters (`keep` with a choosing test,
 `map$choice`) stay generators. Covering them would need every `Choice`
@@ -202,10 +206,12 @@ value in the program, and the runtime's, to use the `$k` convention. G13
 (a record that is taken apart as soon as it's returned) becomes two
 arguments to `k`, which this makes possible but doesn't do.
 
-Prior art: Mercury compiles nondeterministic code with success
-continuations, in the same way (Somogyi, Henderson and Conway, 1996). This
-is the reverse of Wadler's list of successes (1985), which is what the
-generators are. The implementation PR adds both to `CREDITS.md`.
+Adapted from Mercury's high-level C backend, which compiles
+nondeterministic code with success continuations in the same way (Fergus
+Henderson and Zoltan Somogyi, "Compiling Mercury to high-level C code",
+CC 2002; see also "Targets beyond JavaScript" below). The generators are
+Wadler's "list of successes" (Philip Wadler, "How to replace failure by a
+list of successes", FPCA 1985), done lazily.
 
 Effect polymorphism (`map : (List a, (a) -[e]-> b) -[e]-> List b`) is
 handled by **specializing on the one bit that matters**: does `e` include

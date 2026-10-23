@@ -5,42 +5,51 @@ import { $no, $stream0, $showAny, $int, $text, $impl, $many, $setPath, $T, $F, $
 // main
 function main() {
   $print(("first solution for 8: " + show_numbers((() => {
-            for (const r$0 of queens(8)) {
-              return r$0;
-            }
+            let got$0 = $no;
+            (() => {
+                if (queens$k(8, (r$1) => {
+                      got$0 = r$1;
+                      return true;
+                    })) return true;
+              })();
+            if (got$0 !== $no) return got$0;
             return $nil;
           })())));
   $print(("solutions for 8: " + $show((() => {
-            let count$1 = 0;
-            for (const r$2 of queens(8)) {
-              count$1++;
-            }
-            return count$1;
+            let got$2 = 0;
+            (() => {
+                if (queens$k(8, (r$3) => {
+                      got$2++;
+                    })) return true;
+              })();
+            return got$2;
           })())));
   $print("all solutions for 6:");
   for_each((() => {
-        const all$3 = [];
-        for (const r$4 of queens(6)) {
-          all$3.push(r$4);
-        }
-        return $toList(all$3);
+        const got$4 = [];
+        (() => {
+            if (queens$k(6, (r$5) => {
+                  got$4.push(r$5);
+                })) return true;
+          })();
+        return $toList(got$4);
       })(), ((board) => $print(("  " + show_numbers(board)))));
   return $print(("even numbers below 10: " + show_numbers(keep$plain($range(10), ((n) => $bool($sameNumber($mod(n, 2), 0)))))));
 }
 
 // queens
 function* queens(size) {
-  const fold$5 = function* (s$6) {
-    switch (s$6.tag) {
+  const fold$6 = function* (s$7) {
+    switch (s$7.tag) {
       case "std.list.nil" /* nil */: {
         yield $nil;
         break;
       }
       case "std.list.cons" /* cons */: {
-        for (const board2 of fold$5(s$6.fields[1])) {
-          for (let l$7 = $range(size); l$7.tag === "std.list.cons"; l$7 = l$7.fields[1]) {
-            const x$8 = l$7.fields[0];
-            const column = x$8;
+        for (const board2 of fold$6(s$7.fields[1])) {
+          for (let l$8 = $range(size); l$8.tag === "std.list.cons"; l$8 = l$8.fields[1]) {
+            const x$9 = l$8.fields[0];
+            const column = x$9;
             if (safe(column, board2)) {
               yield $cons(column, board2);
             } else {
@@ -52,24 +61,24 @@ function* queens(size) {
       }
     }
   };
-  for (const r$9 of fold$5($range(size))) {
-    yield r$9;
+  for (const r$10 of fold$6($range(size))) {
+    yield r$10;
   }
 }
 
 // show numbers
 function show_numbers(numbers) {
-  const step$10 = (s$11, rs$12) => {
-    switch (s$11.tag) {
+  const step$11 = (s$12, rs$13) => {
+    switch (s$12.tag) {
       case "std.list.nil" /* nil */: {
         return "";
       }
       case "std.list.cons" /* cons */: {
-        const n2 = s$11.fields[0];
-        const rest = s$11.fields[1];
-        const rest_shown = rs$12;
-        const s$13 = rest;
-        switch (s$13.tag) {
+        const n2 = s$12.fields[0];
+        const rest = s$12.fields[1];
+        const rest_shown = rs$13;
+        const s$14 = rest;
+        switch (s$14.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n2);
           }
@@ -80,29 +89,29 @@ function show_numbers(numbers) {
       }
     }
   };
-  const spine$16 = [];
-  let v$14 = numbers;
-  for (let k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1; k$18 >= 0; k$18 = v$14.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$16.push(v$14);
-    v$14 = v$14.fields[k$18];
+  const spine$17 = [];
+  let v$15 = numbers;
+  for (let k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1; k$19 >= 0; k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$17.push(v$15);
+    v$15 = v$15.fields[k$19];
   }
-  let r$15 = step$10(v$14);
-  for (let i$17 = spine$16.length - 1; i$17 >= 0; i$17--) r$15 = step$10(spine$16[i$17], r$15);
-  return r$15;
+  let r$16 = step$11(v$15);
+  for (let i$18 = spine$17.length - 1; i$18 >= 0; i$18--) r$16 = step$11(spine$17[i$18], r$16);
+  return r$16;
 }
 
 // for each
 function for_each(list$in, action$in) {
   for (;;) {
     const list = list$in, action = action$in;
-    const s$19 = list;
-    switch (s$19.tag) {
+    const s$20 = list;
+    switch (s$20.tag) {
       case "std.list.nil" /* nil */: {
         return $unit;
       }
       case "std.list.cons" /* cons */: {
-        const item = s$19.fields[0];
-        const rest2 = s$19.fields[1];
+        const item = s$20.fields[0];
+        const rest2 = s$20.fields[1];
         action(item);
         list$in = rest2;
         action$in = action;
@@ -115,44 +124,77 @@ function for_each(list$in, action$in) {
 // keep
 function keep$plain(list2, test) {
   return (() => {
-      const all$20 = [];
-      for (let l$21 = list2; l$21.tag === "std.list.cons"; l$21 = l$21.fields[1]) {
-        const x$22 = l$21.fields[0];
-        const item2 = x$22;
-        if ((test(item2).tag === "std.bool.true")) {
-          all$20.push(item2);
-        } else {
-          /* fail */
-        }
-      }
-      return $toList(all$20);
+      const got$21 = [];
+      (() => {
+          for (let l$22 = list2; l$22.tag === "std.list.cons"; l$22 = l$22.fields[1]) {
+            const x$23 = l$22.fields[0];
+            const item2 = x$23;
+            if ((test(item2).tag === "std.bool.true")) {
+              got$21.push(item2);
+            } else {
+              /* fail */
+            }
+          }
+        })();
+      return $toList(got$21);
     })();
+}
+
+// queens (the rest of the search as `k$24`)
+function queens$k(size, k$24) {
+  const fold$25 = (s$26, k$27) => {
+    switch (s$26.tag) {
+      case "std.list.nil" /* nil */: {
+        if (k$27($nil)) return true;
+        break;
+      }
+      case "std.list.cons" /* cons */: {
+        if (fold$25(s$26.fields[1], (board2) => {
+              for (let l$28 = $range(size); l$28.tag === "std.list.cons"; l$28 = l$28.fields[1]) {
+                const x$29 = l$28.fields[0];
+                const column = x$29;
+                if (safe(column, board2)) {
+                  if (k$27($cons(column, board2))) return true;
+                } else {
+                  /* fail */
+                }
+              }
+            })) return true;
+        break;
+      }
+    }
+    return false;
+  };
+  if (fold$25($range(size), (r$30) => {
+        if (k$24(r$30)) return true;
+      })) return true;
+  return false;
 }
 
 // safe
 function safe(column2, placed) {
   return ((() => {
-        const step$23 = (s$24, rs$25) => {
-          switch (s$24.tag) {
+        const step$31 = (s$32, rs$33) => {
+          switch (s$32.tag) {
             case "std.list.nil" /* nil */: {
               return ((distance) => $T);
             }
             case "std.list.cons" /* cons */: {
-              const queen = s$24.fields[0];
-              const others_safe = rs$25;
+              const queen = s$32.fields[0];
+              const others_safe = rs$33;
               return ((distance2) => $bool(((!$sameNumber(queen, column2) && !$sameNumber(Math.abs((queen - column2)), distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
             }
           }
         };
-        const spine$28 = [];
-        let v$26 = placed;
-        for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-          spine$28.push(v$26);
-          v$26 = v$26.fields[k$30];
+        const spine$36 = [];
+        let v$34 = placed;
+        for (let k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1; k$38 >= 0; k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+          spine$36.push(v$34);
+          v$34 = v$34.fields[k$38];
         }
-        let r$27 = step$23(v$26);
-        for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$23(spine$28[i$29], r$27);
-        return r$27;
+        let r$35 = step$31(v$34);
+        for (let i$37 = spine$36.length - 1; i$37 >= 0; i$37--) r$35 = step$31(spine$36[i$37], r$35);
+        return r$35;
       })()(1).tag === "std.bool.true");
 }
 

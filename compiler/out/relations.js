@@ -68,14 +68,24 @@ function main() {
   $print(("split(10, 4) = " + (($show(split(10, 4).fields[0]) + ", ") + $show(split(10, 4).fields[1]))));
   $print(("missing addend(3, 10) = " + $show(missing_addend(3, 10))));
   $print(("to polar(0, 2), canonical = " + (($show((() => {
-                for (const r$0 of to_polar(0, 2)) {
-                  return r$0;
-                }
+                let got$0 = $no;
+                (() => {
+                    if (to_polar$k(0, 2, (r$1) => {
+                          got$0 = r$1;
+                          return true;
+                        })) return true;
+                  })();
+                if (got$0 !== $no) return got$0;
                 return $k0;
               })().fields[0]) + ", ") + $show((() => {
-              for (const r$1 of to_polar(0, 2)) {
-                return r$1;
-              }
+              let got$2 = $no;
+              (() => {
+                  if (to_polar$k(0, 2, (r$3) => {
+                        got$2 = r$3;
+                        return true;
+                      })) return true;
+                })();
+              if (got$2 !== $no) return got$2;
               return $k0;
             })().fields[1]))));
   $print(("square roots(9) = " + show_numbers(square_roots(9))));
@@ -89,8 +99,8 @@ function split(sum, difference) {
 
 // to polar
 function* to_polar(x, y) {
-  for (const sol$2 of solve$1(y, x)) {
-    const length = sol$2[0]; const angle = sol$2[1];
+  for (const sol$4 of solve$1(y, x)) {
+    const length = sol$4[0]; const angle = sol$4[1];
     yield ({ tag: "std.pair.pair" /* pair */, fields: [length, angle] });
   }
 }
@@ -98,12 +108,14 @@ function* to_polar(x, y) {
 // square roots
 function square_roots(y2) {
   return (() => {
-      const all$3 = [];
-      for (const sol$4 of solve$2(y2)) {
-        const x2 = sol$4[0];
-        all$3.push(x2);
-      }
-      return $toList(all$3);
+      const got$5 = [];
+      (() => {
+          for (const sol$6 of solve$2(y2)) {
+            const x2 = sol$6[0];
+            got$5.push(x2);
+          }
+        })();
+      return $toList(got$5);
     })();
 }
 
@@ -114,17 +126,17 @@ function missing_addend(known, total) {
 
 // show numbers
 function show_numbers(numbers) {
-  const step$5 = (s$6, rs$7) => {
-    switch (s$6.tag) {
+  const step$7 = (s$8, rs$9) => {
+    switch (s$8.tag) {
       case "std.list.nil" /* nil */: {
         return "";
       }
       case "std.list.cons" /* cons */: {
-        const n = s$6.fields[0];
-        const rest = s$6.fields[1];
-        const rest_shown = rs$7;
-        const s$8 = rest;
-        switch (s$8.tag) {
+        const n = s$8.fields[0];
+        const rest = s$8.fields[1];
+        const rest_shown = rs$9;
+        const s$10 = rest;
+        switch (s$10.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n);
           }
@@ -135,15 +147,24 @@ function show_numbers(numbers) {
       }
     }
   };
-  const spine$11 = [];
-  let v$9 = numbers;
-  for (let k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1; k$13 >= 0; k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$11.push(v$9);
-    v$9 = v$9.fields[k$13];
+  const spine$13 = [];
+  let v$11 = numbers;
+  for (let k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1; k$15 >= 0; k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$13.push(v$11);
+    v$11 = v$11.fields[k$15];
   }
-  let r$10 = step$5(v$9);
-  for (let i$12 = spine$11.length - 1; i$12 >= 0; i$12--) r$10 = step$5(spine$11[i$12], r$10);
-  return r$10;
+  let r$12 = step$7(v$11);
+  for (let i$14 = spine$13.length - 1; i$14 >= 0; i$14--) r$12 = step$7(spine$13[i$14], r$12);
+  return r$12;
+}
+
+// to polar (the rest of the search as `k$16`)
+function to_polar$k(x, y, k$16) {
+  for (const sol$17 of solve$1(y, x)) {
+    const length = sol$17[0]; const angle = sol$17[1];
+    if (k$16(({ tag: "std.pair.pair" /* pair */, fields: [length, angle] }))) return true;
+  }
+  return false;
 }
 
 export const defs = {

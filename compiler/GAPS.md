@@ -348,9 +348,11 @@ search halfway: that needs either generators or an exception to unwind,
 so `first` would keep the generator form or throw a sentinel). This is the
 big one, and it changes the calling convention of a whole class of
 functions, so it needs its own design note in COMPILER.md before code.
-*Design note written:* COMPILER.md, "Planned: searches in
-continuation-passing style". Each definition gets a `$k` copy next to its
-generator, used by direct calls and handlers written in place.
+*DONE:* COMPILER.md, "Searches in continuation-passing style". A search
+called by name has a `$k` copy that takes the rest of the search as a
+function, and handlers written in place and other `$k` copies call it.
+Countdown, biggest instance: 322 → 189 ms, from 2.9× the ideal to 1.5×.
+What's left is mostly G13 and the closures themselves.
 
 **G13. Records taken apart at once are still built (perf: part of G11's
 remainder).** `split` returns a `halves` and `results` a `found`, and the

@@ -93,7 +93,7 @@ test("an effect-polymorphic function gets one copy per calling convention", asyn
 
   const source = compile(code, info, names, { runtime, exports: ["plain", "choices"] });
   assert.match(source, /^function map\(/m);
-  assert.match(source, /^function\* map\$choice\(/m);
+  assert.match(source, /^function map\$choice\$k\(/m);
   const file = join(dir, "poly.js");
   writeFileSync(file, source);
   const defs = (await import(pathToFileURL(file).href)).defs;
@@ -166,7 +166,7 @@ test("a Choice function with at most one answer is a plain function (GAPS.md G14
   const { code, info, names, source, defs } = await compiledDefs(k, ["picked", "downs", "positive"], "single.js");
   assert.match(source, /^function positive\(/m);
   assert.match(source, /^function down\(/m);
-  assert.match(source, /^function\* apply\$choice\(/m);
+  assert.match(source, /^function apply\$choice\$k\(/m);
   const r = makeRunner(code, info, { print: () => {} });
   for (const name of ["picked", "downs"]) {
     const def = code.defs.find((d) => names[d] === name)!;
@@ -177,6 +177,24 @@ test("a Choice function with at most one answer is a plain function (GAPS.md G14
   // Exported, it's a stream of answers like any other Choice function.
   assert.deepEqual([...(defs.positive(3) as Iterable<Value>)], [3]);
   assert.deepEqual([...(defs.positive(-3) as Iterable<Value>)], []);
+});
+
+test("searches called by name pass the rest as a function, and first still stops early (GAPS.md G11)", async () => {
+  const k = new Lang();
+  // An endless search: n, or else n + 1, or else n + 2, …
+  const up = k.def("up from");
+  k.define(up, k.fn(["n"], (n) => k.if(k.call(S.oneOf, k.list(k.true, k.false)), n, k.call(up, k.call(B.add, n, k.lit(1))))));
+  const big = k.def("big square");
+  k.define(big, k.thunk(() => k.call(S.first,
+    k.thunk(() => k.let("x", k.call(up, k.lit(0)), (x) => k.if(k.call(S.less, k.lit(50), k.call(B.mul, x, x)), x, k.call(S.fail)))),
+    k.thunk(() => k.lit(-1)))));
+  const { code, info, names, source, defs } = await compiledDefs(k, ["big square"], "cps.js");
+  assert.match(source, /^function up_from\$k\(/m);
+  assert.doesNotMatch(source, /^function\* up_from\(/m);
+  assert.equal(defs["big square"](), 8);
+  const r = makeRunner(code, info, { print: () => {} });
+  const def = code.defs.find((d) => names[d] === "big square")!;
+  assert.deepEqual([...r.call(r.value(def))][0], 8);
 });
 
 test("a fold over a million items compiles to a loop", async () => {
