@@ -89,17 +89,25 @@ export const NOW_OP = "std.time.now", WAIT_OP = "std.wait.wait";
 // browser keeps those in localStorage), and so may abort (the page logs it). Buttons, rows and fields are
 // functions that build `element`s, not more variants.
 const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn++}`, kind: "tfun", params, result, effects });
+// What a page's parts may do, named once: a view (a text, a part, an
+// attribute's value) may read; a handler may also write and act on the
+// world. Both rows are closed, because the page runtime is what runs them
+// later, after `main` has returned, so no handler in the program is around
+// them: an effect of the program's own is handled inside the view or the
+// handler. Adding a runtime effect to pages is a change to these two lines.
+export const PAGE_VIEW: readonly Id[] = [CELLS, DIVERGE, TIME, NETWORK];
+export const PAGE_HANDLER: readonly Id[] = [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM];
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
-  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME, NETWORK])]]],
-  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM])]]],
+  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [...PAGE_HANDLER])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
-  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME, NETWORK])]]],
-  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE, TIME, NETWORK])]]],
+  ["text", [["shows", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
+  ["part", [["view", (_, self) => tfun([], tref(self), [...PAGE_VIEW])]]],
 ]);
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", event: "std.event.event" } as const;
 

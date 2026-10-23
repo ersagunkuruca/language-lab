@@ -745,7 +745,7 @@ function typeError(code: Code, info: Info, def: Id, names: Names): string | null
   }
   return null;
 }
-const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT];
+export const RUNTIME_HANDLES: readonly Id[] = [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT];
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
 export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
