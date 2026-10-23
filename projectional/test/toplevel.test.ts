@@ -564,3 +564,18 @@ test("a whole number typed where an Int goes fills it as an Int; a fraction is r
   assert.ok(big.code.nodes[lit.id].kind === "lit" && (big.code.nodes[lit.id] as NodeOf<"lit">).value === "12345678901234567890");
   assert.equal(T.fillValue(code, p.pres.names, info, lit.id, "0.5", def).ok, false);
 });
+
+test("an input with no type yet can be called: before(□, □) makes it a function of two", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "pick", { kind: "function", params: ["before", "x", "y"] }));
+  const pick = s.def("pick");
+  const [before, x, y] = (s.code.nodes[(s.code.nodes[pick] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  const offered = fillings(s.code, s.info(), s.holes(pick)[0]).filter((f) => f.kind === "call" && f.target === before).map((f) => (f as { arity: number }).arity);
+  assert.deepEqual(offered, [1, 2, 3]);
+  s.fill(pick, (f) => f.kind === "call" && f.target === before && f.arity === 2);
+  s.fill(pick, ref(x));
+  s.fill(pick, ref(y));
+  const t = showType(s.info().typeOf.get(pick)!, s.all());
+  // Whatever before does, pick does too.
+  assert.equal(t, "((a, b) -[e]-> c, a, b) -[e]-> c");
+});
