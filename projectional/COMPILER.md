@@ -137,6 +137,17 @@ expression, or "a stream of results", compiled as statements that run a
 continuation once per result. The continuation is code that the compiler
 pastes into the innermost loop. It is not a closure.
 
+A `Choice` function that has at most one answer on every path (an
+`if test then x else fail()`, or a match whose arms each give one value,
+call such functions or fail) is a third kind: a plain function that returns
+its answer, or the runtime's `$no` when there's none. Its callers test for
+`$no` instead of looping, and where it's used as a value (passed to a
+`Choice` parameter, exported) `$stream0` wraps it as a generator. The check
+is per definition and doesn't look at what a caller passes, so a call of a
+`Choice`-typed parameter, `one of`, `first`, a handler or a solve counts as
+"maybe more". A recursive call to the definition itself counts as one
+(GAPS.md G14).
+
 Effect polymorphism (`map : (List a, (a) -[e]-> b) -[e]-> List b`) is
 handled by **specializing on the one bit that matters**: does `e` include
 `Choice`? So `map` gets at most two copies, `map` and `map$choice`. The

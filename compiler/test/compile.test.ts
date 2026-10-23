@@ -149,6 +149,36 @@ async function compiledDefs(k: Lang, exports: string[], file: string) {
   return { code, info, names, source, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
 }
 
+test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
+  const k = new Lang();
+  const positive = k.def("positive");
+  k.define(positive, k.fn(["n"], (n) => k.if(k.call(S.less, k.lit(0), n), n, k.call(S.fail))));
+  // Calls another such function, and itself.
+  const down = k.def("down");
+  k.define(down, k.fn(["n"], (n) => k.if(k.call(S.less, n, k.lit(3)), k.call(positive, n), k.call(down, k.call(B.add, n, k.lit(-2))))));
+  // Calls a Choice parameter, so it may give more than one answer.
+  const apply = k.def("apply");
+  k.define(apply, k.fn(["f", "x"], (f, x) => k.call(f, x)));
+  const picked = k.def("picked");
+  k.define(picked, k.thunk(() => k.call(S.all, k.thunk(() => k.call(apply, k.x(positive), k.call(S.oneOf, k.list(k.lit(-1), k.lit(2), k.lit(5))))))));
+  const downs = k.def("downs");
+  k.define(downs, k.thunk(() => k.call(S.all, k.thunk(() => k.call(down, k.call(S.oneOf, k.list(k.lit(7), k.lit(8), k.lit(2), k.lit(-4))))))));
+  const { code, info, names, source, defs } = await compiledDefs(k, ["picked", "downs", "positive"], "single.js");
+  assert.match(source, /^function positive\(/m);
+  assert.match(source, /^function down\(/m);
+  assert.match(source, /^function\* apply\$choice\(/m);
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const name of ["picked", "downs"]) {
+    const def = code.defs.find((d) => names[d] === name)!;
+    assert.deepEqual(defs[name](), [...r.call(r.value(def))][0]);
+  }
+  assert.deepEqual(fromList(defs.picked() as Value), [2, 5]);
+  assert.deepEqual(fromList(defs.downs() as Value), [1, 2, 2]);
+  // Exported, it's a stream of answers like any other Choice function.
+  assert.deepEqual([...(defs.positive(3) as Iterable<Value>)], [3]);
+  assert.deepEqual([...(defs.positive(-3) as Iterable<Value>)], []);
+});
+
 test("a fold over a million items compiles to a loop", async () => {
   const k = new Lang();
   const total = k.def("total");
