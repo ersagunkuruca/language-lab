@@ -331,3 +331,14 @@ test("a type error in a definition main doesn't reach doesn't stop it", () => {
   assert.notDeepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["fine"]);
 });
+
+test("a printer passed as a parameter isn't run under a Choice either", () => {
+  // LANGUAGE.md "The world and Choice" listed this shape as a gap.
+  const p = program((k) => {
+    const tryAll = k.def("try all");
+    k.define(tryAll, k.fn(["say"], (say) => k.call(S.all, k.thunk(() => k.call(say, k.call(S.oneOf, k.list(k.lit("a"), k.lit("b"))))))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(tryAll, k.fn(["s"], (s) => k.call(S.print, s)))));
+  });
+  assert.ok(p.errors.some((m) => /is run under a Choice here/.test(m)), p.errors.join("\n"));
+});

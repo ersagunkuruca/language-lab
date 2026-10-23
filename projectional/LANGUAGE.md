@@ -22,9 +22,13 @@ npm test        # includes test/lang.test.ts
 - **Types?** Yes, inferred (Hindley-Milner) and never written down. The type
   is a view: the block view prints it above each definition.
 - **Monads?** No. Effects are part of a function's type as a *row*, e.g.
-  `evaluate : (expression, Number) -[Choice]-> Number`. There are three:
-  `Choice` (Verse-style failure and multiple answers), `Console` and
-  `Diverge`. Handlers are ordinary functions that remove an effect.
+  `evaluate : (expression, Number) -[Choice]-> Number`. Built in are
+  `Choice` (Verse-style failure and multiple answers), `Diverge`, the
+  world's `Console` and `Files`, `Network`, and `Cells` and `Update` for
+  reactive values; std declares `Abort`, `Log`, `Random`, `Time` and
+  `Wait` as ordinary effects, and a program can declare its own. Handlers
+  are ordinary functions (a `match` on the operations) that remove an
+  effect.
 - **Verse's thing?** Yes, it's `Choice`, and it's the same idea as the
   relation solver's branches: a stream of answers, canonical first.
 - **Modules? Imports?** A module is published definitions plus the same
@@ -371,9 +375,11 @@ Types alone can't express this rule: a handler's thunk has the type
 `Console` whenever the surrounding code prints. The check
 (`worldUnderChoice` in `src/lang/infer.ts`) looks at what each function does
 itself: the declared effects of the calls in its body, plus those of the
-functions it passes to callees that call them right away. One gap remains:
-a printing function kept in a variable (not a let) and called under
-`Choice` inside a definition that takes it as a parameter.
+functions it passes to callees that call them right away. That includes a
+printing function passed as a parameter and called under `Choice` inside
+the definition that takes it, which an earlier version of this section
+listed as a gap (test: "a printer passed as a parameter isn't run under a
+Choice either").
 
 ### The world
 
@@ -984,7 +990,7 @@ class considered, and where each one ends up:
 | errors without a reason | checked | `Abort` carries a reason, and effects you declare carry typed ones; a `match` with their cases catches them |
 | side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") |
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects |
-| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive |
+| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards spends a step budget, solver answers included |
 | arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
 | a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same |
@@ -1085,10 +1091,11 @@ back into the group being hashed is named by its position.
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
-- **More of the world.** A time and randomness effect, HTTP as an async
-  one-shot effect, environment variables, handlers for `Console`/`Files`
-  written in the program (to mock IO in tests), and a compiled program as
-  one portable file (today it imports the runtime from this repository).
+- **More of the world.** Time, randomness and HTTP GET are done (see
+  "Random", "Time", "The web"), and `lab compile` bundles the runtime into
+  one portable file. Still missing: environment variables, HTTP beyond GET,
+  and handlers for `Console`/`Files` written in the program (to mock IO in
+  tests).
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Number m/s`) and
   a function generic over its unit.
