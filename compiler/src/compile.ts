@@ -25,7 +25,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
-import { subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
+import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -274,7 +274,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Adapted from Mercury's high-level C backend, which compiles
   // nondeterministic code this way (Henderson and Somogyi, CC 2002).
   // Only direct calls from compiled code use it; values stay generators.
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean }
+  // `arr`: list parameters given as JS arrays (GAPS.md G21, `walkable`).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Set<Id> }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -343,16 +344,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Set<Id> = new Set()): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].sort().join(",")}` : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps, arr };
       specs.set(key, s);
       queue.push(s);
     }
@@ -363,7 +364,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Set<Id>): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -385,7 +386,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       walk(s.ret, t.ret);
     };
     walk(scheme.type, ty(ref));
-    return spec(def, out, plain);
+    return spec(def, out, plain, false, arr);
   }
 
   // The parameters of a function definition that are only ever called,
@@ -407,6 +408,47 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       onlyCalled.set(def, ok);
     }
     return onlyCalled.get(def)!;
+  }
+
+  // ---- lists that stay arrays (GAPS.md G21; NUMBERS.md, the `array` row)
+  // `split` and `characters` make JS arrays. A binder that is only ever
+  // walked whole (a fold over it, `join all`, `one of`, or handed on to a
+  // parameter or let that is itself only walked) can hold that array, and
+  // the cons cells are never made. For definitions this means a copy per
+  // set of such parameters (`$arr`), which calls whose argument is an array
+  // use. A use the compiler can't walk as an array gets the list back from
+  // it ($toList), so the choice only ever costs time, never meaning.
+  // Prior art: cdr-coding (Hansen, "Compact list representation", CACM
+  // 1969), decided here at compile time by the uses rather than per cell.
+  const walkable = new Set<Id>();
+  if (!reflective) {
+    const parent = new Map<Id, Id>(), refs = new Map<Id, Id[]>();
+    for (const n of Object.values(code.nodes)) {
+      for (const c of children(n)) parent.set(c, n.id);
+      if (n.kind === "ref" && code.nodes[n.target]?.kind === "binder") refs.set(n.target, [...(refs.get(n.target) ?? []), n.id]);
+    }
+    for (const def of code.defs) if (code.nodes[def]?.kind === "def" && isFnDef(def) && !info.divergent.has(def)) node<"lambda">(node<"def">(def).body!).params.forEach((p) => walkable.add(p));
+    for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") node<"lambda">(n.fn).params.forEach((p) => walkable.add(p));
+    const walk = (r: Id): boolean => {
+      const p = code.nodes[parent.get(r)!];
+      if (p?.kind === "fold") return p.scrutinee === r && arrayFold(p);
+      if (p?.kind !== "call" || p.fn === r) return false;
+      const i = p.args.indexOf(r), f = code.nodes[p.fn];
+      if (f.kind === "lambda") return walkable.has(f.params[i]);
+      if (f.kind !== "ref") return false;
+      if (f.target === TEXT_OPS.joinAll || f.target === S.oneOf) return i === 0;
+      return code.nodes[f.target]?.kind === "def" && isFnDef(f.target) && walkable.has(node<"lambda">(node<"def">(f.target).body!).params[i]);
+    };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const b of walkable) if (!(refs.get(b) ?? []).every(walk)) { walkable.delete(b); changed = true; }
+    }
+  }
+  // A fold over a list that only reads each item and the folded rest, not
+  // the rest itself, which an array can run without cells.
+  function arrayFold(n: NodeOf<"fold">): boolean {
+    const arms = n.arms.map((a) => node<"arm">(a)), cons = arms.find((a) => a.variant === CONS);
+    return arms.length === 2 && !!cons && arms.some((a) => a.variant === NIL) && !referenced.has(cons.binds[1]);
   }
 
   // ---- constant data, built once at module level (GAPS.md G9): a variant
@@ -477,7 +519,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // get a lambda written in place that doesn't choose.
     function defCall(n: NodeOf<"call">): Spec {
       const f = node<"ref">(n.fn);
-      const plain = new Set<Id>();
+      const plain = new Set<Id>(), arr = new Set<Id>();
       if (!reflective && isFnDef(f.target)) {
         const params = node<"lambda">(node<"def">(f.target).body!).params;
         const called = calledParams(f.target);
@@ -487,9 +529,35 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             plain.add(params[i]);
             plainHere.add(a);
           }
+          if (walkable.has(params[i]) && arraySource(a)) arr.add(params[i]);
         });
       }
-      return specAt(f.id, f.target, rho, plain);
+      return specAt(f.id, f.target, rho, plain, arr);
+    }
+    // A call's arguments, each an array where the copy takes one.
+    function argsOf(n: NodeOf<"call">, s: Spec): string[] {
+      const params = node<"lambda">(node<"def">(s.def).body!).params;
+      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a)! : ex(a)));
+    }
+
+    // Binders holding a JS array here: the copy's array parameters, and
+    // lets given an array.
+    const arrNow = new Set<Id>(sp.arr);
+    // The JS array an expression is, without making cells, if it is one.
+    function arraySource(id: Id): string | null {
+      const n = code.nodes[id];
+      if (n.kind === "ref") return arrNow.has(n.target) ? local(n.target) : null;
+      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      const f = node<"ref">(n.fn).target;
+      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return `$text.${f === TEXT_OPS.split ? "split" : "characters"}(${n.args.map(ex).join(", ")})`;
+      return null;
+    }
+    // `let p = v`, holding the array when v is one and p is only walked.
+    function letArg(p: Id, a: Id): string {
+      const arr = walkable.has(p) ? arraySource(a) : null;
+      if (arr === null) return ex(a);
+      arrNow.add(p);
+      return arr;
     }
 
     // Does evaluating this expression give anything other than exactly
@@ -564,7 +632,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (code.nodes[target]?.kind === "def" && !streamy(id)) {
           const s = defCall(n);
           if (s.bool) {
-            const c = `${s.name}(${n.args.map(ex).join(", ")})`;
+            const c = `${s.name}(${argsOf(n, s).join(", ")})`;
             return info.divergent.has(target) ? `($spendOrThrow(), ${c})` : c;
           }
         }
@@ -581,7 +649,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const t = code.nodes[n.target];
       const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
       switch (t.kind) {
-        case "binder": return local(n.target);
+        case "binder": return arrNow.has(n.target) ? `$toList(${local(n.target)})` : local(n.target);
         case "def": {
           const s = specAt(n.id, n.target, rho);
           if (!isFnDef(n.target)) return `${s.name}()`;
@@ -677,6 +745,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function call(n: NodeOf<"call">): string {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") return block(n.id);
+      const joined = f.kind === "ref" && f.target === TEXT_OPS.joinAll ? arraySource(n.args[0]) : null;
+      if (joined) return `$text.joinAll(${joined}, ${ex(n.args[1])})`;
       const one = f.kind === "ref" && (f.target === TEXT_OPS.joinAll || code.nodes[f.target].kind === "def") ? fused(n) : null;
       if (one) return one;
       if (f.kind === "ref") {
@@ -700,7 +770,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
         if (t.kind === "def") {
           const s = defCall(n);
-          const c = `${s.name}(${n.args.map(ex).join(", ")})`;
+          const c = `${s.name}(${argsOf(n, s).join(", ")})`;
           const v = s.bool ? `$bool(${c})` : c;
           return info.divergent.has(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
@@ -802,7 +872,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
         const f = node<"lambda">(n.fn);
-        return f.params.map((p, i) => bindLet(p, ex(n.args[i]))).join("") + ret(f.body, tail, out);
+        return f.params.map((p, i) => bindLet(p, letArg(p, n.args[i]))).join("") + ret(f.body, tail, out);
       }
       if (n.kind === "match") {
         if (handlerOf(n)) return out.leaf(out.bool ? `(${handleEx(n)}.tag === ${JSON.stringify(TRUE)})` : handleEx(n));
@@ -821,7 +891,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // again with them: no JS stack (COMPILER.md, stage 2½).
         jumps = true;
         const lam = node<"lambda">(d.body!);
-        const args = (n as NodeOf<"call">).args.map(ex);
+        const args = argsOf(n as NodeOf<"call">, sp);
         const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
         return `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
@@ -862,7 +932,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function foldLoop(n: NodeOf<"fold">): string {
       const plan = foldPlan(code, n);
       switch (plan.rep.jobs.fold) {
-        case "cells.loop": return foldCells(n, ex(plan.on));
+        case "cells.loop": {
+          const arr = arrayFold(n) ? arraySource(plan.on) : null;
+          return arr ? foldArray(n, arr) : foldCells(n, ex(plan.on));
+        }
         case "text.reverse": return foldText(n, ex(plan.on));
         case "count.down": return foldCount(n, ex(plan.on), plan.rep.meaning === INT_OPS.range);
         default: throw new Error(`no template for ${plan.rep.jobs.fold}`);
@@ -1027,8 +1100,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         chain.unshift({ call: c, def: d, emit: step.emit });
         at = c.args[step.li];
       }
-      const src = at ? code.nodes[at] : null;
-      const array = src?.kind === "call" && (refTo(src.fn, TEXT_OPS.split) || refTo(src.fn, TEXT_OPS.characters));
+      const array = at ? arraySource(at) : null;
       if (!chain.length && !array) return null;
       // Every other argument has no effects, and the functions given choose
       // nothing; they're bound once, before the loop.
@@ -1063,7 +1135,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const run = (i: number, item: string): string => (i === chain.length ? sink.each(item) : `{\n${chain[i].emit(item, (v) => run(i + 1, v))}\n}`);
       const body = scoped(true, () => run(0, x));
       const loop = array
-        ? `for (const ${x} of $text.${refTo((src as NodeOf<"call">).fn, TEXT_OPS.split) ? "split" : "characters"}(${(src as NodeOf<"call">).args.map(ex).join(", ")})) {\n${body}\n}`
+        ? `for (const ${x} of ${array}) {\n${body}\n}`
         : (() => { const l = temp("l"); return `for (let ${l} = ${ex(at!)}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${body}\n}`; })();
       return `(() => {\n${bindsOf.join("")}${sink.before}${loop}\nreturn ${sink.after};\n})()`;
     }
@@ -1103,6 +1175,22 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\nconst ${v} = ${ix}[${top}.v.tag];\n` +
         `if (${v} && ${top}.i < ${v}.length) {\n${todo}.push({ v: ${top}.v.fields[${v}[${top}.i++]], i: 0, rs: [] });\ncontinue;\n}\n` +
         `const ${r} = ${step}(${top}.v, ${top}.rs);\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
+    }
+
+    // A fold over a list held as a JS array (GAPS.md G21): an index loop
+    // from the end, or from the front when the step doesn't care about
+    // order (G15). No cells and no spine.
+    function foldArray(n: NodeOf<"fold">, input: string): string {
+      const arms = n.arms.map((a) => node<"arm">(a));
+      const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
+      const fwd = forward(arms, recOf);
+      if (fwd && fwd.on.variant === CONS && fwd.at === 1) {
+        const acc = temp("acc"), x = temp("x"), item = fwd.on.binds[0];
+        return `let ${acc} = ${ex(fwd.end.body)};\nfor (const ${x} of ${input}) {${referenced.has(item) ? `\nconst ${local(item)} = ${x};` : ""}\n${acc} = ${fwd.step(acc)};\n}\nreturn ${acc};`;
+      }
+      const [nil, cons, nilFn, consFn, i, r] = foldArms(n), a = temp("a");
+      return `${nilFn}${consFn}const ${a} = ${input};\nlet ${r} = ${nil}();\n` +
+        `for (let ${i} = ${a}.length - 1; ${i} >= 0; ${i}--) ${r} = ${cons}(${a}[${i}], ${r});\nreturn ${r};`;
     }
 
     // A fold over `characters(t)`, run on t: the characters from the end,
@@ -1221,11 +1309,22 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function stCall(n: NodeOf<"call">, k: K): string {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") {
-        return parts(n.args, (vals) => `${f.params.map((p, i) => bindLet(p, vals[i])).join("")}${st(f.body, k)}`);
+        // A let given an array keeps it (GAPS.md G21); making one has no
+        // effects, so it can be left out of the order of the others.
+        const own = f.params.map((p, i) => (walkable.has(p) && arraySource(n.args[i]) ? letArg(p, n.args[i]) : null));
+        return parts(n.args.filter((_, i) => own[i] === null), (vals) => {
+          let j = 0;
+          return `${f.params.map((p, i) => bindLet(p, own[i] ?? vals[j++])).join("")}${st(f.body, k)}`;
+        });
       }
       if (f.kind === "ref" && code.nodes[f.target].kind === "builtin") {
         const h = f.target;
         if (h === S.fail) return "/* fail */";
+        const items = h === S.oneOf ? arraySource(n.args[0]) : null;
+        if (items) {
+          const x = temp("x");
+          return `for (const ${x} of ${items}) {\n${k(x)}\n}`;
+        }
         if (h === S.oneOf) return parts(n.args, ([xs]) => {
           const l = temp("l"), x = temp("x");
           return `for (let ${l} = ${xs}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${k(x)}\n}`;
@@ -1253,7 +1352,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const target = f.kind === "ref" ? f.target : null;
       const kind = target ? code.nodes[target].kind : null;
       const callee = kind === "def" ? defCall(n) : null;
-      return parts([n.fn, ...n.args], ([fn, ...args]) => {
+      const params = callee && isFnDef(callee.def) ? node<"lambda">(node<"def">(callee.def).body!).params : [];
+      const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arraySource(a) : null));
+      return parts([n.fn, ...n.args.filter((_, i) => own[i] === null)], ([fn, ...rest]) => {
+        let j = 0;
+        const args = own.map((o) => o ?? rest[j++]);
         let c: string;
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
@@ -1273,7 +1376,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const r = temp("r");
           if (callee?.single) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
-            const viaK = spec(callee.def, callee.rho, callee.plain, true), rec = unpackOf(viaK);
+            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = k(c);

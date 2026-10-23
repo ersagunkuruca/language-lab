@@ -313,7 +313,7 @@ Other representations run the same fold differently:
 | `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
 | `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program |
-| `array` | `List a` | a JS array and a start | `items` | an index loop | planned: design below (GAPS.md G21) |
+| `array` | `List a` | a JS array and a start | `items` | an index loop | lists walked whole are built (compiler, GAPS.md G21); the start, for matches, is next |
 | `build` | `List a` | a function of `cons` and `nil` | `build` | apply it | later |
 
 **The rule is the law read backwards.** Every representation promises

@@ -57,7 +57,7 @@ editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C2 | G21 lists that are only walked are arrays (and ropes later) | GAPS G21, folds follow-up | P1 | L | ▶ design note (NUMBERS.md), code next |
+| C2 | G21 lists that are only walked are arrays (and ropes later) | GAPS G21, folds follow-up | P1 | L | ▶ part 1 built: lists walked whole (chapters 199 → 167 ms); next: lists built by consing (`taken`), then matched lists |
 | C3 | GAPS round 3: a program bigger than chapters, built in the editor with the DSL off-limits; what hurts goes to lane E | quality practice 3, R2 §7 | P1 | L | after C1, C2 |
 | C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test) | GAPS G3 | P2 | S | |
 | C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer | GAPS G14 | P2 | S | |
