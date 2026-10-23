@@ -160,3 +160,15 @@ export function parts() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs, Vec, Colour };
 }
+
+// Structural equal on lists of Numbers: `same` compares two lists with
+// one more number in front of each (which makes them lists of Numbers),
+// by the evaluator's rule for each number.
+export function sameLists() {
+  const k = new Lang();
+  const same = k.def("same");
+  k.define(same, k.fn(["xs", "ys"], (xs, ys) => k.equal(k.call(CONS, k.lit(0), xs), k.call(CONS, k.lit(0), ys))));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), same };
+}

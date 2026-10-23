@@ -23,8 +23,15 @@ own, taking the value and the locals its arms use. A child's folded
 result used once in its arm is computed where it's used, so `insert`
 stops once it has found its place rather than folding the rest of the
 list; under a budget the evaluator's order is kept, so the count matches.
-Folds aren't loops yet, so a very long list can run out of stack (the JS
-backend's loops are the model). With `data`, a definition the checker
+A fold whose arms each fold at most one child (a list, a chain) is a
+loop instead (W1c): `down` walks to the end keeping a stack of the values
+it passes, as a data type of the lowering's own, and `up` takes them back
+giving each value's arm the result so far, both as tail calls. That's the
+evaluator's order, and a list of any length folds in constant stack (a
+fold over 10⁴ numbers overflowed before; 10⁶ now take 375 ms). Structural
+`equal` is a function per type: the same case, then each field by the
+evaluator's rule, the last one a tail call, so two long lists compare in
+constant stack too. With `data`, a definition the checker
 can't see end is allowed, as in the JS backend: outside a budget the fuel
 is infinite, so it just runs.
 
@@ -139,9 +146,10 @@ rest with the reason, so nothing breaks between stages.
 
 1. **W1 data.** Records first (W1a, done: one struct type per record
    type, readers for the host). Then variants and records of any fields,
-   matches and folds over them, lists as cons cells (W1b, done). Left
-   (W1c): structural `equal`, folds over data nested in other data (a
-   rose tree's `List Tree`), folds as loops, one cast per arm. The binary encoder in wasm.ts gets the type
+   matches and folds over them, lists as cons cells (W1b, done),
+   structural `equal` and folds over lists as loops (W1c, done). Left:
+   folds over data nested in other data (a rose tree's `List Tree`), and
+   one cast per arm rather than per field read. The binary encoder in wasm.ts gets the type
    section's recursion groups, struct and array types and reference
    types. Programs: calculus and physics without text, and Countdown's
    `solutions` count.
