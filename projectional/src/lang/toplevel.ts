@@ -30,6 +30,7 @@ function builder(code: Code) {
 
 const trim = (s: string) => s.trim().replace(/\s+/g, " ");
 const nameOf = (names: Names, id: Id) => names[id] ?? "it";
+const ownerName = (code: Code, names: Names, id: Id) => code.nodes[id]?.kind === "lambda" ? "this function" : nameOf(names, id);
 
 function nameTaken(code: Code, names: Names, name: string, except?: Id): boolean {
   return code.defs.some((d) => d !== except && names[d] === name);
@@ -78,6 +79,7 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
 const refsTo = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && n.target === target);
 const callsOf = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"call"> => {
   if (n.kind !== "call") return false;
+  if (n.fn === target) return true;
   const f = code.nodes[n.fn];
   return f?.kind === "ref" && f.target === target;
 });
@@ -163,8 +165,12 @@ export function deleteDefinition(code: Code, names: Names, def: Id): Top {
 
 // ---------------------------------------------------------------- parameters
 
+// The input edits take a definition, or a function written inside a body
+// (a lambda passed to map, say). Its inputs change the same way; what it's
+// passed to has to take the new shape, or the type check refuses the edit.
 const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
   const d = code.nodes[def];
+  if (d?.kind === "lambda") return d;
   const b = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
   return b?.kind === "lambda" ? b : null;
 };
@@ -176,7 +182,7 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
   const d = code.nodes[def] as NodeOf<"def">;
   const name = trim(rawName) || "input";
   const lam = lambdaOf(code, def);
-  if (lam?.params.some((p) => names[p] === name)) return { ok: false, reason: `${nameOf(names, def)} already has an input named ${name}` };
+  if (lam?.params.some((p) => names[p] === name)) return { ok: false, reason: `${ownerName(code, names, def)} already has an input named ${name}` };
   const { nodes, add } = builder(code);
   const nn: Names = { ...names };
   const b = add({ kind: "binder" });
@@ -205,7 +211,7 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
 export function removeParameter(code: Code, names: Names, def: Id, param: Id): Top {
   const lam = lambdaOf(code, def);
   const i = lam ? lam.params.indexOf(param) : -1;
-  if (!lam || i < 0) return { ok: false, reason: "that isn't one of this definition's inputs" };
+  if (!lam || i < 0) return { ok: false, reason: `that isn't one of ${ownerName(code, names, def)}'s inputs` };
   const uses = refsTo(code, param).length;
   if (uses) return { ok: false, reason: `${nameOf(names, param)} is used ${uses === 1 ? "once" : `${uses} times`} in the body; clear those first` };
   const nodes = { ...code.nodes };
@@ -228,7 +234,7 @@ export function moveParameter(code: Code, names: Names, def: Id, param: Id, by: 
   const lam = lambdaOf(code, def);
   const i = lam ? lam.params.indexOf(param) : -1;
   const j = i + by;
-  if (!lam || i < 0) return { ok: false, reason: "that isn't one of this definition's inputs" };
+  if (!lam || i < 0) return { ok: false, reason: `that isn't one of ${ownerName(code, names, def)}'s inputs` };
   if (j < 0 || j >= lam.params.length) return { ok: false, reason: by < 0 ? "it's already first" : "it's already last" };
   const swap = <T>(xs: T[]) => { const ys = [...xs]; [ys[i], ys[j]] = [ys[j], ys[i]]; return ys; };
   const nodes = { ...code.nodes };

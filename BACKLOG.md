@@ -27,7 +27,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E1 | Inner lambda parameters: add, remove, reorder (only rename works) | QA2 can't-edit 1, R2 §9.8 | P1 | M | |
 | E2 | Statement order in an action: move a `print` step in `main` up or down | QA2 can't-edit 3, R2 §9.8 | P1 | M | |
 | E3 | Clearing a node to a hole generalizes the definition's type (`period : (a, b) -> Number`) | QA2 L3 | P1 | S | |
 | E4 | A used input can't be removed: offer remove-and-leave-holes | QA2 can't-edit 5 | P1 | S | |
@@ -116,14 +115,34 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 ## Done
 
-Recent first. Older history is in git and in the roadmap's Done table; this
-section keeps about a week.
+Recent first, one table per lane so that lanes finishing items at the
+same time don't edit the same lines. Older history is in git and in the
+roadmap's Done table; this section keeps about a week.
+
+### E: Editor
+
+| id | item | PR |
+|---|---|---|
+| E1 | Inner lambda parameters: add, remove, reorder | #179 |
+| | Right-click menu edits show what they selected (QA2 H1's last part) | #177 |
+
+### C: Compiler and targets
+
+| id | item | PR |
+|---|---|---|
+| C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
+
+### L: Language and library
 
 | id | item | PR |
 |---|---|---|
 | L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | this PR |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
-| C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
+
+### Before the backlog
+
+| id | item | PR |
+|---|---|---|
 | | Countdown in the program list (Hutton credited) | #174 |
 | | QA2 H1, H2, M1 to M4 | #137, #139, #159, #160, #158, #156 |
 | | Can't-edit: change a call's function keeping its inputs; field types | #151, #147 |
