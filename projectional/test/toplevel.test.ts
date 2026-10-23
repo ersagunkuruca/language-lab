@@ -163,6 +163,29 @@ test("a value becomes a function only while nothing uses it as a value", () => {
   assert.equal(s.code.nodes[(s.code.nodes[y] as NodeOf<"def">).body!].kind, "lambda");
 });
 
+test("a function written inside a body gets inputs added, moved and removed, as far as what it's passed to allows", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "v", { kind: "value" }));
+  const v = s.def("v");
+  // v = (a) => □, a function value nothing passes arguments to.
+  const hole = s.holes(v)[0];
+  s.code = { ...s.code, nodes: { ...s.code.nodes, [hole]: { id: hole, kind: "lambda", params: ["p_a"], body: "p_body" }, p_a: { id: "p_a", kind: "binder" }, p_body: { id: "p_body", kind: "hole" } } };
+  s.names = { ...s.names, p_a: "a" };
+  const b = s.ok(Top.addParameter(s.code, s.names, hole, "b"));
+  assert.match(s.refused(Top.addParameter(s.code, s.names, hole, "b")), /this function already has an input named b/);
+  s.ok(Top.moveParameter(s.code, s.names, hole, b, -1));
+  assert.deepEqual((s.code.nodes[hole] as NodeOf<"lambda">).params, [b, "p_a"]);
+  s.ok(Top.removeParameter(s.code, s.names, hole, "p_a"));
+  assert.deepEqual((s.code.nodes[hole] as NodeOf<"lambda">).params, [b]);
+  // Passed to map parts, it has to stay a function of one Number.
+  s.ok(Top.newDefinition(s.code, s.names, "w", { kind: "value" }));
+  const w = s.def("w");
+  s.fill(w, call(S.mapParts));
+  const f = s.fill(w, (x) => x.kind === "lambda") as NodeOf<"lambda">;
+  assert.match(s.refused(Top.addParameter(s.code, s.names, f.id, "extra")), /./);
+  assert.match(s.refused(Top.removeParameter(s.code, s.names, f.id, f.params[0])), /./);
+});
+
 test("a program saved to a file opens again as the same program, and a broken file says why", async () => {
   const { toFile, fromFile } = await import("../editor/files.ts");
   const s = new Session();
