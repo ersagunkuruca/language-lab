@@ -77,7 +77,7 @@ import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { relationFor } from "../src/lang/equations.ts";
-import { relate, showTerm } from "../src/lang/relate.ts";
+import { powers, relate, showTerm } from "../src/lang/relate.ts";
 import { analyze } from "../../invertible/src/index.js";
 import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
@@ -269,7 +269,12 @@ function resolves(code: Code): boolean {
 const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar", effects: "main" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
-const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
+const defNamed = (name: string) => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === name);
+// A program opens on `main`, with the definition that shows it off in the
+// next tab.
+const showcase = () => defNamed(START[doc.program] ?? "main") ?? ownDefs()[0] ?? doc.code.defs[0];
+const startDef = () => defNamed("main") ?? showcase();
+const startTabs = () => [...new Set([startDef(), showcase()])];
 const creditsOf = (d: Doc) => (isExample(d.program) ? CREDITS[d.program] : d.credits) ?? [];
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
 
@@ -289,7 +294,7 @@ const ui: UI = {
   output: null,
   menu: null,
   newKind: "function",
-  tabs: [],
+  tabs: startTabs(),
   panel: "node",
 };
 
@@ -333,7 +338,7 @@ function showProgram() {
   redo.length = 0;
   ui.def = startDef();
   ui.back = [];
-  ui.tabs = [];
+  ui.tabs = startTabs();
   ui.selected = firstHole();
   ui.mode = null;
   ui.output = null;
@@ -875,6 +880,11 @@ function solverPrinter(namer: Namer) {
   const show = (e: SExpr): [string, number] => {
     if (e.k === "num") return [e.name ?? fmt(e.v), e.v < 0 ? 5 : 100];
     if (e.k === "var") return [varName(e.name), 100];
+    const [b, x] = e.k === "call" && e.f === "pow" ? e.args : [];
+    if (x?.k === "num" && !x.name && Number.isInteger(x.v) && x.v >= 0) {
+      const [l, lp] = show(b);
+      return [powers(`${lp < 100 ? `(${l})` : l}^${x.v}`), 8];
+    }
     if (e.f in glyphs && e.args.length === 2) {
       const [g, pr] = glyphs[e.f];
       const [l, lp] = show(e.args[0]), [r, rp] = show(e.args[1]);
@@ -2218,7 +2228,7 @@ document.addEventListener("click", (e) => {
     const a = act.dataset.act;
     if (a === "undo") return travel(undo, redo, "Undid");
     if (a === "redo") return travel(redo, undo, "Redid");
-    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
+    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.tabs = startTabs(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
     if (a === "inline") return toggleInline(act.dataset.target!);

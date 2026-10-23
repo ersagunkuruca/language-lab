@@ -105,7 +105,7 @@ test("what's left over is written with the ports' names, and a number keeps its 
   const fall = p.named("fall");
   const [, speed, gravity] = params(p.code, fall);
   const [a] = relate(p.code, fall, { [speed]: 5, [gravity]: 9.81, out: bool(true) }, { names: p.pres.names });
-  assert.deepEqual(a.residual, ["distance = 5 · time + 4.905 · time^2"]);
+  assert.deepEqual(a.residual, ["distance = 5 · time + 4.905 · time²"]);
 });
 
 test("hence: a consequence gives the solver a way in without counting as a constraint", () => {
