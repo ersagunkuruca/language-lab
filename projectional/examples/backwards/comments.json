@@ -4,5 +4,6 @@
   "1dcc7f60": "join text with neither side known: every way to cut the text in two.",
   "6d33f5c4": "show numbers is a fold that prints; run backwards it unfolds, so it parses. Unfolding might not end, which the type says (Diverge) until fuel bounds it.",
   "caff880b": "map run backwards with its function known: every list whose squares these are.",
-  "583fa2c5": "atan2 run backwards: given the angle and x, the y on that ray, or none."
+  "583fa2c5": "atan2 run backwards: given the angle and x, the y on that ray, or none.",
+  "program": "Adapted: running a function backwards searches a lazy, fair stream of states, as miniKanren does (Friedman, Byrd and Kiselyov, The Reasoned Schemer, 2005; μKanren, Hemann and Friedman, 2013): http://minikanren.org\nPrior art: relational programming in Prolog."
 }

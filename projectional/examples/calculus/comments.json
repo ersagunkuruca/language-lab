@@ -5,5 +5,6 @@
   "5bf4774e": "A let differentiates to a let of the value and its slope.",
   "caadc237": "A fold differentiates to a fold that carries each partial result with its slope, as a pair.",
   "386f43dd": "Where sinc fails (at 0), so does its derivative.",
-  "5d7fcec2": "cubic run backwards from 0: the solver scans for every root, where Newton finds one."
+  "5d7fcec2": "cubic run backwards from 0: the solver scans for every root, where Newton finds one.",
+  "program": "Textbook: symbolic differentiation (the product and quotient rules) and Newton's method.\nPrior art: a fold carrying (value, slope) pairs is forward-mode automatic differentiation (Wengert, 1964) with dual numbers (Clifford, 1873)."
 }

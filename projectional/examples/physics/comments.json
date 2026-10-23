@@ -3,5 +3,6 @@
   "ef2qlgvc9pagd7mbrjga1vti6p": "Two polars sharing a length. The length and angle inside are unknowns of for some, the way wires inside a network were. Give it x′, y′ and the turn and it runs backwards.",
   "6hpbegvm9ekio82s9259bbshse": "What was a network: one equal is the wire that closes it, drift and drop are dots. In Run, tick which ports you know; make the distance known and the time unknown to ask when it lands.",
   "s1l0sf006j8lf36reqn46e91sq": "An ordinary function. Only the inputs declare units; the result is inferred to be in seconds.",
-  "f1n9ttn882jm0o9laafiu1fin8": "fall used in one direction, from true: a quadratic in time, so two answers (the negative one is before the throw)."
+  "f1n9ttn882jm0o9laafiu1fin8": "fall used in one direction, from true: a quadratic in time, so two answers (the negative one is before the throw).",
+  "program": "Textbook: the quadratic formula and projectile motion.\nPrior art: units as part of the type follow Andrew Kennedy's \"Dimension Types\" (ESOP 1994) and F#'s units of measure.\nPrior art: a predicate that runs in every direction is constraint programming, as in CLP(R) (Jaffar and Lassez, 1987) and Modelica's acausal equations."
 }

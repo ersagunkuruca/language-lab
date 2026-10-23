@@ -10,8 +10,8 @@
 // are the imports, and this list is only so that a file opened without
 // that module can say which one is missing. `signatures`: the program's
 // own pins (src/lang/signatures.ts). Version 1 files open unchanged.
-// `credits`, also optional: what the program adapts or follows, and from
-// whom, a line each.
+// A program's own comment is comments.json's "program"; a file with the
+// separate `credits` list of before opens with them in it.
 
 import { isPublished, type Code, type Id, type Node } from "../src/model.ts";
 import type { Comments, Names } from "../src/presentation.ts";
@@ -38,8 +38,6 @@ export interface ProgramFile {
   examples: Record<Id, string[]>;
   needs?: Record<Id, string>;
   signatures?: Pins;
-  // Where the program's ideas and code come from, a line each.
-  credits?: string[];
 }
 
 // The program's own nodes: everything not in `base`.
@@ -94,8 +92,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     code: c as unknown as Code,
     names: x.names as Names,
     descriptive: (x.descriptive as Names) ?? {},
-    comments: (x.comments as Comments) ?? {},
-    credits: Array.isArray(x.credits) ? x.credits.filter((l): l is string => typeof l === "string") : [],
+    comments: withCredits((x.comments as Comments) ?? {}, x.credits),
     examples: isObj(x.examples) ? (Object.fromEntries(Object.entries(x.examples).filter(([, v]) => Array.isArray(v) && v.every((t) => typeof t === "string"))) as Record<Id, string[]>) : {},
     layout: {
       // `positions` (offsets from the automatic layout, before free
@@ -107,4 +104,12 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     },
   };
   return { file, code };
+}
+
+// Credits kept apart, as files saved before had them, become the program's
+// comment (or are added to it).
+function withCredits(comments: Comments, credits: unknown): Comments {
+  const lines = Array.isArray(credits) ? credits.filter((l): l is string => typeof l === "string" && !!l.trim()) : [];
+  if (!lines.length) return comments;
+  return { ...comments, program: [comments.program, ...lines].filter(Boolean).join("\n") };
 }

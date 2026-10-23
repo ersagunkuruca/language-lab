@@ -1,4 +1,0 @@
-[
- "Adapted: running a function backwards searches a lazy, fair stream of states, as miniKanren does (Friedman, Byrd and Kiselyov, The Reasoned Schemer, 2005; μKanren, Hemann and Friedman, 2013): http://minikanren.org",
- "Prior art: relational programming in Prolog."
-]

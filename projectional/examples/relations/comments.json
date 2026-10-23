@@ -4,5 +4,6 @@
   "00fuu812cr7586ns6i94mrfq99": "add, run backwards from its result and one argument.",
   "c5p1l9o2i5uqv9fviacg7f3oi8": "A predicate: true when (x, y) is at this length and angle. x² + y² = length² follows from the other two (hence); it lets the solver find the length from x and y without searching.",
   "rdv2q5mu372hsge5l4kakmff2d": "Two branches for the angle and length (plus 2πk): the type says Choice, first picks the canonical one.",
-  "bmc1grm3rpvkoanmfgui9rklm1": "square read backwards: x · x = y. all collects both roots, and none for a negative y."
+  "bmc1grm3rpvkoanmfgui9rklm1": "square read backwards: x · x = y. all collects both roots, and none for a negative y.",
+  "program": "Prior art: functions as relations that run in any direction are relational and constraint programming: Prolog, miniKanren (http://minikanren.org), CLP(R) and Modelica."
 }

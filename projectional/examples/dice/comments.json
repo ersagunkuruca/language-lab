@@ -6,5 +6,6 @@
   "rfbsr07rh30ndv6447j293upib": "The row for one total (i + 2): the total, then a bar as wide as the number of rolls that came to it, and that number.",
   "uncf9n02jf7hgbs509kt4tlcaa": "One row per total from 2 to 12.",
   "pski1cvcgseb9dtdrshheqstt4": "Who this page borrows from, shown on the page (projectional/CREDITS.md).",
-  "58fhcc83p852dgdt2te1t1brbo": "The page: a Roll button that draws from the world's randomness, one that adds a hundred seeded rolls, and the totals so far. The status line reads now(), so it runs again every frame and counts the seconds since the last roll."
+  "58fhcc83p852dgdt2te1t1brbo": "The page: a Roll button that draws from the world's randomness, one that adds a hundred seeded rolls, and the totals so far. The status line reads now(), so it runs again every frame and counts the seconds since the last roll.",
+  "program": "Adapted: seeded rolls use xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain): https://prng.di.unimi.it/\nPrior art: the clock that runs again each frame follows Fran (Conal Elliott and Paul Hudak, \"Functional reactive animation\", ICFP 1997) and Elm's time subscriptions.\nPrior art: randomness as an effect with a handler you choose is in Koka and Eff.\nPrior art: the page is written with the html module, each tag a function as in Elm's Html module (Evan Czaplicki).\nOur own: the dice page; the triangular spread of two dice is textbook."
 }
