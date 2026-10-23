@@ -1171,7 +1171,7 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     // next to it gets its · back (the solver writes 5x).
     const portOf = new Map<number, string>();
     for (const p of ports) { const v = values[p]; if (v instanceof LVar && !portOf.has(v.n)) portOf.set(v.n, p === "out" ? "result" : opts.names?.[p] ?? p); }
-    const named = (t: string) => t.replace(/(\d)(_\d+)/g, "$1 · $2").replace(/_(\d+)/g, (m, n) => portOf.get(+n) ?? m);
+    const named = (t: string) => powers(t.replace(/(\d)(_\d+)/g, "$1 · $2").replace(/_(\d+)/g, (m, n) => portOf.get(+n) ?? m));
     const residual = [
       ...tidy(st.eqs, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
       ...st.waits.map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
@@ -1216,6 +1216,9 @@ function portsOf(code: Code, fn: Id, known: string[]): string[] {
   if (isFunctionBuiltin(code, fn)) return [...Array.from({ length: arity(fn) }, (_, i) => String(i)), "out"];
   return relationFor(code, fn).rel.ports;
 }
+
+// The solver writes x^2; the editor writes x², like units do.
+export const powers = (t: string) => t.replace(/\^(\d+)(?![.\d])/g, (_, d: string) => d.split("").map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+c]).join(""));
 
 export function showTerm(t: Term): string {
   if (t instanceof LVar) return `_${t.n}`;

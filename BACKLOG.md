@@ -35,7 +35,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E9 | `^2` in solver output where the editor writes `²` | QA2 L4 | P2 | S | |
 | E10 | A program opens on its last open definition, not on `main` | QA2 UX6 | P2 | S | |
 | E11 | Zoom level isn't shown ("100%" stays at 60%); Fit pill covers nodes | QA2 UX4, UX5 | P2 | S | |
 | E12 | Unit refusals name the units ("speed is m/s, gravity is m/s²") | QA2 UX9 | P2 | S | |
@@ -116,6 +115,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E9 | Solver output writes powers as superscripts (`time²`) | #211 |
 | E8 | Nested view listed a comment on a called lambda as two footnotes | #207 |
 | E22 | Long and multiline text literals render compactly (first line + "· N lines", full text on hover, multiline edit box) | #206 |
 | E7 | Add a value here: palette 7.5 s → 1.7 s on solved functions | #203 |
