@@ -25,10 +25,10 @@ import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
-import { Cells, NoValue, nodeOf } from "./cells.ts";
+import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator } from "./random.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
-import { CELLS, CHOICE, DIVERGE, INT, WORLD, type Type } from "./types.ts";
+import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -162,6 +162,8 @@ export interface World {
   // Time's and Wait's: milliseconds since 1970, and pausing.
   now(): number;
   wait(ms: number): void;
+  // Network's: the body of a GET, once per address (the world remembers).
+  fetchText(url: string): string;
 }
 
 // An Abort that nothing in the program handled.
@@ -210,6 +212,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.appendFile]: (p, t) => (world("appendFile")(p as string, t as string), one(unit)),
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
+    [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
     [CELL_OPS.cell]: (v) => one(cells.cell(v)),
     [CELL_OPS.formula]: (f) => one(cells.formula(() => {
       for (const v of (f as Fn)()) return v;
@@ -258,7 +261,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel, S.seeded].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
-  const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
@@ -331,7 +334,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       ambient = this.fuel;
       if (FALLIBLE.has(f as Fn)) {
         let r: Iterable<Value>;
-        try { r = (f as Fn)(...args); } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        // Not here yet isn't a failure: the page asks again later.
+        try { r = (f as Fn)(...args); } catch (e) { if (e instanceof Pending) throw e; return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.from(r, (x) => this.ret(x as Value));
       }
       this.from((f as Fn)(...args), (x) => this.ret(x as Value));
@@ -692,7 +696,7 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
-const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT, RANDOM, TIME, WAIT];
+const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT];
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
 export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
