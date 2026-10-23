@@ -78,11 +78,10 @@ editor.
 
 ## L: Language and library
 
-No thread yet; started when L1 is picked.
+Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L1 | `runMain` runs a program that doesn't type-check (printed `NaN`; the editor's Run panel follows it). Refuse, or make "run anyway" explicit | R2 §8 | P0 | S | |
 | L2 | Fuel means two things: running out in plain code abandons the whole `with fuel` body when compiled, the evaluator lets a later branch go on | R2 §5, COMPILER.md "Diverge and fuel" | P1 | M | |
 | L3 | Docs brought up to date: LANGUAGE.md "three effects", "imports the runtime", the totality row, the Choice-and-world sentence | R2 §6, §9.7 | P1 | S | |
 | L4 | One page model: reactive.html's programs onto std's `Html`, remove `ui.ts`'s `UI` | R2 §5, WEB.md, ROADMAP | P1 | M | |
@@ -124,6 +123,7 @@ section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L1 | Run refuses a program that doesn't type-check, naming the definition | #PR |
 | | Countdown in the program list (Hutton credited) | #174 |
 | | QA2 H1, H2, M1 to M4 | #137, #139, #159, #160, #158, #156 |
 | | Can't-edit: change a call's function keeping its inputs; field types | #151, #147 |

@@ -15,7 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
-import type { Code, Id, NodeOf } from "../model.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -725,11 +725,25 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 }
 
 function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
-  const problem = leftover(t, rt.names ?? {});
+  const problem = typeError(code, info, def, rt.names ?? {}) ?? leftover(t, rt.names ?? {});
   if (problem) throw new Error(problem);
   const r = makeRunner(code, info, rt);
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
+}
+// A program that doesn't type-check isn't run: what it would do is
+// whatever the evaluator happens to do with values of the wrong type (a
+// probe printed NaN). Only errors in what `def` reaches count, so a broken
+// definition elsewhere in the program doesn't stop this one.
+function typeError(code: Code, info: Info, def: Id, names: Names): string | null {
+  if (!info.errors.length) return null;
+  for (const d of [def, ...dependencies(code, def)]) {
+    if (code.nodes[d]?.kind !== "def") continue;
+    const own = new Set(subtree(code, d));
+    const e = info.errors.find((e) => own.has(e.id));
+    if (e) return `can't run: ${names[d] ?? stdNames[d] ?? d} doesn't type-check (${e.message})`;
+  }
+  return null;
 }
 const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT];
 // The effects of a function's type that something in the program has to

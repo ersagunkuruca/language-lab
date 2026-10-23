@@ -303,3 +303,31 @@ test("a command-line main gets its arguments and returns the exit code; input co
   assert.deepEqual(p.printed, ["arguments: -n file.txt", `some("alpha")`]);
   assert.deepEqual(p.out.errors, ["rest: alpha\nbeta"]);
 });
+
+// ---------------------------------------------------------------- Running a program that doesn't type-check
+
+test("a main that doesn't type-check isn't run, and says which definition is wrong", () => {
+  const p = program((k) => {
+    const half = k.def("half");
+    k.define(half, k.fn(["n"], (n) => k.call(B.sqrt, k.text(k.lit("not a number: "), n))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(S.print, k.lit("before")), k.call(S.print, show(k, k.call(half, k.lit(4)))))));
+    return main;
+  });
+  assert.notDeepEqual(p.errors, []);
+  assert.throws(() => p.run(), /can't run: main doesn't type-check \(half needs Text here, got Number\)/);
+  assert.deepEqual(p.printed, [], "nothing ran, not even the first print");
+  assert.throws(() => p.exit([]), /can't run: main/);
+});
+
+test("a type error in a definition main doesn't reach doesn't stop it", () => {
+  const p = program((k) => {
+    const broken = k.def("broken");
+    k.define(broken, k.fn(["n"], (n) => k.call(B.sqrt, k.text(k.lit("x"), n))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.lit("fine"))));
+    return main;
+  });
+  assert.notDeepEqual(p.errors, []);
+  assert.deepEqual(p.run(), ["fine"]);
+});
