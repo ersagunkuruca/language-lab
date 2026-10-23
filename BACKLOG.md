@@ -26,7 +26,7 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
+| E36 | Touch: long-press for the graph menu on iOS, and touch versions of shift-pick and alt-drag | QA2 UX8 (split from E20) | P3 | M | |
 
 ## C: Compiler and targets
 
@@ -88,6 +88,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E20 | Phone width: under 600 px one pane at a time (Programs, Graph, Text, Run) from a bar at the bottom, instead of a 4,614 px page; the smoke checks it at 390x844 | #277 |
 | E35 | Frames fold into one box (▾, or right-click): wires in end on its left, values out leave on its right; it sits where its contents put the frame, so dragging or tidying it moves them. A view in layout.json | #275 |
 | T4 | A quicker smoke: each program's first definition, main and an eighth of the rest per change (all nightly), and graph clicks only where a click reaches (402 half-second timeouts a run were frames under their contents): 5 min 40 s to 1 min 22 s | #274 |
 | I1 | Without a GPU the ray marcher's colour record runs as WebAssembly (WasmGC struct, read by the module's field readers), not JavaScript: 244 to 144 ms a frame at 160x160 | #272 |

@@ -105,6 +105,28 @@ button { font: inherit; color: inherit; }
   .gutter { display: none; }
   .center { grid-template-rows: 70vh 6px auto; } .p-nav { max-height: 40vh; } .side { overflow: visible; }
 }
+/* A phone: one pane at a time, the full height, picked from a bar at the
+   bottom; the top bar scrolls sideways instead of wrapping. */
+.panes { display: none; }
+@media (max-width: 600px) {
+  #app { height: 100dvh; gap: 4px; padding: 4px; }
+  .bar { flex-wrap: nowrap; overflow-x: auto; padding-block: 4px; }
+  .brand { white-space: nowrap; } .brand span { display: none; }
+  .controls { flex-wrap: nowrap; }
+  .seg { flex-wrap: nowrap; }
+  .grid { display: block; flex: 1; min-height: 0; }
+  .grid.is-typed > * { display: none; }
+  .grid.is-typed > .ctx-menu { display: block; }
+  .grid[data-pane="nav"] > .p-nav { display: flex; height: 100%; max-height: none; }
+  .grid[data-pane="graph"] > .center, .grid[data-pane="text"] > .center { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr); }
+  .grid.is-typed .center > * { display: none; }
+  .grid[data-pane="graph"] .p-graph, .grid[data-pane="text"] .p-text { display: flex; }
+  .grid[data-pane="side"] > .side { display: flex; height: 100%; overflow-y: auto; }
+  .status { order: 0; min-height: 0; max-height: 3.2em; overflow-y: auto; padding-block: 2px; }
+  .panes { display: flex; flex: none; order: 10; gap: 2px; padding: 3px; border-radius: 12px; background: var(--panel); }
+  .panes button { flex: 1; border: 0; background: none; padding: 9px 4px; border-radius: 9px; color: var(--muted); font: inherit; cursor: pointer; }
+  .panes button.on { background: var(--canvas); color: var(--fg); font-weight: 600; }
+}
 
 /* the outline: programs, and the open one's definitions under it */
 .p-nav { display: flex; flex-direction: column; padding: 8px 6px; min-height: 0; }
