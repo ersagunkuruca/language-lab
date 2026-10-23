@@ -1188,7 +1188,7 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
       ...heads.map((x, i) => h("option", { value: String(i), selected: !odd && at?.target === x.target }, names[x.target] ?? x.target))) as HTMLSelectElement;
     if (!at && !odd && !(top && none)) select.value = "0";
     const args = h("div", { class: "type-args" });
-    let parts: { spec: () => Top.TypeSpec | null }[] = [];
+    let parts: { el: HTMLElement; spec: () => Top.TypeSpec | null }[] = [];
     const fill = (given: Top.TypeSpec[]) => {
       const head = heads[Number(select.value)];
       parts = head ? Array.from({ length: head.arity }, (_, i) => one(given[i] ?? null, undefined, false)) : [];
@@ -1674,7 +1674,7 @@ const page = {
   status: h("p", { class: "hint" }),
   // Where the page's elements are made (adopted into the frame's document).
   maker: document.implementation.createHTMLDocument("page"),
-  for: null as Code | null, root: null as Node | null, now: null as Preview | null,
+  for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null,
   flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
 };
 const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
@@ -1710,7 +1710,7 @@ function startPage(info: T.Info, main: Id) {
       frame: (f) => requestAnimationFrame(f),
       ran: (n: Node_) => {
         if (!page.flashBox.checked) return;
-        const e = (n as Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as Node).parentElement;
+        const e = (n as unknown as globalThis.Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as unknown as globalThis.Node).parentElement;
         // A part's own element takes no space (display: contents): its children flash.
         for (const x of e?.tagName === "LAB-PART" ? [...e.children] as HTMLElement[] : e ? [e] : []) {
           x.style.outline = "2px solid #e8a33d";
@@ -1718,7 +1718,7 @@ function startPage(info: T.Info, main: Id) {
         }
       },
     });
-    page.root = page.now.root as unknown as Node;
+    page.root = page.now.root as unknown as globalThis.Node;
   } catch (e) {
     page.status.textContent = `The page stopped: ${e instanceof Error ? e.message : String(e)}.`;
   }

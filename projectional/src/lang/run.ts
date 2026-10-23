@@ -26,7 +26,7 @@ import { planSolve, solutions } from "./solve.ts";
 import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
-import { seededGenerator, worldRandom, type Generator } from "./random.ts";
+import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
 
@@ -142,7 +142,7 @@ type Frame = { next: Frame | null } & (
   | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Done }
   | { t: "fuelExit"; saved: Fuel | null }
   // `seeded`: answers Random's `random()` from its generator.
-  | { t: "seeded"; effect: Id; gen: Generator }
+  | { t: "seeded"; effect: Id; gen: RandomGenerator }
   // A handler's answer on its way back to where the operation was
   // performed. Looking for a handler from here skips to outside `handler`:
   // a case runs outside the match it belongs to.
@@ -352,7 +352,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     push(f: Frame) { f.next = this.k; this.k = f; }
 
     // Call a function value with its arguments, in the current continuation.
-    apply(f: Value, args: Value[]) {
+    apply(f: Value, args: Value[]): void {
       const c = closures.get(f as Fn);
       if (c) {
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
@@ -407,7 +407,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       throw new Error(`nothing handles ${op}`);
     }
 
-    handle(h: Id, args: Value[]) {
+    handle(h: Id, args: Value[]): void {
       if (h === S.fuel) {
         this.push({ t: "fuelExit", saved: this.fuel, next: null });
         this.fuel = { left: args[0] as number };
@@ -612,7 +612,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           yield Object.keys(n.binds).map((k) => sol[k]!);
         }
       };
-      this.from(bodies(), (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound)));
+      this.from(bodies(), (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound as Value[])));
     }
   }
 

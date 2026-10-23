@@ -182,7 +182,8 @@ export class Cells {
         // A source that stops makes this one run again, and stop the same
         // way inside its own run, where a page can say so.
         if (s.compute) try { this.update(s); } catch { n.state = DIRTY; }
-        if (n.state === DIRTY) break;
+        // update(s) may have marked n dirty, which the type checker can't see.
+        if ((n.state as number) === DIRTY) break;
       }
     }
     if (n.state === DIRTY) {

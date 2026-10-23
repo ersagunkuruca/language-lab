@@ -18,7 +18,7 @@ import { B } from "../src/prelude.ts";
 function fakeWorld(files: Record<string, string> = {}, input = "") {
   const lines = input.split("\n");
   const out = { errors: [] as string[], logs: [] as string[], files };
-  const world: World = {
+  const world: Partial<World> = {
     error: (l) => out.errors.push(l),
     log: (l) => out.logs.push(l),
     input: () => input,

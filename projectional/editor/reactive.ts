@@ -23,7 +23,7 @@ function show(where: string, p: { code: Code; names: Names; main: Id; ui: UiIds 
   const all = merge(LIBRARY.code, p.code), names = layer<Names>(LIBRARY.names, p.names);
   const info = infer(all, names, undefined, { pins: LIBRARY.pins, hidden: LIBRARY.hidden });
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("\n"));
-  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as Style };
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
   code.textContent = defs.map((name) => renderBlocks(all, pres, info, p.code.defs.find((d) => names[d] === name)!)).join("\n\n");
 
   const cells = new Cells(equal);
