@@ -100,9 +100,11 @@ model, then WebAssembly. Update this line when the step changes.
 - Credit external ideas as the project instructions say.
 - Run the tests locally before pushing (`npm test` in projectional,
   invertible and compiler; `npm run smoke` and `npm run smoke-shaders` for
-  editor or page changes). A pull request's CI only type-checks; every suite
-  runs once per merge before the deploy, and a failure there stops the
-  deploy, so whoever broke main fixes it next.
+  editor or page changes). A pull request's CI only type-checks. A merge
+  deploys in about two minutes; every suite runs beside the deploy in
+  "Check main" and reports without stopping it. After merging, look at
+  Check main for your commit (about 10 minutes): if it is red, whoever
+  broke main fixes it next.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 

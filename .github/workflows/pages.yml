@@ -5,11 +5,10 @@
 #
 # Needs Settings → Pages → Source: "GitHub Actions".
 #
-# Before publishing, it runs every test suite: the unit tests, then the
-# browser tests (the editor, every example, shaders.html, WGSL on a GPU) on
-# what it built. They run here, once per merge, instead of on every push to
-# a pull request (which only type-checks). If they fail, nothing is
-# published and the live site keeps the last good build.
+# It only builds and deploys, so a merge is live in about two minutes. The
+# test suites run beside it in check-main.yml and report: a failure there
+# is fixed by the next pull request, but doesn't hold back the site
+# (projectional/TESTING.md, T1).
 name: Pages
 
 on:
@@ -22,9 +21,8 @@ permissions:
   pages: write
   id-token: write
 
-# A deploy that has started finishes (cancelling it would waste the minutes
-# it spent); merges that land meanwhile wait, and only the newest of them
-# runs next.
+# A deploy that has started finishes; merges that land meanwhile wait, and
+# only the newest of them runs next.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -32,7 +30,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -48,21 +46,6 @@ jobs:
         run: |
           npm ci
           npm run build-editor
-      # Node runs (cores - 1) test files at a time, which is one on the
-      # runner's two cores; two at a time is much faster.
-      - name: Unit tests
-        run: |
-          (cd projectional && node --test --test-concurrency=2 test/*.test.ts)
-          (cd invertible && npm test)
-          (cd compiler && npm test)
-      - name: The editor in a browser
-        working-directory: projectional
-        run: |
-          npm run smoke
-          npm run smoke-shaders
-      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
-        working-directory: compiler
-        run: npm run gpu
       - name: Lay out the site like the repository
         run: |
           mkdir _site
