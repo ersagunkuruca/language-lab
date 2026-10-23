@@ -22,34 +22,52 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Two jobs side by side, so a pull request waits for the slower one (about
+# 4 minutes) instead of both in a row (about 7.5). Each pays its own setup
+# (about 20 seconds), so the runner minutes stay about the same.
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
-    # A run takes about 8 minutes. A hang (a GPU test that never returns, a
-    # browser that never closes) stops at 20 instead of GitHub's 6 hours.
-    timeout-minutes: 20
+    # A hang stops at 15 minutes instead of GitHub's 6 hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: projectional/package-lock.json
+      # Node runs (cores - 1) test files at a time, which is one on the
+      # runner's two cores; two at a time takes 2.5 minutes instead of 4.
       - name: projectional
         working-directory: projectional
         run: |
           npm ci
-          npm test
-      - name: projectional editor in a browser
-        working-directory: projectional
-        run: |
-          npm run build-editor
-          npm run smoke
-          npm run smoke-shaders
+          node --test --test-concurrency=2 test/*.test.ts
       - name: invertible
         working-directory: invertible
         run: npm test
       - name: compiler
         working-directory: compiler
         run: npm test
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: projectional/package-lock.json
+      - name: projectional editor in a browser
+        working-directory: projectional
+        run: |
+          npm ci
+          npm run build-editor
+          npm run smoke
+          npm run smoke-shaders
       - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
         working-directory: compiler
         run: npm run gpu
