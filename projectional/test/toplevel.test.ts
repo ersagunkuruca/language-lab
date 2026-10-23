@@ -579,3 +579,23 @@ test("an input with no type yet can be called: before(□, □) makes it a funct
   // Whatever before does, pick does too.
   assert.equal(t, "((a, b) -[e]-> c, a, b) -[e]-> c");
 });
+
+test("a step can go inside one arm of a match: it runs there, just before that arm's value", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
+  const insert = p.named("insert");
+  const arm = subtree(p.code, insert).map((id) => p.code.nodes[id]).find((n): n is NodeOf<"arm"> => n.kind === "arm")!;
+  const info = infer(p.code, p.pres.names);
+  const r = T.addStep(p.code, p.pres.names, info, insert, arm.body);
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  if (!r.ok) return;
+  const now = r.code.nodes[(r.code.nodes[arm.id] as NodeOf<"arm">).body] as NodeOf<"call">;
+  assert.equal(now.kind, "call");
+  const lam = r.code.nodes[now.fn] as NodeOf<"lambda">;
+  assert.deepEqual([lam.kind, lam.params, lam.body], ["lambda", [r.dot], arm.body]);
+  assert.equal(r.code.nodes[now.args[0]].kind, "hole");
+  // Only inside the definition it's for.
+  assert.equal(T.addStep(p.code, p.pres.names, info, p.named("main"), arm.body).ok, false);
+});

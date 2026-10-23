@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E30 | *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | P2 | M | |
 | E31 | Palette rows with the same label (`show(□)` ×3) told apart only by the type line | GAPS round 3, editor 5 | P2 | S | |
 | E32 | Picture CPU fallback and its check run in float64; run them in Float32 (`withFloat32` + `represent`, as compiler/gpu.ts) | C8 | P2 | S | |
 | E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
@@ -94,6 +93,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E30 | Add a value before this… puts a step anywhere, inside one arm of a match | #242 |
 | E29 | A short text literal gets a new line with Shift+Enter | #241 |
 | E28 | An untyped input can be called from the palette: before(□, □) | #239 |
 | E27 | A whole number typed in an Int hole fills it as an Int | #237 |
