@@ -257,6 +257,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   // Where `ret` puts a value.
   interface Out { bool: boolean; leaf: (js: string) => string }
+  interface Reuse { s: string; cell: Id; root: Id; binds: Id[] }
   const RETURN: Out = { bool: false, leaf: (js) => `return ${js};` };
   const RETURN_BOOL: Out = { bool: true, leaf: (js) => `return ${js};` };
 
@@ -276,7 +277,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Only direct calls from compiled code use it; values stay generators.
   // `arr`: list parameters given as JS arrays, and which kind (GAPS.md
   // G21, `walkable`).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back"> }
+  // `own`: the `$own` copy, which may change its own parameters' cells
+  // (GAPS.md G25).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back">; own: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -345,16 +348,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back"> = new Map()): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back"> = new Map(), own = false): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps, arr };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps, arr, own };
       specs.set(key, s);
       queue.push(s);
     }
@@ -365,7 +368,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back">): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back">, own = false): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -387,7 +390,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       walk(s.ret, t.ret);
     };
     walk(scheme.type, ty(ref));
-    return spec(def, out, plain, false, arr);
+    return spec(def, out, plain, false, arr, own);
   }
 
   // The parameters of a function definition that are only ever called,
@@ -456,6 +459,176 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
     }
   }
+  // ---- cells nobody else holds, changed in place (GAPS.md G25)
+  // A list is owned where the code at hand holds the only reference to every
+  // cell of its spine: a fold's accumulator (the step before made it and
+  // passed it on), a fresh cons onto an owned list, nil, or what an owned
+  // copy of a definition returns. A definition whose list parameter is
+  // matched and used at most once on any path gets an `$own` copy, used
+  // where every such argument is owned. In it, an arm of that match whose
+  // path doesn't use the parameter again builds its cons in the matched
+  // cell instead of a new one, and the cell's rest is owned in turn.
+  // `add to` and `insert` in ledger change their totals in place this way.
+  // Only in definitions without Choice (no answer runs the rest twice) and
+  // outside lambdas and handlers (which may run more than once). Prior art:
+  // Koka's Perceus and "functional but in place" (Reinking, Xie, de Moura
+  // and Leijen, PLDI 2021; Lorenzen, Leijen and Swierstra, ICFP 2023),
+  // which find the same reuse with reference counts at run time.
+  const up = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
+  const INF = 1e9;
+  const isLet = (id: Id) => { const p = code.nodes[up.get(id)!]; return p?.kind === "call" && p.fn === id; };
+  const handlerMatch = (n: Node) => n.kind === "match" && !!handlerOf(n);
+  const mentions = (id: Id, b: Id) => subtree(code, id).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && n.target === b; });
+  // The most times `b` is used on one run of `id`: a match's arms are
+  // alternatives, and being matched on isn't a use. A use inside a lambda,
+  // a handler or a fold's arm (run many times) counts as many.
+  function usesOf(id: Id, b: Id): number {
+    const n = code.nodes[id];
+    if (n.kind === "ref") return n.target === b ? 1 : 0;
+    if ((n.kind === "lambda" && !isLet(id)) || handlerMatch(n)) return mentions(id, b) ? INF : 0;
+    if (n.kind === "match") {
+      const s = code.nodes[n.scrutinee], first = s.kind === "ref" && s.target === b ? 0 : usesOf(n.scrutinee, b);
+      return first + Math.max(0, ...[...n.arms.map((a) => node<"arm">(a).body), ...(n.otherwise ? [n.otherwise] : [])].map((x) => usesOf(x, b)));
+    }
+    if (n.kind === "fold") return usesOf(n.scrutinee, b) + (n.arms.some((a) => mentions(a, b)) ? INF : 0);
+    return children(n).reduce((t, c) => t + usesOf(c, b), 0);
+  }
+  // Definitions that may change cells: without Choice, without fuel.
+  const inPlace = (def: Id) => {
+    if (reflective || !isFnDef(def) || info.divergent.has(def)) return false;
+    const t = info.schemes.get(def)?.type;
+    if (t?.t !== "fn" || t.eff.effs.includes(CHOICE)) return false;
+    // A row variable that is only the definition's own effect is pure (as
+    // in specAt); one shared with a function parameter may be Choice.
+    const rows = new Set<number>();
+    const collect = (x: Type) => {
+      if (x.t === "con") x.args.forEach(collect);
+      if (x.t !== "fn") return;
+      if (x.eff.tail !== null) rows.add(x.eff.tail);
+      if (x.eff.effs.includes(CHOICE)) rows.add(-1);
+      x.params.forEach(collect);
+      collect(x.ret);
+    };
+    t.params.forEach(collect);
+    collect(t.ret);
+    return !rows.has(-1) && (t.eff.tail === null || !rows.has(t.eff.tail));
+  };
+  // The nodes of such a definition that run once per call: not inside a
+  // lambda (other than a let's) or a handler. Fold arms are, once per item,
+  // and their binders are new each time.
+  const once = new Map<Id, Id>();
+  for (const def of code.defs) {
+    if (code.nodes[def]?.kind !== "def" || !inPlace(def)) continue;
+    const walk = (id: Id) => {
+      const n = code.nodes[id];
+      once.set(id, def);
+      if (handlerMatch(n)) return;
+      for (const c of children(n)) if (!(code.nodes[c].kind === "lambda" && !isLet(c))) walk(c);
+    };
+    walk(node<"lambda">(node<"def">(def).body!).body);
+  }
+  // A list parameter that is matched with a cons arm and used at most once.
+  const ownParamsMemo = new Map<Id, Id[]>();
+  function ownParams(def: Id): Id[] {
+    if (!ownParamsMemo.has(def)) {
+      const lam = node<"lambda">(node<"def">(def).body!);
+      ownParamsMemo.set(def, !inPlace(def) ? [] : lam.params.filter((p) => !walkable.has(p) && !growable.has(p) && usesOf(lam.body, p) <= 1 &&
+        subtree(code, lam.body).some((x) => {
+          const n = code.nodes[x];
+          return n.kind === "match" && once.has(x) && !handlerMatch(n) && code.nodes[n.scrutinee].kind === "ref" && node<"ref">(n.scrutinee).target === p && n.arms.some((a) => node<"arm">(a).variant === CONS);
+        })));
+    }
+    return ownParamsMemo.get(def)!;
+  }
+  // Is `b` not used on the run that reaches `at`, between `root` and it?
+  // The other arms of a match on the way are other runs.
+  function clearOf(at: Id, b: Id, root: Id): boolean {
+    for (let x = at; x !== root; ) {
+      const p = up.get(x)!, n = code.nodes[p];
+      for (const c of children(n)) {
+        if (c === x || (n.kind === "match" && c !== n.scrutinee)) continue;
+        if (n.kind === "match" && c === n.scrutinee && code.nodes[c].kind === "ref") continue;
+        if (mentions(c, b)) return false;
+      }
+      x = p;
+    }
+    return true;
+  }
+  // The arm, and the match, that bound `b` as the rest of a cons cell.
+  function restOf(b: Id): { arm: NodeOf<"arm">; m: NodeOf<"match">; cell: Id } | null {
+    const a = code.nodes[up.get(b)!];
+    if (a?.kind !== "arm" || a.variant !== CONS || a.binds[1] !== b) return null;
+    const m = code.nodes[up.get(a.id)!];
+    if (m?.kind !== "match" || handlerMatch(m) || code.nodes[m.scrutinee].kind !== "ref") return null;
+    return { arm: a, m, cell: node<"ref">(m.scrutinee).target };
+  }
+  // `own`: compiling the `$own` copy, whose own parameters are owned.
+  // `assume`: folds and definitions being checked, taken as owned
+  // (recursion).
+  function owned(id: Id, own: boolean, assume = new Set<Id>()): boolean {
+    const n = code.nodes[id];
+    if (!once.has(id)) return false;
+    if (n.kind === "ref") {
+      if (n.target === NIL) return true;
+      return ownedAt(n.target, id, own, assume);
+    }
+    if (n.kind === "call") {
+      const f = code.nodes[n.fn];
+      if (f.kind === "lambda") return owned(f.body, own, assume);
+      if (f.kind !== "ref") return false;
+      if (f.target === CONS) return !isConst(id) && owned(n.args[1], own, assume);
+      if (code.nodes[f.target]?.kind !== "def" || !inPlace(f.target)) return false;
+      return (!ownParams(f.target).length || ownCall(n, own, assume)) && returnsOwned(f.target, assume);
+    }
+    if (n.kind === "match") return !handlerMatch(n) && [...n.arms.map((a) => node<"arm">(a).body), ...(n.otherwise ? [n.otherwise] : [])].every((x) => owned(x, own, assume));
+    if (n.kind === "fold") {
+      if (assume.has(id)) return true;
+      const more = new Set(assume).add(id);
+      return n.arms.every((a) => owned(node<"arm">(a).body, own, more));
+    }
+    return false;
+  }
+  // Is binder `b` owned where `ref` uses it?
+  function ownedAt(b: Id, ref: Id, own: boolean, assume: Set<Id>): boolean {
+    if (walkable.has(b) || growable.has(b)) return false;
+    const p = code.nodes[up.get(b)!];
+    if (p?.kind === "lambda") {
+      if (isLet(p.id)) {
+        const call = node<"call">(up.get(p.id)!);
+        return usesOf(p.body, b) <= 1 && owned(call.args[p.params.indexOf(b)], own, assume);
+      }
+      const def = code.nodes[up.get(p.id)!];
+      return own && def?.kind === "def" && ownParams(def.id).includes(b);
+    }
+    if (p?.kind === "arm") {
+      if (p.results.includes(b)) {
+        const fold = up.get(p.id)!;
+        return usesOf(p.body, b) <= 1 && owned(fold, own, assume);
+      }
+      const r = restOf(b);
+      return !!r && usesOf(r.arm.body, b) <= 1 && clearOf(ref, r.cell, r.arm.body) && ownedAt(r.cell, r.m.scrutinee, own, assume);
+    }
+    return false;
+  }
+  // Does this call take the `$own` copy: every own parameter given an
+  // owned list?
+  function ownCall(n: NodeOf<"call">, own: boolean, assume = new Set<Id>()): boolean {
+    const def = node<"ref">(n.fn).target;
+    if (!inPlace(def) || !once.has(n.id)) return false;
+    const params = node<"lambda">(node<"def">(def).body!).params, mine = ownParams(def);
+    return mine.length > 0 && mine.every((p) => owned(n.args[params.indexOf(p)], own, assume));
+  }
+  // Does the `$own` copy of `def` return an owned list?
+  const returnsMemo = new Map<Id, boolean>();
+  function returnsOwned(def: Id, assume: Set<Id>): boolean {
+    if (returnsMemo.has(def)) return returnsMemo.get(def)!;
+    if (assume.has(def)) return true;
+    const r = inPlace(def) && owned(node<"lambda">(node<"def">(def).body!).body, true, new Set(assume).add(def));
+    if (!assume.size) returnsMemo.set(def, r);
+    return r;
+  }
+
   // Which arrays a binder can hold.
   type Kind = "front" | "back";
   const fits = (b: Id, kind: Kind) => (kind === "front" ? walkable : growable).has(b);
@@ -548,7 +721,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (kind && fits(params[i], kind)) arr.set(params[i], kind);
         });
       }
-      return specAt(f.id, f.target, rho, plain, arr);
+      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ownCall(n, sp.own));
     }
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
@@ -918,39 +1091,60 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // `out`: what to do with the value (return it, or put it in a
     // variable), and whether it's wanted as a JS boolean instead of Bool
     // data.
-    function ret(id: Id, tail = false, out: Out = RETURN): string {
+    // `reuse`: the matched cell `s`, owned, that a cons here may be built
+    // in (GAPS.md G25), if the run from `root` to it doesn't use `cell`.
+    function ret(id: Id, tail = false, out: Out = RETURN, reuse: Reuse | null = null): string {
+      // A field the reused cell already holds.
+      const same = (a: Id, i: number) => { const x = code.nodes[a]; return x.kind === "ref" && x.target === reuse?.binds[i]; };
       const n = code.nodes[id];
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
         const f = node<"lambda">(n.fn);
-        return f.params.map((p, i) => bindLet(p, letArg(p, n.args[i]))).join("") + ret(f.body, tail, out);
+        return f.params.map((p, i) => bindLet(p, letArg(p, n.args[i]))).join("") + ret(f.body, tail, out, reuse);
       }
       if (n.kind === "match") {
         if (handlerOf(n)) return out.leaf(out.bool ? `(${handleEx(n)}.tag === ${JSON.stringify(TRUE)})` : handleEx(n));
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
-          return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out)}\n}\n${ret(e, tail, out)}`)}`;
+          return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out, reuse)}\n}\n${ret(e, tail, out, reuse)}`)}`;
         }
         const s = temp("s");
-        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body, tail, out)}\n}`);
-        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail, out)}\n}`);
+        const scrut = code.nodes[n.scrutinee];
+        const mine = !sp.streams && once.has(id) && scrut.kind === "ref" && ownedAt(scrut.target, n.scrutinee, sp.own, new Set());
+        const cases = n.arms.map((a) => node<"arm">(a)).map((a) => {
+          const r = mine && a.variant === CONS ? { s, cell: (scrut as NodeOf<"ref">).target, root: a.body, binds: a.binds } : reuse;
+          return `case ${tag(a.variant)}: {${binds(a, s)}\n${ret(a.body, tail, out, r)}\n}`;
+        });
+        if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail, out, reuse)}\n}`);
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
       if (n.kind === "fold" && !out.bool) return out === RETURN ? foldLoop(n) : out.leaf(foldEx(n));
+      // A cons built in the matched cell, which nothing else holds.
+      const inCell = reuse && n.kind === "call" && code.nodes[n.fn].kind === "ref" && node<"ref">(n.fn).target === CONS && !isConst(id) &&
+        !mentions(id, reuse.cell) && clearOf(id, reuse.cell, reuse.root) ? reuse.s : null;
       if (tail && holes && holeCall(n)) {
         // Tail recursion modulo cons (G22): the cell is made now with its
         // last field empty, hung where the answer goes, and the loop runs
         // again to fill that field. Friedman and Wise, "Unwinding stylized
         // recursions into iterations" (1975); OCaml's [@tail_mod_cons].
         jumps = true;
-        const c = n as NodeOf<"call">, last = c.args.length - 1, cell = temp("cell");
+        const c = n as NodeOf<"call">, last = c.args.length - 1;
         const lam = node<"lambda">(d.body!);
         const fields = c.args.slice(0, last).map(ex);
         const args = argsOf(node<"call">(c.args[last]), sp);
         const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
-        return `const ${cell} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n` +
-          `${holes.at}.fields[${holes.i}] = ${cell};\n${holes.at} = ${cell};\n${holes.i} = ${last};\n` +
+        let cell = inCell;
+        const made = cell ? same(c.args[0], 0) ? "" : `${cell}.fields[0] = ${fields[0]};\n` : `const ${(cell = temp("cell"))} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n`;
+        // A reused cell is usually still where the last one points.
+        const hang = inCell ? `if (${holes.at}.fields[${holes.i}] !== ${cell}) ${holes.at}.fields[${holes.i}] = ${cell};` : `${holes.at}.fields[${holes.i}] = ${cell};`;
+        return made + `${hang}\n${holes.at} = ${cell};\n${holes.i} = ${last};\n` +
           `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+      }
+      if (inCell) {
+        const c = n as NodeOf<"call">, vs = c.args.map((a, i) => (same(a, i) ? null : [temp(i ? "t" : "h"), ex(a)]));
+        const set = vs.flatMap((v, i) => (v ? [`${inCell}.fields[${i}] = ${v[0]};`] : []));
+        const lets = vs.filter((v) => v).map((v) => `${v![0]} = ${v![1]}`);
+        return `${lets.length ? `const ${lets.join(", ")};\n` : ""}${set.join("\n")}\n${out.leaf(inCell)}`;
       }
       if (tail && selfCall(n)) {
         // The new arguments go into the loop's inputs, and the body runs

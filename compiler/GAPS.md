@@ -723,7 +723,13 @@ compile time: the accumulator of a fold whose step only passes it to a
 function that takes it apart and builds it again. Prior art: Koka's
 Perceus and "functional but in place" (Reinking, Xie, de Moura and Leijen,
 PLDI 2021; Lorenzen, Leijen and Swierstra, ICFP 2023), already the plan
-for native code. Design note first.
+for native code.
+**Done** (C20, COMPILER.md "Data"): `$own` copies of `add to` and `insert`
+change the matched cells. `by account` alone went from 35 to 25 ms on
+50,000 entries (the ideal takes 11 ms); the whole run is about 10%
+faster. What is left of the distance: a new `total` record per entry (the
+items of an owned list aren't owned yet), and the loop around each cell.
+calc's `tokens` reuses its accumulator's cells too.
 
 **G23. Folds from the end over a list built by cons walk its spine first
 (perf: four spines of every entry).** `by account`, `by month`, `smallest`

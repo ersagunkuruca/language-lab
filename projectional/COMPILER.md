@@ -379,7 +379,10 @@ What isn't a loop yet:
   itself as its last step (a self tail call: `run lines`, `lookup`, a loop
   written as tail recursion) compiles to a loop. Its parameters are the
   loop's inputs, and each pass binds them afresh, so a closure made in one
-  pass keeps that pass's values. Any other recursion is JS recursion, so it
+  pass keeps that pass's values. So does one whose last step puts the
+  call of itself in a constructor's last field (`cons(x, self(rest))`,
+  tail recursion modulo cons, GAPS.md G22): the cell is made with that
+  field empty and the loop fills it. Any other recursion is JS recursion, so it
   runs out of stack at a few thousand levels (calc's nested parentheses,
   GAPS.md G1). The evaluator has no such limit. The fix is the
   evaluator's (continuations on the heap) for the functions the checker
@@ -400,9 +403,24 @@ statements instead of building Bool data in a function called in place.
 Where such a function is used as a value (passed on, stored, exported) it's
 wrapped to give Bool data, like everywhere else. Constant data (a variant whose
 fields are all literals or constant data, such as a list of nullary
-variants) is built once, at module level, and shared: data is never
-changed in place (GAPS.md G9). The ids in `case` labels
+variants) is built once, at module level, and shared (GAPS.md G9). The ids in `case` labels
 carry the variant's name as a comment.
+
+Data is changed in place only where nothing else can see it (GAPS.md G25).
+A list is owned where the code holds the only reference to every cell of
+its spine: a fold's accumulator, a fresh `cons` onto an owned list, nil, or
+what an `$own` copy returns. A definition whose list parameter is matched
+and used at most once on any run gets an `$own` copy, which calls use when
+every such argument is owned. There, an arm whose run doesn't use the
+parameter again builds its `cons` in the matched cell, and the cell's rest
+is owned in turn. So `add to` in ledger updates its totals as it walks
+them, instead of copying the ones before. This is only done in
+definitions without `Choice` (an answer could run the rest twice), and
+never inside a lambda or a handler, which may run more than once. Constant
+data is never owned. Prior art: Koka's Perceus and "functional but in
+place" (Reinking, Xie, de Moura and Leijen, PLDI 2021; Lorenzen, Leijen and
+Swierstra, ICFP 2023), which find the same reuse with reference counts at
+run time; here it's decided at compile time.
 
 `equal` compiles by the type of what it compares: `===` for Text and Int,
 `$sameNumber` for Number, the runtime's `$eq` for anything else. A generic
