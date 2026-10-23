@@ -123,7 +123,9 @@ fold, and a let whose inputs are known is computed, not solved for). A
 the body says about the bound ports narrows the search. And every answer
 the equation solver gives is checked against the equations it came from: a
 step that is right in general can be wrong at a singular point (`y = x·tan θ`
-undoes `atan2` except at `x = 0`).
+undoes `atan2` except at `x = 0`). The search's step budget (`spend`) is
+carried in its state, so the solver spends it too: each answer it hands
+back is one step.
 
 ## Calculus on real functions (`examples/calculus`)
 

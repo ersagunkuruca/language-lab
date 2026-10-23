@@ -11,7 +11,7 @@ import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
-import { fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
+import { bool, fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
 import { CONS, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -292,4 +292,16 @@ test("whole-number sums and split run backwards, so counting words backwards doe
   assert.deepEqual([...relate(p.code, pieces, { out: toList(["a", "", "b"]) })].map((a) => shown(a, line)), ['"a  b"']);
   // A piece can't hold the separator: splitting "a b" wouldn't give it back.
   assert.deepEqual([...relate(p.code, pieces, { out: toList(["a b"]) })], []);
+});
+
+test("a search's step budget bounds the equation solver's work too", () => {
+  // safe(column, placed) = true, backwards: every list of queens, with
+  // equations growing per queen. The solver ran between the interpreter's
+  // steps without spending, so after eight answers it never came back.
+  const p = load("queens");
+  let steps = 0;
+  const answers = [...relate(p.code, p.named("safe"), { out: bool(true) }, { spend: () => ++steps <= 2000 })];
+  assert.ok(answers.length >= 5, `${answers.length} answers`);
+  // Once the budget is gone, each open branch asks once more and stops.
+  assert.ok(steps < 3000, `${steps} steps`);
 });
