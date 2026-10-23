@@ -39,7 +39,7 @@ import { chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel } from "./typed.ts";
-import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
+import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
 
@@ -620,14 +620,18 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: it.w, h: it.h } }); }
   const endItem = (e: End) => ("item" in e ? e.item : null);
   const drawn: { pts: ReturnType<typeof curvePoints> }[] = [];
+  const titles: Box[] = [...scene.frames.values()].map((f) => { const b = boxes.get(f.id)!; return { x: b.x + 6, y: b.y + 2, w: tw(f.title, 6.6) + 8, h: 16 }; });
   const all = [...scene.wires];
   // A frame's own result wire: from what it holds to its right edge.
   for (const f of scene.frames.values()) if (f.out) all.push({ from: f.out, to: { frameOut: f.id }, cls: "", flow: false });
   for (const w of all) {
     const a = point(w.from), b = point(w.to);
-    const pts = curvePoints(a.x, a.y, b.x, b.y, 28);
+    const ends = new Set([endItem(w.from), endItem(w.to)]);
+    const others = solid.filter((x) => !ends.has(x.key)).map((x) => x.box);
+    // Around the nodes in the way, where it can; under them (a tunnel) where not.
+    const { pts, bent } = route(a, b, others, drawn.map((d) => d.pts), titles);
     const hops = crossingsOf(pts, drawn.map((d) => d.pts));
-    const d = hops.length ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
+    const d = hops.length || bent ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
     drawn.push({ pts });
     if (w.use) {
       const on = hooks.selected === w.use.dot || hooks.selected === w.use.ref;
@@ -636,8 +640,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       wireG.append(s("path", { d, class: "edge-hit", "data-edge": w.edge }), s("path", { d, class: `tw ${w.cls}`, "data-edge": w.edge }));
     } else wireG.append(s("path", { d, class: `tw ${w.cls}` }));
     // Under a node: the hidden stretch, drawn faintly over it.
-    const ends = new Set([endItem(w.from), endItem(w.to)]);
-    for (const run of tunnels(pts, solid.filter((x) => !ends.has(x.key)).map((x) => x.box))) {
+    for (const run of tunnels(pts, others)) {
       marks.append(s("path", { d: `M${run.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}`, class: `tunnel${w.use ? " use" : ""}` }));
     }
   }

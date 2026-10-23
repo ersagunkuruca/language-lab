@@ -2,7 +2,7 @@
 // value chips that don't overlap, and tidy.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crossingsOf, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
+import { crossingsOf, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
 
 test("two crossing wires cross once, in the middle", () => {
   const a = curvePoints(0, 0, 200, 100), b = curvePoints(0, 100, 200, 0);
@@ -92,4 +92,18 @@ test("tidy reorders a column to cut crossings, and leaves an order with none alo
   // Already uncrossed: nothing moves.
   const settled = after.map((n) => ({ ...n }));
   assert.equal(tidy(settled, [], wires).size, 0);
+});
+
+test("a wire bends around a node in its way, and keeps its tunnel where it can't", () => {
+  const box = { x: 100, y: 40, w: 60, h: 40 };
+  const inside = (q: { x: number; y: number }) => q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h;
+  const around = route({ x: 0, y: 55 }, { x: 260, y: 65 }, [box]);
+  assert.ok(around.bent);
+  assert.ok(!around.pts.some(inside), "the wire still runs under the node");
+  assert.deepEqual(around.pts[0], { x: 0, y: 55 });
+  assert.deepEqual(around.pts.at(-1), { x: 260, y: 65 });
+  // Past the node and back again: nothing to go around by.
+  assert.equal(route({ x: 260, y: 60 }, { x: 0, y: 60 }, [box]).bent, false);
+  // Far off its line: it would stray too far, so it stays straight.
+  assert.equal(route({ x: 0, y: 60 }, { x: 260, y: 60 }, [{ x: 100, y: -100, w: 60, h: 400 }]).bent, false);
 });
