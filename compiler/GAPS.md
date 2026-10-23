@@ -757,6 +757,13 @@ push per item), or the matched-list part of G21 for `split`'s lines,
 which `entries` takes apart with `match`. This is the first program where
 an array from `split` reaches a `match` (also in `parse`, four levels deep
 on `split(line, ",")`).
+*Part done:* a list from `split` or `characters` taken apart by matches,
+whose cons arms only match the rest again, is an index into the array
+(`viewOf` in compile.ts): `parse` makes no cells, about 5 to 10% on the
+ledger (noisy). Left: `entries`, which hands the rest of its lines to
+itself, would need the `$arr` copy to take an array and an index, and the
+four folds from the end still walk a spine of cells, since `entries`
+builds its list with G22's holes.
 
 **G24. A Choice builtin with at most one answer is a generator under
 `first` (perf: once per entry).** `first(() => read whole number(field), …)`

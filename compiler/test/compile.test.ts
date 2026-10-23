@@ -285,6 +285,40 @@ test("a derivative of a function written in the program is compiled as its code,
   assert.equal([...(both.defs.unknown() as Iterable<number>)][0], want[0]);
 });
 
+test("a list from split taken apart by matches is an index into the array, with no cells (GAPS.md G23)", async () => {
+  const { TEXT_OPS: T, INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  // the second field of a comma line, or "none"
+  const second = k.def("second");
+  k.define(second, k.fn(["line"], (line) => k.match(k.call(T.split, line, k.lit(",")), [
+    { variant: NIL, names: [], body: () => k.lit("none") },
+    { variant: CONS, names: ["a", "rest"], body: ([, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => k.lit("none") },
+      { variant: CONS, names: ["b", "more"], body: ([b]) => b },
+    ]) },
+  ])));
+  // the rest is used whole, so it stays a list
+  const tail = k.def("tail count");
+  k.define(tail, k.fn(["line"], (line) => k.match(k.call(T.split, line, k.lit(",")), [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["a", "rest"], body: ([, rest]) => k.fold(rest, [
+      { variant: NIL, names: [], body: () => k.int(0) },
+      { variant: CONS, names: ["h", "t"], results: [null, "r"], body: (_, [, r]) => k.call(I.add, r!, k.int(1)) },
+    ]) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(...["a,b,c", "a", "", "x,y"].map((t) => k.call(second, k.lit(t))), ...["a,b,c", "a"].map((t) => k.call(I.show, k.call(tail, k.lit(t)))))));
+  const { code, info, source, defs } = await compiledDefs(k, ["main"], "views.js");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(fn("second"), /\.length\)/);
+  assert.doesNotMatch(fn("second"), /\.fields\[|\$impl/);
+  assert.doesNotMatch(fn("tail_count"), /\.length\)/);
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(main))][0]);
+  assert.deepEqual(want, ["b", "none", "none", "y", "2", "0"]);
+  assert.deepEqual(fromList(defs.main() as Value), want);
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");
