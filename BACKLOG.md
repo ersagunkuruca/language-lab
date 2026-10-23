@@ -6,7 +6,7 @@ priority order: a lane takes its top item that isn't running.
 
 First gathered 2026-10-23 from projectional/ROADMAP.md, NOTES.md, WEB.md,
 NUMBERS.md, COMPILER.md, REVIEW.md, REVIEW-2026-10-22b.md (R2), QA-2026-10-22.md,
-QA-2026-10-23.md (QA2), compiler/GAPS.md, the editor and compiler threads'
+QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), compiler/GAPS.md, the editor and compiler threads'
 queues, and Ersagun's messages in the project chat.
 
 **Status:** ▶ running (don't disturb) · ⏸ parked · blank = waiting.
@@ -26,6 +26,17 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E37 | Bug: the minimap draws frames as solid black boxes (the `<use>` copy misses the `.p-graph` fills), hiding the nodes | QA3 H1 | P1 | S | |
+| E38 | Bug: by touch, Pick keeps only one node: the long press also selects and drops earlier picks, so group tidy and move can't be done by touch | QA3 H2 | P1 | S | |
+| E39 | Keyboard: focus back to the program after any commit (a literal's Enter leaves it in the field); Enter on a call opens Change the function; Shift+F10 / Menu key opens the node menu | QA3 M5, M6 | P1 | M | |
+| E40 | Phone landscape and 600-900 px tablets still get the 3,091 px stacked page: one pane by height or `pointer: coarse` too | QA3 M1 | P2 | S | |
+| E41 | Phone: pinch zoom in the graph (only wheel zooms; nodes are ~24×15 px at Fit) | QA3 M2 | P2 | M | |
+| E42 | Phone: Undo in reach (top bar scrolls sideways, Undo off-screen) and touch wording (hints say right-click, hover, shift-click) | QA3 M3, M4 | P2 | S | |
+| E43 | Palette: typed arithmetic with names in scope (`x * 2` in `double(x)` finds nothing; only `1 + 2` works) | QA3 M7 | P2 | M | |
+| E44 | A long run freezes the page (Countdown main, 10 s with no repaint): run off the main thread or in slices, with a Stop | QA3 M8 | P2 | M | |
+| E45 | Folding polish: unfolding after a drag lands on other nodes; tidy with a folded box keeps the frame's empty space; a folded box names what it holds | QA3 L1, L2 | P3 | S | |
+| E46 | CPU picture blocky (ray marcher 51×51 stretched to 306 px): sharpen while still; shorter no-GPU status | QA3 L3 | P3 | S | |
+| E47 | First view of a big `main` lopsided (left 40% empty, Fit pill and minimap over nodes); `colour₁` name clash in ray marcher; dice page "1 rolls" and resets on program switch | QA3 L4, L5, L6 | P3 | S | |
 
 ## C: Compiler and targets
 
