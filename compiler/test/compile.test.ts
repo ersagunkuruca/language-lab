@@ -138,13 +138,13 @@ test("a function that may choose, given one that doesn't, gets a copy that calls
 
 // Real-sized data: a fold without Choice is a loop, so it needs no JS stack
 // per item, for chains (lists) and for trees.
-async function compiledDefs(k: Lang, exports: string[], file: string) {
+async function compiledDefs(k: Lang, exports: string[], file: string, steps?: boolean) {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const path = join(dir, file);
-  const source = compile(code, info, names, { runtime, exports });
+  const source = compile(code, info, names, { runtime, exports, steps });
   writeFileSync(path, source);
   return { code, info, names, source, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
 }
@@ -224,6 +224,29 @@ test("running out of fuel in plain code inside a search fails that branch only, 
   const want = fromList([...r.call(r.value(main))][0]);
   assert.deepEqual(want, [7]);
   assert.deepEqual(fromList(defs.main() as Value), want);
+});
+
+test("outside a page, only calls that can be under a `with fuel` spend (GAPS.md G1, fuel)", async () => {
+  const k = new Lang();
+  // counts down to 0, or forever below 0: the checker can't show it ends
+  const down = k.def("down");
+  k.define(down, k.fn(["x"], (x) => k.if(k.call(S.equal, x, k.lit(0)), x, k.call(down, k.call(B.sub, x, k.lit(1))))));
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["x"], (x) => k.call(B.add, k.call(down, x), k.call(down, x))));
+  const plain = k.def("plain");
+  k.define(plain, k.thunk(() => k.call(twice, k.lit(3))));
+  const p = await compiledDefs(k, ["plain"], "spend-none.js", false);
+  assert.doesNotMatch(p.source, /\$spend(OrThrow)?\(/);
+  assert.equal(p.defs.plain(), 0);
+  // a page's budget counts every call
+  assert.match((await compiledDefs(k, ["plain"], "spend-page.js")).source, /\$spendOrThrow\(\)/);
+  // under fuel, `down` spends, through `twice`
+  const fueled = k.def("fueled");
+  k.define(fueled, k.thunk(() => k.call(S.all, k.thunk(() => k.call(S.fuel, k.lit(50), k.thunk(() => k.call(twice, k.lit(-1))))))));
+  const f = await compiledDefs(k, ["plain", "fueled"], "spend-fuel.js", false);
+  assert.match(f.source, /\$spend(OrThrow)?\(/);
+  assert.equal(f.defs.plain(), 0);
+  assert.deepEqual(fromList(f.defs.fueled() as Value), []);
 });
 
 test("a fold whose answer is one record carries its fields in locals, and builds it once (GAPS.md G13 again)", async () => {
