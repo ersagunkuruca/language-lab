@@ -18,7 +18,6 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { smoothDerivative as hasSmoothDerivative } from "./derive.ts";
 import { BOOL, S, SET, SIGS } from "./std.ts";
-import type { Equality } from "./run.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
@@ -42,9 +41,6 @@ export interface Info {
   owner: Map<Id, Id>;
   // Definitions the palette doesn't offer: a module's helpers.
   hidden: Set<Id>;
-  // How numbers compare at each use of `equal` (a ref node), from the type
-  // compared there (run.ts, `Equality`).
-  equality: Map<Id, Equality>;
 }
 
 // pins: signatures that definitions must keep and callers see
@@ -63,7 +59,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const s = new Subst();
   if (reuse) s.next = reuse.from.subst.next;
   const owner = ownerOfTypeParts(code);
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), equality: new Map() };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []) };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -103,36 +99,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (params.has(n.target)) return params.get(n.target)!;
     if (isEffect(n.target)) err(id, `${nm(n.target)} is an effect, not a type of values`);
     return { t: "con", id: n.target, args: n.args.map((a) => typeExpr(a, params)) };
-  };
-
-  // Which numbers can be inside a value of type t: Numbers, Ints, or ones
-  // a type variable stands for. A data type is looked through to its
-  // fields; functions can't be compared, so they don't count.
-  const equalityAt = (t: Type): Equality => {
-    let num = false, int = false, open = false;
-    const seen = new Set<string>();
-    const asType = (id: Id, params: Map<Id, Type>): Type => {
-      const n = code.nodes[id];
-      if (n?.kind !== "tref") return { t: "fn", params: [], ret: { t: "var", v: -1 }, eff: { effs: [], tail: null } };
-      return params.get(n.target) ?? { t: "con", id: n.target, args: n.args.map((a) => asType(a, params)) };
-    };
-    const walk = (t: Type, depth: number) => {
-      if (t.t === "var") { open = true; return; }
-      if (t.t !== "con") return;
-      if (t.id === NUMBER) { num = true; return; }
-      if (t.id === INT) { int = true; return; }
-      const td = typedefOf(t.id);
-      if (!td || td.effect) { t.args.forEach((a) => walk(a, depth)); return; }
-      const key = `${t.id} ${JSON.stringify(t.args)}`;
-      if (seen.has(key)) return;
-      // A type that grows as it nests (Nest a = nest(a, Nest (List a))).
-      if (depth > 50) { open = true; return; }
-      seen.add(key);
-      const params = new Map(td.params.map((p, i) => [p, t.args[i] ?? { t: "var", v: -1 }] as const));
-      for (const { type } of fieldTypes(t.id)) walk(asType(type, params), depth + 1);
-    };
-    walk(t, 0);
-    return open || (num && int) ? "mixed" : num ? "near" : "exact";
   };
 
   // Instantiate a data type: its params as fresh variables, and each
@@ -621,7 +587,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.typeOf) {
     const n = code.nodes[id];
-    if (n?.kind === "ref" && n.target === S.equal && t.t === "fn" && t.params[0]) info.equality.set(id, equalityAt(t.params[0]));
   }
   worldUnderChoice(code, info, (id) => isEffect(owner.get(id) ?? ""), owner, nm, err);
   for (const h of info.holes.values()) {

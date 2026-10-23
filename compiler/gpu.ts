@@ -41,13 +41,16 @@ const cases: Case[] = [
   ...["calculus", "physics", "shaders", "raymarch"].map((name) => { const p = load(name); return { label: name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs }; }),
   (() => {
     const a = area();
-    // A loop: ∫ from x in `steps` strips of width w.
-    return { label: "area (tail recursion as a loop)", code: a.code, info: a.info, names: a.names, roots: [a.area], inputs: (f) => (f.name === "area" ? [[0, 0.01, 200, 0], [-1, 0.125, 16, 0], [1, 0.5, 4, 2]] : undefined) };
+    // A loop under a budget: ∫ from x in `steps` strips of width w. capped
+    // allows ten calls, so from ten strips on it gives its fallback, -1.
+    const strips = [[0, 0.01, 200], [-1, 0.125, 16], [1, 0.5, 4]], near = [[0, 0.25, 8], [0, 0.25, 9], [0, 0.25, 10], [1, 0.5, 11], [0, 0.25, 1e9]];
+    return { label: "area (tail recursion as a loop, under budgets)", code: a.code, info: a.info, names: a.names, roots: [a.integral, a.capped], inputs: (f) => (f.name === "integral" ? strips : f.name === "capped" ? near : undefined) };
   })(),
   (() => {
     const c = corners();
-    // gcd by subtraction only ends for positive whole numbers.
-    return { label: "corners", code: c.code, info: c.info, names: c.names, roots: Object.values(c.defs), inputs: (f) => (f.name === "gcd" ? [[12, 18], [7, 3], [5, 5], [1, 100]] : undefined) };
+    // gcd by subtraction only ends for positive whole numbers; under a
+    // budget of 1000 it gives 0 when it takes longer, or never ends.
+    return { label: "corners", code: c.code, info: c.info, names: c.names, roots: Object.values(c.defs), inputs: (f) => (f.name === "gcd of" ? [[12, 18], [7, 3], [5, 5], [1, 100], [1, 5000], [0.5, 1]] : undefined) };
   })(),
   (() => {
     const v = vectors();

@@ -39,8 +39,10 @@ has the detail):
    for each frame and handles a lost device (editor thread).
 2. **The shader profile refuses loops it can't see end**, instead of
    dropping `Diverge`.
-3. **Equality exact everywhere**, `near` as a function, backwards too, and
-   a round-tripping `show`.
+3. **Equality with one meaning**, backwards too, and a round-tripping
+   `show`. Done except `show`: one rule for every type rather than exact
+   everywhere, because solving over floats needs the tolerance (NOTES.md,
+   "Equality: one rule").
 4. **A backwards `one of` waits for its list**, and forward/backwards
    agreement over every example in CI.
 5. **Reading a formula stops hiding `Diverge`.**

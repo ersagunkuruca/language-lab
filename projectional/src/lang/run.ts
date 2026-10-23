@@ -47,30 +47,28 @@ export function fromList(v: Value): Value[] {
 // Numbers stand for reals and floats only approximate them, so two numbers
 // are equal when they agree to the precision floats carry. Otherwise a
 // predicate like distance = speed·time + ½·g·time² would be false for the
-// very values the solver found for it.
+// very values the solver found for it. `sameNumber` below says where.
 export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
-// An Int is a JS number too while it's a safe integer, so a value can't say
-// which of the two it is, and two Ints must not get the tolerance (10^12
-// and 10^12 + 1 are different counts). The checker knows the type at each
-// `equal` and picks how numbers in it compare (infer.ts, `equality`):
-// - "exact": there's no Number in the type, so every number is an Int;
-// - "near": there are Numbers in it and no Ints;
-// - "mixed": both, or a type variable that could be either. Two whole
-//   numbers compare exactly and anything else to within `close`. That's
-//   right for every Int, and for a Number only differs where both are
-//   whole and far beyond 10^9.
-export type Equality = "exact" | "near" | "mixed";
-
-const numbersEqual: Record<Equality, (a: number, b: number) => boolean> = {
-  exact: (a, b) => a === b,
-  near: close,
-  mixed: (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b)),
-};
+// How two numbers compare, one rule for every type, whichever way a
+// program runs: the evaluator, backwards (relate.ts unify) and compiled
+// (runtime.js $sameNumber, and scalar.ts for WASM and the GPU). Two whole
+// numbers are equal only when they're the same number, so every Int is
+// exact (an Int is a JS number while it's a safe integer, so a value can't
+// say which it is, and 10^12 and 10^12 + 1 are different counts). Any
+// other pair is equal within `close`, which is what solving equations
+// over floats needs: √2 squared is 2.0000000000000004.
+//
+// It used to be type-directed (near on Numbers, exact on Ints, this rule on
+// a type variable), so inlining a generic function changed answers, and
+// backwards every number was near (REVIEW-2026-10-22b.md §2). The price of
+// one rule: it isn't transitive (no tolerance is), so it isn't an
+// equivalence on fractional Numbers. NOTES.md "Equality".
+export const sameNumber = (a: number, b: number) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b));
 
 // With its own stack, so two long lists can be compared.
-export function equal(a: Value, b: Value, how: Equality = "mixed"): boolean {
-  const same = numbersEqual[how];
+export function equal(a: Value, b: Value): boolean {
+  const same = sameNumber;
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -252,12 +250,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
-  // `equal` as the checker typed it at each use.
-  const equals: Record<Equality, Fn> = {
-    exact: tag((a, b) => one(bool(equal(a, b, "exact"))), { prim: S.equal }),
-    near: tag((a, b) => one(bool(equal(a, b, "near"))), { prim: S.equal }),
-    mixed: builtins[S.equal],
-  };
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel, S.seeded].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
@@ -442,7 +434,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     atom(id: Id, env: Env): Value | undefined {
       const n = code.nodes[id];
       if (n.kind === "lit") return n.of === INT ? intLit(n.value) : n.value;
-      if (n.kind === "ref") return n.target === S.equal ? equals[info.equality?.get(id) ?? "mixed"] : refValue(n.target, env);
+      if (n.kind === "ref") return refValue(n.target, env);
       if (n.kind === "lambda") return closure(n, env);
       return undefined;
     }

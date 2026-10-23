@@ -1,9 +1,26 @@
-# Runs every test suite on pull requests. Pushes to main are tested by the
-# Pages build before it publishes.
+# Runs every test suite on pull requests.
+#
+# There is no deploy workflow: GitHub Pages ("Deploy from a branch", main,
+# root) publishes the repository as it is, and the editor build writes the
+# site's pages into it (index.html, tutorial.html, ...). So a pull request
+# must commit a fresh build, and this checks that it did. Before, a second
+# workflow rebuilt and retested everything on every push to main, which was
+# half the project's Actions minutes and often cancelled by the next merge.
 name: Tests
 
+# A pull request that only changes prose or pictures (a review, a QA
+# report, notes) has nothing to test, so it doesn't start a run. Markdown
+# that a build or test reads is the exception: TUTORIAL.md becomes
+# tutorial.html.
 on:
   pull_request:
+    paths:
+      - "**"
+      - "!**.md"
+      - "!**.png"
+      - "!**.jpg"
+      - "!**.gif"
+      - "projectional/TUTORIAL.md"
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +30,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A run takes about 8 minutes. A hang (a GPU test that never returns, a
+    # browser that never closes) stops at 20 instead of GitHub's 6 hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +47,10 @@ jobs:
         working-directory: projectional
         run: |
           npm run build-editor
+          git diff --exit-code --stat -- ../index.html ../tutorial.html ../reactive.html ../shaders.html ../apps || {
+            echo "::error::The committed site is older than the source. Run npm run build-editor in projectional/ and commit the pages it writes."
+            exit 1
+          }
           npm run smoke
           npm run smoke-shaders
       - name: invertible

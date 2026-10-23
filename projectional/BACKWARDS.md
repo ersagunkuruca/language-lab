@@ -54,7 +54,7 @@ node --test test/backwards.test.ts
 | `equal(a, b) = true` | compare | unify `a` and `b` |
 | `and`, `or`, `not` | evaluate | every row of the truth table that fits |
 | `range(n)` | `[0, …, n − 1]` | `n` is the list's length, once that's known |
-| `one of(list)` | each item | the value is somewhere in the list; if the list isn't known, lists that contain it, one length at a time |
+| `one of(list)` | each item | the value is somewhere in the list. It waits for each cell of the list to be known, so a list built by a later goal is searched once and a finite one fails finitely; a list that never becomes known is left as a residual |
 | `fail()` | no answers | no answers |
 | `solve` | a relation in a direction | the same as a call, read sideways: its given ports are inputs, its bound ports are unknowns |
 | `for some(f)` | is there an `x` with `f(x)`? (a search) | `x` is a fresh unknown, and `f(x)` must hold |
@@ -63,7 +63,8 @@ node --test test/backwards.test.ts
 ## What can't run backwards, and why
 
 The checker refuses the first and the last two before anything runs. The
-rest only run forward: they wait, inside the search, until what they need
+next three are refused, with their reason, when the search reaches them.
+The rest only run forward: they wait, inside the search, until what they need
 is known, and then run. An answer that leaves one of them waiting isn't
 pinned down, so the evaluator's `solve` doesn't count it (`relate` returns
 it with the wait in `residual`).
@@ -71,10 +72,13 @@ it with the wait in `residual`).
 | what | why |
 |---|---|
 | `print` | Printing can't be undone, and a search would print once per guess. The checker refuses to run a printing function backwards. |
+| the world's operations (`read file`, `write file`, `read line`, …) | The same reason as `print`: they can't be undone, and a search would do them once per guess. |
+| `cell`, `formula`, `read`, `write` | Cells are the runtime's state, kept by its handler, and only run forward. |
+| `seeded` | It answers `Random` from a generator. Backwards it would have to search the generator's seeds. |
 | `floor`, `mod` | Many inputs give the same output, a whole interval or every multiple of `b`. That's a continuum, not a list to choose from, so these wait until their input is known and only run forward. An answer whose input never becomes known keeps the constraint as a residual. |
 | `less` producing a number | `x < 3` has a continuum of answers, so comparisons only check. `magnitude` backwards works because its arms produce the numbers and the condition only rejects. |
 | calling an unknown function | Functions can't be enumerated. `map` runs backwards only when its function is given. |
-| `first`, `all`, `count` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |
+| `first`, `all`, `count`, `optional` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |
 | `with fuel` inside the function | Runs its action with its own budget once the action is known: each step of the search that might repeat forever spends one. |
 | `derivative` | Backwards it would be integration. Once its function is known it runs forward, so `slope(x) = derivative(y ↦ y·y)(x)` run backwards from 1 gives 0.5. |
 | a function, as an answer | It has no value outside the search to hand back, and functions can't be guessed. The checker refuses to solve for anything with a function in it. |
@@ -100,8 +104,24 @@ answers are skipped (the same rule `solve` already had for `0·x = 0`).
   Unification takes the pair apart and the solver eliminates the two
   equations together.
 - Running forward through the relational interpreter gives the same answers
-  as the evaluator (a test checks queens of 5 both ways). The evaluator in
-  `run.ts` is just the fast special case where inputs are always known.
+  as the evaluator. `test/agreement.test.ts` checks that for every pure
+  function of every example, on sample inputs, and also that backwards
+  from the result finds those inputs and only answers that run forward to
+  it. The evaluator in `run.ts` is just the fast special case where inputs
+  are always known.
+
+## Order of work
+
+What runs first decides whether a search ends, so the interpreter follows
+three rules. An argument computed only from known values runs first, in
+either direction: it's a value, where backwards it would be a guess
+(`polynomial([-2, 0, 1], x)` backwards builds the list before unfolding the
+fold, and a let whose inputs are known is computed, not solved for). A
+`solve` whose answer is known runs its body before its relation, so what
+the body says about the bound ports narrows the search. And every answer
+the equation solver gives is checked against the equations it came from: a
+step that is right in general can be wrong at a singular point (`y = x·tan θ`
+undoes `atan2` except at `x = 0`).
 
 ## Calculus on real functions (`examples/calculus`)
 

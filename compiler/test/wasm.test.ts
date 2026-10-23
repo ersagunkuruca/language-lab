@@ -49,14 +49,32 @@ test("what isn't in the profile is refused, with the reason", () => {
 
 test("tail calls are return_call: a million steps of recursion in constant stack", async () => {
   const a = area();
-  const lowered = lowerScalar(a.code, a.info, a.names, [a.area]);
+  const lowered = lowerScalar(a.code, a.info, a.names, [a.integral]);
   assert.deepEqual([...lowered.refused.keys()], []);
   const m = emitWasm(lowered);
   assert.match(m.wat, /return_call \$area/);
   const w = await instantiate(m);
   const r = makeRunner(a.code, a.info, { print: () => {} });
   // Small enough for the evaluator: the same number, exactly.
-  assert.ok(Object.is(w.area(0, 0.01, 200, 0), first(r.call(r.value(a.area), 0, 0.01, 200, 0))));
+  assert.ok(Object.is(w.integral(0, 0.01, 200), first(r.call(r.value(a.integral), 0, 0.01, 200))));
   // ∫₀² x³ − x − 1 dx = 4 − 2 − 2 = 0, in a million strips.
-  assert.ok(Math.abs(w.area(0, 2e-6, 1e6, 0)) < 1e-4);
+  assert.ok(Math.abs(w.integral(0, 2e-6, 1e6)) < 1e-4);
+});
+
+test("a loop that might not finish runs only under a budget, and runs out where the evaluator does", async () => {
+  const a = area();
+  const lowered = lowerScalar(a.code, a.info, a.names, [a.area, a.capped]);
+  // The loop itself isn't a place to start: its type has Diverge.
+  assert.match(lowered.refused.get(a.area)!, /may not finish \(its type has Diverge\)[\s\S]*with fuel/);
+  const m = emitWasm(lowered);
+  assert.deepEqual(m.exports, ["capped", "f"]);
+  const w = await instantiate(m);
+  const r = makeRunner(a.code, a.info, { print: () => {} });
+  // Ten calls: nine strips and the call that stops. Ten strips is one too many.
+  for (const steps of [0, 1, 9, 10, 11, 1e9]) {
+    const want = first(r.call(r.value(a.capped), 0, 0.25, steps));
+    assert.ok(Object.is(w.capped(0, 0.25, steps), want), `${steps} strips: ${w.capped(0, 0.25, steps)} in WASM, ${want} in the evaluator`);
+  }
+  assert.equal(w.capped(0, 0.25, 10), -1);
+  assert.notEqual(w.capped(0, 0.25, 9), -1);
 });
