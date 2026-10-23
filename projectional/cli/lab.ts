@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // lab: the language on the command line.
 //
-//   lab run <program> [arguments…]       run `main` with the evaluator
+//   lab run <program> [arguments…]       run `main` with the evaluator; a page
+//                                        prints as static HTML (WEB.md)
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
@@ -25,7 +26,10 @@ import { fromFile } from "../editor/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { mainProblem, pageProblem, runProgram } from "../src/lang/run.ts";
+import { equal, mainProblem, pageProblem, runMain, runProgram } from "../src/lang/run.ts";
+import { Cells } from "../src/lang/cells.ts";
+import { evaluatorCall, htmlText } from "../src/lang/html.ts";
+import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
@@ -33,7 +37,7 @@ import { compile } from "../../compiler/src/compile.ts";
 import { webPage } from "./web.ts";
 
 const USAGE = `usage:
-  lab run <program> [arguments…]        run main with the evaluator
+  lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab check <program>                   type-check, and list the definitions and their types
   lab build-web <program> [-o app.html] one HTML file running the page main returns
@@ -87,11 +91,14 @@ function represented(p: Program, main: Id): Program {
   return { ...p, code, info };
 }
 
+// `lab run` takes a page too: it prints, once, as static HTML.
+let staticPage = false;
 function entry(p: Program, name: string, web = false): Id {
   const errors = p.info.errors;
   if (errors.length) fail(`${p.title} has ${errors.length} error${errors.length === 1 ? "" : "s"}:\n${errors.map((e) => `  ${p.names[e.id] ?? e.id}: ${e.message}`).join("\n")}`);
   const def = p.own.find((d) => p.names[d] === name);
   if (!def) fail(`${p.title} has no definition named ${name}`);
+  if (!web && !pageProblem(p.info, def, p.names)) { staticPage = true; return def; }
   const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names);
   if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
@@ -172,6 +179,14 @@ const main = command === "run" || command === "compile" || command === "build-we
 const p = main && defined < 0 ? represented(loaded, main) : loaded;
 switch (command) {
   case "run": {
+    if (staticPage) {
+      // Every text, part and attribute called once, and the handlers left
+      // out: server-side rendering without a server.
+      const cells = new Cells(equal);
+      const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: nodeWorld() });
+      process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));
+      break;
+    }
     process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: nodeWorld() });
     break;
   }

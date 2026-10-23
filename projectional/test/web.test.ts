@@ -156,3 +156,14 @@ test("what a page's views and handlers may do is named once, and the runtime han
   // A view only reads: everything it may do, a handler may do too.
   for (const e of PAGE_VIEW) assert.ok(PAGE_HANDLER.includes(e), e);
 });
+
+test("lab run on a page prints it once as static HTML: values drawn, no script", () => {
+  const r = spawnSync(process.execPath, [lab, "run", join(import.meta.dirname, "../examples/converter")], { encoding: "utf8", cwd: dir });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^<!doctype html>/);
+  assert.match(r.stdout, /<input inputmode="decimal" spellcheck="false" value="20" aria-invalid="false">/);
+  assert.match(r.stdout, /value="68"/);
+  // A style sheet's text goes in as it is: entities aren't read there.
+  assert.match(r.stdout, /<style>[^<]*"Segoe UI"/);
+  assert.doesNotMatch(r.stdout, /<script/);
+});

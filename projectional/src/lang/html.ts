@@ -159,16 +159,19 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
 
 // The page as HTML text, every function called once: what a static site
 // is, and what the tests compare. Handlers are left out.
-export function htmlText(v: Value, call: Mount["call"]): string {
+export function htmlText(v: Value, call: Mount["call"], raw = false): string {
   const d = v as Data;
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   switch (d.tag) {
-    case HTML_V.text: return esc(String(call(d.fields[0])));
-    case HTML_V.part: return htmlText(call(d.fields[0]), call);
+    // Inside <style> and <script> text isn't read for entities: it goes in
+    // as it is, with only a closing tag kept from ending it early.
+    case HTML_V.text: { const t = String(call(d.fields[0])); return raw ? t.replace(/<\//g, "<\\/") : esc(t); }
+    case HTML_V.part: return htmlText(call(d.fields[0]), call, raw);
     case HTML_V.element: {
       const attrs = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.property)
         .map((a) => ` ${a.fields[0]}="${esc(String(call(a.fields[1])))}"`).join("");
-      return `<${d.fields[0]}${attrs}>${fromList(d.fields[2]).map((c) => htmlText(c, call)).join("")}</${d.fields[0]}>`;
+      const rawText = d.fields[0] === "style" || d.fields[0] === "script";
+      return `<${d.fields[0]}${attrs}>${fromList(d.fields[2]).map((c) => htmlText(c, call, rawText)).join("")}</${d.fields[0]}>`;
     }
     default: throw new Error(`not Html: ${d.tag}`);
   }

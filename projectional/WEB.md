@@ -86,9 +86,11 @@ same app, packaged.
   produces, so the field just keeps what was typed, marked invalid, and
   the cell doesn't change. Validation is free.
 - **Static sites?** The same value, printed. Rendering an `Html` with
-  every function called once is a fold to text; `lab run` on a page
-  program will print that (server-side rendering without a server). It is
-  listed here so the type doesn't rule it out, and comes after the app.
+  every function called once is a fold to text, and `lab run` on a page
+  program prints that: a whole HTML document, every text, part and
+  attribute drawn once, handlers left out (server-side rendering without
+  a server; `htmlText` in html.ts). Text inside `<style>` and `<script>`
+  goes in as it is, since entities aren't read there.
 - **Mobile?** Packaging, not language: the HTML file plus a web manifest is
   an installable PWA, and Capacitor (Ionic) wraps the same file as an iOS
   or Android app. Device features (camera, location, notifications) become
@@ -253,7 +255,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 
 Later, each on its own: reactive.html's programs moved onto `Html`; keyed
 lists (done: `for each`); `solve` over function values (done: the
-prelude's `inverse`); static output
+prelude's `inverse`); static output (done: `lab run`)
 from `lab run`; time, randomness and HTTP world effects; the editor
 showing a page program live, like its shader picture.
 

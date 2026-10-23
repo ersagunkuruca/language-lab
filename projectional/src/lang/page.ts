@@ -63,6 +63,12 @@ export function showPage(o: PageOptions): Preview {
 // and what the editor's "Save page" gives you. Nothing is loaded from
 // anywhere else.
 export function pageShell(title: string, ...scripts: string[]): string {
+  return pageDocument(title, "", ...scripts);
+}
+
+// The same document with `body` already drawn in it: `lab run` on a page
+// gives this with no scripts, the page as static HTML.
+export function pageDocument(title: string, body: string, ...scripts: string[]): string {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return `<!doctype html>
 <html lang="en">
@@ -73,7 +79,7 @@ export function pageShell(title: string, ...scripts: string[]): string {
 <!-- ${esc(title)}, built from a program in the language (projectional/WEB.md). -->
 </head>
 <body>
-${scripts.map((js) => `<script>${js.replace(/<\/script/gi, "<\\/script")}</script>`).join("\n")}
+${body ? `${body}\n` : ""}${scripts.map((js) => `<script>${js.replace(/<\/script/gi, "<\\/script")}</script>`).join("\n")}
 </body>
 </html>
 `;
