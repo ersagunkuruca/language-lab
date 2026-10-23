@@ -8,7 +8,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, sameLists, texts } from "../src/fixtures.ts";
+import { area, choices, closures, sameLists, searches, texts } from "../src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -94,8 +94,19 @@ function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "i32") return bool(x === 1);
   if (isFn(t)) throw new Error("no readers for functions");
   if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
-  const c = t.cases[helper(w, `${t.name}.case`, t.key)(x) as number];
-  return { tag: c.variant, fields: c.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${c.name}.${f.name}`, t.key)(x), f.t)) };
+  // Along a list's tails iteratively, so a long one needs no stack.
+  const top: Data = { tag: "", fields: [] };
+  let into = top, at = x;
+  for (;;) {
+    const c = t.cases[helper(w, `${t.name}.case`, t.key)(at) as number], last = c.fields.length - 1;
+    const read = (j: number) => helper(w, `${t.name}.${c.name}.${c.fields[j].name}`, t.key)(at);
+    const d: Data = { tag: c.variant, fields: c.fields.map((f, j) => (j === last && f.t === t ? null : fromWasm(w, read(j), f.t))) as Value[] };
+    into.fields.push(d);
+    if (last < 0 || c.fields[last].t !== t) return top.fields[0];
+    at = read(last);
+    d.fields.pop();
+    into = d;
+  }
 }
 
 test("data in WebAssembly: lists, expression trees, matches and folds give the evaluator's answers", async () => {
@@ -285,6 +296,80 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   // Past 2⁶³ an Int traps (big Ints are W5): reading one, or the smallest over -1.
   assert.throws(() => w["reread"](toText(w, "9223372036854775808")), WebAssembly.RuntimeError);
   assert.throws(() => w["quotient of"](-(2n ** 63n), -1n), WebAssembly.RuntimeError);
+});
+
+// A value as text without recursion, to compare long lists.
+function flat(v: unknown): string {
+  const out: string[] = [], todo: unknown[] = [v];
+  while (todo.length) {
+    const x = todo.pop();
+    if (x && typeof x === "object" && "tag" in x) { out.push(`(${(x as Data).tag}`); todo.push(")", ...[...(x as Data).fields].reverse()); }
+    else out.push(x === ")" ? ")" : typeof x === "bigint" ? `${x}n` : JSON.stringify(x) ?? "undefined");
+  }
+  return out.join(" ");
+}
+// A partial function's answer comes with its status; none is undefined, as first() of no answers.
+function answer(w: Exports, f: { partial?: boolean; result: LType }, got: unknown): Value | undefined {
+  if (!f.partial) return fromWasm(w, got, f.result);
+  const [v, status] = got as [unknown, number];
+  return status === 0 ? fromWasm(w, v, f.result) : undefined;
+}
+
+test("choosing one of a list in WebAssembly: a loop per choice, keep with a test that may have none, chapters' and calc's functions", async () => {
+  const p = searches();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  // The loop over the list is a tail call to itself, so long lists run in constant stack.
+  assert.match(m.wat, /return_call \$\w+choose\d+/);
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const lists = [[], ["1"], ["3", "x", "5", "2", "007", "9"], ["b", "a", "c"], ["é", "e", "🎉"], Array.from({ length: 2e4 }, (_, i) => String(i % 50))].map((xs) => toList(xs));
+  const short = lists.slice(0, 5);
+  const cases: Record<keyof typeof p.defs, Value[][]> = {
+    kept: lists.map((xs) => [xs]),
+    pairs: short.flatMap((xs) => short.map((ys) => [xs, ys])),
+    many: short.flatMap((xs) => short.map((ys) => [xs, ys])),
+    firstPair: short.flatMap((xs) => short.map((ys) => [xs, ys])),
+    some: short.flatMap((xs) => short.map((ys) => [xs, ys])),
+    read: lists.map((xs) => [xs]),
+    readCount: lists.map((xs) => [xs]),
+    // map is a recursion that isn't a tail call (not a fold), so short lists.
+    mapped: short.map((xs) => [xs]),
+    applied: ["", "12", "-3", "x", "05"].map((t) => [t]),
+  };
+  for (const [name, inputs] of Object.entries(cases)) {
+    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs) {
+      const want = first(r.call(r.value(def), ...xs));
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(want), `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
+    }
+  }
+  // Programs: every function of chapters and calc that takes texts, Ints and lists of texts.
+  const lines = ["# One", "## Two words here", "plain text, with words.", "", "   ", "#", "Ünïcode Héading 🎉", "1. numbered", "1 + 2*3", "(x - 4) / y", "  12.5^2 ", "a = 3", "!?"];
+  const pool: Record<string, Value[]> = { text: lines, i64: [0, 3, 12], "std.list<type.string<>>": [toList([]), toList(lines.slice(0, 4)), toList(lines)] };
+  for (const name of ["chapters", "calc"]) {
+    const q = load(name);
+    const l = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
+    assert.deepEqual([...l.refused.entries()].filter(([, why]) => /one of|Choice/.test(why)), [], `${name}: nothing refused for its searches`);
+    const wm = await instantiate(emitWasm(l)) as unknown as Exports;
+    const rr = makeRunner(q.code, q.info, { print: () => {} });
+    let compared = 0;
+    for (const f of l.funcs) {
+      const keys = f.params.map((t) => (typeof t === "string" ? t : t.key));
+      if (f.inner || !f.params.length || !keys.every((k) => pool[k])) continue;
+      const inputs = keys.reduce<Value[][]>((acc, k) => acc.flatMap((xs) => pool[k].map((v) => [...xs, v])), [[]]).slice(0, 60);
+      for (const xs of inputs) {
+        const want = first(rr.call(rr.value(f.def), ...xs));
+        const got = answer(wm, f, wm[f.name](...xs.map((x, i) => toWasm(wm, x, f.params[i]))));
+        assert.deepStrictEqual(got, want, `${name}: ${f.name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
+        compared++;
+      }
+    }
+    assert.ok(compared > 20, `${name}: ${compared} compared`);
+  }
 });
 
 test("what isn't in the profile is refused, with the reason", () => {

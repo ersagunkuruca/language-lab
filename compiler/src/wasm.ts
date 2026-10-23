@@ -203,7 +203,7 @@ export function emitWasm(lowered: Lowered): Module {
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
-    if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result)])];
+    if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
@@ -236,7 +236,7 @@ export function emitWasm(lowered: Lowered): Module {
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
   // Whether f needs a local for a status: it's partial, or has no answer
   // somewhere, or tries something that may have none.
-  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
+  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
 
   // f's code. `d` is how many blocks are open around e, and `fl` the
@@ -276,7 +276,8 @@ export function emitWasm(lowered: Lowered): Module {
       case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + 1)];
       case "apply": {
         const c = cloIndex.get(e.t.key)!;
-        return [...code1(e.fn), 0x21, ...u(e.tmp), 0x20, ...u(e.tmp), ...e.args.flatMap(code1), 0x20, ...u(e.tmp), 0xfb, 0x02, ...u(c), 0x00, e.tail && !f.partial ? 0x15 : 0x14, ...u(c + 1)];
+        const tail = e.tail && !!e.t.partial === !!f.partial;
+        return [...code1(e.fn), 0x21, ...u(e.tmp), 0x20, ...u(e.tmp), ...e.args.flatMap(code1), 0x20, ...u(e.tmp), 0xfb, 0x02, ...u(c), 0x00, tail ? 0x15 : 0x14, ...u(c + 1), ...(e.t.partial && !tail ? check(d, fl) : [])];
       }
       case "case": {
         // block $done; n blocks, innermost first jumped to by br_table on the
@@ -380,8 +381,8 @@ export function emitWasm(lowered: Lowered): Module {
       case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map(w), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
       case "cap": return [`${d}local.get ${local(f, 0)}`, `${d}ref.cast (ref ${sname(shapeIndex[e.shape])})`, `${d}struct.get ${sname(shapeIndex[e.shape])} ${e.i + 1}`].join("\n");
       case "apply": {
-        const c = cloIndex.get(e.t.key)!, t = local(f, e.tmp);
-        return [w(e.fn), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map(w), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${e.tail && !f.partial ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`].join("\n");
+        const c = cloIndex.get(e.t.key)!, t = local(f, e.tmp), tail = e.tail && !!e.t.partial === !!f.partial;
+        return [w(e.fn), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map(w), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${tail ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`, ...(e.t.partial && !tail ? check(ld) : [])].join("\n");
       }
       case "case": {
         const there = e.scrut.k === "local" && e.scrut.i === e.s;
@@ -423,7 +424,7 @@ export function emitWasm(lowered: Lowered): Module {
     ...(structs.length ? ["  (rec"] : []),
     ...structs.map((x) => {
       if (x.bytes) return "    (type $bytes (array (mut i8)))";
-      if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)})))`;
+      if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
