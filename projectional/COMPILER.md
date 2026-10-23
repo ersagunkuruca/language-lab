@@ -148,6 +148,65 @@ is per definition and doesn't look at what a caller passes, so a call of a
 "maybe more". A recursive call to the definition itself counts as one
 (GAPS.md G14).
 
+#### Planned: searches in continuation-passing style (GAPS.md G11)
+
+Generators cost the most in what's left. In Countdown, each answer of
+`results` resumes every `for … of … yield` between the answer and the
+search's handler, so its cost grows with the depth of the recursion. The
+hand-written ideal passes the rest of the search down as a function `k`
+and calls it once per answer: 116 ms for the generators, 40 ms for the
+ideal. The plan is a fourth kind of `Choice` function, built next to the
+generator one and not replacing it:
+
+- **The convention.** `name$k(args…, k)` calls `k(v)` once per answer, in
+  the order the generator would yield them. `k` returns `true` to say
+  "stop, I have what I need", and the function then returns `true`
+  straight away. When the search runs out it returns `false`. So a leaf
+  that would `yield v` becomes `if (k(v)) return true;`, and the end of
+  the body becomes `return false;`.
+- **Which calls use it.** A `Choice` definition called by name from compiled
+  code gets a `$k` copy as well. The copy is part of the spec key, like
+  `map$choice`. Everything that holds a `Choice` function as a value keeps
+  the generator: lambdas, parameters, `$many` builtins, exports, solves,
+  and the evaluator's copy of the program. Those are where other code
+  drives the search, and a callback can't be turned back into a lazy
+  generator without running it all first.
+- **Inside a `$k` body**, a call of another `Choice` definition, with the
+  rest of the body as its continuation `K`, becomes
+  `if (other$k(args…, (r) => { K })) return true;`. `K` is pasted in a
+  closure, so it may only assign locals, call `k`, or `return true`. That
+  is already all a continuation does inside a search, since a search's own
+  answers are its only way out. Loops over `$many` arrays and
+  single-answer calls (G14) stay as they are.
+- **Handlers** written in place call the `$k` copy with a small closure,
+  instead of an IIFE with a loop:
+  - `all`: `f$k(…, (v) => { out.push(v); })`.
+  - `count`: `n++`.
+  - `first` and `optional`: `f$k(…, (v) => { r = v; return true; })`,
+    and then the fallback if `r` is still `$no`. Stopping early stays early.
+  - `with fuel` keeps the generator, since the runtime drives it.
+- **What doesn't change.** The order of the answers, where side effects
+  happen, aborts (they are throws either way) and fuel (`$spend` before a
+  recursive call). Everything can still be checked against the evaluator.
+  The JS stack is about twice as deep as with generators, one closure per
+  level, so compiled programs keep running on the worker with the big stack
+  (G1).
+- **Tests.** The existing agreement and compile tests run every example
+  both ways. New ones: a `first` over a search that prints, which must stop
+  at the same answer the evaluator stops at; a search with no end under
+  `first`; and Countdown's numbers in GAPS.md.
+
+Not covered: `Choice` lambdas and parameters (`keep` with a choosing test,
+`map$choice`) stay generators. Covering them would need every `Choice`
+value in the program, and the runtime's, to use the `$k` convention. G13
+(a record that is taken apart as soon as it's returned) becomes two
+arguments to `k`, which this makes possible but doesn't do.
+
+Prior art: Mercury compiles nondeterministic code with success
+continuations, in the same way (Somogyi, Henderson and Conway, 1996). This
+is the reverse of Wadler's list of successes (1985), which is what the
+generators are. The implementation PR adds both to `CREDITS.md`.
+
 Effect polymorphism (`map : (List a, (a) -[e]-> b) -[e]-> List b`) is
 handled by **specializing on the one bit that matters**: does `e` include
 `Choice`? So `map` gets at most two copies, `map` and `map$choice`. The

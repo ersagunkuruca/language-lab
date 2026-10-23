@@ -348,6 +348,9 @@ search halfway: that needs either generators or an exception to unwind,
 so `first` would keep the generator form or throw a sentinel). This is the
 big one, and it changes the calling convention of a whole class of
 functions, so it needs its own design note in COMPILER.md before code.
+*Design note written:* COMPILER.md, "Planned: searches in
+continuation-passing style". Each definition gets a `$k` copy next to its
+generator, used by direct calls and handlers written in place.
 
 **G13. Records taken apart at once are still built (perf: part of G11's
 remainder).** `split` returns a `halves` and `results` a `found`, and the
@@ -503,6 +506,10 @@ length, so `slice(t, 0, 2)` of a 1.2 MB text with emoji went from 33 ms to
 the regex scan for wide characters is cheap. What's left is the compiler
 part, `startsWith` for a slice compared with a literal, and `length(t) > k`
 without the scan.
+I tried the `startsWith` part after that, and it compiles as planned
+(`line.startsWith("# ")`), but chapters didn't move beyond the noise once
+`slice` stopped scanning. It isn't merged; the code is too small to be
+worth carrying for no measured gain.
 
 **G16. Builders feed consumers through whole lists (perf: 51 → 43 ms for
 `words` alone).** `words` is `length(keep(split(line, " "), w ≠ ""))`: the
@@ -549,6 +556,8 @@ iterables too.
 Replacing it with `+` measured nothing here; V8 handles the check well.
 Ranges ("a count of things in memory is below 2^53") would remove it, but
 there's no measured reason to yet.
+Measured again after G15 and G17, with `acc + 1` for a fold that counts
+from 0: still within the noise (about 3% on 3000 chapters), so it stays.
 
 **G18. The Abort handler is a handler stack (perf: once per run, not
 measurable).** `main`'s `handle … abort(why) → …` pushes a handler, and
