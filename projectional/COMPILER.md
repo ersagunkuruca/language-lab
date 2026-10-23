@@ -192,6 +192,12 @@ went from 322 ms (2.9× the ideal) to 189 ms (1.5×):
   The JS stack is about twice as deep as with generators, one closure per
   level, so compiled programs keep running on the worker with the big stack
   (G1).
+- **Answers that are one record arrive as its fields.** When every answer
+  of a `$k` copy has the same one-case type, such as Countdown's
+  `found(expr, value)`, `k` takes the fields as separate arguments. A caller
+  that takes the record apart at once binds them directly, so the record is
+  never built. Where the rest keeps the record as a whole, its closure
+  builds it. This is G13: about 7% more on Countdown (198 → 185 ms).
 - **Copies nobody calls are left out.** Choosing a copy for a call makes
   that copy, so a search that is only ever called through `$k` would also
   have a generator. The module keeps only what its exports reach.

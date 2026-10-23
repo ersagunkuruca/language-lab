@@ -280,6 +280,22 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
   const isBool = (t: Type) => { const z = sub.zonk(t); return z.t === "con" && z.id === BOOL; };
   // A use of a copy as a value: Bool data out, as everywhere else.
+  // A `$k` copy whose answers are all one record (a type with one case,
+  // such as `found(expr, value)`) passes the record's fields to `k` instead
+  // of building it, and the caller's closure takes them apart for free
+  // (GAPS.md G13). The record is built only where something keeps it.
+  const unpackOf = (sp: Spec): Id | null => {
+    const t = info.schemes.get(sp.def)!.type;
+    const r = t.t === "fn" ? sub.zonk(t.ret) : null;
+    const d = r?.t === "con" ? code.nodes[r.id] : null;
+    const td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+    if (td?.kind !== "typedef" || td.effect || td.variants.length !== 1) return null;
+    const v = td.variants[0];
+    return v !== CONS && node<"variant">(v).fields.length > 0 ? v : null;
+  };
+  // What a JS expression is known to be: data just built, or a record whose
+  // fields arrived as separate arguments.
+  const pieces = new Map<string, { variant: Id; fields: string[] }>();
   const asValue = (s: Spec) => (s.bool ? `((...a) => $bool(${s.name}(...a)))` : s.single ? `$stream0(${s.name})` : s.name);
 
   // Does every path through this definition give one answer or none,
@@ -610,7 +626,25 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
     function construct(variant: Id, fields: string[]): string {
       if (variant === CONS) return `$cons(${fields.join(", ")})`;
-      return `({ tag: ${tag(variant)}, fields: [${fields.join(", ")}] })`;
+      const js = `({ tag: ${tag(variant)}, fields: [${fields.join(", ")}] })`;
+      pieces.set(js, { variant, fields });
+      return js;
+    }
+    // A record's fields as arguments for `k`, without building it again.
+    function fieldsFor(variant: Id, v: string): { pre: string; fields: string[] } {
+      const p = pieces.get(v);
+      if (p && p.variant === variant) return { pre: "", fields: p.fields };
+      const t = temp("t"), n = node<"variant">(variant).fields.length;
+      return { pre: `const ${t} = ${v};\n`, fields: Array.from({ length: n }, (_, i) => `${t}.fields[${i}]`) };
+    }
+    // A closure for the rest that takes a record's fields; the record is
+    // built in it only if the rest uses it as a whole.
+    function unpacked(variant: Id, r: string, k: K): string {
+      const fs = node<"variant">(variant).fields.map(() => temp("f"));
+      pieces.set(r, { variant, fields: fs });
+      const rest = k(r);
+      const whole = new RegExp(`(?<![\\p{L}\\p{N}_$])${r.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(rest);
+      return `(${fs.join(", ")}) => {\n${whole ? `const ${r} = ({ tag: ${tag(variant)}, fields: [${fs.join(", ")}] });\n` : ""}${rest}\n}`;
     }
     function fieldIndex(field: Id): number {
       const def = info.owner.get(field)!;
@@ -1089,8 +1123,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const r = temp("r");
           if (callee?.single) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
-            const viaK = spec(callee.def, callee.rho, callee.plain, true);
-            out = `if (${viaK.name}(${[...args, `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
+            const viaK = spec(callee.def, callee.rho, callee.plain, true), rec = unpackOf(viaK);
+            out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = k(c);
         // Out of fuel: this call has no result, the others carry on.
@@ -1099,7 +1133,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     function stMatch(n: NodeOf<"match">, k: K): string {
-      return parts([n.scrutinee], ([s]) => branch(k, (y) => {
+      return parts([n.scrutinee], ([s]) => {
+        // A record that arrived as its fields: the one arm that can match,
+        // bound straight from them.
+        const p = pieces.get(s), arm = p && n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === p.variant);
+        if (p && arm && /^[\p{L}\p{N}_$]+$/u.test(s)) return `{${arm.binds.map((b, i) => (referenced.has(b) ? `\nconst ${local(b)} = ${p.fields[i]};` : "")).join("")}\n${st(arm.body, k)}\n}`;
+        return stMatchCases(n, k, s);
+      });
+    }
+    function stMatchCases(n: NodeOf<"match">, k: K, s: string): string {
+      return branch(k, (y) => {
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
           const c = code.nodes[n.scrutinee].kind === "call" && !streamy(n.scrutinee) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
@@ -1109,7 +1152,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${tag(a.variant)}: {${binds(a, v)}\n${st(a.body, y)}\nbreak;\n}`);
         if (n.otherwise) cases.push(`default: {\n${st(n.otherwise, y)}\n}`);
         return `{\nconst ${v} = ${s};\nswitch (${v}.tag) {\n${cases.join("\n")}\n}\n}`;
-      }));
+      });
     }
 
     // A fold with Choice: a local generator; each combination of the
@@ -1162,7 +1205,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
       if (sp.cps) {
         const k = temp("k");
-        return `${header} (the rest of the search as \`${k}\`)\nfunction ${sp.name}(${[...lam.params.map(local), k].join(", ")}) {\n${scoped(true, () => st(lam.body, (v) => `if (${k}(${v})) return true;`))}\nreturn false;\n}`;
+        const rec = unpackOf(sp);
+        const leaf = (v: string) => {
+          if (!rec) return `if (${k}(${v})) return true;`;
+          const { pre, fields } = fieldsFor(rec, v);
+          return `${pre}if (${k}(${fields.join(", ")})) return true;`;
+        };
+        return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...lam.params.map(local), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
       }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
       const stmts = ret(lam.body, true, sp.bool ? RETURN_BOOL : RETURN);
