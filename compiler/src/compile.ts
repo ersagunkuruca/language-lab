@@ -937,6 +937,21 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
       if (n.kind === "fold" && !out.bool) return out === RETURN ? foldLoop(n) : out.leaf(foldEx(n));
+      if (tail && holes && holeCall(n)) {
+        // Tail recursion modulo cons (G22): the cell is made now with its
+        // last field empty, hung where the answer goes, and the loop runs
+        // again to fill that field. Friedman and Wise, "Unwinding stylized
+        // recursions into iterations" (1975); OCaml's [@tail_mod_cons].
+        jumps = true;
+        const c = n as NodeOf<"call">, last = c.args.length - 1, cell = temp("cell");
+        const lam = node<"lambda">(d.body!);
+        const fields = c.args.slice(0, last).map(ex);
+        const args = argsOf(node<"call">(c.args[last]), sp);
+        const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
+        return `const ${cell} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n` +
+          `${holes.at}.fields[${holes.i}] = ${cell};\n${holes.at} = ${cell};\n${holes.i} = ${last};\n` +
+          `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+      }
       if (tail && selfCall(n)) {
         // The new arguments go into the loop's inputs, and the body runs
         // again with them: no JS stack (COMPILER.md, stage 2½).
@@ -960,6 +975,27 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // A call of this very specialization of the definition.
     let jumps = false;
+    // Where the answer goes, when the definition fills holes (G22): the
+    // last cell made and which of its fields is empty.
+    let holes: { at: string; i: string } | null = null;
+    // A constructor (not an effect) whose last field is a call of the
+    // definition to itself.
+    function holeCall(n: Node): boolean {
+      if (n.kind !== "call" || !n.args.length) return false;
+      const f = code.nodes[n.fn];
+      if (f.kind !== "ref" || code.nodes[f.target].kind !== "variant" || effectOf(f.target)) return false;
+      return selfCall(code.nodes[n.args[n.args.length - 1]]);
+    }
+    // Is there one in a tail position of `id`? The same positions as ret's.
+    function fillsHoles(id: Id): boolean {
+      const n = code.nodes[id];
+      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return fillsHoles(node<"lambda">(n.fn).body);
+      if (n.kind === "match") {
+        if (handlerOf(n)) return false;
+        return n.arms.some((a) => fillsHoles(node<"arm">(a).body)) || (!!n.otherwise && fillsHoles(n.otherwise));
+      }
+      return holeCall(n);
+    }
     function selfCall(n: Node): boolean {
       if (n.kind !== "call") return false;
       const f = code.nodes[n.fn];
@@ -1518,14 +1554,26 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...lam.params.map(local), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
       }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
-      const stmts = ret(lam.body, true, sp.bool ? RETURN_BOOL : RETURN);
+      // A definition that fills holes returns the first cell it made, kept
+      // in a field of a cell made up for it; every other answer goes into
+      // the last hole.
+      let start = "";
+      let out = sp.bool ? RETURN_BOOL : RETURN;
+      if (!sp.bool && fillsHoles(lam.body)) {
+        const top = temp("top");
+        holes = { at: temp("at"), i: temp("i") };
+        start = `const ${top} = { fields: [undefined] };\nlet ${holes.at} = ${top}, ${holes.i} = 0;\n`;
+        const { at, i } = holes;
+        out = { bool: false, leaf: (js) => `${at}.fields[${i}] = ${js};\nreturn ${top}.fields[0];` };
+      }
+      const stmts = ret(lam.body, true, out);
       // Self tail calls jump: the parameters become the loop's inputs, and
       // each pass binds them afresh, so a function made in one pass keeps
       // that pass's values.
       if (jumps) {
         const ins = lam.params.map((p) => `${local(p)}$in`).join(", ");
         const fresh = lam.params.length ? `const ${lam.params.map((p) => `${local(p)} = ${local(p)}$in`).join(", ")};\n` : "";
-        return `${header}\nfunction ${sp.name}(${ins}) {\nfor (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
+        return `${header}\nfunction ${sp.name}(${ins}) {\n${start}for (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
       }
       return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
     }

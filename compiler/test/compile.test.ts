@@ -390,6 +390,26 @@ test("a self tail call compiles to a loop: a million steps, and each step's clos
   assert.deepEqual(fromList(defs.small() as Value), fromList([...r.call(r.value(small))][0]));
 });
 
+test("a recursion that builds a list fills holes in a loop: a million cells on the default stack (GAPS.md G22)", async () => {
+  const k = new Lang();
+  // the numbers from n to stop, skipping multiples of 3: cons(n, self(…)),
+  // and a plain self tail call on the skipped ones
+  const upto = k.def("upto");
+  k.define(upto, k.fn(["n", "stop"], (n, stop) => k.if(k.call(S.less, stop, n), NIL,
+    k.if(k.call(S.equal, k.call(S.mod, n, k.lit(3)), k.lit(0)), k.call(upto, k.call(B.add, n, k.lit(1)), stop),
+      k.call(CONS, n, k.call(upto, k.call(B.add, n, k.lit(1)), stop))))));
+  const small = k.def("small");
+  k.define(small, k.thunk(() => k.call(upto, k.lit(1), k.lit(10))));
+  const { code, info, source, defs } = await compiledDefs(k, ["upto", "small"], "holes.js");
+  assert.match(source.slice(source.indexOf("function upto(")), /^[^]*?fields: \[n, undefined\][^]*?continue;/);
+  const many = fromList(defs.upto(1, 1_000_000) as Value) as number[];
+  assert.equal(many.length, 666667);
+  assert.deepEqual([many[0], many[1], many.at(-1)], [1, 2, 1_000_000]);
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.deepEqual(fromList(defs.small() as Value), [1, 2, 4, 5, 7, 8, 10]);
+  assert.deepEqual(fromList(defs.small() as Value), fromList([...r.call(r.value(small))][0]));
+});
+
 test("a fold over a deep tree compiles to a loop with its own stack, children first", async () => {
   const k = new Lang();
   const tree = k.type("tree", [], [["leaf", [["n", () => k.tref("type.number")]]], ["node", [["l", (self) => k.tref(self)], ["r", (self) => k.tref(self)]]]]);
