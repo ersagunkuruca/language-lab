@@ -255,6 +255,36 @@ test("a fold whose answer is one record carries its fields in locals, and builds
   assert.deepEqual(fromList(defs.main() as Value), ["hands([0, 2, 4], [1, 3])", "hands([1, 4], [0, 3])"]);
 });
 
+test("a derivative of a function written in the program is compiled as its code, with no run-time help", async () => {
+  const program = (withUnknown: boolean) => {
+    const k = new Lang();
+    const cube = k.def("cube");
+    k.define(cube, k.fn(["x"], (x) => k.call(B.add, k.call(B.mul, x, k.call(B.mul, x, x)), k.call(B.sin, x))));
+    const known = k.def("known");
+    k.define(known, k.thunk(() => k.list(k.call(k.call(S.derivative, k.x(cube)), k.lit(2)), k.call(k.call(S.derivative, k.fn(["x"], (x) => k.call(B.mul, x, x))), k.lit(3)))));
+    if (withUnknown) {
+      // known only when called: still the runtime's
+      const slope = k.def("slope");
+      k.define(slope, k.fn(["f", "x"], (f, x) => k.call(k.call(S.derivative, f), x)));
+      const unknown = k.def("unknown");
+      k.define(unknown, k.thunk(() => k.call(slope, k.x(cube), k.lit(2))));
+    }
+    return { k, known, unknown: k.code.defs.find((d) => k.names[d] === "unknown") };
+  };
+  const one = program(false);
+  const { code, info, source, defs } = await compiledDefs(one.k, ["known"], "derived.js");
+  assert.doesNotMatch(source, /\$derivative\(|\$loadProgram/);
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(one.known))][0]);
+  assert.deepEqual(want, [12 + Math.cos(2), 6]);
+  assert.deepEqual(fromList(defs.known() as Value), want);
+  const two = program(true);
+  const both = await compiledDefs(two.k, ["known", "unknown"], "derived-both.js");
+  assert.match(both.source, /\$derivative\(/);
+  assert.deepEqual(fromList(both.defs.known() as Value), want);
+  assert.equal([...(both.defs.unknown() as Iterable<number>)][0], want[0]);
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");
