@@ -1042,7 +1042,16 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const order = [...(head ? ["functions"] : []), "in scope", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
   const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
-  const shown = all.filter(({ l }) => !q || l.some((s) => s.toLowerCase().includes(q)));
+  // Searching: names that are the text, then start with it, then have a
+  // word starting with it, then contain it, and only then entries whose
+  // type or description mentions it. Within each, the usual order.
+  const rank = (l: [string, string, string]) => {
+    const name = l[0].toLowerCase();
+    return name === q || name.startsWith(`${q}(`) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) ? 2 : name.includes(q) ? 3 : 4;
+  };
+  const shown = !q ? all : all.filter(({ l }) => l.some((s) => s.toLowerCase().includes(q))).map((x) => ({ ...x, r: rank(x.l) })).sort((a, b) => a.r - b.r);
+  // Unsearched, the first 40 (the rest are a search away); searched, all.
+  const cap = q ? shown.length : 40;
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
   input.addEventListener("input", () => {
     ui.query = input.value;
@@ -1066,12 +1075,13 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(h("div", { class: "pal-g" }, "the value typed"), b);
   }
   let group = "";
-  for (const x of shown.slice(0, 40)) {
+  for (const x of shown.slice(0, cap)) {
     if (x.l[2] !== group) { group = x.l[2]; list.append(h("div", { class: "pal-g" }, group)); }
     const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, x.l[0]), h("span", { class: "opt-d" }, x.l[1]));
     b.addEventListener("click", () => run(x));
     list.append(b);
   }
+  if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
   if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values can be typed too: 3, \"text\", [1, 2]."));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
