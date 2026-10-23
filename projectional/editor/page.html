@@ -401,6 +401,8 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .reroute.silent { fill: var(--canvas); stroke: var(--dot); stroke-width: 1.5; cursor: default; }
 .tgraph .reroute.sel { stroke: var(--accent); stroke-width: 3; }
 .tgraph .dotl { fill: var(--dot); font: 600 11.5px var(--font-ui); pointer-events: none; }
+/* Labels that sit on the canvas keep a halo of it, so a wire under one doesn't cross it out. */
+.tgraph .dotl, .tgraph .halo { paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round; }
 .tgraph .dotl.anon { fill: var(--muted); font-weight: 400; }
 .tgraph .tw.use { stroke: var(--wire); stroke-width: 1.8; pointer-events: none; }
 .tgraph .tw.use.lit { stroke: var(--accent); stroke-width: 2.6; }

@@ -1495,6 +1495,7 @@ let graph: GraphView | null = null;
 // Nodes to bring on screen once the next render has drawn them: what an
 // edit just put somewhere the window may not reach.
 let revealNext: ((id: Id) => boolean) | null = null;
+const WHOLE = () => true;
 function revealDrawn() {
   if (!revealNext) return;
   // After the frame, so the graph drawn last (a gesture may render twice)
@@ -1502,7 +1503,7 @@ function revealDrawn() {
   requestAnimationFrame(() => {
     const want = revealNext, g = graph;
     revealNext = null;
-    if (want && g) g.reveal([...g.world.querySelectorAll("[data-id]")].filter((e) => want(e.getAttribute("data-id")!)));
+    if (want && g) g.reveal(want === WHOLE ? [g.world] : [...g.world.querySelectorAll("[data-id]")].filter((e) => want(e.getAttribute("data-id")!)));
   });
 }
 function graphOf(info: T.Info): HTMLElement {
@@ -1645,7 +1646,8 @@ function toggleInline(call: Id) {
   // Collapsing a call collapses what was shown inline inside it too.
   const inline = on ? now.filter((x) => x !== call && !x.endsWith(`~${call}`)) : [...now, call];
   ui.selected = call;
-  if (!on) revealNext = (id) => id === call || id.endsWith(`~${call}`);
+  // The whole graph, which grows (or shrinks) by the callee's body.
+  revealNext = WHOLE;
   commit({ layout: { ...doc.layout, inline } }, ["layout.json"],
     on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
 }

@@ -655,12 +655,12 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   const nameG = s("g");
   for (const f of scene.frames.values()) f.binders.forEach((bd, i) => {
     const p = point({ frame: f.id, port: i });
-    nameG.append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl" }, f.labels[i]));
+    nameG.append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl halo" }, f.labels[i]));
   });
 
   // The definition's result.
   const out = s("g");
-  if (scene.result) { const r = point(scene.result); out.append(s("text", { x: r.x + 8, y: r.y + 4, class: "portl" }, "result")); }
+  if (scene.result) { const r = point(scene.result); out.append(s("text", { x: r.x + 8, y: r.y + 4, class: "portl halo" }, "result")); }
 
   // Values: chips near the output they label, placed where they cover no
   // node and no other chip. With no room, a chip shrinks to a dot; hover it.

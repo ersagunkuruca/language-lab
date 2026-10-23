@@ -143,13 +143,23 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     const place = (room: number, size: number, at: number) => (size * z <= room - 32 ? (room - size * z) / 2 : 16) - at * z;
     set({ z, x: place(r.width, b.width, b.x), y: place(r.height, b.height, b.y) });
   };
-  // Reveal: pan the least that brings these on screen (their top-left
-  // corner first, if they're bigger than the window).
+  // Reveal: pan the least that brings these on screen. Bigger than the
+  // window (a call shown inline grows by its callee's body), zoom out first,
+  // as far as READABLE; past that, their top-left corner comes first.
   const reveal = (els: Element[]) => {
     if (!els.length || !view) return;
     const r = root.getBoundingClientRect(), m = 24;
     const bs = els.map((e) => e.getBoundingClientRect());
     const box = { l: Math.min(...bs.map((b) => b.left)), t: Math.min(...bs.map((b) => b.top)), r: Math.max(...bs.map((b) => b.right)), b: Math.max(...bs.map((b) => b.bottom)) };
+    const f = Math.min((r.width - 2 * m) / (box.r - box.l), (r.height - 2 * m) / (box.b - box.t));
+    if (f < 1 && view.z > READABLE) {
+      // Zoom about the box's centre, then pan as below.
+      const z = Math.max(READABLE, view.z * f), k = z / view.z;
+      const cx = (box.l + box.r) / 2 - r.left, cy = (box.t + box.b) / 2 - r.top;
+      set({ z, x: cx - (cx - view.x) * k, y: cy - (cy - view.y) * k });
+      const w = (box.r - box.l) * k, hgt = (box.b - box.t) * k;
+      Object.assign(box, { l: r.left + cx - w / 2, r: r.left + cx + w / 2, t: r.top + cy - hgt / 2, b: r.top + cy + hgt / 2 });
+    }
     const shift = (lo: number, hi: number, min: number, max: number) => (hi > max - m ? Math.max(max - m - hi, min + m - lo) : lo < min + m ? min + m - lo : 0);
     const dx = shift(box.l, box.r, r.left, r.right), dy = shift(box.t, box.b, r.top, r.bottom);
     if (dx || dy) set({ ...view, x: view.x + dx, y: view.y + dy });
