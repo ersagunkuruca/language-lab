@@ -247,7 +247,14 @@ numbers, any chain), the generated code walks down the spine into an array
 and then runs one `step` function per item back up it. For trees it keeps
 an explicit stack of values whose children are still being folded. Either
 way the arms are run children first, as the evaluator does. A million-item
-fold and a 100,000-deep tree are in the tests.
+fold and a 100,000-deep tree are in the tests. One kind of chain fold needs
+no spine: when the recursive case adds an item to the rest with Int `+`
+(or multiplies with Int `×`), maybe only when a test holds (`if item < 3
+then rest + 1 else rest`), and the items, tests and other case have no
+effects, it runs from the front into an accumulator. Exact Int `+` and `×`
+don't care about order, and nothing can see the order of effect-free
+items. Number `+` keeps the spine: floating point isn't associative. This
+is how `length`, sums and counts compile (compiler/GAPS.md, G15).
 
 These loops are the fold job of one representation, `cells` (values stored
 as linked objects, the way the definition is written). How a fold runs is
