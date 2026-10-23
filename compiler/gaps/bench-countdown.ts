@@ -15,13 +15,14 @@ const time = (f: () => unknown, runs: number) => {
 const ms = (x: number) => `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`.padStart(10);
 
 console.log(`countdown: every solution (in one process)\n`);
-console.log(`${"instance".padEnd(28)} ${"answers".padStart(7)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal`);
+console.log(`${"instance".padEnd(28)} ${"answers".padStart(7)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"wasm".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal  wasm/ideal`);
 for (const [numbers, target] of instances) {
   const want = w.ideal(numbers, target);
   assert.deepEqual(w.compiled(numbers, target), want);
+  assert.deepEqual(w.wasm(numbers, target), want);
   const small = numbers.length <= 5;
   if (small) assert.deepEqual(w.evaluator(numbers, target), want);
   const ev = small ? time(() => w.evaluator(numbers, target), 1) : NaN;
-  const c = time(() => w.compiled(numbers, target), 5), i = time(() => w.ideal(numbers, target), 5);
-  console.log(`${`${numbers.join(" ")} → ${target}`.padEnd(28)} ${String(want.length).padStart(7)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(i)}  ${(c / i).toFixed(1)}×`);
+  const c = time(() => w.compiled(numbers, target), 5), wa = time(() => w.wasm(numbers, target), 5), i = time(() => w.ideal(numbers, target), 5);
+  console.log(`${`${numbers.join(" ")} → ${target}`.padEnd(28)} ${String(want.length).padStart(7)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(wa)} ${ms(i)}  ${`${(c / i).toFixed(1)}×`.padStart(14)}  ${(wa / i).toFixed(1)}×`);
 }

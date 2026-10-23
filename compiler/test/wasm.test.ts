@@ -8,7 +8,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, runMain, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, sameLists, searches, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, closures, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -551,4 +551,45 @@ test("whole programs as WASI commands: files, console, arguments and exit codes 
   }
   rmSync(scratch, { recursive: true });
   assert.equal(runs, programs.length * argsets.length * 2);
+});
+
+// Searches with several answers inside called functions (W4d): each
+// function that chooses takes the rest of the search, so the answers come
+// in the evaluator's order, and queens runs whole.
+test("several answers in WebAssembly: choices in called functions, arguments and folds, under each handler; queens' main as the evaluator's", async () => {
+  const p = several();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const lists = [[], [1], [3, -2, 5], [4, 1, 2, 8], Array.from({ length: 12 }, (_, i) => (i * 7) % 11)].map((xs) => toList(xs));
+  const cases: Record<keyof typeof p.defs, Value[][]> = {
+    firstBig: lists.flatMap((xs) => [0, 5, 13, 100].map((n) => [xs, n])),
+    allSums: lists.map((xs) => [xs]),
+    pairs: lists.slice(0, 4).flatMap((xs) => lists.slice(0, 4).map((ys) => [xs, ys])),
+    howMany: lists.map((xs) => [xs]),
+    some: lists.flatMap((xs) => [0, 4, 9].map((n) => [xs, n])),
+    checked: lists.map((xs) => [xs]),
+    caught: lists.map((xs) => [xs]),
+  };
+  let compared = 0;
+  for (const [name, inputs] of Object.entries(cases)) {
+    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def && !g.inner)!;
+    for (const xs of inputs) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(outcome(r, def, xs)), `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
+      compared++;
+    }
+  }
+  assert.equal(compared, 71);
+  // queens: a fold that chooses each row's column, under first, all and count.
+  const q = load("queens");
+  const lq = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
+  const want: string[] = [], got: string[] = [];
+  const exit = runProgram(q.code, q.info, q.named("main"), [], { print: (l) => want.push(l), names: q.pres.names });
+  assert.equal(await runMain(lq, emitWasm(lq), "main", [], { print: (l) => got.push(l) }), exit);
+  assert.deepEqual(got, want);
+  assert.ok(want.includes("solutions for 8: 92"), want.join("\n"));
 });

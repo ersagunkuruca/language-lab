@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, CONS, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -326,4 +326,36 @@ export function worldly() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), main };
+}
+
+// Searches with several answers inside called functions (W4d): a choice
+// in a function, in arguments (left to right), in a fold that chooses on
+// the way back up (subset sums), under each handler, with an abort
+// among the answers.
+export function several() {
+  const k = new Lang();
+  const n = (v: number) => k.lit(v);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const pick = d("pick", ["xs"], (xs) => k.call(S.oneOf, xs));
+  const pairUp = d("pair up", ["xs", "ys"], (xs, ys) => k.call(CONS, k.call(B.add, k.call(pick, xs), n(0)), k.call(CONS, k.call(pick, ys), NIL)));
+  const sums = d("sums", ["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => n(0) },
+    { variant: CONS, names: ["x", "rest"], results: [null, "s"], body: ([x], [, s]) => k.match(k.call(S.oneOf, k.list(TRUE, FALSE)), [
+      { variant: TRUE, names: [], body: () => k.call(B.add, x, s!) },
+      { variant: FALSE, names: [], body: () => s! },
+    ]) },
+  ]));
+  const checked = d("checked", ["xs"], (xs) => k.let("x", k.call(pick, xs), (x) => k.if(k.call(S.less, x, n(0)), k.call(ABORT_OP, k.lit("negative")), x)));
+  const defs = {
+    firstBig: d("first big", ["xs", "n"], (xs, m) => k.call(S.first, k.thunk(() => k.let("s", k.call(sums, xs), (s) => k.if(k.call(S.less, m, s), s, k.call(S.fail)))), k.thunk(() => n(-1)))),
+    allSums: d("all sums", ["xs"], (xs) => k.call(S.all, k.thunk(() => k.call(sums, xs)))),
+    pairs: d("all pairs", ["xs", "ys"], (xs, ys) => k.call(S.all, k.thunk(() => k.call(pairUp, xs, ys)))),
+    howMany: d("how many", ["xs"], (xs) => k.call(S.count, k.thunk(() => k.call(pairUp, xs, xs)))),
+    some: d("some over", ["xs", "n"], (xs, m) => k.call(S.optional, k.thunk(() => k.let("x", k.call(pick, xs), (x) => k.if(k.call(S.less, m, x), k.call(B.mul, x, n(10)), k.call(S.fail)))))),
+    checked: d("all checked", ["xs"], (xs) => k.call(S.all, k.thunk(() => k.call(checked, xs)))),
+    caught: d("caught", ["xs"], (xs) => k.match(k.call(S.count, k.thunk(() => k.call(checked, xs))), [{ variant: ABORT_OP, names: ["why"], body: () => n(-1) }])),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
 }
