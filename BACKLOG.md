@@ -35,7 +35,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E11 | Zoom level isn't shown ("100%" stays at 60%); Fit pill covers nodes | QA2 UX4, UX5 | P2 | S | |
 | E12 | Unit refusals name the units ("speed is m/s, gravity is m/s²") | QA2 UX9 | P2 | S | |
 | E13 | Navigator search covers only the open program | QA2 L2 | P2 | S | |
 | E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
@@ -114,6 +113,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E11 | The zoom button shows the zoom; Fit keeps clear of the pill | #215 |
 | E10 | A program opens on `main`, its showcase definition in the next tab | #212 |
 | E9 | Solver output writes powers as superscripts (`time²`) | #211 |
 | E8 | Nested view listed a comment on a called lambda as two footnotes | #207 |
