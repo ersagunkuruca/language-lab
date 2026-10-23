@@ -17,6 +17,7 @@ const programs: Record<string, string[]> = {
   calc: ["main"],
   countdown: ["main", "solutions"],
   chapters: ["main"],
+  ledger: ["main"],
 };
 
 for (const [name, exports] of Object.entries(programs)) {
