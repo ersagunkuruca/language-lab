@@ -17,7 +17,10 @@
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
+import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
+import { withFloat32 } from "../src/lang/float32.ts";
+import { represent } from "../src/lang/represent.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { emitWgsl } from "../../compiler/src/wgsl.ts";
 import { emitWasm, instantiate } from "../../compiler/src/wasm.ts";
@@ -128,7 +131,19 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
     const w = Math.max(1, Math.round(r.width * dpr * scale)), h = Math.max(1, Math.round(r.height * dpr * scale));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   };
-  const r = makeRunner(code, info, { print: () => {} });
+  // The same program in Float32 (src/lang/float32.ts), as compiler/gpu.ts
+  // checks it: the evaluator's check and the CPU's picture round as the GPU
+  // does. The program as it is when that can't be made.
+  const in32 = (() => {
+    try {
+      const w = withFloat32(code, names);
+      const c = represent(w.code, keys.map((k) => entries[k]), w.rep), i = infer(c, w.names);
+      return i.errors.length ? null : { code: c, info: i, names: w.names };
+    } catch { return null; }
+  })();
+  const cpuSide = in32 ?? { code, info, names };
+  const floats = in32 ? "in 32-bit floats, as the GPU" : "in 64-bit floats";
+  const r = makeRunner(cpuSide.code, cpuSide.info, { print: () => {} });
   // The evaluator's colour at (x, y, t).
   const evaluate = (x: number, y: number, t: number): number[] => keys.length === 3
     ? keys.map((e) => first(r.call(r.value(entries[e]), x, y, t)) as number)
@@ -253,7 +268,7 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
     points.forEach((p, i) => evaluate(Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])).forEach((want, k) => {
       worst = Math.max(worst, Math.abs(got[3 * i + k] - want));
     }));
-    el.textContent = `Checked against the evaluator: ${points.length} points × 3 channels, largest difference ${worst.toExponential(1)} (the GPU uses 32-bit floats, the evaluator 64-bit).`;
+    el.textContent = `Checked against the evaluator: ${points.length} points × 3 channels, largest difference ${worst.toExponential(1)} (the evaluator ${in32 ? "rounds to 32-bit floats as the GPU does" : "in 64-bit floats, the GPU in 32"}).`;
     el.dataset.worst = String(worst);
   }
 
@@ -261,9 +276,9 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   // a colour record, as JavaScript (WebAssembly takes no records yet).
   // Frame after frame, at a size that keeps a frame near 25 ms.
   async function cpu(why: string) {
-    const plain = lowerScalar(code, info, names, keys.map((k) => entries[k]));
+    const plain = lowerScalar(cpuSide.code, cpuSide.info, cpuSide.names, keys.map((k) => entries[k]));
     const wasm = keys.length === 3 && !plain.refused.size ? await instantiate(emitWasm(plain)) : null;
-    const lowered = lowerScalar(code, info, names, keys.map((k) => entries[k]), { records: true });
+    const lowered = lowerScalar(cpuSide.code, cpuSide.info, cpuSide.names, keys.map((k) => entries[k]), { records: true });
     const out = keys.find((k) => lowered.refused.has(entries[k]));
     if (out) { status.textContent = `No GPU here (${why}), and ${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}.`; return; }
     const js = loadJs(lowered);
@@ -287,7 +302,7 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
       }
       ctx.putImageData(img, 0, 0);
       const ms = performance.now() - t0;
-      status.textContent = `No GPU here (${why}), so this is the same program as ${how} on the CPU, ${size}×${size}, ${Math.round(ms)} ms a frame`;
+      status.textContent = `No GPU here (${why}), so this is the same program as ${how} on the CPU ${floats}, ${size}×${size}, ${Math.round(ms)} ms a frame`;
       if (ms > 40) size = Math.max(32, Math.round(size * 0.8));
       else if (ms < 15) size = Math.min(256, Math.round(size * 1.15));
       if (o.still == null) requestAnimationFrame(draw);
