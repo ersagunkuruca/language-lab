@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { S, SET, SIGS, stdNames } from "../../projectional/src/lang/std.ts";
+import { S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../projectional/src/lang/std.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
@@ -19,7 +19,8 @@ import { NUMBER, Subst } from "../../projectional/src/lang/types.ts";
 import { differentiate, NotDifferentiable } from "../../projectional/src/lang/derive.ts";
 import { constraints } from "../../projectional/src/units.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { lowerScalar } from "../src/scalar.ts";
+import { lowerScalar, OPS as SCALAR_OPS } from "../src/scalar.ts";
+import { TARGETS } from "../src/builtins.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../projectional/src/model.ts";
@@ -56,6 +57,19 @@ test("every builtin type-checks when called, and the evaluator runs it", () => {
     assert.equal(typeof r.value(id), "function", `${name(id)} has no implementation in run.ts`);
     assert.ok(r.value(f) !== undefined);
   }
+});
+
+test("every builtin has one record for the compiler's targets (builtins.ts), agreeing with std.ts", () => {
+  for (const id of [...builtins, SET]) {
+    const t = TARGETS[id];
+    assert.ok(t, `${name(id)} has no record in compiler/src/builtins.ts`);
+    // std.ts's implementation is run only where there is one; a Choice
+    // builtin is partial, and only those are.
+    if (t.js === "impl") assert.ok(STD_IMPL[id] && !STD_MANY[id], name(id));
+    assert.equal(t.js === "partial", !!STD_MANY[id], name(id));
+    if (typeof t.scalar === "string") assert.ok(t.scalar in SCALAR_OPS, name(id));
+  }
+  assert.deepEqual(Object.keys(TARGETS).filter((id) => !SIGS[id]), []);
 });
 
 test("every builtin compiles to JavaScript", () => {
@@ -134,7 +148,7 @@ test("every number builtin lowers to the scalar profile (WASM, WGSL), or says wh
     const { code, info, names, f } = calling(id);
     const lowered = lowerScalar(code, info, names, [f]);
     const why = lowered.refused.get(f);
-    if (why) { assert.doesNotMatch(why, /isn't in the scalar profile/, `${name(id)}: scalar.ts has neither a rule nor a reason: ${why}`); continue; }
+    if (why) { assert.doesNotMatch(why, /isn't in the scalar profile$/, `${name(id)}: scalar.ts has neither a rule nor a reason: ${why}`); continue; }
     // WGSL prints it (the GPU run, gpu.ts, checks its numbers).
     assert.doesNotThrow(() => emitWgsl(lowered), name(id));
     // WASM gives the evaluator's numbers exactly.

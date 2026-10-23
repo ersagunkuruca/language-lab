@@ -28,14 +28,14 @@
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { BOOL, CONS, FALSE, INT_OPS, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
 import { modeCompiler, type ModeEmit } from "./modes.ts";
+import { INLINE, jsKind } from "./builtins.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
@@ -58,85 +58,15 @@ export interface Options {
   steps?: boolean;
 }
 
-// Builtins that are just JavaScript. `bool` ones produce a JS boolean.
-// `ids`, where given, are the argument nodes, for builtins that compile
-// differently when an argument is a constant.
-const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> = {
-  [B.add]: { js: ([a, b]) => `(${a} + ${b})` },
-  [B.sub]: { js: ([a, b]) => `(${a} - ${b})` },
-  [B.mul]: { js: ([a, b]) => `(${a} * ${b})` },
-  [B.div]: { js: ([a, b]) => `(${a} / ${b})` },
-  [B.neg]: { js: ([a]) => `(-${a})` },
-  [B.pow]: { js: ([a, b]) => `(${a} ** ${b})` },
-  [B.sqrt]: { js: ([a]) => `Math.sqrt(${a})` },
-  [B.sin]: { js: ([a]) => `Math.sin(${a})` },
-  [B.cos]: { js: ([a]) => `Math.cos(${a})` },
-  [B.exp]: { js: ([a]) => `Math.exp(${a})` },
-  [B.log]: { js: ([a]) => `Math.log(${a})` },
-  [B.tan]: { js: ([a]) => `Math.tan(${a})` },
-  [B.atan2]: { js: ([a, b]) => `Math.atan2(${a}, ${b})` },
-  [S.abs]: { js: ([a]) => `Math.abs(${a})` },
-  [S.floor]: { js: ([a]) => `Math.floor(${a})` },
-  [S.float32]: { js: ([a]) => `Math.fround(${a})` },
-  [S.mod]: { js: ([a, b]) => `$mod(${a}, ${b})` },
-  // Part by part; the function is pure, so a plain JS function.
-  [S.mapParts]: { js: ([f, r]) => `$mapParts(${f}, ${r})` },
-  [S.zipParts]: { js: ([f, a, b]) => `$zipParts(${f}, ${a}, ${b})` },
-  [S.total]: { js: ([r]) => `$total(${r})` },
-  [S.concat]: { js: ([a, b]) => `(${a} + ${b})` },
-  [S.show]: { js: ([a]) => `$show(${a})` },
-  [S.range]: { js: ([a]) => `$range(${a})` },
-  [S.print]: { js: ([a]) => `$print(${a})` },
-  // The world: the runtime's World, set by whoever runs the program.
-  [IO.printError]: { js: ([a]) => `$io.printError(${a})` },
-  [IO.readInput]: { js: () => `$io.readInput()` },
-  [IO.readLine]: { js: () => `$io.readLine()` },
-  [IO.readFile]: { js: ([a]) => `$io.readFile(${a})` },
-  [IO.writeFile]: { js: ([a, b]) => `$io.writeFile(${a}, ${b})` },
-  [IO.appendFile]: { js: ([a, b]) => `$io.appendFile(${a}, ${b})` },
-  [IO.fileExists]: { js: ([a]) => `$io.fileExists(${a})` },
-  [IO.listFolder]: { js: ([a]) => `$io.listFolder(${a})` },
-  [IO.fetchText]: { js: ([a]) => `$io.fetchText(${a})` },
-  // Cells: the runtime's one handler (projectional/src/lang/cells.ts). A
-  // formula is given its compiled thunk; a read of one that gave no value
-  // throws, which ends whatever formula is reading it, as in the evaluator.
-  [CELL_OPS.cell]: { js: ([a]) => `$cells().cell(${a})` },
-  [CELL_OPS.formula]: { js: ([f]) => `$cells().formula(${f})` },
-  [CELL_OPS.each]: { js: ([c, f]) => `$cells().each(${c}, ${f}, $listArrays)` },
-  [CELL_OPS.read]: { js: ([c]) => `$cells().read(${c})` },
-  [CELL_OPS.write]: { js: ([c, v]) => `($cells().write(${c}, ${v}), $unit)` },
-  [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
-  [S.and]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
-  [S.hence]: { js: ([a, b]) => `(${a} && ${b})`, bool: true },
-  [S.or]: { js: ([a, b]) => `(${a} || ${b})`, bool: true },
-  [S.not]: { js: ([a]) => `!${a}`, bool: true },
-  // Int: a number while it's a safe integer, a BigInt beyond (int.ts), so
-  // comparisons are plain JS ones.
-  [INT_OPS.add]: { js: ([a, b]) => `$int.add(${a}, ${b})` },
-  [INT_OPS.sub]: { js: ([a, b]) => `$int.sub(${a}, ${b})` },
-  [INT_OPS.mul]: { js: ([a, b]) => `$int.mul(${a}, ${b})` },
-  [INT_OPS.neg]: { js: ([a]) => `$int.neg(${a})` },
-  [INT_OPS.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
-  [INT_OPS.show]: { js: ([a]) => `String(${a})` },
-  [INT_OPS.toNumber]: { js: ([a]) => `Number(${a})` },
-  // Code-point order. When one side is a constant whose characters all come
-  // before the surrogates (U+D800), JS's UTF-16 order gives the same answer.
-  [TEXT_OPS.less]: { js: ([a, b], ids) => (ids && ids.some(narrowText) ? `(${a} < ${b})` : `$text.less(${a}, ${b})`), bool: true },
-  // Cases print with the names the program was compiled with ($names).
-  [SHOW_ANY]: { js: ([a]) => `$showAny(${a}, $names)` },
-};
-// Other std builtins run their implementation from std.ts: `$impl` for
-// those with one answer, `$many` (an array of answers) for those with Choice.
-// Every Choice builtin is partial, with no answer or one (std.ts `choice`),
-// so a call runs `$partial`, which gives the answer or $no (GAPS.md G24).
-const implOf = (id: Id) => (OPS[id] ? null : STD_IMPL[id] ? `$impl[${JSON.stringify(id)}]` : null);
-const manyOf = (id: Id) => (STD_MANY[id] ? `$many[${JSON.stringify(id)}]` : null);
-const oneOf = (id: Id) => (STD_MANY[id] ? `$partial[${JSON.stringify(id)}]` : null);
-const BOOL_ARGS = new Set([S.and, S.hence, S.or, S.not]);
+// Builtins: what each compiles to is its record in builtins.ts. Those that
+// run their implementation from std.ts call `$impl`; a Choice builtin is
+// partial, with no answer or one (std.ts `choice`), so a call runs
+// `$partial`, which gives the answer or $no (GAPS.md G24), and `$many` is
+// its answers as an array, for a use as a value.
+const implOf = (id: Id) => (jsKind(id) === "impl" ? `$impl[${JSON.stringify(id)}]` : null);
+const manyOf = (id: Id) => (jsKind(id) === "partial" ? `$many[${JSON.stringify(id)}]` : null);
+const oneOf = (id: Id) => (jsKind(id) === "partial" ? `$partial[${JSON.stringify(id)}]` : null);
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
-
-// Set by compile(): is this node a text literal below the surrogates?
-let narrowText: (id: Id) => boolean = () => false;
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
   // derivative(f) and gradient(f) of a function written right there become
@@ -153,7 +83,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     names = x.names;
     info = infer(code, names);
   }
-  narrowText = (id) => { const n = code.nodes[id]; return n.kind === "lit" && typeof n.value === "string" && n.of === undefined && /^[\u0000-\ud7ff]*$/.test(n.value); };
+  // Is this node a text literal below the surrogates? (TEXT_OPS.less)
+  const narrowText = (id: Id) => { const n = code.nodes[id]; return n.kind === "lit" && typeof n.value === "string" && n.of === undefined && /^[\u0000-\ud7ff]*$/.test(n.value); };
   const sub = info.subst;
   // Effects a program defines: an operation is a variant of an effect, and a
   // match on operations is a handler (runtime.js $perform, $handle).
@@ -294,7 +225,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f.kind !== "ref") return null;
       const t = code.nodes[f.target], id = f.target;
       if (t.kind === "builtin") {
-        if (OPS[id] && !BOOL_ARGS.has(id)) { const js = OPS[id].js(args, c.args); return { js: OPS[id].bool ? `$bool(${js})` : js }; }
+        if (INLINE[id] && !INLINE[id]?.boolArgs) { const js = INLINE[id].js(args, c.args.map(narrowText)); return { js: INLINE[id].bool ? `$bool(${js})` : js }; }
         if (id === S.equal) return { js: `$bool($eq(${args.join(", ")}))` };
         if (implOf(id)) return { js: `${implOf(id)}(${args.join(", ")})` };
         if (oneOf(id)) return { js: `${oneOf(id)}(${args.join(", ")})`, partial: true };
@@ -1075,7 +1006,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind === "call" && code.nodes[n.fn].kind === "ref" && boolFns.has(node<"ref">(n.fn).target)) return `${local(node<"ref">(n.fn).target)}(${n.args.map(ex).join(", ")})`;
       if (n.kind === "call" && code.nodes[n.fn].kind === "ref") {
         const target = node<"ref">(n.fn).target;
-        if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex), n.args);
+        if (INLINE[target]?.bool) return INLINE[target].js(n.args.map(INLINE[target]?.boolArgs ? exBool : ex), n.args.map(narrowText));
         if (target === S.equal) return equality(n);
         if (code.nodes[target]?.kind === "def" && !streamy(id)) {
           const s = defCall(n);
@@ -1149,9 +1080,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           // Where functions are looked inside (inverse(show, …)), a builtin
           // value says which builtin it is, as the evaluator's do.
           const prim = (js: string) => (reflective ? `$prim(${js}, ${JSON.stringify(n.target)})` : js);
-          if (OPS[n.target]) {
+          if (INLINE[n.target]) {
             const ps = Array.from({ length: arity(n.id) }, (_, i) => `a${i}`);
-            const js = OPS[n.target].bool ? `$bool(${OPS[n.target].js(ps)})` : OPS[n.target].js(ps);
+            const js = INLINE[n.target].bool ? `$bool(${INLINE[n.target].js(ps)})` : INLINE[n.target].js(ps);
             return wrap(prim(`((${ps.join(", ")}) => ${js})`), false);
           }
           const runtime: Record<Id, [string, boolean]> = {
@@ -1250,9 +1181,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
         if (t.kind === "builtin") {
-          if (OPS[f.target]) {
-            const js = OPS[f.target].js(n.args.map(BOOL_ARGS.has(f.target) ? exBool : ex), n.args);
-            return OPS[f.target].bool ? `$bool(${js})` : js;
+          if (INLINE[f.target]) {
+            const js = INLINE[f.target].js(n.args.map(INLINE[f.target]?.boolArgs ? exBool : ex), n.args.map(narrowText));
+            return INLINE[f.target].bool ? `$bool(${js})` : js;
           }
           if (f.target === S.equal) return `$bool(${equality(n)})`;
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
@@ -1566,7 +1497,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const item = code.nodes[p].kind === "ref" && node<"ref">(p).target === rest ? q : code.nodes[q].kind === "ref" && node<"ref">(q).target === rest ? p : null;
           if (!item || !free(item)) return null;
           op = f;
-          return (acc) => OPS[f].js([ex(item), acc]);
+          return (acc) => INLINE[f].js([ex(item), acc]);
         }
         if (b.kind === "match" && isBoolMatch(b) && free(b.scrutinee)) {
           const [t, e] = boolArms(b).map(shape);
@@ -2026,9 +1957,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = field(args[0], target!);
-        else if (kind === "builtin" && OPS[target!]) {
-          const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
-          c = OPS[target!].bool ? `$bool(${js})` : js;
+        else if (kind === "builtin" && INLINE[target!]) {
+          const js = INLINE[target!].js(INLINE[target!]?.boolArgs ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
+          c = INLINE[target!].bool ? `$bool(${js})` : js;
         } else if (target === S.equal) c = `$bool(${equalJs(n.args[0], args)})`;
         else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
         else if (target === S.gradient) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;

@@ -40,12 +40,12 @@ import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { DIVERGE, NUMBER, type Type } from "../../projectional/src/lang/types.ts";
-import { B } from "../../projectional/src/prelude.ts";
 import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { discharge } from "../../projectional/src/lang/ledger.ts";
+import { scalarOp, TARGETS } from "./builtins.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
@@ -83,11 +83,6 @@ export const OPS = {
   less: { t: "i32" }, equal: { t: "i32" }, beq: { t: "i32" }, and: { t: "i32" }, or: { t: "i32" }, not: { t: "i32" },
 } as const satisfies Record<string, { t: SType; host?: boolean }>;
 
-const BUILTIN: Record<Id, Op> = {
-  [B.add]: "add", [B.sub]: "sub", [B.mul]: "mul", [B.div]: "div", [B.neg]: "neg", [B.sqrt]: "sqrt",
-  [B.sin]: "sin", [B.cos]: "cos", [B.tan]: "tan", [B.exp]: "exp", [B.log]: "log", [B.pow]: "pow", [B.atan2]: "atan2",
-  [S.abs]: "abs", [S.floor]: "floor", [S.float32]: "float32", [S.mod]: "mod", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
-};
 
 // `spends`: each call spends one from the budget (the checker couldn't see
 // it end). `budgeted`: its type has Diverge, so it may only be called under
@@ -297,7 +292,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const same = op("or", op("equal", x, y), op("and", op("not", op("and", whole(x), whole(y))), op("or", op("less", diff, tol), op("equal", diff, tol))));
           return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), same);
         }
-        if (BUILTIN[target]) return { k: "op", op: BUILTIN[target], args: args() };
+        if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
@@ -328,7 +323,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!r || typeof r === "string") throw new Refused(`takes ${nm(target)} of something that isn't a record of Numbers and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
-        throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile`);
+        const why = TARGETS[target]?.scalar;
+        throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
@@ -423,7 +419,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const ls = fnNode.params.map((p, k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(p, i); return { i, value: xs[k] }; });
           return ls.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(fnNode.body, inner, f, false));
         }
-        if (fnNode.kind === "ref" && BUILTIN[fnNode.target]) return { k: "op", op: BUILTIN[fnNode.target], args: xs };
+        if (fnNode.kind === "ref" && scalarOp(fnNode.target)) return { k: "op", op: scalarOp(fnNode.target)!, args: xs };
         if (fnNode.kind === "ref" && code.nodes[fnNode.target]?.kind === "def") return { k: "call", fn: func(fnNode.target), args: xs, tail: false };
         throw new Refused("takes the parts with a function that isn't written here (that needs closures)");
       };
