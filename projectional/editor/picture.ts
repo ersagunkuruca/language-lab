@@ -302,27 +302,63 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
     // A canvas the GPU drew on can't be drawn on any other way.
     const ctx = canvas.getContext("2d");
     if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
-    let size = o.still == null ? 64 : 160;
+    // A moving picture is drawn small enough to keep a frame near 25 ms. A
+    // still one, or a moving one paused (click it), is then drawn again at
+    // the canvas's own size, a slice of rows a frame, over the small one.
+    let size = 64;
     const how = wasm ? "WebAssembly" : "JavaScript";
+    status.title = `No GPU here (${why}). The same program as ${how}, ${floats}.`;
+    const probe = [-0.7, 0, 0.7].flatMap((x) => [-0.7, 0, 0.7].map((y) => [x, y]));
+    const moving = o.still == null && probe.some(([x, y]) => String(colourAt(x, y, 0.3)) !== String(colourAt(x, y, 1.9)));
+    let paused: number | null = null;
+    const sharp = () => Math.min(512, Math.round((canvas.clientWidth || 256) * Math.min(2, devicePixelRatio || 1)));
+    const pixel = (img: ImageData, n: number, px: number, py: number, t: number) => {
+      const x = (2 * (px + 0.5) - n) / n, y = (n - 2 * (py + 0.5)) / n, at = 4 * (py * n + px);
+      colourAt(x, y, t).forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
+      img.data[at + 3] = 255;
+    };
+    const say = (what: string) => { status.textContent = `Drawn as ${how} on the CPU (no GPU here), ${what}`; };
     const draw = () => {
-      if (stopped) return;
+      if (stopped || paused !== null) return;
       const t = now(), t0 = performance.now();
       if (canvas.width !== size) canvas.width = canvas.height = size;
       const img = ctx.createImageData(size, size);
-      for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
-        const x = (2 * (px + 0.5) - size) / size, y = (size - 2 * (py + 0.5)) / size;
-        const at = 4 * (py * size + px);
-        colourAt(x, y, t).forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
-        img.data[at + 3] = 255;
-      }
+      for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) pixel(img, size, px, py, t);
       ctx.putImageData(img, 0, 0);
       const ms = performance.now() - t0;
-      status.textContent = `No GPU here (${why}), so this is the same program as ${how} on the CPU ${floats}, ${size}×${size}, ${Math.round(ms)} ms a frame`;
       if (ms > 40) size = Math.max(32, Math.round(size * 0.8));
       else if (ms < 15) size = Math.min(256, Math.round(size * 1.15));
-      if (o.still == null) requestAnimationFrame(draw);
+      if (moving) { say(`${canvas.width}×${canvas.width}, ${Math.round(ms)} ms a frame. Click it to pause and sharpen.`); requestAnimationFrame(draw); }
+      else refine(t);
     };
-    status.textContent = `No GPU here (${why}); drawing on the CPU…`;
+    // Sharper, without blanking: the small picture scaled up first.
+    const refine = (t: number) => {
+      const n = sharp();
+      if (n <= canvas.width) { say(`${canvas.width}×${canvas.width}.`); return; }
+      const old = document.createElement("canvas");
+      old.width = old.height = canvas.width;
+      old.getContext("2d")!.drawImage(canvas, 0, 0);
+      canvas.width = canvas.height = n;
+      ctx.drawImage(old, 0, 0, n, n);
+      const img = ctx.createImageData(n, n);
+      let row = 0;
+      const slice = () => {
+        if (stopped || (moving && paused === null)) return;
+        const t0 = performance.now(), from = row;
+        while (row < n && performance.now() - t0 < 25) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
+        ctx.putImageData(img, 0, 0, 0, from, n, row - from);
+        say(row < n ? `sharpening: ${Math.round((100 * row) / n)}%` : `${n}×${n}.${moving ? " Paused: click it to play." : ""}`);
+        if (row < n) requestAnimationFrame(slice);
+      };
+      slice();
+    };
+    canvas.onclick = moving ? () => {
+      if (stopped) return;
+      if (paused === null) { paused = now(); refine(paused); }
+      else { paused = null; draw(); }
+    } : null;
+    canvas.style.cursor = moving ? "pointer" : "";
+    say("…");
     if (o.check) o.check.textContent = "";
     draw();
   }
