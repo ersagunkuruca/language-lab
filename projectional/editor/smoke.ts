@@ -13,7 +13,10 @@
 //
 // It uses the Chromium in CHROMIUM if set, otherwise the installed Chrome.
 
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium, type Page } from "playwright-core";
 
 const page = process.argv[2] ?? new URL("../../index.html", import.meta.url).href;
@@ -130,6 +133,34 @@ async function cellsPage() {
   await p.close();
 }
 
+// The page programs, live above Run: dice draws and a click changes it,
+// it survives the editor redrawing, and Save page gives a file that runs.
+async function pagePreview() {
+  where = "page preview";
+  const ctx = await browser.newContext({ acceptDownloads: true });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  const f = p.frameLocator("iframe.page");
+  await f.locator("#hundred").click();
+  const status = () => f.locator("#status").innerText({ timeout: 2000 }).catch(() => "(no status)");
+  if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
+  await p.locator("[data-def]").nth(1).click();
+  if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
+  const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
+  // Saved where its name says it's a page, or the browser shows it as text.
+  const saved = join(mkdtempSync(join(tmpdir(), "smoke-")), file.suggestedFilename());
+  await file.saveAs(saved);
+  const q = await ctx.newPage();
+  q.on("pageerror", (e) => errors.push(`${where}, saved page: ${e.stack ?? e.message}`));
+  await q.goto(pathToFileURL(saved).href);
+  await q.locator("#hundred").click();
+  if (!(await q.locator("#status").innerText()).startsWith("100 rolls")) errors.push(`${where}: the saved page didn't roll`);
+  await ctx.close();
+}
+
 const saved = readFileSync(new URL("smoke-saved.json", import.meta.url), "utf8");
 const edited = JSON.stringify({ ...JSON.parse(saved), docs: { relations: { ...JSON.parse(saved).docs.relations, edited: true } } });
 await visit(null);
@@ -138,6 +169,7 @@ await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
 await deleteAndUndo();
 await newAndDeleteDefinition();
+await pagePreview();
 await cellsPage();
 await browser.close();
 console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor`);
