@@ -428,3 +428,24 @@ test("a field can hold Int, Pair, Optional, List of anything, or the type itself
   s.ok(Top.setFieldType(s.code, s.names, fields[0], T("std.optional", T("type.int"))));
   assert.equal(s.info().errors.length, 0);
 });
+
+test("a field of a one-case type is in the palette as the function that reads it", () => {
+  const s = new Session();
+  const Chapter = s.ok(Top.newDefinition(s.code, s.names, "Chapter", { kind: "type", firstCase: "chapter" }));
+  const chapter = (s.code.nodes[(s.code.nodes[Chapter] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+  const pages = s.ok(Top.addField(s.code, s.names, Chapter, chapter, "pages", { target: "type.int", args: [] }));
+  s.ok(Top.newDefinition(s.code, s.names, "n", { kind: "function", params: [] }));
+  const n = s.def("n");
+  // n = pages(chapter(12)), by palette picks.
+  s.fill(n, call(pages));
+  s.fill(n, call(chapter));
+  const lit = s.fill(n, (f) => f.kind === "lit" && f.of === "int");
+  s.code = { ...s.code, nodes: { ...s.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: 12, of: "type.int" } } };
+  assert.equal(s.info().errors.length, 0);
+  assert.equal(showValue(runMain(s.code, s.info(), n), s.code, s.all()), "12");
+  // The standard library's Pair reads the same way.
+  s.ok(Top.newDefinition(s.code, s.names, "m", { kind: "value" }));
+  const m = s.def("m");
+  const offered = fillings(s.code, s.info(), s.holes(m)[0]).flatMap((f) => (f.kind === "call" ? [f.target] : []));
+  assert.ok(offered.includes("std.pair.pair.fst") && offered.includes(pages));
+});
