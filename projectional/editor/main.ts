@@ -53,6 +53,12 @@ import converterComments from "../examples/converter/comments.json" with { type:
 import raymarchCredits from "../examples/raymarch/credits.json" with { type: "json" };
 import diceCredits from "../examples/dice/credits.json" with { type: "json" };
 import converterCredits from "../examples/converter/credits.json" with { type: "json" };
+import countdownCode from "../examples/countdown/code.json" with { type: "json" };
+import countdownNames from "../examples/countdown/names.default.json" with { type: "json" };
+import countdownDescriptive from "../examples/countdown/names.descriptive.json" with { type: "json" };
+import countdownComments from "../examples/countdown/comments.json" with { type: "json" };
+import countdownLayout from "../examples/countdown/layout.json" with { type: "json" };
+import countdownCredits from "../examples/countdown/credits.json" with { type: "json" };
 import shadersCredits from "../examples/shaders/credits.json" with { type: "json" };
 import queensCredits from "../examples/queens/credits.json" with { type: "json" };
 import sortCredits from "../examples/sort/credits.json" with { type: "json" };
@@ -121,7 +127,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 // What each example adapts, follows or was done before by (credits.json,
 // one line each, after CREDITS.md). An example's are always the shipped
@@ -129,7 +135,7 @@ const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const CREDITS: Record<Program, string[]> = {
   numbers: physicsCredits, sort: sortCredits, queens: queensCredits, calculus: calculusCredits, backwards: backwardsCredits,
   relations: relationsCredits, effects: effectsCredits, shaders: shadersCredits, raymarch: raymarchCredits,
-  dice: diceCredits, converter: converterCredits,
+  dice: diceCredits, converter: converterCredits, countdown: countdownCredits,
 };
 const MINE = "mine.";
 
@@ -211,6 +217,7 @@ const initialFor = (program: Program): Doc =>
   : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
   : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
   : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
+  : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
   : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : initial();
 
