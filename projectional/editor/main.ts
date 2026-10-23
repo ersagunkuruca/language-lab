@@ -1616,6 +1616,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(head(names[id] ?? "a value"));
     if (names[id] !== "_") rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
     rows.push(item("Name it…", "name"));
+    if (T.isDot(doc.code, ui.def, id)) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
     if (T.isDot(doc.code, ui.def, id)) { const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", r.ok ? undefined : r.reason)); }
   } else if ((kind === "node" || kind === "frame") && id) {
     const d = calleeDef(id);
@@ -1631,6 +1632,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
+    rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Picked nodes move and tidy together (shift-click does the same)"));
   }
   if (kind !== "hole") {
     rows.push(h("div", { class: "ctx-sep" }));
@@ -1684,6 +1686,7 @@ function menuAction(act: string, target: Id | undefined) {
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
       return;
     }
+    case "pick": { graph?.pick(target!); ui.menu = null; return render(); }
     case "tidy-all": return graph?.tidy(null);
     case "tidy-picked": return graph?.tidy(graph.picked());
     case "tidy-frame": return graph?.tidy([target!]);
