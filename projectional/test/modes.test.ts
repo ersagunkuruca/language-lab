@@ -1,7 +1,7 @@
 // Modes (src/lang/modes.ts, MODES.md): what the analysis says about a
 // direction before it runs, checked against what relate.ts does when it
-// runs. Nothing uses the analysis yet, so these tests are the evidence it
-// can be trusted when something does (MODES.md, plan step 2).
+// runs. The checker types solves from it (MODES.md, plan step 2), so these
+// tests are the evidence it can be trusted.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

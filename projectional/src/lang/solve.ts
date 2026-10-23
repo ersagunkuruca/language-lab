@@ -17,12 +17,11 @@
 //
 // Any other function (it has cases, folds, text, data, or calls a builtin
 // like `join text`) is run backwards by the relational interpreter
-// (relate.ts). That direction is always Choice, and Diverge too when the
-// function folds or recurses, since unfolding can go on forever.
+// (relate.ts). That direction is always Choice, and Diverge when its mode
+// may not end (modes.ts; the checker asks it).
 
 import { direction, results } from "../../../invertible/src/index.js";
 import type { Code, Id, NodeOf } from "../model.ts";
-import { dependencies, subtree } from "../model.ts";
 import { relationFor, type Relation } from "./equations.ts";
 import { SIGS, TRUE } from "./std.ts";
 
@@ -44,8 +43,6 @@ export interface SolvePlan {
   canFail: boolean;
   // Pure exactly when there's always one answer; otherwise Choice.
   unique: boolean;
-  // Relational only: the search may unfold forever (Diverge).
-  loops: boolean;
 }
 
 type Direction =
@@ -55,7 +52,7 @@ type Direction =
 export function planSolve(code: Code, n: NodeOf<"solve">): SolvePlan {
   const relational = (): SolvePlan => {
     if (!runsBackwards(code, n.fn)) throw new Error(`${n.fn} can't be run backwards`);
-    return { mode: "relational", rel: null, known: Object.keys(n.given), predicate: false, status: "solved", needMore: 0, many: true, canFail: true, unique: false, loops: mayLoop(code, n.fn) };
+    return { mode: "relational", rel: null, known: Object.keys(n.given), predicate: false, status: "solved", needMore: 0, many: true, canFail: true, unique: false };
   };
   let r: ReturnType<typeof relationFor>;
   try { r = relationFor(code, n.fn); } catch { return relational(); }
@@ -63,7 +60,7 @@ export function planSolve(code: Code, n: NodeOf<"solve">): SolvePlan {
   const outTrue = isTrue(code, n.given.out);
   if (r.predicate && (!outTrue || "out" in n.binds)) return relational();
   const known = Object.keys(n.given).filter((k) => !(r.predicate && k === "out"));
-  const base = { mode: "solver" as const, rel: r.rel, known, predicate: r.predicate, loops: false };
+  const base = { mode: "solver" as const, rel: r.rel, known, predicate: r.predicate };
   const d = direction(r.rel as never, known) as Direction;
   if (d.kind === "underdetermined") return { ...base, status: "underdetermined", needMore: d.need, many: false, canFail: false, unique: false };
   const many = d.multiplicity === "many";
@@ -78,13 +75,6 @@ function runsBackwards(code: Code, fn: Id): boolean {
   const t = code.nodes[fn];
   if (t?.kind === "def") return !!t.body && code.nodes[t.body].kind === "lambda";
   return t?.kind === "builtin" && !!SIGS[fn];
-}
-
-// Does running fn backwards involve unfolding: a fold, or a recursive call?
-function mayLoop(code: Code, fn: Id): boolean {
-  if (code.nodes[fn].kind !== "def") return false;
-  return [fn, ...dependencies(code, fn)].some((d) => code.nodes[d].kind === "def" &&
-    (dependencies(code, d).includes(d) || subtree(code, d).some((x) => code.nodes[x].kind === "fold")));
 }
 
 export function* solutions(rel: Relation, values: Record<string, number>): Generator<Record<string, number | null>> {

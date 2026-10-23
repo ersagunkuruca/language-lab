@@ -28,7 +28,8 @@
 // value whose case is known but not its fields). Nothing in the examples
 // needs the third yet; a projection run backwards waits for its record.
 //
-// This step only reports (MODES.md, plan step 1): nothing uses it yet.
+// The checker (infer.ts) types a relational solve from its verdict:
+// Diverge only when it may not end, and an error when it's stuck.
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, NodeOf } from "../model.ts";

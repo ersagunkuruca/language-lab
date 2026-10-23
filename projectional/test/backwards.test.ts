@@ -130,7 +130,7 @@ test("what can't run backwards says why", () => {
   assert.deepEqual(answer.residual, ["call"]);
 });
 
-test("backwards: types say Choice, Diverge when it may unfold forever, and printing is refused", () => {
+test("backwards: types say Choice, Diverge when the search may not end, and printing is refused", () => {
   const p = load("backwards");
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
@@ -140,12 +140,27 @@ test("backwards: types say Choice, Diverge when it may unfold forever, and print
   assert.equal(typeOf("cuts"), "(Text) -> List Text");
   assert.equal(typeOf("read numbers"), "(Text) -[Choice]-> List Number");
   assert.equal(typeOf("height on the ray"), "(Number, Number) -[Choice]-> Number");
-  // Without fuel, the unfold's Diverge shows.
+  // Without fuel it's still only Choice: reading text back unfolds a fold,
+  // but each step reads a shorter text, so it ends (modes.ts). It was
+  // typed Diverge before the mode analysis.
   const read = get(p.code, get(p.code, p.named("read numbers"), "def").body!, "lambda");
   const fuel = get(p.code, read.body, "call");
   const thunk = get(p.code, fuel.args[1], "lambda");
   const bare = replace(p.code, read.body, (c) => ({ ...c.nodes[thunk.body] } as never));
-  assert.equal(showType(infer(bare, p.pres.names).typeOf.get(p.named("read numbers"))!, p.pres.names), "(Text) -[Choice, Diverge]-> List Number");
+  assert.equal(showType(infer(bare, p.pres.names).typeOf.get(p.named("read numbers"))!, p.pres.names), "(Text) -[Choice]-> List Number");
+  // A search that may not end is Diverge, and says why: a list from how
+  // many items it has counts down whole numbers, which don't get smaller.
+  const c = program((k) => {
+    const count = k.def("count");
+    k.define(count, k.fn(["xs"], (xs) => k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.int(0) },
+      { variant: CONS, names: ["x", "rest"], results: [null, "n"], body: (_, [, n]) => k.call(INT_OPS.add, n!, k.int(1)) },
+    ])));
+    const [xs] = (k.code.nodes[(k.code.nodes[count] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+    const back = k.def("lists of");
+    k.define(back, k.fn(["n"], (n) => k.solve(count, { out: n }, { [xs]: "xs" }, ({ [xs]: v }) => v)));
+  });
+  assert.equal(showType(c.info.typeOf.get(c.named("lists of"))!, c.names), "(Int) -[Choice, Diverge]-> List a");
 
   const q = program((k) => {
     const say = k.def("say");
