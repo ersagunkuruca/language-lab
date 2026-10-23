@@ -113,6 +113,7 @@ button { font: inherit; color: inherit; }
 .nav-find::placeholder { color: var(--faint); }
 .nav-list { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
 .nav-row { flex: none; display: block; width: 100%; text-align: left; border: 0; background: none; padding: 4px 10px; border-radius: 8px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.nav-row[hidden] { display: none; }
 .nav-row:hover { background: var(--canvas); color: var(--fg); }
 .nav-row.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav-row.open { font-weight: 600; color: var(--fg); }
