@@ -1019,9 +1019,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       let at: Id | null = n.args[sink.li];
       // Walk down through steps to the list they start from.
       for (;;) {
-        const c = at ? code.nodes[at] : null;
+        const c: Node | null = at ? code.nodes[at] : null;
         if (!c || c.kind !== "call" || code.nodes[c.fn].kind !== "ref") break;
-        const d = node<"ref">(c.fn).target, step = code.nodes[d].kind === "def" ? stepOf(d) : null;
+        const d: Id = node<"ref">(c.fn).target, step: { li: number; emit: Emit } | null = code.nodes[d].kind === "def" ? stepOf(d) : null;
         if (!step || seen.has(d)) break;
         seen.add(d);
         chain.unshift({ call: c, def: d, emit: step.emit });
