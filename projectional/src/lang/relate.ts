@@ -664,14 +664,19 @@ export function interpreter(code: Code, opts: Options = {}) {
     };
   }
 
-  // one of(list) = x: x is somewhere in the list. If the list isn't known
-  // either, this builds lists that contain x, one length at a time.
+  // one of(list) = x: x is somewhere in the list. Each cell of the list is
+  // waited for until it's known. Making up lists that contain x instead (a
+  // list one longer each time) never ends when the list is really built by
+  // a later goal: `one of([3])` asked for 5 went on proposing [5], [_, 5],
+  // … before the literal's cons was ever unified (miniKanren's classic
+  // goal-order divergence, REVIEW-2026-10-22b.md §3). A list that never
+  // becomes known leaves the wait as a residual.
   function member(xs: Term, out: Term): Goal {
-    return (s0) => {
-      const l = walk(xs, s0);
-      if (isData(l)) return l.tag === CONS ? disj(eq(out, l.fields[0]), step(member(l.fields[1], out)))(s0) : null;
-      const [[h, t], s] = freshVars(s0, 2);
-      return disj(eq(l, dataT(CONS, [out, t])), conj(eq(l, dataT(CONS, [h, t])), step(member(t, out))))(s);
+    return (s) => {
+      const l = walk(xs, s);
+      if (l instanceof LVar) return wait({ k: "later", text: "one of", ready: (st) => !(walk(xs, st) instanceof LVar), then: member(xs, out) })(s);
+      if (isData(l)) return l.tag === CONS ? disj(eq(out, l.fields[0]), step(member(l.fields[1], out)))(s) : null;
+      return null;
     };
   }
 
