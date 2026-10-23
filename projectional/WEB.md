@@ -43,12 +43,14 @@ same app, packaged.
   can fail, so `Abort`: the page logs it and carries on). Since time,
   randomness and HTTP it may also read the clock, draw random numbers and
   fetch. Its row is `PAGE_HANDLER` in std.ts, and a view's (a text, a
-  part, an attribute's value: `Cells, Diverge, Time, Network`) is
+  part, an attribute's value: `Cells, Diverge, Time, Network, Log`) is
   `PAGE_VIEW`, each named once and checked against what the runtime
   handles. They are closed on purpose: the runtime runs views and handlers
   after `main` has returned, so no handler written in the program is
   around them, and an effect of the program's own is handled inside the
-  view or handler. A handler can't search unhandled (the world isn't
+  view or handler. Both may `log`: a log line is for whoever debugs the
+  page, and goes to the browser console (a view's once per run). A
+  handler can't search unhandled (the world isn't
   touched under an open `Choice`), and a view can't write or print. Those are the guarantees Solid only warns about at run time.
   **They needed one checker fix first** (PR #102), found while writing
   this: a function type inside a data type had no effect row (infer.ts

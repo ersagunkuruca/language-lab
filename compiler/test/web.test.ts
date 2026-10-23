@@ -19,7 +19,7 @@ import { compile } from "../src/compile.ts";
 import { $eq, $setCells, $setWorld } from "../src/runtime.js";
 import { browserWorld } from "../../projectional/src/lang/browser.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { ABORT_OP, CELL_OPS, HTML_V, IO, NOW_OP, S } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, HTML_V, IO, LOG_OP, NOW_OP, S } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { HTML_MODULE } from "../../projectional/src/lang/library.ts";
 
@@ -255,4 +255,38 @@ test("for each keeps an item's row when the list changes, compiled the same", as
     assert.equal(root.find("+a"), a, `${way}: a's row is kept`);
     assert.match(root.html(), /<ul><li>c<button id="\+c">\+<\/button>0<\/li><li>a<button id="\+a">\+<\/button>1<\/li><li>b<button id="\+b">\+<\/button>0<\/li><\/ul>/, way);
   }
+});
+
+test("a page's views and handlers may log: each line goes to the browser's console, both ways", async () => {
+  // A view logs each time it runs; a handler when its event comes (L27).
+  const k = new Lang();
+  const log = (line: string) => k.call(LOG_OP, k.lit(line));
+  const el = (tag: string, attrs: string[], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("n", k.call(CELL_OPS.cell, k.lit(0)), (n) => el("div", [], [
+    el("p", [], [k.call(HTML_V.text, k.thunk(() => k.seq(log("drawn"), k.call(S.show, k.call(CELL_OPS.read, n)))))]),
+    el("button", [k.call(HTML_V.property, k.lit("id"), k.thunk(() => k.lit("go"))), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.seq(log("clicked"), k.call(CELL_OPS.write, n, k.call(B.add, k.call(CELL_OPS.read, n), k.lit(1))))))], []),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(pageProblem(info, main, names), null);
+  const path = join(dir, "logging.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const run = (way: "evaluator" | "compiled") => {
+    const lines: string[] = [];
+    const out = { log: (s: string) => lines.push(s), error: (s: string) => lines.push(`error: ${s}`) } as unknown as Console;
+    const cells = new Cells(way === "evaluator" ? equal : $eq);
+    const store = { getItem: () => null, setItem() {}, length: 0, key: () => null };
+    const world = browserWorld(store, "logging", out, { cells, frame() {} });
+    let v;
+    if (way === "evaluator") v = runMain(code, info, main, { print: () => {}, names, cells, world });
+    else { $setCells(cells); $setWorld(world); v = compiled.main() as never; }
+    const root = mountHtml(v, { cells, doc: fakeDoc(), call: way === "evaluator" ? evaluatorCall : compiledCall }) as FakeEl;
+    root.find("go").fire("click");
+    return lines;
+  };
+  assert.deepEqual(run("evaluator"), ["drawn", "clicked", "drawn"]);
+  assert.deepEqual(run("compiled"), ["drawn", "clicked", "drawn"]);
 });

@@ -81,7 +81,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L23 | Showcase `conjugate(f, g)` = f⁻¹ ∘ g ∘ f: colour-space edit, object-vs-world transform, multiband guitar effect | Ersagun 2026-10-22, NOTES.md | P3 | M | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
-| L27 | `Log` in a page's views and handlers: the runtime handles it everywhere else, but neither page row allows it | L6 | P3 | S | |
 | L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 
 ## Coordinator and process
@@ -145,7 +144,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L14 | One generic bind: the prelude's `inverse(f, y)` runs any function value backwards (a solve over `applied(f, x) = f(x)`). The converter's fields read back with `inverse(view, typed)` and its ten `from X` definitions are gone (646 nodes to 559). Found and closed a hole: a function given to a solve as a port lost its effects; they now reach the row around. A closed function in a variable opens at each use (Koka's `open`), so a field's `view` can be both shown and inverted. Compiled pages mark builtins used as values, so `inverse(show, …)` runs compiled too | this PR |
+| L27 | `Log` in a page's views and handlers: both rows allow it, a line goes to the browser console (a view's each time it runs), evaluator and compiled the same | this PR |
+| L14 | One generic bind: the prelude's `inverse(f, y)` runs any function value backwards (a solve over `applied(f, x) = f(x)`). The converter's fields read back with `inverse(view, typed)` and its ten `from X` definitions are gone (646 nodes to 559). Found and closed a hole: a function given to a solve as a port lost its effects; they now reach the row around. A closed function in a variable opens at each use (Koka's `open`), so a field's `view` can be both shown and inverted. Compiled pages mark builtins used as values, so `inverse(show, …)` runs compiled too | #229 |
 | L28 | The html module: each tag a function of its children, attributes by wrapping (`styled`, `classed`, `named`, `with`), `button`, `words`, a style sheet as a list of rules. The dice and converter pages rewritten with it (dice 475 nodes to 382; the converter's style sheet is its own definition) | #209 |
 | L13 | Keyed lists in pages: `each(items, f)` in cells (Solid's `mapArray`) and the html module's `for each(items, row, inside)`, which keeps an item's row, cells and all, when the list changes; evaluator and compiled pages the same | #222 |
 | L25 | Container matrix, the other places: a solve's body, a function run backwards, a shader (with and without a literal with fuel), a representation's job, a module's pinned export and one whose pin leaves an effect out. One hole found and closed: a job that did an effect its definition doesn't was only caught when the rewritten program happened not to check; `jobProblem` refuses it before the rewrite (`lab` asks it) | #219 |

@@ -590,8 +590,8 @@ builtin's type takes away exactly what its row says.
 | where | takes away | why |
 |---|---|---|
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
-| a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort |
-| a page's text, part or attribute value | Cells, Diverge, Time, Network | the page runtime runs a view in a watcher, under a step budget, after main has returned |
+| a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random, Log | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console |
+| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log | the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run |
 | a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait | the runtime handles them around main: the world, cells, the clock and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | all, count | Choice | every answer, collected into a list or counted |
@@ -703,7 +703,7 @@ files are `localStorage` entries named after the program. A view that
 reads `now()` runs again every animation frame ("Time" above), and one
 that fetches shows its reply when it lands ("The web"). Handlers may draw
 random numbers; views may not, since they run again whenever a cell they
-read changes, and a different number each time isn't a view.
+read changes, and a different number each time isn't a view. Both may `log` (to the console; a view logs each time it runs).
 `examples/dice`, live at
 [apps/dice.html](https://ersagunkuruca.github.io/language-lab/apps/dice.html),
 uses all three: Roll draws from the world, "Roll 100 with seed 7" adds the
