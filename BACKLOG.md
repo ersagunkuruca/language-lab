@@ -81,7 +81,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L5 | Effect ledger and container matrix: a test that every consumer of a type asks for its effects | R2 §1.2, §9.6 | P1 | M | |
 | L6 | A page's `on` row is closed and hand-picked; a named row defined once, or an open row | R2 §5 | P2 | M | |
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth | R2 §4 | P2 | L | before C7 |
 | L8 | The error table generated from tests, each row pointing at its test | R2 §6, REVIEW.md §9 | P2 | M | |
@@ -101,6 +100,8 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L23 | Showcase `conjugate(f, g)` = f⁻¹ ∘ g ∘ f: colour-space edit, object-vs-world transform, multiband guitar effect | Ersagun 2026-10-22, NOTES.md | P3 | M | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
+| L25 | Container matrix, the other four places: a `solve` body, a shader, a representation's job, a pinned export | R2 §1.2, L5 | P2 | M | |
+| L26 | The ledger in code: every place that removes an effect from a row calls one `discharge(effect, why)`, and a test compares the calls with the table | R2 §1.2 | P2 | M | |
 
 ## Coordinator and process
 
@@ -135,7 +136,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L4 | One page model: reactive.html draws std's `Html`, its widgets are definitions, `ui.ts` and `UI` removed | this PR |
+| L5 | Container matrix: 10 places a function can wait × 4 effects, each reaches the type, is refused, or is the runtime's on purpose; no holes found | this PR |
+| L4 | One page model: reactive.html draws std's `Html`, its widgets are definitions, `ui.ts` and `UI` removed | #183 |
 | L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | #181 |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 
