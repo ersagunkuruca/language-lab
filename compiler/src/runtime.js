@@ -23,6 +23,21 @@ export function $toList(xs) {
   return l;
 }
 
+// A list kept from the other end, { a, n }: the list a[n − 1], …, a[0]
+// (compile.ts, `growable`; GAPS.md G21). Consing onto it pushes when nothing
+// has pushed past n yet, and copies otherwise, so older lists don't change.
+export function $snoc(v, x) {
+  const a = v.n === v.a.length ? v.a : v.a.slice(0, v.n);
+  a.push(x);
+  return { a, n: v.n + 1 };
+}
+// Its items in list order.
+export function $fromBack(v) {
+  const out = new Array(v.n);
+  for (let i = 0; i < v.n; i++) out[v.n - 1 - i] = v.a[i];
+  return out;
+}
+
 export function $range(n) {
   let l = $nil;
   for (let i = Math.max(0, n) - 1; i >= 0; i--) l = $cons(i, l);

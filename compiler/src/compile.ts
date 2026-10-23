@@ -274,8 +274,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Adapted from Mercury's high-level C backend, which compiles
   // nondeterministic code this way (Henderson and Somogyi, CC 2002).
   // Only direct calls from compiled code use it; values stay generators.
-  // `arr`: list parameters given as JS arrays (GAPS.md G21, `walkable`).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Set<Id> }
+  // `arr`: list parameters given as JS arrays, and which kind (GAPS.md
+  // G21, `walkable`).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back"> }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -344,10 +345,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Set<Id> = new Set()): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back"> = new Map()): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].sort().join(",")}` : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
@@ -364,7 +365,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Set<Id>): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back">): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -420,30 +421,44 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // it ($toList), so the choice only ever costs time, never meaning.
   // Prior art: cdr-coding (Hansen, "Compact list representation", CACM
   // 1969), decided here at compile time by the uses rather than per cell.
-  const walkable = new Set<Id>();
+  // A list that is also consed onto, and the result only walked or consed
+  // onto again (an accumulator such as chapters' `taken`), is kept from the
+  // other end: `{ a, n }`, the list a[n − 1], …, a[0]. Consing pushes onto
+  // a when nothing has pushed past n yet, and copies otherwise, so every
+  // older list still reads what it read ($snoc). `growable` holds those
+  // binders, and `walkable` the ones that are never consed onto.
+  const walkable = new Set<Id>(), growable = new Set<Id>();
   if (!reflective) {
     const parent = new Map<Id, Id>(), refs = new Map<Id, Id[]>();
     for (const n of Object.values(code.nodes)) {
       for (const c of children(n)) parent.set(c, n.id);
       if (n.kind === "ref" && code.nodes[n.target]?.kind === "binder") refs.set(n.target, [...(refs.get(n.target) ?? []), n.id]);
     }
-    for (const def of code.defs) if (code.nodes[def]?.kind === "def" && isFnDef(def) && !info.divergent.has(def)) node<"lambda">(node<"def">(def).body!).params.forEach((p) => walkable.add(p));
-    for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") node<"lambda">(n.fn).params.forEach((p) => walkable.add(p));
-    const walk = (r: Id): boolean => {
+    const binders: Id[] = [];
+    for (const def of code.defs) if (code.nodes[def]?.kind === "def" && isFnDef(def) && !info.divergent.has(def)) binders.push(...node<"lambda">(node<"def">(def).body!).params);
+    for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") binders.push(...node<"lambda">(n.fn).params);
+    const walk = (r: Id, set: Set<Id>, grow: boolean): boolean => {
       const p = code.nodes[parent.get(r)!];
       if (p?.kind === "fold") return p.scrutinee === r && arrayFold(p);
       if (p?.kind !== "call" || p.fn === r) return false;
       const i = p.args.indexOf(r), f = code.nodes[p.fn];
-      if (f.kind === "lambda") return walkable.has(f.params[i]);
+      if (f.kind === "lambda") return set.has(f.params[i]);
       if (f.kind !== "ref") return false;
+      if (f.target === CONS) return grow && i === 1 && walk(p.id, set, grow);
       if (f.target === TEXT_OPS.joinAll || f.target === S.oneOf) return i === 0;
-      return code.nodes[f.target]?.kind === "def" && isFnDef(f.target) && walkable.has(node<"lambda">(node<"def">(f.target).body!).params[i]);
+      return code.nodes[f.target]?.kind === "def" && isFnDef(f.target) && set.has(node<"lambda">(node<"def">(f.target).body!).params[i]);
     };
-    for (let changed = true; changed; ) {
-      changed = false;
-      for (const b of walkable) if (!(refs.get(b) ?? []).every(walk)) { walkable.delete(b); changed = true; }
+    for (const [set, grow] of [[walkable, false], [growable, true]] as const) {
+      binders.forEach((b) => set.add(b));
+      for (let changed = true; changed; ) {
+        changed = false;
+        for (const b of set) if (!(refs.get(b) ?? []).every((r) => walk(r, set, grow))) { set.delete(b); changed = true; }
+      }
     }
   }
+  // Which arrays a binder can hold.
+  type Kind = "front" | "back";
+  const fits = (b: Id, kind: Kind) => (kind === "front" ? walkable : growable).has(b);
   // A fold over a list that only reads each item and the folded rest, not
   // the rest itself, which an array can run without cells.
   function arrayFold(n: NodeOf<"fold">): boolean {
@@ -519,7 +534,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // get a lambda written in place that doesn't choose.
     function defCall(n: NodeOf<"call">): Spec {
       const f = node<"ref">(n.fn);
-      const plain = new Set<Id>(), arr = new Set<Id>();
+      const plain = new Set<Id>(), arr = new Map<Id, Kind>();
       if (!reflective && isFnDef(f.target)) {
         const params = node<"lambda">(node<"def">(f.target).body!).params;
         const called = calledParams(f.target);
@@ -529,7 +544,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             plain.add(params[i]);
             plainHere.add(a);
           }
-          if (walkable.has(params[i]) && arraySource(a)) arr.add(params[i]);
+          const kind = arrayKind(a, true);
+          if (kind && fits(params[i], kind)) arr.set(params[i], kind);
         });
       }
       return specAt(f.id, f.target, rho, plain, arr);
@@ -537,28 +553,60 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
       const params = node<"lambda">(node<"def">(s.def).body!).params;
-      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a)! : ex(a)));
+      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a, true)!.js : ex(a)));
     }
 
-    // Binders holding a JS array here: the copy's array parameters, and
-    // lets given an array.
-    const arrNow = new Set<Id>(sp.arr);
-    // The JS array an expression is, without making cells, if it is one.
-    function arraySource(id: Id): string | null {
+    // Binders holding an array here: the copy's array parameters, and lets
+    // given one.
+    const arrNow = new Map<Id, Kind>(sp.arr);
+    // The array an expression is, without making cells, if it is one: a JS
+    // array in list order (front), or `{ a, n }` from the other end (back).
+    // `held`: the value goes to a binder, where an empty list is worth
+    // starting from the other end, in case it grows.
+    function arrayKind(id: Id, held = false): Kind | null {
       const n = code.nodes[id];
-      if (n.kind === "ref") return arrNow.has(n.target) ? local(n.target) : null;
+      if (n.kind === "ref") return n.target === NIL ? (held ? "back" : null) : arrNow.get(n.target) ?? null;
       if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
-      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return `$text.${f === TEXT_OPS.split ? "split" : "characters"}(${n.args.map(ex).join(", ")})`;
+      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return "front";
+      return f === CONS && code.nodes[n.args[1]].kind === "ref" && arrayKind(n.args[1], held) === "back" ? "back" : null;
+    }
+    function arraySource(id: Id, held = false): { js: string; kind: Kind } | null {
+      if (!arrayKind(id, held)) return null;
+      const n = code.nodes[id];
+      if (n.kind === "ref") {
+        if (n.target === NIL) return { js: "{ a: [], n: 0 }", kind: "back" };
+        const kind = arrNow.get(n.target);
+        return kind ? { js: local(n.target), kind } : null;
+      }
+      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      const f = node<"ref">(n.fn).target;
+      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { js: `$text.${f === TEXT_OPS.split ? "split" : "characters"}(${n.args.map(ex).join(", ")})`, kind: "front" };
+      // Onto a list kept from the other end. Only onto a name or nil, so the
+      // item is still worked out before the rest, as in $cons.
+      const rest = f === CONS && code.nodes[n.args[1]].kind === "ref" ? arraySource(n.args[1], held) : null;
+      if (rest?.kind === "back") return { js: `$snoc(${rest.js}, ${ex(n.args[0])})`, kind: "back" };
       return null;
     }
-    // `let p = v`, holding the array when v is one and p is only walked.
+    // `let p = v`, holding the array when v is one that p can hold.
     function letArg(p: Id, a: Id): string {
-      const arr = walkable.has(p) ? arraySource(a) : null;
-      if (arr === null) return ex(a);
-      arrNow.add(p);
-      return arr;
+      const arr = arraySource(a, true);
+      if (!arr || !fits(p, arr.kind)) return ex(a);
+      arrNow.set(p, arr.kind);
+      return arr.js;
     }
+    // A loop over an array's items, in list order, from the end of the list,
+    // or in either order.
+    function eachOf(arr: { js: string; kind: Kind }, x: string, body: string, order: "list" | "end" | "any"): string {
+      if (arr.kind === "front" && order !== "end") return `for (const ${x} of ${arr.js}) {\n${body}\n}`;
+      const v = temp("v"), i = temp("i");
+      const up = (arr.kind === "back") === (order !== "list");
+      const [a, len] = arr.kind === "front" ? [v, `${v}.length`] : [`${v}.a`, `${v}.n`];
+      const loop = up ? `for (let ${i} = 0; ${i} < ${len}; ${i}++)` : `for (let ${i} = ${len} - 1; ${i} >= 0; ${i}--)`;
+      return `{\nconst ${v} = ${arr.js};\n${loop} {\nconst ${x} = ${a}[${i}];\n${body}\n}\n}`;
+    }
+    // An array as a JS array in list order.
+    const inOrder = (arr: { js: string; kind: Kind }) => (arr.kind === "front" ? arr.js : `$fromBack(${arr.js})`);
 
     // Does evaluating this expression give anything other than exactly
     // one result? (A lambda doesn't: it's a value; calling it might.)
@@ -649,7 +697,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const t = code.nodes[n.target];
       const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
       switch (t.kind) {
-        case "binder": return arrNow.has(n.target) ? `$toList(${local(n.target)})` : local(n.target);
+        case "binder": {
+          const kind = arrNow.get(n.target);
+          return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
+        }
         case "def": {
           const s = specAt(n.id, n.target, rho);
           if (!isFnDef(n.target)) return `${s.name}()`;
@@ -746,7 +797,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") return block(n.id);
       const joined = f.kind === "ref" && f.target === TEXT_OPS.joinAll ? arraySource(n.args[0]) : null;
-      if (joined) return `$text.joinAll(${joined}, ${ex(n.args[1])})`;
+      if (joined) return `$text.joinAll(${inOrder(joined)}, ${ex(n.args[1])})`;
       const one = f.kind === "ref" && (f.target === TEXT_OPS.joinAll || code.nodes[f.target].kind === "def") ? fused(n) : null;
       if (one) return one;
       if (f.kind === "ref") {
@@ -1100,8 +1151,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         chain.unshift({ call: c, def: d, emit: step.emit });
         at = c.args[step.li];
       }
-      const array = at ? arraySource(at) : null;
-      if (!chain.length && !array) return null;
+      if (!chain.length && !(at && arrayKind(at))) return null;
       // Every other argument has no effects, and the functions given choose
       // nothing; they're bound once, before the loop.
       const calls = [n, ...chain.map((c) => c.call)];
@@ -1134,8 +1184,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const x = temp("x");
       const run = (i: number, item: string): string => (i === chain.length ? sink.each(item) : `{\n${chain[i].emit(item, (v) => run(i + 1, v))}\n}`);
       const body = scoped(true, () => run(0, x));
+      const array = at ? arraySource(at) : null;
       const loop = array
-        ? `for (const ${x} of ${array}) {\n${body}\n}`
+        ? eachOf(array, x, body, "list")
         : (() => { const l = temp("l"); return `for (let ${l} = ${ex(at!)}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${body}\n}`; })();
       return `(() => {\n${bindsOf.join("")}${sink.before}${loop}\nreturn ${sink.after};\n})()`;
     }
@@ -1180,17 +1231,17 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A fold over a list held as a JS array (GAPS.md G21): an index loop
     // from the end, or from the front when the step doesn't care about
     // order (G15). No cells and no spine.
-    function foldArray(n: NodeOf<"fold">, input: string): string {
+    function foldArray(n: NodeOf<"fold">, input: { js: string; kind: Kind }): string {
       const arms = n.arms.map((a) => node<"arm">(a));
       const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
-      const fwd = forward(arms, recOf);
+      const fwd = forward(arms, recOf), a = temp("a"), x = temp("x"), held = { js: a, kind: input.kind };
       if (fwd && fwd.on.variant === CONS && fwd.at === 1) {
-        const acc = temp("acc"), x = temp("x"), item = fwd.on.binds[0];
-        return `let ${acc} = ${ex(fwd.end.body)};\nfor (const ${x} of ${input}) {${referenced.has(item) ? `\nconst ${local(item)} = ${x};` : ""}\n${acc} = ${fwd.step(acc)};\n}\nreturn ${acc};`;
+        const acc = temp("acc"), item = fwd.on.binds[0];
+        return `let ${acc} = ${ex(fwd.end.body)};\nconst ${a} = ${input.js};\n` +
+          `${eachOf(held, x, `${referenced.has(item) ? `const ${local(item)} = ${x};\n` : ""}${acc} = ${fwd.step(acc)};`, "any")}\nreturn ${acc};`;
       }
-      const [nil, cons, nilFn, consFn, i, r] = foldArms(n), a = temp("a");
-      return `${nilFn}${consFn}const ${a} = ${input};\nlet ${r} = ${nil}();\n` +
-        `for (let ${i} = ${a}.length - 1; ${i} >= 0; ${i}--) ${r} = ${cons}(${a}[${i}], ${r});\nreturn ${r};`;
+      const [nil, cons, nilFn, consFn, , r] = foldArms(n);
+      return `${nilFn}${consFn}const ${a} = ${input.js};\nlet ${r} = ${nil}();\n${eachOf(held, x, `${r} = ${cons}(${x}, ${r});`, "end")}\nreturn ${r};`;
     }
 
     // A fold over `characters(t)`, run on t: the characters from the end,
@@ -1311,7 +1362,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f.kind === "lambda") {
         // A let given an array keeps it (GAPS.md G21); making one has no
         // effects, so it can be left out of the order of the others.
-        const own = f.params.map((p, i) => (walkable.has(p) && arraySource(n.args[i]) ? letArg(p, n.args[i]) : null));
+        const own = f.params.map((p, i) => { const k = arrayKind(n.args[i], true); return k && fits(p, k) ? letArg(p, n.args[i]) : null; });
         return parts(n.args.filter((_, i) => own[i] === null), (vals) => {
           let j = 0;
           return `${f.params.map((p, i) => bindLet(p, own[i] ?? vals[j++])).join("")}${st(f.body, k)}`;
@@ -1323,7 +1374,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const items = h === S.oneOf ? arraySource(n.args[0]) : null;
         if (items) {
           const x = temp("x");
-          return `for (const ${x} of ${items}) {\n${k(x)}\n}`;
+          return eachOf(items, x, k(x), "list");
         }
         if (h === S.oneOf) return parts(n.args, ([xs]) => {
           const l = temp("l"), x = temp("x");
@@ -1353,7 +1404,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const kind = target ? code.nodes[target].kind : null;
       const callee = kind === "def" ? defCall(n) : null;
       const params = callee && isFnDef(callee.def) ? node<"lambda">(node<"def">(callee.def).body!).params : [];
-      const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arraySource(a) : null));
+      const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arraySource(a, true)!.js : null));
       return parts([n.fn, ...n.args.filter((_, i) => own[i] === null)], ([fn, ...rest]) => {
         let j = 0;
         const args = own.map((o) => o ?? rest[j++]);
@@ -1506,7 +1557,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
   for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
 
-  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
