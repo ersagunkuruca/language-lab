@@ -84,7 +84,9 @@ export function $count(f) { let n = 0; for (const _ of f()) n++; return n; }
 
 export const OUT = { outOfFuel: true };
 const fuel = [];
-export const $spend = () => !fuel.length || --fuel[fuel.length - 1].left >= 0;
+// Outside any `with fuel`, a step is free, except under a page's budget
+// (run.ts, withSteps), which throws when it runs out.
+export const $spend = () => (fuel.length ? --fuel[fuel.length - 1].left >= 0 : (spendStep(), true));
 export function $spendOrThrow() { if (!$spend()) throw OUT; }
 
 // The frame is active exactly while the body is running, as in the
@@ -179,7 +181,7 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // two shapes of operation buy (Koka and Effekt compile tail-resumptive and
 // abortive handlers the same way).
 
-import { Aborted } from '../../projectional/src/lang/run.ts';
+import { Aborted, OutOfSteps, spendStep } from '../../projectional/src/lang/run.ts';
 import { ABORT, ABORT_OP, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, SOME, WAIT_OP } from '../../projectional/src/lang/std.ts';
 import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
 export { Aborted as $Aborted };
@@ -266,7 +268,7 @@ const fallible = (k) => (...args) => {
     v = f.apply(world, args);
   } catch (e) {
     // Not here yet isn't a failure: the page asks again later.
-    if (e instanceof Pending) throw e;
+    if (e instanceof Pending || e instanceof OutOfSteps) throw e;
     return $perform(ABORT, ABORT_OP, [e.message]);
   }
   return v;

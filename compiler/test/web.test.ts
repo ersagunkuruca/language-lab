@@ -173,3 +173,45 @@ test("fetching in a page: a view keeps what it shows until the reply, a handler 
   // Each address asked once, however often it was read.
   assert.deepEqual(e.asked, ["/greeting", "/missing", "/later"]);
 });
+
+test("a formula that never ends: its part says it didn't finish, and comes back when the cell changes, both ways", async () => {
+  const k = new Lang();
+  // down(x) ends only from a whole number ≥ 0; the checker can't prove it, so it's Diverge.
+  const down = k.def("down");
+  k.define(down, k.fn(["x"], (x) => k.if(k.equal(x, k.lit(0)), k.lit(0), k.call(down, k.call(B.sub, x, k.lit(1))))));
+  const start = k.def("start");
+  k.define(start, k.thunk(() => k.call(CELL_OPS.cell, k.lit(3))));
+  const main = k.def("main");
+  const on = (event: string, f: () => string) => k.call(HTML_V.on, k.lit(event), k.fn(["e"], () => f()));
+  const id = (name: string) => k.call(HTML_V.property, k.lit("id"), k.thunk(() => k.lit(name)));
+  k.define(main, k.thunk(() => k.let("n", k.call(start), (n) => k.let("f", k.call(CELL_OPS.formula, k.thunk(() => k.call(down, k.call(CELL_OPS.read, n)))), (f) =>
+    k.call(HTML_V.element, k.lit("p"), k.list(), k.list(
+      k.call(HTML_V.text, k.thunk(() => k.call(S.show, k.call(CELL_OPS.read, f)))),
+      k.call(HTML_V.element, k.lit("button"), k.list(id("spin"), on("click", () => k.call(CELL_OPS.write, n, k.lit(-1)))), k.list()),
+      k.call(HTML_V.element, k.lit("button"), k.list(id("fix"), on("click", () => k.call(CELL_OPS.write, n, k.lit(2)))), k.list()),
+    ))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(pageProblem(info, main, names), null);
+  const path = join(dir, "spin.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+
+  const draw = (way: "evaluator" | "compiled") => {
+    const cells = new Cells(way === "evaluator" ? equal : $eq);
+    let v;
+    if (way === "evaluator") v = runMain(code, info, main, { print: () => {}, names, cells });
+    else { $setCells(cells); v = compiled.main() as never; }
+    const root = mountHtml(v, { cells, doc: fakeDoc(), call: way === "evaluator" ? evaluatorCall : compiledCall, steps: 1000 }) as FakeEl;
+    const seen = [root.html()];
+    root.find("spin").fire("click");
+    seen.push(root.html());
+    root.find("fix").fire("click");
+    seen.push(root.html());
+    return seen.map((h) => h.replace(/<button.*/, ""));
+  };
+  const e = draw("evaluator"), c = draw("compiled");
+  assert.deepEqual(c, e);
+  assert.deepEqual(e, ["<p>0", "<p>didn't finish", "<p>0"]);
+});

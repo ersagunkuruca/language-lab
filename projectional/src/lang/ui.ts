@@ -10,7 +10,8 @@
 import type { Id } from "../model.ts";
 import { Cells, type CellNode } from "./cells.ts";
 import type { Data, Fn, Value } from "./run.ts";
-import { fromList } from "./run.ts";
+import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
+import { STUCK } from "./html.ts";
 
 export type UiIds = Record<"text" | "button" | "entry" | "slider" | "row" | "column" | "dynamic", Id>;
 
@@ -32,6 +33,8 @@ export interface Mount {
   // Each time a watcher runs again (not the first time), with its element:
   // the page flashes it.
   ran?: (el: El, node: CellNode) => void;
+  // The step budget of each update (run.ts, withSteps).
+  steps?: number;
 }
 
 const call = (f: Value, ...args: Value[]): Value => {
@@ -44,10 +47,14 @@ export function mount(v: Value, m: Mount): El {
   const d = v as Data;
   const el = (tag: string, cls: string) => { const e = doc.createElement(tag); e.className = cls; return e; };
   // A watcher on `e`, reporting its later runs.
-  const watch = (e: El, label: string, run: () => void) => {
+  const steps = m.steps ?? PAGE_STEPS;
+  cells.around = (update) => withSteps(steps, update);
+  // Each update runs under a step budget (run.ts, withSteps); one that runs
+  // out shows that it didn't finish.
+  const watch = (e: El, label: string, run: () => void, stuck: () => void = () => {}) => {
     let first = true;
     const node: CellNode = cells.watch(() => {
-      run();
+      try { withSteps(steps, run); } catch (err) { if (!(err instanceof OutOfSteps)) throw err; stuck(); return; }
       if (!first) m.ran?.(e, node);
       first = false;
     }, label);
@@ -59,14 +66,14 @@ export function mount(v: Value, m: Mount): El {
   switch (d.tag) {
     case ui.text: {
       const e = el("span", "ui-text");
-      watch(e, "text", () => { e.textContent = String(call(d.fields[0])); });
+      watch(e, "text", () => { e.textContent = String(call(d.fields[0])); }, () => { e.textContent = STUCK; });
       return e;
     }
     case ui.button: {
       const e = el("button", "ui-button");
       e.textContent = String(d.fields[0]);
       e.setAttribute("type", "button");
-      e.addEventListener("click", guard(() => cells.batch(() => call(d.fields[1]))));
+      e.addEventListener("click", guard(() => cells.batch(() => withSteps(steps, () => call(d.fields[1])))));
       return e;
     }
     case ui.entry: {
@@ -76,7 +83,7 @@ export function mount(v: Value, m: Mount): El {
         if (ev.key !== "Enter" || !e.value) return;
         const text = e.value;
         e.value = "";
-        guard(() => cells.batch(() => call(d.fields[1], text)))();
+        guard(() => cells.batch(() => withSteps(steps, () => call(d.fields[1], text))))();
       });
       return e;
     }
@@ -105,7 +112,7 @@ export function mount(v: Value, m: Mount): El {
       const e = el("div", "ui-dynamic");
       // The parts drawn inside belong to this watcher's run: the next run
       // disposes of them before drawing new ones.
-      watch(e, "part", () => { e.replaceChildren(mount(call(d.fields[0]), m)); });
+      watch(e, "part", () => { e.replaceChildren(mount(call(d.fields[0]), m)); }, () => { e.textContent = STUCK; });
       return e;
     }
     default: throw new Error(`not a UI value: ${d.tag}`);

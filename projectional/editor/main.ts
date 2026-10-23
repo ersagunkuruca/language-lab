@@ -335,6 +335,10 @@ function newProgram() {
   if (!r.ok) return;
   addProgram({ ...empty, title: `Untitled ${n}`, code: r.code, names: { short: r.names, descriptive: {} } },
     "A new program with one empty action, main. Fill its hole from the palette; + New adds definitions and data types.");
+  // Its hole selected, with the palette showing, whichever tab was open.
+  ui.selected = T.nextHole(doc.code, ui.def, ui.def) ?? null;
+  ui.panel = "node";
+  render();
 }
 
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
@@ -1949,7 +1953,9 @@ document.addEventListener("click", (e) => {
     if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
-    if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; render(); document.getElementById("f-def-name")?.focus(); return; }
+    // The form is in the side panel's first tab: show it, whichever tab
+    // (the Guide, on a first visit) was open.
+    if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; if (ui.mode) ui.panel = "node"; render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();
     if (a === "copy") return copySelected();
     if (a === "t-values") return showValues();

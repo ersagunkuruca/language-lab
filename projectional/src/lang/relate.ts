@@ -58,11 +58,11 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
+import { close, fromList, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { seededGenerator } from "./random.ts";
-import { CELL_OPS, CONS, FALSE, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
-import { intLit } from "./int.ts";
+import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
+import { add as intAdd, intLit, neg as intNeg, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
 import { Subst } from "./types.ts";
@@ -695,6 +695,41 @@ export function interpreter(code: Code, opts: Options = {}) {
           const path = get.k === "prim" ? [get.id] : fieldPath(code, get.lambda);
           if (!path) throw new NotInvertible("set needs a field, or a path of fields");
           return eq(out, setPath(deep(b, s) as DataT, path.map((f) => fieldIndex(code, f)), deep(args[2], s)))(s);
+        },
+      });
+    }
+    // Whole-number add, subtract and negate: any two of the three sides
+    // give the third. Waiting for both inputs instead, length(xs) = 0
+    // backwards would guess every list, then add up each guess to see.
+    if (id === INT_OPS.add || id === INT_OPS.sub || id === INT_OPS.neg) {
+      const sides = [...args, out];
+      // The side to find, from the others: out = a + b, a = out − b, b = out − a.
+      const solve: ((x: Int[]) => Int)[] = id === INT_OPS.add ? [([, b, o]) => intSub(o, b), ([a, , o]) => intSub(o, a), ([a, b]) => intAdd(a, b)]
+        : id === INT_OPS.sub ? [([, b, o]) => intAdd(o, b), ([a, , o]) => intSub(a, o), ([a, b]) => intSub(a, b)]
+        : [([, o]) => intNeg(o), ([a]) => intNeg(a)];
+      const unknown = (s: State) => sides.filter((t) => walk(t, s) instanceof LVar).length;
+      return wait({
+        k: "later", text: stdNames[id] ?? id, ready: (s) => unknown(s) <= 1, then: (s) => {
+          const xs = sides.map((t) => walk(t, s));
+          const i = xs.findIndex((x) => x instanceof LVar);
+          const at = i < 0 ? sides.length - 1 : i;
+          return eq(sides[at], solve[at](xs as Int[]))(s);
+        },
+      });
+    }
+    // split, backwards: the pieces joined by the separator, if splitting
+    // that gives the same pieces (no piece holds the separator). Waiting
+    // for the text alone, a search for words in a line would build ever
+    // longer lists of pieces that never meet a text.
+    if (id === TEXT_OPS.split) {
+      const [t, by] = args;
+      return wait({
+        k: "later", text: "split", ready: (s) => known(by, s) && (known(t, s) || known(out, s)), then: (s) => {
+          const sep = walk(by, s) as string, split = STD_IMPL[id] as (t: string, by: string) => Value;
+          if (known(t, s)) return eq(out, fromValue(split(walk(t, s) as string, sep)))(s);
+          const pieces = fromList(toValue(deep(out, s))!) as string[];
+          const text = pieces.join(sep);
+          return sep !== "" && valueEqual(split(text, sep), toValue(deep(out, s))!) ? eq(t, text)(s) : null;
         },
       });
     }

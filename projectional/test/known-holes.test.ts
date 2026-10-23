@@ -129,7 +129,7 @@ test("§1.3 equal on functions should be refused, not compare by identity", () =
 
 // ---------------------------------------------------------------- the second review (REVIEW-2026-10-22b.md)
 
-test("R2 §1.1 reading a formula that never ends is typed as if it ends (Cells hides Diverge)", { todo: "Cells covers Diverge (LANGUAGE.md, Cells)" }, () => {
+test("R2 §1.1 reading a formula that never ends is typed as if it may not end", () => {
   let spin = "";
   const p = program((k) => {
     spin = k.def("spin");
@@ -140,7 +140,7 @@ test("R2 §1.1 reading a formula that never ends is typed as if it ends (Cells h
     return main;
   });
   assert.ok(p.effects(spin).includes(DIVERGE));
-  // main runs forever, and its type is () -[Cells, Console]-> Unit.
+  // main runs forever: read says Diverge, so its type does too.
   assert.ok(p.effects(p.main).includes(DIVERGE), "main reads a formula that never ends, and its type says it's total");
 });
 

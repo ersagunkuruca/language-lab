@@ -41,8 +41,8 @@ function uiType(k: Lang) {
   const str = () => k.tref(STRING), num = () => k.tref(NUMBER);
   return k.type("UI", [], [
     ["text", [["shows", () => k.tfun([], str(), [CELLS, DIVERGE])]]],
-    ["button", [["label", str], ["on click", () => k.tfun([], k.tref(UNIT), [CELLS, UPDATE])]]],
-    ["entry", [["hint", str], ["on enter", () => k.tfun([str()], k.tref(UNIT), [CELLS, UPDATE])]]],
+    ["button", [["label", str], ["on click", () => k.tfun([], k.tref(UNIT), [CELLS, UPDATE, DIVERGE])]]],
+    ["entry", [["hint", str], ["on enter", () => k.tfun([str()], k.tref(UNIT), [CELLS, UPDATE, DIVERGE])]]],
     ["slider", [["label", str], ["low", num], ["high", num], ["value", () => k.tref(CELL, num())]]],
     ["row", [["items", (self) => k.tref(LIST, k.tref(self))]]],
     ["column", [["items", (self) => k.tref(LIST, k.tref(self))]]],
