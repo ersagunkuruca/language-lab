@@ -8,6 +8,9 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { load } from "../src/program.ts";
 import { makeRunner } from "../../projectional/src/lang/run.ts";
+import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
+import { infer } from "../../projectional/src/lang/infer.ts";
+import type { Id } from "../../projectional/src/model.ts";
 import { area, corners, vectors } from "../src/fixtures.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
@@ -31,11 +34,13 @@ test("examples/shaders: red, green and blue, and everything they call, go to the
 
 test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all", () => {
   const p = load("raymarch");
+  // The source has no derivative code: shade asks derivative((x) ↦ scene(x, y, z, time)) and so on.
+  assert.ok(!Object.values(p.pres.names).some((n) => n.includes("∂")), "no ∂ definitions in the source");
   const s = emitWgsl(lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true }));
   assert.deepEqual([...s.refused.keys()], []);
   const names = s.funcs.map((f) => f.name);
-  // The normals are the generated partial derivatives, not finite differences.
-  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "march", "shadow", "shade"]) assert.ok(names.includes(d), d);
+  // The normals are partial derivatives generated from scene for the shader, not finite differences.
+  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "∂ring/∂x", "march", "shadow", "shade"]) assert.ok(names.includes(d), d);
   // march and shadow call themselves last: loops.
   for (const f of s.funcs.filter((f) => f.name === "march" || f.name === "shadow")) {
     const body = s.wgsl.slice(s.wgsl.indexOf(`fn ${f.wgsl}(`));
@@ -43,16 +48,27 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   }
   assert.match(s.wgsl, /struct Colour_\d+ \{\n {2}red: f32,\n {2}green: f32,\n {2}blue: f32,\n\}/);
   // And they are the gradient: close to central differences, away from the
-  // blend's seams.
-  const r = makeRunner(p.code, p.info, { print: () => {} });
-  const at = (name: string, ...xs: number[]) => { for (const v of r.call(r.value(p.named(name)), ...xs)) return v as number; return NaN; };
+  // blend's seams. Both the definitions the shader gets and the evaluator's
+  // own derivative, taken at run time.
+  const x = expandDerivatives(p.code, p.pres.names);
+  const xi = infer(x.code, x.names);
+  assert.deepEqual(xi.errors, []);
+  const generated = (n: string) => x.code.defs.find((d) => x.names[d] === n)!;
+  const r = makeRunner(x.code, xi, { print: () => {} });
+  const at = (def: Id, ...xs: number[]) => { for (const v of r.call(r.value(def), ...xs)) return v as number; return NaN; };
+  const scene = p.named("scene");
+  // The evaluator, given the source, differentiates at run time with the
+  // same deriver: it shades every point the same as the expanded program.
+  const src = makeRunner(p.code, p.info, { print: () => {} });
+  const shade = (run: typeof r, ...xs: number[]) => { for (const v of run.call(run.value(p.named("shade")), ...xs)) return JSON.stringify(v); return "none"; };
+  for (const pt of [[0.3, -0.75, -0.2, 1], [0.6, 0.2, 0.3, 2]]) assert.equal(shade(src, ...pt), shade(r, ...pt));
   const h = 1e-5;
-  for (const [x, y, z, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
-    const pt = [x, y, z];
+  for (const [px, py, pz, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
+    const pt = [px, py, pz];
     ["x", "y", "z"].forEach((axis, i) => {
       const plus = pt.map((v, j) => (j === i ? v + h : v)), minus = pt.map((v, j) => (j === i ? v - h : v));
-      const numeric = (at("scene", ...plus, t) - at("scene", ...minus, t)) / (2 * h);
-      assert.ok(Math.abs(at(`∂scene/∂${axis}`, x, y, z, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
+      const numeric = (at(scene, ...plus, t) - at(scene, ...minus, t)) / (2 * h);
+      assert.ok(Math.abs(at(generated(`∂scene/∂${axis}`), px, py, pz, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
     });
   }
 });

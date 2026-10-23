@@ -118,6 +118,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Differentiating real functions written in the language (`derive.ts`) | Textbook | Symbolic differentiation. The product and quotient rules are the textbook ones. |
 | A fold carrying (value, slope) pairs | Prior art | Forward-mode automatic differentiation (Wengert, 1964) and dual numbers (W. K. Clifford, 1873). `∂polynomial/∂x` is Horner's rule. |
+| `derivative(f)` generated before compiling, so GPU code gets exact slopes | Prior art | Differentiating a program before code generation, as [Enzyme](https://enzyme.mit.edu) (Moses and Churavy, NeurIPS 2020) does for LLVM and GPU kernels. Noted in `shade`'s comment in `examples/raymarch`. |
 
 ## Numbers and representations
 
@@ -165,7 +166,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Sphere tracing | Adapted | John C. Hart, "Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces", The Visual Computer, 1996. |
 | The ring's (torus's) distance, the smooth minimum, the soft shadow | Adapted | Inigo Quilez's formulas, from his [distance functions](https://iquilezles.org/articles/distfunctions/), [smooth minimum](https://iquilezles.org/articles/smin/) and [soft shadows](https://iquilezles.org/articles/rmshadows/) articles. Credited in each definition's comment in `examples/raymarch` (shown in the editor), on `shaders.html` and in COMPILER.md. |
-| The scene (a drop in a ring over a checker floor), the ripples, normals as saved derivatives | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
+| The scene (a drop in a ring over a checker floor), the ripples, normals as the scene's derivative | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
 
 ## The node editor
 

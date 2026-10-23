@@ -27,6 +27,8 @@ import { DIVERGE, NUMBER, type Type } from "../../projectional/src/lang/types.ts
 import { B } from "../../projectional/src/prelude.ts";
 import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
+import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
+import { infer } from "../../projectional/src/lang/infer.ts";
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
@@ -63,11 +65,23 @@ const BUILTIN: Record<Id, Op> = {
 };
 
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr }
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[] }
+// `code` and `info` are the program that was lowered: the one given, or
+// a copy with its derivatives generated, where funcs[i].def lives.
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; code: Code; info: Info }
 
 class Refused extends Error {}
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean } = {}): Lowered {
+  // derivative(f) of a function written right there becomes the code of
+  // its derivative (derive.ts), checked again, so the GPU gets exact
+  // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
+  // definitions like any other.
+  const x = expandDerivatives(code, names);
+  if (x.expanded.length) {
+    code = x.code;
+    names = x.names;
+    info = infer(code, names);
+  }
   const zonk = (id: Id): Type => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
@@ -260,5 +274,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   for (const r of roots) {
     try { func(r); } catch (e) { if (!(e instanceof Refused)) throw e; }
   }
-  return { funcs, refused, records: [...records.values()] };
+  return { funcs, refused, records: [...records.values()], code, info };
 }
