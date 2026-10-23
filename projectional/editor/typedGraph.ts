@@ -79,6 +79,8 @@ export interface GraphView extends Canvas {
   // Space out every node, or only these (a frame stands for what it holds).
   tidy: (only: Id[] | null) => void;
   picked: () => Id[];
+  // Pick or unpick one, as shift-click does (the menu's way, for touch).
+  pick: (id: Id) => void;
   // The nodes these stand for: themselves, and a frame's contents.
   expand: (ids: Id[]) => Id[];
 }
@@ -94,7 +96,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
   const scene = build(code, pres, info, defId, hooks);
-  for (const p of [...picked]) if (!scene.items.has(p)) picked.delete(p);
+  for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
@@ -102,6 +104,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   return {
     ...canvas,
     picked: () => [...picked],
+    pick: (id) => { if (!picked.delete(id)) picked.add(id); },
     expand: (ids) => [...expand(scene, ids)],
     tidy: (only) => {
       const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
@@ -853,9 +856,28 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     const t = (e.target as Element).closest("[data-id]");
     if (t) hooks.open(t.getAttribute("data-id")!);
   });
+  // A touch held still for half a second is a right-click: iOS has none.
+  // Where the browser has its own (Android), the first of the two wins.
+  let held = 0, letGo = () => {};
+  root.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType !== "touch") return;
+    const at = { x: ev.clientX, y: ev.clientY }, t = ev.target as Element;
+    const mv = (e: PointerEvent) => { if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) letGo(); };
+    const timer = setTimeout(() => {
+      letGo();
+      held = Date.now();
+      t.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y }));
+    }, 500);
+    letGo = () => { clearTimeout(timer); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", letGo); window.removeEventListener("pointercancel", letGo); };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", letGo);
+    window.addEventListener("pointercancel", letGo);
+  });
   root.addEventListener("contextmenu", (e) => {
     if (!hooks.menu) return;
     e.preventDefault();
+    letGo();
+    if (e.isTrusted && Date.now() - held < 1000) return;
     const el = e.target as Element;
     const hole = el.closest(".pill.hole")?.getAttribute("data-slot");
     const src = el.closest("[data-src]")?.getAttribute("data-src");
@@ -877,8 +899,9 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     const out = start.closest("[data-out]")?.getAttribute("data-out");
     const slot = start.closest("circle.inp")?.getAttribute("data-slot");
     const mv = start.closest("[data-move]")?.getAttribute("data-move");
-    // Alt-drag moves anything, dots included (a plain drag from a dot wires).
-    if (!ev.altKey && (src || out || slot)) {
+    // Alt-drag moves anything, dots included (a plain drag from a dot wires),
+    // and so does a drag from a picked dot: the way to move one by touch.
+    if (!ev.altKey && !(src && mv && picked.has(src)) && (src || out || slot)) {
       ev.preventDefault();
       const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : null;
       connectDrag(root, ev, "[data-slot]", check && ((t) => check(t.getAttribute("data-slot")!)), (target) => {
