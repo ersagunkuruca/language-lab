@@ -17,6 +17,8 @@ import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { S } from "../../projectional/src/lang/std.ts";
+import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
+import type { Id } from "../../projectional/src/model.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");
@@ -39,12 +41,14 @@ test("examples/shaders: red, green and blue, and everything they call, go to the
 
 test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all", () => {
   const p = load("raymarch");
+  // The source has no derivative code: shade asks derivative((x) ↦ scene(x, y, z, time)) and so on.
+  assert.ok(!Object.values(p.pres.names).some((n) => n.includes("∂")), "no ∂ definitions in the source");
   const lowered = lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true });
   const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.keys()], []);
   const names = lowered.funcs.map((f) => f.name);
-  // The normals are the generated partial derivatives, not finite differences.
-  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "march", "shadow", "shade", "trace"]) assert.ok(names.includes(d), d);
+  // The normals are partial derivatives generated from scene for the shader, not finite differences.
+  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "∂ring/∂x", "march", "shadow", "shade", "trace"]) assert.ok(names.includes(d), d);
   // Only colour is a place to start: the rest may not finish, so they run
   // under its budget.
   assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour"]);
@@ -63,16 +67,27 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.match(s.wgsl, /return clamp\(l\d+ \* l\d+, vec3f\(0\.0\), vec3f\(1\.0\)\);/);
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And they are the gradient: close to central differences, away from the
-  // blend's seams.
-  const r = makeRunner(p.code, p.info, { print: () => {} });
-  const at = (name: string, ...xs: number[]) => { for (const v of r.call(r.value(p.named(name)), ...xs)) return v as number; return NaN; };
+  // blend's seams. Both the definitions the shader gets and the evaluator's
+  // own derivative, taken at run time.
+  const x = expandDerivatives(p.code, p.pres.names);
+  const xi = infer(x.code, x.names);
+  assert.deepEqual(xi.errors, []);
+  const generated = (n: string) => x.code.defs.find((d) => x.names[d] === n)!;
+  const r = makeRunner(x.code, xi, { print: () => {} });
+  const at = (def: Id, ...xs: number[]) => { for (const v of r.call(r.value(def), ...xs)) return v as number; return NaN; };
+  const scene = p.named("scene");
+  // The evaluator, given the source, differentiates at run time with the
+  // same deriver: it shades every point the same as the expanded program.
+  const src = makeRunner(p.code, p.info, { print: () => {} });
+  const shade = (run: typeof r, ...xs: number[]) => { for (const v of run.call(run.value(p.named("shade")), ...xs)) return JSON.stringify(v); return "none"; };
+  for (const pt of [[0.3, -0.75, -0.2, 1], [0.6, 0.2, 0.3, 2]]) assert.equal(shade(src, ...pt), shade(r, ...pt));
   const h = 1e-5;
-  for (const [x, y, z, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
-    const pt = [x, y, z];
+  for (const [px, py, pz, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
+    const pt = [px, py, pz];
     ["x", "y", "z"].forEach((axis, i) => {
       const plus = pt.map((v, j) => (j === i ? v + h : v)), minus = pt.map((v, j) => (j === i ? v - h : v));
-      const numeric = (at("scene", ...plus, t) - at("scene", ...minus, t)) / (2 * h);
-      assert.ok(Math.abs(at(`∂scene/∂${axis}`, x, y, z, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
+      const numeric = (at(scene, ...plus, t) - at(scene, ...minus, t)) / (2 * h);
+      assert.ok(Math.abs(at(generated(`∂scene/∂${axis}`), px, py, pz, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
     });
   }
 });
@@ -188,14 +203,16 @@ test("every example: what a shader can start from has no Diverge, and every loop
     const p = load(name);
     const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
     const s = emitWgsl(lowered);
+    // The lowered program: generated derivatives are in it.
+    const info = lowered.info;
     for (const f of s.funcs) {
-      const t = p.info.subst.zonk(p.info.typeOf.get(f.def)!);
-      assert.ok(t.t === "fn" && !p.info.subst.resolveRow(t.eff).effs.includes(DIVERGE), `${name}: ${f.name} starts a shader and may not finish`);
+      const t = info.subst.zonk(info.typeOf.get(f.def)!);
+      assert.ok(t.t === "fn" && !info.subst.resolveRow(t.eff).effs.includes(DIVERGE), `${name}: ${f.name} starts a shader and may not finish`);
     }
     for (const f of lowered.funcs) {
       // Something the checker couldn't see end may only be called under a budget,
       // and its WGSL takes one from it before anything else.
-      if (p.info.divergent.has(f.def)) assert.ok(f.spends && f.budgeted, `${name}: ${f.name}`);
+      if (info.divergent.has(f.def)) assert.ok(f.spends && f.budgeted, `${name}: ${f.name}`);
       if (!f.spends) continue;
       const at = s.wgsl.indexOf(`// ${f.name}\nfn `);
       if (at < 0) continue; // refused by the printer, with its reason

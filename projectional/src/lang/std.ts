@@ -184,7 +184,8 @@ export const S = {
   // A function's derivative, read off its graph (src/lang/derive.ts). Where
   // the slope can't be read (the function goes through floor, or takes
   // apart data built from its input) there is none, so the derivative may
-  // fail: Choice.
+  // fail: Choice. (Unless the checker can see f and read all its slopes:
+  // infer.ts types that derivative(f) without Choice.)
   derivative: builtin("derivative", "derivative", (s) => {
     const e = s.freshRow();
     return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());

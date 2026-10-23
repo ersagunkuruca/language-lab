@@ -16,6 +16,7 @@ import type { Names } from "../presentation.ts";
 import { unitProblems } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
+import { smoothDerivative as hasSmoothDerivative } from "./derive.ts";
 import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
@@ -384,7 +385,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         break;
       }
       case "call": {
-        const f = expr(n.fn, env, row);
+        const f = smoothDerivative(n) ?? expr(n.fn, env, row);
         const args = n.args.map((a) => expr(a, env, row));
         const ret = s.fresh();
         const fr = s.resolve(f);
@@ -428,6 +429,19 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         t = s.fresh();
     }
     info.typeOf.set(id, t);
+    return t;
+  }
+
+  // derivative(f) where derive.ts can read every slope of f, which is
+  // written right there: its result fails only where f does, so it has f's
+  // effects and no Choice (src/lang/derive.ts, smoothDerivative). Any other
+  // derivative(f) takes the builtin's own type, Choice included.
+  function smoothDerivative(n: NodeOf<"call">): Type | null {
+    const head = code.nodes[n.fn];
+    if (head?.kind !== "ref" || head.target !== S.derivative || n.args.length !== 1 || !hasSmoothDerivative(code, n.args[0])) return null;
+    const e = s.freshRow();
+    const t: Type = { t: "fn", params: [{ t: "fn", params: [num], ret: num, eff: e }], ret: { t: "fn", params: [num], ret: num, eff: e }, eff: s.freshRow() };
+    info.typeOf.set(n.fn, t);
     return t;
   }
 
