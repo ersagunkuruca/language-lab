@@ -6,9 +6,17 @@ const $program = $loadProgram({"nodes":{"19579902":{"id":"19579902","kind":"call
 function solve$0(g0) {
   return $relate($program, "b795c829", { "out": g0 }, ["2abdbdf3"]);
 }
-// greet, run backwards by the relational interpreter: given out, solve for name
+// greet, run with its result known
+function greet$mode0(p$0) {
+  const m$1 = "hello, ";
+  if (!p$0.startsWith(m$1)) return $no;
+  const m$2 = p$0.slice(m$1.length);
+  return [m$2];
+}
+// greet, run backwards (semidet): its plan written out
 function solve$1(g0) {
-  return $relate($program, "f5057927", { "out": g0 }, ["19718686"]);
+  const r = greet$mode0(g0);
+  return r === $no ? [] : [[r[0]]];
 }
 // join text, run backwards by the relational interpreter: given out, solve for 0, 1
 function solve$2(g0) {
