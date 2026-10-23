@@ -67,7 +67,8 @@ language, so parentheses are computed at render time (`src/render/expr.ts`).
 ## What the demo shows
 
 **One tree, two shapes.** Ersagun's example, stored once in
-`examples/compose/code.json`:
+`examples/archive/compose/code.json` (archived: its functions are bare
+names with no bodies, so it shows rendering and isn't a program to run):
 
 ```
 nested:  a = ((d) => b(c(d, e(f, d))))(g(h))

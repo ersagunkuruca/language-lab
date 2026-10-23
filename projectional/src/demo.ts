@@ -32,10 +32,10 @@ const sha = (s: string) => createHash("sha256").update(s).digest("hex").slice(0,
 
 // 1. Same tree, two shapes
 {
-  const dir = join(root, "examples/compose");
+  const dir = join(root, "examples/archive/compose");
   const code = loadCode(dir);
   const a = code.defs.at(-1)!;
-  section("1. One tree, two shapes (examples/compose)");
+  section("1. One tree, two shapes (examples/archive/compose)");
   console.log("  nested view:");
   console.log(show(code, loadPresentation(dir, { names: ["default"], style: "math" }), [a]));
   console.log("\n  let view:");

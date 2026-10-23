@@ -211,8 +211,7 @@ test("records are structs (or vectors): built by their case, read by fields or a
 });
 
 test("every example: what a shader can start from has no Diverge, and every loop under a budget spends from it", () => {
-  // compose has externs (no bodies), so it isn't a whole program to check.
-  for (const name of readdirSync(examples).filter((n) => existsSync(join(examples, n, "code.json")) && n !== "compose")) {
+  for (const name of readdirSync(examples).filter((n) => existsSync(join(examples, n, "code.json")))) {
     const p = load(name);
     const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
     const s = emitWgsl(lowered);
