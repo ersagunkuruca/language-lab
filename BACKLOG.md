@@ -62,7 +62,6 @@ and lists built by G22's loops), then the rest in order.
 | C8 | `Float32` for shaders | ROADMAP 6a left | P2 | M | |
 | C9 | Compiled JS still calls the runtime's `$derivative`; expand derivatives as the scalar profile does | shaders follow-up | P2 | S | |
 | C10 | Compiled plain recursion past about 10k levels (check what's left after G1's 1 GB stack) | ROADMAP steps 1-5 open | P2 | S | |
-| L2 | Fuel means two things: running out inside plain code abandons the whole `with fuel` body when compiled, where the evaluator lets a later branch go on. Fix in compile.ts (out-of-fuel becomes a Choice failure where plain code is called from a search); no program hits it yet (COMPILER.md "Diverge and fuel") | R2 §5 | P2 | M | moved from lane L: the change is in compiler/ |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C12 | G18 an Abort handler that never resumes is a try/catch | GAPS G18 | P3 | S | |
 | C13 | G1 again: drop `$spend` when no `with fuel` is reachable | GAPS G1 | P3 | S | |
@@ -132,7 +131,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C4 | G3 again: Bool parameters of definitions only called by name, and tests written in place for a fused `keep`, are JS booleans (ledger's `goes before`, chapters' `slug` and `words`) | this PR |
+| L2 | Fuel in plain code inside a search: running out fails that branch only, as in the evaluator, instead of ending the whole `with fuel` body (guards only in programs that use `with fuel`) | this PR |
+| C4 | G3 again: Bool parameters of definitions only called by name, and tests written in place for a fused `keep`, are JS booleans (ledger's `goes before`, chapters' `slug` and `words`) | #208 |
 | C5 | G24 and G14 again: Choice builtins are partial (`$partial`, one answer or none), and `first` over a body with one answer runs it in place (ledger's `amount`, chapters' `lower`) | #204 |
 | C20 | G25 list cells nobody else holds changed in place (`$own` copies): ledger's `by account` 35 → 25 ms, about 10% overall | #202 |
 | C19 | G22 tail recursion modulo cons: `cons(x, self(rest))` fills holes in a loop, so ledger runs 50,000 lines on the default stack | #200 |

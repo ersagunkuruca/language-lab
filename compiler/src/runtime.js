@@ -109,6 +109,7 @@ const fuel = [];
 // (run.ts, withSteps), which throws when it runs out.
 export const $spend = () => (fuel.length ? --fuel[fuel.length - 1].left >= 0 : (spendStep(), true));
 export function $spendOrThrow() { if (!$spend()) throw OUT; }
+export const $outOfFuel = (e) => e === OUT;
 
 // The frame is active exactly while the body is running, as in the
 // evaluator, so a lazily consumed body still counts its own calls.

@@ -28,7 +28,7 @@
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { CHOICE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
 import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
@@ -636,6 +636,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (!assume.size) returnsMemo.set(def, r);
     return r;
   }
+
+  // Does the program run anything under `with fuel`?
+  const fueled = Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === S.fuel);
 
   // ---- Bool parameters as JS booleans (GAPS.md G3): a definition that is
   // only ever called by name, and not exported, takes its Bool parameters
@@ -1587,8 +1590,21 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     // ---- expressions with Choice: statements that run `k` once per result
+    // Plain code in a search that may run out of fuel: running out there is
+    // this branch's failure, as in the evaluator, and the search goes on
+    // (COMPILER.md, "Diverge and fuel"). Only in programs with `with fuel`.
+    function guarded(id: Id, js: string, k: K): string {
+      if (!fueled || !subtree(code, id).some((x) => {
+        const c = code.nodes[x];
+        if (c.kind !== "call") return false;
+        const t = ty(c.fn);
+        return t.t === "fn" && (t.eff.effs.includes(DIVERGE) || t.eff.tail !== null);
+      })) return k(js);
+      const v = temp("v");
+      return `let ${v};\ntry {\n${v} = ${js};\n} catch (e) {\nif (!$outOfFuel(e)) throw e;\n${v} = $no;\n}\nif (${v} !== $no) {\n${k(v)}\n}`;
+    }
     function st(id: Id, k: K): string {
-      if (!streamy(id)) return k(ex(id));
+      if (!streamy(id)) return guarded(id, ex(id), k);
       const n = code.nodes[id];
       switch (n.kind) {
         case "call": return stCall(n, k);
@@ -1713,7 +1729,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
-        } else out = k(c);
+        } else out = guarded(n.id, c, k);
         // Out of fuel: this call has no result, the others carry on.
         return target && info.divergent.has(target) ? `if ($spend()) {\n${out}\n}` : out;
       });
@@ -1854,7 +1870,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
-    "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
+    "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.

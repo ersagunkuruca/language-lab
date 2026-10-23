@@ -307,11 +307,11 @@ Only calls into definitions in `info.divergent` (the ones the checker
 couldn't prove terminate) check fuel, and only when a `with fuel` handler
 is active. In code with `Choice`, running out of fuel means the call has no
 result, exactly as in the evaluator. In code without `Choice`, running out
-throws, and the handler catches it. These differ in one corner case: a
-branch that runs out of fuel inside plain code abandons the whole `with
-fuel` body, where the evaluator would let a later branch that makes no
-divergent calls still succeed. Nothing does this today. If it starts to
-matter, make out-of-fuel a `Choice` failure at every call site.
+throws. Where a search runs plain code that may spend fuel, the throw is
+caught there and that branch has no result, so a later branch goes on, as
+in the evaluator; the handler catches what's left. Programs without `with
+fuel` get no such guards. Fuel is one budget for the whole body in both:
+a branch that spends it leaves less for the next.
 
 ### Folds are loops; recursion still uses the stack
 
