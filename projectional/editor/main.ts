@@ -1604,6 +1604,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
+    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new dot holding a hole, worked out just before this: in one arm of a match, only there", r.ok ? undefined : r.reason)); }
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
@@ -1632,8 +1633,8 @@ function menuAction(act: string, target: Id | undefined) {
     commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Back to the automatic place. Only layout.json changed.");
   };
   switch (act) {
-    case "add": {
-      const r = T.addStep(doc.code, doc.names.short, info, ui.def);
+    case "add": case "add-before": {
+      const r = T.addStep(doc.code, doc.names.short, info, ui.def, act === "add-before" ? target : undefined);
       if (!r.ok || !m) return void applyT(r);
       const hole = r.select!, w = m.world;
       ui.selected = hole;

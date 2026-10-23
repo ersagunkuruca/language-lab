@@ -621,12 +621,16 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
 // reach it). Fill the hole, then drag from the dot to wherever the value
 // goes. It's how the graph adds a node in empty space without a node that
 // belongs to nothing: every node is still part of the tree.
-export function addStep(code: Code, names: Names, info: Info, defId: Id): TEdit & { dot?: Id } {
+// With `before`, the step goes just before that part instead (one arm of a
+// match, say: print the usage, then return 2).
+export function addStep(code: Code, names: Names, info: Info, defId: Id, before?: Id): TEdit & { dot?: Id } {
   const def = code.nodes[defId] as NodeOf<"def">;
   const top = def?.body ? code.nodes[def.body] : null;
   if (!top) return { ok: false, reason: "this definition has no body yet: fill it first" };
   if (top.kind === "typedef") return { ok: false, reason: "a data type has no steps; add a case or a field instead" };
-  const at = top.kind === "lambda" ? top.body : def.body!;
+  if (before !== undefined && (!["lit", "ref", "call", "lambda", "match", "fold", "hole"].includes(code.nodes[before]?.kind) || !subtree(code, defId).includes(before)))
+    return { ok: false, reason: "a step goes before a value of this definition" };
+  const at = before ?? (top.kind === "lambda" ? top.body : def.body!);
   const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
   const next = swapIn(code, at, let_);
   next.nodes[dot] = { id: dot, kind: "binder" };
