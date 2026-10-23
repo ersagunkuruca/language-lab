@@ -386,7 +386,10 @@ remove it. Low priority. **Done** (C13, above).
 **G12. `one of([true, false])` is a list and a loop.** It builds the list
 each time (hoisting it: 240 → 234 ms) and tests the Bool it picked. The
 ideal runs the two branches one after the other. Small, and G9 covers the
-building part.
+building part. **Done** (Backlog C14): `one of` a list of up to four
+constants written in place runs the rest once for each, in order, with no
+list; the rest is shared as a local function when it is long. Countdown's
+timing doesn't change measurably.
 
 The cheap ones together (G14, G9, G1, G12, all patched by hand) bring 240 ms
 to 116 ms. The remaining 3× to the ideal is G11 and G13.

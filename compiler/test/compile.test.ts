@@ -226,6 +226,19 @@ test("running out of fuel in plain code inside a search fails that branch only, 
   assert.deepEqual(fromList(defs.main() as Value), want);
 });
 
+test("one of a few constants written in place runs each in turn, with no list (GAPS.md G12)", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.all, k.thunk(() =>
+    k.let("b", k.call(S.oneOf, k.list(TRUE, FALSE)), (b) => k.let("n", k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), (n) => k.if(b, n, k.call(B.neg, n))))))));
+  const { code, info, defs, source } = await compiledDefs(k, ["main"], "one-of-few.js");
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(main))][0]);
+  assert.deepEqual(want, [1, 2, -1, -2]);
+  assert.deepEqual(fromList(defs.main() as Value), want);
+  assert.doesNotMatch(source, /\$cons\(/);
+});
+
 test("outside a page, only calls that can be under a `with fuel` spend (GAPS.md G1, fuel)", async () => {
   const k = new Lang();
   // counts down to 0, or forever below 0: the checker can't show it ends
