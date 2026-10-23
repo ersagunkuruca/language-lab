@@ -271,6 +271,15 @@ under a `Choice` with no error.) Data types have no row variables, so a
 type can't be "pure when its function is pure" the way `map` is; a field
 lists the most it allows.
 
+A function in a variable whose row ends up **closed** that way (a page
+field's `view`, once it has been shown in a text) does those effects and
+no others, so each later use of the variable gets an open copy: it can be
+called, or handed to `inverse`, where more happens. Only the outer row
+opens; its parameters keep their types. This is Koka's `open` (Leijen,
+"Type directed compilation of row-typed algebraic effects"). Uses are
+checked in order, so a use that fixes the row to something wider before
+the closing use still clashes with it.
+
 The effects:
 
 | effect | operations | handled by |
@@ -750,8 +759,11 @@ data in it is run backwards by the relational interpreter
 (`src/lang/relate.ts`): an `if` becomes a choice over its arms, a fold
 becomes an unfold, `join text` enumerates the ways to cut its result. Its
 type is `Choice`, plus `Diverge` when it might unfold forever. Printing
-can't be run backwards, and the checker says so. `show numbers` run
-backwards is a parser:
+can't be run backwards, and the checker says so. A function given as a
+port (`solve applied(f = view, out = text) for x`) brings its effects in
+with it, as a call would; the prelude's `inverse(f, y)` is that solve, so
+any function value can be run backwards. `show numbers` run backwards is
+a parser:
 
 ```
 ‹read numbers›(text) = with fuel(10000, () => solve ‹show numbers›(result = text) for numbers)
@@ -970,8 +982,11 @@ refused with both types named. Data type upgrades (where constructors and
 fields move too) need a migration, which is a next step.
 
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
-numbers`, `length`, `sum`, `append`, `reverse` and the helper `reverse
-onto`. It is written once with the DSL in `src/lang/prelude-source.ts` and
+numbers`, `length`, `sum`, `append`, `reverse`, `inverse` and the helpers
+`reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
+any function value run backwards, through `applied(f, x) = f(x)`, since
+`solve` names a definition. It is written once with the DSL in
+`src/lang/prelude-source.ts` and
 published by `node library/build.ts`, which also moves the examples onto it.
 Every program is loaded with it (`src/lang/library.ts`): the editor, the
 loader, the tests, the compiler.

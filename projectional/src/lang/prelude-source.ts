@@ -4,7 +4,7 @@
 // so building it again gives the same ids, byte for byte: regenerating a
 // published module can't lose anything, unlike regenerating a draft.
 
-import { merge, type Id } from "../model.ts";
+import { merge, type Id, type NodeOf } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
@@ -43,13 +43,23 @@ export function buildPrelude(): Module {
   const reverse = k.def("reverse");
   k.define(reverse, k.fn(["list"], (xs) => k.call(onto, xs, NIL)));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse];
+  // solve names a definition, so running a function value backwards goes
+  // through one that calls it: inverse(f, y) is the x with f(x) = y.
+  const applied = k.def("applied");
+  k.define(applied, k.fn(["f", "x"], (f, x) => k.call(f, x)));
+  const [fPort, xPort] = (k.code.nodes[(k.code.nodes[applied] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  const inverse = k.def("inverse");
+  k.define(inverse, k.fn(["f", "y"], (f, y) => k.solve(applied, { [fPort]: f, out: y }, { [xPort]: "x" }, ({ [xPort]: x }) => x)));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",
+    [inverse]: "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));

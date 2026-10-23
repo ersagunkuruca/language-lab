@@ -1015,6 +1015,100 @@
           "@egedg16di7hp3kq2u7ghqi8dbd:2"
         ],
         "body": "@egedg16di7hp3kq2u7ghqi8dbd:3"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64",
+        "kind": "def",
+        "body": "@evvkvacd5ecmvnt8jl3v6s9n64:1"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:2": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:2",
+        "kind": "binder"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:3": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:3",
+        "kind": "binder"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:5": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:5",
+        "kind": "ref",
+        "target": "@evvkvacd5ecmvnt8jl3v6s9n64:2"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:6": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:6",
+        "kind": "ref",
+        "target": "@evvkvacd5ecmvnt8jl3v6s9n64:3"
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:4": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:4",
+        "kind": "call",
+        "fn": "@evvkvacd5ecmvnt8jl3v6s9n64:5",
+        "args": [
+          "@evvkvacd5ecmvnt8jl3v6s9n64:6"
+        ]
+      },
+      "@evvkvacd5ecmvnt8jl3v6s9n64:1": {
+        "id": "@evvkvacd5ecmvnt8jl3v6s9n64:1",
+        "kind": "lambda",
+        "params": [
+          "@evvkvacd5ecmvnt8jl3v6s9n64:2",
+          "@evvkvacd5ecmvnt8jl3v6s9n64:3"
+        ],
+        "body": "@evvkvacd5ecmvnt8jl3v6s9n64:4"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh",
+        "kind": "def",
+        "body": "@8ilsm74pnh52dq99esfelgj2nh:1"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:2": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:2",
+        "kind": "binder"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:3": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:3",
+        "kind": "binder"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:7": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:7",
+        "kind": "binder"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:5": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:5",
+        "kind": "ref",
+        "target": "@8ilsm74pnh52dq99esfelgj2nh:2"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:6": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:6",
+        "kind": "ref",
+        "target": "@8ilsm74pnh52dq99esfelgj2nh:3"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:8": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:8",
+        "kind": "ref",
+        "target": "@8ilsm74pnh52dq99esfelgj2nh:7"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:4": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:4",
+        "kind": "solve",
+        "fn": "@evvkvacd5ecmvnt8jl3v6s9n64",
+        "given": {
+          "@evvkvacd5ecmvnt8jl3v6s9n64:2": "@8ilsm74pnh52dq99esfelgj2nh:5",
+          "out": "@8ilsm74pnh52dq99esfelgj2nh:6"
+        },
+        "binds": {
+          "@evvkvacd5ecmvnt8jl3v6s9n64:3": "@8ilsm74pnh52dq99esfelgj2nh:7"
+        },
+        "body": "@8ilsm74pnh52dq99esfelgj2nh:8"
+      },
+      "@8ilsm74pnh52dq99esfelgj2nh:1": {
+        "id": "@8ilsm74pnh52dq99esfelgj2nh:1",
+        "kind": "lambda",
+        "params": [
+          "@8ilsm74pnh52dq99esfelgj2nh:2",
+          "@8ilsm74pnh52dq99esfelgj2nh:3"
+        ],
+        "body": "@8ilsm74pnh52dq99esfelgj2nh:4"
       }
     },
     "defs": [
@@ -1026,7 +1120,9 @@
       "@cci1a6fll2qmphm2sgtabs53qo",
       "@c9sa21p6t34r9bf9cjcm8h2101",
       "@9q8d7m9gld6fvdr2gj63v34sgq",
-      "@egedg16di7hp3kq2u7ghqi8dbd"
+      "@egedg16di7hp3kq2u7ghqi8dbd",
+      "@evvkvacd5ecmvnt8jl3v6s9n64",
+      "@8ilsm74pnh52dq99esfelgj2nh"
     ]
   },
   "pins": {
@@ -1425,6 +1521,99 @@
         }
       },
       "plain": []
+    },
+    "@evvkvacd5ecmvnt8jl3v6s9n64": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 1
+            },
+            "eff": {
+              "effs": [],
+              "tail": 2
+            }
+          },
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 1
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": []
+    },
+    "@8ilsm74pnh52dq99esfelgj2nh": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 1
+            },
+            "eff": {
+              "effs": [],
+              "tail": 2
+            }
+          },
+          {
+            "t": "var",
+            "v": 1
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [
+            "effect.choice",
+            "effect.diverge"
+          ],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
     }
   },
   "names": {
@@ -1470,12 +1659,21 @@
     "@9q8d7m9gld6fvdr2gj63v34sgq:9": "item",
     "@9q8d7m9gld6fvdr2gj63v34sgq:10": "rest",
     "@egedg16di7hp3kq2u7ghqi8dbd": "reverse",
-    "@egedg16di7hp3kq2u7ghqi8dbd:2": "list"
+    "@egedg16di7hp3kq2u7ghqi8dbd:2": "list",
+    "@evvkvacd5ecmvnt8jl3v6s9n64": "applied",
+    "@evvkvacd5ecmvnt8jl3v6s9n64:2": "f",
+    "@evvkvacd5ecmvnt8jl3v6s9n64:3": "x",
+    "@8ilsm74pnh52dq99esfelgj2nh": "inverse",
+    "@8ilsm74pnh52dq99esfelgj2nh:2": "f",
+    "@8ilsm74pnh52dq99esfelgj2nh:3": "y",
+    "@8ilsm74pnh52dq99esfelgj2nh:7": "x"
   },
   "comments": {
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     "@su0m8djlkg5cq4b68i0klesqia": "A fold that prints. Run backwards it unfolds, so it parses.",
-    "@9q8d7m9gld6fvdr2gj63v34sgq": "A helper of reverse. Published with the module, not offered in the palette."
+    "@9q8d7m9gld6fvdr2gj63v34sgq": "A helper of reverse. Published with the module, not offered in the palette.",
+    "@8ilsm74pnh52dq99esfelgj2nh": "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [
     "@7uq2j0i4v8m02boa1jovfc68tl",
@@ -1485,6 +1683,7 @@
     "@ms3a2v8ka09mr0hqvm9t2d4mq4",
     "@cci1a6fll2qmphm2sgtabs53qo",
     "@c9sa21p6t34r9bf9cjcm8h2101",
-    "@egedg16di7hp3kq2u7ghqi8dbd"
+    "@egedg16di7hp3kq2u7ghqi8dbd",
+    "@8ilsm74pnh52dq99esfelgj2nh"
   ]
 }

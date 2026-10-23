@@ -353,6 +353,12 @@ export function $meta(f, lambda, env) {
   return f;
 }
 
+// A builtin used as a value, marked with which one it is.
+export function $prim(f, prim) {
+  Object.defineProperty(f, META, { value: { prim } });
+  return f;
+}
+
 // The evaluator calls every function as a stream of results; compiled
 // functions without Choice return one value.
 export function $toEval(f, streams) {
