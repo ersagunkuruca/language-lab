@@ -170,6 +170,42 @@ test("partial builtins give their answer or none, and `first` over one runs no s
   assert.deepEqual(fromList(defs.both() as Value), ["42", "-1", "Q"]);
 });
 
+test("Bool parameters and tests passed to keep are JS booleans, and boxed where used as data (GAPS.md G3)", async () => {
+  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const k = new Lang(LIBRARY.code);
+  const keep = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "keep")!;
+  const pick = k.def("pick");
+  k.define(pick, k.fn(["flag", "x"], (flag, x) => k.if(flag, x, k.call(B.sub, k.lit(0), x))));
+  // the flag kept as data
+  const kept = k.def("kept");
+  k.define(kept, k.fn(["flag"], (flag) => k.if(flag, k.call(CONS, flag, NIL), k.call(CONS, k.call(S.not, flag), NIL))));
+  // a search with a Bool parameter, given one by a search
+  const choose = k.def("choose");
+  k.define(choose, k.fn(["flag"], (flag) => k.if(flag, k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), k.call(S.fail))));
+  // used as a value too, so it keeps Bool data
+  const flip = k.def("flip");
+  k.define(flip, k.fn(["flag"], (flag) => k.if(flag, FALSE, TRUE)));
+  const words = k.def("words");
+  k.define(words, k.fn(["t"], (t) => k.call(T.joinAll, k.call(keep, k.call(T.split, t, k.lit(" ")), k.fn(["w"], (w) => k.call(S.not, k.call(S.equal, w, k.lit(""))))), k.lit("+"))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(
+    k.call(SHOW_ANY, k.list(k.call(pick, TRUE, k.lit(3)), k.call(pick, k.call(S.less, k.lit(2), k.lit(1)), k.lit(3)))),
+    k.call(SHOW_ANY, k.call(kept, k.call(S.less, k.lit(1), k.lit(2)))),
+    k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(choose, k.call(S.oneOf, k.list(TRUE, FALSE, TRUE)))))),
+    k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(k.call(S.oneOf, k.list(k.x(flip))), TRUE)))),
+    k.call(words, k.lit("a  b c")),
+  )));
+  const { code, info, source, defs } = await compiledDefs(k, ["main"], "bool-params.js");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(fn("pick"), /if \(flag\d*\)/);
+  assert.match(fn("kept"), /flag\d* \? \$T : \$F/);
+  assert.match(fn("flip"), /\.tag === "std\.bool\.true"/);
+  assert.match(fn("words"), /\(w\) => !\(w === ""\)/);
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.deepEqual(fromList(defs.main() as Value), fromList([...r.call(r.value(main))][0]));
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");

@@ -165,7 +165,7 @@ function parse(line3, n2) {
 
 // report
 function report(entries3) {
-  return ((((((((((((table("By account", sort(by_account(entries3), $F)) + newline()) + newline()) + table("By month", sort(by_month(entries3), $T))) + newline()) + newline()) + expense_line(smallest(entries3))) + newline()) + "total: ") + money(total_of(entries3))) + " in ") + String(length(entries3))) + " entries");
+  return ((((((((((((table("By account", sort(by_account(entries3), false)) + newline()) + newline()) + table("By month", sort(by_month(entries3), true))) + newline()) + newline()) + expense_line(smallest(entries3))) + newline()) + "total: ") + money(total_of(entries3))) + " in ") + String(length(entries3))) + " entries");
 }
 
 // bad line
@@ -447,7 +447,7 @@ function with_point(d) {
 
 // goes before
 function goes_before(a, b, by_name3) {
-  if ((by_name3.tag === "std.bool.true")) {
+  if (by_name3) {
     return $text.less(a.fields[0], b.fields[0]);
   }
   return larger(a, b);

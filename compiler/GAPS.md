@@ -540,6 +540,9 @@ $bool(!(p === ""))`, and `keep` tests `.tag === "std.bool.true"`. Round 1's
 fix made named functions return JS booleans, but lambdas still box.
 *Fix:* the same `Spec.bool` for a lambda whose result type is Bool, and for
 `keep`'s parameter.
+**Done** (C4): when `keep` or another step is fused (G16), a test written in
+place is bound as a lambda that returns a JS boolean, and the step calls it
+in its condition: `const test = (p) => !(p === "")`.
 
 **G17. A generic function compares with `$eq` (perf: 51 → 48.5 ms;
 437 → 393 ms on 3000 chapters).** `times in : (a, List a) -> Int` doesn't
@@ -756,6 +759,9 @@ search to stop: `amount` is a read and a test, and chapters' `lower` too.
 **G3 again. A Bool parameter is data.** `sort(…, false)` passes `$F`, and
 `goes before` tests `.tag === "std.bool.true"` for each comparison. G3's
 JS booleans cover results, not parameters.
+**Done** (C4): a definition only ever called by name, and not exported,
+takes its Bool parameters as JS booleans. Tests read them as they are, and
+a use as data boxes them (`flag ? $T : $F`).
 
 **G19 again. Text positions are counted per call.** `with point` asks for
 the length of the same text three times, and `blank`, `month` and the pads

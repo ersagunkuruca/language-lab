@@ -637,6 +637,24 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
+  // ---- Bool parameters as JS booleans (GAPS.md G3): a definition that is
+  // only ever called by name, and not exported, takes its Bool parameters
+  // as `true`/`false`. A use as data boxes it ($T/$F); tests read it as is.
+  const boolParams = new Set<Id>();
+  if (!reflective) {
+    const exported = new Set(opts.exports.map((x) => code.defs.findLast((d) => names[d] === x)));
+    const asValue = new Set<Id>();
+    for (const n of Object.values(code.nodes)) {
+      if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "def") continue;
+      const p = code.nodes[up.get(n.id)!];
+      if (!(p?.kind === "call" && p.fn === n.id)) asValue.add(n.target);
+    }
+    for (const def of code.defs) {
+      if (code.nodes[def]?.kind !== "def" || !isFnDef(def) || exported.has(def) || asValue.has(def)) continue;
+      for (const p of node<"lambda">(node<"def">(def).body!).params) if (isBool(ty(p))) boolParams.add(p);
+    }
+  }
+
   // Which arrays a binder can hold.
   type Kind = "front" | "back";
   const fits = (b: Id, kind: Kind) => (kind === "front" ? walkable : growable).has(b);
@@ -734,7 +752,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
       const params = node<"lambda">(node<"def">(s.def).body!).params;
-      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a, true)!.js : ex(a)));
+      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a, true)!.js : boolParams.has(params[i]) ? exBool(a) : ex(a)));
     }
 
     // Binders holding an array here: the copy's array parameters, and lets
@@ -854,6 +872,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function exBool(id: Id): string {
       const n = code.nodes[id];
       if (n.kind === "ref" && (n.target === TRUE || n.target === FALSE)) return String(n.target === TRUE);
+      if (n.kind === "ref" && boolParams.has(n.target)) return local(n.target);
+      if (n.kind === "call" && code.nodes[n.fn].kind === "ref" && boolFns.has(node<"ref">(n.fn).target)) return `${local(node<"ref">(n.fn).target)}(${n.args.map(ex).join(", ")})`;
       if (n.kind === "call" && code.nodes[n.fn].kind === "ref") {
         const target = node<"ref">(n.fn).target;
         if (OPS[target]?.bool) return OPS[target].js(n.args.map(BOOL_ARGS.has(target) ? exBool : ex), n.args);
@@ -880,6 +900,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       switch (t.kind) {
         case "binder": {
           const kind = arrNow.get(n.target);
+          if (boolParams.has(n.target)) return `(${local(n.target)} ? $T : $F)`;
           return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
         }
         case "def": {
@@ -965,6 +986,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       });
       return `$meta(${plainLambda(n)}, ${JSON.stringify(n.id)}${env.length ? `, () => [${env.join(", ")}]` : ""})`;
     }
+    // Function binders that hold a lambda returning a JS boolean, and the
+    // lambda: `(p) => !(p === "")` instead of Bool data (GAPS.md G3).
+    const boolFns = new Set<Id>();
+    function boolLambda(n: NodeOf<"lambda">): string {
+      const ps = n.params.map(local).join(", ");
+      const b = code.nodes[n.body].kind;
+      if (b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda")) return `((${ps}) => {\n${ret(n.body, false, RETURN_BOOL)}\n})`;
+      return `((${ps}) => ${exBool(n.body)})`;
+    }
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
@@ -977,6 +1007,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function call(n: NodeOf<"call">): string {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") return block(n.id);
+      if (f.kind === "ref" && boolFns.has(f.target)) return `$bool(${local(f.target)}(${n.args.map(ex).join(", ")}))`;
       const joined = f.kind === "ref" && f.target === TEXT_OPS.joinAll ? arraySource(n.args[0]) : null;
       if (joined) return `$text.joinAll(${inOrder(joined)}, ${ex(n.args[1])})`;
       const one = f.kind === "ref" && (f.target === TEXT_OPS.joinAll || code.nodes[f.target].kind === "def") ? fused(n) : null;
@@ -1421,7 +1452,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         c.args.forEach((a, i) => {
           if (i === li) return;
           if (ty(a).t === "fn") { fusePlain.add(params[i]); if (code.nodes[a].kind === "lambda") plainHere.add(a); }
-          if (referenced.has(params[i])) bindsOf.push(`const ${local(params[i])} = ${ex(a)};\n`);
+          if (!referenced.has(params[i])) return;
+          // A test written here returns a JS boolean (GAPS.md G3).
+          const lam = code.nodes[a], t = sub.zonk(ty(a));
+          if (lam.kind === "lambda" && t.t === "fn" && isBool(t.ret) && !streamy(lam.body) && calledParams(d).has(params[i])) {
+            boolFns.add(params[i]);
+            bindsOf.push(`const ${local(params[i])} = ${boolLambda(lam)};\n`);
+          } else {
+            boolFns.delete(params[i]);
+            bindsOf.push(`const ${local(params[i])} = ${boolParams.has(params[i]) ? exBool(a) : ex(a)};\n`);
+          }
         });
       }
       const x = temp("x");
@@ -1650,7 +1690,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arraySource(a, true)!.js : null));
       return parts([n.fn, ...n.args.filter((_, i) => own[i] === null)], ([fn, ...rest]) => {
         let j = 0;
-        const args = own.map((o) => o ?? rest[j++]);
+        const args = own.map((o, i) => o ?? (boolParams.has(params[i]) ? `(${rest[j++]}.tag === ${JSON.stringify(TRUE)})` : rest[j++]));
         let c: string;
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
@@ -1692,7 +1732,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return branch(k, (y) => {
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
-          const c = code.nodes[n.scrutinee].kind === "call" && !streamy(n.scrutinee) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
+          const sc = code.nodes[n.scrutinee];
+          const c = (sc.kind === "call" && !streamy(n.scrutinee)) || (sc.kind === "ref" && boolParams.has(sc.target)) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
           return `if (${c}) {\n${st(t, y)}\n} else {\n${st(e, y)}\n}`;
         }
         const v = temp("s");

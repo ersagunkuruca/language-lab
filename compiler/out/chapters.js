@@ -227,13 +227,13 @@ function slug(title2) {
         return parts$49.join(by$50);
       })(), "-");
   const name2 = (() => {
-      const test = ((p) => $bool(!(p === "")));
+      const test = ((p) => !(p === ""));
       const by$53 = "-";
       const parts$52 = [];
       for (const x$54 of parts) {
         {
           const item3 = x$54;
-          if ((test(item3).tag === "std.bool.true")) {
+          if (test(item3)) {
             parts$52.push(item3);
           } else {
             /* fail */
@@ -290,12 +290,12 @@ function entry(chapter4) {
 // words
 function words(line4) {
   return (() => {
-      const test = ((w) => $bool(!(w === "")));
+      const test = ((w) => !(w === ""));
       let acc$66 = 0;
       for (const x$67 of $text.split(line4, " ")) {
         {
           const item3 = x$67;
-          if ((test(item3).tag === "std.bool.true")) {
+          if (test(item3)) {
             acc$66 = $int.add(1, acc$66);
           } else {
             /* fail */
