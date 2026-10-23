@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I1 | Editor: the picture's CPU fallback can run a colour record in WebAssembly now (`Colour.red` readers, C7 W1a), not JavaScript; picture.ts still says WebAssembly takes no records | lane C | 2026-10-23 |
 
 ## E: Editor
 
@@ -91,6 +90,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I1 | Without a GPU the ray marcher's colour record runs as WebAssembly (WasmGC struct, read by the module's field readers), not JavaScript: 244 to 144 ms a frame at 160x160 | #272 |
 | E19 | A map in the graph's corner while part of it is out of view (the 'there's more' cue); click or drag to look there. Collapsible frames split to E35 | #270 |
 | E18 | Wires bend over or under nodes in their way when a short detour crosses no more wires: tunnels 333 to 136, bridges 410 to 438 | #263 |
 | E17 | Tidy reorders columns to cut crossings (Sugiyama barycenter + swaps) and stops pushing nodes across wires: examples 410 to 375 crossings after tidy (was 522) | #256 |
