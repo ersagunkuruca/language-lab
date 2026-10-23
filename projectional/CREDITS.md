@@ -91,6 +91,8 @@ not only code: an influence is credited even when nothing was copied.
 | Randomness as an effect whose handler chooses the numbers (a seeded one for tests, the world's otherwise) | Prior art | Koka's `ndet` effect for random numbers; the Eff papers' examples of handlers for nondeterminism and randomness (Bauer and Pretnar). LANGUAGE.md "Random". |
 | The seeded generator, xoshiro128** seeded by SplitMix32 | Adapted | xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain, [prng.di.unimi.it](https://prng.di.unimi.it/xoshiro128starstar.c)); SplitMix by Guy Steele, Doug Lea and Christine Flood ("Fast splittable pseudorandom number generators", OOPSLA 2014). Translated in `src/lang/random.ts`. |
 | The time as a cell written each animation frame, so a part reading `now()` re-runs per frame; no timer operation | Prior art | Fran's time-varying behaviours (Conal Elliott and Paul Hudak, "Functional reactive animation", ICFP 1997); Elm's `Time.every` subscriptions (Evan Czaplicki). `src/lang/browser.ts`, LANGUAGE.md "Time". |
+| A page's fetch suspends: the view keeps what it shows and runs again when the reply lands; a handler runs again | Prior art | Solid's `createResource` (Ryan Carniato, [solidjs.com](https://www.solidjs.com)) and React's Suspense (the React team at Meta). `src/lang/browser.ts`, `src/lang/html.ts`, LANGUAGE.md "The web". |
+| GET as a read that may run under `Choice`, fetched once per address per run | Our own | Leans on HTTP's definition of safe methods (RFC 9110, §9.2.1). LANGUAGE.md "The web". |
 
 ## Choice: failure and many answers
 

@@ -261,7 +261,11 @@ const fallible = (k) => (...args) => {
   try {
     if (!f) throw new Error(`this runtime can't ${k}`);
     v = f.apply(world, args);
-  } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
+  } catch (e) {
+    // Not here yet isn't a failure: the page asks again later.
+    if (e instanceof Pending) throw e;
+    return $perform(ABORT, ABORT_OP, [e.message]);
+  }
   return v;
 };
 const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
@@ -274,11 +278,12 @@ export const $io = {
   appendFile: (p, t) => (fallible('appendFile')(p, t), $unit),
   fileExists: (p) => $bool(!!world.fileExists?.(p)),
   listFolder: (p) => $toList(fallible('listFolder')(p)),
+  fetchText: fallible('fetchText'),
 };
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells } from '../../projectional/src/lang/cells.ts';
+import { Cells, Pending } from '../../projectional/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }

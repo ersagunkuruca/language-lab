@@ -54,6 +54,18 @@ export const nodeOf = (v: Value): CellNode | null => (typeof v === "function" ? 
 // A formula whose computation gave no value (it ran out of `with fuel`).
 export class NoValue extends Error {}
 
+// A value that isn't here yet (a page's `fetch text` waiting for its
+// reply): what was asked stops, and `ready` settles when asking again will
+// get further. A page's views keep what they showed and run again then
+// (html.ts), like Solid's createResource and React's Suspense.
+export class Pending extends Error {
+  ready: Promise<unknown>;
+  constructor(ready: Promise<unknown>, what: string) {
+    super(`still waiting for ${what}`);
+    this.ready = ready;
+  }
+}
+
 export class Cells {
   private current: CellNode | null = null;
   private owner: CellNode | null = null;
