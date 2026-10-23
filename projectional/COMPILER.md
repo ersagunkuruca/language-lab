@@ -633,9 +633,10 @@ either side. The bigger cost was in the source, which had to spell out
 each channel; the language side of that (elementwise operations over any
 record of Numbers, written once in a module) is described just above.
 
-Still to do for shaders: matrix types, a `Float32`
-number type so f32 is in the types rather than a target's choice, and a
-live preview in the editor.
+Still to do for shaders: matrix types, `Float32` so f32 is in the
+program rather than a target's choice (designed in NUMBERS.md, as an
+approximate representation of `Number`), and a live preview in the
+editor.
 
 ### JavaScript for the scalar profile: the CPU's fallback for pictures
 
