@@ -1770,7 +1770,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 // picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
 // again after every edit. When the compiler can't take it to the GPU, its
 // reason shows instead. The canvas outlives renders, so the drawing goes on.
-const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint" }), for: null as Code | null, now: null as Picture | null };
+const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status" }), for: null as Code | null, now: null as Picture | null };
 const picNote = h("div", {});
 const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
 function pictureSection(info: T.Info | null): HTMLElement | null {
