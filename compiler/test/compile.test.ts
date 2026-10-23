@@ -192,6 +192,32 @@ test("a fold over a million items compiles to a loop", async () => {
   assert.equal(defs.big(), 499999500000);
 });
 
+test("a fold that only adds Int items runs from the front, with no spine (GAPS.md G15)", async () => {
+  const { INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  // How many items are below 3: `if item < 3 then rest + 1 else rest`.
+  const small = k.def("small");
+  k.define(small, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.if(k.call(I.less, h, k.int(3)), k.call(I.add, r!, k.int(1)), r!) },
+  ])));
+  // Number + is not associative in floating point, so this one keeps its order.
+  const sum = k.def("sum");
+  k.define(sum, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, h, r!) },
+  ])));
+  const big = k.def("big");
+  k.define(big, k.thunk(() => k.call(small, k.call(I.range, k.int(1_000_000)))));
+  const { source, defs } = await compiledDefs(k, ["big", "small", "sum"], "forward.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.doesNotMatch(body("small"), /spine/);
+  assert.match(body("sum"), /spine/);
+  assert.equal(defs.big(), 3);
+  assert.equal(defs.small(toList([5, 1, 2, 9, 0])), 3);
+  assert.equal(defs.sum(toList([0.1, 0.2, 0.3])), 0.1 + (0.2 + (0.3 + 0)));
+});
+
 test("a self tail call compiles to a loop: a million steps, and each step's closures keep their own values", async () => {
   const k = new Lang();
   // count down from n, adding n each time: a loop written as tail recursion

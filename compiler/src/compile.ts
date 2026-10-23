@@ -754,6 +754,60 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
     }
 
+    // A fold over a chain whose recursive case adds an item to the rest
+    // (`item + rest`, `rest + item`, or × instead), maybe only when a test
+    // holds (`if test then rest + 1 else rest`), and whose other case, items
+    // and tests have no effects: Int + and × are associative and
+    // commutative (exact, unlike Number's), so the items can be combined
+    // from the front.
+    const ORDERLESS = new Set<Id>([INT_OPS.add, INT_OPS.mul]);
+    function pure(id: Id): boolean {
+      return subtree(code, id).every((x) => {
+        const c = code.nodes[x];
+        if (c.kind === "solve") return false;
+        if (c.kind !== "call") return true;
+        const t = ty(c.fn), f = code.nodes[c.fn];
+        if (f.kind === "ref" && info.divergent.has(f.target)) return false;
+        if (t.t !== "fn") return false;
+        const row = sub.resolveRow(t.eff);
+        return !row.effs.length && (row.tail === null || !rho.get(row.tail));
+      });
+    }
+    // How a step changes the accumulator, as JS, or null if it isn't one of
+    // those shapes.
+    type Step = (acc: string) => string;
+    function forward(arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]) {
+      if (arms.length !== 2) return null;
+      const on = arms.find((a) => recOf(a).length === 1), end = arms.find((a) => recOf(a).length === 0);
+      if (!on || !end) return null;
+      const at = recOf(on)[0], rest = on.results[at]!;
+      const usesRest = (x: Id) => subtree(code, x).some((y) => { const r = code.nodes[y]; return r.kind === "ref" && r.target === rest; });
+      const free = (x: Id) => !usesRest(x) && pure(x);
+      let op: Id | null = null;
+      const shape = (x: Id): Step | null => {
+        const b = code.nodes[x];
+        if (b.kind === "ref" && b.target === rest) return (acc) => acc;
+        if (b.kind === "call" && b.args.length === 2 && code.nodes[b.fn].kind === "ref") {
+          const f = node<"ref">(b.fn).target;
+          if (!ORDERLESS.has(f) || (op && op !== f)) return null;
+          const [p, q] = b.args;
+          const item = code.nodes[p].kind === "ref" && node<"ref">(p).target === rest ? q : code.nodes[q].kind === "ref" && node<"ref">(q).target === rest ? p : null;
+          if (!item || !free(item)) return null;
+          op = f;
+          return (acc) => OPS[f].js([ex(item), acc]);
+        }
+        if (b.kind === "match" && isBoolMatch(b) && free(b.scrutinee)) {
+          const [t, e] = boolArms(b).map(shape);
+          if (!t || !e) return null;
+          return (acc) => `(${exBool(b.scrutinee)} ? ${t(acc)} : ${e(acc)})`;
+        }
+        return null;
+      };
+      const step = shape(on.body);
+      if (!step || !op || !pure(end.body) || end.binds.some((x) => referenced.has(x))) return null;
+      return { on, end, at, step };
+    }
+
     function foldCells(n: NodeOf<"fold">, input: string): string {
       const arms = n.arms.map((a) => node<"arm">(a));
       const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
@@ -767,6 +821,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const recursive = arms.filter((a) => recOf(a).length);
       const fn = `const ${step} = (${s}, ${rs}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n`;
       const v = temp("v"), r = temp("r");
+      const fwd = chain ? forward(arms, recOf) : null;
+      if (fwd) {
+        // Exact Int + or ×, which don't care about order: the items from the
+        // front, into an accumulator, with no spine (GAPS.md G15).
+        const { end, on, at, step } = fwd, acc = temp("acc"), l = temp("l");
+        return `let ${acc} = ${ex(end.body)};\nlet ${l} = ${input};\n` +
+          `for (; ${l}.tag === ${tag(on.variant)}; ${l} = ${l}.fields[${at}]) {${binds(on, l)}\n${acc} = ${step(acc)};\n}\nreturn ${acc};`;
+      }
       if (chain) {
         const spine = temp("spine"), i = temp("i");
         const next = recursive.map((a) => `${v}.tag === ${tag(a.variant)} ? ${recOf(a)[0]} : `).join("") + "-1";
