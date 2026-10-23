@@ -27,7 +27,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { mainProblem, pageProblem, runProgram } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
-import { choose, represent, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { webPage } from "./web.ts";
@@ -76,6 +76,8 @@ function represented(p: Program, main: Id): Program {
   for (const of of new Set(p.reps.map((r) => r.of))) {
     const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
     if (rep.type === rep.of) continue;
+    const problem = jobProblem(p.info, rep, p.names);
+    if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
     code = represent(code, defs, rep);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
