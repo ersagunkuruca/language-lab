@@ -34,7 +34,7 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
     if (label === "with WebGPU") {
       if (!status.startsWith("WebGPU")) errors.push(`${where}: didn't draw with WebGPU: ${status}`);
       if (worst === null || !(Number(worst) < 2e-3)) errors.push(`${where}: the GPU is ${worst} away from the evaluator`);
-    } else if (!status.includes("on the CPU")) errors.push(`${where}: didn't fall back to the CPU: ${status}`);
+    } else if (!status.includes("WebAssembly on the CPU")) errors.push(`${where}: didn't fall back to the CPU: ${status}`);
     // The middle of the picture isn't black.
     const box = (await $("picture").boundingBox())!;
     await $("picture").scrollIntoViewIfNeeded();
@@ -62,7 +62,8 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
     await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box .pic-status")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});
     const status = await said.innerText().catch(() => "no picture");
     console.log(`${label}, the editor's ${program}: ${status}`);
-    if (label === "with WebGPU" ? !status.startsWith("WebGPU") : !status.includes("on the CPU")) errors.push(`${label}: the editor didn't draw ${program}: ${status}`);
+    // Without a GPU, both pictures run as WebAssembly (a colour record too).
+    if (label === "with WebGPU" ? !status.startsWith("WebGPU") : !status.includes("WebAssembly on the CPU")) errors.push(`${label}: the editor didn't draw ${program}: ${status}`);
   }
   await soak(page, label);
   await browser.close();

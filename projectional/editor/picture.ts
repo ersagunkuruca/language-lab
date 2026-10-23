@@ -7,9 +7,10 @@
 // (compiler/src/scalar.ts) and prints WGSL (compiler/src/wgsl.ts); this
 // wraps that in a fragment shader that calls them once per pixel and draws
 // it with WebGPU. Without WebGPU, the same lowering printed as WebAssembly
-// (compiler/src/wasm.ts) draws it on the CPU, smaller; a `colour` that gives
-// a record can't go that way yet (WebAssembly takes no records), so it's
-// printed as JavaScript instead (compiler/src/js-scalar.ts).
+// (compiler/src/wasm.ts) draws it on the CPU, smaller: a `colour` record is
+// a WasmGC struct there, read through the module's own field readers. What
+// WebAssembly can't take is printed as JavaScript instead
+// (compiler/src/js-scalar.ts).
 //
 // shaders.html (editor/shaders.ts) and the editor's Run panel both draw
 // through here.
@@ -272,18 +273,32 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
     el.dataset.worst = String(worst);
   }
 
-  // Without WebGPU: the same functions as WebAssembly on the CPU, or, for
-  // a colour record, as JavaScript (WebAssembly takes no records yet).
-  // Frame after frame, at a size that keeps a frame near 25 ms.
+  // Without WebGPU: the same functions as WebAssembly on the CPU (a colour
+  // record read field by field through the module's readers), or as
+  // JavaScript where WebAssembly can't take them. Frame after frame, at a
+  // size that keeps a frame near 25 ms.
+  // The picture's channels at a point, from WebAssembly: red, green and
+  // blue as three exports, or the colour record's fields by its readers
+  // (`Colour.red`, or `Colour.red(key)` where two record types share a name).
+  async function inWasm(lowered: ReturnType<typeof lowerScalar>): Promise<(x: number, y: number, t: number) => number[]> {
+    const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
+    if (keys.length === 3) return (x, y, t) => keys.map((e) => w[e](x, y, t) as number);
+    const f = lowered.funcs.find((g) => g.def === entries.colour && g.params.every((p) => p === "f64"));
+    const r = f && typeof f.result === "object" && "fields" in f.result ? f.result : null;
+    if (!r || !w.colour) throw new Error("no colour record to read");
+    const read = r.fields.map((x) => w[`${r.name}.${x.name}(${r.key})`] ?? w[`${r.name}.${x.name}`]);
+    if (read.some((g) => !g)) throw new Error("a field without a reader");
+    return (x, y, t) => { const c = w.colour(x, y, t); return read.map((g) => g(c) as number); };
+  }
+
   async function cpu(why: string) {
-    const plain = lowerScalar(cpuSide.code, cpuSide.info, cpuSide.names, keys.map((k) => entries[k]));
-    const wasm = keys.length === 3 && !plain.refused.size ? await instantiate(emitWasm(plain)) : null;
     const lowered = lowerScalar(cpuSide.code, cpuSide.info, cpuSide.names, keys.map((k) => entries[k]), { records: true });
     const out = keys.find((k) => lowered.refused.has(entries[k]));
     if (out) { status.textContent = `No GPU here (${why}), and ${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}.`; return; }
-    const js = loadJs(lowered);
-    const colourAt = (x: number, y: number, t: number): number[] => wasm ? keys.map((e) => wasm[e](x, y, t))
-      : keys.length === 3 ? keys.map((e) => js.get(entries[e])!(x, y, t) as number) : js.get(entries.colour)!(x, y, t) as number[];
+    const wasm = await inWasm(lowered).catch(() => null);
+    const js = wasm ? null : loadJs(lowered);
+    const colourAt = (x: number, y: number, t: number): number[] => wasm ? wasm(x, y, t)
+      : keys.length === 3 ? keys.map((e) => js!.get(entries[e])!(x, y, t) as number) : js!.get(entries.colour)!(x, y, t) as number[];
     // A canvas the GPU drew on can't be drawn on any other way.
     const ctx = canvas.getContext("2d");
     if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
