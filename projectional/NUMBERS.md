@@ -263,6 +263,42 @@ type the program declared exact. Today's `Number` is the real numbers
 represented approximately by float64. That stays the default for decimals,
 and now it's said out loud.
 
+**`Float32`, the first approximate representation other than the default**
+(design, Backlog C8). GPUs compute in f32, so a shader today means one
+thing in the evaluator (float64) and another on the GPU, and the GPU test
+can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
+
+- **A representation of `Number`, not a new type.** The program is written
+  on `Number` as now, and `Float32` is chosen for it in
+  `representations.json`, as Binary is for `Nat`. Uniformity: no second
+  number type to convert to and from, and no node that looks different.
+  It is marked approximate, so the chooser never picks it by cost alone;
+  a program (or the shader page) asks for it.
+- **What it does:** every `Number` job rounds its result to the nearest
+  binary32 value (round to nearest, ties to even: JS `Math.fround`), and
+  literals are rounded once. The representing type is `Number` itself, and
+  `meaning` is the identity: every f32 value is a float64 value. So the
+  rewrite only swaps each builtin for its rounded copy (`add` becomes
+  `round32(a + b)`), with one new builtin, `round to Float32`. That needs
+  represent.ts to accept a builtin type as T and builtins as jobs, the one
+  change to the representation machinery.
+- **What it buys:** the evaluator, the compiled JS and the CPU fallback for
+  pictures (js-scalar.ts, which emits `Math.fround`) give the GPU's answers.
+  For `+`, `−`, `×` and comparisons WGSL rounds correctly, so these become
+  equal, not close, and the GPU test checks them exactly. `÷`, `sqrt` and
+  the transcendental functions have looser bounds in WGSL (2.5 ULP for `÷`,
+  2⁻¹¹ absolute for `sin`), so they stay "close".
+- **What it doesn't:** no f16, no fused multiply-add choice (WGSL may fuse
+  `a·b + c`; the representation rounds twice and says so), and WASM stays
+  f64. The WGSL printer is unchanged: under `Float32` it prints what it
+  prints now, and its comment that "Number is f32" becomes a fact of the
+  program instead of the target's choice.
+
+The steps, one PR each: the builtin and represent.ts taking a builtin type;
+the `Float32` representation with its laws tested with a tolerance against
+`Number`; js-scalar's `Math.fround`; the shaders example asking for it and
+gpu.ts checking `+ − ×` exactly.
+
 ### Costs and the chooser
 
 Each representation lists the cost of each job, on a ladder: `1`,
