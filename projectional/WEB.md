@@ -186,6 +186,11 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   dependency, as for `lab compile`), and writes one HTML file. There is
   no stylesheet of its own: a program's styles are a `style` element in
   its page, like any other element.
+- **Preview** (`src/lang/page.ts`): `showPage` runs a page's `main` with
+  the evaluator against the browser world and mounts it into any
+  document, so the editor can show a page live and redraw it after each
+  edit without compiling. `stop()` ends its clock. `pageMain` finds the
+  `main` that makes a program a page.
 - **What `main` may do**: return `Html`; take no arguments; use `Cells`,
   `Update`, `Console`, `Files` (run.ts `pageProblem` says why not).
 
