@@ -470,8 +470,9 @@ function applyT(e: T.TEdit, then?: () => void): boolean {
   }
   if (e.select) ui.selected = e.select;
   then?.();
-  const short = e.names;
-  commit({ code: e.code, names: { ...doc.names, short: short } }, ["code.json", "names.short.json"], e.note);
+  // A node an edit removed takes its names with it, in every layer.
+  const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) } }, ["code.json", "names.short.json"], e.note);
   return true;
 }
 
@@ -583,6 +584,11 @@ function openDef(d: Id) {
 
 // ---------------------------------------------------------------- gestures
 
+// A descriptive name is a second name. A node that has only its short
+// one is renamed there, so the name you give is the one the program has
+// (lab and the compiler read the short names) and not a second one.
+const nameLayer = (id: Id): Layer => (ui.layer === "descriptive" && doc.names.descriptive[id] === undefined ? "short" : ui.layer);
+
 function rename(id: Id, value: string) {
   const clash = Top.nameClash(doc.code, pres().names, id, value);
   if (clash) {
@@ -591,11 +597,12 @@ function rename(id: Id, value: string) {
     ui.refused = true;
     return render();
   }
-  const names = { ...doc.names[ui.layer] };
+  const layer = nameLayer(id);
+  const names = { ...doc.names[layer] };
   if (value.trim()) names[id] = value; else delete names[id];
   const k = node(id).kind;
   const what = k === "call" ? (value.trim() ? "Named this step" : "Inlined this step") : "Renamed";
-  commit({ names: { ...doc.names, [ui.layer]: names } }, [`names.${ui.layer}.json`], `${what}. Only names.${ui.layer}.json changed; the meaning hash is the same.`);
+  commit({ names: { ...doc.names, [layer]: names } }, [`names.${layer}.json`], `${what}. Only names.${layer}.json changed; the meaning hash is the same.`);
 }
 
 function setComment(id: Id, value: string) {
@@ -941,7 +948,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
     const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
     input.addEventListener("change", () => rename(id, input.value));
-    out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${ui.layer}.json`), input));
+    out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${nameLayer(id)}.json`), input));
   }
 
   // A dot: a let's binder, the shared output of its value.
