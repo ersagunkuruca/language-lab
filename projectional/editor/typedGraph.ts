@@ -87,6 +87,11 @@ export interface GraphView extends Canvas {
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
 
+// When a long press last opened a menu, and when a touch last did. The
+// graph is drawn again when a menu opens, so these outlive one drawing: the
+// tap that ends a long press lands on the new one, and isn't a click.
+let held = 0, menuAt = 0;
+
 // Picked nodes, per graph: kept across redraws, not saved.
 const pickedBy = new Map<string, Set<Id>>();
 
@@ -838,6 +843,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   let down = { x: 0, y: 0 };
   root.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
   root.addEventListener("click", (e) => {
+    if (Date.now() - menuAt < 800) return;
     const folding = (e.target as Element).closest("[data-fold]")?.getAttribute("data-fold");
     if (folding) return hooks.fold?.(folding);
     const edge = (e.target as Element).closest("[data-edge]");
@@ -858,7 +864,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   });
   // A touch held still for half a second is a right-click: iOS has none.
   // Where the browser has its own (Android), the first of the two wins.
-  let held = 0, letGo = () => {};
+  let letGo = () => {};
   root.addEventListener("pointerdown", (ev) => {
     if (ev.pointerType !== "touch") return;
     const at = { x: ev.clientX, y: ev.clientY }, t = ev.target as Element;
@@ -878,6 +884,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     e.preventDefault();
     letGo();
     if (e.isTrusted && Date.now() - held < 1000) return;
+    // Ours (a long press) or the browser's from a touch: a tap will follow.
+    if (!e.isTrusted || (e as PointerEvent).pointerType === "touch") menuAt = Date.now();
     const el = e.target as Element;
     const hole = el.closest(".pill.hole")?.getAttribute("data-slot");
     const src = el.closest("[data-src]")?.getAttribute("data-src");
