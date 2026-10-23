@@ -1017,6 +1017,18 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (asCall && safe(asCall, call, risky)) out.push(call);
   };
   for (const b of h.scope) consider(b.id, b.type);
+  // An input nothing has given a type yet can still be called: calling it
+  // with n inputs is what says it's a function of n (before(□, □)).
+  for (const b of h.scope) {
+    if (info.subst.resolve(b.type).t !== "var") continue;
+    for (const arity of [1, 2, 3]) {
+      const s = info.subst.clone();
+      const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
+      try { s.unify(b.type, t); s.unify(h.expected, t.ret); s.unifyRow(t.eff, h.row); } catch (e) { if (e instanceof TypeError) continue; throw e; }
+      const call: Filling = { kind: "call", target: b.id, arity, type: s.zonk(t) };
+      if (safe(s, call, false)) out.push(call);
+    }
+  }
   // Referring to the group itself, or to a def that depends on it, makes a
   // recursive group whose checks (does it end?) see the body: confirmed.
   for (const [d, sc] of info.schemes) {
