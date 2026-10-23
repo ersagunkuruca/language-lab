@@ -1197,6 +1197,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return [table(answers, false), table(arms.filter((a) => !answers.includes(a)), streams)];
     }
     function handleEx(n: NodeOf<"match">): string {
+      const arms = n.arms.map((a) => node<"arm">(a));
+      if (!arms.some((a) => node<"variant">(a.variant).returns)) {
+        // Only escapes: a try/catch (GAPS.md G18), no tables or closures.
+        const h = temp("h"), e = temp("e");
+        const cases = arms.map((a) => `if (${e}.op === ${tag(a.variant)}) {${binds(a, e, "args")}\n${ret(a.body)}\n}`).join("\n");
+        return `(() => {\nconst ${h} = $enter(${JSON.stringify(handlerOf(n))});\ntry {\n${ret(n.scrutinee)}\n} catch (${e}$) {\nconst ${e} = $caught(${e}$, ${h});\n${cases}\nthrow new Error("unhandled escape");\n} finally {\n$leave(${h});\n}\n})()`;
+      }
       const [answers, escapes] = handlerCases(n, false);
       return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${ret(n.scrutinee)}\n})`;
     }
@@ -1211,7 +1218,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return block(n.id);
     }
     // Only the fields the arm uses are taken out.
-    const binds = (a: NodeOf<"arm">, s: string) => a.binds.map((b, i) => (referenced.has(b) ? `\nconst ${local(b)} = ${s}.fields[${i}];` : "")).join("");
+    const binds = (a: NodeOf<"arm">, s: string, of = "fields") => a.binds.map((b, i) => (referenced.has(b) ? `\nconst ${local(b)} = ${s}.${of}[${i}];` : "")).join("");
     const isBoolMatch = (n: NodeOf<"match">) => n.arms.every((a) => [TRUE, FALSE].includes(node<"arm">(a).variant)) && (n.arms.length === 2 || (n.arms.length === 1 && !!n.otherwise));
     const boolArms = (n: NodeOf<"match">): [Id, Id] => {
       const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v)?.body ?? n.otherwise!;
@@ -2026,7 +2033,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
-    "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
+    "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.

@@ -254,6 +254,18 @@ export function $handle(effect, answers, escapes, body) {
   } finally { handlers.length = at; }
 }
 
+// A match whose cases all escape (none answers), compiled inline as a
+// try/catch (GAPS.md G18): `$enter` before the body, `$caught` in the catch
+// (rethrows what isn't this handler's, and cuts the stack back so the case
+// runs outside it), `$leave` in the finally.
+export function $enter(effect) { const h = { effect, answers: {}, at: handlers.length }; handlers.push(h); return h; }
+export function $caught(e, h) {
+  if (!(e instanceof Escape) || e.handler !== h) throw e;
+  handlers.length = h.at;
+  return e;
+}
+export function $leave(h) { handlers.length = h.at; }
+
 // ... around a computation with Choice: the handler is on the stack while
 // the computation runs, which is during each step of its generator. An
 // escape ends it, alternatives and all, with the case's results.
