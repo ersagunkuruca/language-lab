@@ -12,8 +12,8 @@ is adapted from theirs: [Credits](#credits) at the end says where each
 comes from.
 
 Everything here can be tried in the editor:
-https://ersagunkuruca.github.io/language-lab/ (or open the repository's
-`index.html` locally). The examples ship with it, in the *Programs* list on
+https://ersagunkuruca.github.io/language-lab/ (or build it locally with
+`npm run build-editor` in `projectional/` and open `index.html`). The examples ship with it, in the *Programs* list on
 the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Insertion sort*, *Eight queens*, *Calculus*, *Run backwards*,
 *Relations in programs*, and two shaders, *Shader: ripples* and *Shader: ray
