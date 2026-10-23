@@ -205,6 +205,8 @@ are compiled by the solver's plan as before. For the others, the order of
 work inside `relate.ts` is chosen at run time, so `COMPILER.md` plans a
 Mercury-style mode analysis per (definition, known ports), with `relate.ts`
 linked as the runtime where it fails.
+MODES.md is the design: the same analysis also decides, before running,
+whether a direction ends and how many answers it can have.
 
 ## Files
 
