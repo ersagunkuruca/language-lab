@@ -91,8 +91,8 @@ run in parallel because they touch different files.
    (`$perform` with a handler stack, escapes as exceptions), `cli/lab.ts`
    runs, compiles and checks saved programs on Node, and `examples/wc` is a
    word count in the language, after Unix `wc`. `Cells` compiles to the
-   runtime's one handler. A compiled program is one portable file (`lab compile` bundles its runtime). Open: time, randomness and
-   HTTP effects.
+   runtime's one handler. A compiled program is one portable file (`lab compile` bundles its runtime). Time, randomness and HTTP
+   followed (#110, #113, #114; LANGUAGE.md "Random", "Time", "The web").
 4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
    (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`
    (`write`), one runtime handler that gives Solid.js-style signals and lazy,
@@ -132,10 +132,14 @@ run in parallel because they touch different files.
    `localStorage`); `lab build-web` writes one HTML file; two-way binding
    is a field's display function run backwards, and
    [apps/converter.html](https://ersagunkuruca.github.io/language-lab/apps/converter.html)
-   is written that way. On the way, functions kept in data got their
+   is written that way. Pages read the clock (a part that reads `now()`
+   runs each frame), draw random numbers in handlers and fetch with
+   Suspense-style waiting:
+   [apps/dice.html](https://ersagunkuruca.github.io/language-lab/apps/dice.html)
+   rolls dice. On the way, functions kept in data got their
    effect rows (#102). Open: reactive.html's programs moved onto `Html`,
    keyed lists, `solve` over a function value (one generic `bind`),
-   static output from `lab run`, time, randomness and HTTP, a page shown
+   static output from `lab run`, a page shown
    live in the editor. Mobile follows as a packaged web app (a PWA, or
    Capacitor).
 8. **Research items** as they become blocking: costs worked out from folds,
