@@ -2,5 +2,6 @@
  "Adapted: seeded rolls use xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain): https://prng.di.unimi.it/",
  "Prior art: the clock that runs again each frame follows Fran (Conal Elliott and Paul Hudak, \"Functional reactive animation\", ICFP 1997) and Elm's time subscriptions.",
  "Prior art: randomness as an effect with a handler you choose is in Koka and Eff.",
+ "Prior art: the page is written with the html module, each tag a function as in Elm's Html module (Evan Czaplicki).",
  "Our own: the dice page; the triangular spread of two dice is textbook."
 ]

@@ -1,5 +1,6 @@
-// Publishes the prelude (src/lang/prelude-source.ts) to library/prelude.json
-// and the vectors module (src/lang/vectors-source.ts) to library/vectors.json,
+// Publishes the prelude (src/lang/prelude-source.ts) to library/prelude.json,
+// the vectors module (src/lang/vectors-source.ts) to library/vectors.json
+// and the html module (src/lang/html-source.ts) to library/html.json,
 // checks it, then moves every example onto it: an example's own copy of a
 // prelude definition hashes the same as the published one, so it's replaced
 // by a reference to it (adopt). Running this again changes nothing.
@@ -12,6 +13,7 @@ import { prelude } from "../src/prelude.ts";
 import { std } from "../src/lang/std.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { buildVectors } from "../src/lang/vectors-source.ts";
+import { buildHtml } from "../src/lang/html-source.ts";
 import { verify } from "../src/lang/modules.ts";
 
 const here = import.meta.dirname;
@@ -27,6 +29,11 @@ const vwrong = verify(v, merge(prelude, std), true);
 if (vwrong) throw new Error(`vectors: ${vwrong}`);
 save(join(here, "vectors.json"), v);
 console.log(`vectors: ${v.code.defs.length} definitions, ${v.exports.length} offered, ${Object.keys(v.code.nodes).length} nodes`);
+const h = buildHtml();
+const hwrong = verify(h, merge(prelude, std, m.code), true);
+if (hwrong) throw new Error(`html: ${hwrong}`);
+save(join(here, "html.json"), h);
+console.log(`html: ${h.code.defs.length} definitions, ${h.exports.length} offered, ${Object.keys(h.code.nodes).length} nodes`);
 
 // Examples, with the library just written.
 const { adoptLibrary } = await import("../src/lang/library.ts");

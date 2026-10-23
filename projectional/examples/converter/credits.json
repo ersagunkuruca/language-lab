@@ -1,5 +1,6 @@
 [
  "Adapted: fine-grained reactivity (signals, memos, effects, no virtual DOM) is Solid's model (Ryan Carniato, https://www.solidjs.com), after S.js (Adam Haile).",
  "Prior art: two-way binding by running the view backwards is close to lenses (Foster, Greenwald, Moore, Pierce and Schmitt, \"Combinators for bidirectional tree transformations\", TOPLAS 2007).",
+ "Prior art: the page is written with the html module, each tag a function as in Elm's Html module (Evan Czaplicki).",
  "Our own: the converter, bound by solving the view instead of writing both directions."
 ]

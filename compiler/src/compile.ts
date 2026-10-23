@@ -1864,7 +1864,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     opts.link === "global" ? `const { ${helpers.join(", ")} } = ${opts.runtime};` : `import { ${helpers.join(", ")} } from ${JSON.stringify(opts.runtime)};`,
     ``,
     ...program,
-    ...(referenced.has(SHOW_ANY) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
+    // Only when the code kept shows a case: a library function that does
+    // (the html module's px) isn't a reason when nothing calls it.
+    ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(")) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...solverCode,
     ...constants,
     ``,
