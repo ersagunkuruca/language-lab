@@ -5,11 +5,11 @@
 #
 # Needs Settings → Pages → Source: "GitHub Actions".
 #
-# Before publishing, it runs the browser tests (the editor, every example,
-# shaders.html, WGSL on a GPU) on what it built: they run here, once per
-# merge, instead of on every push to a pull request. If they fail, nothing
-# is published and the live site keeps the last good build. The unit tests
-# have already run on the pull request.
+# Before publishing, it runs every test suite: the unit tests, then the
+# browser tests (the editor, every example, shaders.html, WGSL on a GPU) on
+# what it built. They run here, once per merge, instead of on every push to
+# a pull request (which only type-checks). If they fail, nothing is
+# published and the live site keeps the last good build.
 name: Pages
 
 on:
@@ -32,7 +32,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -41,11 +41,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: projectional/package-lock.json
       - name: Build the pages
         working-directory: projectional
         run: |
           npm ci
           npm run build-editor
+      # Node runs (cores - 1) test files at a time, which is one on the
+      # runner's two cores; two at a time is much faster.
+      - name: Unit tests
+        run: |
+          (cd projectional && node --test --test-concurrency=2 test/*.test.ts)
+          (cd invertible && npm test)
+          (cd compiler && npm test)
       - name: The editor in a browser
         working-directory: projectional
         run: |

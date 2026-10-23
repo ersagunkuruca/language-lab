@@ -98,6 +98,11 @@ model, then WebAssembly. Update this line when the step changes.
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
+- Run the tests locally before pushing (`npm test` in projectional,
+  invertible and compiler; `npm run smoke` and `npm run smoke-shaders` for
+  editor or page changes). A pull request's CI only type-checks; every suite
+  runs once per merge before the deploy, and a failure there stops the
+  deploy, so whoever broke main fixes it next.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 
