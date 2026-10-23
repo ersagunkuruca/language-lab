@@ -1,8 +1,17 @@
 # Modes: the order of a backwards search, decided before it runs
 
 Design note for BACKLOG.md L11 (REVIEW-2026-10-22b.md §3, REVIEW.md §1.2,
-COMPILER.md stage 1b). Written 2026-10-23. Nothing here is built yet; the
-last section is the plan.
+COMPILER.md stage 1b). Written 2026-10-23. The last section is the plan.
+
+**Status.** Step 1 is built: `src/lang/modes.ts` gives the verdict for any
+mode, and `test/modes.test.ts` checks it against what relate.ts does and
+against the checker. Nothing uses it yet. As planned, `map` and `show
+numbers` backwards end. Forward, the verdict agrees with the checker's
+`Diverge` on every definition in the examples, leaving out the few that
+call a function they were passed, since there it's that function's effect
+row. Known is two levels for now (known or not). The third (the case known,
+not the fields) waits for a program that needs it: today a projection run
+backwards waits for its record.
 
 ## The problem
 
