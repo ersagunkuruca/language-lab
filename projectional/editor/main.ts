@@ -1689,7 +1689,7 @@ const page = {
 const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
   h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
-    h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Show what runs again"),
+    h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
     h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
     h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
 function pageSection(info: T.Info | null): HTMLElement | null {
