@@ -217,13 +217,60 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // chooses, so the copy calls them as plain functions (GAPS.md G4).
   // `bool`: the copy returns a JS boolean, not Bool data. Its callers test
   // it as it is, or make it data where they need a value (GAPS.md G3).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean }
+  // `single`: the copy has Choice but at most one answer, so it's a plain
+  // function that returns the answer or $no, not a generator (GAPS.md G14).
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
   const isBool = (t: Type) => { const z = sub.zonk(t); return z.t === "con" && z.id === BOOL; };
   // A use of a copy as a value: Bool data out, as everywhere else.
-  const asValue = (s: Spec) => (s.bool ? `((...a) => $bool(${s.name}(...a)))` : s.name);
+  const asValue = (s: Spec) => (s.bool ? `((...a) => $bool(${s.name}(...a)))` : s.single ? `$stream0(${s.name})` : s.name);
+
+  // Does every path through this definition give one answer or none,
+  // whatever Choice functions it's given? Only calls whose callee is known
+  // count: a definition with at most one answer, `fail`, a function value
+  // whose type has no Choice. `one of`, handlers, `first`, solves and
+  // Choice-typed parameters may give more. A definition that's still being
+  // looked at (recursion) counts as one for itself, and as many for the
+  // others in its cycle.
+  const singles = new Map<Id, boolean>();
+  const looking = new Set<Id>();
+  const STREAMING = new Set<Id>([S.oneOf, S.fuel, S.first, S.seeded]);
+  function singleDef(def: Id): boolean {
+    if (singles.has(def)) return singles.get(def)!;
+    if (looking.has(def)) return false;
+    looking.add(def);
+    const noChoice = (t: Type) => t.t === "fn" && !t.eff.effs.includes(CHOICE) && t.eff.tail === null;
+    const one = (id: Id): boolean => {
+      const n = code.nodes[id];
+      switch (n.kind) {
+        case "lit": case "ref": case "hole": case "lambda": return true;
+        case "match": return !handlerOf(n) && one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body)) && (!n.otherwise || one(n.otherwise));
+        case "fold": return one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body));
+        case "call": {
+          if (!n.args.every(one)) return false;
+          const f = code.nodes[n.fn];
+          if (f.kind === "lambda") return one(f.body);
+          if (f.kind !== "ref") return one(n.fn) && noChoice(ty(n.fn));
+          const t = code.nodes[f.target];
+          if (t.kind === "variant" || t.kind === "field") return true;
+          if (t.kind === "builtin") return f.target === S.fail || (!STREAMING.has(f.target) && !manyOf(f.target));
+          if (t.kind === "def") {
+            if (f.target === def) return true;
+            const scheme = info.schemes.get(f.target)!.type;
+            return noChoice(scheme) || (isFnDef(f.target) && singleDef(f.target));
+          }
+          return noChoice(ty(n.fn));
+        }
+        default: return false;
+      }
+    };
+    const r = isFnDef(def) && one(node<"lambda">(node<"def">(def).body!).body);
+    looking.delete(def);
+    singles.set(def, r);
+    return r;
+  }
 
   function spec(def: Id, rho: Rho, plain: Set<Id> = new Set()): Spec {
     const scheme = info.schemes.get(def)!;
@@ -233,7 +280,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams, bool };
+      const single = !reflective && streams && isFnDef(def) && singleDef(def);
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams, bool, single };
       specs.set(key, s);
       queue.push(s);
     }
@@ -867,7 +915,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         let out: string;
         if (callStreams(n)) {
           const r = temp("r");
-          out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
+          out = callee?.single ? `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}` : `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = k(c);
         // Out of fuel: this call has no result, the others carry on.
         return target && info.divergent.has(target) ? `if ($spend()) {\n${out}\n}` : out;
@@ -914,6 +962,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const lam = node<"lambda">(b);
       const ps = lam.params.map(local).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
+      if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
       const stmts = ret(lam.body, true, sp.bool ? RETURN_BOOL : RETURN);
       // Self tail calls jump: the parameters become the loop's inputs, and
@@ -942,7 +991,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
   for (let s; (s = queue.shift());) out.push(body(s));
 
-  const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];

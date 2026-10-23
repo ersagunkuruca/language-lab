@@ -313,7 +313,11 @@ instance (240 ms before).
 ### The gaps, ranked
 
 **G14. A Choice function with at most one answer is still a generator
-(perf: 240 → 159 ms, the largest single gap).** `join` either gives one
+(perf: 240 → 159 ms, the largest single gap). DONE (2026-10-23): on
+Hutton's instance, compiled went from 542 to 355 ms on the same machine,
+against the ideal's 80 ms (6.8× to 4.5×; this machine was slower than the
+one the table above was measured on). COMPILER.md, "Two calling
+conventions".** `join` either gives one
 `found` or fails. It's compiled as a generator, and `results` drains it
 with `for (const r of join(…)) yield r`, so every operator tried makes a
 generator object and runs the iterator protocol.
