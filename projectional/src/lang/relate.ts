@@ -54,7 +54,7 @@ import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
+import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
@@ -134,6 +134,17 @@ class Sub {
     return node[n & 31] as Term | undefined;
   }
   has(n: number) { return this.get(n) !== undefined; }
+  // The variables bound, in order.
+  *keys(): Generator<number> {
+    function* go(node: Trie, d: number, base: number): Generator<number> {
+      for (let i = 0; i < node.length; i++) {
+        if (node[i] === undefined) continue;
+        if (d === 0) yield base + i;
+        else yield* go(node[i] as Trie, d - 1, (base + i) * 32);
+      }
+    }
+    yield* go(this.root, this.depth, 0);
+  }
   set(n: number, t: Term): Sub {
     let root = this.root, depth = this.depth;
     while (n >= 2 ** (5 * (depth + 1))) { root = [root]; depth++; }
@@ -212,9 +223,17 @@ function mplus(a: Stream, b: () => Stream): Stream {
   return [a[0], () => mplus(a[1](), b)];
 }
 function bind(a: Stream, g: Goal): Stream {
-  if (a === null) return null;
-  if (typeof a === "function") return () => bind(a(), g);
-  return mplus(g(a[0]), () => bind(a[1](), g));
+  // A run of answers that g rejects at once is walked in a loop: as
+  // recursion, eight thousand of them in a row (queens' safe, backwards)
+  // overflow the stack.
+  for (;;) {
+    if (a === null) return null;
+    if (typeof a === "function") { const later = a; return () => bind(later(), g); }
+    const r = g(a[0]);
+    const rest = a[1];
+    if (r !== null) return mplus(r, () => bind(rest(), g));
+    a = rest();
+  }
 }
 const succeed: Goal = unit;
 const failG: Goal = () => null;
@@ -298,12 +317,19 @@ function solveSome(s: State): Stream | undefined {
     if (!determined.length) continue;
     const sols = stream(rel as never, p as never, {} as never) as Iterable<{ values: Record<string, number | null> }>;
     const it = sols[Symbol.iterator]();
+    // An answer that leaves every unknown free (0 = 2 · a · b, solved for a
+    // with b unknown) pins nothing down: settling it again would be the same
+    // state, forever. This group waits for more to be known.
+    const head = it.next();
+    if (!head.done && determined.every((x) => head.value.values[x] === null || head.value.values[x] === undefined)) continue;
+    let first: IteratorResult<{ values: Record<string, number | null> }> | null = head;
     // A periodic family (angle + 2πk) never ends. If none of its first
     // members fits what else is known, the rest won't either, and walking
     // them would never come back (it spends no fuel), so stop there.
     let left = PERIODS;
     const next = (): Stream => {
-      const r = it.next();
+      const r = first ?? it.next();
+      first = null;
       if (r.done || left-- <= 0) return null;
       let t: State | null = s;
       for (const x of determined) {
@@ -467,6 +493,22 @@ export function interpreter(code: Code, opts: Options = {}) {
   // go before the call when its value is unknown (forward), after it when
   // the value is known (backwards), so information flows from what's known.
   const cheap = (id: Id) => ["lit", "ref", "lambda"].includes(nodes[id].kind);
+  // An argument computed only from known values goes first, in either
+  // direction: run forward it's a value, where backwards it would be a
+  // search. Backwards, polynomial([-2, 0, 1], x) would otherwise unfold its
+  // fold over every list before building this one, and a let of a shape's
+  // distance would be guessed from the blend it feeds.
+  const mentions = new Map<Id, Id[]>();
+  const binders = (id: Id): Id[] => {
+    let out = mentions.get(id);
+    if (out) return out;
+    const n = nodes[id];
+    out = n.kind === "ref" ? (nodes[n.target]?.kind === "binder" ? [n.target] : []) : [...new Set(children(n).flatMap(binders))];
+    mentions.set(id, out);
+    return out;
+  };
+  const computable = (id: Id, env: Env, s: State): boolean =>
+    binders(id).every((b) => !env.has(b) || ground(env.get(b) as Term, s) !== undefined);
 
   // A call of a builtin that never branches when its inputs are unknown
   // (it waits, or adds an equation), all the way down.
@@ -496,8 +538,9 @@ export function interpreter(code: Code, opts: Options = {}) {
       // They only record what they are waiting for, never branch, and then
       // the call can see the shape of its inputs (text(show(n), " ", rest)
       // can only be cut at a space after a number) instead of guessing.
-      const waits = n.args.map((a, i) => !cheap(a) && waitsOnly(a) && waitsOnly(n.id));
-      const before = argGoals.filter((_, i) => waits[i]), after = argGoals.filter((_, i) => !cheap(n.args[i]) && !waits[i]);
+      const first = n.args.map((a) => !cheap(a) && computable(a, env, s));
+      const waits = n.args.map((a, i) => !cheap(a) && !first[i] && waitsOnly(a) && waitsOnly(n.id));
+      const before = argGoals.filter((_, i) => first[i] || waits[i]), after = argGoals.filter((_, i) => !cheap(n.args[i]) && !first[i] && !waits[i]);
       // a, hence b: b is the way in, so it goes first. In polar, x² + y² =
       // length² gives the length from x and y in closed form; the two
       // equations on their own have two unknowns each, and from x = 0 the
@@ -826,7 +869,14 @@ export function interpreter(code: Code, opts: Options = {}) {
       const inner = new Map(env);
       for (const [p, b] of Object.entries(n.binds)) inner.set(b, at[p]);
       const given = Object.entries(n.given).map(([p, e]) => ev(e, env, at[p]));
-      return conj(...given, relationGoal(n.fn, at), ev(n.body, inner, out))(s);
+      // With the answer known, the body goes first: what it says about the
+      // bound ports narrows the relation's search (reading text back to a
+      // known list of numbers checks that list, instead of unfolding every
+      // list and comparing at the end, which never ends after the last
+      // answer).
+      const body = ev(n.body, inner, out);
+      const known = !(walk(out, s) instanceof LVar);
+      return (known ? conj(...given, body, relationGoal(n.fn, at)) : conj(...given, relationGoal(n.fn, at), body))(s);
     };
   }
 
@@ -923,7 +973,7 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
 // Does some value make f true? This is `for some` run forward.
 export function satisfiable(code: Code, f: unknown, opts: Options = {}): boolean {
   const it = interpreter(code, opts);
-  const [[x], s] = freshVars({ sub: new Map(), eqs: [], waits: [], next: 0 }, 1);
+  const [[x], s] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0 }, 1);
   for (const _ of pull(it.apply(fromValue(f), [x], boolT(true))(s))) return true;
   return false;
 }

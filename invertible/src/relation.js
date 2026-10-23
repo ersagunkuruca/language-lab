@@ -349,6 +349,16 @@ export function run(rel, p, values, { window = 1, limit = 64, tol = 1e-9, guess 
   function go(i, env, path, free) {
     if (solutions.length >= limit) return;
     if (i === p.steps.length) {
+      // Every answer is checked against the equations it came from. A step
+      // can be right in general and wrong at a singular point: y = x·tan θ
+      // undoes atan2(y, x) = θ except at x = 0, where it gives y = 0 for
+      // any θ, and atan2(0, 0) is 0.
+      for (const eq of rel.eqs) {
+        if (touches(eq.lhs, free) || touches(eq.rhs, free)) continue;
+        if (![...vars(eq.lhs), ...vars(eq.rhs)].every((n) => n in env)) continue;
+        const l = evaluate(eq.lhs, env), r = evaluate(eq.rhs, env);
+        if (!ok(l) || !ok(r) || Math.abs(l - r) > tol * (1 + Math.abs(l) + Math.abs(r))) return;
+      }
       const ports = rel.ports.filter((n) => n in env || free.has(n));
       const sol = Object.fromEntries(ports.map((n) => [n, free.has(n) ? null : clean(env[n])]));
       const key = Object.values(sol).map((x) => (x === null ? 'free' : Math.round(x * 1e8))).join();
