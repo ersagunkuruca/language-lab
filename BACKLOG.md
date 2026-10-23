@@ -29,6 +29,7 @@ so the next bigger program can be built in the editor.
 | E18 | Wires routed around nodes | node-editor backlog | P3 | M | |
 | E19 | Minimap / "there's more" cue, and collapsible frames | node-editor backlog, QA2 UX4 | P3 | M | |
 | E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
+| T4 | A quicker smoke per change (each program's first definition and main, plus the once-per-program gestures; every definition nightly), and shorter waits than 500 ms per missing click target | projectional/TESTING.md T4 | P1 | S | after T2 |
 
 ## C: Compiler and targets
 
@@ -59,6 +60,20 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
 | L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
+| T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, results cached by definition hash and re-checked on save (Unison prior art). Design note first | projectional/TESTING.md T7 | P2 | L | |
+
+## Testing and fast feedback
+
+Thread "Testing strategy and fast feedback", which owns `.github/workflows`
+since 2026-10-23. Plan and measurements: projectional/TESTING.md.
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| T1 | Deploy first (about 2 min from merge to live); the suites run after it in "Check main" and report instead of blocking | TESTING.md T1 | P1 | S | ▶ |
+| T2 | `npm run affected`: run only the tests a change reaches (import graph, plus `EXAMPLES=` for the example sweeps); CI and threads before pushing | TESTING.md T2 | P1 | M | |
+| T3 | Sweeps take a rotating 1/8 slice per change (`SWEEP=`), all of it nightly; drop lang.test.ts's second palette sweep over queens | TESTING.md T3 | P1 | S | |
+| T5 | Nightly full run when main changed: every test and sweep in full, every definition in the smoke, the GPU check; green moves the `good` tag, red is a P0 | TESTING.md T5 | P1 | S | |
+| T6 | Testing rules against the paradigm pin in WORKFLOW.md; read the three tests that mention `cons` against them | TESTING.md T6 | P2 | S | |
 
 ## Coordinator and process
 
