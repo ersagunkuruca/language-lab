@@ -189,6 +189,14 @@ nightly. And cut the waits: a click on something that isn't there costs
 a 500 ms timeout, up to six per definition. Expected about 1 min instead
 of 5.5.
 
+Done (T4): per change each program's first definition, its `main` and an
+eighth of the rest (a different eighth each run, by `SWEEP_AT`, so eight
+runs cover them all), every one with `SWEEP=all`. The waits were clicks on
+a graph's frames, which are mostly under their own contents: 402 timed-out
+clicks a run, 203 of its 340 s. The smoke now clicks the first six parts
+whose middle a click actually reaches. Here: 5 min 40 s became 1 min 22 s
+per change, and 2 min 17 s for every definition.
+
 ### T5. Nightly full run
 
 At 03:00 UTC, only if main changed since the last `good` tag: every test,

@@ -1,5 +1,7 @@
-// The built page in a real browser: open every example program, every
-// definition in it, run it, show its values and click its first nodes (and
+// The built page in a real browser: open every example program, its first
+// definition, its main and a slice of the rest (a different eighth each
+// run, all of them with SWEEP=all, as the nightly run does: TESTING.md T4),
+// run each, show its values and click its first nodes (and
 // once per program, tidy its graph and show a binding as let and get nodes), and
 // fail on any error the page throws or logs, or any run or values that
 // stop with an error. The unit tests can't catch a view that throws while
@@ -18,12 +20,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, type Page } from "playwright-core";
+import { inSweep } from "../test/helpers.ts";
 
 const page = process.argv[2] ?? new URL("../../index.html", import.meta.url).href;
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : { channel: "chrome" });
 const errors: string[] = [];
 let where = "loading";
 let defs = 0;
+let seen = 0;
 
 async function visit(saved: string | null, only?: string) {
   const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
@@ -44,6 +48,7 @@ async function visit(saved: string | null, only?: string) {
     await click('[data-set="program"]', i);
     const names = await p.locator("[data-def]").allInnerTexts();
     for (const [j, def] of names.entries()) {
+      if (j > 0 && def.trim() !== "main" && !inSweep(seen++)) continue;
       where = `${saved ? "saved by an older editor: " : ""}${program} / ${def}`;
       await click("[data-def]", j);
       // A list reads as a list in the blocks too, however tall its items.
@@ -52,7 +57,17 @@ async function visit(saved: string | null, only?: string) {
       await click('[data-act="t-run"]');
       await click('[data-act="t-values"]');
       await stopped(p);
-      for (let k = 0; k < 6; k++) await click(".p-graph [data-id]", k);
+      // Its first nodes, where a click reaches them: a frame is mostly under
+      // its contents, and waiting for it to come out from under them cost
+      // half a second a try.
+      for (let k = 0; k < 6; k++) {
+        const at = await p.locator(".p-graph [data-id]").evaluateAll((els, k) => els.flatMap((e) => {
+          const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+          return document.elementFromPoint(x, y)?.closest("[data-id]") === e ? [[x, y]] : [];
+        })[k], k);
+        if (!at) break;
+        await p.mouse.click(at[0], at[1]);
+      }
       // The graph's menu, and the gestures it offers that only change the
       // layout: once per program, on its first definition.
       if (j === 0) {
@@ -193,7 +208,7 @@ await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
 await browser.close();
-console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor`);
+console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor${process.env.SWEEP === "all" ? "" : " (a slice: SWEEP=all for every one)"}`);
 if (errors.length) {
   console.error(errors.join("\n\n"));
   process.exit(1);

@@ -28,7 +28,6 @@ so the next bigger program can be built in the editor.
 |---|---|---|---|---|---|
 | E35 | Collapsible frames (split from E19, whose map is done) | node-editor backlog | P3 | M | |
 | E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
-| T4 | A quicker smoke per change (each program's first definition and main, plus the once-per-program gestures; every definition nightly), and shorter waits than 500 ms per missing click target | projectional/TESTING.md T4 | P1 | S | after T2 |
 
 ## C: Compiler and targets
 
@@ -65,7 +64,7 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 Thread "Testing strategy and fast feedback", which owns `.github/workflows`
 since 2026-10-23. Plan and measurements: projectional/TESTING.md. T1-T3,
-T5 and T6 are done; T4 is in lane E and T7 in lane L.
+T4 to T6 are done; T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
@@ -90,6 +89,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| T4 | A quicker smoke: each program's first definition, main and an eighth of the rest per change (all nightly), and graph clicks only where a click reaches (402 half-second timeouts a run were frames under their contents): 5 min 40 s to 1 min 22 s | #274 |
 | I1 | Without a GPU the ray marcher's colour record runs as WebAssembly (WasmGC struct, read by the module's field readers), not JavaScript: 244 to 144 ms a frame at 160x160 | #272 |
 | E19 | A map in the graph's corner while part of it is out of view (the 'there's more' cue); click or drag to look there. Collapsible frames split to E35 | #270 |
 | E18 | Wires bend over or under nodes in their way when a short detour crosses no more wires: tunnels 333 to 136, bridges 410 to 438 | #263 |
