@@ -1807,6 +1807,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
     // Run k more than once only if it's short; otherwise loop over a local
     // generator and run k once, after it.
+    function fewConstants(id: Id): Id[] | null {
+      const items: Id[] = [];
+      for (let n = code.nodes[id]; ; n = code.nodes[n.args[1]]) {
+        if (n.kind === "ref" && n.target === NIL) return items.length && items.length <= 4 ? items : null;
+        if (n.kind !== "call" || !refTo(n.fn, CONS)) return null;
+        const x = code.nodes[n.args[0]];
+        if (!(x.kind === "lit" || (x.kind === "ref" && code.nodes[x.target]?.kind === "variant" && !node<"variant">(x.target).fields.length))) return null;
+        items.push(n.args[0]);
+      }
+    }
     function branch(k: K, gen: (y: K) => string): string {
       const probe = k("$$");
       if (probe.length < 160) return gen(k);
@@ -1838,6 +1848,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const x = temp("x");
           return eachOf(items, x, k(x), "list");
         }
+        // A few constants written in place (`one of([true, false])`): each
+        // in turn, with no list (GAPS.md G12).
+        const few = h === S.oneOf ? fewConstants(n.args[0]) : null;
+        if (few) return branch(k, (y) => few.map((i) => `{\n${y(ex(i))}\n}`).join("\n"));
         if (h === S.oneOf) return parts(n.args, ([xs]) => {
           const l = temp("l"), x = temp("x");
           return `for (let ${l} = ${xs}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${k(x)}\n}`;
