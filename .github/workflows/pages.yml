@@ -5,8 +5,11 @@
 #
 # Needs Settings → Pages → Source: "GitHub Actions".
 #
-# It only builds and publishes, in one job (about a minute): every suite has
-# already run on the pull request.
+# Before publishing, it runs the browser tests (the editor, every example,
+# shaders.html, WGSL on a GPU) on what it built: they run here, once per
+# merge, instead of on every push to a pull request. If they fail, nothing
+# is published and the live site keeps the last good build. The unit tests
+# have already run on the pull request.
 name: Pages
 
 on:
@@ -19,15 +22,17 @@ permissions:
   pages: write
   id-token: write
 
-# A newer push supersedes a deploy that hasn't finished.
+# A deploy that has started finishes (cancelling it would waste the minutes
+# it spent); merges that land meanwhile wait, and only the newest of them
+# runs next.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -41,6 +46,14 @@ jobs:
         run: |
           npm ci
           npm run build-editor
+      - name: The editor in a browser
+        working-directory: projectional
+        run: |
+          npm run smoke
+          npm run smoke-shaders
+      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
+        working-directory: compiler
+        run: npm run gpu
       - name: Lay out the site like the repository
         run: |
           mkdir _site
