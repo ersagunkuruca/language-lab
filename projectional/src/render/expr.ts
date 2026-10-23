@@ -26,7 +26,9 @@ export function callText(pres: Presentation, namer: Namer, fn: Node, args: R[], 
     const p = nota.prec ?? 9;
     return { text: `${nota.glyph}${paren(args[0], args[0].prec > p)}`, prec: p };
   }
-  const name = head ? nota?.glyph ?? namer.name(head) : paren(fnText(), fnText().prec === ATOM);
+  // fnText marks footnotes, so it runs at most once.
+  const fr = head ? undefined : fnText();
+  const name = fr ? paren(fr, fr.prec === ATOM) : nota?.glyph ?? namer.name(head!);
   return atom(`${name}(${args.map((a) => a.text).join(", ")})`);
 }
 

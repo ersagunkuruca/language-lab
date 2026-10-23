@@ -99,3 +99,13 @@ test("comment references follow renames", () => {
   const comments = { [def]: `uses {${b}} twice` };
   assert.match(renderLet(code, pres(rename(names, b, "slope"), plainStyle, comments), def), /^-- uses slope twice/);
 });
+
+test("a footnote on a called lambda is listed once in the nested view", () => {
+  const k = new Builder(prelude);
+  const f = k.def("f");
+  let fn = "";
+  k.define(f, k.lambda(["a"], (a) => k.call((fn = k.lambda(["x"], (x) => k.call(B.mul, x, x))), a)));
+  const out = renderNested(merge(prelude, k.code), pres(k.names, mathStyle, { [fn]: "squares" }), f);
+  assert.match(out, /\[1\] squares/);
+  assert.doesNotMatch(out, /\[2\]/);
+});
