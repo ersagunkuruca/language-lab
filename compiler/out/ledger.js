@@ -48,7 +48,7 @@ function usage() {
 
 // run
 function run(path2) {
-  show_ledger(entries($impl["builtin.text.split"]($io.readFile(path2), newline()), 1), path2);
+  show_ledger(entries$arr($text.split($io.readFile(path2), newline()), 0, 1), path2);
   return 0;
 }
 
@@ -58,42 +58,52 @@ function failed(why) {
   return 1;
 }
 
+// newline
+let value$4;
+function newline() {
+  return value$4 ??= (() => {
+    const r$6 = $partial["builtin.text.fromCode"](10);
+    if (r$6 !== $no) {
+      return r$6;
+    }
+    return "";
+  })();
+}
+
 // entries
-function entries(lines$in, n$in) {
-  const top$4 = { fields: [undefined] };
-  let at$5 = top$4, i$6 = 0;
+function entries$arr(lines$in, lines$i$in, n$in) {
+  const top$8 = { fields: [undefined] };
+  let at$9 = top$8, i$10 = 0;
   for (;;) {
-    const lines = lines$in, n = n$in;
-    const s$7 = lines;
-    switch (s$7.tag) {
-      case "std.list.nil" /* nil */: {
-        at$5.fields[i$6] = $nil;
-        return top$4.fields[0];
-      }
-      case "std.list.cons" /* cons */: {
-        const line = s$7.fields[0];
-        const rest2 = s$7.fields[1];
-        if (blank(line)) {
-          lines$in = rest2;
-          n$in = $int.add(n, 1);
-          continue;
-        }
-        const cell$8 = { tag: "std.list.cons" /* cons */, fields: [parse(line, n), undefined] };
-        at$5.fields[i$6] = cell$8;
-        at$5 = cell$8;
-        i$6 = 1;
-        lines$in = rest2;
+    const lines = lines$in, lines$i = lines$i$in, n = n$in;
+    if (lines$i >= lines.length) {
+      at$9.fields[i$10] = $nil;
+      return top$8.fields[0];
+    } else {
+      const line = lines[lines$i];
+      const j$7 = lines$i + 1;
+      if (blank(line)) {
+        lines$in = lines;
+        lines$i$in = j$7;
         n$in = $int.add(n, 1);
         continue;
       }
+      const cell$11 = { tag: "std.list.cons" /* cons */, fields: [parse(line, n), undefined] };
+      at$9.fields[i$10] = cell$11;
+      at$9 = cell$11;
+      i$10 = 1;
+      lines$in = lines;
+      lines$i$in = j$7;
+      n$in = $int.add(n, 1);
+      continue;
     }
   }
 }
 
 // show ledger
 function show_ledger(entries2, path3) {
-  const s$9 = entries2;
-  switch (s$9.tag) {
+  const s$12 = entries2;
+  switch (s$12.tag) {
     case "std.list.nil" /* nil */: {
       return $perform("std.abort", "std.abort.abort" /* abort */, [(path3 + " has no entries")]);
     }
@@ -101,18 +111,6 @@ function show_ledger(entries2, path3) {
       return $print(report(entries2));
     }
   }
-}
-
-// newline
-let value$10;
-function newline() {
-  return value$10 ??= (() => {
-    const r$12 = $partial["builtin.text.fromCode"](10);
-    if (r$12 !== $no) {
-      return r$12;
-    }
-    return "";
-  })();
 }
 
 // blank
@@ -154,6 +152,38 @@ function parse(line3, n2) {
   }
 }
 
+// entries
+function entries(lines$in, n$in) {
+  const top$19 = { fields: [undefined] };
+  let at$20 = top$19, i$21 = 0;
+  for (;;) {
+    const lines = lines$in, n = n$in;
+    const s$22 = lines;
+    switch (s$22.tag) {
+      case "std.list.nil" /* nil */: {
+        at$20.fields[i$21] = $nil;
+        return top$19.fields[0];
+      }
+      case "std.list.cons" /* cons */: {
+        const line = s$22.fields[0];
+        const rest2 = s$22.fields[1];
+        if (blank(line)) {
+          lines$in = rest2;
+          n$in = $int.add(n, 1);
+          continue;
+        }
+        const cell$23 = { tag: "std.list.cons" /* cons */, fields: [parse(line, n), undefined] };
+        at$20.fields[i$21] = cell$23;
+        at$20 = cell$23;
+        i$21 = 1;
+        lines$in = rest2;
+        n$in = $int.add(n, 1);
+        continue;
+      }
+    }
+  }
+}
+
 // report
 function report(entries3) {
   return ((((((((((((table("By account", sort(by_account(entries3), false)) + newline()) + newline()) + table("By month", sort(by_month(entries3), true))) + newline()) + newline()) + expense_line(smallest(entries3))) + newline()) + "total: ") + money(total_of(entries3))) + " in ") + String(length(entries3))) + " entries");
@@ -167,9 +197,9 @@ function bad_line(n3) {
 // amount
 function amount(field, n4) {
   return (() => {
-    const r$22 = $partial["builtin.int.read"](field);
-    if (r$22 !== $no) {
-      return r$22;
+    const r$27 = $partial["builtin.int.read"](field);
+    if (r$27 !== $no) {
+      return r$27;
     }
     return $perform("std.abort", "std.abort.abort" /* abort */, [(("line " + String(n4)) + ": the amount isn't a whole number of cents")]);
   })();
@@ -177,113 +207,113 @@ function amount(field, n4) {
 
 // by account
 function by_account(entries4) {
-  const step$23 = (s$24, rs$25) => {
-    switch (s$24.tag) {
+  const step$28 = (s$29, rs$30) => {
+    switch (s$29.tag) {
       case "std.list.nil" /* nil */: {
         return $nil;
       }
       case "std.list.cons" /* cons */: {
-        const e = s$24.fields[0];
-        const totals = rs$25;
+        const e = s$29.fields[0];
+        const totals = rs$30;
         return add_to$own(totals, e.fields[1], e.fields[2]);
       }
     }
   };
-  const spine$28 = [];
-  let v$26 = entries4;
-  for (let k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1; k$30 >= 0; k$30 = v$26.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$28.push(v$26);
-    v$26 = v$26.fields[k$30];
+  const spine$33 = [];
+  let v$31 = entries4;
+  for (let k$35 = v$31.tag === "std.list.cons" /* cons */ ? 1 : -1; k$35 >= 0; k$35 = v$31.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$33.push(v$31);
+    v$31 = v$31.fields[k$35];
   }
-  let r$27 = step$23(v$26);
-  for (let i$29 = spine$28.length - 1; i$29 >= 0; i$29--) r$27 = step$23(spine$28[i$29], r$27);
-  return r$27;
+  let r$32 = step$28(v$31);
+  for (let i$34 = spine$33.length - 1; i$34 >= 0; i$34--) r$32 = step$28(spine$33[i$34], r$32);
+  return r$32;
 }
 
 // sort
 function sort(totals2, by_name) {
-  const step$31 = (s$32, rs$33) => {
-    switch (s$32.tag) {
+  const step$36 = (s$37, rs$38) => {
+    switch (s$37.tag) {
       case "std.list.nil" /* nil */: {
         return $nil;
       }
       case "std.list.cons" /* cons */: {
-        const t = s$32.fields[0];
-        const sorted = rs$33;
+        const t = s$37.fields[0];
+        const sorted = rs$38;
         return insert$own(t, sorted, by_name);
       }
     }
   };
-  const spine$36 = [];
-  let v$34 = totals2;
-  for (let k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1; k$38 >= 0; k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$36.push(v$34);
-    v$34 = v$34.fields[k$38];
+  const spine$41 = [];
+  let v$39 = totals2;
+  for (let k$43 = v$39.tag === "std.list.cons" /* cons */ ? 1 : -1; k$43 >= 0; k$43 = v$39.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$41.push(v$39);
+    v$39 = v$39.fields[k$43];
   }
-  let r$35 = step$31(v$34);
-  for (let i$37 = spine$36.length - 1; i$37 >= 0; i$37--) r$35 = step$31(spine$36[i$37], r$35);
-  return r$35;
+  let r$40 = step$36(v$39);
+  for (let i$42 = spine$41.length - 1; i$42 >= 0; i$42--) r$40 = step$36(spine$41[i$42], r$40);
+  return r$40;
 }
 
 // table
 function table(title, totals3) {
   return ((title + newline()) + (() => {
     const change = row;
-    const by$40 = newline();
-    const parts$39 = [];
-    for (let l$42 = totals3; l$42.tag === "std.list.cons"; l$42 = l$42.fields[1]) {
-      const x$41 = l$42.fields[0];
+    const by$45 = newline();
+    const parts$44 = [];
+    for (let l$47 = totals3; l$47.tag === "std.list.cons"; l$47 = l$47.fields[1]) {
+      const x$46 = l$47.fields[0];
       {
-        const item = x$41;
-        parts$39.push(change(item));
+        const item = x$46;
+        parts$44.push(change(item));
       }
     }
-    return parts$39.join(by$40);
+    return parts$44.join(by$45);
   })());
 }
 
 // by month
 function by_month(entries5) {
-  const step$43 = (s$44, rs$45) => {
-    switch (s$44.tag) {
+  const step$48 = (s$49, rs$50) => {
+    switch (s$49.tag) {
       case "std.list.nil" /* nil */: {
         return $nil;
       }
       case "std.list.cons" /* cons */: {
-        const e2 = s$44.fields[0];
-        const totals4 = rs$45;
+        const e2 = s$49.fields[0];
+        const totals4 = rs$50;
         return add_to$own(totals4, month(e2), e2.fields[2]);
       }
     }
   };
-  const spine$48 = [];
-  let v$46 = entries5;
-  for (let k$50 = v$46.tag === "std.list.cons" /* cons */ ? 1 : -1; k$50 >= 0; k$50 = v$46.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$48.push(v$46);
-    v$46 = v$46.fields[k$50];
+  const spine$53 = [];
+  let v$51 = entries5;
+  for (let k$55 = v$51.tag === "std.list.cons" /* cons */ ? 1 : -1; k$55 >= 0; k$55 = v$51.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$53.push(v$51);
+    v$51 = v$51.fields[k$55];
   }
-  let r$47 = step$43(v$46);
-  for (let i$49 = spine$48.length - 1; i$49 >= 0; i$49--) r$47 = step$43(spine$48[i$49], r$47);
-  return r$47;
+  let r$52 = step$48(v$51);
+  for (let i$54 = spine$53.length - 1; i$54 >= 0; i$54--) r$52 = step$48(spine$53[i$54], r$52);
+  return r$52;
 }
 
 // smallest
 function smallest(entries6) {
-  const step$51 = (s$52, rs$53) => {
-    switch (s$52.tag) {
+  const step$56 = (s$57, rs$58) => {
+    switch (s$57.tag) {
       case "std.list.nil" /* nil */: {
         return $k0;
       }
       case "std.list.cons" /* cons */: {
-        const e3 = s$52.fields[0];
-        const later = rs$53;
-        const s$54 = later;
-        switch (s$54.tag) {
+        const e3 = s$57.fields[0];
+        const later = rs$58;
+        const s$59 = later;
+        switch (s$59.tag) {
           case "std.optional.none" /* none */: {
             return ({ tag: "std.optional.some" /* some */, fields: [e3] });
           }
           case "std.optional.some" /* some */: {
-            const m = s$54.fields[0];
+            const m = s$59.fields[0];
             if ((m.fields[2] < e3.fields[2])) {
               return ({ tag: "std.optional.some" /* some */, fields: [m] });
             }
@@ -293,26 +323,26 @@ function smallest(entries6) {
       }
     }
   };
-  const spine$57 = [];
-  let v$55 = entries6;
-  for (let k$59 = v$55.tag === "std.list.cons" /* cons */ ? 1 : -1; k$59 >= 0; k$59 = v$55.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$57.push(v$55);
-    v$55 = v$55.fields[k$59];
+  const spine$62 = [];
+  let v$60 = entries6;
+  for (let k$64 = v$60.tag === "std.list.cons" /* cons */ ? 1 : -1; k$64 >= 0; k$64 = v$60.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$62.push(v$60);
+    v$60 = v$60.fields[k$64];
   }
-  let r$56 = step$51(v$55);
-  for (let i$58 = spine$57.length - 1; i$58 >= 0; i$58--) r$56 = step$51(spine$57[i$58], r$56);
-  return r$56;
+  let r$61 = step$56(v$60);
+  for (let i$63 = spine$62.length - 1; i$63 >= 0; i$63--) r$61 = step$56(spine$62[i$63], r$61);
+  return r$61;
 }
 
 // expense line
 function expense_line(found) {
-  const s$60 = found;
-  switch (s$60.tag) {
+  const s$65 = found;
+  switch (s$65.tag) {
     case "std.optional.none" /* none */: {
       return "no entries";
     }
     case "std.optional.some" /* some */: {
-      const e4 = s$60.fields[0];
+      const e4 = s$65.fields[0];
       return ((((("smallest: " + money(e4.fields[2])) + " on ") + e4.fields[0]) + ", ") + e4.fields[3]);
     }
   }
@@ -320,13 +350,13 @@ function expense_line(found) {
 
 // total of
 function total_of(entries7) {
-  let acc$66 = 0;
-  let l$67 = entries7;
-  for (; l$67.tag === "std.list.cons" /* cons */; l$67 = l$67.fields[1]) {
-    const e5 = l$67.fields[0];
-    acc$66 = $int.add(e5.fields[2], acc$66);
+  let acc$71 = 0;
+  let l$72 = entries7;
+  for (; l$72.tag === "std.list.cons" /* cons */; l$72 = l$72.fields[1]) {
+    const e5 = l$72.fields[0];
+    acc$71 = $int.add(e5.fields[2], acc$71);
   }
-  return acc$66;
+  return acc$71;
 }
 
 // money
@@ -336,38 +366,38 @@ function money(c) {
 
 // length
 function length(list) {
-  let acc$73 = 0;
-  let l$74 = list;
-  for (; l$74.tag === "std.list.cons" /* cons */; l$74 = l$74.fields[1]) {
-    acc$73 = $int.add(1, acc$73);
+  let acc$78 = 0;
+  let l$79 = list;
+  for (; l$79.tag === "std.list.cons" /* cons */; l$79 = l$79.fields[1]) {
+    acc$78 = $int.add(1, acc$78);
   }
-  return acc$73;
+  return acc$78;
 }
 
 // add to
 function add_to$own(totals5$in, name$in, cents2$in) {
-  const top$75 = { fields: [undefined] };
-  let at$76 = top$75, i$77 = 0;
+  const top$80 = { fields: [undefined] };
+  let at$81 = top$80, i$82 = 0;
   for (;;) {
     const totals5 = totals5$in, name = name$in, cents2 = cents2$in;
-    const s$78 = totals5;
-    switch (s$78.tag) {
+    const s$83 = totals5;
+    switch (s$83.tag) {
       case "std.list.nil" /* nil */: {
-        at$76.fields[i$77] = $cons(({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, cents2, 1] }), $nil);
-        return top$75.fields[0];
+        at$81.fields[i$82] = $cons(({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, cents2, 1] }), $nil);
+        return top$80.fields[0];
       }
       case "std.list.cons" /* cons */: {
-        const t2 = s$78.fields[0];
-        const rest4 = s$78.fields[1];
+        const t2 = s$83.fields[0];
+        const rest4 = s$83.fields[1];
         if ((t2.fields[0] === name)) {
-          const h$79 = ({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, $int.add(t2.fields[1], cents2), $int.add(t2.fields[2], 1)] });
-          s$78.fields[0] = h$79;
-          at$76.fields[i$77] = s$78;
-          return top$75.fields[0];
+          const h$84 = ({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, $int.add(t2.fields[1], cents2), $int.add(t2.fields[2], 1)] });
+          s$83.fields[0] = h$84;
+          at$81.fields[i$82] = s$83;
+          return top$80.fields[0];
         }
-        if (at$76.fields[i$77] !== s$78) at$76.fields[i$77] = s$78;
-        at$76 = s$78;
-        i$77 = 1;
+        if (at$81.fields[i$82] !== s$83) at$81.fields[i$82] = s$83;
+        at$81 = s$83;
+        i$82 = 1;
         totals5$in = rest4;
         name$in = name;
         cents2$in = cents2;
@@ -379,26 +409,26 @@ function add_to$own(totals5$in, name$in, cents2$in) {
 
 // insert
 function insert$own(item2$in, sorted2$in, by_name2$in) {
-  const top$80 = { fields: [undefined] };
-  let at$81 = top$80, i$82 = 0;
+  const top$85 = { fields: [undefined] };
+  let at$86 = top$85, i$87 = 0;
   for (;;) {
     const item2 = item2$in, sorted2 = sorted2$in, by_name2 = by_name2$in;
-    const s$83 = sorted2;
-    switch (s$83.tag) {
+    const s$88 = sorted2;
+    switch (s$88.tag) {
       case "std.list.nil" /* nil */: {
-        at$81.fields[i$82] = $cons(item2, $nil);
-        return top$80.fields[0];
+        at$86.fields[i$87] = $cons(item2, $nil);
+        return top$85.fields[0];
       }
       case "std.list.cons" /* cons */: {
-        const top = s$83.fields[0];
-        const rest5 = s$83.fields[1];
+        const top = s$88.fields[0];
+        const rest5 = s$88.fields[1];
         if (goes_before(item2, top, by_name2)) {
-          at$81.fields[i$82] = $cons(item2, sorted2);
-          return top$80.fields[0];
+          at$86.fields[i$87] = $cons(item2, sorted2);
+          return top$85.fields[0];
         }
-        if (at$81.fields[i$82] !== s$83) at$81.fields[i$82] = s$83;
-        at$81 = s$83;
-        i$82 = 1;
+        if (at$86.fields[i$87] !== s$88) at$86.fields[i$87] = s$88;
+        at$86 = s$88;
+        i$87 = 1;
         item2$in = item2;
         sorted2$in = rest5;
         by_name2$in = by_name2;
@@ -420,15 +450,15 @@ function month(e6) {
 
 // zeros
 function zeros(t4, width) {
-  const nil$89 = () => {
+  const nil$94 = () => {
     return t4;
   };
-  const cons$90 = (c$91, padded) => {
+  const cons$95 = (c$96, padded) => {
     return ("0" + padded);
   };
-  let r$92 = nil$89();
-  for (let i$93 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$93 >= 0; i$93--) r$92 = cons$90(i$93, r$92);
-  return r$92;
+  let r$97 = nil$94();
+  for (let i$98 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$98 >= 0; i$98--) r$97 = cons$95(i$98, r$97);
+  return r$97;
 }
 
 // with point
@@ -446,28 +476,28 @@ function goes_before(a, b, by_name3) {
 
 // pad right
 function pad_right(t5, width2) {
-  const nil$94 = () => {
+  const nil$99 = () => {
     return t5;
   };
-  const cons$95 = (c$96, padded2) => {
+  const cons$100 = (c$101, padded2) => {
     return (padded2 + " ");
   };
-  let r$97 = nil$94();
-  for (let i$98 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$98 >= 0; i$98--) r$97 = cons$95(i$98, r$97);
-  return r$97;
+  let r$102 = nil$99();
+  for (let i$103 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$103 >= 0; i$103--) r$102 = cons$100(i$103, r$102);
+  return r$102;
 }
 
 // pad
 function pad(t6, width3) {
-  const nil$99 = () => {
+  const nil$104 = () => {
     return t6;
   };
-  const cons$100 = (c$101, padded3) => {
+  const cons$105 = (c$106, padded3) => {
     return (" " + padded3);
   };
-  let r$102 = nil$99();
-  for (let i$103 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$103 >= 0; i$103--) r$102 = cons$100(i$103, r$102);
-  return r$102;
+  let r$107 = nil$104();
+  for (let i$108 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$108 >= 0; i$108--) r$107 = cons$105(i$108, r$107);
+  return r$107;
 }
 
 // larger

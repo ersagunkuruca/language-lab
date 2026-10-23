@@ -226,6 +226,50 @@ test("running out of fuel in plain code inside a search fails that branch only, 
   assert.deepEqual(fromList(defs.main() as Value), want);
 });
 
+test("a list from split matched and handed back to its own definition is the array and an index (GAPS.md G23)", async () => {
+  const { INT_OPS: I, TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  // the lines that aren't empty: a loop and holes
+  const full = k.def("full");
+  k.define(full, k.fn(["lines"], (lines) => k.match(lines, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["l", "rest"], body: ([l, rest]) => k.if(k.equal(l, k.lit("")), k.call(full, rest), k.call(CONS, l, k.call(full, rest))) },
+  ])));
+  // how many pairs: the rest of the rest goes back
+  const pairs = k.def("pairs");
+  k.define(pairs, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["a", "r"], body: ([, r]) => k.match(r, [
+      { variant: NIL, names: [], body: () => k.int(0) },
+      { variant: CONS, names: ["b", "r2"], body: ([, r2]) => k.call(I.add, k.int(1), k.call(pairs, r2)) },
+    ]) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.fn(["t"], (t) => k.list(k.call(I.show, k.call(pairs, k.call(T.split, t, k.lit(",")))), k.call(T.joinAll, k.call(full, k.call(T.split, t, k.lit("\n"))), k.lit("|")))));
+  const { code, info, defs, source } = await compiledDefs(k, ["main"], "views-back.js");
+  assert.match(source, /function full\$arr\(lines\$in, lines\$i\$in\)/);
+  assert.match(source, /function pairs\$arr\(xs, xs\$i\)/);
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const t of ["", "a", "a,b\n\nc,d,e\n", "\n\nx\n"]) {
+    const want = fromList([...r.call(r.value(main), t)][0]);
+    assert.deepEqual(fromList(defs.main(t) as Value), want, JSON.stringify(t));
+  }
+  // a search taking its lines apart works on cells, from the array's rest
+  const pick = k.def("pick");
+  k.define(pick, k.fn(["ls"], (ls) => k.match(ls, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["l", "rest"], body: ([l, rest]) => k.call(S.oneOf, k.list(l, k.call(pick, rest))) },
+  ])));
+  const every = k.def("every");
+  k.define(every, k.fn(["t"], (t) => k.call(S.all, k.thunk(() => k.call(pick, k.call(T.split, t, k.lit(",")))))));
+  const c = await compiledDefs(k, ["every"], "views-choice.js");
+  const rc = makeRunner(c.code, c.info, { print: () => {} });
+  assert.deepEqual(fromList(c.defs.every("a,b,c") as Value), fromList([...rc.call(rc.value(every), "a,b,c")][0]));
+  // a loop, not a frame per line
+  const many = Array.from({ length: 200000 }, (_, i) => (i % 3 ? `${i}` : "")).join("\n");
+  assert.equal((fromList(defs.main(many) as Value)[1] as string).split("|").length, 133333);
+});
+
 test("equality with a value built in place is a tag test and its fields, with nothing built (GAPS.md G2)", async () => {
   const k = new Lang();
   const tok = k.type("tok", [], [["word", [["w", () => k.tref("type.string")]]], ["num", [["n", () => k.tref("type.number")]]], ["pair", [["a", (self) => k.tref(self)], ["b", (self) => k.tref(self)]]], ["gap", []]]);

@@ -333,7 +333,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // G21, `walkable`).
   // `own`: the `$own` copy, which may change its own parameters' cells
   // (GAPS.md G25).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back">; own: boolean }
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -407,7 +407,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back"> = new Map(), own = false): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
     const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}`;
@@ -427,7 +427,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back">, own = false): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -516,6 +516,37 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         changed = false;
         for (const b of set) if (!(refs.get(b) ?? []).every((r) => walk(r, set, grow))) { set.delete(b); changed = true; }
       }
+    }
+  }
+  // Lists only ever taken apart by matches, whose rests are too, or passed
+  // to such a parameter (GAPS.md G23): where one is an array from `split`,
+  // it can be the array and the index where it starts. ledger's `entries`
+  // walks its lines this way, handing the rest to itself.
+  const viewable = new Set<Id>();
+  if (!reflective) {
+    const parent = new Map<Id, Id>(), refs = new Map<Id, Id[]>(), rests: Id[] = [];
+    for (const n of Object.values(code.nodes)) {
+      for (const c of children(n)) parent.set(c, n.id);
+      if (n.kind === "ref" && code.nodes[n.target]?.kind === "binder") refs.set(n.target, [...(refs.get(n.target) ?? []), n.id]);
+    }
+    const listMatch = (n: Node): n is NodeOf<"match"> => n.kind === "match" && !handlerOf(n) && n.arms.length > 0 && n.arms.every((a) => [NIL, CONS].includes(node<"arm">(a).variant));
+    for (const n of Object.values(code.nodes)) if (listMatch(n)) for (const a of n.arms) { const arm = node<"arm">(a); if (arm.variant === CONS) rests.push(arm.binds[1]); }
+    const params = (def: Id) => node<"lambda">(node<"def">(def).body!).params;
+    for (const def of code.defs) if (code.nodes[def]?.kind === "def" && isFnDef(def)) params(def).forEach((b) => viewable.add(b));
+    rests.forEach((b) => viewable.add(b));
+    const ok = (r: Id): boolean => {
+      const p = code.nodes[parent.get(r)!];
+      if (p && listMatch(p) && p.scrutinee === r) {
+        const cons = p.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
+        return !cons || viewable.has(cons.binds[1]);
+      }
+      if (p?.kind !== "call" || p.fn === r) return false;
+      const f = code.nodes[p.fn];
+      return f.kind === "ref" && code.nodes[f.target]?.kind === "def" && isFnDef(f.target) && viewable.has(params(f.target)[p.args.indexOf(r)]);
+    };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const b of viewable) if (!(refs.get(b) ?? []).every(ok)) { viewable.delete(b); changed = true; }
     }
   }
   // ---- cells nobody else holds, changed in place (GAPS.md G25)
@@ -788,7 +819,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // get a lambda written in place that doesn't choose.
     function defCall(n: NodeOf<"call">): Spec {
       const f = node<"ref">(n.fn);
-      const plain = new Set<Id>(), arr = new Map<Id, Kind>();
+      const plain = new Set<Id>(), arr = new Map<Id, Kind | "view">();
       if (!reflective && isFnDef(f.target)) {
         const params = node<"lambda">(node<"def">(f.target).body!).params;
         const called = calledParams(f.target);
@@ -800,28 +831,65 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
           const kind = arrayKind(a, true);
           if (kind && fits(params[i], kind)) arr.set(params[i], kind);
+          else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
         });
       }
-      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ownCall(n, sp.own));
+      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own));
     }
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
       const params = node<"lambda">(node<"def">(s.def).body!).params;
-      return n.args.map((a, i) => (s.arr.has(params[i]) ? arraySource(a, true)!.js : boolParams.has(params[i]) ? exBool(a) : ex(a)));
+      return n.args.map((a, i) => (s.arr.has(params[i]) ? arrArg(a, s.arr.get(params[i])!) : boolParams.has(params[i]) ? exBool(a) : ex(a)));
+    }
+    // An argument a copy takes as an array: the array, or for a view the
+    // array and the index (two arguments).
+    function arrArg(a: Id, kind: Kind | "view"): string {
+      if (kind !== "view") return arraySource(a, true)!.js;
+      const v = viewArg(a)!;
+      return `${v.a}, ${v.i}`;
+    }
+    // The array and index a list argument is: a view binder, or `split` and
+    // `characters`, whose arrays are made here.
+    function viewArg(id: Id): { a: string; i: string } | null {
+      const n = code.nodes[id];
+      if (n.kind === "ref") return views.get(n.target) ?? null;
+      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      const f = node<"ref">(n.fn).target;
+      return f === TEXT_OPS.split || f === TEXT_OPS.characters ? { a: arraySource(id)!.js, i: "0" } : null;
+    }
+    // A copy's parameters as JS names: a view is two.
+    const paramNames = (s: Spec) => node<"lambda">(node<"def">(s.def).body!).params.flatMap((p) => (s.arr.get(p) === "view" ? [local(p), `${local(p)}$i`] : [local(p)]));
+    // A call's arguments in the same order, for a loop's inputs.
+    function loopArgs(n: NodeOf<"call">, s: Spec): string[] {
+      const params = node<"lambda">(node<"def">(s.def).body!).params;
+      return argsOf(n, s).flatMap((a, i) => { if (s.arr.get(params[i]) !== "view") return [a]; const v = viewArg(n.args[i])!; return [v.a, v.i]; });
     }
 
     // Binders holding an array here: the copy's array parameters, and lets
     // given one.
-    const arrNow = new Map<Id, Kind>(sp.arr);
+    const arrNow = new Map<Id, Kind>([...sp.arr].filter((e): e is [Id, Kind] => e[1] !== "view"));
     // Rest binders of a list taken apart where it is an array: the array
     // and the index where the rest starts (`viewOf`).
     const views = new Map<Id, { a: string; i: string }>();
+    for (const [p, k] of sp.arr) if (k === "view") views.set(p, { a: local(p), i: `${local(p)}$i` });
+    // The rests of a view parameter taken apart are views too, named now, so
+    // a call that hands one back is known to be this copy before its match
+    // is written (holes, loops).
+    if (views.size) {
+      for (const x of subtree(code, node<"def">(sp.def).body!)) {
+        const m = code.nodes[x];
+        if (m.kind !== "match" || handlerOf(m) || streamy(x) || code.nodes[m.scrutinee].kind !== "ref" || !m.arms.every((a) => [NIL, CONS].includes(node<"arm">(a).variant))) continue;
+        const from = views.get(node<"ref">(m.scrutinee).target), cons = m.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
+        if (from && cons && viewable.has(cons.binds[1]) && referenced.has(cons.binds[1])) views.set(cons.binds[1], { a: from.a, i: temp("j") });
+      }
+    }
     // A match on a list, with no handler: nil and cons arms (or otherwise).
     const listMatch = (n: NodeOf<"match">) => !handlerOf(n) && n.arms.length > 0 && n.arms.every((a) => { const v = node<"arm">(a).variant; return v === NIL || v === CONS; });
     // Is every use of a cons arm's rest the scrutinee of another such
     // match? Then the rest can stay an index into the array.
     const onlyMatched = (arm: NodeOf<"arm">) => {
       const rest = arm.binds[1];
+      if (viewable.has(rest)) return true;
       const scrutinees = new Set<Id>();
       for (const x of subtree(code, arm.body)) { const m = code.nodes[x]; if (m.kind === "match" && listMatch(m)) scrutinees.add(m.scrutinee); }
       return subtree(code, arm.body).every((x) => { const r = code.nodes[x]; return !(r.kind === "ref" && r.target === rest) || scrutinees.has(x); });
@@ -1290,7 +1358,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const ifNil = nil ? ret(nil.body, tail, out, reuse) : ret(n.otherwise!, tail, out, reuse);
           let ifCons: string;
           if (cons) {
-            const [h, rest] = cons.binds, j = temp("j");
+            const [h, rest] = cons.binds, j = views.get(rest)?.i ?? temp("j");
             const head = referenced.has(h) ? `\nconst ${local(h)} = ${view.a}[${view.i}];` : "";
             const next = referenced.has(rest) ? `\nconst ${j} = ${view.i === "0" ? "1" : `${view.i} + 1`};` : "";
             if (referenced.has(rest)) views.set(rest, { a: view.a, i: j });
@@ -1321,14 +1389,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const c = n as NodeOf<"call">, last = c.args.length - 1;
         const lam = node<"lambda">(d.body!);
         const fields = c.args.slice(0, last).map(ex);
-        const args = argsOf(node<"call">(c.args[last]), sp);
+        const args = loopArgs(node<"call">(c.args[last]), sp);
         const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         let cell = inCell;
         const made = cell ? same(c.args[0], 0) ? "" : `${cell}.fields[0] = ${fields[0]};\n` : `const ${(cell = temp("cell"))} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n`;
         // A reused cell is usually still where the last one points.
         const hang = inCell ? `if (${holes.at}.fields[${holes.i}] !== ${cell}) ${holes.at}.fields[${holes.i}] = ${cell};` : `${holes.at}.fields[${holes.i}] = ${cell};`;
         return made + `${hang}\n${holes.at} = ${cell};\n${holes.i} = ${last};\n` +
-          `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+          `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
       if (inCell) {
         const c = n as NodeOf<"call">, vs = c.args.map((a, i) => (same(a, i) ? null : [temp(i ? "t" : "h"), ex(a)]));
@@ -1341,9 +1409,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // again with them: no JS stack (COMPILER.md, stage 2½).
         jumps = true;
         const lam = node<"lambda">(d.body!);
-        const args = argsOf(n as NodeOf<"call">, sp);
+        const args = loopArgs(n as NodeOf<"call">, sp);
         const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
-        return `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+        return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
       return out.leaf(out.bool ? exBool(id) : ex(id));
     }
@@ -1905,7 +1973,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const kind = target ? code.nodes[target].kind : null;
       const callee = kind === "def" ? defCall(n) : null;
       const params = callee && isFnDef(callee.def) ? node<"lambda">(node<"def">(callee.def).body!).params : [];
-      const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arraySource(a, true)!.js : null));
+      const own = n.args.map((a, i) => (callee?.arr.has(params[i]) ? arrArg(a, callee.arr.get(params[i])!) : null));
       return parts([n.fn, ...n.args.filter((_, i) => own[i] === null)], ([fn, ...rest]) => {
         let j = 0;
         const args = own.map((o, i) => o ?? (boolParams.has(params[i]) ? `(${rest[j++]}.tag === ${JSON.stringify(TRUE)})` : rest[j++]));
@@ -2006,7 +2074,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const header = `// ${names[sp.def] ?? sp.def}${sp.rho.size && [...sp.rho.values()].some(Boolean) ? " (called with a Choice function)" : ""}`;
     if (isFnDef(sp.def)) {
       const lam = node<"lambda">(b);
-      const ps = lam.params.map(local).join(", ");
+      const ps = paramNames(sp).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
       if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
       if (sp.cps) {
@@ -2017,7 +2085,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const { pre, fields } = fieldsFor(rec, v);
           return `${pre}if (${k}(${fields.join(", ")})) return true;`;
         };
-        return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...lam.params.map(local), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
+        return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...paramNames(sp), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
       }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
       // A definition that fills holes returns the first cell it made, kept
@@ -2037,8 +2105,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // each pass binds them afresh, so a function made in one pass keeps
       // that pass's values.
       if (jumps) {
-        const ins = lam.params.map((p) => `${local(p)}$in`).join(", ");
-        const fresh = lam.params.length ? `const ${lam.params.map((p) => `${local(p)} = ${local(p)}$in`).join(", ")};\n` : "";
+        const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
+        const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
         return `${header}\nfunction ${sp.name}(${ins}) {\n${start}for (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
       }
       return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
@@ -2065,7 +2133,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const uses = (js: string, name: string) => new RegExp(`(?<![\\p{L}\\p{N}_$])${name.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(js);
   const keep = new Set<string>();
   const reach = (js: string) => {
-    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\/|\/\/.*$/g, "");
+    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "");
     for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
   };
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
