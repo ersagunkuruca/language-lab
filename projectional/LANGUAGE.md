@@ -712,6 +712,7 @@ seconds since the last roll by reading `now()`.
 
 ```
 node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
+node cli/lab.ts run examples/converter > static.html             # the page drawn once, as static HTML
 ```
 
 `examples/converter`, live at
