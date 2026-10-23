@@ -116,7 +116,9 @@ type Wait =
   // Runs `then` once `ready` says enough is known.
   | { k: "later"; ready: (s: State) => boolean; then: Goal; text: string };
 
-interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number }
+// `spend` is the search's step budget, carried in the state so the
+// equation solver, which runs outside the interpreter, spends from it too.
+interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean }
 
 // The substitution: logic variable number to term. Persistent, as a 32-way
 // trie on the number, so binding a variable copies one short path instead
@@ -330,7 +332,11 @@ function solveSome(s: State): Stream | undefined {
     // members fits what else is known, the rest won't either, and walking
     // them would never come back (it spends no fuel), so stop there.
     let left = PERIODS;
+    // Each answer the solver hands back is a step of the search: a search
+    // that solves many equations per unfolding (queens' safe, backwards)
+    // would otherwise do unbounded work between steps.
     const next = (): Stream => {
+      if (s.spend && !s.spend()) return null;
       const r = first ?? it.next();
       first = null;
       if (r.done || left-- <= 0) return null;
@@ -680,7 +686,10 @@ export function interpreter(code: Code, opts: Options = {}) {
         return wait({
           k: "later", text: "with fuel", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
             let left = walk(a, s) as number;
-            return interpreter(code, { spend: () => left-- > 0 && spend() }).apply(walk(b, s), [], out)(s);
+            const inner = () => left-- > 0 && spend();
+            // Inside, the solver spends the action's budget; its answers go
+            // on with the outer one.
+            return bind(interpreter(code, { spend: inner }).apply(walk(b, s), [], out)({ ...s, spend: inner }), (t) => unit({ ...t, spend: s.spend }));
           },
         });
     }
@@ -1066,7 +1075,7 @@ export interface Answer {
 export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts: Options = {}): Generator<Answer> {
   const it = interpreter(code, opts);
   const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, fromValue(v)]));
-  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0 };
+  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend };
   const ports = portsOf(code, fn, Object.keys(known));
   const [vs, s] = freshVars(start, ports.length);
   ports.forEach((p, i) => { if (!(p in at)) at[p] = vs[i]; });
@@ -1091,7 +1100,7 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
 // Does some value make f true? This is `for some` run forward.
 export function satisfiable(code: Code, f: unknown, opts: Options = {}): boolean {
   const it = interpreter(code, opts);
-  const [[x], s] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0 }, 1);
+  const [[x], s] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, 1);
   for (const _ of pull(it.apply(fromValue(f), [x], boolT(true))(s))) return true;
   return false;
 }
