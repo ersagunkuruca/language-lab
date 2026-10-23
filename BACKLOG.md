@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E37 | Bug: the minimap draws frames as solid black boxes (the `<use>` copy misses the `.p-graph` fills), hiding the nodes | QA3 H1 | P1 | S | |
 | E38 | Bug: by touch, Pick keeps only one node: the long press also selects and drops earlier picks, so group tidy and move can't be done by touch | QA3 H2 | P1 | S | |
 | E39 | Keyboard: focus back to the program after any commit (a literal's Enter leaves it in the field); Enter on a call opens Change the function; Shift+F10 / Menu key opens the node menu | QA3 M5, M6 | P1 | M | |
 | E40 | Phone landscape and 600-900 px tablets still get the 3,091 px stacked page: one pane by height or `pointer: coarse` too | QA3 M1 | P2 | S | |
@@ -98,6 +97,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E37 | The minimap copies the graph (classes kept, ids and data-* dropped) instead of drawing it through <use>, whose copy rules like .tgraph .rg don't reach: frames were black | #283 |
 | E36 | Touch: a long press opens the graph's menu (iOS has no right-click), the menu's Pick stands in for shift-click, and a picked dot drags to move as alt-drag does | #278 |
 | E20 | Phone width: under 600 px one pane at a time (Programs, Graph, Text, Run) from a bar at the bottom, instead of a 4,614 px page; the smoke checks it at 390x844 | #277 |
 | E35 | Frames fold into one box (▾, or right-click): wires in end on its left, values out leave on its right; it sits where its contents put the frame, so dragging or tidying it moves them. A view in layout.json | #275 |
