@@ -66,6 +66,7 @@ editor.
 | C8 | `Float32` for shaders | ROADMAP 6a left | P2 | M | |
 | C9 | Compiled JS still calls the runtime's `$derivative`; expand derivatives as the scalar profile does | shaders follow-up | P2 | S | |
 | C10 | Compiled plain recursion past about 10k levels (check what's left after G1's 1 GB stack) | ROADMAP steps 1-5 open | P2 | S | |
+| L2 | Fuel means two things: running out inside plain code abandons the whole `with fuel` body when compiled, where the evaluator lets a later branch go on. Fix in compile.ts (out-of-fuel becomes a Choice failure where plain code is called from a search); no program hits it yet (COMPILER.md "Diverge and fuel") | R2 §5 | P2 | M | moved from lane L: the change is in compiler/ |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C12 | G18 an Abort handler that never resumes is a try/catch | GAPS G18 | P3 | S | |
 | C13 | G1 again: drop `$spend` when no `with fuel` is reachable | GAPS G1 | P3 | S | |
@@ -81,8 +82,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L2 | Fuel means two things: running out in plain code abandons the whole `with fuel` body when compiled, the evaluator lets a later branch go on | R2 §5, COMPILER.md "Diverge and fuel" | P1 | M | |
-| L3 | Docs brought up to date: LANGUAGE.md "three effects", "imports the runtime", the totality row, the Choice-and-world sentence | R2 §6, §9.7 | P1 | S | |
 | L4 | One page model: reactive.html's programs onto std's `Html`, remove `ui.ts`'s `UI` | R2 §5, WEB.md, ROADMAP | P1 | M | |
 | L5 | Effect ledger and container matrix: a test that every consumer of a type asks for its effects | R2 §1.2, §9.6 | P1 | M | |
 | L6 | A page's `on` row is closed and hand-picked; a named row defined once, or an open row | R2 §5 | P2 | M | |
@@ -122,6 +121,7 @@ section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | this PR |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 | C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
 | | Countdown in the program list (Hutton credited) | #174 |

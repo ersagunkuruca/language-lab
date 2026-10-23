@@ -94,7 +94,9 @@ model, then WebAssembly. Update this line when the step changes.
 - One item, one PR (one change per PR, never bundled). An L item may be
   split into several rows first.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
-  **Done** with its PR number, and adds any follow-up rows it found.
+  **Done** with its PR number, and adds any follow-up rows it found. The
+  number isn't known before the PR exists, so write "this PR" and fill it
+  in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
