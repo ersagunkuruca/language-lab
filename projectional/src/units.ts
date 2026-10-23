@@ -234,14 +234,19 @@ class System {
 export interface Inference {
   ok: boolean;
   // Constraints that couldn't be satisfied, with the node they came from.
-  conflicts: { why: string; node?: Id }[];
+  conflicts: { why: string; node?: Id; sides?: [string, Unit][]; was?: Unit }[];
   unit: (term: string) => Unit | undefined;
 }
 
 export function infer(code: Code, defId: Id, extra: Constraint[] = []): Inference {
   const sys = new System();
-  const conflicts: { why: string; node?: Id }[] = [];
-  for (const c of [...constraints(code, defId), ...extra]) if (!sys.add(c)) conflicts.push({ why: c.why, node: c.node });
+  const conflicts: Inference["conflicts"] = [];
+  for (const c of [...constraints(code, defId), ...extra]) {
+    // What each side already was, so the message can name both units.
+    const sides = c.terms.length === 2 ? c.terms.map(([t]) => [t, sys.value(t)] as const).filter((x): x is [string, Unit] => !!x[1]) : [];
+    const was = c.terms.length === 1 ? sys.value(c.terms[0][0]) : undefined;
+    if (!sys.add(c)) conflicts.push({ why: c.why, node: c.node, sides: sides.length === 2 ? sides : undefined, was });
+  }
   return { ok: !conflicts.length, conflicts, unit: (term) => sys.value(term) };
 }
 
@@ -260,21 +265,36 @@ export function compatible(code: Code, defId: Id, a: string, b: string): { ok: b
 // Unit conflicts in every function of a program, as messages. Only programs
 // that declare a unit somewhere are checked: without one, every unit is
 // free and nothing can conflict.
-export function unitProblems(code: Code): { id: Id; message: string }[] {
+export function unitProblems(code: Code, names: Record<Id, string> = {}): { id: Id; message: string }[] {
   if (!Object.values(code.nodes).some((n) => unitOf(n))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
     const def = code.nodes[d];
     if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
-    for (const c of infer(code, d).conflicts) out.push({ id: c.node ?? d, message: unitMessage(code, c.why, c.node) });
+    for (const c of infer(code, d).conflicts) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
   }
   return out;
 }
 
-function unitMessage(code: Code, why: string, node?: Id): string {
+// A term's id is a node's, maybe under a callee's prefix ("a/b/id").
+function termName(code: Code, names: Record<Id, string>, term: string): string | undefined {
+  const id = term.slice(term.lastIndexOf("/") + 1);
+  const n = code.nodes[id];
+  if (names[id]) return names[id];
+  if (n?.kind === "ref") return names[n.target];
+  if (n?.kind === "call" && code.nodes[n.fn]?.kind === "ref") { const f = names[(code.nodes[n.fn] as { target: Id }).target]; return f && `${f}(…)`; }
+  return undefined;
+}
+
+function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts"][number], names: Record<Id, string>): string {
   if (why === "declared unit" && node) {
     const u = unitOf(code.nodes[node]);
-    return `declared ${u ? formatUnit(u) : "a unit"}, but the rest says otherwise`;
+    return `declared ${u ? formatUnit(u) : "a unit"}, but the rest ${was ? `makes it ${formatUnit(was)}` : "says otherwise"}`;
   }
-  return why === "a plain number" ? "a plain number can't stand where a unit is needed" : "units don't agree here";
+  if (why === "a plain number") return "a plain number can't stand where a unit is needed";
+  if (sides) {
+    const [[a, ua], [b, ub]] = sides, na = termName(code, names, a), nb = termName(code, names, b);
+    return na && nb && na !== nb ? `units don't agree here: ${na} is ${formatUnit(ua)}, ${nb} is ${formatUnit(ub)}` : `units don't agree here: ${formatUnit(ua)} can't meet ${formatUnit(ub)}`;
+  }
+  return "units don't agree here";
 }
