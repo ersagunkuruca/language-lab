@@ -275,7 +275,8 @@ code, names, comments, pins and layout as one JSON file (`editor/files.ts`); *Op
 checks that every id it refers to exists, then opens it as a program of
 your own. Programs are also kept in the browser as you edit. The palette
 also takes a value typed into its search (`3`, `"text"`, `[3, 1, 2]`,
-`circle(2)`), and offers `match □` on a value still to be given, which on a
+`circle(2)`) or arithmetic over values and the names in scope (`x * 2`,
+`(x + 1) · x`), and offers `match □` on a value still to be given, which on a
 Bool is if/then/else.
 
 *Show inline* (on a selected call) draws the call as its definition's

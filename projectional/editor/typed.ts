@@ -292,27 +292,38 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
 // Fill a hole with a value written out, the way values print: 3, "text",
 // [3, 1, 2], circle(2). It becomes the code that builds it (literals and
 // constructor calls), type-checked like any other filling. Arithmetic on
-// values reads too: 1 + 2 is add(1, 2).
+// values reads too: 1 + 2 is add(1, 2), and so do the names in scope
+// there, the hole's inputs and lets first: x * 2 in double(x).
 export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: string, defId?: Id): TEdit {
-  const r = typedOut(text, code, { ...display, ...names });
+  const all = { ...display, ...names };
+  const scope = new Map<string, Id>();
+  for (const d of code.defs) if (all[d]) scope.set(all[d], d);
+  for (const b of defId ? scopeAt(code, defId, hole) : []) if (all[b]) scope.set(all[b], b);
+  const r = typedOut(text, code, all, scope);
   if ("error" in r) return { ok: false, reason: r.error };
+  // A name alone is already in the palette's list.
+  if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
   const plain = written(code, names, info, hole, text, r, false, defId);
   // A whole number where an Int goes is an Int: 0 in slice's position.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  if (plain.ok || !("value" in r) || !whole(r.value)) return plain;
+  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t && t.args.some(wholes);
+  if (plain.ok || !wholes(r)) return plain;
   const int = written(code, names, info, hole, text, r, true, defId);
   return int.ok ? int : plain;
 }
 
 // What's typed, as values at the leaves of + − × ÷. Split at the last
 // operator of the loosest kind outside brackets and text, so 1 − 2 − 3 is
-// (1 − 2) − 3; a − with nothing before it is a negative number's.
-type Typed = { value: Value } | { op: Id; args: Typed[] };
+// (1 − 2) − 3; a − with nothing before it is a negative number's. A leaf
+// may be a name in scope.
+type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[] };
 const OPS: [string, Id][][] = [[["+", B.add], ["-", B.sub], ["−", B.sub]], [["*", B.mul], ["×", B.mul], ["·", B.mul], ["/", B.div], ["÷", B.div]]];
-function typedOut(text: string, code: Code, names: Names): Typed | { error: string } {
+function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
+  const t = text.trim();
+  const named = scope.get(t);
+  if (named) return { ref: named };
   const r = parseValue(text, code, names);
   if (!("error" in r)) return { value: r.value };
-  const t = text.trim();
   for (const level of OPS) {
     let depth = 0, quoted = false;
     for (let i = t.length - 1; i > 0; i--) {
@@ -325,11 +336,11 @@ function typedOut(text: string, code: Code, names: Names): Typed | { error: stri
       if (!op) continue;
       const left = t.slice(0, i).trimEnd();
       if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
-      const a = typedOut(left, code, names), b = typedOut(t.slice(i + 1), code, names);
+      const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       if (!("error" in a) && !("error" in b)) return { op: op[1], args: [a, b] };
     }
   }
-  if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names); if (!("error" in inner)) return inner; }
+  if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
   return r;
 }
 
@@ -352,6 +363,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   };
   const tree = (t: Typed, at?: Id): Id => {
     if ("value" in t) return build(t.value, at);
+    if ("ref" in t) { const id = at ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
     const id = at ?? freshId(), fn = freshId();
     nodes[fn] = { id: fn, kind: "ref", target: t.op };
     nodes[id] = { id, kind: "call", fn, args: t.args.map((a) => tree(a)) };

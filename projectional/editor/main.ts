@@ -1227,7 +1227,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (value) runValue(); else if (shown[0]) run(shown[0]); } });
   const list = h("div", { class: "opts palette" });
   if (value) {
-    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this value, written out"));
+    const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this, written out"));
     b.addEventListener("click", runValue);
     list.append(h("div", { class: "pal-g" }, "the value typed"), b);
   }
@@ -1239,7 +1239,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values can be typed too: 3, \"text\", [1, 2]."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
