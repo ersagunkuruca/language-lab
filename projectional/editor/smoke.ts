@@ -71,6 +71,8 @@ async function visit(saved: string | null, only?: string) {
         if (bb) {
           await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
           await click('.ctx-item[data-menu="tidy-all"]');
+          // The map, when part of the graph is out of the window.
+          if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) await click(".p-graph .minimap");
           await click(".p-graph .reroute:not(.silent)");
           await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
           await click('.ctx-item[data-menu="named"]');

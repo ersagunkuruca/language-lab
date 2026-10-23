@@ -126,6 +126,9 @@ const views = new Map<string, View>();
 const READABLE = 0.6;
 // The height the Fit / zoom pill takes at the bottom of the window.
 const PILL = 36;
+// The map's size, and a count to name each window's picture for it.
+const MAP = { w: 168, h: 112 };
+let worlds = 0;
 
 export function infiniteCanvas(key: string, cls: string): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
@@ -133,7 +136,8 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   root.append(world);
   let view = views.get(key);
   let shown = (_z: number) => {};
-  const apply = () => { if (view) { world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); shown(view.z); } };
+  let mapped = () => {};
+  const apply = () => { if (view) { world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); shown(view.z); mapped(); } };
   const set = (v: View) => { view = v; views.set(key, v); apply(); };
   // Fit: the whole picture, centered both ways. Readable: never smaller than
   // READABLE, and a side that doesn't fit then starts at its top or left
@@ -216,6 +220,49 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   };
   shown(view?.z ?? 1);
   tools.append(btn("Fit", "Show the whole graph, centered", () => fit()), zoom);
-  el.append(root, tools);
+
+  // The map: the whole picture small, with the window on it as a frame,
+  // shown only while part of the picture is out of the window, so it is
+  // also the sign that there's more. Click or drag on it to look there.
+  const id = `world-${++worlds}`;
+  world.id = id;
+  const map = s("svg", { class: "minimap", width: MAP.w, height: MAP.h }) as SVGSVGElement;
+  const shrink = s("g") as SVGGElement;
+  shrink.append(s("use", { href: `#${id}` }));
+  const frame = s("rect", { class: "minimap-view", rx: 2 });
+  map.append(shrink, frame);
+  let whole: DOMRect | null = null, k = 1, at = { x: 0, y: 0 };
+  mapped = () => {
+    const r = root.getBoundingClientRect();
+    if (!view || !whole || !whole.width || !r.width) { map.setAttribute("display", "none"); return; }
+    const sx = -view.x / view.z, sy = -view.y / view.z, sw = r.width / view.z, sh = (r.height - PILL) / view.z;
+    const out = whole.x < sx - 1 || whole.y < sy - 1 || whole.x + whole.width > sx + sw + 1 || whole.y + whole.height > sy + sh + 1;
+    map.setAttribute("display", out ? "inline" : "none");
+    if (!out) return;
+    k = Math.min((MAP.w - 8) / whole.width, (MAP.h - 8) / whole.height);
+    at = { x: (MAP.w - whole.width * k) / 2 - whole.x * k, y: (MAP.h - whole.height * k) / 2 - whole.y * k };
+    // The clone carries the window's transform; undo it, then shrink.
+    shrink.setAttribute("transform", `translate(${at.x},${at.y}) scale(${k}) scale(${1 / view.z}) translate(${-view.x},${-view.y})`);
+    Object.entries({ x: at.x + sx * k, y: at.y + sy * k, width: sw * k, height: sh * k }).forEach(([a, v]) => frame.setAttribute(a, String(v)));
+  };
+  // (Tests draw graphs in a DOM without observers, and need no map.)
+  if (typeof MutationObserver !== "undefined") new MutationObserver(() => { whole = root.isConnected ? world.getBBox() : null; mapped(); }).observe(world, { childList: true });
+  // Look at the point under the pointer: it goes to the window's middle.
+  const look = (e: PointerEvent) => {
+    if (!view) return;
+    const m = map.getBoundingClientRect(), r = root.getBoundingClientRect();
+    const wx = (e.clientX - m.left - at.x) / k, wy = (e.clientY - m.top - at.y) / k;
+    set({ ...view, x: r.width / 2 - wx * view.z, y: (r.height - PILL) / 2 - wy * view.z });
+  };
+  map.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    look(e);
+    const up = () => { window.removeEventListener("pointermove", look); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", look);
+    window.addEventListener("pointerup", up);
+  });
+  map.setAttribute("display", "none");
+  el.append(root, tools, map);
   return { el, root, world, zoom: () => view?.z ?? 1, fit, reveal };
 }

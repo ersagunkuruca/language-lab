@@ -27,7 +27,7 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E19 | Minimap / "there's more" cue, and collapsible frames | node-editor backlog, QA2 UX4 | P3 | M | |
+| E35 | Collapsible frames (split from E19, whose map is done) | node-editor backlog | P3 | M | |
 | E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
 | T4 | A quicker smoke per change (each program's first definition and main, plus the once-per-program gestures; every definition nightly), and shorter waits than 500 ms per missing click target | projectional/TESTING.md T4 | P1 | S | after T2 |
 
@@ -91,6 +91,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E19 | A map in the graph's corner while part of it is out of view (the 'there's more' cue); click or drag to look there. Collapsible frames split to E35 | #270 |
 | E18 | Wires bend over or under nodes in their way when a short detour crosses no more wires: tunnels 333 to 136, bridges 410 to 438 | #263 |
 | E17 | Tidy reorders columns to cut crossings (Sugiyama barycenter + swaps) and stops pushing nodes across wires: examples 410 to 375 crossings after tidy (was 522) | #256 |
 | E21 | Int literals in the palette ("an integer"): already there since 79f95d0; closed on review | none |
