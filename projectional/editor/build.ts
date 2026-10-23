@@ -102,7 +102,7 @@ pre.code { margin: 0; background: var(--bg); border: 1px solid var(--line); bord
 .live { font-size: 15px; }
 .ui-column { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .ui-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.ui-dynamic .ui-column { gap: 6px; }
+lab-part > .ui-column { gap: 6px; }
 .ui-text { padding: 1px 6px; border-radius: 6px; font-family: var(--font-code); font-size: 14px; overflow-wrap: anywhere; }
 .ui-button { font: inherit; font-size: 14px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
 .ui-button:hover { border-color: var(--accent); }

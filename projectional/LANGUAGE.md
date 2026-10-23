@@ -530,10 +530,11 @@ small version of it.
 Both programs run live at
 [reactive.html](https://ersagunkuruca.github.io/language-lab/reactive.html) (built by
 `editor/build.ts` from `editor/reactive.ts`). The page is a value: `main`
-runs once and returns a `UI` (`text`, `button`, `entry`, `slider`, `row`,
-`column`, `dynamic`), whose changing parts are functions; `src/lang/ui.ts`
-puts each one in a watcher, so a change touches only its own element. That
-is Solid's compiled JSX, as data.
+runs once and returns std's `Html`, like every page (WEB.md), whose
+changing parts are functions; `src/lang/html.ts` puts each one in a
+watcher, so a change touches only its own element. That is Solid's
+compiled JSX, as data. `button`, `row`, `entry`, `slider` and the rest are
+definitions in the program that build elements.
 
 What is deliberately not there, and why:
 
@@ -1060,7 +1061,7 @@ src/lang/std.ts       Bool, Unit, List, Pair as typedef nodes; builtins with sig
 src/lang/infer.ts     inference, exhaustiveness, totality, typed holes, fillings()
 src/lang/run.ts       evaluator: results as lazy streams; handlers; runMain
 src/lang/cells.ts     the Cells handler: cells, lazy formulas, watchers
-src/lang/ui.ts        draws a UI value on a page, one watcher per changing part
+src/lang/html.ts      draws an Html value on a page, one watcher per changing part
 src/lang/cells-programs.ts  the reactive page and continued fractions
 src/lang/refactor.ts  fillHole(), addVariant(): the gestures that prevent errors
 src/lang/render.ts    the block view (if/match/fold as indented blocks, types on top)

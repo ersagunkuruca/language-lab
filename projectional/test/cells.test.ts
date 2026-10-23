@@ -14,7 +14,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { equal, makeRunner, runMain, type Value } from "../src/lang/run.ts";
 import { CELL_OPS, S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
-import { mount, type Doc, type El } from "../src/lang/ui.ts";
+import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
+import { fakeDoc, FakeEl, FakeText } from "./fakedom.ts";
 import { B } from "../src/prelude.ts";
 
 // ---------------------------------------------------------------- the handler alone
@@ -106,25 +107,14 @@ test("cells aren't plain data: they can't be compared or shown", () => {
   assert.ok(check(k).info.errors.length > 0);
 });
 
-// A page in memory.
-class FakeEl implements El {
-  tag: string;
-  textContent: string | null = "";
-  className = "";
-  value = "";
-  children: FakeEl[] = [];
-  attrs: Record<string, string> = {};
-  on: Record<string, ((e: { key?: string }) => void)[]> = {};
-  constructor(tag: string) { this.tag = tag; }
-  append(...n: El[]) { this.children.push(...(n as FakeEl[])); }
-  replaceChildren(...n: El[]) { this.children = n as FakeEl[]; }
-  addEventListener(t: string, f: (e: { key?: string }) => void) { (this.on[t] ??= []).push(f); }
-  setAttribute(n: string, v: string) { this.attrs[n] = v; }
-  fire(t: string, e: { key?: string } = {}) { this.on[t]?.forEach((f) => f(e)); }
-  all(): FakeEl[] { return [this, ...this.children.flatMap((c) => c.all())]; }
-  text(): string { return this.children.length ? this.children.map((c) => c.text()).filter(Boolean).join(" | ") : this.tag === "button" ? `[${this.textContent}]` : (this.textContent ?? ""); }
+// A page in memory (test/fakedom.ts), read as its leaves: texts, and a
+// button as [its label].
+function leaves(n: FakeEl | FakeText): string[] {
+  if (n instanceof FakeText) return n.textContent ? [n.textContent] : [];
+  if (n.tag === "button") return [`[${n.textContent}]`];
+  return n.kids.flatMap(leaves);
 }
-const doc: Doc = { createElement: (t) => new FakeEl(t) };
+const shown = (n: FakeEl | FakeText) => leaves(n).join(" | ");
 
 function page(p: ReturnType<typeof counterProgram> | ReturnType<typeof fractionsProgram>) {
   const c = check(p);
@@ -132,14 +122,15 @@ function page(p: ReturnType<typeof counterProgram> | ReturnType<typeof fractions
   const cells = new Cells(equal);
   const value = runMain(c.code, c.info, p.main, { print: () => {}, names: c.names, cells });
   const ran: string[] = [];
-  const root = mount(value, { cells, ui: p.ui, doc, ran: (el) => ran.push((el as FakeEl).text()) }) as FakeEl;
-  const button = (label: string, nth = 0) => root.all().filter((e) => e.tag === "button" && e.textContent === label)[nth];
-  return { c, root, cells, ran, button };
+  const root = mountHtml(value, { cells, doc: fakeDoc(), call: evaluatorCall, ran: (el) => ran.push(shown(el as FakeEl | FakeText)) }) as FakeEl;
+  const all = (e: FakeEl): FakeEl[] => [e, ...e.kids.flatMap((k) => (k instanceof FakeEl ? all(k) : []))];
+  const button = (label: string, nth = 0) => all(root).filter((e) => e.tag === "button" && e.textContent === label)[nth];
+  return { c, root, cells, ran, button, all: () => all(root), text: () => shown(root) };
 }
 
 test("the counter page: a click re-runs exactly the texts that read what changed", () => {
   const p = page(counterProgram());
-  assert.equal(p.root.text(), "[−] | 0 | [+] | doubled: 0 | [details] | count squared: 0 | try the counter | [done] | hide the details | [done] | 2 to do");
+  assert.equal(p.text(), "[−] | 0 | [+] | doubled: 0 | [details] | count squared: 0 | try the counter | [done] | hide the details | [done] | 2 to do");
   p.button("+").fire("click");
   assert.deepEqual(p.ran, ["1", "doubled: 2", "count squared: 1"]);
   p.ran.length = 0;
@@ -149,19 +140,22 @@ test("the counter page: a click re-runs exactly the texts that read what changed
   p.button("+").fire("click");
   assert.deepEqual(p.ran, ["2", "doubled: 4"], "the hidden details don't read count, so they don't run");
   p.ran.length = 0;
-  const entry = p.root.all().find((e) => e.tag === "input")!;
-  entry.value = "write the docs";
+  const entry = p.all().find((e) => e.tag === "input")!;
+  entry.type_("write the docs");
   entry.fire("keydown", { key: "Enter" });
-  assert.match(p.root.text(), /hide the details \| \[done\] \| write the docs \| \[done\] \| 3 to do$/);
-  assert.deepEqual(p.ran.map((t) => t.split(" | ")[0]), ["try the counter", "3 to do"]);
+  assert.equal(entry.value, "", "the field empties");
+  assert.match(p.text(), /hide the details \| \[done\] \| write the docs \| \[done\] \| 3 to do$/);
+  // The field's own value (no text, so "") runs when typed into and when
+  // emptied; otherwise only the list and the count.
+  assert.deepEqual(p.ran.map((t) => t.split(" | ")[0]), ["", "try the counter", "3 to do", ""]);
   p.button("done", 0).fire("click");
-  assert.match(p.root.text(), /count squared|details hidden/);
-  assert.match(p.root.text(), /\| hide the details \| \[done\] \| write the docs \| \[done\] \| 2 to do$/);
+  assert.match(p.text(), /count squared|details hidden/);
+  assert.match(p.text(), /\| hide the details \| \[done\] \| write the docs \| \[done\] \| 2 to do$/);
 });
 
 test("continued fractions on demand: terms are computed once, and only as many as are read", () => {
   const p = page(fractionsProgram());
-  const lines = () => p.root.all().filter((e) => e.className === "ui-text").map((e) => e.textContent);
+  const lines = () => p.all().filter((e) => e.attrs.get("class") === "ui-text").map((e) => e.textContent);
   const [r2, e, sum, diff, inv, sq] = lines();
   assert.match(r2!, /^√2 = \[1; 2, 2, 2, 2, 2, 2, 2, 2, 2\] ≈ 1\.41421/);
   assert.match(e!, /^e = \[2; 1, 2, 1, 1, 4, 1, 1, 6, 1\] ≈ 2\.71828/);
@@ -171,16 +165,14 @@ test("continued fractions on demand: terms are computed once, and only as many a
   assert.match(inv!, /^1 \/ √2 = \[0; 1, 2, 2, 2, 2, 2, 2, 2, 2\] ≈ 0\.7071/);
   assert.match(sq!, /^√2 × √2 = no first term after 300 steps/);
   // One more term to show: a few more formulas run, not all of them again.
-  const slider = p.root.all().filter((e) => e.tag === "input")[0];
+  const slider = p.all().filter((e) => e.tag === "input")[0];
   const before = p.cells.runs;
-  slider.value = "11";
-  slider.fire("input");
+  slider.type_("11");
   const more = p.cells.runs - before;
   assert.match(lines()[0]!, /^√2 = \[1; 2, 2, 2, 2, 2, 2, 2, 2, 2, 2\]/);
   // n = 4 is a square: now √4 × √4 has terms, and it is 4.
-  const n = p.root.all().filter((e) => e.tag === "input")[1];
-  n.value = "4";
-  n.fire("input");
+  const n = p.all().filter((e) => e.tag === "input")[1];
+  n.type_("4");
   assert.equal(lines()[0], "√4 = [2] ≈ 2");
   assert.equal(lines()[5], "√4 × √4 = [4]");
   assert.ok(more <= 12, `showing one more term ran ${more} formulas and watchers`);
