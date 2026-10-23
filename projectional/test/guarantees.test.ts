@@ -12,7 +12,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
 import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
-import { DIVERGE, showType } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id | void) {
@@ -165,7 +165,7 @@ test("a function can't be solved for: functions can't be guessed", () => {
 test("derivative never throws: where a slope can't be read there is none", () => {
   const p = program((k) => {
     const pick = k.def("pick");
-    // takes apart data built from x: the slope isn't read through data yet
+    // takes apart a record built from x: each part has its slope (x · x)
     k.define(pick, k.fn(["x"], (x) => k.match(k.call(PAIR_V, x, x), [{ variant: PAIR_V, names: ["a", "b"], body: ([a, b]) => k.call(B.mul, a, b) }])));
     const kink = k.def("kink");
     k.define(kink, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), k.call(S.floor, x))));
@@ -182,7 +182,28 @@ test("derivative never throws: where a slope can't be read there is none", () =>
     return main;
   });
   assert.deepEqual(p.errors, []);
-  assert.deepEqual(p.run(), ["none", "none", "-1", "none", "1"]);
+  assert.deepEqual(p.run(), ["none", "6", "-1", "none", "1"]);
+});
+
+test("derivative of a function written right there fails only where the function does", () => {
+  const p = program((k) => {
+    const square = k.def("square");
+    k.define(square, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+    const kink = k.def("kink");
+    k.define(kink, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), k.call(S.floor, x))));
+    // smooth: a definition, a lambda holding y still, a builtin
+    k.define(k.def("a"), k.fn(["x"], (x) => k.call(k.call(S.derivative, square), x)));
+    k.define(k.def("b"), k.fn(["x", "y"], (x, y) => k.call(k.call(S.derivative, k.fn(["u"], (u) => k.call(B.mul, u, y))), x)));
+    k.define(k.def("c"), k.fn(["x"], (x) => k.call(k.call(S.derivative, B.sin), x)));
+    // no slope through floor, and a function value isn't known until it runs
+    k.define(k.def("d"), k.fn(["x"], (x) => k.call(k.call(S.derivative, kink), x)));
+    k.define(k.def("e"), k.fn(["f", "x"], (f, x) => k.call(k.call(S.derivative, f), x)));
+    k.define(k.def("g"), k.fn(["f", "x"], (f, x) => k.call(k.call(S.derivative, k.fn(["u"], (u) => k.call(f, u))), x)));
+  });
+  assert.deepEqual(p.errors, []);
+  const def = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
+  for (const n of ["a", "b", "c"]) assert.deepEqual(p.effects(def(n)), [], n);
+  for (const n of ["d", "e", "g"]) assert.ok(p.effects(def(n)).includes(CHOICE), n);
 });
 
 test("backwards, derivative and with fuel run forward once their function is known", () => {

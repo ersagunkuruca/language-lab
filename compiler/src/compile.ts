@@ -182,7 +182,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // over, the same as the evaluator's (META), and the module carries its
   // own node table for the interpreter to read.
   const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
-  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.exists)));
+  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
@@ -567,6 +567,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (HANDLERS.has(f.target)) return handlerEx(f.target, n);
           if (f.target === S.seeded) return `$seeded(${ex(n.args[0])}, ${ex(n.args[1])})`;
           if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
+          if (f.target === S.gradient) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
           if (f.target === S.exists) return `$exists($program, ${ex(n.args[0])})`;
           if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
@@ -908,6 +909,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           c = OPS[target!].bool ? `$bool(${js})` : js;
         } else if (target === S.equal) c = `$bool(${equalJs(n.args[0], args)})`;
         else if (target === S.derivative) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)})`;
+        else if (target === S.gradient) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
         else if (target === S.exists) c = `$exists($program, ${args[0]})`;
         else if (target === SET) c = setCall(n.args[0], args[1], args[2]);
         else if (kind === "builtin" && (manyOf(target!) ?? implOf(target!))) c = `${manyOf(target!) ?? implOf(target!)}(${args.join(", ")})`;

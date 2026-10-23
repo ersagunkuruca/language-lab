@@ -74,8 +74,10 @@ if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser
 
 let failures = 0, compared = 0;
 for (const c of cases) {
-  const shader = emitWgsl(lowerScalar(c.code, c.info, c.names, c.roots, { records: true }));
-  const r = makeRunner(c.code, c.info, { print: () => {} });
+  const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true });
+  const shader = emitWgsl(lowered);
+  // The lowered program: generated derivatives (∂blend/∂a …) are in it.
+  const r = makeRunner(lowered.code, lowered.info, { print: () => {} });
   for (const f of shader.funcs) {
     // Records go in and out as their numbers, in field order.
     const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);

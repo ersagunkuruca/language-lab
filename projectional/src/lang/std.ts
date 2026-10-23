@@ -184,10 +184,19 @@ export const S = {
   // A function's derivative, read off its graph (src/lang/derive.ts). Where
   // the slope can't be read (the function goes through floor, or takes
   // apart data built from its input) there is none, so the derivative may
-  // fail: Choice.
+  // fail: Choice. (Unless the checker can see f and read all its slopes:
+  // infer.ts types that derivative(f) without Choice.)
   derivative: builtin("derivative", "derivative", (s) => {
     const e = s.freshRow();
     return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());
+  }),
+  // A function of a point's (or any record of Numbers') gradient: the
+  // record of its derivatives along each part, so the normal of a surface
+  // f(p) = 0 is unit(gradient(f)(p)). Choice as for derivative, and
+  // dropped the same way when the checker can read every slope.
+  gradient: builtin("gradient", "gradient", (s) => {
+    const r = s.fresh(false, true), e = s.freshRow();
+    return fn([fn([r], num, e)], fn([r], r, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
   // Parts: a record of Numbers (Number itself, or one case whose fields are
   // all Numbers: a point, a colour) taken part by part, so arithmetic on

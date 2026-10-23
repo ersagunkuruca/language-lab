@@ -55,7 +55,7 @@ import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as es
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
-import { derivativeLambda } from "./derive.ts";
+import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
 import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
@@ -75,7 +75,9 @@ export class LVar {
   constructor(n: number) { this.n = n; }
 }
 type Env = Map<Id, unknown>;
-interface Closure { k: "closure"; lambda: Id; env: Env; orig?: unknown }
+// `gradient`: this is gradient(the closure), whose lambda is written once
+// it's applied to a point and so known to be over that point's record.
+interface Closure { k: "closure"; lambda: Id; env: Env; orig?: unknown; gradient?: true }
 // A builtin, a constructor (a variant with fields) or a projection (a field).
 interface Prim { k: "prim"; id: Id; orig?: unknown }
 interface DataT { tag: Id; fields: Term[] }
@@ -555,6 +557,17 @@ export function interpreter(code: Code, opts: Options = {}) {
     // Functions can't be guessed: wait until it's known which one this is.
     if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out)(s), text: "call" });
     if (typeof f !== "object" || isData(f)) throw new NotInvertible("calling something that isn't a function");
+    if (f.k === "closure" && f.gradient) {
+      const g = f;
+      return wait({
+        k: "later", text: "gradient", ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
+          const p = walk(args[0], s);
+          const lambda = typeof p === "number" ? derivativeLambda(code, { lambda: g.lambda }) : isData(p) ? gradientLambda(code, { lambda: g.lambda }, (p as DataT).tag) : null;
+          if (!lambda) throw new NotInvertible("gradient is taken at a record of Numbers");
+          return apply({ k: "closure", lambda, env: g.env }, args, out)(s);
+        },
+      });
+    }
     if (f.k === "closure") {
       const lam = nodes[f.lambda] as NodeOf<"lambda">;
       const g: Goal = (s) => {
@@ -632,6 +645,16 @@ export function interpreter(code: Code, opts: Options = {}) {
             const f = walk(a, s) as Closure | Prim;
             const lambda = derivativeLambda(code, f.k === "closure" ? { lambda: f.lambda } : { prim: f.id });
             return eq(out, { k: "closure", lambda, env: f.k === "closure" ? f.env : new Map() })(s);
+          },
+        });
+      // Like derivative, it waits for its function; which record it's
+      // over shows when it's applied to a point (apply, below).
+      case S.gradient:
+        return wait({
+          k: "later", text: "gradient", ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
+            const f = walk(a, s) as Closure | Prim;
+            if (f.k !== "closure") return eq(out, f.k === "prim" ? { k: "closure", lambda: derivativeLambda(code, { prim: f.id }), env: new Map() } : f)(s);
+            return eq(out, { ...f, gradient: true })(s);
           },
         });
       // The action runs with its own budget: every step that might repeat

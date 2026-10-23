@@ -12,8 +12,8 @@ is adapted from theirs: [Credits](#credits) at the end says where each
 comes from.
 
 Everything here can be tried in the editor:
-https://ersagunkuruca.github.io/language-lab/ (or open the repository's
-`index.html` locally). The examples ship with it, in the *Programs* list on
+https://ersagunkuruca.github.io/language-lab/ (or build it locally with
+`npm run build-editor` in `projectional/` and open `index.html`). The examples ship with it, in the *Programs* list on
 the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Insertion sort*, *Eight queens*, *Calculus*, *Run backwards*,
 *Relations in programs*, and two shaders, *Shader: ripples* and *Shader: ray
@@ -530,7 +530,18 @@ generated derivative), `if` and `match` (each case differentiated), and
 folds (a fold that carries value-and-slope pairs, which is forward-mode
 automatic differentiation written in the language itself). Where it can't
 read a slope (through `floor`), the derivative fails there, so its type has
-`Choice`.
+`Choice`. When the function is written right where `derivative` is applied
+(a definition, an arithmetic builtin, or a lambda) and every slope can be
+read, the checker knows the derivative fails only where the function does,
+and drops the `Choice`.
+
+That's how the ray marcher gets its normals. Its points are `Vec`s, and
+`shade` asks for `unit(gradient((q) ↦ scene(q, time))(p))`: `gradient` is
+the slope of the scene along x, along y and along z, with time held still,
+as one Vec. There is no derivative code in the program: change `scene` and
+the normals follow. For the GPU, the compiler generates the gradient's code
+before printing the shader, so the shader gets exact slopes as plain
+arithmetic.
 
 The other half of calculus is running backwards: `zeros of cubic` is `cubic`
 run backwards from 0, and `zeros of x² − 2` gives both `±1.414…`, where

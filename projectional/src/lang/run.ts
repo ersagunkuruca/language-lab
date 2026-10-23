@@ -19,7 +19,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
-import { derivativeLambda } from "./derive.ts";
+import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
@@ -253,6 +253,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.derivative]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
       return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
+    },
+    // The record a gradient is over is known once there's a point to take
+    // it at; over a Number it's the derivative.
+    [S.gradient]: (f) => {
+      const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
+      const env = fromMap("env" in m ? m.env : new Map());
+      return one(function* (p: Value) {
+        const lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : gradientLambda(code, m, (p as Data).tag);
+        for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
+      } as Fn);
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
