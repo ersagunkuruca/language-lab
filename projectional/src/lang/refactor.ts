@@ -8,7 +8,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
 import { children, freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
-import { INT } from "./types.ts";
+import { INT, NUMBER, STRING, type Type } from "./types.ts";
 
 export interface Edit { code: Code; names: Names }
 
@@ -58,6 +58,17 @@ function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, v
 }
 
 // `name`, or `name 2`, `name 3`… if a binder in view has it already.
+// A new function's parameter, named for what it takes: x for a Number, n
+// for an Int, the type's own name for the rest (event, chapter), so a
+// handler reads (event) => □ instead of (input 1) => □.
+export function paramName(t: Type | undefined, names: Names): string {
+  if (t?.t === "fn") return "f";
+  if (t?.t !== "con") return "value";
+  const fixed: Record<string, string> = { [NUMBER]: "x", [INT]: "n", [STRING]: "text", "std.list": "items" };
+  const nm = fixed[t.id] ?? names[t.id];
+  return nm ? nm.toLowerCase() : "value";
+}
+
 function unique(name: string, taken: Set<string>): string {
   if (!taken.has(name)) return name;
   let i = 2;
@@ -98,7 +109,12 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
     case "lit": data = f.of === "int" ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
     case "lambda": {
       const taken = namesInScope(code, names, hole);
-      const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = unique(`input ${i + 1}`, taken); return b; });
+      const params = Array.from({ length: f.arity }, (_, i) => {
+        const b = add({ kind: "binder" });
+        nn[b] = unique(paramName(f.params?.[i], { ...library, ...names }), taken);
+        taken.add(nn[b]);
+        return b;
+      });
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };
       break;
     }
