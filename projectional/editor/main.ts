@@ -108,6 +108,8 @@ interface Layout {
   at?: Record<string, Pos>;
   // Bindings shown as a let node with get nodes instead of wires.
   named?: Id[];
+  // Frames drawn folded into one box (a lambda, a let, a match arm...). A view.
+  folded?: Id[];
   // Per definition: which ports (parameters, and "out" for the result) you
   // give it when running it backwards. Choosing different ones is how you
   // invert it, and it never touches code.json.
@@ -1575,6 +1577,15 @@ function toggleNamed(b: Id) {
       : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only layout.json changed.");
 }
 
+// A frame drawn folded into one box, or open. A view.
+function toggleFolded(f: Id) {
+  const now = doc.layout.folded ?? [];
+  const on = now.includes(f);
+  commit({ layout: { ...doc.layout, folded: on ? now.filter((x) => x !== f) : [...now, f] } }, ["layout.json"],
+    on ? "Unfolded: what the frame holds is back where it was. Only layout.json changed."
+      : "Folded into one box: wires in end on its left, values out leave on its right. Click ▸ to unfold. Only layout.json changed.");
+}
+
 // ---------------------------------------------------------------- the graph's menu
 //
 // Right-click in the graph: what you can do right there. On a hole, the
@@ -1607,6 +1618,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const d = calleeDef(id);
     if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc.code, typedPres(), d).name(d)}`, "goto"));
     const code = view?.code ?? doc.code;
+    if (kind === "frame") rows.push((doc.layout.folded ?? []).includes(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold into one box", "fold", "Hide what it holds; its wires in and out stay"));
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
@@ -1653,6 +1665,7 @@ function menuAction(act: string, target: Id | undefined) {
       return;
     }
     case "named": return toggleNamed(target!);
+    case "fold": return toggleFolded(target!);
     case "name": { select(target!); document.getElementById("f-name")?.focus(); return; }
     case "undot": return void applyT(T.removeDot(doc.code, doc.names.short, info, ui.def, target!));
     case "goto": { const d = calleeDef(target!); if (d) openDef(d); return; }
@@ -1720,6 +1733,8 @@ function graphHooks(info: T.Info) {
         note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
     },
     named: new Set(doc.layout.named ?? []),
+    folded: new Set(doc.layout.folded ?? []),
+    fold: toggleFolded,
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
   };
 }
