@@ -114,9 +114,12 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
 `;
   const picture: Picture = { wgsl: shader.wgsl, fragment: fragment.slice(shader.wgsl.length).trim(), ready: Promise.resolve(), stop };
 
+  // The canvas is drawn at `scale` of its size on screen (times the pixel
+  // ratio), and the browser stretches it to fit.
+  let scale = 1;
   const fit = () => {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    const w = Math.max(1, Math.round(r.width * dpr * scale)), h = Math.max(1, Math.round(r.height * dpr * scale));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   };
   const r = makeRunner(code, info, { print: () => {} });
@@ -146,6 +149,24 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   });
   const uniform = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const group = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: uniform } }] });
+  // A frame of a ray marcher is a lot of work for every pixel, and a GPU
+  // given frames faster than it finishes them queues them up until the
+  // whole browser, which draws with the same GPU, stops responding. So the
+  // next frame waits for this one to finish, and the resolution follows
+  // how long frames take: lower when slower than about 30 a second, higher
+  // again when there's room. It starts small (256 pixels across at most)
+  // so the first frame is quick on any GPU. A still is drawn once, whole.
+  const r0 = canvas.getBoundingClientRect();
+  scale = o.still == null ? Math.min(1, 256 / Math.max(1, Math.max(r0.width, r0.height) * Math.min(2, devicePixelRatio || 1))) : 1;
+  // How long frames take, smoothed, since one slow frame can be the page
+  // being busy rather than the GPU. Never below 128 pixels across.
+  let took = 0;
+  const least = Math.min(1, 128 / Math.max(1, Math.max(r0.width, r0.height) * Math.min(2, devicePixelRatio || 1)));
+  const adapt = (ms: number) => {
+    took = took ? 0.8 * took + 0.2 * ms : ms;
+    if (took > 30) { scale = Math.max(least, scale * Math.max(0.5, Math.sqrt(16 / took))); took = 0; }
+    else if (took < 10 && scale < 1) { scale = Math.min(1, scale * 1.2); took = 0; }
+  };
   let frames = 0, since = performance.now();
   const draw = () => {
     if (stopped) return;
@@ -158,14 +179,20 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
     pass.draw(3);
     pass.end();
     d.queue.submit([enc.finish()]);
-    frames++;
-    const t = performance.now();
-    if (t - since > 1000) {
-      status.textContent = `WebGPU · ${canvas.width}×${canvas.height} · ${Math.round((frames * 1000) / (t - since))} frames a second`;
-      frames = 0;
-      since = t;
-    }
-    if (o.still == null) requestAnimationFrame(draw);
+    const sent = performance.now();
+    // A frame still not done after a second counts as a very slow one: the
+    // next is drawn smaller, and the picture doesn't stop.
+    void Promise.race([d.queue.onSubmittedWorkDone(), new Promise((go) => setTimeout(go, 1000))]).then(() => {
+      adapt(performance.now() - sent);
+      frames++;
+      const t = performance.now();
+      if (t - since > 1000) {
+        status.textContent = `WebGPU · ${canvas.width}×${canvas.height} · ${Math.round((frames * 1000) / (t - since))} frames a second`;
+        frames = 0;
+        since = t;
+      }
+      if (o.still == null) requestAnimationFrame(draw);
+    });
   };
   draw();
   status.textContent = `WebGPU · ${canvas.width}×${canvas.height}`;

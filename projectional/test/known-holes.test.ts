@@ -1,7 +1,8 @@
-// Holes found by the review (REVIEW.md). Each test states what *should*
-// happen. One still open is marked todo, so it runs and reports without
-// failing the suite; when a fix lands, the todo is dropped and the test
-// guards it.
+// Holes found by the reviews (REVIEW.md, then REVIEW-2026-10-22b.md). Each
+// test states what *should* happen. One still open is marked todo, so it
+// runs and reports without failing the suite; when a fix lands, the todo is
+// dropped and the test guards it. Every hole from the first review is
+// fixed; the open ones are the second review's, at the end.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,8 +10,9 @@ import { get, type Code, type Id, type NodeData } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
+import { relate } from "../src/lang/relate.ts";
 import { runMain } from "../src/lang/run.ts";
-import { CONS, NIL, S } from "../src/lang/std.ts";
+import { CELL_OPS, CONS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -123,4 +125,62 @@ test("§1.3 equal on functions should be refused, not compare by identity", () =
     return main;
   });
   assert.ok(p.info.errors.length > 0, "two copies of the same function compare unequal today");
+});
+
+// ---------------------------------------------------------------- the second review (REVIEW-2026-10-22b.md)
+
+test("R2 §1.1 reading a formula that never ends is typed as if it ends (Cells hides Diverge)", { todo: "Cells covers Diverge (LANGUAGE.md, Cells)" }, () => {
+  let spin = "";
+  const p = program((k) => {
+    spin = k.def("spin");
+    k.define(spin, k.fn(["x"], (x) => k.call(spin, k.call(B.add, x, k.lit(1)))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.let("f", k.call(CELL_OPS.formula, k.thunk(() => k.call(spin, k.lit(0)))), (f) =>
+      k.call(S.print, k.call(S.show, k.call(CELL_OPS.read, f))))));
+    return main;
+  });
+  assert.ok(p.effects(spin).includes(DIVERGE));
+  // main runs forever, and its type is () -[Cells, Console]-> Unit.
+  assert.ok(p.effects(p.main).includes(DIVERGE), "main reads a formula that never ends, and its type says it's total");
+});
+
+test("R2 §1.2 equal gives the same answer whether or not it goes through a generic function", () => {
+  const p = program((k) => {
+    const same = k.def("same");
+    k.define(same, k.fn(["x", "y"], (x, y) => k.equal(x, y)));
+    const main = k.def("main");
+    const a = () => k.lit(1000000000000), b = () => k.lit(1000000000001);
+    k.define(main, k.thunk(() => k.seq(
+      k.call(S.print, k.call(SHOW_ANY, k.equal(a(), b()))),
+      k.call(S.print, k.call(SHOW_ANY, k.call(same, a(), b()))))));
+    return main;
+  });
+  assert.deepEqual(p.info.errors, []);
+  // Today: ["true", "false"]. Inlining `same` changes the answer.
+  const [direct, generic] = p.run();
+  assert.equal(direct, generic);
+});
+
+test("R2 §1.2 run backwards, Ints still compare to within 1e-9", () => {
+  const k = new Lang();
+  const f = k.def("f");
+  k.define(f, k.thunk(() => k.call(S.oneOf, k.list(k.int(1000000000001)))));
+  const code = base(k.code);
+  let steps = 0;
+  const answers = [...relate(code, f, { out: 1000000000000 }, { spend: () => ++steps < 2000 })];
+  // Forward, f() = 1000000000000 is false (equal on Int is exact since #78).
+  assert.equal(answers.length, 0, "f() = 1000000000000 has an answer backwards");
+});
+
+test("R2 §2.1 running a one-item `one of` backwards ends", () => {
+  const k = new Lang();
+  const f = k.def("f");
+  k.define(f, k.thunk(() => k.call(S.oneOf, k.list(k.lit(3)))));
+  const code = base(k.code);
+  for (const out of [3, 5]) {
+    let steps = 0;
+    // Without a budget this runs until memory runs out.
+    [...relate(code, f, { out }, { spend: () => ++steps < 10000 })];
+    assert.ok(steps < 10000, `f() = ${out} backwards was still searching after 10,000 steps`);
+  }
 });

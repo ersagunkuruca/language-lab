@@ -6,7 +6,7 @@
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 
@@ -17,7 +17,7 @@ const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
 for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"]]) named(node({ id, kind: "builtin", op: id }), name);
-for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
 // type expressions. An effect is written the same way (`effect`): its
@@ -71,10 +71,21 @@ export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
 // what nothing handles, the world answers.
 export const RANDOM = typedef("std.random", "Random", [], [["random", [], () => tref(NUMBER)]], true);
 export const RANDOM_OP = "std.random.random";
+// Time: `now()` is the time in milliseconds since 1970 (UTC). Reading the
+// clock changes nothing, so like Random it may run under Choice, and a
+// match can answer it (a test's fixed clock). In a page, a part that reads
+// it runs again every animation frame (browser.ts), so a clock is a part
+// that shows `now()`. Wait: `wait(ms)` pauses the program, on the command
+// line. Its own effect, so a page, whose parts and handlers may not wait,
+// says so in their types.
+export const TIME = typedef("std.time", "Time", [], [["now", [], () => tref(NUMBER)]], true);
+export const WAIT = typedef("std.wait", "Wait", [], [["wait", [["milliseconds", () => tref(NUMBER)]], () => tref(UNIT)]], true);
+export const NOW_OP = "std.time.now", WAIT_OP = "std.wait.wait";
 
 // A page (WEB.md): an ordinary rose tree, whose changing parts are
 // functions the page runs in watchers (src/lang/html.ts). Views may read
-// cells; event handlers may also write them, print, and use files (the
+// cells, the clock and the web (a view that fetches has to catch its
+// Abort itself, and shows what it showed until the reply comes); event handlers may also write cells, print, and use files (the
 // browser keeps those in localStorage), and so may abort (the page logs it). Buttons, rows and fields are
 // functions that build `element`s, not more variants.
 const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn++}`, kind: "tfun", params, result, effects });
@@ -82,13 +93,13 @@ export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
-  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
-  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT])]]],
+  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME, NETWORK])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT, TIME, NETWORK])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
-  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE])]]],
-  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE])]]],
+  ["text", [["shows", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME, NETWORK])]]],
+  ["part", [["view", (_, self) => tfun([], tref(self), [CELLS, DIVERGE, TIME, NETWORK])]]],
 ]);
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", event: "std.event.event" } as const;
 
@@ -220,6 +231,9 @@ export const IO = {
   appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),
   fileExists: world("io.fileExists", "file exists", [str], bool, [FILES]),
   listFolder: world("io.listFolder", "list folder", [str], list(str), [FILES, ABORT]),
+  // The body of a GET, as text. Aborts when it can't be had (no network,
+  // a status that isn't 2xx). Fetched once per address per run.
+  fetchText: world("io.fetchText", "fetch text", [str], str, [NETWORK, ABORT]),
 };
 
 // Cells (src/lang/cells.ts, LANGUAGE.md "Cells"): Solid.js's signals and
@@ -293,7 +307,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, EVENT, ATTRIBUTE, HTML] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, ATTRIBUTE, HTML] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

@@ -11,7 +11,8 @@ non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 For a candid review of the whole project (holes, what's achievable, and a
 roadmap towards real programs, shaders, websites and apps), see
-[REVIEW.md](REVIEW.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
+[REVIEW.md](REVIEW.md) and the second one,
+[REVIEW-2026-10-22b.md](REVIEW-2026-10-22b.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
 the design ideas we've discussed, with the current answer to each, are in
 [NOTES.md](NOTES.md). Where the ideas and code come from (influences, prior
 work, adapted code) is in [CREDITS.md](CREDITS.md).
@@ -288,9 +289,11 @@ with `node examples/unpack.ts saved.json examples/sort`. Nothing
 regenerates the examples from TypeScript any more; their JSON is the
 program.
 
-The editor is published by `.github/workflows/pages.yml` on every push to
+The editor is published by GitHub Pages from the repository as it is on
 main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
-and the tutorial to the repository root, which is the site)
+and the tutorial to the repository root, which is the site). So commit what
+`npm run build-editor` writes; the Tests workflow fails a pull request whose
+committed pages are older than its source.
 
 ## Errors you can't make
 
@@ -409,5 +412,5 @@ examples/             the example programs, one folder of side tables each (code
 cli/lab.ts            the command line: run, compile or check a saved program (LANGUAGE.md, "The command line")
 test/                 core, lang, backwards, numbers, oneworld (networks as
                       predicates), guarantees, scale, dots, graph, toplevel, and
-                      known-holes (holes found by REVIEW.md, as todo tests)
+                      known-holes (holes found by the reviews, as todo tests)
 ```

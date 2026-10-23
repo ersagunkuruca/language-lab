@@ -10,7 +10,7 @@
 // stream of results, compiled ones their one result). The page is anything
 // shaped like the few DOM calls used here, so tests draw into a fake one.
 
-import type { Cells, CellNode } from "./cells.ts";
+import { Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList } from "./run.ts";
 import { HTML_V } from "./std.ts";
@@ -58,7 +58,9 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   const watch = (e: Node_, label: string, run: () => void) => {
     let first = true;
     const node: CellNode = cells.watch(() => {
-      run();
+      // Something it asked for isn't here yet: it keeps what it shows, and
+      // runs again when that lands (it read the cell that says so).
+      try { run(); } catch (e) { if (!(e instanceof Pending)) throw e; return; }
       if (!first) m.ran?.(e, node);
       first = false;
     }, label);
@@ -98,9 +100,18 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
             const target = (ev.target ?? e) as El & { type?: string };
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
             // One batch per event: the page updates once, after every write.
-            try {
-              cells.batch(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] }));
-            } catch (err) { console.error(err); }
+            // A handler that fetched what hasn't come runs again from the
+            // start when it lands, with the same event (so it should fetch
+            // before it writes, as a Suspense render must be pure).
+            const fire = () => {
+              try {
+                cells.batch(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] }));
+              } catch (err) {
+                if (err instanceof Pending) err.ready.then(fire);
+                else console.error(err);
+              }
+            };
+            fire();
           });
         } else throw new Error(`not an attribute: ${a.tag}`);
       }

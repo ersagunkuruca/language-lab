@@ -32,18 +32,13 @@ export function $range(n) {
 // Numbers are equal to the precision floats carry, as in the evaluator.
 export const $near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
-// How numbers compare depends on the type compared, as in the evaluator
-// (run.ts `Equality`): "exact" (only Ints in it), "near" (only Numbers), or
-// "mixed" (both, or not known: whole numbers exactly, others near).
-const $same = {
-  exact: (a, b) => a === b,
-  near: $near,
-  mixed: (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : $near(a, b)),
-};
+// `equal` on two numbers, one rule on every type, as in the evaluator
+// (run.ts `sameNumber`): whole numbers exactly, others near.
+export const $sameNumber = (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : $near(a, b));
 
 // With its own stack, so two long lists can be compared.
-export function $eq(a, b, how = 'mixed') {
-  const same = $same[how];
+export function $eq(a, b) {
+  const same = $sameNumber;
   const todo = [a, b];
   while (todo.length) {
     const y = todo.pop(), x = todo.pop();
@@ -177,7 +172,7 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // abortive handlers the same way).
 
 import { Aborted } from '../../projectional/src/lang/run.ts';
-import { ABORT, ABORT_OP, LOG_OP, NONE, RANDOM, RANDOM_OP, SOME } from '../../projectional/src/lang/std.ts';
+import { ABORT, ABORT_OP, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, SOME, WAIT_OP } from '../../projectional/src/lang/std.ts';
 import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
 export { Aborted as $Aborted };
 
@@ -195,10 +190,17 @@ export function $perform(effect, op, args) {
     try { return h.answers[op](...args); } finally { handlers.push(...above); }
   }
   // What the program doesn't handle, the runtime does: Log goes to standard
-  // error, an Abort ends the run, and the world draws Random's numbers.
+  // error, an Abort ends the run, and the world draws Random's numbers, reads
+  // the clock and waits.
   if (op === LOG_OP) { (world.log ?? printer)(args[0]); return $unit; }
   if (op === ABORT_OP) throw new Aborted(args[0]);
   if (op === RANDOM_OP) return (world.random ?? worldRandom)();
+  if (op === NOW_OP) return (world.now ?? Date.now)();
+  if (op === WAIT_OP) {
+    if (!world.wait) throw new Error("this runtime can't wait");
+    world.wait(args[0]);
+    return $unit;
+  }
   throw new Error(`nothing handles ${op}`);
 }
 
@@ -254,7 +256,11 @@ const fallible = (k) => (...args) => {
   try {
     if (!f) throw new Error(`this runtime can't ${k}`);
     v = f.apply(world, args);
-  } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
+  } catch (e) {
+    // Not here yet isn't a failure: the page asks again later.
+    if (e instanceof Pending) throw e;
+    return $perform(ABORT, ABORT_OP, [e.message]);
+  }
   return v;
 };
 const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
@@ -267,11 +273,12 @@ export const $io = {
   appendFile: (p, t) => (fallible('appendFile')(p, t), $unit),
   fileExists: (p) => $bool(!!world.fileExists?.(p)),
   listFolder: (p) => $toList(fallible('listFolder')(p)),
+  fetchText: fallible('fetchText'),
 };
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells } from '../../projectional/src/lang/cells.ts';
+import { Cells, Pending } from '../../projectional/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }

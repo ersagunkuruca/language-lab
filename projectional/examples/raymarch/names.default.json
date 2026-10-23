@@ -199,12 +199,16 @@
   "416vum6ltmhgfgl1uvsenqldqs": "a",
   "607oe1fcm3t2kp5ft6ltvrn2u8": "b",
   "9k09ssi957d0njvknm976o32a7": "amount",
-  "t4pma75h0imolv3puct9l0h2hb": "colour",
+  "t4pma75h0imolv3puct9l0h2hb": "trace",
   "cn0aigjo6jln2kqovn7s2ub3i8": "x",
   "ek41ndcno6rguqn53rr3clcbhn": "y",
   "06v1f1je71frff5335g1m05adk": "time",
   "mc30blctas8lt6be3ksk1c7rg0": "camera",
   "e3kk85dtroobu8v5usfef3t9kl": "ray",
   "5a8u1188p15hi36clg5dlh10qq": "hit",
-  "97ku0i3kfsjuonmn7g17odu2oc": "steps"
+  "97ku0i3kfsjuonmn7g17odu2oc": "steps",
+  "udrboqusi8nqd1q8136ng3p22a": "x",
+  "0mhr6ab7a0pdibio9dsjv2dgd5": "y",
+  "ma96pl6dic0f6n174mnk40t2v0": "time",
+  "t353g46bonarkbro9sbp03amv0": "colour"
 }

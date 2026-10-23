@@ -22,7 +22,7 @@ import { $setWorld as $$setWorld, $setPrint as $$setPrint, $cells as $$cells } f
 import { mountHtml as $$mount, compiledCall as $$call } from ${at("../src/lang/html.ts")};
 import { browserWorld as $$browserWorld } from ${at("../src/lang/browser.ts")};
 const $$store = (() => { try { return localStorage; } catch { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null }; } })();
-$$setWorld($$browserWorld($$store, ${JSON.stringify(title)}));
+$$setWorld($$browserWorld($$store, ${JSON.stringify(title)}, console, { cells: $$cells(), frame: (f) => requestAnimationFrame(f) }));
 $$setPrint((line) => console.log(line));
 document.body.append($$mount(defs[${JSON.stringify(name)}](), { cells: $$cells(), doc: document, call: $$call }));
 `,
