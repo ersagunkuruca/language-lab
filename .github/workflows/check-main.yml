@@ -1,8 +1,9 @@
-# Every test suite, once per merge to main, beside the deploy instead of
-# before it (projectional/TESTING.md, T1): the unit tests, then the browser
-# tests (the editor, every example, shaders.html, WGSL on a GPU) on a fresh
-# build. A red run doesn't stop the site; it is main's to fix, by the next
-# pull request. A pull request itself only type-checks (test.yml).
+# The tests a merge to main can reach, beside the deploy instead of before
+# it (projectional/TESTING.md, T1 and T2): projectional/test/affected.ts
+# picks them from what changed since the last commit this workflow passed,
+# from unit tests to the editor in a browser and WGSL on a GPU. A red run
+# doesn't stop the site; it is main's to fix, by the next pull request. A
+# pull request itself only type-checks (test.yml).
 name: Check main
 
 on:
@@ -16,8 +17,13 @@ on:
       - "!**.gif"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 # Merges that land during a run wait, and only the newest of them runs
-# next: it tests everything, so the ones skipped lose nothing.
+# next. It tests what changed since the last green run, so the ones
+# skipped lose nothing.
 concurrency:
   group: check-main
   cancel-in-progress: false
@@ -28,32 +34,26 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: projectional/package-lock.json
-      - name: Build the pages
+      - run: npm ci
         working-directory: projectional
+      # Since the last green run; with none, everything.
+      - name: What changed
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm ci
-          npm run build-editor
-      # Node runs (cores - 1) test files at a time, which is one on the
-      # runner's two cores; two at a time is much faster.
+          base=$(gh run list -R "$GITHUB_REPOSITORY" -w check-main.yml -b main -s success -L 1 --json headSha -q '.[0].headSha' || true)
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then echo "base=$base" >> "$GITHUB_OUTPUT"; else echo "base=--all" >> "$GITHUB_OUTPUT"; fi
       # The big sweeps check one eighth of their cases, a different eighth
       # each run (test/helpers.ts sweep, TESTING.md T3).
-      - name: Unit tests
+      - name: The tests the change reaches
         env:
           SWEEP_AT: ${{ github.run_number }}
-        run: |
-          (cd projectional && node --test --test-concurrency=2 test/*.test.ts)
-          (cd invertible && npm test)
-          (cd compiler && npm test)
-      - name: The editor in a browser
-        working-directory: projectional
-        run: |
-          npm run smoke
-          npm run smoke-shaders
-      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
-        working-directory: compiler
-        run: npm run gpu
+        run: node projectional/test/affected.ts ${{ steps.base.outputs.base }} HEAD

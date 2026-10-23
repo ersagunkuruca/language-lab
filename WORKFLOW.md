@@ -98,13 +98,16 @@ model, then WebAssembly. Update this line when the step changes.
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
-- Run the tests locally before pushing (`npm test` in projectional,
-  invertible and compiler; `npm run smoke` and `npm run smoke-shaders` for
-  editor or page changes). A pull request's CI only type-checks. A merge
-  deploys in about two minutes; every suite runs beside the deploy in
-  "Check main" and reports without stopping it. After merging, look at
-  Check main for your commit (about 10 minutes): if it is red, whoever
-  broke main fixes it next.
+- Before pushing, run the tests your change reaches: `npm run affected`
+  in projectional (unit tests in all three packages, and the browser tests
+  when the pages could change; `-- --list` says which). Set CHROMIUM to a
+  Chromium for the browser tests if Chrome isn't installed. A pull
+  request's CI only type-checks. A merge deploys in about two minutes;
+  "Check main" runs the same selection beside the deploy, from the last
+  commit it passed, and reports without stopping it. After merging, look
+  at Check main for your commit: if it is red, whoever broke main fixes it
+  next. `npm run affected -- --all` runs everything with every sweep in
+  full.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 
