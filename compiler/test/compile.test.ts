@@ -277,6 +277,38 @@ test("lists that are only walked stay the arrays split makes (GAPS.md G21)", asy
   assert.equal(defs["head or"]("p,q"), "qpp");
 });
 
+test("a list that is consed onto and only walked is kept from the other end (GAPS.md G21)", async () => {
+  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const rev = k.def("rev");
+  k.define(rev, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.text(r!, h) },
+  ])));
+  // Walks the words, consing each onto `acc`, and at the end reads `acc`
+  // three ways: joined, its first item, and folded from the end.
+  const gather = k.def("gather");
+  k.define(gather, k.fn(["ws", "acc"], (ws, acc) => k.match(ws, [
+    { variant: NIL, names: [], body: () => k.text(k.call(T.joinAll, acc, k.lit(",")), k.lit(" "),
+      k.call(S.first, k.thunk(() => k.call(S.oneOf, acc)), k.thunk(() => k.lit("none"))), k.lit(" "), k.call(rev, acc)) },
+    { variant: CONS, names: ["w", "rest"], body: ([w, rest]) => k.call(gather, rest, k.call(CONS, w, acc)) },
+  ])));
+  const backwards = k.def("backwards");
+  k.define(backwards, k.fn(["t"], (t) => k.call(gather, k.call(T.split, t, k.lit(",")), NIL)));
+  // Two lists made from the same one: the second push copies.
+  const two = k.def("two");
+  k.define(two, k.fn(["xs"], (xs) => k.let("a", k.call(CONS, k.lit("x"), xs), (a) => k.let("b", k.call(CONS, k.lit("y"), xs), (b) => k.text(k.call(rev, a), k.call(rev, b))))));
+  const both = k.def("both");
+  k.define(both, k.thunk(() => k.call(two, NIL)));
+  const { defs, source } = await compiledDefs(k, ["backwards", "both", "gather"], "growing.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("gather$arr"), /\$snoc\(acc, w\)/);
+  assert.doesNotMatch(body("gather$arr") + body("two$arr"), /\$cons|\$toList|\$fromBack\(acc\)\)/);
+  assert.equal(defs.backwards("a,b,c"), "c,b,a c abc");
+  assert.equal(defs.both(), "xy");
+  assert.equal(defs.gather(toList(["p"]), toList(["q"])), "p,q p qp");
+});
+
 test("a fold over a million items compiles to a loop", async () => {
   const k = new Lang();
   const total = k.def("total");

@@ -353,7 +353,11 @@ whose argument is an array use it; other calls, and uses as a value, keep
 the copy that takes cells. A fold over an array is an index loop from the
 end, or from the front when the step doesn't care about order (G15). If a
 use the compiler can't walk as an array ever meets one, it gets the cells
-back (`$toList`), so this can cost time but never change an answer. Prior
+back (`$toList`), so this can cost time but never change an answer. A list
+that is consed onto, with the result only walked or consed onto again
+(an accumulator), is kept from the other end, as `{ a, n }` for the list
+a[n − 1], …, a[0]: a `cons` pushes onto a when nothing has pushed past n
+yet, and copies otherwise, so a list made earlier never changes. Prior
 art: cdr-coding (Hansen, CACM 1969), which stores a list's cells one after
 another; here it's decided at compile time from how the list is used.
 

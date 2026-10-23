@@ -600,9 +600,16 @@ or handing it on to another such binder holds the array `split` or
 `characters` made; definitions get an `$arr` copy for calls that pass one.
 chapters' lines go from `split` to `sections` with no cells and no spine:
 3000 chapters, 199 → 167 ms (median of 31, alternating runs; ideal 86).
-*Left:* lists that are matched on (the array and a start, as designed), and
-lists built by consing and then walked (`taken` in `number`, now the
-biggest cost: an array grown at the end, read from the end).
+*Second part built:* lists built by consing and then walked. A binder whose
+uses are walks, or a `cons` onto it whose result is again walked or consed
+onto, is kept from the other end: `{ a, n }`, the list a[n − 1], …, a[0].
+`cons` pushes when nothing has pushed past n yet and copies otherwise, so
+older lists never change (runtime.js `$snoc`). An empty list handed to such
+a binder starts as `{ a: [], n: 0 }`. chapters' `taken` grows by one push
+per chapter, and `times in` walks an array. Against the code before G21,
+3000 chapters go from about 3.4× the ideal to about 1.9× (same process,
+alternating, median of 31; the machine was noisy, so ratios rather than ms).
+*Left:* lists that are matched on (the array and a start, as designed).
 
 **G13 again.** `sections` builds a `Pile` record per line and takes it
 apart in the next step. The ideal carries two locals.
