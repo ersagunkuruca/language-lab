@@ -58,8 +58,8 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   await page.goto(new URL("../../index.html", import.meta.url).href);
   for (const program of ["Shader: ripples", "Shader: ray marching"]) {
     await page.locator(".nav-row:not([data-def])", { hasText: program }).first().click();
-    const said = page.locator(".picture-box p");
-    await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box p")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});
+    const said = page.locator(".picture-box .pic-status");
+    await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box .pic-status")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});
     const status = await said.innerText().catch(() => "no picture");
     console.log(`${label}, the editor's ${program}: ${status}`);
     if (label === "with WebGPU" ? !status.startsWith("WebGPU") : !status.includes("on the CPU")) errors.push(`${label}: the editor didn't draw ${program}: ${status}`);
