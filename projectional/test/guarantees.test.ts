@@ -165,7 +165,7 @@ test("a function can't be solved for: functions can't be guessed", () => {
 test("derivative never throws: where a slope can't be read there is none", () => {
   const p = program((k) => {
     const pick = k.def("pick");
-    // takes apart data built from x: the slope isn't read through data yet
+    // takes apart a record built from x: each part has its slope (x · x)
     k.define(pick, k.fn(["x"], (x) => k.match(k.call(PAIR_V, x, x), [{ variant: PAIR_V, names: ["a", "b"], body: ([a, b]) => k.call(B.mul, a, b) }])));
     const kink = k.def("kink");
     k.define(kink, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), k.call(S.floor, x))));
@@ -182,7 +182,7 @@ test("derivative never throws: where a slope can't be read there is none", () =>
     return main;
   });
   assert.deepEqual(p.errors, []);
-  assert.deepEqual(p.run(), ["none", "none", "-1", "none", "1"]);
+  assert.deepEqual(p.run(), ["none", "6", "-1", "none", "1"]);
 });
 
 test("derivative of a function written right there fails only where the function does", () => {

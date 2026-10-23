@@ -28,10 +28,21 @@
 //                                (forward-mode AD written in the language
 //                                itself), then takes the derivative part
 //   fail                         fail: where f has no value, neither has f′
+//   a record of Numbers          a record: each part's derivative (a point
+//                                moving has a velocity); reading a part,
+//                                or taking the record apart, reads that
+//                                part's; map parts, zip parts and total
+//                                part by part. A definition that takes or
+//                                returns one is differentiated where it's
+//                                called, as if written there
 //
-// Not differentiable: a case analysis that takes apart data built from the
-// variable (it would need derivatives of data), comparisons and text as
-// results, and solve nodes (implicit differentiation would do it; not yet).
+// gradient(f), for f of one record of Numbers, is f's derivative along
+// each part in turn, as a record: one forward pass per part, seeded with
+// that direction (the way forward-mode AD computes a gradient).
+//
+// Not differentiable: a case analysis that takes apart data with several
+// cases built from the variable, comparisons and text as results, and
+// solve nodes (implicit differentiation would do it; not yet).
 // Generating a derivative as a definition (the editor's gesture) refuses
 // those with NotDifferentiable. At run time, `derivative` can't refuse, so
 // it reads what it can and puts `fail` where it can't: no slope there,
@@ -55,16 +66,22 @@ export class NotDifferentiable extends Error {}
 // fresh nodes each time it is placed (a node can't have two parents).
 // `neg` and `recip` remember −y and 1/y, so a + (−y) prints as a − y and
 // a · (1/y) as a / y.
-type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E } | { k: "none" };
+// A record of Numbers has a derivative part by part: `rec` holds each
+// part's, and a `build` whose `variant` is set builds a whole record.
+type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id } | { k: "none" }
+  | { k: "rec"; variant: Id; parts: E[] };
 const numE = (v: number): E => ({ k: "num", v });
 const NONE: E = { k: "none" };
 const isNum = (e: E, v?: number) => e.k === "num" && (v === undefined || e.v === v);
+const variantOf = (e: E): Id | null => (e.k === "rec" ? e.variant : e.k === "build" ? e.variant ?? null : null);
 
 interface Ctx {
   // binder → how to refer to it in the new code
   sub: Map<Id, () => Id>;
   // binder → its derivative, for binders that depend on the variable
   d: Map<Id, E>;
+  // binder → its record's variant, for binders holding a record of Numbers
+  shape: Map<Id, Id>;
 }
 
 interface SolverTree { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: SolverTree[] }
@@ -89,11 +106,91 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   const binder = (name: string) => { const id = add({ kind: "binder" }); if (name) outNames[id] = name; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
   const callN = (fn: Id, ...args: Id[]) => add({ kind: "call", fn, args });
-  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v }) : e.k === "none" ? callN(ref(S.fail)) : e.build());
+  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v }) : e.k === "none" ? callN(ref(S.fail))
+    : e.k === "rec" ? callN(ref(e.variant), ...e.parts.map(place)) : e.build());
   const cant = (why: string): E => {
     if (!lenient) throw new NotDifferentiable(why);
     return NONE;
   };
+
+  // Records of Numbers. A record's derivative is a record: each part's
+  // derivative, so a point moving along a curve has a velocity, and the
+  // gradient of a function of a point is its derivative along each part
+  // in turn. Only records (one case); data with several cases has no
+  // derivative.
+  let owners: Map<Id, Id> | null = null;
+  const owner = (part: Id) => (owners ??= ownerOfTypeParts(code)).get(part);
+  const record = (variant: Id): boolean => {
+    const t = nodes[(nodes[owner(variant) ?? ""] as NodeOf<"def"> | undefined)?.body ?? ""];
+    return t?.kind === "typedef" && !t.effect && t.variants.length === 1 && t.variants[0] === variant;
+  };
+  const fieldsOf = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields;
+  // A zero where a record is expected is a record of zeros.
+  const placeAs = (e: E, variant: Id | null): Id =>
+    variant && e.k === "num" && e.v === 0 ? place({ k: "rec", variant, parts: fieldsOf(variant).map(() => numE(0)) }) : place(e);
+  // Part `field` of a record's derivative.
+  function partOf(e: E, field: Id): E {
+    if (e.k === "rec") {
+      const j = fieldsOf(e.variant).indexOf(field);
+      return j < 0 ? cant("a part of the wrong record") : e.parts[j];
+    }
+    if (e.k === "build") return { k: "build", build: () => callN(ref(field), place(e)) };
+    return e;
+  }
+  // The variant of the record expression `id` evaluates to, when it is
+  // one of Numbers, read off the code (no types here): a record built
+  // right there, a binder known to hold one, or what a function returns.
+  function shapeOf(id: Id, ctx: Ctx, seen = new Set<Id>()): Id | null {
+    const n = nodes[id];
+    if (n.kind === "ref") return ctx.shape.get(n.target) ?? null;
+    if (n.kind === "match") {
+      for (const a of n.arms) { const v = shapeOf((nodes[a] as NodeOf<"arm">).body, ctx, seen); if (v) return v; }
+      return null;
+    }
+    if (n.kind !== "call") return null;
+    const head = nodes[n.fn];
+    const inner = (lam: NodeOf<"lambda">) => {
+      const shape = new Map(ctx.shape);
+      lam.params.forEach((p, i) => { const v = n.args[i] && shapeOf(n.args[i], ctx, seen); if (v) shape.set(p, v); });
+      return shapeOf(lam.body, { ...ctx, shape }, seen);
+    };
+    if (head.kind === "lambda") return inner(head);
+    if (head.kind !== "ref") return null;
+    if (head.target === S.mapParts || head.target === S.zipParts) return n.args[1] ? shapeOf(n.args[1], ctx, seen) : null;
+    const t = nodes[head.target];
+    if (t?.kind === "variant") return record(head.target) ? head.target : null;
+    if (t?.kind === "field") {
+      const tr = nodes[(t as NodeOf<"field">).type];
+      const td = tr?.kind === "tref" ? nodes[(nodes[tr.target] as NodeOf<"def"> | undefined)?.body ?? ""] : null;
+      return td?.kind === "typedef" && td.variants.length === 1 && record(td.variants[0]) ? td.variants[0] : null;
+    }
+    if (t?.kind === "def" && t.body && nodes[t.body].kind === "lambda" && !seen.has(head.target)) {
+      seen.add(head.target);
+      const v = inner(nodes[t.body] as NodeOf<"lambda">);
+      seen.delete(head.target);
+      return v;
+    }
+    return null;
+  }
+  // map parts, zip parts and total, differentiated part by part: part j of
+  // map parts(f, v) is f(v.j), so its derivative is that call's.
+  function partsD(n: NodeOf<"call">, which: Id, ctx: Ctx): E {
+    const records = which === S.total ? n.args : n.args.slice(1);
+    const variant = shapeOf(records[0], ctx);
+    if (!variant) {
+      // A Number is a record of one part, itself: map parts(f, x) is f(x).
+      // A Number's slope is a Number; a record's would be one.
+      const ds = records.map((r) => D(r, ctx));
+      if (ds.every((d) => isNum(d, 0)) || ds.some(variantOf)) return cant("can't tell which record these parts are of");
+      return D(which === S.total ? records[0] : add({ kind: "call", fn: n.args[0], args: records }), ctx);
+    }
+    const parts = fieldsOf(variant).map((field) => {
+      const at = records.map((r) => add({ kind: "call", fn: add({ kind: "ref", target: field }), args: [r] }));
+      return D(which === S.total ? at[0] : add({ kind: "call", fn: n.args[0], args: at }), ctx);
+    });
+    if (which !== S.total) return { k: "rec", variant, parts };
+    return parts.reduce((a, b) => op("add", a, b), numE(0));
+  }
 
   // Arithmetic on derivatives, simplifying as it goes so the result reads
   // like something a person would write.
@@ -216,7 +313,14 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         if (head.kind === "ref") {
           const t = nodes[head.target];
           if (OPS[head.target]) return chain(OPS[head.target], n.args, ctx);
-          if (t.kind === "def" && t.body && nodes[t.body].kind === "lambda") return defD(head.target, n.args, ctx);
+          if (head.target === S.mapParts || head.target === S.zipParts || head.target === S.total) return partsD(n, head.target, ctx);
+          if (t.kind === "variant") {
+            if (!record(head.target)) return cant("data with several cases has no derivative");
+            const parts = n.args.map((a) => D(a, ctx));
+            return parts.every((p) => isNum(p, 0)) ? numE(0) : { k: "rec", variant: head.target, parts };
+          }
+          if (t.kind === "field") return partOf(D(n.args[0], ctx), head.target);
+          if (t.kind === "def" && t.body && nodes[t.body].kind === "lambda") return defD(n, head.target, ctx);
           if (t.kind === "binder") return unknownD(n, ctx);
           return cant(`the derivative goes through ${names[head.target] ?? head.target}, which isn't arithmetic`);
         }
@@ -238,6 +342,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     args.forEach((a, i) => {
       const da = D(a, ctx);
       if (isNum(da, 0)) return;
+      if (variantOf(da)) { sum = cant("arithmetic is on Numbers, not records"); return; }
       sum = op("add", sum, op("mul", fromTree(PRIMS[name].d[i](holes)), da));
     });
     return sum;
@@ -245,26 +350,44 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 
   // A let: the value and its derivative, both bound, then the body's
   // derivative in terms of them.
+  // The body's derivative is worked out first (so it's known whether it
+  // is a record's); the binders it refers to are made each time it's
+  // placed.
   function letD(n: NodeOf<"call">, lam: NodeOf<"lambda">, ctx: Ctx): E {
+    const sub = new Map(ctx.sub), d = new Map(ctx.d), shape = new Map(ctx.shape);
+    const slots = lam.params.map((p, i) => {
+      const slot = { p, np: "", dp: "", dv: D(n.args[i], ctx), bound: false };
+      sub.set(p, () => ref(slot.np));
+      const v = shapeOf(n.args[i], ctx) ?? variantOf(slot.dv);
+      if (v) shape.set(p, v);
+      const dv = slot.dv;
+      if (isNum(dv, 0)) return slot;
+      if (dv.k === "none") { d.set(p, NONE); return slot; }
+      // A record whose parts' derivatives are all constants (a direction
+      // to differentiate along) needs no binder.
+      if (dv.k === "rec" && dv.parts.every((x) => x.k === "num")) { d.set(p, dv); return slot; }
+      slot.bound = true;
+      const whole: E = { k: "build", build: () => ref(slot.dp), variant: variantOf(dv) ?? undefined };
+      d.set(p, dv.k === "rec" ? { k: "rec", variant: dv.variant, parts: dv.parts.map((x, j) => (x.k === "num" ? x : partOf(whole, fieldsOf(dv.variant)[j]))) } : whole);
+      return slot;
+    });
+    const dBody = D(lam.body, { sub, d, shape });
+    // A constant (a direction, part by part) needs none of the let.
+    if (dBody.k === "num" || (dBody.k === "rec" && dBody.parts.every((x) => x.k === "num"))) return dBody;
     return {
-      k: "build", build: () => {
-        const sub = new Map(ctx.sub), d = new Map(ctx.d);
+      k: "build", variant: variantOf(dBody) ?? undefined, build: () => {
         const params: Id[] = [], args: Id[] = [];
         const dParams: Id[] = [], dArgs: Id[] = [];
-        lam.params.forEach((p, i) => {
-          const np = binder(nm(p));
-          sub.set(p, () => ref(np));
-          params.push(np);
+        for (const [i, slot] of slots.entries()) {
+          slot.np = binder(nm(slot.p));
+          params.push(slot.np);
           args.push(copy(n.args[i], ctx));
-          const dv = D(n.args[i], ctx);
-          if (isNum(dv, 0)) return;
-          if (dv.k === "none") { d.set(p, NONE); return; }
-          const dp = binder(`${nm(p)}′`);
-          d.set(p, { k: "build", build: () => ref(dp) });
-          dParams.push(dp);
-          dArgs.push(place(dv));
-        });
-        const body = place(D(lam.body, { sub, d }));
+          if (!slot.bound) continue;
+          slot.dp = binder(`${nm(slot.p)}′`);
+          dParams.push(slot.dp);
+          dArgs.push(place(slot.dv));
+        }
+        const body = place(dBody);
         return add({ kind: "call", fn: add({ kind: "lambda", params: [...params, ...dParams], body }), args: [...args, ...dArgs] });
       },
     };
@@ -272,10 +395,21 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 
   // Through a call of another definition: its own derivative, generated
   // once and reused (and able to call itself, for recursion).
-  function defD(def: Id, args: Id[], ctx: Ctx): E {
+  // A definition that takes or returns a record is differentiated where
+  // it's called, as if its body were written there: its partials would be
+  // records, and a generic one (the vectors module's) has no one record.
+  const inlining = new Set<Id>();
+  function defD(n: NodeOf<"call">, def: Id, ctx: Ctx): E {
+    const args = n.args;
+    const ds = args.map((a) => D(a, ctx));
+    if (ds.some(variantOf) || shapeOf(n.id, ctx)) {
+      if (inlining.has(def)) return cant(`${nm(def)} calls itself with a record, which isn't differentiated yet`);
+      inlining.add(def);
+      try { return letD(n, nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">, ctx); } finally { inlining.delete(def); }
+    }
     let sum: E = numE(0);
     args.forEach((a, i) => {
-      const da = D(a, ctx);
+      const da = ds[i];
       if (isNum(da, 0)) return;
       const p = partial(def, i);
       const at: E = { k: "build", build: () => callN(ref(p), ...args.map((x) => copy(x, ctx))) };
@@ -302,24 +436,40 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     if (n.args.length !== 1) return cant("only functions of one number can be differentiated at run time");
     if (depends(n.fn, new Set(ctx.d.keys()))) return cant("the function being called depends on the variable itself");
     const du = D(n.args[0], ctx);
+    if (variantOf(du)) return cant("only functions of one number can be differentiated at run time");
     const at: E = { k: "build", build: () => callN(callN(ref(S.derivative), copy(n.fn, ctx)), copy(n.args[0], ctx)) };
     return op("mul", at, du);
   }
 
   function matchD(n: NodeOf<"match">, ctx: Ctx): E {
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
+    // Taking apart a record of Numbers built from the variable: each part
+    // has its derivative.
+    let ds: E = numE(0);
     if (depends(n.scrutinee, new Set(ctx.d.keys())) && arms.some((a) => a.binds.length)) {
-      return cant("this case analysis takes apart data built from the variable");
+      ds = D(n.scrutinee, ctx);
+      if (arms.length !== 1 || n.otherwise || !(isNum(ds, 0) || variantOf(ds))) return cant("this case analysis takes apart data built from the variable");
     }
+    const each = arms.map((arm) => {
+      const sub = new Map(ctx.sub), d = new Map(ctx.d), shape = new Map(ctx.shape);
+      const binds = arm.binds.map((b) => ({ b, nb: "" }));
+      for (const [j, x] of binds.entries()) {
+        sub.set(x.b, () => ref(x.nb));
+        const dj = partOf(ds, fieldsOf(arm.variant)[j]);
+        if (!isNum(dj, 0)) d.set(x.b, dj);
+      }
+      return { arm, binds, body: D(arm.body, { sub, d, shape }) };
+    });
+    const other = n.otherwise ? D(n.otherwise, ctx) : null;
+    const variant = [...each.map((a) => a.body), ...(other ? [other] : [])].map(variantOf).find(Boolean) ?? null;
     return {
-      k: "build", build: () => add({
+      k: "build", variant: variant ?? undefined, build: () => add({
         kind: "match", scrutinee: copy(n.scrutinee, ctx),
-        arms: arms.map((arm) => {
-          const sub = new Map(ctx.sub);
-          const binds = arm.binds.map((b) => { const nb = binder(nm(b)); sub.set(b, () => ref(nb)); return nb; });
-          return add({ kind: "arm", variant: arm.variant, binds, results: arm.results.map(() => null), body: place(D(arm.body, { ...ctx, sub })) });
+        arms: each.map(({ arm, binds, body }) => {
+          for (const x of binds) x.nb = binder(nm(x.b));
+          return add({ kind: "arm", variant: arm.variant, binds: binds.map((x) => x.nb), results: arm.results.map(() => null), body: placeAs(body, variant) });
         }),
-        otherwise: n.otherwise ? place(D(n.otherwise, ctx)) : null,
+        otherwise: other ? placeAs(other, variant) : null,
       }),
     };
   }
@@ -349,7 +499,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
             d.set(r, { k: "build", build: () => callN(ref(SECOND), ref(nr)) });
             return nr;
           });
-          const inner = { sub, d };
+          const inner = { sub, d, shape: ctx.shape };
           const body = callN(ref(PAIR_V), copy(arm.body, inner), place(D(arm.body, inner)));
           return add({ kind: "arm", variant: arm.variant, binds, results, body });
         });
@@ -365,10 +515,28 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     const sub = new Map<Id, () => Id>();
     const params = lam.params.map((p) => { const np = binder(nm(p)); sub.set(p, () => ref(np)); return np; });
     const d = new Map<Id, E>([[lam.params[i], numE(1)]]);
-    return add({ kind: "lambda", params, body: place(D(lam.body, { sub, d })) });
+    const ctx = { sub, d, shape: new Map<Id, Id>() };
+    return add({ kind: "lambda", params, body: placeAs(D(lam.body, ctx), shapeOf(lam.body, ctx)) });
   }
 
-  return { lambda, partial, names: outNames, defs };
+  // The gradient of a function of one record of Numbers, as a new lambda:
+  // the record of its derivatives along each part, one forward pass per
+  // part (forward-mode AD, seeded with each direction in turn).
+  function gradient(lamId: Id, variant: Id): Id {
+    const lam = nodes[lamId] as NodeOf<"lambda">;
+    const [p] = lam.params;
+    const np = binder(nm(p));
+    const sub = new Map<Id, () => Id>([[p, () => ref(np)]]);
+    const fields = fieldsOf(variant);
+    const parts = fields.map((_, j) => {
+      const seed: E = { k: "rec", variant, parts: fields.map((_, i) => numE(i === j ? 1 : 0)) };
+      return D(lam.body, { sub, d: new Map([[p, seed]]), shape: new Map([[p, variant]]) });
+    });
+    if (parts.some(variantOf)) throw new NotDifferentiable("gradient needs a function whose result is a Number");
+    return add({ kind: "lambda", params: [np], body: place({ k: "rec", variant, parts }) });
+  }
+
+  return { lambda, gradient, partial, names: outNames, defs };
 }
 
 // f′ as a new definition next to f (and any helpers it needs, like g′ for
@@ -431,16 +599,54 @@ function knownFunction(code: Code, arg: Id): Id | null {
   return lambda;
 }
 
-const derivativeCall = (code: Code, id: Id): id is Id => {
+// The one case of a record type (a typedef with one variant), whose
+// gradient is a record of the same type.
+export function recordVariant(code: Code, type: Id): Id | null {
+  const t = code.nodes[(code.nodes[type] as NodeOf<"def"> | undefined)?.body ?? ""];
+  return t?.kind === "typedef" && !t.effect && t.variants.length === 1 ? t.variants[0] : null;
+}
+
+// gradient(f) where f is a lambda or a definition of one input, and
+// derive.ts can read every slope along every part of `variant`.
+function knownLambda(code: Code, arg: Id): Id | null {
+  const n = code.nodes[arg];
+  const lam = n?.kind === "lambda" ? n : n?.kind === "ref" && code.nodes[n.target]?.kind === "def" ? code.nodes[(code.nodes[n.target] as NodeOf<"def">).body ?? ""] : null;
+  return lam?.kind === "lambda" && lam.params.length === 1 ? lam.id : null;
+}
+export function smoothGradient(code: Code, arg: Id, variant: Id): boolean {
+  const scratch: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  try {
+    const lam = knownLambda(scratch, arg);
+    if (!lam) return false;
+    const before = new Set(Object.keys(scratch.nodes));
+    deriver(scratch).gradient(lam, variant);
+    return !Object.values(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient));
+  } catch {
+    return false;
+  }
+}
+
+// For the evaluator: gradient(f) at a record of `variant`, as a lambda
+// (cached like derivativeLambda). Never refuses: where a slope can't be
+// read, it fails.
+export function gradientLambda(code: Code, fn: { lambda: Id }, variant: Id): Id {
+  let c = cache.get(code.nodes);
+  if (!c) cache.set(code.nodes, (c = new Map()));
+  const key = `${fn.lambda}∇${variant}`;
+  if (!c.has(key)) c.set(key, deriver(code, {}, true).gradient(fn.lambda, variant));
+  return c.get(key)!;
+}
+
+const derivativeCall = (code: Code, id: Id, which: Id = S.derivative): id is Id => {
   const n = code.nodes[id];
-  return n?.kind === "call" && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.derivative;
+  return n?.kind === "call" && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === which;
 };
 
 // Does derivative(arg) have a slope everywhere f has a value? It does when
 // f is known and every node on the way is one derive.ts can read: then
 // the derivative never fails where f doesn't, and the checker types it
 // without Choice. A function value passed in (unknown until run time), or
-// floor, or data taken apart, keeps Choice.
+// floor, or data with several cases taken apart, keeps Choice.
 export function smoothDerivative(code: Code, arg: Id): boolean {
   const scratch: Code = { nodes: { ...code.nodes }, defs: code.defs };
   try {
@@ -457,17 +663,27 @@ export function smoothDerivative(code: Code, arg: Id): boolean {
 
 // A copy of the program where each smooth `derivative(f)` is replaced by
 // the lambda it stands for, with the partial derivatives it calls added as
-// definitions (∂scene/∂x …, shared between calls). This is what a compiler
+// definitions (∂blend/∂a …, shared between calls). This is what a compiler
 // that can't run the evaluator inside it (the GPU's) compiles: the same
 // code the evaluator would generate at run time, generated ahead of it.
 // The source keeps saying derivative(f), so editing f changes the slope.
-export function expandDerivatives(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
-  const calls = Object.keys(code.nodes).filter((id) => derivativeCall(code, id) && smoothDerivative(code, (code.nodes[id] as NodeOf<"call">).args[0]));
+//
+// gradient(f) the same way, given `variants`: the record a gradient call
+// is over (the checker knows it; the code alone doesn't).
+export function expandDerivatives(code: Code, names: Names, variants: (call: Id) => Id | null = () => null): { code: Code; names: Names; expanded: Id[] } {
+  const arg = (id: Id) => (code.nodes[id] as NodeOf<"call">).args[0];
+  const grads = new Map<Id, Id>();
+  for (const id of Object.keys(code.nodes)) {
+    const v = derivativeCall(code, id, S.gradient) ? variants(id) : null;
+    if (v && smoothGradient(code, arg(id), v)) grads.set(id, v);
+  }
+  const calls = Object.keys(code.nodes).filter((id) => grads.has(id) || (derivativeCall(code, id) && smoothDerivative(code, arg(id))));
   if (!calls.length) return { code, names, expanded: [] };
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
   const d = deriver(out, names);
   for (const id of calls) {
-    const lam = d.lambda(knownFunction(out, (out.nodes[id] as NodeOf<"call">).args[0])!, 0);
+    const f = (out.nodes[id] as NodeOf<"call">).args[0];
+    const lam = grads.has(id) ? d.gradient(knownLambda(out, f)!, grads.get(id)!) : d.lambda(knownFunction(out, f)!, 0);
     // The call node itself becomes the lambda, so whatever points at it
     // (the call that applies it, usually) now applies the derivative.
     out.nodes[id] = { ...out.nodes[lam], id } as Node;

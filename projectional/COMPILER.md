@@ -401,12 +401,16 @@ page checks each picture at 108 points. Both run in CI.
 
 The showcase is `examples/raymarch`, a sphere tracer (John C. Hart,
 1996) whose normals are the gradient of the scene, run under a budget of
-1000 calls per pixel. `shade` says
-`derivative((x) ↦ scene(x, y, z, time))(x)` and so on. The checker types
-that without `Choice`, since derive.ts can read every slope of `scene`,
-and `lowerScalar` replaces each such call with the generated derivative
-(`∂scene/∂x` and the partials it calls) before lowering. So the GPU gets
-exact derivatives instead of six extra scene evaluations, and editing
+1000 calls per pixel. Points are `Vec`s and colours `Colour`s, and the
+arithmetic on them is the vectors module's, so the source has no code per
+axis or per channel. `shade` says
+`unit(gradient((q) ↦ scene(q, time))(p))`. The checker types that
+without `Choice`, since derive.ts can read every slope of `scene` along
+every part of a Vec, and `lowerScalar` replaces the call with the
+generated gradient before lowering: three forward passes through `scene`,
+one per axis, with the definitions that take or return a Vec (`minus`,
+`magnitude`, `sphere`, …) differentiated where they're called. So the GPU
+gets exact derivatives instead of six extra scene evaluations, and editing
 `scene` changes the normals. Its distance formulas and soft shadow are
 Inigo Quilez's, credited where they are used.
 

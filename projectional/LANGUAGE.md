@@ -96,6 +96,16 @@ The **vectors module** (`library/vectors.json`, built from
 and `reflect`, the operations GLSL and WGSL have built in. On a GPU each is
 the vector operation it describes (COMPILER.md "Vectors").
 
+`derivative` reads slopes through records of Numbers too: a record's
+derivative is a record, each part's derivative, so the slope of
+`(t) ↦ magnitude(vec(t, 3, 4))` is read through the Vec. And
+`gradient(f)`, for a function of one record of Numbers, is the record of
+its derivatives along each part: `gradient((q) ↦ dot(q, q))(vec(1, 2, 3))`
+is `vec(2, 4, 6)`, and the normal of a surface `scene(p) = 0` is
+`unit(gradient(scene)(p))` (`examples/raymarch`). Like `derivative`, its
+result may fail (`Choice`) where a slope can't be read, and the checker
+drops the Choice when it can see `f` and read every slope.
+
 ### Whole numbers and text, at real sizes
 
 `Int` is the whole numbers, and it **never overflows** (`src/lang/int.ts`).
@@ -956,7 +966,7 @@ class considered, and where each one ends up:
 | non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive |
 | arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
-| a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data built from x), there is none |
+| a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same |
 | running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker |
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error |
 | incomplete program | allowed | holes have types and the program runs until it reaches one |

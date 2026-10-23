@@ -76,7 +76,7 @@ let failures = 0, compared = 0;
 for (const c of cases) {
   const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true });
   const shader = emitWgsl(lowered);
-  // The lowered program: generated derivatives (∂scene/∂x …) are in it.
+  // The lowered program: generated derivatives (∂blend/∂a …) are in it.
   const r = makeRunner(lowered.code, lowered.info, { print: () => {} });
   for (const f of shader.funcs) {
     // Records go in and out as their numbers, in field order.

@@ -1,0 +1,7 @@
+# Written by projectional: npm run build-editor. The Pages workflow builds
+# them on main; nobody commits them, so they never conflict.
+/index.html
+/tutorial.html
+/reactive.html
+/shaders.html
+/apps/

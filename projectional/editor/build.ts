@@ -1,8 +1,8 @@
 // Bundles editor/main.ts (and the core it imports) into one self-contained
 // HTML file. Needs esbuild: npm install, then npm run build-editor.
-// It writes to the repository root, which is the published site as it is
-// (Pages serves the branch as-is, and the Pages workflow publishes the same
-// files), so the editor is the site's home page:
+// It writes to the repository root, and the Pages workflow publishes the
+// repository with these pages in it, so the editor is the site's home page.
+// They are build output, not committed (.gitignore):
 //   index.html     the editor; open it locally too
 //   tutorial.html  TUTORIAL.md as a page, its screenshots read from
 //                  projectional/tutorial/
