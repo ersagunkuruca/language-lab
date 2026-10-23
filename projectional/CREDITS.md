@@ -165,6 +165,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Sphere tracing | Adapted | John C. Hart, "Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces", The Visual Computer, 1996. |
 | The ring's (torus's) distance, the smooth minimum, the soft shadow | Adapted | Inigo Quilez's formulas, from his [distance functions](https://iquilezles.org/articles/distfunctions/), [smooth minimum](https://iquilezles.org/articles/smin/) and [soft shadows](https://iquilezles.org/articles/rmshadows/) articles. Credited in each definition's comment in `examples/raymarch` (shown in the editor), on `shaders.html` and in COMPILER.md. |
+| Records of Numbers printed as WGSL vector operations (parts doing the same thing become one `vec3f` operation; `dot`, `mix`, `normalize`, … recognised) | Prior art | Superword-level parallelism: Samuel Larsen and Saman Amarasinghe, "Exploiting superword level parallelism with multimedia instruction sets", PLDI 2000. Ours works on the expression tree. Credited in `compiler/src/wgsl.ts` and COMPILER.md "Vectors". |
 | The scene (a drop in a ring over a checker floor), the ripples, normals as saved derivatives | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
 
 ## The node editor

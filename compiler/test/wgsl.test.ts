@@ -41,7 +41,14 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
     const body = s.wgsl.slice(s.wgsl.indexOf(`fn ${f.wgsl}(`));
     assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{[\s\S]*continue;/);
   }
-  assert.match(s.wgsl, /struct Colour_\d+ \{\n {2}red: f32,\n {2}green: f32,\n {2}blue: f32,\n\}/);
+  // Colours and points are vectors, and arithmetic written field by field
+  // is vector arithmetic.
+  assert.match(s.wgsl, /\/\/ Colour is a vec3f: red is \.x, green is \.y, blue is \.z\./);
+  assert.match(s.wgsl, /fn mix_\d+\(p0: vec3f, p1: vec3f, p2: f32\) -> vec3f \{\n {2}return mix\(p0, p1, p2\);/);
+  assert.match(s.wgsl, /fn dot_\d+\(p0: vec3f, p1: vec3f\) -> f32 \{\n {2}return dot\(p0, p1\);/);
+  assert.match(s.wgsl, /return vec3f\(0\.55, 0\.68, 0\.85\) \+ \(vec3f\(0\.2, 0\.2, 0\.1\) \* p0\);/);
+  assert.match(s.wgsl, /return clamp\(l\d+ \* l\d+, vec3f\(0\.0\), vec3f\(1\.0\)\);/);
+  assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And they are the gradient: close to central differences, away from the
   // blend's seams.
   const r = makeRunner(p.code, p.info, { print: () => {} });
@@ -92,17 +99,22 @@ test("an if inside an expression is a var set by an if statement; pow of a negat
   assert.match(s.wgsl, /fn lab_pow/);
 });
 
-test("records are structs: built by their case, read by fields or a one-arm match, carried by loops", () => {
+test("records are structs (or vectors): built by their case, read by fields or a one-arm match, carried by loops", () => {
   const v = vectors();
   const roots = Object.values(v.defs);
   const s = emitWgsl(lowerScalar(v.code, v.info, v.names, roots, { records: true }));
-  assert.match(s.wgsl, /struct Vec_0 \{\n {2}x: f32,\n {2}y: f32,\n {2}z: f32,\n\}/);
-  assert.match(s.wgsl, /struct Ray_1 \{\n {2}origin: Vec_0,\n {2}direction: Vec_0,\n\}/);
+  // Two to four Numbers are a vector; anything else is a struct.
+  assert.match(s.wgsl, /\/\/ Vec is a vec3f: x is \.x, y is \.y, z is \.z\./);
+  assert.match(s.wgsl, /struct Ray_1 \{\n {2}origin: vec3f,\n {2}direction: vec3f,\n\}/);
   // The standard library's Pair, at Number and Number.
-  assert.match(s.wgsl, /struct Pair_2 \{\n {2}fst: f32,\n {2}snd: f32,\n\}/);
-  assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return Vec_0\(l3\.x \+ \(p1 \* l4\.x\)/);
-  assert.match(s.wgsl, /fn walk_3\(a0: Vec_0, a1: f32, a2: f32\) -> Pair_2 \{\n {2}var p0 = a0;[\s\S]*let t0 = Vec_0\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
-  assert.match(s.wgsl, /return walk_3\(Vec_0\(p0, 1\.0, 0\.0\), p1, 0\.0\)\.snd;/);
+  assert.match(s.wgsl, /\/\/ Pair is a vec2f: fst is \.x, snd is \.y\./);
+  // origin + t · direction, written field by field, is one vector expression.
+  assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
+  assert.match(s.wgsl, /fn length_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
+  assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}return normalize\(p0\);/);
+  // Parts that don't do the same thing stay parts.
+  assert.match(s.wgsl, /fn walk_\d+\(a0: vec3f, a1: f32, a2: f32\) -> vec2f \{\n {2}var p0 = a0;[\s\S]*let t0 = vec3f\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
+  assert.match(s.wgsl, /return walk_\d+\(vec3f\(p0, 1\.0, 0\.0\), p1, 0\.0\)\.y;/);
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
   // An input that's never used is a Number, and only a Number may be passed.
