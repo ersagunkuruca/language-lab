@@ -70,7 +70,7 @@ const ELEMENTWISE = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const CALL: Partial<Record<Op, string>> = {
-  sqrt: "sqrt", abs: "abs", floor: "floor", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", atan2: "atan2",
+  sqrt: "sqrt", abs: "abs", floor: "floor", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", atan2: "atan2", mod: "lab_mod",
 };
 
 // JavaScript's pow for a negative base and a whole exponent; WGSL leaves
@@ -82,6 +82,12 @@ const POW = `fn lab_pow(x: f32, y: f32) -> f32 {
   if (floor(y) != y) { return sqrt(x); } // NaN, as in JavaScript
   let r = pow(-x, y);
   return select(-r, r, floor(y * 0.5) == y * 0.5);
+}`;
+
+// The evaluator's mod: the remainder takes the sign of b (WGSL's % takes
+// a's), so mod(−1, 3) is 2, as in std.ts.
+const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
+  return a - b * floor(a / b);
 }`;
 
 export function emitWgsl(lowered: Lowered): Shader {
@@ -247,10 +253,12 @@ export function emitWgsl(lowered: Lowered): Shader {
 
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
+  const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
   const needsFuel = kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
+    ...(needsMod ? [MOD] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
     ...structText,
     ...text,

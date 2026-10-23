@@ -313,6 +313,10 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         if (head.kind === "ref") {
           const t = nodes[head.target];
           if (OPS[head.target]) return chain(OPS[head.target], n.args, ctx);
+          // floor and mod jump (at whole numbers, at multiples of b), so
+          // there they have no slope, and a slope that's 0 between jumps
+          // would hide that: they aren't differentiated.
+          if (head.target === S.floor || head.target === S.mod) return cant(`${names[head.target] ?? head.target} jumps, so it has no slope where it does`);
           if (head.target === S.mapParts || head.target === S.zipParts || head.target === S.total) return partsD(n, head.target, ctx);
           if (t.kind === "variant") {
             if (!record(head.target)) return cant("data with several cases has no derivative");

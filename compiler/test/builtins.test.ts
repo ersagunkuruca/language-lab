@@ -15,7 +15,13 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { NotInvertible, relate } from "../../projectional/src/lang/relate.ts";
 import { makeRunner } from "../../projectional/src/lang/run.ts";
-import { Subst } from "../../projectional/src/lang/types.ts";
+import { NUMBER, Subst } from "../../projectional/src/lang/types.ts";
+import { differentiate, NotDifferentiable } from "../../projectional/src/lang/derive.ts";
+import { constraints } from "../../projectional/src/units.ts";
+import { B } from "../../projectional/src/prelude.ts";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitWasm, instantiate } from "../src/wasm.ts";
+import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { compile } from "../src/compile.ts";
 
@@ -69,6 +75,73 @@ test("every builtin runs backwards, or says why it can't", () => {
       if (!(e instanceof NotInvertible)) throw e;
       // The fallback for an id relate.ts has no rule for isn't a reason.
       assert.doesNotMatch(e.message, /has no backwards reading/, `${name(id)}: relate.ts has neither a rule nor a reason`);
+    }
+  }
+});
+
+// The number builtins have three more jobs, each a table of its own: a
+// derivative (derive.ts), a unit rule (units.ts), and the scalar profile
+// that WASM and WGSL print (scalar.ts). Each does it or says why not.
+const numberOnly = builtins.filter((id) => {
+  const t = SIGS[id](new Subst());
+  return t.t === "fn" && t.params.length > 0 && [...t.params, t.ret].every((p) => p.t === "con" && p.id === NUMBER);
+});
+
+// The second input stays at 2 (a divisor, a power that's whole).
+const SAMPLE = [0, 2];
+const arity = (id: Id) => { const t = SIGS[id](new Subst()); return t.t === "fn" ? t.params.length : 0; };
+
+test("std.ts's number builtins are the ones these tables cover", () => {
+  assert.ok(numberOnly.length >= 16, numberOnly.join(" "));
+  for (const id of [B.add, B.sin, S.abs, S.floor, S.mod]) assert.ok(numberOnly.includes(id), id);
+});
+
+test("every number builtin has a derivative, or says why not", () => {
+  for (const id of numberOnly) {
+    const { code, names, f } = calling(id);
+    let d;
+    try { d = differentiate(code, names, f); } catch (e) {
+      if (!(e instanceof NotDifferentiable)) throw e;
+      assert.doesNotMatch(e.message, /isn't arithmetic/, `${name(id)}: derive.ts has neither a rule nor a reason`);
+      continue;
+    }
+    // And it's the slope: against a central difference, away from jumps.
+    const r = makeRunner(d.code, infer(d.code, d.names), { print: () => {} });
+    const run = (g: Id, xs: number[]) => r.call(r.value(g), ...xs).next().value as number;
+    for (const x of [0.3, 1.7, 2.45]) {
+      const xs = SAMPLE.slice(0, arity(id)).map((v, i) => (i === 0 ? x : v));
+      const h = 1e-6, up = [...xs], down = [...xs];
+      up[0] += h; down[0] -= h;
+      const want = (run(f, up) - run(f, down)) / (2 * h);
+      assert.ok(Math.abs(run(d.def, xs) - want) < 1e-4 * (1 + Math.abs(want)), `${name(id)}′ at ${xs}: ${run(d.def, xs)} ≠ ${want}`);
+    }
+  }
+});
+
+test("every number builtin has a unit rule", () => {
+  for (const id of numberOnly) {
+    const { code, f } = calling(id);
+    // f's own call: the library's nodes (published, "@…") call it too.
+    const call = Object.values(code.nodes).find((n) => !n.id.startsWith("@") && n.kind === "call" && (code.nodes[n.fn] as { target?: Id }).target === id)!;
+    assert.ok(constraints(code, f).some((c) => c.node === call.id), `${name(id)}: units.ts has no rule for it`);
+  }
+});
+
+test("every number builtin lowers to the scalar profile (WASM, WGSL), or says why not", async () => {
+  for (const id of numberOnly) {
+    const { code, info, names, f } = calling(id);
+    const lowered = lowerScalar(code, info, names, [f]);
+    const why = lowered.refused.get(f);
+    if (why) { assert.doesNotMatch(why, /isn't in the scalar profile/, `${name(id)}: scalar.ts has neither a rule nor a reason: ${why}`); continue; }
+    // WGSL prints it (the GPU run, gpu.ts, checks its numbers).
+    assert.doesNotThrow(() => emitWgsl(lowered), name(id));
+    // WASM gives the evaluator's numbers exactly.
+    const w = await instantiate(emitWasm(lowered));
+    const r = makeRunner(code, info, { print: () => {} });
+    for (const x of [-2.5, -1, 0.5, 3.7]) {
+      const xs = SAMPLE.slice(0, arity(id)).map((v, i) => (i === 0 ? x : v));
+      const want = r.call(r.value(f), ...xs).next().value;
+      assert.ok(Object.is(w.f(...xs), want), `${name(id)}(${xs}) in WASM: ${w.f(...xs)} ≠ ${want}`);
     }
   }
 });

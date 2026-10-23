@@ -13,6 +13,7 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
+import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
 import { OPS, type LType, type Lowered, type Op, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType, number> = { f64: 0x7c, i32: 0x7f };
@@ -22,7 +23,10 @@ const scalar = (t: LType) => t as SType;
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
+  mod: { name: "mod", params: 2 },
 };
+// The evaluator's own mod (std.ts), imported like Math's, so WASM agrees with it.
+const MOD = STD_IMPL[S.mod] as (a: number, b: number) => number;
 const INSTR: Partial<Record<Op, [number, string]>> = {
   add: [0xa0, "f64.add"], sub: [0xa1, "f64.sub"], mul: [0xa2, "f64.mul"], div: [0xa3, "f64.div"],
   neg: [0x9a, "f64.neg"], abs: [0x99, "f64.abs"], sqrt: [0x9f, "f64.sqrt"], floor: [0x9c, "f64.floor"],
@@ -177,7 +181,7 @@ function budgets(e: SExpr): boolean {
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
 export async function instantiate(m: Module): Promise<Record<string, (...xs: number[]) => number>> {
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 } });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD } });
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
 }
 
