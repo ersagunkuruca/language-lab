@@ -1,0 +1,45 @@
+# Once a night, when main has changed since the last full run: every test,
+# every sweep in full, every definition in the smoke, the GPU check
+# (projectional/TESTING.md, T5). The runs after each merge test only what
+# the merge reaches and a slice of each sweep; this is where whatever they
+# skipped gets checked. Green moves the `good` tag to what it tested, so
+# running Pages by hand on `good` puts back the last fully checked site.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Changed since the last full run?
+        id: changed
+        run: |
+          if [ "$(git rev-parse -q --verify 'refs/tags/good^{commit}')" = "$(git rev-parse HEAD)" ]; then echo "run=no" >> "$GITHUB_OUTPUT"; else echo "run=yes" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.changed.outputs.run == 'yes'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: projectional/package-lock.json
+      - if: steps.changed.outputs.run == 'yes'
+        run: npm ci
+        working-directory: projectional
+      - if: steps.changed.outputs.run == 'yes'
+        name: Everything
+        run: node projectional/test/affected.ts --all
+      - if: steps.changed.outputs.run == 'yes'
+        name: Move the good tag
+        run: |
+          git tag -f good HEAD
+          git push -f origin refs/tags/good
