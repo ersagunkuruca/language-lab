@@ -670,7 +670,23 @@ function knownPorts(info: T.Info): Id[] {
 // graph shows what every node makes of them.
 function portText(info: T.Info, p: Id): string {
   const i = portsOfDef(ui.def).indexOf(p);
-  return doc.examples?.[ui.def]?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
+  return doc.examples?.[ui.def]?.[i] ?? seeded(ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
+}
+
+// Until you give values of your own, a function starts with the numbers
+// some call in the program already passes it, so it opens with values on
+// its wires instead of empty boxes.
+function seeded(def: Id): string[] | null {
+  const nodes = doc.code.nodes;
+  for (const n of Object.values(nodes)) {
+    if (n.kind !== "call") continue;
+    const f = nodes[n.fn];
+    if (f?.kind !== "ref" || f.target !== def) continue;
+    const args = n.args.map((a) => nodes[a]);
+    const nums = args.map((a) => (a?.kind === "lit" && (typeof a.value === "number" || /^-?\d+$/.test(a.value)) ? String(a.value) : null));
+    if (nums.length && nums.every((v) => v !== null)) return nums as string[];
+  }
+  return null;
 }
 
 function setPortText(p: Id, text: string) {
@@ -768,7 +784,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }
-  if (missing.length) box.append(h("p", { class: "status-line warn" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
+  if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
   else if (r.error) box.append(h("p", { class: "status-line bad" }, r.error));
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   else if (!r.answers.length) box.append(h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
@@ -1591,7 +1607,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn") box.append(h("p", { class: "hint" }, "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."));
   if (tr?.result !== undefined && (action || value)) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
-  if (tr?.error) box.append(h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
+  // A hole isn't a failure: it is where the program isn't written yet.
+  if (tr?.error) box.append(tr.error.message === "reached a hole"
+    ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
+    : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
 
