@@ -8,8 +8,8 @@
 // wraps that in a fragment shader that calls them once per pixel and draws
 // it with WebGPU. Without WebGPU, the same lowering printed as WebAssembly
 // (compiler/src/wasm.ts) draws it on the CPU, smaller; a `colour` that gives
-// a record can't go that way yet (WebAssembly takes no records), so the
-// evaluator draws it, smaller still.
+// a record can't go that way yet (WebAssembly takes no records), so it's
+// printed as JavaScript instead (compiler/src/js-scalar.ts).
 //
 // shaders.html (editor/shaders.ts) and the editor's Run panel both draw
 // through here.
@@ -21,6 +21,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { emitWgsl } from "../../compiler/src/wgsl.ts";
 import { emitWasm, instantiate } from "../../compiler/src/wasm.ts";
+import { loadJs } from "../../compiler/src/js-scalar.ts";
 
 // The definitions a picture is made of, by name: colour, or red, green and
 // blue. Null when the program has neither.
@@ -257,45 +258,42 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   }
 
   // Without WebGPU: the same functions as WebAssembly on the CPU, or, for
-  // a colour record, the evaluator.
+  // a colour record, as JavaScript (WebAssembly takes no records yet).
+  // Frame after frame, at a size that keeps a frame near 25 ms.
   async function cpu(why: string) {
     const plain = lowerScalar(code, info, names, keys.map((k) => entries[k]));
     const wasm = keys.length === 3 && !plain.refused.size ? await instantiate(emitWasm(plain)) : null;
-    const size = wasm ? 160 : 64;
-    canvas.width = canvas.height = size;
+    const lowered = lowerScalar(code, info, names, keys.map((k) => entries[k]), { records: true });
+    const out = keys.find((k) => lowered.refused.has(entries[k]));
+    if (out) { status.textContent = `No GPU here (${why}), and ${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}.`; return; }
+    const js = loadJs(lowered);
+    const colourAt = (x: number, y: number, t: number): number[] => wasm ? keys.map((e) => wasm[e](x, y, t))
+      : keys.length === 3 ? keys.map((e) => js.get(entries[e])!(x, y, t) as number) : js.get(entries.colour)!(x, y, t) as number[];
     // A canvas the GPU drew on can't be drawn on any other way.
     const ctx = canvas.getContext("2d");
     if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
-    const img = ctx.createImageData(size, size);
-    const row = (py: number, t: number) => {
-      for (let px = 0; px < size; px++) {
-        const x = (2 * (px + 0.5) - size) / size, y = (size - 2 * (py + 0.5)) / size;
-        const at = 4 * (py * size + px);
-        const c = wasm ? keys.map((e) => wasm[e](x, y, t)) : evaluate(x, y, t);
-        c.forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
-        img.data[at + 3] = 255;
-      }
-    };
-    const draw = async () => {
+    let size = o.still == null ? 64 : 160;
+    const how = wasm ? "WebAssembly" : "JavaScript";
+    const draw = () => {
       if (stopped) return;
       const t = now(), t0 = performance.now();
-      if (wasm) for (let py = 0; py < size; py++) row(py, t);
-      else {
-        // The evaluator is slow for this: one picture, a few rows at a time
-        // so the page stays responsive.
-        for (let py = 0; py < size && !stopped; py++) {
-          row(py, t);
-          if (py % 4 === 3) { ctx.putImageData(img, 0, 0); await new Promise((done) => setTimeout(done)); }
-        }
+      if (canvas.width !== size) canvas.width = canvas.height = size;
+      const img = ctx.createImageData(size, size);
+      for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
+        const x = (2 * (px + 0.5) - size) / size, y = (size - 2 * (py + 0.5)) / size;
+        const at = 4 * (py * size + px);
+        colourAt(x, y, t).forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
+        img.data[at + 3] = 255;
       }
       ctx.putImageData(img, 0, 0);
-      status.textContent = wasm
-        ? `No GPU here (${why}), so this is the same program as WebAssembly on the CPU, ${size}×${size}, ${Math.round(performance.now() - t0)} ms a frame`
-        : `No GPU here (${why}), and WebAssembly takes no records yet, so this is one frame drawn by the evaluator on the CPU, ${size}×${size}, in ${(performance.now() - t0) / 1000 < 1 ? `${Math.round(performance.now() - t0)} ms` : `${((performance.now() - t0) / 1000).toFixed(1)} s`}`;
-      if (wasm && o.still == null) requestAnimationFrame(draw);
+      const ms = performance.now() - t0;
+      status.textContent = `No GPU here (${why}), so this is the same program as ${how} on the CPU, ${size}×${size}, ${Math.round(ms)} ms a frame`;
+      if (ms > 40) size = Math.max(32, Math.round(size * 0.8));
+      else if (ms < 15) size = Math.min(256, Math.round(size * 1.15));
+      if (o.still == null) requestAnimationFrame(draw);
     };
     status.textContent = `No GPU here (${why}); drawing on the CPU…`;
     if (o.check) o.check.textContent = "";
-    await draw();
+    draw();
   }
 }

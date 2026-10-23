@@ -488,6 +488,18 @@ Still to do for shaders: matrix types, a `Float32`
 number type so f32 is in the types rather than a target's choice, and a
 live preview in the editor.
 
+### JavaScript for the scalar profile: the CPU's fallback for pictures
+
+Without WebGPU, a picture is drawn on the CPU. WebAssembly takes no
+records yet, so a `colour` that gives one (the ray marcher's) goes
+through a third printer of the same lowering, `compiler/src/js-scalar.ts`:
+Number is a JavaScript number, Bool a boolean, a record an array of its
+fields, and a call to itself as the last step a loop. It gives the
+evaluator's numbers exactly (`compiler/test/js-scalar.test.ts`), and it is
+fast enough to animate the ray marcher at about 150×150 (a 96×96 frame
+takes about 25 ms in Node), where the evaluator took 4 s for one 64×64
+frame.
+
 ### How the rest maps, when it comes
 
 **Effects.** As designed in LANGUAGE.md, every operation is either
