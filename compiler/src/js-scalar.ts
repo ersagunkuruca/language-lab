@@ -9,7 +9,7 @@
 // just recurses. Lower with `{ records: true }` to have records. A budget
 // (with fuel) is one variable, `fuel`, spent as in WGSL and WebAssembly.
 
-import type { LType, Lowered, Op, SExpr, SFunc } from "./scalar.ts";
+import { noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||",
@@ -63,6 +63,7 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
           if (e.op === "not") return `(!${xs[0]})`;
           return `Math.${MATH[e.op]}(${xs.join(", ")})`;
         }
+        default: return noData(e);
       }
     }
 
@@ -105,7 +106,7 @@ export function loadJs(lowered: Lowered): Map<string, (...xs: number[]) => unkno
 
 // What a function that ran out gives, which the budget around it replaces.
 function zero(t: LType): string {
-  return t === "f64" ? "0" : t === "i32" ? "false" : `[${t.fields.map((x) => zero(x.t)).join(", ")}]`;
+  return t === "f64" ? "0" : t === "i32" ? "false" : `[${(t as RType).fields.map((x) => zero(x.t)).join(", ")}]`;
 }
 
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {

@@ -37,7 +37,7 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C7 | WebAssembly for full programs (WasmGC), staged W1 data, W2 closures, W3 text and the world, W4 searches and effects, W5 big Int; design in projectional/WASM.md | ROADMAP 6 | P2 | L | ▶ design done, W1a records done; W1b cases and lists next |
+| C7 | WebAssembly for full programs (WasmGC), staged W1 data, W2 closures, W3 text and the world, W4 searches and effects, W5 big Int; design in projectional/WASM.md | ROADMAP 6 | P2 | L | ▶ design done, W1a records, W1b data and folds done; W1c structural equal, nested folds, one-answer Choice next |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C17 | Native binaries through WASM (wasm2c) or C with reference counting | ROADMAP 6 | P3 | L | after C7 |
@@ -129,7 +129,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C7 W1a | Records in WebAssembly as WasmGC structs, an exported reader per field (`Colour.red`), a generic definition at two types exported under both; the ray marcher's colours match the evaluator exactly. The editor's CPU fallback could now use WebAssembly for colour records (Inbox) | this PR |
+| C7 W1b | Data in WebAssembly (`data`): types with several cases and types that contain themselves (lists, expression trees) as a base struct with the case's number and a subtype per case, one recursion group; a match is `br_table`; a fold is a recursive function of its own, a result used once computed where it's used (insert stops at its place); a module that may not finish runs as in JS. sort, insert, polynomial, ∂polynomial/∂x, Countdown's valid and combine, algebra's derivative give the evaluator's answers through exported makers and readers (`List.cons`, `List.case`, `List.cons.head`) | this PR |
+| C7 W1a | Records in WebAssembly as WasmGC structs, an exported reader per field (`Colour.red`), a generic definition at two types exported under both; the ray marcher's colours match the evaluator exactly. The editor's CPU fallback could now use WebAssembly for colour records (Inbox) | #265 |
 | C7 design | projectional/WASM.md: whole programs to WasmGC by growing the scalar profile towards the heap; representation table, text as UTF-8 arrays, Int past 64 bits from the host, the five stages | #262 |
 | C6 | G13 again, the part left: a single-answer function whose answers are one record leaves their fields in `$got` (a `$fields` copy) when its caller goes on with the answer; Countdown's `join` builds no `found`, 1.47× → 1.30× the ideal | #259 |
 | C22 | G23's last part measured and left: `entries` kept as an array for the folds from the end made 50,000 lines 146 ms against 138 ms (noise), since each step's `add to` is the cost, not the spine (GAPS.md G23) | #255 |

@@ -3,13 +3,30 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stage W1 has begun: records are WasmGC structs (W1a). What
-runs in WebAssembly is the scalar profile (`compiler/src/scalar.ts`,
-`wasm.ts`): Numbers, Bools, records of them as immutable structs with an
-exported reader per field (`Colour.red`), calls, tail calls as
-`return_call`, and a budget. The ray marcher's colours come out of
-WebAssembly exactly as the evaluator's. Everything else is refused with
-a reason, which the editor shows.
+**Status.** Stage W1 is mostly done. What runs in WebAssembly is the
+scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
+Numbers, Bools, records of them as immutable structs (W1a), data with
+several cases and data that contains itself, such as lists and expression
+trees (W1b), matches, folds, calls, tail calls as `return_call`, and a
+budget. The host builds and reads values through exported makers and
+readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
+the calculus example's polynomials, Countdown's `valid` and `combine` and
+the algebra example's `derivative` give exactly the evaluator's answers.
+Everything else is refused with a reason, which the editor shows.
+
+How W1b came out. A data type is a base struct holding the case's number
+as an `i32` and one final subtype per case, all the structs in one
+recursion group. A match puts the value in a local and jumps on the
+number with `br_table`; reading a field casts to the case first
+(`ref.cast`, once per read for now). A fold is a recursive function of its
+own, taking the value and the locals its arms use. A child's folded
+result used once in its arm is computed where it's used, so `insert`
+stops once it has found its place rather than folding the rest of the
+list; under a budget the evaluator's order is kept, so the count matches.
+Folds aren't loops yet, so a very long list can run out of stack (the JS
+backend's loops are the model). With `data`, a definition the checker
+can't see end is allowed, as in the JS backend: outside a budget the fuel
+is infinite, so it just runs.
 
 ## What it's for
 
@@ -121,9 +138,10 @@ One PR each, in this order. Each stage widens what runs, and refuses the
 rest with the reason, so nothing breaks between stages.
 
 1. **W1 data.** Records first (W1a, done: one struct type per record
-   type, readers for the host). Then variants and records of any fields, matches and folds
-   over them (folds as the loops the JS backend makes), lists as cons
-   cells, structural `equal`. The binary encoder in wasm.ts gets the type
+   type, readers for the host). Then variants and records of any fields,
+   matches and folds over them, lists as cons cells (W1b, done). Left
+   (W1c): structural `equal`, folds over data nested in other data (a
+   rose tree's `List Tree`), folds as loops, one cast per arm. The binary encoder in wasm.ts gets the type
    section's recursion groups, struct and array types and reference
    types. Programs: calculus and physics without text, and Countdown's
    `solutions` count.

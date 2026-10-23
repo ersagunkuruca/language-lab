@@ -45,9 +45,11 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../projectional/src/model.ts";
-import type { LType, Lowered, Op, RType, SExpr, SFunc } from "./scalar.ts";
+import { isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType } from "./scalar.ts";
 
-export interface ShaderFunc { def: Id; name: string; wgsl: string; params: LType[]; result: LType }
+// A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
+type GType = Exclude<LType, DType>;
+export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType[]; result: GType }
 // structs: the WGSL name of each record type and of its fields.
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }> }
 const INFIX: Partial<Record<Op, string>> = {
@@ -56,7 +58,7 @@ const INFIX: Partial<Record<Op, string>> = {
 // Records of 2 to 4 Numbers are vectors; their fields are these.
 const XYZW = ["x", "y", "z", "w"];
 export function vectorWidth(t: LType): number {
-  return typeof t !== "string" && t.fields.length >= 2 && t.fields.length <= 4 && t.fields.every((f) => f.t === "f64") ? t.fields.length : 0;
+  return isRecord(t) && t.fields.length >= 2 && t.fields.length <= 4 && t.fields.every((f) => f.t === "f64") ? t.fields.length : 0;
 }
 
 // The same operation on every part of a vector, written once.
@@ -102,10 +104,12 @@ function unrounded(e: SExpr): SExpr {
     case "call": case "make": return { ...e, args: e.args.map(unrounded) };
     case "get": return { ...e, rec: unrounded(e.rec) };
     case "budget": return { ...e, body: unrounded(e.body), otherwise: unrounded(e.otherwise) };
+    default: return noData(e);
   }
 }
 
 export function emitWgsl(lowered: Lowered): Shader {
+  if (lowered.data.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   const funcs = lowered.funcs.map((f) => ({ ...f, body: unrounded(f.body) }));
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
@@ -179,7 +183,7 @@ export function emitWgsl(lowered: Lowered): Shader {
     return structs.get(r.key)!.name;
   };
   function tname(t: LType): string {
-    return t === "f64" ? "f32" : t === "i32" ? "bool" : struct(t);
+    return t === "f64" ? "f32" : t === "i32" ? "bool" : struct(t as RType);
   }
   for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) tname(t);
 
@@ -232,6 +236,7 @@ export function emitWgsl(lowered: Lowered): Shader {
         }
         case "get": { const r = put(e.rec); return r && { ...e, rec: r }; }
         case "op": case "call": case "make": { const xs = e.args.map(put); return xs.every((x) => x) ? { ...e, args: xs as SExpr[] } : null; }
+        default: return noData(e);
       }
     };
     const body = put(f.body);
@@ -281,7 +286,7 @@ export function emitWgsl(lowered: Lowered): Shader {
   return {
     wgsl,
     // Only what can be called from outside a budget is a place to start.
-    funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params, result: funcs[i].result })),
+    funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
     refused,
     structs,
   };
@@ -342,6 +347,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           }
           return `${CALL[e.op]}(${xs.map(bare).join(", ")})`;
         }
+        default: return noData(e);
       }
     }
 
@@ -471,6 +477,7 @@ function put(e: SExpr, i: number, v: SExpr): SExpr {
     case "if": return { ...e, cond: put(e.cond, i, v), then: put(e.then, i, v), else: put(e.else, i, v) };
     case "let": return { ...e, value: put(e.value, i, v), body: put(e.body, i, v) };
     case "budget": return { ...e, body: put(e.body, i, v), otherwise: put(e.otherwise, i, v) };
+    default: return noData(e);
   }
 }
 function gets(e: SExpr): Extract<SExpr, { k: "get" }>[] {

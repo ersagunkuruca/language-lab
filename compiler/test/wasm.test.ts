@@ -3,8 +3,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeRunner, type Value } from "../../projectional/src/lang/run.ts";
-import { lowerScalar } from "../src/scalar.ts";
+import { bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { TRUE } from "../../projectional/src/lang/std.ts";
+import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { area } from "../src/fixtures.ts";
@@ -57,6 +58,58 @@ test("records are WasmGC structs: the ray marcher's colours in WebAssembly, exac
   }
   // A generic definition at two types is exported once by its name, then by its types.
   assert.ok(m.exports.includes("plus") && m.exports.some((e) => /^plus\(/.test(e)), m.exports.join(" "));
+});
+
+// Values across the boundary, through the module's own makers and readers.
+type Exports = Record<string, (...xs: unknown[]) => unknown>;
+type Data = { tag: string; fields: Value[] };
+const helper = (w: Exports, name: string, key: string) => w[`${name}(${key})`] ?? w[name];
+function toWasm(w: Exports, v: Value, t: LType): unknown {
+  if (t === "f64") return v;
+  if (t === "i32") return (v as Data).tag === TRUE ? 1 : 0;
+  if (!isData(t)) throw new Error("no makers for records");
+  const d = v as Data, c = t.cases.find((x) => x.variant === d.tag)!;
+  return helper(w, `${t.name}.${c.name}`, t.key)(...c.fields.map((x, j) => toWasm(w, d.fields[j], x.t)));
+}
+function fromWasm(w: Exports, x: unknown, t: LType): Value {
+  if (t === "f64") return x as number;
+  if (t === "i32") return bool(x === 1);
+  if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
+  const c = t.cases[helper(w, `${t.name}.case`, t.key)(x) as number];
+  return { tag: c.variant, fields: c.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${c.name}.${f.name}`, t.key)(x), f.t)) };
+}
+
+test("data in WebAssembly: lists, expression trees, matches and folds give the evaluator's answers", async () => {
+  const cases: [string, string, () => Value[][]][] = [
+    ["sort", "sort", () => [[toList([3, 1, 2, 5, -0.5, 4, 1])], [toList([])], [toList(Array.from({ length: 200 }, (_, i) => (i * 37) % 101))]]],
+    ["sort", "insert", () => [[2.5, toList([1, 2, 3, 4])], [0, toList([])]]],
+    ["calculus", "polynomial", () => [[toList([1, -2, 0.5]), 3], [toList([]), 1], [toList([2, 0, 0, 1]), -1.5]]],
+    ["calculus", "∂polynomial/∂x", () => [[toList([1, -2, 0.5]), 3], [toList([2, 0, 0, 1]), -1.5]]],
+    ["countdown", "valid", () => [0, 1, 2, 3].flatMap((k) => [[k, 6, 3], [k, 2, 4]])],
+    ["countdown", "combine", () => [0, 1, 2, 3].map((k) => [k, 6, 3])],
+    ["algebra", "derivative", () => []],
+  ];
+  for (const [name, fn, inputs] of cases) {
+    const p = load(name);
+    const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+    const f = lowered.funcs.find((g) => g.name === fn && !g.inner);
+    assert.ok(f, `${name}: ${fn} compiles (${lowered.refused.get(p.named(fn))})`);
+    const m = emitWasm(lowered);
+    assert.ok(WebAssembly.validate(m.bytes), `${name} validates`);
+    const w = await instantiate(m) as unknown as Exports;
+    const r = makeRunner(p.code, p.info, { print: () => {} });
+    let args = inputs();
+    // Op's cases by number; algebra's sample expressions from the program.
+    if (name === "countdown") args = args.map(([k, ...xs]) => [{ tag: (f.params[0] as { cases: { variant: string }[] }).cases[k as number].variant, fields: [] }, ...xs]);
+    if (name === "algebra") args = fromList(r.value(p.named("samples"))).map((e) => [e]);
+    assert.ok(args.length);
+    if (name === "countdown") assert.match(lowered.refused.get(p.named("subsequence"))!, /List of a value of any type/);
+    for (const xs of args) {
+      const want = first(r.call(r.value(f.def), ...xs));
+      const got = fromWasm(w, w[fn](...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      assert.deepStrictEqual(got, want, `${name}: ${fn}`);
+    }
+  }
 });
 
 test("what isn't in the profile is refused, with the reason", () => {
