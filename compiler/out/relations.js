@@ -61,6 +61,7 @@ function solve$3$direct(v0, v2) {
 function solve$3(v0, v2) {
   return solve$3$direct(v0, v2) ?? $solveRuntime(solve$3$plan, { "0": v0, "out": v2 }, ["1"]);
 }
+const $k0 = ({ tag: "std.pair.pair" /* pair */, fields: [0, 0] });
 
 // main
 function main() {
@@ -70,12 +71,12 @@ function main() {
                 for (const r$0 of to_polar(0, 2)) {
                   return r$0;
                 }
-                return ({ tag: "std.pair.pair" /* pair */, fields: [0, 0] });
+                return $k0;
               })().fields[0]) + ", ") + $show((() => {
               for (const r$1 of to_polar(0, 2)) {
                 return r$1;
               }
-              return ({ tag: "std.pair.pair" /* pair */, fields: [0, 0] });
+              return $k0;
             })().fields[1]))));
   $print(("square roots(9) = " + show_numbers(square_roots(9))));
   return $print((("square roots(−1) = [" + show_numbers(square_roots((-1)))) + "]"));

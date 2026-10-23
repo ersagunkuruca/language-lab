@@ -338,6 +338,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return onlyCalled.get(def)!;
   }
 
+  // ---- constant data, built once at module level (GAPS.md G9): a variant
+  // whose fields are all literals or constant data, so `one of([plus,
+  // minus, times, over])` doesn't build its list each time. Data is never
+  // changed in place, so one copy can be shared.
+  const constants: string[] = [];
+  const constNames = new Map<string, string>();
+  function isConst(id: Id): boolean {
+    const n = code.nodes[id];
+    if (n.kind === "lit") return true;
+    const variant = (r: Id) => { const t = code.nodes[r]; return t?.kind === "ref" && code.nodes[t.target]?.kind === "variant" && !effectOf(t.target); };
+    if (n.kind === "ref") return variant(id) && node<"variant">(n.target).fields.length === 0;
+    return n.kind === "call" && variant(n.fn) && n.args.length === node<"variant">(node<"ref">(n.fn).target).fields.length && n.args.every(isConst);
+  }
+  function hoist(js: string): string {
+    if (!constNames.has(js)) {
+      const name = `$k${constNames.size}`;
+      constNames.set(js, name);
+      constants.push(`const ${name} = ${js};`);
+    }
+    return constNames.get(js)!;
+  }
+
   // ---- solve nodes: one function each, shared by every specialization
   const solvers = new Map<Id, string>();
   const solverCode: string[] = [];
@@ -492,7 +514,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (n.target === FALSE) return "$F";
           if (n.target === NIL) return "$nil";
           if (n.target === UNIT_V) return "$unit";
-          if (!t.fields.length) return `({ tag: ${tag(n.target)}, fields: [] })`;
+          if (!t.fields.length) return hoist(`{ tag: ${tag(n.target)}, fields: [] }`);
           return wrap(`((${t.fields.map((_, i) => `a${i}`).join(", ")}) => ${construct(n.target, t.fields.map((_, i) => `a${i}`))})`, false);
         case "field": return wrap(`((d) => d.fields[${fieldIndex(n.target)}])`, false);
         case "builtin": {
@@ -572,6 +594,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
+        if (t.kind === "variant" && isConst(n.id)) return hoist(construct(f.target, n.args.map(ex)));
         if (t.kind === "variant") return effectOf(f.target) ? perform(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
         if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
         if (t.kind === "def") {
@@ -1006,6 +1029,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     ...program,
     ...(referenced.has(SHOW_ANY) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...solverCode,
+    ...constants,
     ``,
     out.join("\n\n"),
     ``,

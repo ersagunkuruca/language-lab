@@ -328,7 +328,9 @@ caller tests the sentinel. This is the effect-type version of "this
 function returns an Optional". `valid`-style tests (`if test then x else
 fail()`) are common in search code, so this pays everywhere.
 
-**G9 again. Constant data is rebuilt each time (perf: 240 → 202 ms).**
+**G9 again. Constant data is rebuilt each time (perf: 240 → 202 ms).
+DONE (2026-10-23), after G14: Hutton's instance 361 → 273 ms on the same
+machine (4.0× → 3.5× the ideal).**
 `one of([plus, minus, times, over])` builds four operator objects and four
 cons cells on every combination of two results. Round 1 found the cheap
 part of G9 (hoist nullary variants as constants); here it's worth 16%. *Fix:*
