@@ -63,7 +63,8 @@ node --test test/backwards.test.ts
 ## What can't run backwards, and why
 
 The checker refuses the first and the last two before anything runs. The
-rest only run forward: they wait, inside the search, until what they need
+next three are refused, with their reason, when the search reaches them.
+The rest only run forward: they wait, inside the search, until what they need
 is known, and then run. An answer that leaves one of them waiting isn't
 pinned down, so the evaluator's `solve` doesn't count it (`relate` returns
 it with the wait in `residual`).
@@ -71,10 +72,13 @@ it with the wait in `residual`).
 | what | why |
 |---|---|
 | `print` | Printing can't be undone, and a search would print once per guess. The checker refuses to run a printing function backwards. |
+| the world's operations (`read file`, `write file`, `read line`, …) | The same reason as `print`: they can't be undone, and a search would do them once per guess. |
+| `cell`, `formula`, `read`, `write` | Cells are the runtime's state, kept by its handler, and only run forward. |
+| `seeded` | It answers `Random` from a generator. Backwards it would have to search the generator's seeds. |
 | `floor`, `mod` | Many inputs give the same output, a whole interval or every multiple of `b`. That's a continuum, not a list to choose from, so these wait until their input is known and only run forward. An answer whose input never becomes known keeps the constraint as a residual. |
 | `less` producing a number | `x < 3` has a continuum of answers, so comparisons only check. `magnitude` backwards works because its arms produce the numbers and the condition only rejects. |
 | calling an unknown function | Functions can't be enumerated. `map` runs backwards only when its function is given. |
-| `first`, `all`, `count` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |
+| `first`, `all`, `count`, `optional` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |
 | `with fuel` inside the function | Runs its action with its own budget once the action is known: each step of the search that might repeat forever spends one. |
 | `derivative` | Backwards it would be integration. Once its function is known it runs forward, so `slope(x) = derivative(y ↦ y·y)(x)` run backwards from 1 gives 0.5. |
 | a function, as an answer | It has no value outside the search to hand back, and functions can't be guessed. The checker refuses to solve for anything with a function in it. |

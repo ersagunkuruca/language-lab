@@ -242,7 +242,23 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
           if (t !== "f64" && t !== "i32") throw new Refused("compares values that aren't Numbers or Bools");
-          return { k: "op", op: t === "f64" ? "equal" : "beq", args: args() };
+          if (t === "i32") return { k: "op", op: "beq", args: args() };
+          // The evaluator's rule (run.ts sameNumber): two whole numbers
+          // exactly, any other pair within 1e-9 relative to their size.
+          // Each side once: a local if it isn't one already.
+          const lets: { i: number; value: SExpr }[] = [];
+          const [x, y] = args().map((value): SExpr => {
+            if (value.k === "local" || value.k === "num") return value;
+            const i = f.locals.push("f64") - 1;
+            lets.push({ i, value });
+            return { k: "local", i };
+          });
+          const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
+          const num = (v: number): SExpr => ({ k: "num", v });
+          const whole = (e: SExpr) => op("equal", op("floor", e), e);
+          const diff = op("abs", op("sub", x, y)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", x)), op("abs", y)));
+          const same = op("or", op("equal", x, y), op("and", op("not", op("and", whole(x), whole(y))), op("or", op("less", diff, tol), op("equal", diff, tol))));
+          return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), same);
         }
         if (BUILTIN[target]) return { k: "op", op: BUILTIN[target], args: args() };
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);

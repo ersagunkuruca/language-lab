@@ -58,9 +58,9 @@ import { dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { impl } from "../prelude.ts";
-import { close, META, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
+import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
-import { CONS, FALSE, NIL, S, SET, SHOW_ANY, SIGS, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
+import { CELL_OPS, CONS, FALSE, IO, NIL, NONE, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
@@ -171,7 +171,8 @@ function unify(a: Term, b: Term, s: State): State | null {
   if (a === b) return s;
   if (a instanceof LVar) return bindVar(s, a, b);
   if (b instanceof LVar) return bindVar(s, b, a);
-  if (typeof a === "number" && typeof b === "number") return close(a, b) ? s : null;
+  // The same rule as `equal` forward (run.ts sameNumber): Ints exactly.
+  if (typeof a === "number" && typeof b === "number") return sameNumber(a, b) ? s : null;
   if (typeof a !== "object" || typeof b !== "object") return null;
   if (isData(a) && isData(b)) {
     if (a.tag !== b.tag || a.fields.length !== b.fields.length) return null;
@@ -193,6 +194,9 @@ function bindVar(s: State, v: LVar, t: Term): State {
 
 const freshVars = (s: State, n: number): [LVar[], State] =>
   [Array.from({ length: n }, (_, i) => new LVar(s.next + i)), { ...s, next: s.next + n }];
+
+const WORLD_OPS = new Set<Id>(Object.values(IO));
+const CELL_IDS = new Set<Id>(Object.values(CELL_OPS));
 
 // ---------------------------------------------------------------- streams
 
@@ -574,7 +578,8 @@ export function interpreter(code: Code, opts: Options = {}) {
       case S.oneOf: return member(a, out);
       case S.exists: return exists(a, out);
       case S.fail: return failG;
-      case S.first: case S.all: case S.count: return aggregate(id, args, out);
+      case S.first: case S.all: case S.count: case S.optional: return aggregate(id, args, out);
+      case S.seeded: throw new NotInvertible("seeded answers Random from a generator; run backwards it would have to search the seeds");
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
       // Backwards, derivative would be integration: it waits for its function.
       case S.derivative:
@@ -618,6 +623,10 @@ export function interpreter(code: Code, opts: Options = {}) {
         },
       });
     }
+    // Each builtin either has a reading above or says here why it has none
+    // (compiler/test/builtins.test.ts checks every one).
+    if (WORLD_OPS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} touches the world (the console, files): that can't be undone, and a search would do it once per guess`);
+    if (CELL_IDS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} works on cells, the runtime's state, which only runs forward`);
     throw new NotInvertible(`${id} has no backwards reading`);
   }
 
@@ -688,7 +697,7 @@ export function interpreter(code: Code, opts: Options = {}) {
   // down, so it doesn't count (as in the evaluator's solve).
   function aggregate(id: Id, args: Term[], out: Term): Goal {
     return wait({
-      k: "later", text: id === S.first ? "first" : id === S.all ? "all" : "count", ready: (s) => known(args[0], s), then: (s) => {
+      k: "later", text: id === S.first ? "first" : id === S.all ? "all" : id === S.optional ? "optional" : "count", ready: (s) => known(args[0], s), then: (s) => {
         const body = walk(args[0], s);
         const [[r], inner] = freshVars(s, 1);
         const answers: Term[] = [];
@@ -697,9 +706,10 @@ export function interpreter(code: Code, opts: Options = {}) {
           const v = ground(r, t);
           if (v === undefined) continue;
           answers.push(v);
-          if (id === S.first) break;
+          if (id === S.first || id === S.optional) break;
         }
         if (id === S.first) return answers.length ? eq(out, answers[0])(s) : apply(walk(args[1], s), [], out)(s);
+        if (id === S.optional) return eq(out, answers.length ? dataT(SOME, [answers[0]]) : dataT(NONE, []))(s);
         return eq(out, id === S.all ? list(answers) : answers.length)(s);
       },
     });
