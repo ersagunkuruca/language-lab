@@ -449,3 +449,19 @@ test("a field of a one-case type is in the palette as the function that reads it
   const offered = fillings(s.code, s.info(), s.holes(m)[0]).flatMap((f) => (f.kind === "call" ? [f.target] : []));
   assert.ok(offered.includes("std.pair.pair.fst") && offered.includes(pages));
 });
+
+test("match on a Pair or an Optional of the standard library is in the palette", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "n", { kind: "function", params: [] }));
+  const n = s.def("n");
+  const offered = fillings(s.code, s.info(), s.holes(n)[0]).flatMap((f) => (f.kind === "match" && f.on === null ? [f.type] : []));
+  assert.ok(offered.includes("std.pair") && offered.includes("std.optional"), offered.join(", "));
+  // n = match some(5) { none → 0; some(v) → v }, by palette picks.
+  s.fill(n, (f) => f.kind === "match" && f.on === null && f.type === "std.optional");
+  s.fill(n, call("std.optional.some"));
+  s.number(n, 5);
+  s.number(n, 0);
+  s.fill(n, (f) => f.kind === "ref" && s.code.nodes[f.target]?.kind === "binder");
+  assert.equal(s.info().errors.length, 0);
+  assert.equal(showValue(runMain(s.code, s.info(), n), s.code, s.all()), "5");
+});
