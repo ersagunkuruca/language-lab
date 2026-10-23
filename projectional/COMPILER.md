@@ -749,8 +749,9 @@ program outside a JS host, and the C route covers that too.
 5. **Native via C** with reference counting and success continuations.
    Start when a CLI needs fast startup or low memory, or the language needs
    to be embedded somewhere without JS.
-6. **Full WASM via WasmGC.** Only when a program has to run in a
-   WebAssembly-only host.
+6. **Full WASM via WasmGC.** For programs that have to run in a
+   WebAssembly-only host. Designed in [WASM.md](WASM.md): the scalar
+   profile grows towards the heap, stage by stage.
 
 ## When to do what
 
