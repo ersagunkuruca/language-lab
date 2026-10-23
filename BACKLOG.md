@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E40 | Phone landscape and 600-900 px tablets still get the 3,091 px stacked page: one pane by height or `pointer: coarse` too | QA3 M1 | P2 | S | |
 | E41 | Phone: pinch zoom in the graph (only wheel zooms; nodes are ~24×15 px at Fit) | QA3 M2 | P2 | M | |
 | E42 | Phone: Undo in reach (top bar scrolls sideways, Undo off-screen) and touch wording (hints say right-click, hover, shift-click) | QA3 M3, M4 | P2 | S | |
 | E43 | Palette: typed arithmetic with names in scope (`x * 2` in `double(x)` finds nothing; only `1 + 2` works) | QA3 M7 | P2 | M | |
@@ -95,6 +94,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E40 | One pane at a time below 900 px wide or 500 px high (phones either way up, tablets); the stacked layout is gone; the smoke checks 844x390 and 768x1024 | #288 |
 | E39 | Keyboard: Enter in a literal's or name's field saves and returns to the program; Enter on a call opens its menu on Change the function; Shift+F10 / Menu key opens the menu, arrows move, Escape returns | #287 |
 | E38 | By touch, Pick keeps every picked node: the tap ending a long press landed on the graph redrawn for the menu as a click; when a touch last opened a menu now outlives one drawing | #285 |
 | E37 | The minimap copies the graph (classes kept, ids and data-* dropped) instead of drawing it through <use>, whose copy rules like .tgraph .rg don't reach: frames were black | #283 |
