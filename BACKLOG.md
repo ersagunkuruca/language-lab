@@ -35,14 +35,12 @@ so the next bigger program can be built in the editor.
 
 ## C: Compiler and targets
 
-Thread "Bigger programs and compiler gaps". Current step: C2's part left (lists matched on,
-and lists built by G22's loops), then the rest in order.
+Thread "Bigger programs and compiler gaps". Current step: the items below in order.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C6 | G13 again, the part left: single-answer functions returning several values (Countdown's `join` builds its `found`) | GAPS G13 | P3 | M | fold part done |
 | C7 | WebAssembly for full programs (WasmGC or our own GC); design note first | ROADMAP 6 | P2 | L | after the editor step and L4 |
-| C22 | G23 again: lists built by G22's holes (ledger's `entries`) kept as arrays, so the four folds from the end need no spine | GAPS G23 | P3 | M | |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C17 | Native binaries through WASM (wasm2c) or C with reference counting | ROADMAP 6 | P3 | L | after C7 |
@@ -119,6 +117,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| C22 | G23's last part measured and left: `entries` kept as an array for the folds from the end made 50,000 lines 146 ms against 138 ms (noise), since each step's `add to` is the cost, not the spine (GAPS.md G23) | this PR |
 | C22 | G23 part 2: a list from `split` matched and handed back to its own definition (ledger's `entries`, calc's `run lines`) is the array and an index; the folds from the end are still open above | #246 |
 | C16 | G10: the output's indentation follows its brackets, not the ones in text or comments | #243 |
 | C15 | G2: equality with a value built in place is a tag test and its fields, with nothing built | #240 |
@@ -151,7 +150,7 @@ roadmap's Done table; this section keeps about a week.
 | L13 | Keyed lists in pages: `each(items, f)` in cells (Solid's `mapArray`) and the html module's `for each(items, row, inside)`, which keeps an item's row, cells and all, when the list changes; evaluator and compiled pages the same | #222 |
 | L25 | Container matrix, the other places: a solve's body, a function run backwards, a shader (with and without a literal with fuel), a representation's job, a module's pinned export and one whose pin leaves an effect out. One hole found and closed: a job that did an effect its definition doesn't was only caught when the rewritten program happened not to check; `jobProblem` refuses it before the rewrite (`lab` asks it) | #219 |
 | L26 | The effect ledger in code: every place an effect leaves a row calls `discharge(where, effects, why)` (`src/lang/ledger.ts`); LANGUAGE.md's "Where effects go" table is generated from the calls, and a test checks each builtin's type drops exactly its row | #216 |
-| L7 | One record per builtin for the compiler's targets (`compiler/src/builtins.ts`): its JavaScript (an expression, std.ts's implementation, or written by compile.ts, saying where) and its scalar operation for WASM and WGSL, or why it has none, which a shader's refusal now says. compile.ts's OPS and impl rule and scalar.ts's table are derived from it, and a full WASM target adds a field, not a table. The language's jobs stay in their modules: relate.ts's backwards rules are closures over its search and derive.ts's come from invertible's table, so a record would only point at them; `builtins.test.ts` asks each of them for every builtin | this PR |
+| L7 | One record per builtin for the compiler's targets (`compiler/src/builtins.ts`): its JavaScript (an expression, std.ts's implementation, or written by compile.ts, saying where) and its scalar operation for WASM and WGSL, or why it has none, which a shader's refusal now says. compile.ts's OPS and impl rule and scalar.ts's table are derived from it, and a full WASM target adds a field, not a table. The language's jobs stay in their modules: relate.ts's backwards rules are closures over its search and derive.ts's come from invertible's table, so a record would only point at them; `builtins.test.ts` asks each of them for every builtin | #252 |
 | L11e | MODES step 5: a relational `solve` whose mode is `det` or `semidet` compiles to its plan written out (`compiler/src/modes.ts`), with no interpreter in the module when every solve is like that; several answers stay with relate.ts | #250 |
 | L11d | A `solve` whose mode gives exactly one answer and ends has no `Choice`: the checker, run.ts (no choice point) and the compiler (a plain call) agree. A one-case constructor taken apart always matches | #213 |
 | L11c | `relate.ts` follows the schedule: each function in each mode runs its goals in the order modes.ts planned. The ordering rules (`cheap`, `computable`, `waitsOnly`, `hence` reversed, match and fold and solve orders) are gone; goals a stuck direction never reaches wait for what they need | #205 |
