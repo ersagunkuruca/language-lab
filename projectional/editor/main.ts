@@ -1021,6 +1021,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
     const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
     input.addEventListener("change", () => rename(id, input.value));
+    // Enter saves (the change) and goes back to the program.
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
     out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${nameLayer(id)}.json`), input));
   }
 
@@ -1060,6 +1062,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       if (e.key !== "Enter" || e.shiftKey || multi) return;
       e.preventDefault();
       commit();
+      toProgram();
     });
     out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
@@ -2011,6 +2014,30 @@ function seg(name: string, value: string, options: [string, string][]) {
     ...options.map(([v, label]) => h("button", { type: "button", class: v === value ? "on" : "", "data-set": name, "data-value": v, "aria-pressed": String(v === value) }, label)));
 }
 
+// The keyboard back in the program, after an edit made from a field: Tab
+// goes on from the part just edited.
+function toProgram() {
+  const blocks = document.querySelector<HTMLElement>(".blocks-wrap");
+  if (blocks) blocks.focus({ preventScroll: true });
+  else (document.activeElement as HTMLElement | null)?.blur();
+}
+
+// The graph's menu for the selected part, from the keyboard (Shift+F10, the
+// Menu key, or Enter on a call), next to where the part is drawn; its first
+// item, or the one named, takes the focus. Arrows move through it.
+function menuForSelected(focus?: string) {
+  const id = ui.selected;
+  if (!id) return;
+  const el = document.querySelector(`.p-graph svg.canvas [data-id="${id}"]`) ?? document.querySelector(".blocks-wrap .sel");
+  const r = el?.getBoundingClientRect() ?? { left: 40, bottom: 40 };
+  const kind: MenuTarget["kind"] = el?.closest("[data-src]") ? "binder" : el?.closest("[data-frame]") && id !== ui.def ? "frame" : "node";
+  ui.menu = { target: { kind, id }, x: r.left, y: r.bottom, world: { x: 0, y: 0 } };
+  ui.query = "";
+  render();
+  const items = [...document.querySelectorAll<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")];
+  (items.find((b) => b.dataset.menu === focus) ?? items[0])?.focus();
+}
+
 function select(id: Id | null) {
   // Re-rendering on a repeat click would detach the element before its
   // dblclick fires, and go-to-definition is a dblclick.
@@ -2215,7 +2242,7 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
     : h("pre", { class: "text" }, textPanel(info));
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
@@ -2352,7 +2379,16 @@ document.addEventListener("dblclick", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && ui.menu) { ui.menu = null; return render(); }
+  if (e.key === "Escape" && ui.menu) { ui.menu = null; render(); return toProgram(); }
+  if (ui.menu && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    const items = [...document.querySelectorAll<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")];
+    if (items.length) {
+      e.preventDefault();
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+    }
+    return;
+  }
   const field = (e.target as HTMLElement).closest<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
   const typing = !!field;
   if (e.key === "Escape" && !typing && ui.selected) return select(null);
@@ -2389,9 +2425,17 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  if (inProgram && ui.selected && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
+    e.preventDefault();
+    return menuForSelected();
+  }
   if (e.key === "Enter" && inProgram && ui.selected) {
     const edit = document.querySelector<HTMLElement>("#f-query, #f-lit");
-    if (edit) { e.preventDefault(); edit.focus(); }
+    e.preventDefault();
+    // A hole or a literal is edited in place; anything else offers what
+    // can be done to it, Change the function first for a call.
+    if (edit) edit.focus();
+    else menuForSelected("swap");
     return;
   }
   if (!typing && (e.key === "Delete" || e.key === "Backspace") && ui.selected) {

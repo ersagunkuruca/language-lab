@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E39 | Keyboard: focus back to the program after any commit (a literal's Enter leaves it in the field); Enter on a call opens Change the function; Shift+F10 / Menu key opens the node menu | QA3 M5, M6 | P1 | M | |
 | E40 | Phone landscape and 600-900 px tablets still get the 3,091 px stacked page: one pane by height or `pointer: coarse` too | QA3 M1 | P2 | S | |
 | E41 | Phone: pinch zoom in the graph (only wheel zooms; nodes are ~24×15 px at Fit) | QA3 M2 | P2 | M | |
 | E42 | Phone: Undo in reach (top bar scrolls sideways, Undo off-screen) and touch wording (hints say right-click, hover, shift-click) | QA3 M3, M4 | P2 | S | |
@@ -96,6 +95,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E39 | Keyboard: Enter in a literal's or name's field saves and returns to the program; Enter on a call opens its menu on Change the function; Shift+F10 / Menu key opens the menu, arrows move, Escape returns | #287 |
 | E38 | By touch, Pick keeps every picked node: the tap ending a long press landed on the graph redrawn for the menu as a click; when a touch last opened a menu now outlives one drawing | #285 |
 | E37 | The minimap copies the graph (classes kept, ids and data-* dropped) instead of drawing it through <use>, whose copy rules like .tgraph .rg don't reach: frames were black | #283 |
 | E36 | Touch: a long press opens the graph's menu (iOS has no right-click), the menu's Pick stands in for shift-click, and a picked dot drags to move as alt-drag does | #278 |
