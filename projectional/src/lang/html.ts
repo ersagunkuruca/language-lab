@@ -10,7 +10,7 @@
 // stream of results, compiled ones their one result). The page is anything
 // shaped like the few DOM calls used here, so tests draw into a fake one.
 
-import { Pending, type Cells, type CellNode } from "./cells.ts";
+import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V } from "./std.ts";
@@ -58,7 +58,26 @@ const SVG = "http://www.w3.org/2000/svg";
 // as properties: what the user typed or ticked replaces the attribute.
 const LIVE = new Set(["value", "checked"]);
 
+// What each mount has drawn of the values `each` keeps (cells.ts): drawn
+// again, a kept row is the same nodes, watchers and all, moved to its new
+// place, which is how a list keeps rows by identity (Solid's <For>).
+const drawn = new WeakMap<Mount, WeakMap<object, Node_>>();
+
 export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
+  const owner = typeof v === "object" && v !== null ? KEPT.get(v) : undefined;
+  if (!owner || owner.disposed) return draw(v, m, svg);
+  let mine = drawn.get(m);
+  if (!mine) drawn.set(m, (mine = new WeakMap()));
+  const before = mine.get(v as object);
+  if (before) return before;
+  // Its watchers belong to the row, not to the part drawing it, so they
+  // last as long as the item does.
+  const node = m.cells.under(owner, () => draw(v, m, svg));
+  mine.set(v as object, node);
+  return node;
+}
+
+function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const { doc, cells } = m;
   const d = v as Data;
   const steps = m.steps ?? PAGE_STEPS;

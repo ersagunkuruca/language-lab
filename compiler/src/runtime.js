@@ -22,6 +22,13 @@ export function $toList(xs) {
   for (let i = xs.length - 1; i >= 0; i--) l = $cons(xs[i], l);
   return l;
 }
+export function $fromList(l) {
+  const out = [];
+  for (; l.tag === CONS; l = l.fields[1]) out.push(l.fields[0]);
+  return out;
+}
+// How cells.ts each turns lists into arrays and back.
+export const $listArrays = { from: $fromList, to: $toList };
 
 // A list kept from the other end, { a, n }: the list a[n − 1], …, a[0]
 // (compile.ts, `growable`; GAPS.md G21). Consing onto it pushes when nothing

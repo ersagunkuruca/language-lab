@@ -45,7 +45,13 @@ export interface CellNode {
   // Why its last computation stopped (a page's step budget ran out): read,
   // it stops the same way, until a cell it read changes.
   error?: unknown;
+  // What else goes when it's disposed (each's rows, below).
+  onDispose?: () => void;
 }
+
+// Each value `each` made, with the owner it was made under: a page that
+// draws it again keeps what it drew the first time (html.ts).
+export const KEPT = new WeakMap<object, CellNode>();
 
 // A cell, as a value of the language: a function value (so equality is
 // identity, and the checker treats `Cell a` as not plain) that carries its
@@ -152,7 +158,55 @@ export class Cells {
     try { return f(); } finally { if (--this.batching === 0) this.flush(); }
   }
 
+  // A list mapped item by item, as a formula: an item that's still there
+  // (equal to one from the last time) keeps what f made of it, and only new
+  // items are mapped. f runs untracked, in an owner of its own per item, so
+  // what it makes (cells, a page's watchers) lives as long as the item.
+  // This is Solid's mapArray, which its <For> is built on. `list` turns the
+  // language's lists into arrays and back.
+  each(items: Value, f: (item: Value) => Value, list: { from: (v: Value) => Value[]; to: (xs: Value[]) => Value }, label = "each"): Value {
+    let rows: { item: Value; value: Value; root: CellNode }[] = [];
+    const cell = this.node(() => {
+      const old = [...rows], made: CellNode[] = [];
+      try {
+        const next = list.from(this.read(items)).map((item) => {
+          const i = old.findIndex((r) => this.same(r.item, item));
+          if (i >= 0) return old.splice(i, 1)[0];
+          const root: CellNode = { value: undefined, state: CLEAN, compute: null, sources: [], observers: new Set(), watcher: false, owned: [], label: `${label} row`, runs: 0, disposed: false };
+          made.push(root);
+          const [current, owner] = [this.current, this.owner];
+          this.current = null;
+          this.owner = root;
+          let value: Value;
+          try { value = f(item); } finally { this.current = current; this.owner = owner; }
+          if (typeof value === "object" && value !== null) KEPT.set(value, root);
+          return { item, value, root };
+        });
+        rows = next;
+      } catch (e) {
+        // Stopped part way (out of steps, waiting): what it made goes, and
+        // the rows stay as they were.
+        made.forEach((r) => this.dispose(r));
+        throw e;
+      }
+      old.forEach((r) => this.dispose(r.root));
+      return list.to(rows.map((r) => r.value));
+    }, undefined, label);
+    cell.onDispose = () => rows.forEach((r) => this.dispose(r.root));
+    return this.wrap(cell);
+  }
+
+  // Run with `owner` as the owner of what's made (a kept row drawn again).
+  under<T>(owner: CellNode, run: () => T): T {
+    const saved = this.owner;
+    this.owner = owner;
+    try { return run(); } finally { this.owner = saved; }
+  }
+
   dispose(n: CellNode): void {
+    const also = n.onDispose;
+    n.onDispose = undefined;
+    also?.();
     n.disposed = true;
     for (const s of n.sources) s.observers.delete(n);
     n.sources = [];
