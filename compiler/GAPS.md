@@ -497,6 +497,12 @@ prefix test reads the whole line twice. The ideal is
 *Fix:* in `text.ts`, slices near the start only need to look that far, and
 `length` can stop scanning once it knows the answer is the JS length. In the
 compiler, `slice(t, 0, k) = "lit"` with a literal is `startsWith`.
+*Half DONE:* `slice` now walks the text only up to `to` and never counts its
+length, so `slice(t, 0, 2)` of a 1.2 MB text with emoji went from 33 ms to
+0.02 ms. chapters doesn't move: its lines are short and have no emoji, and
+the regex scan for wide characters is cheap. What's left is the compiler
+part, `startsWith` for a slice compared with a literal, and `length(t) > k`
+without the scan.
 
 **G16. Builders feed consumers through whole lists (perf: 51 → 43 ms for
 `words` alone).** `words` is `length(keep(split(line, " "), w ≠ ""))`: the

@@ -11,6 +11,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { equal, runMain, toList } from "../src/lang/run.ts";
 import { CONS, NIL, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
+import { slice } from "../src/lang/text.ts";
 
 function printed(build: (k: Lang) => Id): string[] {
   const k = new Lang();
@@ -126,4 +127,13 @@ test("the printer is a parser at real sizes: show numbers read back from 500 num
   // somewhere past 1,000 numbers depending on the Node version: REVIEW.md
   // §2.2.)
   assert.ok(performance.now() - t < 5000, `took ${performance.now() - t} ms`);
+});
+
+test("slice near the start of a long text with emoji reads only that far (compiler/GAPS.md G19)", () => {
+  const t = "ab😀".repeat(300_000);
+  const start = performance.now();
+  for (let i = 0; i < 1000; i++) assert.equal(slice(t, 1, 4), "b😀a");
+  assert.ok(performance.now() - start < 200, "each slice walked the whole text");
+  assert.equal(slice("a😀\uD800b", 1, 99), "😀\uD800b");
+  assert.equal(slice("a😀b", 3, 99), "");
 });

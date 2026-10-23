@@ -17,12 +17,18 @@ export const length = (t: string): Int => (wide.test(t) ? Array.from(t).length :
 
 // The characters from `from` up to, not including, `to`. Out-of-range
 // positions are clamped, so it never fails: slice("abc", 1, 99) = "bc".
+// It walks the text only as far as `to`, so a slice near the start of a long
+// line doesn't read the whole line (compiler/GAPS.md G19).
 export function slice(t: string, from: Int, to: Int): string {
-  const n = length(t) as number;
-  const clamp = (i: Int) => Math.max(0, Math.min(n, small(i)));
-  const a = clamp(from), b = clamp(to);
+  const a = Math.max(0, small(from)), b = small(to);
   if (b <= a) return "";
-  return wide.test(t) ? Array.from(t).slice(a, b).join("") : t.slice(a, b);
+  let i = 0, at = 0, start = -1;
+  for (; at < b && i < t.length; at++) {
+    if (at === a) start = i;
+    const c = t.charCodeAt(i), d = t.charCodeAt(i + 1);
+    i += c >= 0xd800 && c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff ? 2 : 1;
+  }
+  return start < 0 ? "" : t.slice(start, i);
 }
 
 export const characters = chars;
