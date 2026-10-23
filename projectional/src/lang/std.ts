@@ -94,7 +94,7 @@ export const EVENT = typedef("std.event", "Event", [], [
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [CELLS, DIVERGE, TIME, NETWORK])]]],
-  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT, TIME, NETWORK])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [CELLS, UPDATE, CONSOLE, FILES, ABORT, TIME, NETWORK, RANDOM])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],

@@ -60,7 +60,8 @@ import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
 import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
-import { CELL_OPS, CONS, FALSE, IO, NIL, NONE, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
+import { seededGenerator } from "./random.ts";
+import { CELL_OPS, CONS, FALSE, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
 import { intLit } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
@@ -435,6 +436,8 @@ export interface Options {
   spend?: () => boolean;
   // The names generic `show` prints cases with; std's if not given.
   names?: Names;
+  // What `random()` answers with, inside `seeded` (set by its reading below).
+  random?: () => number;
 }
 
 export function interpreter(code: Code, opts: Options = {}) {
@@ -556,6 +559,11 @@ export function interpreter(code: Code, opts: Options = {}) {
   function apply(f: Term, args: Term[], out: Term): Goal {
     // Functions can't be guessed: wait until it's known which one this is.
     if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out)(s), text: "call" });
+    if (isData(f) && f.tag === RANDOM_OP && !args.length) {
+      if (!opts.random) throw new NotInvertible("random() outside seeded answers from the world, which only runs forward");
+      const next = opts.random;
+      return (s) => eq(out, next())(s);
+    }
     if (typeof f !== "object" || isData(f)) throw new NotInvertible("calling something that isn't a function");
     if (f.k === "closure" && f.gradient) {
       const g = f;
@@ -636,7 +644,16 @@ export function interpreter(code: Code, opts: Options = {}) {
       case S.fail: return failG;
       case S.first: case S.all: case S.count: case S.optional: return aggregate(id, args, out);
       case S.mapParts: case S.zipParts: case S.total: return parts(id, args, out);
-      case S.seeded: throw new NotInvertible("seeded answers Random from a generator; run backwards it would have to search the seeds");
+      // Forward only: once the seed and the action are known, the action runs
+      // with random() answered by the evaluator's generator (random.ts).
+      // Backwards it would have to search the seeds.
+      case S.seeded:
+        return wait({
+          k: "later", text: "seeded", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
+            const gen = seededGenerator(walk(a, s) as number);
+            return interpreter(code, { ...opts, spend, random: () => gen.next() }).apply(walk(b, s), [], out)(s);
+          },
+        });
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
       // Backwards, derivative would be integration: it waits for its function.
       case S.derivative:

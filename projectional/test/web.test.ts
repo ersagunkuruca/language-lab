@@ -104,3 +104,39 @@ test("the converter app: typing in any field moves the others, and text with no 
   // and the next visit starts where this one left off
   assert.deepEqual(run(store).map((i) => i.value).slice(0, 3), ["0", "32", "273.15"]);
 });
+
+// examples/dice, the app at apps/dice.html: a Roll button drawing from the
+// world, a hundred seeded rolls that are the same every time, and a status
+// line that reads the clock, so it runs again each frame.
+test("the dice app: seeded rolls repeat exactly, and the clock ticks frame by frame", async () => {
+  const { webPage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  assert.deepEqual(info.errors, []);
+  const html = await webPage("Dice", p.code, info, p.pres.names, p.named("main"));
+  const body = new FakeEl("body");
+  let frames: (() => void)[] = [];
+  let time = 1_000_000;
+  const DateNow = { now: () => time };
+  runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], {
+    document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, Date: DateNow, crypto,
+    requestAnimationFrame: (f: () => void) => frames.push(f),
+  });
+  const root = body.kids[0] as FakeEl;
+  const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
+  const bars = () => [...root.html().matchAll(/px"><\/span>(\d+)/g)].map((m) => Number(m[1]));
+  assert.equal(root.find("status").textContent, "0 rolls; the last 0 s ago");
+  root.find("hundred").fire("click");
+  const once = bars();
+  assert.equal(once.length, 11);
+  assert.equal(once.reduce((a, b) => a + b, 0), 100);
+  root.find("hundred").fire("click");
+  assert.deepEqual(bars(), once.map((n) => 2 * n));
+  root.find("roll").fire("click");
+  assert.match(root.find("said").textContent!, /^You rolled [1-6] and [1-6]: \d+\.$/);
+  assert.equal(root.find("status").textContent, "201 rolls; the last 0 s ago");
+  frame(1_002_500);
+  assert.equal(root.find("status").textContent, "201 rolls; the last 2 s ago");
+});
