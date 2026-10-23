@@ -590,6 +590,10 @@ once. The ideal keeps the array. Most std lists in this program are built
 by a builtin and read front to back. *Fix:* the `array` row
 of `projectional/NUMBERS.md`'s fold table: a list that's never consed onto,
 only walked or folded, is an array.
+*Design written:* NUMBERS.md, "The `array` row". A walk-only list parameter
+gets an `$arr` copy taking an array and a start, chosen by a whole-program
+fixpoint. Conversions to cons cells happen only where a value stops being
+walked.
 
 **G13 again.** `sections` builds a `Pile` record per line and takes it
 apart in the next step. The ideal carries two locals.
