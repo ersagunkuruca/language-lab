@@ -599,3 +599,22 @@ test("a step can go inside one arm of a match: it runs there, just before that a
   // Only inside the definition it's for.
   assert.equal(T.addStep(p.code, p.pres.names, info, p.named("main"), arm.body).ok, false);
 });
+
+test("arithmetic typed where a value goes is calls of the operators: 2 × (3 − 1)", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "number" && !n.unit && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const r = T.fillValue(code, p.pres.names, infer(code, p.pres.names), lit.id, "2 × (3 − 1) - -1");
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  if (!r.ok) return;
+  const show = (id: Id): string => {
+    const n = r.code.nodes[id];
+    if (n.kind === "lit") return String(n.value);
+    const c = n as NodeOf<"call">;
+    return `${(r.code.nodes[c.fn] as NodeOf<"ref">).target}(${c.args.map(show).join(", ")})`;
+  };
+  assert.equal(show(lit.id), `${B.sub}(${B.mul}(2, ${B.sub}(3, 1)), -1)`);
+});
