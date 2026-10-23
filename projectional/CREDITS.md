@@ -159,6 +159,7 @@ not only code: an influence is credited even when nothing was copied.
 | `Choice` functions as lazy streams of answers (the generators) | Prior art | Wadler, "How to replace failure by a list of successes" (FPCA 1985). COMPILER.md. |
 | Planned native code via C with reference counting and reuse | Influence | Koka's Perceus (Reinking, Xie, de Moura and Leijen, PLDI 2021). COMPILER.md. |
 | Compiling numeric code to WebAssembly and WGSL | Ersagun's idea | Follows the [WGSL](https://www.w3.org/TR/WGSL/) and WebAssembly specifications. |
+| Whole programs to WebAssembly with the host's garbage collector (WasmGC), one struct type per case (design, WASM.md) | Prior art | OCaml's wasm_of_ocaml (Jérôme Vouillon), Guile's Hoot (Spritely Institute), Kotlin/Wasm and dart2wasm compile garbage-collected languages to WasmGC. No code taken. |
 
 ## Cells, reactivity and web apps
 
