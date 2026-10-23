@@ -46,6 +46,9 @@ async function visit(saved: string | null, only?: string) {
     for (const [j, def] of names.entries()) {
       where = `${saved ? "saved by an older editor: " : ""}${program} / ${def}`;
       await click("[data-def]", j);
+      // A list reads as a list in the blocks too, however tall its items.
+      const blocks = await p.locator(".blocks-wrap").first().innerText({ timeout: 500 }).catch(() => "");
+      if (/^\s*cons\($/m.test(blocks) && /\bnil\b/.test(blocks)) errors.push(`${where}: a list shows as cons(…) in the blocks`);
       await click('[data-act="t-run"]');
       await click('[data-act="t-values"]');
       await stopped(p);
