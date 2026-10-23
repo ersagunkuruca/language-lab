@@ -18,16 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| | Editor: a function parameter can't be called until its type is known (no `f(□, □)` for an untyped `f`); blocks higher-order definitions written from scratch | GAPS round 3, editor 1 | 2026-10-23 |
-| | Editor: a text literal can't hold a newline (one-line field; `"\n"` is taken literally) | GAPS round 3, editor 2 | 2026-10-23 |
-| | Editor: multiline text (a style sheet) is drawn on one line in the node view, so the graph gets extremely wide; the tree view is no better. The converter no longer has one (L28), but any long text still does | Ersagun 2026-10-23 15:32 | 2026-10-23 |
-| | Editor: *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | 2026-10-23 |
-| | Editor: typing `0` in an Int hole offers nothing (E21 is now in the way of every program with Int) | GAPS round 3, editor 4 | 2026-10-23 |
-| | Editor: palette rows with the same label (`show(□)` ×3, `cents(□)` ×2) told apart only by the type line | GAPS round 3, editor 5 | 2026-10-23 |
-| | Editor: spaces in a typed text are collapsed (`"  × "` → `" × "`) | GAPS round 3, editor 6 | 2026-10-23 |
-| | Editor: Text view drops brackets around an `if` inside `++` | GAPS round 3, editor 7 | 2026-10-23 |
-| | Editor: a definition with `Console` runs (and prints) while it's being written | GAPS round 3, editor 8 | 2026-10-23 |
-| | Editor: a picture's CPU fallback (editor/picture.ts) and its evaluator check run in float64; run them on the program in Float32 (`withFloat32` + `represent`, as compiler/gpu.ts does) so the fallback draws the GPU's picture | C8 | 2026-10-23 |
 
 ## E: Editor
 
@@ -36,7 +26,15 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E13 | Navigator search covers only the open program | QA2 L2 | P2 | S | |
+| E24 | Bug: spaces in a typed text are collapsed (`"  × "` → `" × "`) | GAPS round 3, editor 6 | P1 | S | |
+| E25 | Bug: Text view drops brackets around an `if` inside `++` | GAPS round 3, editor 7 | P1 | S | |
+| E26 | Bug: a definition with `Console` runs (and prints) while it's being written | GAPS round 3, editor 8 | P1 | S | |
+| E27 | Typing `0` in an Int hole offers nothing (with E21) | GAPS round 3, editor 4 | P1 | S | |
+| E28 | A function parameter can't be called until its type is known (no `f(□, □)` for an untyped `f`) | GAPS round 3, editor 1 | P1 | M | |
+| E29 | A short text literal can't get a newline (the multiline box only opens for text that already has one, #206) | GAPS round 3, editor 2 | P2 | S | |
+| E30 | *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | P2 | M | |
+| E31 | Palette rows with the same label (`show(□)` ×3) told apart only by the type line | GAPS round 3, editor 5 | P2 | S | |
+| E32 | Picture CPU fallback and its check run in float64; run them in Float32 (`withFloat32` + `represent`, as compiler/gpu.ts) | C8 | P2 | S | |
 | E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
 | E15 | Keyboard editing: Tab reaches no node, port or hole | QA2 UX7 | P2 | L | |
 | E16 | "Copy into my program" and "pin" gestures for modules | ROADMAP step 5 open | P2 | M | |
@@ -108,6 +106,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E13 | Navigator search finds definitions in every program | #227 |
 | E12 | Unit refusals name the units on both sides | #223 |
 | E23 | Bug: the live page's buttons went dead after opening another definition (Chrome drops listeners when the frame is redrawn) | #221 |
 | E11 | The zoom button shows the zoom; Fit keeps clear of the pill | #215 |
