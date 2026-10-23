@@ -48,7 +48,7 @@ node --test test/backwards.test.ts
 | call of a definition | run its body | run its body backwards. Calls are ordered by what's known: when a call's value is known it's pushed into the function first, else its inputs are computed first |
 | call of a function value | call it | the same, when the function is known (it's not a black box: a function value remembers its node). `map(xs, square) = [4, 9]` gives four lists |
 | let (a dot on a wire) | bind | the same: a let is a call of a lambda |
-| whole-number `add`, `subtract`, `negate` | evaluate | any two sides give the third, exactly. So `length(xs) = 3` backwards gives `n = 2` for the rest before unfolding it, and builds the three-item list at once instead of guessing lengths |
+| whole-number `add`, `subtract`, `negate` | evaluate | any two sides give the third, exactly. So `length(xs) = 3` backwards gives `n = 2` for the rest before unfolding it, and builds the three-item list at once instead of guessing lengths (as Prolog's CLP(FD) and miniKanren's `pluso` do) |
 | `split(t, by) = pieces` | split | `pieces` known: join them with `by`, and accept it only if splitting that gives the same pieces (no piece holds `by`) |
 | `join text(a, b) = c` | concatenate | `a` known: strip it off. `b` known: strip it off. Neither: every way to cut `c` in two |
 | `show(n) = t` | print the number | read `t` back, and accept only the spelling `show` itself would produce (so `"01"` and `"1.0"` aren't answers) |
