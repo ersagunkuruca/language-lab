@@ -47,13 +47,14 @@
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { DIVERGE, INT, NUMBER, STRING, type Type } from "../../projectional/src/lang/types.ts";
-import { BOOL, FALSE, INT_OPS, S, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Type } from "../../projectional/src/lang/types.ts";
+import { BOOL, CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { discharge } from "../../projectional/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
+import { runtime } from "./wasm-rt.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
@@ -64,6 +65,10 @@ const RT: Record<Id, string> = {
   [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range",
   [TEXT_OPS.length]: "text.length", [TEXT_OPS.slice]: "text.slice", [TEXT_OPS.characters]: "text.characters",
   [TEXT_OPS.split]: "text.split", [TEXT_OPS.joinAll]: "text.joinAll", [TEXT_OPS.less]: "text.less",
+  // No answer or one (Choice): runtime functions that give a status too.
+  [INT_OPS.quotient]: "int.quotient", [INT_OPS.remainder]: "int.remainder", [INT_OPS.power]: "int.power",
+  [INT_OPS.read]: "int.read", [INT_OPS.wholePart]: "int.wholePart",
+  [TEXT_OPS.find]: "text.find", [TEXT_OPS.code]: "text.code", [TEXT_OPS.fromCode]: "text.fromCode",
 };
 
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
@@ -88,6 +93,33 @@ export interface Shape { t: FType; caps: LType[] }
 // For a printer of a target without a heap (WGSL, the JS fallback for
 // shaders), which is never given data.
 export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a heap: lower without \`data\``); };
+// Whether e can end with no answer: it fails, or calls something partial.
+// An attempt can't, unless its parts can (its body's "none" it handles).
+export function fails(e: SExpr, funcs: SFunc[]): boolean {
+  switch (e.k) {
+    case "fail": return true;
+    case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
+    case "rt": return !!runtime(e.fn).partial || e.args.some((a) => fails(a, funcs));
+    case "attempt": return fails(e.ok, funcs) || fails(e.otherwise, funcs);
+    case "budget": return fails(e.otherwise, funcs);
+    default: return kids(e).some((a) => fails(a, funcs));
+  }
+}
+// The expressions directly inside e.
+export function kids(e: SExpr): SExpr[] {
+  switch (e.k) {
+    case "op": case "call": case "make": case "new": case "rt": return e.args;
+    case "if": return [e.cond, e.then, e.else];
+    case "let": return [e.value, e.body];
+    case "get": case "field": case "tag": return [e.rec];
+    case "case": return [e.scrut, ...e.arms.filter((a): a is SExpr => !!a)];
+    case "budget": return [e.body, e.otherwise];
+    case "closure": return e.caps;
+    case "apply": return [e.fn, ...e.args];
+    case "attempt": return [e.body, e.ok, e.otherwise];
+    default: return [];
+  }
+}
 
 export type SExpr =
   | { k: "num"; v: number }
@@ -122,7 +154,14 @@ export type SExpr =
   // first(() => with fuel(n, () => body), () => otherwise): body with n
   // calls to spend, or otherwise if it ran out. `save` is a Number local
   // for the budget around this one, `res` one for body's value.
-  | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number };
+  | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number }
+  // No answer here (Choice, `data`): the nearest attempt gives its
+  // otherwise, or the function, being partial, says it has none.
+  | { k: "fail" }
+  // first, optional, all and count over a search with one answer or none:
+  // body's answer goes into local res and ok is the value; if it has
+  // none, otherwise is.
+  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
 // WebAssembly instructions; a WASM module imports them, a shader has them
@@ -141,7 +180,9 @@ export const OPS = {
 // it end). `budgeted`: its type has Diverge, so it may only be called under
 // a budget, never from outside. `inner`: made by the lowering (a fold
 // is a function of its own), so not something to call from outside either.
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean }
+// `partial`: it has one answer or none (Choice, `data`), so it gives a
+// status with its answer (wasm.ts).
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info }
@@ -316,7 +357,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const bad = [...ft.params, ft.ret][[...params, result].findIndex((x) => !x)];
       fail(opts.records ? `takes or gives ${whyNot(info.subst.zonk(bad))}` : `takes or gives ${OTHER}`);
     }
-    const effs = constant ? [] : info.subst.resolveRow(ft.eff).effs.filter((e) => !BUDGETED.includes(e));
+    // With `data`, a search with one answer or none (no `one of`, which
+    // is refused where it's used) is a partial function, and so is one
+    // that spends from a budget: running out is having no answer there,
+    // which the nearest handler sees, as in the evaluator.
+    const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
+    const partial = !!opts.data && (all.includes(CHOICE) || (!constant && info.divergent.has(def)));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && e === CHOICE));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -324,7 +371,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const i = funcs.length;
     index.set(key, i);
     inProgress.add(def);
-    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted };
+    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted, ...(partial ? { partial } : {}) };
     funcs.push(f);
     const outer = underBudget, outerAt = at, shaped = shapes.length;
     try {
@@ -418,6 +465,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         }
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
+        if (target === S.fail && opts.data) return { k: "fail" };
+        if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
+        if (opts.data && [S.first, S.optional, S.all, S.count].includes(target) && !isBudget(n)) return attempt(n, id, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
         if (t?.kind === "def") {
@@ -638,6 +688,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
     });
     g.body = { k: "case", scrut, s: 0, t: st, arms: bodies, result };
+    if (fails(g.body, funcs)) g.partial = true;
     return { k: "call", fn: gi, args: [expr(n.scrutinee, env, f, false), ...outside], tail };
   }
   // The stack of a fold run as a loop: the values on the way down, newest
@@ -710,6 +761,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         },
       ],
     };
+    if (fails(down.body, funcs) || fails(up.body, funcs)) down.partial = up.partial = true;
     return di;
   }
   // What p's type variables stand for, where c is p at known types.
@@ -741,6 +793,46 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     if (r && isRecord(r) && r.variant === variant) return { k: "make", t: r, args };
     throw new Refused(`builds ${nm(variant)}, which isn't ${opts.data ? "data" : "a record"} of Numbers and Bools`);
+  }
+
+  // Whether a call of first is first(() => with fuel(…), …), a budget.
+  function isBudget(n: NodeOf<"call">): boolean {
+    const a = n.args[0] ? code.nodes[n.args[0]] : undefined;
+    const body = a?.kind === "lambda" && !a.params.length ? code.nodes[a.body] : null;
+    return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && body?.kind === "call" && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
+  }
+  // first, optional, all and count of a search written in place. With no
+  // `one of` in the profile, a search has one answer or none, so each is
+  // that answer, or what they give for none: first's default, none, an
+  // empty list, 0.
+  function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
+    const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
+    const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
+    if (!search || (target === S.first && !dflt)) throw new Refused(`uses ${nm(target)} on a search that isn't written in place (as () => …)`);
+    const t = stype(zonk(id)), bt = stype(zonk(search));
+    if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
+    const res = f.locals.push(bt) - 1;
+    const body = expr(search, env, f, false);
+    const answer: SExpr = { k: "local", i: res };
+    const caseOf = (d: LType, v: Id) => (isData(d) ? d.cases.findIndex((c) => c.variant === v) : -1);
+    let ok: SExpr, otherwise: SExpr;
+    if (target === S.first) { ok = answer; otherwise = expr(dflt!, env, f, false); }
+    else if (target === S.count) { ok = { k: "num", v: 1 }; otherwise = { k: "num", v: 0 }; }
+    else {
+      const d = t as DType, [yes, no] = target === S.optional ? [SOME, NONE] : [CONS, NIL];
+      const none: SExpr = { k: "new", t: d, c: caseOf(d, no), args: [] };
+      ok = { k: "new", t: d, c: caseOf(d, yes), args: target === S.optional ? [answer] : [answer, none] };
+      otherwise = none;
+    }
+    return { k: "attempt", body, res, ok, otherwise, t };
+  }
+  // value of(o): o's value if it's some, no answer if it's none.
+  function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const d = stype(zonk(n.args[0])), t = stype(zonk(id));
+    if (!d || !isData(d) || !t) throw new Refused(`takes the value of ${whyNot(zonk(d ? id : n.args[0]))}`);
+    const s = f.locals.push(d) - 1, some = d.cases.findIndex((c) => c.variant === SOME);
+    return { k: "case", scrut: expr(n.args[0], env, f, false), s, t: d, result: t, arms: d.cases.map((_, ci): SExpr => (ci === some ? { k: "field", rec: { k: "local", i: s }, t: d, c: ci, i: 0 } : { k: "fail" })) };
   }
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing

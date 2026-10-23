@@ -29,6 +29,10 @@ export interface RtFn {
   uses: string[];
   // The list type `list` stands for, by key (List Text when not given).
   list?: string;
+  // A builtin with no answer or one (Choice): it gives its answer and a
+  // status, 0 for an answer and 1 for none, as the module's own
+  // one-answer functions do (wasm.ts).
+  partial?: true;
 }
 
 // Immediates each instruction takes.
@@ -44,10 +48,11 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "f64.eq": [[0x61], []], "f64.ne": [[0x62], []], "f64.lt": [[0x63], []], "f64.gt": [[0x64], []], "f64.le": [[0x65], []], "f64.ge": [[0x66], []],
   "i32.add": [[0x6a], []], "i32.sub": [[0x6b], []], "i32.mul": [[0x6c], []], "i32.div_u": [[0x6e], []], "i32.rem_u": [[0x70], []], "i32.and": [[0x71], []], "i32.or": [[0x72], []], "i32.xor": [[0x73], []],
   "i64.add": [[0x7c], []], "i64.sub": [[0x7d], []], "i64.mul": [[0x7e], []], "i64.div_s": [[0x7f], []], "i64.div_u": [[0x80], []], "i64.rem_s": [[0x81], []], "i64.rem_u": [[0x82], []],
-  "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []],
+  "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []], "i64.shl": [[0x86], []], "i64.shr_s": [[0x87], []], "i64.shr_u": [[0x88], []],
+  "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i32.shl": [[0x74], []], "i32.shr_u": [[0x76], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
-  "ref.is_null": [[0xd1], []],
+  "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
   "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]],
   "array.set": [[0xfb, 0x0e], ["type"]], "array.len": [[0xfb, 0x0f], []], "array.copy": [[0xfb, 0x11], ["type", "type"]],
@@ -83,7 +88,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
       switch (kind) {
         case "local": { const j = names.indexOf(a.slice(1)); if (j < 0) throw new Error(`${f.name}: no local ${a}`); out.push(...u(j)); break; }
         case "func": out.push(...u(r.func(a.slice(1)))); break;
-        case "type": { const t = r.type(a.slice(1)); out.push(...(op === "ref.cast" ? sLeb(BigInt(t)) : u(t))); break; }
+        case "type": { const t = r.type(a.slice(1)); out.push(...(op === "ref.cast" || op === "ref.null" ? sLeb(BigInt(t)) : u(t))); break; }
         case "label": case "u": out.push(...u(Number(a))); break;
         case "i32": case "i64": out.push(...sLeb(BigInt(a))); break;
         case "f64": out.push(...new Uint8Array(new Float64Array([Number(a)]).buffer)); break;
@@ -101,7 +106,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
   }
   const code = [...u(groups.length), ...groups.flat(), ...out, 0x0b];
   const wat = [
-    `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} (result ${r.valtype(f.result).text})${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
+    `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
     ...lines.map((l) => {
       const [op, ...args] = l.split(/\s+/);
       return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z]+$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : a)).filter(Boolean).join(" ") : ""}`;
@@ -1069,6 +1074,508 @@ const R: Record<string, Omit<RtFn, "name">> = {
       end
       end
       local.get $r`,
+  },
+  // ---- builtins with no answer or one: an answer and a status (0), or a
+  // zero and 1. A Choice builtin's status is what wasm.ts branches on.
+  // Rounding down, the remainder with the divisor's sign (int.ts).
+  "int.quotient": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["q", "i64"], ["r", "i64"]], uses: [], partial: true,
+    body: `
+      local.get $b
+      i64.eqz
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $a
+      local.get $b
+      i64.div_s ;; the smallest i64 over -1 traps: that needs a big Int
+      local.set $q
+      local.get $a
+      local.get $b
+      i64.rem_s
+      local.tee $r
+      i64.const 0
+      i64.ne
+      local.get $r
+      local.get $b
+      i64.xor
+      i64.const 0
+      i64.lt_s
+      i32.and
+      if void
+        local.get $q
+        i64.const 1
+        i64.sub
+        local.set $q
+      end
+      local.get $q
+      i32.const 0`,
+  },
+  "int.remainder": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [], partial: true,
+    body: `
+      local.get $b
+      i64.eqz
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $a
+      local.get $b
+      i64.rem_s
+      local.tee $r
+      i64.const 0
+      i64.ne
+      local.get $r
+      local.get $b
+      i64.xor
+      i64.const 0
+      i64.lt_s
+      i32.and
+      if i64
+        local.get $r
+        local.get $b
+        i64.add
+      else
+        local.get $r
+      end
+      i32.const 0`,
+  },
+  // By squaring, each product checked; a is squared only when a higher
+  // power is still to come, so it overflows only when the answer would.
+  "int.power": {
+    params: [["a", "i64"], ["n", "i64"]], result: "i64", locals: [["r", "i64"]], uses: ["int.mul"], partial: true,
+    body: `
+      local.get $n
+      i64.const 0
+      i64.lt_s
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      i64.const 1
+      local.set $r
+      block void
+      loop void
+        local.get $n
+        i64.eqz
+        br_if 1
+        local.get $n
+        i64.const 1
+        i64.and
+        i64.eqz
+        i32.eqz
+        if void
+          local.get $r
+          local.get $a
+          call $int.mul
+          local.set $r
+        end
+        local.get $n
+        i64.const 1
+        i64.shr_u
+        local.tee $n
+        i64.eqz
+        br_if 1
+        local.get $a
+        local.get $a
+        call $int.mul
+        local.set $a
+        br 0
+      end
+      end
+      local.get $r
+      i32.const 0`,
+  },
+  // Rounds down; Infinity and NaN have no answer (x − x isn't 0).
+  "int.wholePart": {
+    params: [["x", "f64"]], result: "i64", locals: [], uses: [], partial: true,
+    body: `
+      local.get $x
+      local.get $x
+      f64.sub
+      f64.const 0
+      f64.ne
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $x
+      f64.floor
+      i64.trunc_f64_s ;; past 2⁶³ traps: that needs a big Int
+      i32.const 0`,
+  },
+  // Only what show writes: -?(0|[1-9][0-9]*), not -0. Kept at or below
+  // zero while reading, so the smallest i64 reads too.
+  "int.read": {
+    params: [["t", "text"]], result: "i64", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "i64"]], uses: ["int.mul", "int.sub", "int.neg"], partial: true,
+    body: `
+      local.get $t
+      array.len
+      local.set $n
+      local.get $n
+      if void
+        local.get $t
+        i32.const 0
+        array.get_u $bytes
+        i32.const 45
+        i32.eq
+        if void
+          i32.const 1
+          local.set $neg
+          i32.const 1
+          local.set $i
+        end
+      end
+      local.get $i
+      local.get $n
+      i32.ge_u
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $t
+      local.get $i
+      array.get_u $bytes
+      i32.const 48
+      i32.eq
+      if void
+        local.get $i
+        i32.const 1
+        i32.add
+        local.get $n
+        i32.ne
+        local.get $neg
+        i32.or
+        if void
+          i64.const 0
+          i32.const 1
+          return
+        end
+      end
+      block void
+      loop void
+        local.get $i
+        local.get $n
+        i32.ge_u
+        br_if 1
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        i32.const 48
+        i32.sub
+        local.tee $c
+        i32.const 9
+        i32.gt_u
+        if void
+          i64.const 0
+          i32.const 1
+          return
+        end
+        local.get $m
+        i64.const 10
+        call $int.mul
+        local.get $c
+        i64.extend_i32_u
+        call $int.sub
+        local.set $m
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $neg
+      if i64
+        local.get $m
+      else
+        local.get $m
+        call $int.neg
+      end
+      i32.const 0`,
+  },
+  // The first byte where part's bytes start, as characters before it.
+  // UTF-8 can't match inside a character, so bytes find what characters do.
+  "text.find": {
+    params: [["t", "text"], ["p", "text"]], result: "i64", locals: [["i", "i32"], ["j", "i32"], ["last", "i32"], ["k", "i32"]], uses: [], partial: true,
+    body: `
+      local.get $t
+      array.len
+      local.get $p
+      array.len
+      i32.sub
+      local.set $last
+      block void ;; found at i
+      loop void
+        local.get $i
+        local.get $last
+        i32.gt_s
+        if void
+          i64.const 0
+          i32.const 1
+          return
+        end
+        i32.const 0
+        local.set $j
+        block void ;; not at i
+        loop void
+          local.get $j
+          local.get $p
+          array.len
+          i32.ge_u
+          br_if 3
+          local.get $t
+          local.get $i
+          local.get $j
+          i32.add
+          array.get_u $bytes
+          local.get $p
+          local.get $j
+          array.get_u $bytes
+          i32.ne
+          br_if 1
+          local.get $j
+          i32.const 1
+          i32.add
+          local.set $j
+          br 0
+        end
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      i32.const 0
+      local.set $j
+      block void
+      loop void
+        local.get $j
+        local.get $i
+        i32.ge_u
+        br_if 1
+        local.get $t
+        local.get $j
+        array.get_u $bytes
+        i32.const 192
+        i32.and
+        i32.const 128
+        i32.ne
+        local.get $k
+        i32.add
+        local.set $k
+        local.get $j
+        i32.const 1
+        i32.add
+        local.set $j
+        br 0
+      end
+      end
+      local.get $k
+      i64.extend_i32_u
+      i32.const 0`,
+  },
+  // A one-character text's code point: its first byte says how many bytes
+  // the character has, which must be all of them.
+  "text.code": {
+    params: [["t", "text"]], result: "i64", locals: [["n", "i32"], ["c", "i32"], ["k", "i32"], ["i", "i32"]], uses: [], partial: true,
+    body: `
+      local.get $t
+      array.len
+      local.tee $n
+      i32.eqz
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $t
+      i32.const 0
+      array.get_u $bytes
+      local.tee $c
+      i32.const 128
+      i32.lt_u
+      if void
+        i32.const 1
+        local.set $k
+      else
+        local.get $c
+        i32.const 224
+        i32.lt_u
+        if void
+          i32.const 2
+          local.set $k
+          local.get $c
+          i32.const 31
+          i32.and
+          local.set $c
+        else
+          local.get $c
+          i32.const 240
+          i32.lt_u
+          if void
+            i32.const 3
+            local.set $k
+            local.get $c
+            i32.const 15
+            i32.and
+            local.set $c
+          else
+            i32.const 4
+            local.set $k
+            local.get $c
+            i32.const 7
+            i32.and
+            local.set $c
+          end
+        end
+      end
+      local.get $n
+      local.get $k
+      i32.ne
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      i32.const 1
+      local.set $i
+      block void
+      loop void
+        local.get $i
+        local.get $k
+        i32.ge_u
+        br_if 1
+        local.get $c
+        i32.const 6
+        i32.shl
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        i32.const 63
+        i32.and
+        i32.or
+        local.set $c
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $c
+      i64.extend_i32_u
+      i32.const 0`,
+  },
+  // A code point's character in UTF-8; past U+10FFFF, below 0 and the
+  // surrogates have none.
+  "text.fromCode": {
+    params: [["n", "i64"]], result: "text", locals: [["c", "i32"]], uses: [], partial: true,
+    body: `
+      local.get $n
+      i64.const 1114111
+      i64.gt_u
+      if void
+        ref.null $bytes
+        i32.const 1
+        return
+      end
+      local.get $n
+      i32.wrap_i64
+      local.tee $c
+      i32.const 55296
+      i32.sub
+      i32.const 2048
+      i32.lt_u
+      if void
+        ref.null $bytes
+        i32.const 1
+        return
+      end
+      local.get $c
+      i32.const 128
+      i32.lt_u
+      if text
+        local.get $c
+        array.new_fixed $bytes 1
+      else
+        local.get $c
+        i32.const 2048
+        i32.lt_u
+        if text
+          local.get $c
+          i32.const 6
+          i32.shr_u
+          i32.const 192
+          i32.or
+          local.get $c
+          i32.const 63
+          i32.and
+          i32.const 128
+          i32.or
+          array.new_fixed $bytes 2
+        else
+          local.get $c
+          i32.const 65536
+          i32.lt_u
+          if text
+            local.get $c
+            i32.const 12
+            i32.shr_u
+            i32.const 224
+            i32.or
+            local.get $c
+            i32.const 6
+            i32.shr_u
+            i32.const 63
+            i32.and
+            i32.const 128
+            i32.or
+            local.get $c
+            i32.const 63
+            i32.and
+            i32.const 128
+            i32.or
+            array.new_fixed $bytes 3
+          else
+            local.get $c
+            i32.const 18
+            i32.shr_u
+            i32.const 240
+            i32.or
+            local.get $c
+            i32.const 12
+            i32.shr_u
+            i32.const 63
+            i32.and
+            i32.const 128
+            i32.or
+            local.get $c
+            i32.const 6
+            i32.shr_u
+            i32.const 63
+            i32.and
+            i32.const 128
+            i32.or
+            local.get $c
+            i32.const 63
+            i32.and
+            i32.const 128
+            i32.or
+            array.new_fixed $bytes 4
+          end
+        end
+      end
+      i32.const 0`,
   },
 };
 

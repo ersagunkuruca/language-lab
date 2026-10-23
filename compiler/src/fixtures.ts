@@ -210,3 +210,47 @@ export function texts() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
 }
+
+// Searches with one answer or none: each Choice builtin under a handler,
+// a partial function of the program's own (index, a tail call to
+// itself), a fold whose arm may have none (sum), handlers inside handlers,
+// a definition that has Choice itself (plus one), and budgets around
+// searches, so WebAssembly's found-flag returns can be compared with the
+// evaluator on any input.
+export function choices() {
+  const k = new Lang();
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const opt = (body: () => Id) => k.call(S.optional, k.thunk(body));
+  const index = k.def("index");
+  k.define(index, k.fn(["key", "xs", "i"], (key, xs, i) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.if(k.equal(x, k.call(S.concat, key, k.lit(""))), i, k.call(index, key, rest, k.call(INT_OPS.add, i, k.int(1)))) },
+  ])));
+  const sum = k.def("sum");
+  k.define(sum, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["x", "rest"], results: [null, "r"], body: ([x], [, r]) => k.call(INT_OPS.add, k.call(INT_OPS.read, x), r!) },
+  ])));
+  const down = k.def("down");
+  k.define(down, k.fn(["n"], (n) => k.if(k.call(S.less, n, k.lit(0)), k.call(S.fail), k.if(k.equal(n, k.lit(0)), k.lit(0), k.call(down, k.call(B.sub, n, k.lit(1)))))));
+  const defs = {
+    quotient: d("quotient of", ["a", "b"], (a, b) => opt(() => k.call(INT_OPS.quotient, a, b))),
+    remainder: d("remainder of", ["a", "b"], (a, b) => opt(() => k.call(INT_OPS.remainder, a, b))),
+    power: d("power of", ["a", "b"], (a, b) => opt(() => k.call(INT_OPS.power, a, b))),
+    whole: d("whole", ["x"], (x) => opt(() => k.call(INT_OPS.wholePart, x))),
+    reread: d("reread", ["t"], (t) => k.call(S.first, k.thunk(() => k.call(INT_OPS.show, k.call(INT_OPS.read, t))), k.thunk(() => k.lit("no")))),
+    found: d("found", ["t", "p"], (t, p) => opt(() => k.call(TEXT_OPS.find, t, p))),
+    code: d("code of", ["t"], (t) => opt(() => k.call(TEXT_OPS.code, t))),
+    character: d("character of", ["n"], (n) => k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, n)), k.thunk(() => k.lit("?")))),
+    position: d("position", ["key", "xs"], (key, xs) => opt(() => k.call(index, key, xs, k.int(0)))),
+    sums: d("sums", ["xs"], (xs) => k.call(S.all, k.thunk(() => k.call(sum, xs)))),
+    readable: d("readable", ["t"], (t) => k.call(S.count, k.thunk(() => k.call(INT_OPS.read, t)))),
+    unwrapped: d("unwrapped", ["t"], (t) => k.call(S.first, k.thunk(() => k.call(S.valueOf, opt(() => k.call(INT_OPS.read, t)))), k.thunk(() => k.int(-1)))),
+    plusOne: d("plus one", ["t"], (t) => k.call(INT_OPS.add, k.call(INT_OPS.read, t), k.int(1))),
+    budgeted: d("budgeted", ["n"], (n) => within(k, 5, () => k.call(down, n), () => k.lit(-1))),
+    inside: d("inside", ["n"], (n) => within(k, 5, () => k.call(S.first, k.thunk(() => k.call(down, n)), k.thunk(() => k.lit(-5))), () => k.lit(-1))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
+}
