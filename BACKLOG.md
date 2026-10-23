@@ -65,11 +65,11 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 ## Testing and fast feedback
 
 Thread "Testing strategy and fast feedback", which owns `.github/workflows`
-since 2026-10-23. Plan and measurements: projectional/TESTING.md.
+since 2026-10-23. Plan and measurements: projectional/TESTING.md. T1-T3,
+T5 and T6 are done; T4 is in lane E and T7 in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T6 | Testing rules against the paradigm pin in WORKFLOW.md; read the three tests that mention `cons` against them | TESTING.md T6 | P2 | S | |
 
 ## Coordinator and process
 
@@ -185,7 +185,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| T5 | Nightly at 03:00 UTC, when main changed since the `good` tag: `npm run affected -- --all` (every test, every sweep in full, the browser and GPU checks); green moves `good`. Running Pages by hand on `good` puts back the last fully checked site | this PR |
+| T6 | Testing rules in WORKFLOW.md ("Tests"): the language's terms, laws over all examples, tests go with the design they pin, under 5 s per file or a sweep, no coverage targets. The tests that mention `cons` read against them: toplevel.test.ts edits a match on a list's cons arm (would change with arrays, as it should); compiler checks that output has no `$cons` (the opposite of a pin) | this PR |
+| T5 | Nightly at 03:00 UTC, when main changed since the `good` tag: `npm run affected -- --all` (every test, every sweep in full, the browser and GPU checks); green moves `good`. Running Pages by hand on `good` puts back the last fully checked site | #267 |
 | T2 | `npm run affected` runs only the tests a change reaches: the import graph across the three packages, the test files that read a changed example, the browser tests when the pages could change; Check main runs it from its last green commit. Over the last 40 merges: 6 needed nothing, 5 nearly every unit test, the rest a few files; the browser tests (now the long pole, T4) for 31 | #266 |
 | T3 | The four slowest test files check a rotating eighth of their sweep per run (`SWEEP=all` for everything, `SWEEP_AT` picks the eighth; Check main passes its run number): about 330 s → 60 s; lang.test.ts no longer repeats palette.test.ts's queens sweep | #264 |
 | T1 | Deploy first: a merge is live in about 2 minutes (86 s for #262); the suites run beside it in "Check main" and report instead of blocking | #261 |
