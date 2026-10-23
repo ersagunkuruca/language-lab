@@ -83,6 +83,9 @@ export interface GraphView extends Canvas {
   pick: (id: Id) => void;
   // The nodes these stand for: themselves, and a frame's contents.
   expand: (ids: Id[]) => Id[];
+  // Where a folded frame's contents go when it unfolds: moved together to
+  // the nearest place where the frame overlaps nothing (none if it fits).
+  room: (frame: Id) => Record<Id, Pos>;
 }
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
@@ -111,6 +114,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     picked: () => [...picked],
     pick: (id) => { if (!picked.delete(id)) picked.add(id); },
     expand: (ids) => [...expand(scene, ids)],
+    room: (f) => roomFor(scene, hooks.at, hooks.folded, f),
     tidy: (only) => {
       const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
       const n = Object.keys(moved).length;
@@ -139,6 +143,7 @@ interface Item {
   value?: Id;           // whose value the chip shows
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
+  name?: string;        // what it is called, for a folded box that holds it
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
@@ -337,7 +342,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       inputs.forEach((a, i) => g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    }, { value: id, out: { x: bw, y: bh / 2 } });
+    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : label });
     const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
@@ -397,7 +402,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
         g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
       });
-    });
+    }, { name: title });
     const { sub, bx } = withArgs(inputs, kids, bw, bh, id, portY);
     const body = lay(n.body);
     const x = bx + bw + 40, y = Math.max(0, (sub.h - body.h) / 2);
@@ -508,7 +513,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l));
       });
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), typeOf(id)));
-    }, { value: id, out: { x: bw, y: bh / 2 } });
+    }, { value: id, out: { x: bw, y: bh / 2 }, name: title });
     const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i ? "fn" : ""));
     // Only the value's wire can take a dot: a case's function isn't a value.
     for (const wr of wires) if (wr.to && "item" in wr.to && wr.to.item === id && wr.cls === "fn") wr.edge = undefined;
@@ -601,7 +606,14 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   };
   if (![...scene.frames.keys()].some((f) => hider(f))) return scene;
   const { boxes } = placeAll(scene, at);
-  const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44), h: FOLDH });
+  // A box says what it holds: the calls inside, the first few by name.
+  const holds = (f: Id) => {
+    const inside = [...scene.items.values()].filter((it) => hider(it.frame) === f);
+    const names = [...new Set(inside.flatMap((it) => (it.name ? [it.name] : [])))];
+    const more = inside.length - names.length;
+    return names.length ? `${names.slice(0, 3).join(", ")}${names.length > 3 ? ", …" : ""}` : `${more} node${more === 1 ? "" : "s"} inside`;
+  };
+  const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
   for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
   const frames = new Map<Id, Frame>();
@@ -610,13 +622,12 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     if (!by) { frames.set(f.id, f); continue; }
     if (by !== f.id) continue;
     const b = boxes.get(f.id)!, { w, h } = size(f);
-    const count = [...scene.items.values()].filter((it) => hider(it.frame) === f.id).length;
     items.set(f.id, {
       key: f.id, frame: f.parent, w, h, auto: { x: b.x, y: b.y }, solid: true,
       draw: (g) => g.append(
         s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id }),
         s("text", { x: 10, y: 16, class: "rt" }, f.title),
-        s("text", { x: 10, y: 34, class: "fold-n" }, `${count} node${count === 1 ? "" : "s"} inside`),
+        s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
       ),
     });
@@ -659,6 +670,51 @@ function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>):
     for (const c of expand(scene, [k])) { const q = pos.get(c)!; out[c] = { x: Math.round(q.x + p.x - b.x), y: Math.round(q.y + p.y - b.y) }; }
   }
   return out;
+}
+
+// A box dragged somewhere and unfolded would spread its contents over
+// whatever is there now. Instead they move together, keeping their shape,
+// to the nearest place where the frame overlaps nothing outside it.
+function roomFor(scene: Scene, at: Record<Id, Pos>, folded: Set<Id> | undefined, f: Id): Record<Id, Pos> {
+  const open = fold(scene, at, new Set([...(folded ?? [])].filter((x) => x !== f)));
+  const { pos, boxes } = placeAll(open, at);
+  const b = boxes.get(f);
+  if (!b) return {};
+  const within = (g: Id | null, of: Id | null) => { for (let p = g; p; p = scene.frames.get(p)?.parent ?? null) if (p === of) return true; return false; };
+  // Everything drawn, with the frame (or item) it sits in.
+  const drawn: [Id | null, Box][] = [];
+  for (const [k, it] of open.items) drawn.push([scene.items.has(k) ? it.frame : k, { ...pos.get(k)!, w: it.w, h: it.h }]);
+  for (const [k, fb] of boxes) drawn.push([k, fb]);
+  const GAP = 18;
+  const meet = (a: Box, o: Box, gap: number) => o.x < a.x + a.w + gap && a.x < o.x + o.w + gap && o.y < a.y + a.h + gap && a.y < o.y + o.h + gap;
+  // The frame clears everything outside it, and each frame around it,
+  // grown to take it, clears what it didn't already touch.
+  const around: [Box, Box[]][] = [];
+  for (let a = scene.frames.get(f)?.parent ?? null; a; a = scene.frames.get(a)?.parent ?? null) {
+    const ab = boxes.get(a);
+    if (ab) around.push([ab, drawn.filter(([g, o]) => !within(g, a) && !within(a, g) && !meet(ab, o, 0)).map(([, o]) => o)]);
+  }
+  const others = drawn.filter(([g]) => !within(g, f) && !within(f, g)).map(([, o]) => o);
+  const clear = (dx: number, dy: number) => {
+    const m = { x: b.x + dx, y: b.y + dy, w: b.w, h: b.h };
+    if (others.some((o) => meet(m, o, GAP))) return false;
+    return around.every(([ab, out]) => {
+      const x = Math.min(ab.x, m.x - GAP), y = Math.min(ab.y, m.y - GAP);
+      const grown = { x, y, w: Math.max(ab.x + ab.w, m.x + m.w + GAP) - x, h: Math.max(ab.y + ab.h, m.y + m.h + GAP) - y };
+      return !out.some((o) => meet(grown, o, 0));
+    });
+  };
+  if (clear(0, 0)) return {};
+  for (let r = 20; r <= 4000; r += 20) {
+    const ring: [number, number][] = [];
+    for (let t = -r; t <= r; t += 20) ring.push([t, -r], [t, r], [-r, t], [r, t]);
+    const fit = ring.filter(([dx, dy]) => clear(dx, dy)).sort((p, q) => Math.hypot(...p) - Math.hypot(...q))[0];
+    if (!fit) continue;
+    const all = placeAll(scene, at).pos, out: Record<Id, Pos> = {};
+    for (const c of expand(scene, [f])) { const q = all.get(c)!; out[c] = { x: Math.round(q.x + fit[0]), y: Math.round(q.y + fit[1]) }; }
+    return out;
+  }
+  return {};
 }
 
 // ---------------------------------------------------------------- drawing
