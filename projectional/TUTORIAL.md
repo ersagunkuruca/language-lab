@@ -261,6 +261,11 @@ of "type errors prevented by the editor": you can't pick what doesn't fit.
 - **+ New program** makes an empty program; **Save file** and **Open file…** (in the
   *Program* tab) write and read it as one JSON file holding the code, names, comments and
   layout together. Every edit is also kept in the browser as you go.
+- The *Program* tab also lists the program's **credits** (`credits.json`, a
+  line each): whose code it adapts and whose ideas it follows, saying which.
+  A shader shows them above its picture too. In a program of your own you
+  write them there; an example's are the ones it ships with. **Credits** in
+  the menu bar comes [here](#credits), to the language's own.
 - **+ New definition** makes a function (give its inputs, or none for an
   action you can run), a value, or a data type (give its first case).
 - Select a case of a data type to add fields to it. A field's type is

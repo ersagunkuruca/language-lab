@@ -50,6 +50,17 @@ import diceComments from "../examples/dice/comments.json" with { type: "json" };
 import converterCode from "../examples/converter/code.json" with { type: "json" };
 import converterNames from "../examples/converter/names.default.json" with { type: "json" };
 import converterComments from "../examples/converter/comments.json" with { type: "json" };
+import raymarchCredits from "../examples/raymarch/credits.json" with { type: "json" };
+import diceCredits from "../examples/dice/credits.json" with { type: "json" };
+import converterCredits from "../examples/converter/credits.json" with { type: "json" };
+import shadersCredits from "../examples/shaders/credits.json" with { type: "json" };
+import queensCredits from "../examples/queens/credits.json" with { type: "json" };
+import sortCredits from "../examples/sort/credits.json" with { type: "json" };
+import physicsCredits from "../examples/physics/credits.json" with { type: "json" };
+import calculusCredits from "../examples/calculus/credits.json" with { type: "json" };
+import backwardsCredits from "../examples/backwards/credits.json" with { type: "json" };
+import relationsCredits from "../examples/relations/credits.json" with { type: "json" };
+import effectsCredits from "../examples/effects/credits.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -112,6 +123,14 @@ interface Layout {
 type Program = string;
 const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
+// What each example adapts, follows or was done before by (credits.json,
+// one line each, after CREDITS.md). An example's are always the shipped
+// ones, so an edit can't drop them.
+const CREDITS: Record<Program, string[]> = {
+  numbers: physicsCredits, sort: sortCredits, queens: queensCredits, calculus: calculusCredits, backwards: backwardsCredits,
+  relations: relationsCredits, effects: effectsCredits, shaders: shadersCredits, raymarch: raymarchCredits,
+  dice: diceCredits, converter: converterCredits,
+};
 const MINE = "mine.";
 
 interface Doc {
@@ -128,6 +147,9 @@ interface Doc {
   // Example inputs per definition, as text (src/lang/values.ts): what the
   // graph shows values for. A side table like names: never code.
   examples?: Record<Id, string[]>;
+  // Where the program's ideas and code come from, a line each: a side
+  // table, shown in the Program tab and above a picture.
+  credits?: string[];
   // Changed by you since it was loaded (an example as shipped is not saved
   // as yours, so it keeps up with the shipped one).
   edited?: boolean;
@@ -241,6 +263,7 @@ const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: 
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
 const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
+const creditsOf = (d: Doc) => (isExample(d.program) ? CREDITS[d.program] : d.credits) ?? [];
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
 
 const ui: UI = {
@@ -344,7 +367,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {}, credits: creditsOf(doc) }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -366,7 +389,7 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures },
+    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, credits: x.credits },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -501,6 +524,7 @@ const files = () => [
   { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
   { name: "layout.json", get: (d: Doc) => JSON.stringify(d.layout) },
   { name: "examples.json", get: (d: Doc) => JSON.stringify(d.examples ?? {}) },
+  { name: "credits.json", get: (d: Doc) => JSON.stringify(creditsOf(d)) },
 ];
 
 function fnv(s: string) {
@@ -1295,7 +1319,29 @@ function programPanel(): HTMLElement {
     h("button", { class: "btn", type: "button", "data-act": "save-file" }, "Save file"),
     mine ? h("button", { class: "btn danger", type: "button", "data-act": "delete-program" }, "Delete") : null),
     h("p", { class: "hint" }, "Every edit is kept in this browser as you go. A file holds the code, names, comments and layout together."));
+  out.append(creditsList(creditsOf(doc)) ?? h("p", { class: "hint" }, "No credits yet."));
+  if (mine) {
+    const ta = h("textarea", { id: "f-credits", rows: "3", placeholder: "Adapted: … (who, and a link). Influence: … Prior art: …" }) as HTMLTextAreaElement;
+    ta.value = creditsOf(doc).join("\n");
+    ta.addEventListener("change", () => {
+      const credits = ta.value.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (credits.join("\n") !== creditsOf(doc).join("\n")) commit({ credits }, ["credits.json"], "Credits saved: they show in the Program tab and above a picture.");
+    });
+    out.append(h("label", { class: "field", for: "f-credits" }, h("span", {}, "Credits · credits.json, a line each"), ta));
+  }
   return out;
+}
+
+// A program's credits, links as links. What each line credits, and how
+// (adapted, influence, prior art), is in the line; CREDITS.md has them all.
+function creditsList(lines: string[]): HTMLElement | null {
+  if (!lines.length) return null;
+  const linked = (line: string) => line.split(/(https?:\/\/[^\s]+[^\s.,;:)])/).map((part, i) =>
+    i % 2 ? h("a", { href: part, target: "_blank", rel: "noopener" }, part.replace(/^https?:\/\//, "").replace(/\/$/, "")) : part);
+  return h("div", { class: "credits" },
+    h("strong", {}, "Credits"),
+    h("ul", {}, ...lines.map((l) => h("li", {}, ...linked(l)))),
+    h("a", { href: "tutorial.html#credits" }, "Every influence and source"));
 }
 
 // The graph, with any calls shown inline. Their copies are a view, so every
@@ -1522,10 +1568,12 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 // again after every edit. When the compiler can't take it to the GPU, its
 // reason shows instead. The canvas outlives renders, so the drawing goes on.
 const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint" }), for: null as Code | null, now: null as Picture | null };
-const picBox = h("div", { class: "picture-box" }, pic.canvas, pic.status);
+const picCredits = h("div", {});
+const picBox = h("div", { class: "picture-box" }, picCredits, pic.canvas, pic.status);
 function pictureSection(info: T.Info | null): HTMLElement | null {
   const entries = pictureEntries(doc.code.defs, pres().names);
   if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
+  picCredits.replaceChildren(creditsList(creditsOf(doc)) ?? "");
   if (pic.for !== doc.code) {
     const code = pic.for = doc.code;
     pic.now?.stop();
@@ -1772,7 +1820,8 @@ function guide(): HTMLElement {
   ];
   return h("section", { class: "guide", "aria-label": "Guide" },
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
-    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."));
+    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
+    h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its definitions' comments say so, and the Program tab lists its credits (above the picture too, for a shader). Credits, in the menu, lists every influence and source of the language itself."));
 }
 
 // A built-in isn't a black box: show its equation, its code, and every
@@ -1917,6 +1966,7 @@ function draw() {
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
         h("a", { class: "btn", href: "tutorial.html" }, "Tutorial"),
+        h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
         h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
     h("main", { class: "grid is-typed", style: dockStyle() },
       navigator(p),

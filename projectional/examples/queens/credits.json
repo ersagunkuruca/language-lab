@@ -1,0 +1,4 @@
+[
+ "Textbook: the eight queens puzzle (Max Bezzel, 1848), a classic backtracking example, as in Niklaus Wirth's \"Program development by stepwise refinement\" (1971).",
+ "Influence: Choice, where an expression can fail or give many answers, follows Verse (\"The Verse Calculus\", ICFP 2023), with Icon's generators and Prolog's backtracking before it."
+]
