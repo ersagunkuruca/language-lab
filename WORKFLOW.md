@@ -112,6 +112,34 @@ model, then WebAssembly. Update this line when the step changes.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 
+## Tests
+
+What a test may say, so tests protect the language without pinning
+today's design in place (Ersagun, 2026-10-23: a suite of `cons` tests
+would keep us a Lisp; projectional/TESTING.md has the reasoning).
+
+- **Say it in the language's terms.** A test states what a program does
+  (an example's output; run and compiled printing the same), or a law
+  (forward and backwards agree, a round trip, an equality law, every
+  palette offer type-checks). Not the shape of an implementation: node
+  kinds, private functions, internal data layout, or the wording of UI
+  text unless the text is the feature.
+- **Quantify over the examples, don't list cases.** A law over every
+  example tests the next example for free and doesn't make today's
+  representation feel load-bearing. One law "a list read back from the
+  blocks is the list written" survives a move from `cons` to arrays; five
+  tests about `cons` cells don't.
+- **Every test says what it protects** in its first comment. When a
+  design goes, its tests go in the same PR, and the PR says so. That is
+  normal, not cheating. Still never allowed: weakening or skipping a test
+  while the behaviour it protects is meant to stay the same.
+- **Under 5 seconds per file per change.** Anything slower is a sweep and
+  checks a slice per run with `sweep()` from `projectional/test/helpers.ts`
+  (all of it nightly and with `SWEEP=all`).
+- **No coverage targets.** Whether the tests earn their time is judged in
+  the critical review, sometimes with a mutation pass (change the code,
+  see if any test notices), not by a number to raise.
+
 ## Ids and sizes
 
 Ids are a lane letter and a number (`E3`, `C12`, `L7`), never reused, and an
