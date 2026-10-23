@@ -817,10 +817,11 @@ export function interpreter(code: Code, opts: Options = {}) {
     switch (id) {
       case S.concat: return wait({ k: "concat", a, b, c: out });
       case S.show: return wait({ k: "show", n: a, s: out });
-      case S.floor: case S.mod:
+      case S.floor: case S.mod: case S.float32:
         // Many inputs give the same output (a whole interval, every multiple
-        // of b): there's nothing to enumerate, so these only run forward.
-        return wait({ k: "compute", args, out, f: STD_IMPL[id] as (...x: Value[]) => Value, text: id === S.floor ? "floor" : "mod" });
+        // of b, every number rounding to one f32): there's nothing to
+        // enumerate, so these only run forward.
+        return wait({ k: "compute", args, out, f: STD_IMPL[id] as (...x: Value[]) => Value, text: id === S.floor ? "floor" : id === S.mod ? "mod" : "round to Float32" });
       case S.range: return wait({ k: "range", n: a, out });
       case S.less: return compare(args, out, both<number>((x, y) => x < y), both<number>((x, y) => x >= y));
       case S.equal:

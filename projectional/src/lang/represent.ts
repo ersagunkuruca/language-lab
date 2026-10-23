@@ -17,6 +17,7 @@
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, INT_OPS, LIST, S, TEXT_OPS } from "./std.ts";
+import { NUMBER } from "./types.ts";
 
 export interface Representation {
   name: string;
@@ -26,8 +27,15 @@ export interface Representation {
   // Every value has one spelling, so structural equality is equality of
   // meanings. A representation that isn't canonical must implement `equal`.
   canonical: boolean;
-  // Keys: a variant of T (its constructor), "match", "fold", or a def on T.
+  // Keys: a variant of T (its constructor), "match", "fold", or a def or
+  // builtin on T.
   impl: Record<string, Id>;
+  // A function given each literal of T, when R spells literals differently
+  // (or rounds them: Float32).
+  literal?: Id;
+  // Its laws hold only approximately (floats), so the chooser never picks
+  // it by cost; a program asks for it (NUMBERS.md).
+  approximate?: boolean;
   // The same keys, plus "space". Values are on the ladder below.
   cost: Record<string, string>;
 }
@@ -35,7 +43,13 @@ export interface Representation {
 export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
 const rank = (c: string | undefined) => (c === undefined ? LADDER.length : LADDER.indexOf(c));
 
-const variantsOf = (code: Code, type: Id) => (code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants;
+// A builtin type such as Number has no cases: its jobs are its builtins.
+const variantsOf = (code: Code, type: Id) => {
+  const d = code.nodes[type];
+  return d?.kind === "def" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : [];
+};
+// Is this node a literal of type t?
+const literalOf = (n: Node, t: Id) => n.kind === "lit" && (n.of ? n.of === t : t === NUMBER && typeof n.value === "number");
 
 // The jobs on T a definition uses, transitively: constructors, matches,
 // folds, and calls to functions some representation implements.
@@ -89,14 +103,14 @@ export interface Choice {
 // done by its definition, which costs what it costs in T's own terms.
 export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   const jobs = uses(code, entry, reps);
-  const spec = reps.find((r) => r.type === r.of)!;
+  const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? spec.cost[j] ?? "?"]));
   const score = (r: Representation) => {
     const c = costs(r);
     const rs = jobs.map((j) => rank(c[j]));
     return [Math.max(...rs), rs.reduce((a, b) => a + b, 0), rank(c.space)];
   };
-  const best = [...reps].sort((a, b) => {
+  const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
     return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
   })[0];
@@ -124,7 +138,9 @@ export function jobProblem(info: Info, rep: Representation, names: Record<Id, st
 // where a node is replaced (a match becomes a call to the representation's
 // match), so names and comments stay attached.
 export function represent(code: Code, entries: Id[], rep: Representation): Code {
-  if (rep.type === rep.of) return code;
+  // The definition itself; a representation by the same type changes the
+  // jobs (Float32 rounds each one).
+  if (rep.type === rep.of && !Object.keys(rep.impl).length && !rep.literal) return code;
   const t = rep.of;
   const variants = new Set(variantsOf(code, t));
   const nodes: Record<Id, Node> = { ...code.nodes };
@@ -139,7 +155,7 @@ export function represent(code: Code, entries: Id[], rep: Representation): Code 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
   const own = new Set<Id>();
-  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : [])]) {
+  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : [])]) {
     own.add(d);
     for (const x of dependencies(code, d)) own.add(x);
   }
@@ -187,6 +203,10 @@ export function represent(code: Code, entries: Id[], rep: Representation): Code 
     const n = nodes[id];
     for (const c of childrenOf(n)) rewrite(c);
     if (n.kind === "ref" && rep.impl[n.target]) nodes[id] = { ...n, target: rep.impl[n.target] };
+    else if (rep.literal && literalOf(n, t)) {
+      const { id: _, ...lit } = n;
+      nodes[id] = { id, kind: "call", fn: ref(rep.literal), args: [add(lit)] };
+    }
     else if (n.kind === "tref" && n.target === t) nodes[id] = { ...n, target: rep.type };
     else if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) {
       const arms = new Map(n.arms.map((a) => { const arm = nodes[a] as NodeOf<"arm">; return [arm.variant, arm]; }));

@@ -136,6 +136,12 @@ test("units: declared on parameters and numbers, inferred through predicates and
   const measured = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 29.62 && n.unit)!;
   const plain = replace(p.code, measured.id, () => ({ kind: "lit", value: 29.62 }));
   assert.ok(infer(plain, p.pres.names).errors.some((e) => /declared m|units don't agree|plain number/.test(e.message)));
+  // A refusal names the units on both sides.
+  const speed = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 5 && n.unit)!;
+  const seconds = replace(p.code, speed.id, () => ({ kind: "lit", value: 5, unit: { s: 1 } }));
+  const msgs = infer(seconds, p.pres.names).errors.map((e) => e.message);
+  assert.ok(msgs.includes("declared m/s, but the rest makes it s"), msgs.join("; "));
+  assert.ok(msgs.some((m) => /^units don't agree here: \S+ is m, \S+ is s²$/.test(m)), msgs.join("; "));
 });
 
 test("a predicate hashes by structure: the same network written twice hashes the same", () => {

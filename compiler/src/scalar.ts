@@ -77,7 +77,7 @@ export type SExpr =
 export type Op = keyof typeof OPS;
 export const OPS = {
   add: { t: "f64" }, sub: { t: "f64" }, mul: { t: "f64" }, div: { t: "f64" }, neg: { t: "f64" },
-  sqrt: { t: "f64" }, abs: { t: "f64" }, floor: { t: "f64" },
+  sqrt: { t: "f64" }, abs: { t: "f64" }, floor: { t: "f64" }, float32: { t: "f64" },
   sin: { t: "f64", host: true }, cos: { t: "f64", host: true }, tan: { t: "f64", host: true },
   exp: { t: "f64", host: true }, log: { t: "f64", host: true }, pow: { t: "f64", host: true }, atan2: { t: "f64", host: true }, mod: { t: "f64", host: true },
   less: { t: "i32" }, equal: { t: "i32" }, beq: { t: "i32" }, and: { t: "i32" }, or: { t: "i32" }, not: { t: "i32" },
@@ -86,7 +86,7 @@ export const OPS = {
 const BUILTIN: Record<Id, Op> = {
   [B.add]: "add", [B.sub]: "sub", [B.mul]: "mul", [B.div]: "div", [B.neg]: "neg", [B.sqrt]: "sqrt",
   [B.sin]: "sin", [B.cos]: "cos", [B.tan]: "tan", [B.exp]: "exp", [B.log]: "log", [B.pow]: "pow", [B.atan2]: "atan2",
-  [S.abs]: "abs", [S.floor]: "floor", [S.mod]: "mod", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
+  [S.abs]: "abs", [S.floor]: "floor", [S.float32]: "float32", [S.mod]: "mod", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
 };
 
 // `spends`: each call spends one from the budget (the checker couldn't see
@@ -370,10 +370,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const shape = `only as a budget, ${BUDGET}`;
     if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || inner?.kind !== "call" || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
       throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
-    const amount = code.nodes[inner.args[0]], body = thunk(inner.args[1]);
+    // A number written down, rounded to Float32 maybe (NUMBERS.md).
+    const rounded = code.nodes[inner.args[0]];
+    const under = rounded?.kind === "call" && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
+    const amount = under ? code.nodes[(rounded as NodeOf<"call">).args[0]] : rounded, body = thunk(inner.args[1]);
     if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
     if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
-    const v = amount.value;
+    const v = under ? Math.fround(amount.value) : amount.value;
     if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (a shader's is a number from 0 to ${MAX_FUEL})`);
     const t = stype(zonk(id));
     if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);

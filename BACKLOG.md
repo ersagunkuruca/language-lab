@@ -27,6 +27,7 @@ New items land here until the next triage gives them a lane and a priority.
 | | Editor: spaces in a typed text are collapsed (`"  × "` → `" × "`) | GAPS round 3, editor 6 | 2026-10-23 |
 | | Editor: Text view drops brackets around an `if` inside `++` | GAPS round 3, editor 7 | 2026-10-23 |
 | | Editor: a definition with `Console` runs (and prints) while it's being written | GAPS round 3, editor 8 | 2026-10-23 |
+| | Editor: a picture's CPU fallback (editor/picture.ts) and its evaluator check run in float64; run them on the program in Float32 (`withFloat32` + `represent`, as compiler/gpu.ts does) so the fallback draws the GPU's picture | C8 | 2026-10-23 |
 
 ## E: Editor
 
@@ -35,7 +36,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E12 | Unit refusals name the units ("speed is m/s, gravity is m/s²") | QA2 UX9 | P2 | S | |
 | E13 | Navigator search covers only the open program | QA2 L2 | P2 | S | |
 | E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
 | E15 | Keyboard editing: Tab reaches no node, port or hole | QA2 UX7 | P2 | L | |
@@ -53,10 +53,9 @@ and lists built by G22's loops), then the rest in order.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C2 | G21 lists as arrays, the part left: lists that are matched on (the array and a start), and lists built by G22's loops; ledger's G23 is the first program that needs it (four spines per run, `split` lines matched in `entries` and `parse`) | GAPS G21, G23 | P2 | M | parts 1 #182, 2 #188 done |
 | C6 | G13 again, the part left: single-answer functions returning several values (Countdown's `join` builds its `found`) | GAPS G13 | P3 | M | fold part done |
 | C7 | WebAssembly for full programs (WasmGC or our own GC); design note first | ROADMAP 6 | P2 | L | after the editor step and L4 |
-| C8 | `Float32` for shaders | ROADMAP 6a left | P2 | M | |
+| C22 | G21/G23 again: a list matched and handed to itself (ledger's `entries`) as an array and an index (`$arr` copies taking both), and lists built by G22's holes kept as arrays, so the folds from the end need no spine | GAPS G23 | P3 | M | |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C12 | G18 an Abort handler that never resumes is a try/catch | GAPS G18 | P3 | S | |
@@ -109,6 +108,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E12 | Unit refusals name the units on both sides | #223 |
 | E23 | Bug: the live page's buttons went dead after opening another definition (Chrome drops listeners when the frame is redrawn) | #221 |
 | E11 | The zoom button shows the zoom; Fit keeps clear of the pill | #215 |
 | E10 | A program opens on `main`, its showcase definition in the next tab | #212 |
@@ -128,6 +128,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| C2 | G21 part 3: a list from `split` taken apart by matches is an index into the array (ledger's `parse` makes no cells, about 5 to 10%); the rest is C22 | this PR |
+| C8 | `Float32`: an approximate representation of `Number` (every job rounded to binary32, literals too), so f32 is in the program rather than the GPU's choice; on the GPU test, 578 of 1001 values (functions of + − × only) now match the evaluator exactly instead of closely. Design #220, builtin #224, representation #225 | #226 |
 | C10 | Deep recursion checked: `lab compile` takes 1,000,000 nested parentheses; on the default stack compiled and the ideal both stop near 1,500, no gap; heap continuations left as C21 | this PR |
 | C9 | Compiled JS expands `derivative` and `gradient` of a known function at compile time, as the scalar profile does; only a function known at run time asks the runtime's `$derivative` | #217 |
 | C6 | G13 again, the fold part: a fold whose answer is one record carries its fields in locals and builds it once (chapters' `sections`, one record fewer per line) | #214 |

@@ -294,10 +294,20 @@ can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
   prints now, and its comment that "Number is f32" becomes a fact of the
   program instead of the target's choice.
 
-The steps, one PR each: the builtin and represent.ts taking a builtin type;
+The steps, one PR each: the builtin and represent.ts taking a builtin type
+(done: `round to Float32` is in every number table, its slope is the
+slope of what it rounds, and a representation may have `literal`, a
+function given each literal, and `approximate`, which the chooser skips);
 the `Float32` representation with its laws tested with a tolerance against
-`Number`; js-scalar's `Math.fround`; the shaders example asking for it and
-gpu.ts checking `+ − ×` exactly.
+`Number` (done: `withFloat32` in src/lang/float32.ts adds a rounded job for
+each Number builtin whose answer may not be an f32, and
+test/float32.test.ts checks each to within half a step); js-scalar's
+`Math.fround` and gpu.ts checking `+ − ×` exactly (done: a function made
+only of those, negate, abs, floor and comparisons is checked exactly
+against the evaluator running the program in Float32, 578 of the 1001
+values; the raymarch picture's JavaScript in Float32 equals the
+evaluator's in Float32). The editor's picture fallback running in
+Float32 is a backlog item for the editor.
 
 ### Costs and the chooser
 
