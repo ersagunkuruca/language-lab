@@ -115,11 +115,15 @@ interface FoldCtx { arms: Map<Id, FoldArm>; env: Env }
 // The children of one value to fold first, and how their results become
 // the arm's folded values.
 interface Kids { kids: Data[]; folded: (results: Value[]) => Value[] }
+// The children folded so far, newest first. Shared, not copied, between the
+// frames that wait for the next child, so a value with n children costs n
+// steps, not n² (a choice may resume a frame more than once).
+type Done = { v: Value; n: number; up: Done } | null
 type Frame = { next: Frame | null } & (
   | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: NodeOf<"call"> | NodeOf<"solve"> }
   | { t: "match"; n: NodeOf<"match">; env: Env }
   | { t: "fold"; n: NodeOf<"fold">; env: Env }
-  | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Value[] }
+  | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Done }
   | { t: "fuelExit"; saved: Fuel | null }
   // `seeded`: answers Random's `random()` from its generator.
   | { t: "seeded"; effect: Id; gen: Generator }
@@ -506,12 +510,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // for children are the stack, on the heap.
         case "fold": return this.foldValue({ arms: foldArms(f.n), env: f.env }, v as Data);
         case "foldChild": {
-          const results = [...f.results, v];
-          if (results.length < f.kids.kids.length) {
+          const results: Done = { v, n: (f.results?.n ?? 0) + 1, up: f.results };
+          if (results.n < f.kids.kids.length) {
             this.push({ ...f, results, next: null });
-            return this.foldValue(f.ctx, f.kids.kids[results.length]);
+            return this.foldValue(f.ctx, f.kids.kids[results.n]);
           }
-          return this.foldBody(f.ctx, f.d, f.arm, f.kids.folded(results));
+          const all: Value[] = new Array(results.n);
+          for (let r: Done = results; r; r = r.up) all[r.n - 1] = r.v;
+          return this.foldBody(f.ctx, f.d, f.arm, f.kids.folded(all));
         }
         case "handler":
           if (f.h === S.first || f.h === S.optional) {
@@ -538,7 +544,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         const arm = ctx.arms.get(d.tag)!;
         const kids = kidsOf(arm, d);
         if (!kids.kids.length) return this.foldBody(ctx, d, arm, kids.folded([]));
-        this.push({ t: "foldChild", ctx, d, arm, kids, results: [], next: null });
+        this.push({ t: "foldChild", ctx, d, arm, kids, results: null, next: null });
         d = kids.kids[0];
       }
     }
