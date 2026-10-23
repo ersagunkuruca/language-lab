@@ -546,3 +546,21 @@ test("a new function's parameters are named for what they take", () => {
   assert.deepEqual([con(NUMBER), con(INT), con(STRING), con("std.list"), con("chap"), { t: "var" as const, v: 1 }, undefined].map((t) => paramName(t, names)),
     ["x", "n", "text", "items", "chapter", "value", "value"]);
 });
+
+test("a whole number typed where an Int goes fills it as an Int; a fraction is refused there", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/wc"));
+  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const info = infer(code, p.pres.names);
+  const def = code.defs.find((d) => subtree(code, d).includes(lit.id));
+  const r = T.fillValue(code, p.pres.names, info, lit.id, "0", def);
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  if (r.ok) assert.deepEqual(r.code.nodes[lit.id], { id: lit.id, kind: "lit", value: 0, of: INT });
+  const big = T.fillValue(code, p.pres.names, info, lit.id, "12345678901234567890", def);
+  assert.ok(big.ok, big.ok ? "" : big.reason);
+  assert.ok(big.code.nodes[lit.id].kind === "lit" && (big.code.nodes[lit.id] as NodeOf<"lit">).value === "12345678901234567890");
+  assert.equal(T.fillValue(code, p.pres.names, info, lit.id, "0.5", def).ok, false);
+});
