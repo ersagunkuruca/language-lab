@@ -31,7 +31,7 @@
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
 import type { Runtime, World } from "../../projectional/src/lang/run.ts";
-import { assemble, runtime, textBytes, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
@@ -56,15 +56,23 @@ const INSTR: Partial<Record<Op, [number | number[], string]>> = {
 
 export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 
-export function emitWasm(lowered: Lowered): Module {
+// `wasi`: a WASI command instead, its world written over
+// wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
+// runMain does, for hosts with no JavaScript (wasmtime).
+export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Module {
+  const wasi = !!opts.wasi;
   const { funcs } = lowered;
   // Host functions used, in a fixed order: they take the first indices.
   const hosts = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
   // The runtime functions used, with the ones they use; `host.show` is an import.
-  const rtNames: string[] = [];
+  // WASI's functions it uses (wasi_fd_write …) are imports, and the
+  // TextList and TextOption makers the module's own helpers.
+  const rtNames: string[] = [], wasiImports: string[] = [];
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
+    if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
+    if (/^Text(List|Option)\./.test(name)) return;
     rtNames.push(name);
     if (name !== "host.show") runtime(name).uses.forEach(need);
   };
@@ -75,6 +83,15 @@ export function emitWasm(lowered: Lowered): Module {
   const worldOps: Extract<SExpr, { k: "world" }>[] = [];
   const worldCalls = (e: SExpr): void => { if (e.k === "world" && !worldOps.some((x) => x.op === e.op)) worldOps.push(e); kids(e).forEach(worldCalls); };
   funcs.forEach((f) => worldCalls(f.body));
+  const main = wasi ? funcs.find((f) => f.name === "main" && !f.inner && !f.budgeted) : undefined;
+  if (wasi && (!main || main.params.length > 1)) throw new Error("a WASI command needs a main that takes the arguments, or nothing");
+  if (wasi) {
+    worldOps.forEach((x) => need(`wasi.${x.op}`));
+    if (worldOps.some((x) => x.aborts)) need("wasi.reason");
+    if (main!.params.length) need("wasi.args");
+    need("wasi.line");
+    need("wasi_proc_exit");
+  }
   const texty = rtNames.length > 0 || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
@@ -82,9 +99,9 @@ export function emitWasm(lowered: Lowered): Module {
   const rts: RtFn[] = rtNames.filter((n) => n !== "host.show").map(runtime);
   const worldReason = worldOps.some((x) => x.aborts);
   const worldBase = hosts.length + (hostShow ? 1 : 0);
-  const worldIndex = (op: string) => worldBase + worldOps.findIndex((x) => x.op === op);
-  const reasonIndex = worldBase + worldOps.length;
-  const imports = worldBase + worldOps.length + (worldReason ? 1 : 0);
+  const worldIndex = (op: string) => (wasi ? rtIndex(`wasi.${op}`) : worldBase + worldOps.findIndex((x) => x.op === op));
+  const reasonIndex = () => (wasi ? rtIndex("wasi.reason") : worldBase + worldOps.length);
+  const imports = worldBase + (wasi ? wasiImports.length : worldOps.length + (worldReason ? 1 : 0));
   const fnIndex = (i: number) => imports + i;
   // A generic definition lowered at several types (plus on Vec and on
   // Colour) is exported under its name once, then with the types it's at.
@@ -154,11 +171,25 @@ export function emitWasm(lowered: Lowered): Module {
     if (!d) throw new Error(`the runtime's ${key} isn't one of the module's types`);
     return d;
   };
+  const optionOf = () => {
+    const d = datas.find((x) => x.key === OPTION_TEXT);
+    if (!d) throw new Error("the runtime's Optional Text isn't one of the module's types");
+    return d;
+  };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (n === "bytes" ? bytesIndex : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
-    func: (n: string) => (n === "host.show" ? hosts.length : rtIndex(n)),
+    type: (n: string) => (n === "bytes" ? bytesIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    func: (n: string) => {
+      if (n === "host.show") return hosts.length;
+      if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
+      if (n === "main") return fnIndex(funcs.indexOf(main!));
+      const h = helpers.findIndex((x) => x.name === n);
+      return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
+    },
+    global: (n: string) => (n === "reason" ? reasonG : 0),
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
+      if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
+      if (t === "void") throw new Error("nothing isn't a value type");
       return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t };
     },
   });
@@ -181,8 +212,9 @@ export function emitWasm(lowered: Lowered): Module {
   // A world operation giving the unit gives nothing (the module makes it);
   // one that can fail gives a status after.
   const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && t.fields.length === 0;
-  const worldSig = worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
-  const reasonSig = worldReason ? sig([], "text") : 0;
+  const worldSig = wasi ? [] : worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
+  const reasonSig = worldReason && !wasi ? sig([], "text") : 0;
+  const wasiSig = wasiImports.map((n) => sig(WASI_IMPORTS[n.slice(5)].params, WASI_IMPORTS[n.slice(5)].result));
   // A closure's code has its function type's code type, so call_ref takes it.
   const codeOf = new Map<number, FType>();
   const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
@@ -235,8 +267,22 @@ export function emitWasm(lowered: Lowered): Module {
   }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
-  const rtType = (f: RtFn, t: VT): LType => (t === "list" ? listOf(f) : t);
-  const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)), rtType(f, f.result), f.partial));
+  // _start: main, given the arguments; an abort's reason to standard
+  // error and exit 1, else the exit code from an Int or a Number, or 0.
+  if (wasi) {
+    const m = main!, r = m.result;
+    rts.push({
+      name: "wasi.start", params: [], result: "void", locals: m.partial ? [["st", "i32"]] : [], uses: [],
+      body: [
+        ...(m.params.length ? ["call $wasi.args"] : []), "call $main",
+        ...(m.partial ? ["local.set $st", "local.get $st", "if void", ...(aborts ? ["local.get $st", "i32.const 2", "i32.eq", "if void", "i32.const 2", "global.get $reason", "call $wasi.line", "end"] : []), "i32.const 1", "call $wasi_proc_exit", "unreachable", "end"] : []),
+        ...(r === "i64" ? ["i32.wrap_i64"] : r === "f64" ? ["i32.trunc_sat_f64_s"] : ["drop", "i32.const 0"]),
+        "call $wasi_proc_exit",
+      ].join("\n"),
+    });
+  }
+  const rtType = (f: RtFn, t: VT): LType | null => (t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t);
+  const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
@@ -251,12 +297,13 @@ export function emitWasm(lowered: Lowered): Module {
   const importSec = vec([
     ...hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]),
     ...(hostShow ? [[...str("host"), ...str("show"), 0x00, ...u(showSig)]] : []),
-    ...worldOps.map((x, i) => [...str("world"), ...str(x.op), 0x00, ...u(worldSig[i])]),
-    ...(worldReason ? [[...str("world"), ...str("reason"), 0x00, ...u(reasonSig)]] : []),
+    ...worldOps.filter(() => !wasi).map((x, i) => [...str("world"), ...str(x.op), 0x00, ...u(worldSig[i])]),
+    ...(worldReason && !wasi ? [[...str("world"), ...str("reason"), 0x00, ...u(reasonSig)]] : []),
+    ...wasiImports.map((n, i) => [...str("wasi_snapshot_preview1"), ...str(n.slice(5)), 0x00, ...u(wasiSig[i])]),
   ]);
   const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
   // The runtime functions the host uses, by these names.
-  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte" };
+  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start" };
   const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
@@ -264,6 +311,7 @@ export function emitWasm(lowered: Lowered): Module {
     ...entries.map(([f, i]) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]),
     ...helpers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
     ...rtExports.map((f) => [...str(RT_EXPORTS[f.name]), 0x00, ...u(rtIndex(f.name))]),
+    ...(wasi ? [[...str("memory"), 0x02, 0x00]] : []),
   ]);
   // global 0: the fuel left, an f64. Outside any budget it's infinite, so
   // what the checker couldn't see end just runs (only `data` calls it there).
@@ -367,7 +415,7 @@ export function emitWasm(lowered: Lowered): Module {
       case "world": {
         // A failure (status 2): its reason from the world, then on out as an abort.
         const call = [...e.args.flatMap(code1), 0x10, ...u(worldIndex(e.op))];
-        const failed = !e.aborts ? [] : fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x21, ...u(st), 0x20, ...u(st), 0x04, 0x40, 0x10, ...u(reasonIndex), 0x24, ...u(reasonG), 0x41, 0x02, 0x0c, ...to(d + 1, fl), 0x0b];
+        const failed = !e.aborts ? [] : fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x21, ...u(st), 0x20, ...u(st), 0x04, 0x40, 0x10, ...u(reasonIndex()), 0x24, ...u(reasonG), 0x41, 0x02, 0x0c, ...to(d + 1, fl), 0x0b];
         return [...call, ...failed, ...(isUnit(e.t) ? [0xfb, 0x00, ...u(recIndex.get((e.t as RType).key)!)] : [])];
       }
       case "op": {
@@ -400,6 +448,7 @@ export function emitWasm(lowered: Lowered): Module {
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
+    ...(wasi ? section(5, vec([[0x00, 0x01]])) : []),
     ...(fuel || aborts ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
@@ -486,8 +535,8 @@ export function emitWasm(lowered: Lowered): Module {
         wat(e.arm, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "world": return [
-        ...e.args.map(w), `${d}call $world.${e.op}`,
-        ...(!e.aborts ? [] : fl < 0 ? [`${d}(if (then unreachable)) ;; failed, nowhere to go`] : [`${d}local.set ${st}`, `${d}local.get ${st}`, `${d}(if (then call $world.reason global.set $reason i32.const 2 br ${to(ld + 1)})) ;; failed`]),
+        ...e.args.map(w), `${d}call $${wasi ? "wasi" : "world"}.${e.op}`,
+        ...(!e.aborts ? [] : fl < 0 ? [`${d}(if (then unreachable)) ;; failed, nowhere to go`] : [`${d}local.set ${st}`, `${d}local.get ${st}`, `${d}(if (then call $${wasi ? "wasi" : "world"}.reason global.set $reason i32.const 2 br ${to(ld + 1)})) ;; failed`]),
         ...(isUnit(e.t) ? [`${d}struct.new ${recName(e.t as RType)}`] : []),
       ].join("\n");
       case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
@@ -505,8 +554,10 @@ export function emitWasm(lowered: Lowered): Module {
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
     ...(hostShow ? [`  (import "host" "show" (func $host.show (param f64) (result (ref null $bytes))))`] : []),
-    ...worldOps.map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${" (ref null $bytes)".repeat(x.args.length)})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
-    ...(worldReason ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
+    ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${" (ref null $bytes)".repeat(x.args.length)})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
+    ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
+    ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
+    ...(wasi ? [`  (memory (export "memory") 1)`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),

@@ -3,12 +3,13 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2, W3a, W3b-1, W4a, W4b and W4c are done (W2:
-functions as values, W3a: Int and Text, W3b-1: the world through a
-JavaScript host, W4a: searches with one answer or none, W4b: choosing
-inside a handler, W4c: Abort, below). wc, ledger, chapters and calc run
-whole in WebAssembly, main included. Next is W3b-2, the same imports
-written for WASI, so they run under wasmtime with no JavaScript. What runs in WebAssembly is the
+**Status.** Stages W1, W2, W3, W4a, W4b and W4c are done (W2: functions
+as values, W3a: Int and Text, W3b: the world, through a JavaScript host
+or as a WASI command, W4a: searches with one answer or none, W4b:
+choosing inside a handler, W4c: Abort, below). wc, ledger, chapters and
+calc run whole in WebAssembly, main included, and as WASI commands they
+run under wasmtime with no JavaScript (`npm run wasi -- wc` in compiler/).
+Next is `one of` inside called functions (queens, Countdown). What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -18,6 +19,24 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W3b-2 came out. `emitWasm(lowered, { wasi: true })` gives a WASI
+command: the same world operations, written in WebAssembly over
+`wasi_snapshot_preview1` (`fd_write`, `fd_read`, `path_open`,
+`fd_readdir`, `path_filestat_get`, `args_get`, `proc_exit`) in
+`wasm-rt.ts`, and `_start`, which runs main as `runMain` does. WASI hands
+bytes over in linear memory, so the module has one, grown to fit, and
+copies between it and its GC texts. A failure's reason is Node's world's
+wording, from WASI's error number. Two things a JavaScript host gets free
+are written out: a folder's names come sorted (each time the greatest name
+before the last one taken, since WASI gives them in no order), and a line
+is read a byte at a time so what follows stays for the next read. Paths
+are relative to the folder the host gives the program, WASI's sandbox, so
+an absolute path or `..` out of it is "not allowed". Under `node:wasi` in a
+folder of their own, the four programs and one that uses the rest of the
+world (listing folders, `file exists`, `read line`, `add to file`) give the
+evaluator's output, files and exit codes on 90 runs; by hand they run the
+same under wasmtime 50 (`-W gc=y`).
 
 How W3b-1 came out. Console and Files are imports from a module
 `world`, one per operation used (`print`, `readFile`, `listFolder`, …),
@@ -253,8 +272,8 @@ rest with the reason, so nothing breaks between stages.
 2. **W2 closures (done).** Functions as values, `map` and `keep` with a
    lambda, `call_ref`, and tail calls through `return_call_ref`.
 3. **W3 text and the world.** UTF-8 text with the std.ts text builtins,
-   `show` (W3a, done), and the `World` imports with both adapters (W3b-1
-   the JavaScript one, done; W3b-2 WASI). Programs: wc and
+   `show` (W3a, done), and the `World` imports with both adapters (W3b,
+   done: JavaScript, and WASI for wasmtime). Programs: wc and
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
    installed).
 4. **W4 searches and effects.** One answer or none as a status after
