@@ -618,3 +618,23 @@ test("arithmetic typed where a value goes is calls of the operators: 2 × (3 −
   };
   assert.equal(show(lit.id), `${B.sub}(${B.mul}(2, ${B.sub}(3, 1)), -1)`);
 });
+
+test("arithmetic typed in the palette reads the names in scope: x * 2 in double(x)", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "double", { kind: "function", params: ["x"] }));
+  const double = s.def("double");
+  const x = (s.code.nodes[(s.code.nodes[double] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0];
+  const hole = s.holes(double)[0];
+  for (const text of ["x * 2", "x*2", "2 · x", "x + 1", "(x + 1) * x"]) {
+    const r = T.fillValue(s.code, s.all(), s.info(), hole, text, double);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+  }
+  const r = T.fillValue(s.code, s.all(), s.info(), hole, "x * 2", double);
+  if (!r.ok) return;
+  const c = r.code.nodes[hole] as NodeOf<"call">;
+  assert.deepEqual([(r.code.nodes[c.fn] as NodeOf<"ref">).target, (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], [B.mul, x]);
+  // Out of scope it is nothing, and a name alone is the list's.
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "y * 2", double).ok, false);
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "x", double).ok, false);
+});
