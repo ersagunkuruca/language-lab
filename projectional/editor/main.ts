@@ -77,7 +77,7 @@ import { INT, showType as showTypeOf } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { relationFor } from "../src/lang/equations.ts";
-import { relate, showTerm } from "../src/lang/relate.ts";
+import { powers, relate, showTerm } from "../src/lang/relate.ts";
 import { analyze } from "../../invertible/src/index.js";
 import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
@@ -875,6 +875,11 @@ function solverPrinter(namer: Namer) {
   const show = (e: SExpr): [string, number] => {
     if (e.k === "num") return [e.name ?? fmt(e.v), e.v < 0 ? 5 : 100];
     if (e.k === "var") return [varName(e.name), 100];
+    const [b, x] = e.k === "call" && e.f === "pow" ? e.args : [];
+    if (x?.k === "num" && !x.name && Number.isInteger(x.v) && x.v >= 0) {
+      const [l, lp] = show(b);
+      return [powers(`${lp < 100 ? `(${l})` : l}^${x.v}`), 8];
+    }
     if (e.f in glyphs && e.args.length === 2) {
       const [g, pr] = glyphs[e.f];
       const [l, lp] = show(e.args[0]), [r, rp] = show(e.args[1]);
