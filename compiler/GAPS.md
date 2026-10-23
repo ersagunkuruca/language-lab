@@ -782,6 +782,13 @@ ledger (noisy). Left: `entries`, which hands the rest of its lines to
 itself, would need the `$arr` copy to take an array and an index, and the
 four folds from the end still walk a spine of cells, since `entries`
 builds its list with G22's holes.
+*Second part done* (Backlog C22): a list parameter that is only taken
+apart by matches, whose rests are only matched or handed to such a
+parameter again, gets an `$arr` copy taking the array and an index when
+it is given `split`'s array or such a rest. `entries` and calc's `run
+lines` walk their lines this way, a loop with no cells. Ledger at 50,000
+lines: about 159 → 148 ms (noisy). Left: the four folds from the end over
+the entries, which `entries` builds with holes.
 
 **G24. A Choice builtin with at most one answer is a generator under
 `first` (perf: once per entry).** `first(() => read whole number(field), …)`

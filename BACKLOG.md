@@ -44,7 +44,7 @@ and lists built by G22's loops), then the rest in order.
 |---|---|---|---|---|---|
 | C6 | G13 again, the part left: single-answer functions returning several values (Countdown's `join` builds its `found`) | GAPS G13 | P3 | M | fold part done |
 | C7 | WebAssembly for full programs (WasmGC or our own GC); design note first | ROADMAP 6 | P2 | L | after the editor step and L4 |
-| C22 | G21/G23 again: a list matched and handed to itself (ledger's `entries`) as an array and an index (`$arr` copies taking both), and lists built by G22's holes kept as arrays, so the folds from the end need no spine | GAPS G23 | P3 | M | |
+| C22 | G23 again: lists built by G22's holes (ledger's `entries`) kept as arrays, so the four folds from the end need no spine | GAPS G23 | P3 | M | |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C17 | Native binaries through WASM (wasm2c) or C with reference counting | ROADMAP 6 | P3 | L | after C7 |
@@ -120,7 +120,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C16 | G10: the output's indentation follows its brackets, not the ones in text or comments | this PR |
+| C22 | G23 part 2: a list from `split` matched and handed back to its own definition (ledger's `entries`, calc's `run lines`) is the array and an index; the folds from the end are still open above | this PR |
+| C16 | G10: the output's indentation follows its brackets, not the ones in text or comments | #243 |
 | C15 | G2: equality with a value built in place is a tag test and its fields, with nothing built | #240 |
 | C14 | G12: `one of` a few constants written in place runs each in turn, with no list | #238 |
 | C12 | G18: a handler whose cases all escape is an inline try/catch (calc enters one per line; gain within noise) | #233 |
