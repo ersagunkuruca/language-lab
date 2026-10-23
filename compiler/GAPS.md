@@ -628,3 +628,143 @@ three of chapters' text functions in `relate.ts`:
 
 The check also took 13 minutes on chapters alone, so the step budget doesn't
 bound this search. These went to `relate.ts`, not to the compiler, and are fixed by PR #142: whole-number add and subtract and `split` run backwards, and the chapters check takes under a second.
+
+## Round 3: ledger (2026-10-23)
+
+`projectional/examples/ledger` reads a file of money entries, one per line
+(`date,account,cents,memo`; blank lines and `#` comments skipped), and
+prints totals by account, largest first, totals by month, the smallest
+entry and the grand total. A line that doesn't have four fields, or whose
+amount isn't a whole number of cents, stops the run with its line number.
+
+```
+$ node projectional/cli/lab.ts run projectional/examples/ledger ledger.csv
+By account
+salary             7000.00 × 2
+coffee               -4.50 × 1
+groceries           -81.54 × 3
+rent              -2400.00 × 2
+...
+smallest: -1200.00 on 2026-09-02, flat
+total: 4513.96 in 8 entries
+```
+
+It has 32 definitions, against chapters' 21: two record types and 30
+functions. Totals are a list updated by a recursion (`add to`), sorted by
+an insertion sort (`insert`, `sort`) that orders either by amount or by
+name; money is printed from Int cents with text alone (`zeros`, `with
+point`); padding is a fold over `range`, so the checker sees it end.
+`Choice` comes in through `read whole number` and the `character(10)` that
+gives `newline`; `Abort` through `bad line`, `amount` and `show ledger`.
+
+It was built in the editor by clicks, the way Countdown was: headless
+Chromium driving the built page (palette picks, typed values, the case and
+field forms, renames, the graph's *Add a value here…*), then *Save file*
+and `examples/unpack.ts`. Nothing was edited by hand, and the DSL wasn't
+used. What the editor made hard is listed at the end.
+
+Files:
+- `compiler/gaps/ledger.ideal.js`: the hand-written ideal, with the gaps
+  marked.
+- `compiler/gaps/ledger.ts`: the three ways in one process, and a generator
+  of entries.
+- `compiler/test/ledger.test.ts`: all three agree on output and exit code,
+  failures included.
+- `compiler/gaps/bench-ledger.ts`: the numbers below.
+
+### Results
+
+```
+file                        evaluator   compiled      ideal  compiled/ideal
+100 entries, 3 KB               74 ms    0.98 ms    0.49 ms  2.0×
+1000 entries, 35 KB            208 ms    3.27 ms    1.40 ms  2.3×
+3000 entries, 107 KB           870 ms    9.46 ms    2.75 ms  3.4×
+4000 entries, 143 KB        (skipped)      14 ms    3.10 ms  4.4×
+```
+
+All three agree everywhere they run. The first result of this round is a
+correctness gap, not a speed one: past about 5000 lines the compiled code
+runs out of JavaScript stack in a process with the default stack, which
+is how the editor and the browser run it. `lab compile` output still
+runs, because it re-runs itself with G1's 1 GB stack: 50,000 entries take
+0.69 s there, 0.15 s for the ideal, and 9.1 s in the evaluator.
+
+### The gaps, ranked
+
+**G22. A recursion that builds a list keeps its frame (correctness: stack
+overflow past about 5000 items without G1's big stack; perf too).**
+`entries` is `cons(parse(line, n), entries(rest, n + 1))`, `add to` and
+`insert` are `cons(t, add to(rest, …))`. The call to itself isn't the last
+thing done, so stage 2½'s jumps don't apply, and each item is a JS frame.
+The ideal is a loop that appends. *Fix:* tail recursion modulo cons: when
+the only thing after the self-call is putting it in a constructor's last
+field, build the cell first with a hole for that field, pass the cell
+down, and loop. Prior art: Friedman and Wise, "Unwinding stylized
+recursions into iterations" (1975); OCaml 4.14's `[@tail_mod_cons]`
+(Bour, Clément and Scherer, 2021). With G21's arrays, a list made this way
+and only walked could be an array pushed in order, too.
+
+**G23. Folds from the end over a list built by cons walk its spine first
+(perf: four spines of every entry).** `by account`, `by month`, `smallest`
+and `sort` fold the list of entries from the end, so each copies the whole
+list into a spine array before it starts. The ideal walks an array from
+the end. *Fix:* G21's arrays for a list that `entries` builds (with G22, a
+push per item), or the matched-list part of G21 for `split`'s lines,
+which `entries` takes apart with `match`. This is the first program where
+an array from `split` reaches a `match` (also in `parse`, four levels deep
+on `split(line, ",")`).
+
+**G24. A Choice builtin with at most one answer is a generator under
+`first` (perf: once per entry).** `first(() => read whole number(field), …)`
+loops over `$many["builtin.int.read"]`, which makes an array of zero or one
+answers, inside a closure called in place. The ideal is one regular
+expression test. The same holds for `newline`'s `character(10)`. *Fix:*
+G14's single-answer copies for builtins: `read`, `code`, `fromCode`,
+`quotient`, `remainder` and `find` have at most one answer.
+
+**G3 again. A Bool parameter is data.** `sort(…, false)` passes `$F`, and
+`goes before` tests `.tag === "std.bool.true"` for each comparison. G3's
+JS booleans cover results, not parameters.
+
+**G19 again. Text positions are counted per call.** `with point` asks for
+the length of the same text three times, and `blank`, `month` and the pads
+go through `$impl["builtin.text.slice"]` and `length`, which count code
+points. For texts the program made from digits (`show`) or read from a
+file of ASCII dates, a prefix test or a UTF-16 slice is the same thing; the
+compiler can't know that yet.
+
+### What the editor made hard
+
+ledger took about 230 palette picks in 30 functions. Filling is fast, and
+three things from round 2 are fixed: fields can be `Int`, field reads are
+in the palette (`name(□)`), and nested matches can be renamed as they go.
+What got in the way, roughly in order of cost:
+
+1. **A function parameter can't be called until its type is known.** The
+   insertion sort was meant to take `before : (Total, Total) -> Bool`. The
+   palette offers `before` as a value but no `before(□, □)`, and nothing
+   gives the parameter a type first, so `insert` and `sort` take a Bool
+   `by name` and choose with an `if` (`goes before`). Blocking for any
+   higher-order definition written from scratch.
+2. **A text can't hold a newline.** The literal field is one line, and
+   `"\n"` typed in the palette is a backslash and an n. `newline` is
+   `first(() => character(10), () => "")`. Splitting a file into lines
+   needs it, so every program that reads files does.
+3. **A step can only go at the top of a definition.** *Add a value here…*
+   (the graph's menu on empty space) adds a dot before the definition's
+   result, never inside a match arm. "Print the usage, then return 2" in
+   one arm of `main` needs its own definition (`usage`, `failed`).
+4. **An Int is not offered for a number typed in an Int hole.** Typing `0`
+   in `slice`'s position offers nothing; the way in is to search "int",
+   pick *an integer*, then type the value in the Literal panel (E21).
+5. **Several rows have the same label.** `show(□)` comes three times
+   (Number, Int, any) and `cents(□)` twice (Entry, Total); only the type
+   line under each tells them apart.
+6. **Spaces in a typed text are collapsed.** `"  × "` comes out as
+   `" × "`.
+7. **The Text view drops brackets around an `if` inside `++`.** `money`
+   reads `if c < 0 then "-" else "" ++ with point(…)`, as if the join were
+   part of the `else`.
+8. **Effects run while editing.** Writing `usage` printed "usage: ledger
+   file.csv" to the page's console: the editor evaluated a definition
+   with `Console` as soon as it was complete.

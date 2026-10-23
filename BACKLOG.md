@@ -18,7 +18,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| | *(empty)* | | |
+| | Editor: a function parameter can't be called until its type is known (no `f(□, □)` for an untyped `f`); blocks higher-order definitions written from scratch | GAPS round 3, editor 1 | 2026-10-23 |
+| | Editor: a text literal can't hold a newline (one-line field; `"\n"` is taken literally) | GAPS round 3, editor 2 | 2026-10-23 |
+| | Editor: *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | 2026-10-23 |
+| | Editor: typing `0` in an Int hole offers nothing (E21 is now in the way of every program with Int) | GAPS round 3, editor 4 | 2026-10-23 |
+| | Editor: palette rows with the same label (`show(□)` ×3, `cents(□)` ×2) told apart only by the type line | GAPS round 3, editor 5 | 2026-10-23 |
+| | Editor: spaces in a typed text are collapsed (`"  × "` → `" × "`) | GAPS round 3, editor 6 | 2026-10-23 |
+| | Editor: Text view drops brackets around an `if` inside `++` | GAPS round 3, editor 7 | 2026-10-23 |
+| | Editor: a definition with `Console` runs (and prints) while it's being written | GAPS round 3, editor 8 | 2026-10-23 |
 
 ## E: Editor
 
@@ -49,16 +56,15 @@ so the next bigger program can be built in the editor.
 
 ## C: Compiler and targets
 
-Thread "Bigger programs and compiler gaps". Current step: GAPS round 2
-(chapters is about 5× the ideal), then round 3, a bigger program built in the
-editor.
+Thread "Bigger programs and compiler gaps". Current step: G22, the
+stack overflow round 3 found (ledger), then the rest in order.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C2 | G21 lists that are only walked are arrays (and ropes later) | GAPS G21, folds follow-up | P1 | L | ▶ part 1 #182 (walked whole), part 2 (consed onto then walked, `taken`): chapters about 3.4× → 1.9× ideal; next: matched lists |
-| C3 | GAPS round 3: a program bigger than chapters, built in the editor with the DSL off-limits; what hurts goes to lane E | quality practice 3, R2 §7 | P1 | L | after C1, C2 |
-| C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test) | GAPS G3 | P2 | S | |
-| C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer | GAPS G14 | P2 | S | |
+| C19 | G22 a recursion that builds a list (`cons(x, self(rest))`) keeps a JS frame per item: ledger overflows past about 5000 lines without G1's big stack, so in the editor and the browser. Tail recursion modulo cons (credit Friedman and Wise 1975; OCaml's `[@tail_mod_cons]`, Bour, Clément and Scherer 2021) | GAPS G22 | P1 | M | |
+| C2 | G21 lists as arrays, the part left: lists that are matched on (the array and a start), and lists built by G22's loops; ledger's G23 is the first program that needs it (four spines per run, `split` lines matched in `entries` and `parse`) | GAPS G21, G23 | P2 | M | parts 1 #182, 2 #188 done |
+| C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test); a Bool parameter is data too (ledger's `by name`) | GAPS G3, round 3 | P2 | S | |
+| C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer; so are `read whole number` and the other at-most-one builtins under `first` (G24) | GAPS G14, G24 | P2 | S | |
 | C6 | G13 again: `sections` builds a `Pile` per line; single-answer functions returning several values | GAPS G13 | P2 | M | |
 | C7 | WebAssembly for full programs (WasmGC or our own GC); design note first | ROADMAP 6 | P2 | L | after the editor step and L4 |
 | C8 | `Float32` for shaders | ROADMAP 6a left | P2 | M | |
@@ -128,6 +134,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| C3 | GAPS round 3: ledger, 32 definitions built in the editor by clicks; compiled 2 to 4× the ideal; G22 (stack), G23, G24 and eight editor frictions | this PR |
+| C2 | G21 parts 1 and 2: lists walked whole, and accumulators, stay arrays (chapters about 3.4× → 1.9× the ideal) | #182, #188 |
 | C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
 
 ### L: Language and library
