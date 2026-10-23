@@ -673,11 +673,27 @@ function portText(info: T.Info, p: Id): string {
   return doc.examples?.[ui.def]?.[i] ?? seeded(ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
 }
 
+// In a program that draws a picture, a function of x, y and time is the
+// picture at one pixel, so it starts at one: a point right of and above
+// the middle, one second in. The picture above is the same function at
+// every pixel, which is what its Run panel says.
+const PIXEL: Record<string, string> = { x: "0.5", y: "0.25", time: "1", t: "1" };
+function pixelSeed(def: Id): string[] | null {
+  if (!pictureEntries(doc.code.defs, pres().names)) return null;
+  const body = defBody(def);
+  if (body?.kind !== "lambda") return null;
+  const names = body.params.map((p) => pres().names[p] ?? "");
+  if (!names.includes("x") || !names.includes("y")) return null;
+  return names.map((n) => PIXEL[n] ?? "");
+}
+
 // Until you give values of your own, a function starts with the numbers
 // some call in the program already passes it, so it opens with values on
 // its wires instead of empty boxes.
 function seeded(def: Id): string[] | null {
   const nodes = doc.code.nodes;
+  const pixel = pixelSeed(def);
+  if (pixel) return pixel;
   for (const n of Object.values(nodes)) {
     if (n.kind !== "call") continue;
     const f = nodes[n.fn];
@@ -765,6 +781,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
   const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
+  if (pixelSeed(ui.def) && !doc.examples?.[ui.def]) box.append(h("p", { class: "hint" }, "The picture above is this function at every pixel. Here it runs at one of them: change x, y or time to look at another."));
   box.append(h("p", { class: "hint" }, pred
     ? "A function that says true or false: what used to be a network. Tick the ports you know and it solves for the rest, keeping it true."
     : "Tick the ports you know, the result included, and it works out the others: this function, run backwards."));
@@ -1605,11 +1622,14 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   if ((action || value) && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
-  else if (z?.t === "fn") box.append(h("p", { class: "hint" }, "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."));
+  else if (z?.t === "fn") box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
+    : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
   if (tr?.result !== undefined && (action || value)) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
+  // Nor is a run on values you didn't give: they're only a starting point.
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
+    : !doc.examples?.[ui.def] ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
