@@ -16,9 +16,8 @@ import type { Id } from "../model.ts";
 import { B } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY } from "./library.ts";
-import { CELL_OPS, CONS, FIRST, INT_OPS, LIST, NIL, NONE, PAIR, PAIR_V, S, SECOND, SOME, TEXT_OPS, UNIT } from "./std.ts";
+import { CELL_OPS, CONS, FIRST, HTML_V, INT_OPS, LIST, NIL, NONE, PAIR, PAIR_V, S, SECOND, SOME, TEXT_OPS, UNIT } from "./std.ts";
 import { CELL, CELLS, DIVERGE, INT, NUMBER, STRING, UPDATE } from "./types.ts";
-import type { UiIds } from "./ui.ts";
 
 const C = CELL_OPS;
 
@@ -32,32 +31,70 @@ function lang() {
   return { k, lib };
 }
 
-// What the page draws. Every field that shows something is a function, run
-// by the page inside a watcher: when a cell it read changes, it runs again
-// and only that part of the page changes. That's Solid's JSX expressions,
-// as data. `dynamic` is a part whose shape itself depends on cells (Solid's
-// <Show>/<For>, both at once).
-function uiType(k: Lang) {
-  const str = () => k.tref(STRING), num = () => k.tref(NUMBER);
-  return k.type("UI", [], [
-    ["text", [["shows", () => k.tfun([], str(), [CELLS, DIVERGE])]]],
-    ["button", [["label", str], ["on click", () => k.tfun([], k.tref(UNIT), [CELLS, UPDATE, DIVERGE])]]],
-    ["entry", [["hint", str], ["on enter", () => k.tfun([str()], k.tref(UNIT), [CELLS, UPDATE, DIVERGE])]]],
-    ["slider", [["label", str], ["low", num], ["high", num], ["value", () => k.tref(CELL, num())]]],
-    ["row", [["items", (self) => k.tref(LIST, k.tref(self))]]],
-    ["column", [["items", (self) => k.tref(LIST, k.tref(self))]]],
-    ["dynamic", [["view", (self) => k.tfun([], k.tref(self), [CELLS, DIVERGE])]]],
-  ]);
+// What the page draws is std's `Html` (WEB.md), the same type every page
+// uses. Its changing parts are functions, run by the page inside a
+// watcher: when a cell one read changes, it runs again and only that part
+// of the page changes. That's Solid's JSX expressions, as data, and `part`
+// is a piece whose shape itself depends on cells (Solid's <Show>/<For>,
+// both at once). The widgets are ordinary definitions of the program that
+// build elements, not more kinds of page.
+const VALUE = "std.event.event.value", KEY = "std.event.event.key";
+
+function widgets(k: Lang) {
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (name: string, f: () => Id) => k.call(HTML_V.property, k.lit(name), k.thunk(f));
+  const on = (name: string, f: (e: Id) => Id) => k.call(HTML_V.on, k.lit(name), k.fn(["event"], f));
+  const cls = (name: string) => prop("class", () => k.lit(name));
+  const text = (f: () => Id) => k.call(HTML_V.text, k.thunk(f));
+  const read = (c: Id) => k.call(C.read, c);
+
+  const label = k.def("label");
+  k.define(label, k.fn(["shows"], (shows) => el("span", [cls("ui-text")], [k.call(HTML_V.text, shows)])));
+  const button = k.def("button");
+  k.define(button, k.fn(["name", "on click"], (name, click) =>
+    el("button", [prop("type", () => k.lit("button")), cls("ui-button"), on("click", () => k.call(click))], [text(() => name)])));
+  const box = (name: string, c: string) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["items"], (items) => k.call(HTML_V.element, k.lit("div"), k.list(cls(c)), items)));
+    return d;
+  };
+  const row = box("row", "ui-row"), column = box("column", "ui-column");
+  // A field that hands what was typed to `on enter`, then empties.
+  const entry = k.def("entry");
+  k.define(entry, k.fn(["hint", "on enter"], (hint, enter) => k.let("draft", k.call(C.cell, k.lit("")), (draft) =>
+    el("input", [cls("ui-entry"), prop("placeholder", () => hint), prop("value", () => read(draft)),
+      on("input", (e) => k.call(C.write, draft, k.call(VALUE, e))),
+      on("keydown", (e) => k.if(k.call(S.and, k.equal(k.call(KEY, e), k.lit("Enter")), k.call(S.not, k.equal(read(draft), k.lit("")))),
+        k.seq(k.call(enter, read(draft)), k.call(C.write, draft, k.lit(""))),
+        k.unitValue)),
+    ], []))));
+  // A slider for a cell holding a whole Number; a value that doesn't read
+  // as one changes nothing.
+  const slider = k.def("slider");
+  k.define(slider, k.fn(["name", "low", "high", "value"], (name, low, high, c) => {
+    const shown = () => k.call(S.show, read(c));
+    return el("label", [cls("ui-slider")], [
+      el("span", [cls("ui-slider-label")], [text(() => name)]),
+      el("input", [prop("type", () => k.lit("range")), prop("min", () => k.call(S.show, low)), prop("max", () => k.call(S.show, high)),
+        prop("step", () => k.lit("1")), prop("value", shown),
+        on("input", (e) => k.match(k.call(S.optional, k.thunk(() => k.call(INT_OPS.read, k.call(VALUE, e)))), [
+          { variant: SOME, names: ["n"], body: ([n]) => k.call(C.write, c, k.call(INT_OPS.toNumber, n)) },
+          { variant: NONE, names: [], body: () => k.unitValue },
+        ]))], []),
+      el("output", [], [text(shown)]),
+    ]);
+  }));
+  return { label, button, row, column, entry, slider, part: HTML_V.part };
 }
 
 export function counterProgram() {
   const { k, lib } = lang();
-  const ui = uiType(k);
+  const ui = widgets(k);
   const map = lib("map"), keep = lib("keep"), append = lib("append"), length = lib("length");
   const read = (c: Id) => k.call(C.read, c);
   const show = (x: Id) => k.call(S.show, x);
-  const text = (f: () => Id) => k.call(ui.v.text, k.thunk(f));
-  const button = (label: string, f: () => Id) => k.call(ui.v.button, k.lit(label), k.thunk(f));
+  const text = (f: () => Id) => k.call(ui.label, k.thunk(f));
+  const button = (label: string, f: () => Id) => k.call(ui.button, k.lit(label), k.thunk(f));
 
   const main = k.def("main");
   k.define(main, k.thunk(() =>
@@ -65,14 +102,14 @@ export function counterProgram() {
     k.let("doubled", k.call(C.formula, k.thunk(() => k.call(B.mul, read(count), k.lit(2)))), (doubled) =>
     k.let("details", k.call(C.cell, k.true), (details) =>
     k.let("todos", k.call(C.cell, k.list(k.lit("try the counter"), k.lit("hide the details"))), (todos) =>
-      k.call(ui.v.column, k.list(
-        k.call(ui.v.row, k.list(
+      k.call(ui.column, k.list(
+        k.call(ui.row, k.list(
           button("−", () => k.call(C.write, count, k.call(B.sub, read(count), k.lit(1)))),
           text(() => show(read(count))),
           button("+", () => k.call(C.write, count, k.call(B.add, read(count), k.lit(1)))),
         )),
         text(() => k.text(k.lit("doubled: "), show(read(doubled)))),
-        k.call(ui.v.row, k.list(
+        k.call(ui.row, k.list(
           button("details", () => k.call(C.write, details, k.call(S.not, read(details)))),
           // While the details are hidden this reads only `details`, so the
           // counter doesn't make it run.
@@ -80,21 +117,21 @@ export function counterProgram() {
             k.text(k.lit("count squared: "), show(k.call(B.mul, read(count), read(count)))),
             k.lit("details hidden: this text no longer reads count"))),
         )),
-        k.call(ui.v.entry, k.lit("add a todo, then Enter"), k.fn(["item"], (item) =>
+        k.call(ui.entry, k.lit("add a todo, then Enter"), k.fn(["item"], (item) =>
           k.call(C.write, todos, k.call(append, read(todos), k.list(item))))),
-        k.call(ui.v.dynamic, k.thunk(() => k.call(ui.v.column, k.call(map, read(todos), k.fn(["item"], (item) =>
-          k.call(ui.v.row, k.list(
+        k.call(ui.part, k.thunk(() => k.call(ui.column, k.call(map, read(todos), k.fn(["item"], (item) =>
+          k.call(ui.row, k.list(
             text(() => item),
             button("done", () => k.call(C.write, todos, k.call(keep, read(todos), k.fn(["other"], (o) => k.call(S.not, k.equal(o, item)))))),
           ))))))),
         text(() => k.text(show(k.call(INT_OPS.toNumber, k.call(length, read(todos)))), k.lit(" to do"))),
       ))))))));
-  return { code: k.code, names: k.names, main, ui: ui.v as UiIds };
+  return { code: k.code, names: k.names, main };
 }
 
 export function fractionsProgram() {
   const { k, lib } = lang();
-  const ui = uiType(k);
+  const ui = widgets(k);
   const map = lib("map");
   const int = (n: number) => k.int(n);
   const I = INT_OPS;
@@ -273,12 +310,12 @@ export function fractionsProgram() {
     k.let("1 / √n", later(() => k.call(over, k.call(rational, int(1), int(1)), read(rootN))), (inv) =>
     k.let("√n × √n", later(() => k.call(times, read(rootN), read(rootN))), (square) => {
       const count = () => k.call(whole, read(many));
-      const line = (label: () => Id, x: () => Id) => k.call(ui.v.text, k.thunk(() => k.let("ts", k.call(terms, x(), count()), (ts) =>
+      const line = (label: () => Id, x: () => Id) => k.call(ui.label, k.thunk(() => k.let("ts", k.call(terms, x(), count()), (ts) =>
         k.text(label(), k.lit(" = "), k.call(showTerms, ts), k.lit(" ≈ "), k.call(S.show, k.call(value, ts))))));
       const nText = () => k.call(S.show, read(n));
-      return k.call(ui.v.column, k.list(
-        k.call(ui.v.slider, k.lit("terms"), k.lit(1), k.lit(40), many),
-        k.call(ui.v.slider, k.lit("n"), k.lit(2), k.lit(30), n),
+      return k.call(ui.column, k.list(
+        k.call(ui.slider, k.lit("terms"), k.lit(1), k.lit(40), many),
+        k.call(ui.slider, k.lit("n"), k.lit(2), k.lit(30), n),
         line(() => k.text(k.lit("√"), nText()), () => read(rootN)),
         line(() => k.lit("e"), () => eCF),
         line(() => k.text(k.lit("√"), nText(), k.lit(" + e")), () => read(sum)),
@@ -287,11 +324,11 @@ export function fractionsProgram() {
         // √n · √n is n, but when n isn't a square every term of the two
         // inputs agrees with n forever and no first term ever comes: equality
         // of exact reals is undecidable. `with fuel` gives up after a while.
-        k.call(ui.v.text, k.thunk(() => k.text(k.lit("√"), nText(), k.lit(" × √"), nText(), k.lit(" = "),
+        k.call(ui.label, k.thunk(() => k.text(k.lit("√"), nText(), k.lit(" × √"), nText(), k.lit(" = "),
           k.call(S.first,
             k.thunk(() => k.call(S.fuel, k.lit(300), k.thunk(() => shown(read(square), count())))),
             k.thunk(() => k.lit("no first term after 300 steps: is it just below n, or n, or just above? that can't be decided")))))),
       ));
     }))))))))));
-  return { code: k.code, names: k.names, main, ui: ui.v as UiIds, defs: { CF, rational, root, e, terms, showTerms, value, plus, minus, times, over } };
+  return { code: k.code, names: k.names, main, defs: { CF, rational, root, e, terms, showTerms, value, plus, minus, times, over } };
 }

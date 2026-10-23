@@ -12,12 +12,11 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { equal, runMain } from "../src/lang/run.ts";
-import { mount, type Doc } from "../src/lang/ui.ts";
+import { evaluatorCall, mountHtml, type Doc } from "../src/lang/html.ts";
 import { merge } from "../src/model.ts";
 import { layer } from "../src/presentation.ts";
-import type { UiIds } from "../src/lang/ui.ts";
 
-function show(where: string, p: { code: Code; names: Names; main: Id; ui: UiIds }, defs: string[]) {
+function show(where: string, p: { code: Code; names: Names; main: Id }, defs: string[]) {
   const box = document.getElementById(where)!;
   const live = box.querySelector(".live")!, code = box.querySelector(".code")!, log = box.querySelector(".log")!;
   const all = merge(LIBRARY.code, p.code), names = layer<Names>(LIBRARY.names, p.names);
@@ -34,17 +33,20 @@ function show(where: string, p: { code: Code; names: Names; main: Id; ui: UiIds 
     before = cells.runs;
     flashed = 0;
   };
-  const root = mount(value, {
-    cells, ui: p.ui, doc: document as unknown as Doc,
+  const root = mountHtml(value, {
+    cells, doc: document as unknown as Doc, call: evaluatorCall,
     ran: (el) => {
       flashed++;
-      const e = el as unknown as HTMLElement;
+      // A text that ran flashes its element; a part, what it drew.
+      const n = el as unknown as Node;
+      const e = (n.nodeType === Node.TEXT_NODE ? n.parentElement : (n as Element).tagName === "LAB-PART" ? (n as Element).firstElementChild : n) as HTMLElement | null;
+      if (!e) return;
       e.classList.remove("ran");
       void e.offsetWidth; // restart the animation
       e.classList.add("ran");
     },
   });
-  live.replaceChildren(root as unknown as HTMLElement);
+  live.replaceChildren(root as unknown as Node);
   report("first run");
   // Report after each change the page makes.
   live.addEventListener("click", (e) => { if ((e.target as HTMLElement).tagName === "BUTTON") queueMicrotask(() => report("click")); });

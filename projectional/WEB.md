@@ -15,8 +15,9 @@ same app, packaged.
   the value, each run in its own watcher, so a click re-runs exactly the
   parts that read the cell it wrote. Nothing is diffed and there is no
   virtual DOM. This is Solid.js's model (Ryan Carniato,
-  https://www.solidjs.com), which `src/lang/ui.ts` and reactive.html
-  already use; this design turns that seed into the real thing.
+  https://www.solidjs.com), which reactive.html used first with a type of
+  its own; this design turned that seed into the real thing, and
+  reactive.html now draws `Html` too.
 - **What is `Html`?** Three ordinary types in std, a rose tree:
 
   ```
@@ -126,9 +127,9 @@ class(name: Text) : Attribute     = property("class", () => name)
 label(t: Text) : Html             = text(() => t)
 ```
 
-The four UI programs on reactive.html move onto this in their own PR, and
-the DSL-local `UI` type in `cells-programs.ts` goes away: one way to make a
-page.
+The programs on reactive.html moved onto this in their own PR, and the
+DSL-local `UI` type in `cells-programs.ts` and `src/lang/ui.ts` are gone:
+one way to make a page.
 
 ### Two-way binding, worked out
 
@@ -171,7 +172,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 
 ## The runtime
 
-- **Mount** (`src/lang/ui.ts`, generalised): walks the `Html`, creates DOM
+- **Mount** (`src/lang/html.ts`, generalised from the old `ui.ts`): walks the `Html`, creates DOM
   nodes, puts each function in a watcher, and adds listeners that run a
   handler inside `cells.batch`, so several writes update the page once.
   It calls functions through one adapter so the same mount runs the

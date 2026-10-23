@@ -81,7 +81,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L4 | One page model: reactive.html's programs onto std's `Html`, remove `ui.ts`'s `UI` | R2 §5, WEB.md, ROADMAP | P1 | M | |
 | L5 | Effect ledger and container matrix: a test that every consumer of a type asks for its effects | R2 §1.2, §9.6 | P1 | M | |
 | L6 | A page's `on` row is closed and hand-picked; a named row defined once, or an open row | R2 §5 | P2 | M | |
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth | R2 §4 | P2 | L | before C7 |
@@ -136,7 +135,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | this PR |
+| L4 | One page model: reactive.html draws std's `Html`, its widgets are definitions, `ui.ts` and `UI` removed | this PR |
+| L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | #181 |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 
 ### Before the backlog
