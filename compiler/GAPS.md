@@ -709,6 +709,22 @@ that field empty, hangs it in the last hole, and jumps. Every other answer
 goes into the last hole, and the first cell is returned. ledger now runs
 10,000 and 50,000 lines in one process (2.7× and 3.9× the ideal).
 
+**G25. A list nobody else holds is copied to change one item (perf: the
+biggest gap left, measured after G22).** `add to` is a persistent update:
+each entry copies the totals before its account, about 20 new cells per
+line, and `insert` does the same for sort. A profile of compiled ledger at
+50,000 lines puts `by account` and `by month` (with `add to` inlined) at a
+third of the time and the garbage collector at a fifth. Giving the ideal
+the same copying `add to` takes it from about 55 to 100 ms, so this alone
+is most of the distance. The totals are the fold's own accumulator: the
+previous step made them and nothing else holds them, so the cells could be
+changed in place. *Fix:* reuse of cells known to be unique, decided at
+compile time: the accumulator of a fold whose step only passes it to a
+function that takes it apart and builds it again. Prior art: Koka's
+Perceus and "functional but in place" (Reinking, Xie, de Moura and Leijen,
+PLDI 2021; Lorenzen, Leijen and Swierstra, ICFP 2023), already the plan
+for native code. Design note first.
+
 **G23. Folds from the end over a list built by cons walk its spine first
 (perf: four spines of every entry).** `by account`, `by month`, `smallest`
 and `sort` fold the list of entries from the end, so each copies the whole
