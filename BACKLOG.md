@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E6 | Show inline overflows the graph with no refit; its labels sit on wires | QA2 UX3 | P2 | S | |
 | E7 | Add a value here: the palette takes 2 to 4.5 s on solved functions (a whole-program check per candidate) | QA 2026-10-22 | P2 | M | |
 | E8 | Nested view duplicates footnotes | QA2 L1 | P2 | S | |
 | E9 | `^2` in solver output where the editor writes `²` | QA2 L4 | P2 | S | |
@@ -122,6 +121,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E6 | Show inline refits the graph; canvas labels get a halo | #199 |
 | E5 | Tabs: six at most, shrink to fit the pane | #196 |
 | E4 | Remove a used input: its uses become holes | #194 |
 | E3 | Clearing a node keeps its definition's type while the hole is open | #191 |
