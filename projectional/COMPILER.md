@@ -146,7 +146,10 @@ its answer, or the runtime's `$no` when there's none. Its callers test for
 is per definition and doesn't look at what a caller passes, so a call of a
 `Choice`-typed parameter, `one of`, `first`, a handler or a solve counts as
 "maybe more". A recursive call to the definition itself counts as one
-(GAPS.md G14).
+(GAPS.md G14). Choice builtins (`read whole number`, `character code`,
+`quotient`, …) are all partial, one answer or none, so they count as one
+and compile to `$partial`, which returns the answer or `$no`; a `first`
+whose body has at most one answer just runs it (G24).
 
 #### Searches in continuation-passing style (GAPS.md G11)
 

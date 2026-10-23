@@ -139,6 +139,8 @@ function builtin(op: string, name: string, sig: Sig, f?: (...xs: any[]) => any) 
   if (f) STD_IMPL[id] = f;
   return id;
 }
+// A partial builtin: Choice with no answer or one, never more (the compiler
+// relies on it: compiler/src/compile.ts `$partial`, GAPS.md G24).
 function choice(op: string, name: string, params: Type[], ret: Type, f: (...xs: any[]) => any[]) {
   const id = builtin(op, name, (s) => fn(params, ret, s.freshRow([CHOICE])));
   STD_MANY[id] = f;
