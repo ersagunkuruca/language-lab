@@ -928,13 +928,36 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }).errors.length;
   const whole = (f: Filling) => recheck(fillHole(code, {}, hole, f).code) <= (before ??= recheck(code));
   // Running a function backwards depends on its body, not just its type
-  // (a call that may search forever makes the search Diverge), so if the
-  // group is run backwards anywhere, every filling is checked on its own.
-  const solvedOn = Object.values(code.nodes).some((n) => n.kind === "solve" && h.group.includes(n.fn));
+  // (a call that may search forever makes the search Diverge, a square
+  // makes the answer two). What the check makes of the body is its plan,
+  // so a filling that leaves every plan of the group's solves as it was
+  // is checked like any other; one that changes a plan, on its own.
+  const solves = Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && h.group.includes(n.fn));
+  const plans = (c: Code) => solves.map((n) => {
+    try {
+      const p = planSolve(c, n);
+      // A search's Diverge, and whether it can run at all, are its mode's.
+      // (Running up to the hole being filled isn't a difference.)
+      const v = p.mode === "relational" ? solveMode(c, n, {}) : null;
+      return [p.mode, p.status, p.needMore, p.many, p.canFail, p.unique, p.predicate, p.rel?.ports.join(","), v ? `${v.ends}/${v.stuck.filter((x) => x !== "a hole").join(",")}` : ""].join("|");
+    }
+    catch (e) { return `!${(e as Error).message}`; }
+  }).join(";");
+  let planned: string | undefined;
+  const samePlans = (f: Filling) => plans(fillHole(code, {}, hole, f).code) === (planned ??= plans(code));
   const checked = new Map<string, boolean>();
   const safe = (s: Subst, f: Filling, risky: boolean) => {
-    if (risky || solvedOn) return whole(f);
-    const touches = pinned.some((k) => (k[0] === "t" ? s.types.has(+k.slice(1)) : s.rows.has(+k.slice(1))));
+    if (risky || (solves.length && !samePlans(f))) return whole(f);
+    // A row only renamed pins nothing: a pure call's empty row joining the
+    // definition's. (A type variable renamed may still be pinned: the new
+    // one can carry a constraint, records of Numbers say.)
+    const touches = pinned.some((k) => {
+      const v = +k.slice(1);
+      if (k[0] === "t") return s.types.has(v);
+      if (!s.rows.has(v)) return false;
+      const r = s.resolveRow({ effs: [], tail: v });
+      return r.effs.length > 0 || r.tail === null || pinned.includes(`r${r.tail}`);
+    });
     if (!touches) return true;
     // Units are the exception: what a call does to them is the callee's
     // own (multiply multiplies them, add needs them equal), so a ref or a

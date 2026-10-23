@@ -1124,6 +1124,16 @@ const SYMBOLS: Record<string, string[]> = {
   "square root": ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
 };
 
+// What fits a hole, once per check of the code: the right-click menu and
+// the side panel show the same palette, and typing in either redraws both.
+const fitting = new WeakMap<T.Info, Map<Id, T.Filling[]>>();
+function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
+  let m = fitting.get(info);
+  if (!m) fitting.set(info, (m = new Map()));
+  if (!m.has(hole)) m.set(hole, T.fillings(doc.code, info, hole));
+  return m.get(hole)!;
+}
+
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1134,7 +1144,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Where a function goes, writing one here is often what's meant.
   const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
-  const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
+  const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
   // Searching: names that are the text, then start with it, then have a
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
