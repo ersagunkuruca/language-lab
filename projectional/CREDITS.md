@@ -87,6 +87,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Algebraic effects and handlers | Influence | Plotkin and Power (2003), Plotkin and Pretnar (2009); the Eff language (Bauer and Pretnar). |
 | Effect rows in inferred types | Influence | [Koka](https://koka-lang.github.io) (Daan Leijen, "Koka: programming with row polymorphic effect types", 2014). LANGUAGE.md: "the Koka/Eff/OCaml 5 line of design, cut down". |
+| A closed function row opened at each use of a variable, so a function can go where more happens | Prior art | Koka's `open` (Daan Leijen, "Type directed compilation of row-typed algebraic effects", POPL 2017). `src/lang/infer.ts` `opened`, LANGUAGE.md "Effects". |
 | A handler is a `match` whose cases are an effect's operations | Adapted | OCaml 5.3's effect cases in `match` (OCaml 5 effects: Sivaramakrishnan et al., PLDI 2021). Credited in `src/lang/infer.ts` and LANGUAGE.md. |
 | An abort cuts the remaining alternatives | Prior art | ISO Prolog's `catch/3`; Koka and Effekt treat aborts as exceptions the same way. |
 | Effects as ordinary type definitions; world effects not allowed under `Choice` | Our own | Grew out of the review (REVIEW.md); no direct source we know of. |
