@@ -11,7 +11,7 @@ import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
-import { reId } from "./helpers.ts";
+import { reId, sweep, sweepShare } from "./helpers.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const run = (code: Code, info: ReturnType<typeof infer>, main: Id) => {
@@ -55,11 +55,12 @@ test("algebra: folds are total, Newton's method carries Diverge until fuel turns
 // can't make a type error, checked.
 test("every filling the palette offers keeps the program free of errors", () => {
   let tried = 0;
-  for (const name of ["algebra", "queens"]) {
+  // queens is in test/palette.test.ts.
+  for (const name of ["algebra"]) {
     const p = load(name);
     // Every third arm body and function body (all of them takes ~30s).
     const targets = Object.values(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
-    for (const target of targets) {
+    for (const target of sweep(targets)) {
       const holed = replace(p.code, target, () => ({ kind: "hole" }));
       const info = infer(holed, p.pres.names);
       assert.deepEqual(info.errors, [], "a hole is not an error");
@@ -73,7 +74,7 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  assert.ok(tried > 1000, `tried ${tried}`);
+  assert.ok(tried > 1000 * sweepShare, `tried ${tried}`);
 });
 
 test("the palette leaves out what would be a type error, and the checker catches it if forced", () => {
