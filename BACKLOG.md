@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E15 | Keyboard editing: Tab reaches no node, port or hole | QA2 UX7 | P2 | L | |
 | E16 | "Copy into my program" and "pin" gestures for modules | ROADMAP step 5 open | P2 | M | |
 | E17 | Tidy that cuts crossings (layered, Sugiyama-style; credit as prior art) | node-editor backlog | P3 | M | |
 | E18 | Wires routed around nodes | node-editor backlog | P3 | M | |
@@ -88,6 +87,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E15 | Tab and Shift+Tab step through a program's parts in reading order; Enter edits the selected one | #251 |
 | E33 | Bug: a list of tall items showed as cons(…) in the blocks (Ersagun 19:16) | #248 |
 | E14 | Palette: most-used first, √ finds sqrt, typed arithmetic fills as calls | #247 |
 | E32 | Picture CPU fallback and its GPU check run in Float32 | #245 |

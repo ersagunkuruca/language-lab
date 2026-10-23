@@ -56,6 +56,16 @@ async function visit(saved: string | null, only?: string) {
       // The graph's menu, and the gestures it offers that only change the
       // layout: once per program, on its first definition.
       if (j === 0) {
+        // The keyboard reaches the program: Tab from the blocks selects a part.
+        if (await p.locator(".blocks-wrap").count()) {
+          // From the last part Tab leaves the program, so step back instead.
+          const ids = await p.locator(".blocks-wrap [data-id]:not(.op)").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id));
+          const at = await p.locator(".blocks-wrap .sel[data-id]").first().getAttribute("data-id", { timeout: 200 }).catch(() => null);
+          await p.locator(".blocks-wrap").first().focus();
+          await p.keyboard.press(at && at === ids.at(-1) ? "Shift+Tab" : "Tab");
+          if (!(await p.locator(".blocks-wrap .sel").count())) errors.push(`${where}: Tab in the blocks selected nothing`);
+          await p.keyboard.press("Escape");
+        }
         const svg = p.locator(".p-graph svg.canvas");
         const bb = await svg.boundingBox();
         if (bb) {
