@@ -280,7 +280,10 @@ can be compared directly. Booleans in conditions are plain JS booleans
 called directly, and a match that decides a condition sets a JS boolean in
 statements instead of building Bool data in a function called in place.
 Where such a function is used as a value (passed on, stored, exported) it's
-wrapped to give Bool data, like everywhere else. The ids in `case` labels
+wrapped to give Bool data, like everywhere else. Constant data (a variant whose
+fields are all literals or constant data, such as a list of nullary
+variants) is built once, at module level, and shared: data is never
+changed in place (GAPS.md G9). The ids in `case` labels
 carry the variant's name as a comment.
 
 `and` and `or` short-circuit in compiled code. The evaluator evaluates both
