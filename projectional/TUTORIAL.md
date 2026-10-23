@@ -657,14 +657,16 @@ left shows in `rotate`:
 
 ![rotate: bridges where wires cross, but the wires still cross a lot](tutorial/rotate.png)
 
-- *Tidy* removes overlaps but doesn't reorder nodes to cut crossings, so a
-  definition with many inputs fanning into a few nodes is still a weave.
+- *Tidy* now reorders the nodes in each column where that cuts crossings
+  (Sugiyama's barycenter step), and no longer pushes a node off one wire
+  across others: over the examples, a tidy leaves about 9% fewer crossings
+  than before it, where it used to add about 27%. Wires that fan out from
+  one frame's inputs to nodes far apart still weave.
 - Wires don't route around nodes; they pass under them (as tunnels) or
   over input names. In `insert`, `tail` and `tail′` are hidden under wires.
 
-**Proposal.** A layered layout (Sugiyama-style, as ELK and Graphviz do) that
-orders nodes in each column to minimize crossings, as a *Tidy* option, and
-names drawn with a background so a wire can't cover them.
+**Proposal.** Names drawn with a background so a wire can't cover them, and
+wires routed around nodes.
 
 ### 2. Cases that are values are drawn as functions
 

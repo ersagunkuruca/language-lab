@@ -196,9 +196,9 @@ not only code: an influence is credited even when nothing was copied.
 | A let is a reroute dot on a wire | Influence | Blender's node editor reroutes (also Unreal and Houdini). Credited in `editor/typedGraph.ts`, README.md. |
 | Named let/get nodes, wire portals | Influence | Unreal Blueprints' local variables and named reroutes, Max/MSP send/receive, World Machine portals. NODE-EDITOR.md. |
 | Bridges over crossing wires, tunnels under nodes | Ersagun's idea | Prior art: line hops in circuit schematics and Visio. |
+| Tidy reorders columns to cut crossings | Prior art | The barycenter step of layered graph drawing: K. Sugiyama, S. Tagawa, M. Toda, "Methods for Visual Understanding of Hierarchical System Structures", IEEE Trans. SMC, 1981. Credited in `editor/graphLayout.ts`. |
 | Right-click search at the pointer, tidy, frames | Influence | Blender (Shift-A, Node Wrangler), Unreal, Houdini (Tab, network boxes). Full list with links in NODE-EDITOR.md. |
 | Known visual-programming pitfalls | Influence | M. Burnett et al., "Scaling Up Visual Programming Languages", IEEE Computer, 1995, and the sources in NODE-EDITOR.md. |
-| Planned crossing reduction | Textbook | Sugiyama, Tagawa and Toda (IEEE SMC, 1981), layered layout as in ELK and Graphviz. |
 | Visual design (Design E, neutral colours) | Our own | Designed in the project. Fonts: Red Hat Display and DM Mono (SIL Open Font License, via Google Fonts). |
 
 ## Example programs
