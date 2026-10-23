@@ -15,6 +15,7 @@
 // replaces, through `meaning`.
 
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
+import type { Info } from "./infer.ts";
 import { CONS, INT_OPS, LIST, S, TEXT_OPS } from "./std.ts";
 
 export interface Representation {
@@ -100,6 +101,23 @@ export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
     return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
   })[0];
   return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
+}
+
+// A job does what it replaces and nothing more: its effects are the ones
+// the replaced definition's type has, and none for a constructor, a match
+// or a fold (their cases' effects come in through the functions they're
+// given, as a type variable). Otherwise the program's type wouldn't say
+// what the represented program does: effects come from the meaning
+// (NUMBERS.md). Null when every job keeps to it; `info` is the program's
+// check, which types the representation's code too.
+export function jobProblem(info: Info, rep: Representation, names: Record<Id, string> = {}): string | null {
+  const effects = (d: Id) => { const t = info.typeOf.get(d); return t?.t === "fn" ? info.subst.resolveRow(t.eff).effs : []; };
+  for (const [job, impl] of Object.entries(rep.impl)) {
+    const allowed = job === "match" || job === "fold" ? [] : effects(job);
+    const extra = effects(impl).filter((e) => !allowed.includes(e));
+    if (extra.length) return `${names[impl] ?? impl} does ${extra.map((e) => names[e] ?? e).join(", ")}, which ${job === "match" || job === "fold" ? `a ${job}` : names[job] ?? job} doesn't, so it can't do its job in ${rep.name}`;
+  }
+  return null;
 }
 
 // The program from `entries`, with T's jobs done by `rep`. Node ids are kept

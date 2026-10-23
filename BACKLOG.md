@@ -88,7 +88,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L23 | Showcase `conjugate(f, g)` = f⁻¹ ∘ g ∘ f: colour-space edit, object-vs-world transform, multiband guitar effect | Ersagun 2026-10-22, NOTES.md | P3 | M | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
-| L25 | Container matrix, the other four places: a `solve` body, a shader, a representation's job, a pinned export | R2 §1.2, L5 | P2 | M | |
 | L27 | `Log` in a page's views and handlers: the runtime handles it everywhere else, but neither page row allows it | L6 | P3 | S | |
 
 ## Coordinator and process
@@ -146,7 +145,8 @@ roadmap's Done table; this section keeps about a week.
 | id | item | PR |
 |---|---|---|
 | L28 | The html module: each tag a function of its children, attributes by wrapping (`styled`, `classed`, `named`, `with`), `button`, `words`, a style sheet as a list of rules. The dice and converter pages rewritten with it (dice 475 nodes to 382; the converter's style sheet is its own definition) | #209 |
-| L26 | The effect ledger in code: every place an effect leaves a row calls `discharge(where, effects, why)` (`src/lang/ledger.ts`); LANGUAGE.md's "Where effects go" table is generated from the calls, and a test checks each builtin's type drops exactly its row | this PR |
+| L25 | Container matrix, the other places: a solve's body, a function run backwards, a shader (with and without a literal with fuel), a representation's job, a module's pinned export and one whose pin leaves an effect out. One hole found and closed: a job that did an effect its definition doesn't was only caught when the rewritten program happened not to check; `jobProblem` refuses it before the rewrite (`lab` asks it) | this PR |
+| L26 | The effect ledger in code: every place an effect leaves a row calls `discharge(where, effects, why)` (`src/lang/ledger.ts`); LANGUAGE.md's "Where effects go" table is generated from the calls, and a test checks each builtin's type drops exactly its row | #216 |
 | L11d | A `solve` whose mode gives exactly one answer and ends has no `Choice`: the checker, run.ts (no choice point) and the compiler (a plain call) agree. A one-case constructor taken apart always matches | #213 |
 | L11c | `relate.ts` follows the schedule: each function in each mode runs its goals in the order modes.ts planned. The ordering rules (`cheap`, `computable`, `waitsOnly`, `hence` reversed, match and fold and solve orders) are gone; goals a stuck direction never reaches wait for what they need | #205 |
 | L11b | Types from modes: a relational `solve` is `Diverge` only when its mode may not end (says why), and a direction nothing pins down is an error at the `solve`; `mayLoop` removed | #198 |

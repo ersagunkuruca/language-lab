@@ -7,7 +7,7 @@ import { get } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
-import { choose, represent, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { equal, makeRunner, runMain, type Data, type Value } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
 
@@ -70,6 +70,8 @@ test("the chooser picks Int for main, and represent onto binary gives the same a
   assert.ok(c.jobs.includes("fold") && c.jobs.includes(p.named("multiply")));
   assert.equal(represent(p.code, [p.named("main")], unary), p.code);
 
+  // Each job does only what it replaces (test/containers.test.ts has one that doesn't).
+  for (const r of reps) assert.equal(jobProblem(info, r, names), null, r.name);
   const bin = represent(p.code, [p.named("main"), p.named("small")], binary);
   const bi = infer(bin, names);
   assert.deepEqual(bi.errors, []);

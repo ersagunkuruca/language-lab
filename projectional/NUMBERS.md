@@ -42,7 +42,9 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
   `meaning(add′(a, b)) = add(meaning(a), meaning(b))`. Today they are
   tested, the same way the compiler is tested against the evaluator. The
   evaluator always runs the definition, so it stays the meaning of the
-  program.
+  program. Effects are checked, not tested: a job may do only what the
+  definition it replaces does (`jobProblem`), so a `succ′` that prints is
+  refused before the rewrite, and the program's type stays true.
 - **Converting into a representation?** Free: it's `meaning` run backwards.
   `meaning` is usually many-to-one (binary with leading zeros, fractions
   not in lowest terms), so its inverse has many answers, and the canonical

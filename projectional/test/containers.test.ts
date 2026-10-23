@@ -5,16 +5,22 @@
 // the ledger below: every expected "runtime" outcome names who handles it.
 // A cell that comes out "dropped" is a hole: the program does the effect and
 // no type says so (#102 and the read-of-a-formula hole were two of these).
-// Not here yet: a solve body, a shader, a representation's job and a
-// pinned export (BACKLOG.md L25).
+// The places below the first table each build a program of their own (a
+// solve, a shader, a representation, a module), BACKLOG.md L25.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Id } from "../src/model.ts";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { merge, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { root } from "../src/io.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { infer } from "../src/lang/infer.ts";
-import { base, baseNames } from "../src/lang/load.ts";
+import { infer, type Info } from "../src/lang/infer.ts";
+import { base, baseNames, loadProgram } from "../src/lang/load.ts";
+import { makeModule, publish } from "../src/lang/modules.ts";
+import { jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { CELL_OPS, HTML_V, S } from "../src/lang/std.ts";
+import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { CELLS, CHOICE, CONSOLE, DIVERGE, NUMBER, UPDATE } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -114,6 +120,142 @@ for (const container of Object.keys(containers)) {
       // A runtime-discharged effect leaves main's type without it, and no error.
       const ok = want.startsWith("runtime") ? got === "dropped" : got === want;
       assert.ok(ok, `${eff} ${container}: expected ${want}, got ${got}${errors.length ? ` (${errors.join("; ")})` : ""}`);
+    }
+  });
+}
+
+// ---- The other places (L25): each builds its own program.
+
+type Got = "row" | "refused" | "dropped";
+// f, doing the effect, and spin, which never ends, in a program on `known`.
+function effectful(eff: Effect, known?: Code) {
+  const k = known ? new Lang(known) : new Lang();
+  const spin = k.def("spin");
+  k.define(spin, k.fn(["x"], (x) => k.call(spin, k.call(B.add, x, k.lit(1)))));
+  const f = k.def("f");
+  k.define(f, k.thunk(() => doing(k, eff, spin)));
+  return { k, f };
+}
+const rowOf = (info: Info, d: Id) => { const t = info.typeOf.get(d); return t?.t === "fn" ? info.subst.resolveRow(t.eff).effs : []; };
+// What became of eff, from the program's check: errors, or main's row.
+function judged(code: Code, names: Record<Id, string>, main: Id, eff: Effect): { got: Got; errors: string[] } {
+  const info = infer(code, names);
+  const errors = info.errors.map((e) => e.message);
+  if (errors.length) return { got: "refused", errors };
+  return { got: rowOf(info, main).includes(ID[eff]) ? "row" : "dropped", errors };
+}
+const params = (code: Code, d: Id) => (code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+
+const places: Record<string, (eff: Effect) => { got: Got; errors: string[] }> = {
+  // The body runs once for each answer, forward.
+  "in a solve's body": (eff) => {
+    const { k, f } = effectful(eff);
+    const g = k.def("g");
+    k.define(g, k.fn(["x"], (x) => k.call(B.add, x, k.lit(1))));
+    const [x] = params(k.code, g);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.show, k.solve(g, { out: k.lit(2) }, { [x]: "x" }, ({ [x]: v }) => k.call(B.add, v, k.call(f))))));
+    return judged(base(k.code), baseNames(k.names), main, eff);
+  },
+  // Searching runs it many times and drops most runs, so it may not act.
+  "in a function run backwards": (eff) => {
+    const { k, f } = effectful(eff);
+    const h = k.def("h");
+    k.define(h, k.fn(["x"], (x) => k.call(B.add, x, k.call(f))));
+    const [x] = params(k.code, h);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.show, k.solve(h, { out: k.lit(2) }, { [x]: "x" }, ({ [x]: v }) => v))));
+    return judged(base(k.code), baseNames(k.names), main, eff);
+  },
+  // A shader is compiled for the GPU (compiler/src/scalar.ts): refused
+  // there, or it compiles with nothing left over.
+  "in a shader": (eff) => shader(eff, false),
+  "in a shader, under a literal with fuel": (eff) => shader(eff, true),
+  // A representation's job replaces what it does in the program it's
+  // chosen for, so what the job does must be what the program's type says.
+  "in a representation's job": (eff) => {
+    const p = loadProgram(join(root, "examples", "numbers"));
+    const reps: Representation[] = JSON.parse(readFileSync(join(root, "examples", "numbers", "representations.json"), "utf8"));
+    const binary = reps.find((r) => r.name === "binary")!;
+    const { k, f } = effectful(eff, p.code);
+    // succ′, which does succ's job on binary numbers, also does eff.
+    const job = binary.impl[Object.keys(binary.impl).find((j) => p.pres.names[j] === "succ")!];
+    const lam = k.code.nodes[(p.code.nodes[job] as NodeOf<"def">).body!] ?? p.code.nodes[(p.code.nodes[job] as NodeOf<"def">).body!];
+    const body = (lam as NodeOf<"lambda">).body;
+    const code = merge(p.code, k.code);
+    code.nodes[lam.id] = { ...(lam as NodeOf<"lambda">), body: k.seq(k.call(f), body) };
+    Object.assign(code.nodes, k.code.nodes);
+    const names = { ...p.pres.names, ...k.names };
+    const main = p.named("main");
+    const before = infer(code, names);
+    if (before.errors.length) return { got: "refused", errors: before.errors.map((e) => e.message) };
+    const problem = jobProblem(before, binary, names);
+    if (problem) return { got: "refused", errors: [problem] };
+    const after = judged(represent(code, [main, p.named("small")], binary), names, main, eff);
+    // In main's type after the rewrite, but not before: the program's own
+    // type didn't say it.
+    return after.got === "row" && !rowOf(before, main).includes(ID[eff]) ? { got: "dropped", errors: [] } : after;
+  },
+  // Published in a module and called from a program: the export's pin is
+  // its type, effects included.
+  "in a module's pinned export": (eff) => exported(eff, false),
+  "in a module's export whose pin leaves it out": (eff) => exported(eff, true),
+};
+
+function shader(eff: Effect, fuel: boolean) {
+  const { k, f } = effectful(eff);
+  const shade = k.def("shade");
+  const body = (x: Id) => k.call(B.add, x, k.call(f));
+  k.define(shade, k.fn(["x"], (x) => fuel ? k.call(S.first, k.thunk(() => k.call(S.fuel, k.lit(100), k.thunk(() => body(x)))), k.thunk(() => x)) : body(x)));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  if (info.errors.length) return { got: "refused" as const, errors: info.errors.map((e) => e.message) };
+  const lowered = lowerScalar(code, info, names, [shade]);
+  if (lowered.refused.has(shade)) return { got: "refused" as const, errors: [String(lowered.refused.get(shade))] };
+  return { got: rowOf(info, shade).includes(ID[eff]) ? "row" as const : "dropped" as const, errors: [] };
+}
+
+function exported(eff: Effect, lie: boolean) {
+  const { k, f } = effectful(eff);
+  const g = k.def("g");
+  k.define(g, k.thunk(() => k.call(f)));
+  const known = base({ nodes: {}, defs: [] });
+  const p = publish(merge(known, k.code), k.names, [g], known);
+  if (!p.ok) throw new Error(p.reason);
+  const at = p.rename.get(g)!;
+  const pins = { ...p.pins };
+  if (lie) pins[at] = { ...pins[at], type: { ...pins[at].type, eff: { effs: [], tail: null } } as never };
+  const m = makeModule("m", p.code, p.names, [at], pins);
+  const u = new Lang(merge(known, m.code));
+  const main = u.def("main");
+  u.define(main, u.thunk(() => u.call(S.show, u.call(at))));
+  const code = merge(merge(known, m.code), u.code), names = { ...baseNames(), ...m.names, ...u.names };
+  const info = infer(code, names, undefined, { pins: m.pins });
+  const errors = info.errors.map((e) => e.message);
+  if (errors.length) return { got: "refused" as Got, errors };
+  return { got: (rowOf(info, main).includes(ID[eff]) ? "row" : "dropped") as Got, errors };
+}
+
+const SHADER_BUDGET = "runtime: a shader's literal with fuel gives each pixel a step budget (the ledger's a shader row)";
+const allRefused: Record<Effect, Outcome> = { Console: "refused", Choice: "refused", Diverge: "refused", Update: "refused" };
+const backwards: Record<Effect, Outcome> = { Console: "refused", Choice: "row", Diverge: "row", Update: "refused" };
+const placesExpected: Record<string, Record<Effect, Outcome>> = {
+  "in a solve's body": plain,
+  "in a function run backwards": backwards,
+  "in a shader": allRefused,
+  "in a shader, under a literal with fuel": { ...allRefused, Diverge: SHADER_BUDGET },
+  "in a representation's job": allRefused,
+  "in a module's pinned export": plain,
+  "in a module's export whose pin leaves it out": allRefused,
+};
+
+for (const place of Object.keys(places)) {
+  test(`a function ${place}: each effect reaches the type, is refused, or is the runtime's`, () => {
+    for (const eff of Object.keys(ID) as Effect[]) {
+      const want = placesExpected[place][eff];
+      const { got, errors } = places[place](eff);
+      const ok = want.startsWith("runtime") ? got === "dropped" : got === want;
+      assert.ok(ok, `${eff} ${place}: expected ${want}, got ${got}${errors.length ? ` (${errors.join("; ")})` : ""}`);
     }
   });
 }
