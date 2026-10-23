@@ -43,8 +43,12 @@ export function canonical(sc: Scheme): Pin {
     const eff: Row = { effs: [...t.eff.effs].sort(), tail: t.eff.tail === null ? null : rows.get(t.eff.tail) ?? t.eff.tail };
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff };
   };
-  const plain = new Set(sc.plain ?? []);
-  return { vars: [...vars.values()], rows: [...rows.values()], type: go(sc.type), plain: [...vars].filter(([v]) => plain.has(v)).map(([, i]) => i) };
+  const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
+  const out: Pin = { vars: [...vars.values()], rows: [...rows.values()], type: go(sc.type), plain: [...vars].filter(([v]) => plain.has(v)).map(([, i]) => i) };
+  // Only when there are any, so every signature written before keeps its hash.
+  const nums = [...vars].filter(([v]) => numbers.has(v)).map(([, i]) => i);
+  if (nums.length) out.numbers = nums;
+  return out;
 }
 
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc)) : "");
@@ -67,7 +71,7 @@ export function fresh(p: Pin, s: Subst): Scheme {
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail } };
   };
-  return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!) };
+  return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!) };
 }
 
 // The pin's type with its variables made rigid: each one a type of its own
@@ -75,9 +79,9 @@ export function fresh(p: Pin, s: Subst): Scheme {
 // fits the pin when its type, instantiated, unifies with this.
 export const RIGID = "pin.";
 export function rigid(sc: Scheme): Type {
-  const plain = new Set(sc.plain ?? []);
+  const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
   const go = (t: Type): Type => {
-    if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${plain.has(t.v) ? "plain" : "any"}.${t.v}`, args: [] } : t;
+    if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${numbers.has(t.v) ? "numbers" : plain.has(t.v) ? "plain" : "any"}.${t.v}`, args: [] } : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     const tail = t.eff.tail;
     const eff: Row = tail !== null && sc.rows.includes(tail) ? { effs: [...t.eff.effs, `${RIGID}row.${tail}`], tail: null } : t.eff;

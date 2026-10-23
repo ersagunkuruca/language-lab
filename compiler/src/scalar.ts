@@ -96,7 +96,14 @@ const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean } = {}): Lowered {
-  const zonk = (id: Id): Type => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
+  // A generic definition (the vectors module's plus, for any record of
+  // Numbers) is lowered once per set of types it's called at, the way a
+  // C++ template or a Rust generic is: `at` is what its type variables
+  // stand for in the one being lowered.
+  let at = new Map<number, Type>();
+  const put = (t: Type, m: Map<number, Type>): Type =>
+    t.t === "var" ? m.get(t.v) ?? t : t.t === "con" ? { ...t, args: t.args.map((a) => put(a, m)) } : { ...t, params: t.params.map((p) => put(p, m)), ret: put(t.ret, m) };
+  const zonk = (id: Id): Type => put(info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 }), at);
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
   const OTHER = opts.records ? "something other than Number, Bool or a record of them" : "something other than Number or Bool";
@@ -158,15 +165,19 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   let underBudget = false;
   const diverges = (t: Type | undefined) => !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(DIVERGE);
 
-  // The function index for `def`, lowering it (and what it calls) first.
-  function func(def: Id): number {
-    const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+  // The function index for `def` at these types, lowering it (and what it
+  // calls) first.
+  function func(def: Id, types = new Map<number, Type>()): number {
+    const raw = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    const t = raw && put(raw, types);
     if (!underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
-    if (index.has(def)) return index.get(def)!;
-    if (refused.has(def)) throw new Refused(`calls ${nm(def)}, which ${refused.get(def)}`);
+    const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
+    const key = used.length ? `${def}|${used.map((v) => `${v}=${show(types.get(v)!)}`).join(",")}` : def;
+    if (index.has(key)) return index.get(key)!;
+    if (refused.has(key)) throw new Refused(`calls ${nm(def)}, which ${refused.get(key)}`);
     const d = code.nodes[def] as NodeOf<"def">;
     const lam = d?.body ? code.nodes[d.body] : null;
-    const fail = (why: string): never => { refused.set(def, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
+    const fail = (why: string): never => { refused.set(key, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
     if (!t || t.t !== "fn" || lam?.kind !== "lambda") fail("is not a function written in the program");
     const ft = t as Extract<Type, { t: "fn" }>;
     // An input that can be anything is one the body never looks at (∂f/∂x
@@ -184,26 +195,29 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 
     // Reserve the index now, so recursion finds it.
     const i = funcs.length;
-    index.set(def, i);
+    index.set(key, i);
     inProgress.add(def);
     const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted };
     funcs.push(f);
-    const outer = underBudget;
+    const outer = underBudget, outerAt = at;
     try {
       const l = lam as NodeOf<"lambda">;
       const env = new Map(l.params.map((p, j) => [p, j]));
       underBudget = budgeted;
+      at = types;
       f.body = expr(l.body, env, f, true);
     } catch (e) {
       underBudget = outer;
+      at = outerAt;
       // Undo: this definition and anything lowered after it.
       funcs.splice(i);
       for (const [d2, j] of index) if (j >= i) index.delete(d2);
       inProgress.delete(def);
-      if (e instanceof Refused) { refused.set(def, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
+      if (e instanceof Refused) { refused.set(key, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
       throw e;
     }
     underBudget = outer;
+    at = outerAt;
     inProgress.delete(def);
     return i;
   }
@@ -261,10 +275,20 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), same);
         }
         if (BUILTIN[target]) return { k: "op", op: BUILTIN[target], args: args() };
+        if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
         if (t?.kind === "def") {
-          const fn = func(target);
+          // What the callee's type variables are here.
+          const types = new Map<number, Type>();
+          const match = (p: Type, c: Type) => {
+            if (p.t === "var") { if (c.t !== "var") types.set(p.v, c); }
+            else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && match(a, c.args[j]));
+            else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && match(a, c.params[j])); match(p.ret, c.ret); }
+          };
+          const ct = info.typeOf.get(target) && info.subst.zonk(info.typeOf.get(target)!);
+          if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && match(p, zonk(n.args[j]))); match(ct.ret, zonk(id)); }
+          const fn = func(target, types);
           n.args.forEach((a, j) => {
             if (stype(zonk(a)) !== funcs[fn].params[j]) throw new Refused(`passes ${nm(target)} something other than ${nm(target)} takes there`);
           });
@@ -341,9 +365,52 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // A root that may not finish is refused as a place to start, even when
   // it was lowered to be called from under a budget.
   const unstarted = new Map<Id, string>();
+  // map parts, zip parts and total: the function applied to each part, as
+  // the record's fields would be written by hand. A part that is already
+  // an expression (the record was just built) is used as it is; otherwise
+  // the record goes in a local first, so it's computed once.
+  function parts(n: NodeOf<"call">, env: Map<Id, number>, f: SFunc): SExpr {
+    const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
+    const recs = target === S.total ? n.args : n.args.slice(1);
+    const t = stype(zonk(recs[0]));
+    if (t !== "f64" && (!t || typeof t === "string" || t.fields.some((x) => x.t !== "f64"))) throw new Refused(`takes the parts of something that isn't a record of Numbers`);
+    const lets: { i: number; value: SExpr }[] = [];
+    const partsOf = (id: Id): SExpr[] => {
+      const e = expr(id, env, f, false);
+      if (t === "f64") return [e];
+      if (e.k === "make") return e.args;
+      let rec = e;
+      if (e.k !== "local") { const i = f.locals.push(t) - 1; lets.push({ i, value: e }); rec = { k: "local", i }; }
+      return t.fields.map((_, j) => ({ k: "get", rec, t, i: j }));
+    };
+    const ps = recs.map(partsOf);
+    const width = ps[0].length;
+    let out: SExpr;
+    if (target === S.total) out = ps[0].reduce((a, b) => ({ k: "op", op: "add", args: [a, b] }));
+    else {
+      const fnId = n.args[0], fnNode = code.nodes[fnId];
+      const each = (j: number): SExpr => {
+        const xs = ps.map((p) => p[j]);
+        if (fnNode.kind === "lambda") {
+          if (fnNode.params.length !== xs.length) throw new Refused("applies a function to the wrong number of inputs");
+          let inner = new Map(env);
+          const ls = fnNode.params.map((p, k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(p, i); return { i, value: xs[k] }; });
+          return ls.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(fnNode.body, inner, f, false));
+        }
+        if (fnNode.kind === "ref" && BUILTIN[fnNode.target]) return { k: "op", op: BUILTIN[fnNode.target], args: xs };
+        if (fnNode.kind === "ref" && code.nodes[fnNode.target]?.kind === "def") return { k: "call", fn: func(fnNode.target), args: xs, tail: false };
+        throw new Refused("takes the parts with a function that isn't written here (that needs closures)");
+      };
+      const results = Array.from({ length: width }, (_, j) => each(j));
+      out = t === "f64" ? results[0] : { k: "make", t, args: results };
+    }
+    return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), out);
+  }
+
   for (const r of roots) {
     try { func(r); } catch (e) { if (!(e instanceof Refused)) throw e; if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, "")); }
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
-  return { funcs, refused, records: [...records.values()] };
+  // Refusals by definition; those of one specialization stay inside.
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()] };
 }

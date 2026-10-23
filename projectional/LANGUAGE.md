@@ -70,6 +70,32 @@ fields written in place, so an update always has exactly one answer. A
 general function there (`(p) ↦ p.width · 2`) is the next step: it would
 run backwards through the relational interpreter, with `Choice`.
 
+**Records of Numbers, part by part.** A point, a direction or a colour is
+an ordinary one-case type whose fields are all Numbers (`vec(x, y, z)`,
+`colour(red, green, blue)`). Three builtins take any such record part by
+part, so the arithmetic on it is written once for all of them:
+
+- `map parts(f, r)`: `f` on each part, `vec(f(x), f(y), f(z))`;
+- `zip parts(f, a, b)`: `f` on each pair of parts;
+- `total(r)`: the parts added up.
+
+`f` must be pure (it runs once per part). A Number counts as a record of
+one part, so the same code works on plain Numbers. The checker types them
+with a constraint that type variables carry, like `equal`'s plain data:
+`plus(a, b) = zip parts(add, a, b)` is `(r, r) → r` for every record of
+Numbers `r`. Both inputs are the same `r`, so adding a colour to a point is
+still a type error (NUMBERS.md: "adding a position to a color is a
+mistake"), and a record with a field that isn't a Number is refused with
+that reason. Run backwards, each part is one call that runs backwards on its
+own: the point that `plus(p, vec(1, 1, 1))` takes to `vec(5, 0, 2)` is
+`vec(4, -1, 1)`.
+
+The **vectors module** (`library/vectors.json`, built from
+`src/lang/vectors-source.ts`) is written on them: `plus`, `minus`,
+`times`, `scale`, `dot`, `magnitude`, `distance`, `unit`, `mix`, `clamp`
+and `reflect`, the operations GLSL and WGSL have built in. On a GPU each is
+the vector operation it describes (COMPILER.md "Vectors").
+
 ### Whole numbers and text, at real sizes
 
 `Int` is the whole numbers, and it **never overflows** (`src/lang/int.ts`).
@@ -928,6 +954,7 @@ class considered, and where each one ends up:
 | side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") |
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects |
 | non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive |
+| arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
 | a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data built from x), there is none |
 | running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker |

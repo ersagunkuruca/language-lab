@@ -56,6 +56,13 @@ export class TypeError extends Error {}
 // (a, a) → Bool for every plain a.
 export class PlainError extends TypeError {}
 
+// A type that must be a record of Numbers: Number itself, or data with one
+// case whose fields are all Numbers (a point, a colour). The parts-wise
+// builtins (`map parts`, `zip parts`, `total`) work on any of them, so
+// vector arithmetic is written once for every such record. Carried by type
+// variables like plain data is. Such a record is plain data too.
+export class NumbersError extends TypeError {}
+
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
 export class Subst {
@@ -68,6 +75,11 @@ export class Subst {
   // whole to be plain, or null if it holds a function whatever its args.
   // Set by the checker, which can see the data types' fields.
   plainArgs: (id: Id, args: Type[]) => Type[] | null = (_, args) => args;
+  // Type variables that may only stand for a record of Numbers.
+  numbers = new Set<number>();
+  // For a data type applied to args: its fields' types, if it has one
+  // case, or null. Set by the checker.
+  recordFields: (id: Id, args: Type[]) => Type[] | null = () => null;
 
   clone(): Subst {
     const s = new Subst();
@@ -76,12 +88,26 @@ export class Subst {
     s.next = this.next;
     s.plain = new Set(this.plain);
     s.plainArgs = this.plainArgs;
+    s.numbers = new Set(this.numbers);
+    s.recordFields = this.recordFields;
     return s;
   }
 
-  fresh(plain = false): Type {
-    if (plain) this.plain.add(this.next);
+  fresh(plain = false, numbers = false): Type {
+    if (plain || numbers) this.plain.add(this.next);
+    if (numbers) this.numbers.add(this.next);
     return { t: "var", v: this.next++ };
+  }
+
+  // Require t to be a record of Numbers: its fields become Numbers.
+  requireNumbers(t: Type): void {
+    t = this.resolve(t);
+    if (t.t === "var") { this.numbers.add(t.v); this.plain.add(t.v); return; }
+    if (t.t === "con" && t.id === NUMBER) return;
+    const fields = t.t === "con" ? this.recordFields(t.id, t.args) : null;
+    if (!fields?.length) throw new NumbersError("not a record of Numbers");
+    try { for (const f of fields) this.unify(f, { t: "con", id: NUMBER, args: [] }); }
+    catch (e) { if (e instanceof TypeError && !(e instanceof NumbersError)) throw new NumbersError("a field isn't a Number"); throw e; }
   }
 
   // Require t to be plain data, now (for what's known of it) and later (its
@@ -137,6 +163,7 @@ export class Subst {
       const [v, t] = a.t === "var" ? [a, b] : [b as { t: "var"; v: number }, a];
       if (this.occurs(v.v, t)) throw new TypeError("this would need an infinite type");
       this.types.set(v.v, t);
+      if (this.numbers.has(v.v)) this.requireNumbers(t);
       if (this.plain.has(v.v)) this.requirePlain(t);
       return;
     }
@@ -186,7 +213,8 @@ export class EffectError extends TypeError {
 
 // A type scheme: a type with its own variables, copied fresh at each use.
 // `plain` lists the variables that may only stand for plain data.
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[] }
+// `numbers` lists those that may only stand for a record of Numbers.
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -202,8 +230,8 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
 }
 
 export function instantiate(sc: Scheme, s: Subst): Type {
-  const plain = new Set(sc.plain ?? []);
-  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v))]));
+  const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
+  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v))]));
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   const go = (t: Type): Type => {
     t = s.resolve(t);
