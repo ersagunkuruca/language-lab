@@ -12,7 +12,7 @@ import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
 import { fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
+import { CONS, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -265,4 +265,31 @@ test("a parameter whose id is all digits is labelled by its name", () => {
   const greet = Object.values(code.nodes).find((n): n is NodeOf<"solve"> => n.kind === "solve" && "19718686" in n.binds)!;
   assert.equal(portLabel(code, names, greet.fn, "19718686"), names["19718686"]);
   assert.equal(portLabel(code, names, "builtin.concat", "1"), "b");
+});
+
+test("whole-number sums and split run backwards, so counting words backwards doesn't guess", () => {
+  const p = program((k) => {
+    const count = k.def("count");
+    k.define(count, k.fn(["xs"], (xs) => k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.int(0) },
+      { variant: CONS, names: ["x", "rest"], results: [null, "n"], body: (_, [, n]) => k.call(INT_OPS.add, n!, k.int(1)) },
+    ])));
+    const pieces = k.def("pieces");
+    k.define(pieces, k.fn(["line"], (line) => k.call(TEXT_OPS.split, line, k.lit(" "))));
+  });
+  const count = p.named("count"), [xs] = params(p.code, count);
+  let steps = 0;
+  const spend = () => ++steps < 2000;
+  // n + 1 = 3 gives n = 2 before the rest of the list is unfolded: the
+  // three-item list is the first answer, not one found by trying lengths.
+  const [three] = take(relate(p.code, count, { out: 3 }, { spend }), 1);
+  assert.equal(shown(three, xs).split(",").length, 3);
+  assert.ok(steps < 20, `${steps} steps`);
+  // No list has −1 items: the search goes −2, −3, … until its budget ends.
+  steps = 0;
+  assert.deepEqual([...relate(p.code, count, { out: -1 }, { spend })], []);
+  const pieces = p.named("pieces"), [line] = params(p.code, pieces);
+  assert.deepEqual([...relate(p.code, pieces, { out: toList(["a", "", "b"]) })].map((a) => shown(a, line)), ['"a  b"']);
+  // A piece can't hold the separator: splitting "a b" wouldn't give it back.
+  assert.deepEqual([...relate(p.code, pieces, { out: toList(["a b"]) })], []);
 });
