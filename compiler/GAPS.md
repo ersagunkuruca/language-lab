@@ -247,7 +247,9 @@ the rest once G1 to G7 are done, if the profile still shows it.
 **G10. Readability of the output (cosmetic).** The indentation goes wrong
 after an `if` with a nested `match` inside a case (see `atom` in
 `out/calc.js`). It doesn't change what runs, but the output is meant to be
-read.
+read. **Done** (Backlog C16): brackets inside text and comments
+no longer count, and a line that opens several brackets is one level,
+closed by the line that starts by closing them.
 
 ### Proposed order
 

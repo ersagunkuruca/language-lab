@@ -2065,7 +2065,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const uses = (js: string, name: string) => new RegExp(`(?<![\\p{L}\\p{N}_$])${name.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(js);
   const keep = new Set<string>();
   const reach = (js: string) => {
-    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "");
+    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\/|\/\/.*$/g, "");
     for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
   };
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
@@ -2095,16 +2095,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   ].join("\n"));
 }
 
-// Indent by braces, so the output is readable.
+// Indent by brackets, so the output is readable: one level for each line
+// that leaves brackets open, however many it opens.
 function indent(src: string): string {
-  let depth = 0;
+  // How many brackets each open level holds.
+  const open: number[] = [];
+  const close = () => { if (open.length && --open[open.length - 1] === 0) open.pop(); };
   return src.split("\n").map((line) => {
     const t = line.trim();
     if (!t) return "";
-    const opens = (t.match(/[{(\[]/g) ?? []).length, closes = (t.match(/[})\]]/g) ?? []).length;
-    const lead = /^[})\]]/.test(t) ? 1 : 0;
-    const out = "  ".repeat(Math.max(0, depth - lead)) + t;
-    depth = Math.max(0, depth + opens - closes);
+    // Brackets in text and comments don't count.
+    const code = t.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\*.*?\*\/|\/\/.*$/g, "");
+    // A line that starts by closing brackets lines up with the line that
+    // opened them, even when it doesn't close all of them.
+    let i = 0, partly = false;
+    for (; i < code.length && /[})\]\s]/.test(code[i]); i++) if (code[i] !== " ") { const n = open.length; close(); partly = open.length === n; }
+    const out = "  ".repeat(open.length - (partly ? 1 : 0)) + t;
+    let opened = 0;
+    for (; i < code.length; i++) {
+      if ("{([".includes(code[i])) opened++;
+      else if ("})]".includes(code[i])) { if (opened) opened--; else close(); }
+    }
+    if (opened) open.push(opened);
     return out;
   }).join("\n");
 }

@@ -48,115 +48,115 @@ function main() {
   $print(("who was greeted(\"goodbye\") = " + who_was_greeted("goodbye")));
   $print(("cuts(\"abc\") = " + words(cuts("abc"))));
   $print(("read numbers(\"10 20 30\") = " + (() => {
-          for (const r$0 of read_numbers("10 20 30")) {
-            let v$1;
-            try {
-              v$1 = show_numbers(r$0);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              v$1 = $no;
-            }
-            if (v$1 !== $no) {
-              let v$2;
-              try {
-                v$2 = ("[" + v$1);
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  v$2 = $no;
-                }
-                if (v$2 !== $no) {
-                  let v$3;
-                  try {
-                    v$3 = (v$2 + "]");
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  v$3 = $no;
-                }
-                if (v$3 !== $no) {
-                  return v$3;
-                }
-              }
-            }
+    for (const r$0 of read_numbers("10 20 30")) {
+      let v$1;
+      try {
+        v$1 = show_numbers(r$0);
+      } catch (e) {
+        if (!$outOfFuel(e)) throw e;
+        v$1 = $no;
+      }
+      if (v$1 !== $no) {
+        let v$2;
+        try {
+          v$2 = ("[" + v$1);
+        } catch (e) {
+          if (!$outOfFuel(e)) throw e;
+          v$2 = $no;
+        }
+        if (v$2 !== $no) {
+          let v$3;
+          try {
+            v$3 = (v$2 + "]");
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            v$3 = $no;
           }
-          return "unreadable";
-        })()));
+          if (v$3 !== $no) {
+            return v$3;
+          }
+        }
+      }
+    }
+    return "unreadable";
+  })()));
   $print(("read numbers(\"10  20\") = " + (() => {
-          for (const r$4 of read_numbers("10  20")) {
-            let v$5;
-            try {
-              v$5 = show_numbers(r$4);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              v$5 = $no;
-            }
-            if (v$5 !== $no) {
-              let v$6;
-              try {
-                v$6 = ("[" + v$5);
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  v$6 = $no;
-                }
-                if (v$6 !== $no) {
-                  let v$7;
-                  try {
-                    v$7 = (v$6 + "]");
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  v$7 = $no;
-                }
-                if (v$7 !== $no) {
-                  return v$7;
-                }
-              }
-            }
+    for (const r$4 of read_numbers("10  20")) {
+      let v$5;
+      try {
+        v$5 = show_numbers(r$4);
+      } catch (e) {
+        if (!$outOfFuel(e)) throw e;
+        v$5 = $no;
+      }
+      if (v$5 !== $no) {
+        let v$6;
+        try {
+          v$6 = ("[" + v$5);
+        } catch (e) {
+          if (!$outOfFuel(e)) throw e;
+          v$6 = $no;
+        }
+        if (v$6 !== $no) {
+          let v$7;
+          try {
+            v$7 = (v$6 + "]");
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            v$7 = $no;
           }
-          return "unreadable";
-        })()));
+          if (v$7 !== $no) {
+            return v$7;
+          }
+        }
+      }
+    }
+    return "unreadable";
+  })()));
   $print(("square roots of each([4, 9]) = " + words(map(square_roots_of_each($k1), $meta(((xs) => (("[" + show_numbers(xs)) + "]")), "deff62dd")))));
   $print(("height on the ray(3π/4, −2) = " + (() => {
-          for (const r$8 of height_on_the_ray(2.356194490192345, (-2))) {
-            let v$9;
-            try {
-              v$9 = $show(r$8);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              v$9 = $no;
-            }
-            if (v$9 !== $no) {
-              return v$9;
-            }
-          }
-          return "none";
-        })()));
+    for (const r$8 of height_on_the_ray(2.356194490192345, (-2))) {
+      let v$9;
+      try {
+        v$9 = $show(r$8);
+      } catch (e) {
+        if (!$outOfFuel(e)) throw e;
+        v$9 = $no;
+      }
+      if (v$9 !== $no) {
+        return v$9;
+      }
+    }
+    return "none";
+  })()));
   return $print(("height on the ray(3π/4, 2) = " + (() => {
-          for (const r$10 of height_on_the_ray(2.356194490192345, 2)) {
-            let v$11;
-            try {
-              v$11 = $show(r$10);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              v$11 = $no;
-            }
-            if (v$11 !== $no) {
-              return v$11;
-            }
-          }
-          return "none";
-        })()));
+    for (const r$10 of height_on_the_ray(2.356194490192345, 2)) {
+      let v$11;
+      try {
+        v$11 = $show(r$10);
+      } catch (e) {
+        if (!$outOfFuel(e)) throw e;
+        v$11 = $no;
+      }
+      if (v$11 !== $no) {
+        return v$11;
+      }
+    }
+    return "none";
+  })()));
 }
 $meta(main, "99f5e5fd");
 
 // magnitudes to
 function magnitudes_to(size) {
   return (() => {
-      const all$12 = [];
-      for (const sol$13 of solve$0(size)) {
-        const x = sol$13[0];
-        all$12.push(x);
-      }
-      return $toList(all$12);
-    })();
+    const all$12 = [];
+    for (const sol$13 of solve$0(size)) {
+      const x = sol$13[0];
+      all$12.push(x);
+    }
+    return $toList(all$12);
+  })();
 }
 $meta(magnitudes_to, "5e7740e4");
 
@@ -198,34 +198,34 @@ $meta(show_numbers, "@su0m8djlkg5cq4b68i0klesqia:1");
 // who was greeted
 function who_was_greeted(greeting) {
   return (() => {
-      for (const sol$23 of solve$1(greeting)) {
-        const name = sol$23[0];
-        return name;
-      }
-      return "nobody";
-    })();
+    for (const sol$23 of solve$1(greeting)) {
+      const name = sol$23[0];
+      return name;
+    }
+    return "nobody";
+  })();
 }
 $meta(who_was_greeted, "b1d446d8");
 
 // cuts
 function cuts(text) {
   return (() => {
-      const all$24 = [];
-      for (const sol$25 of solve$2(text)) {
-        const front = sol$25[0]; const back = sol$25[1];
-        let v$26;
-        try {
-          v$26 = ((front + "|") + back);
-        } catch (e) {
-          if (!$outOfFuel(e)) throw e;
-          v$26 = $no;
-        }
-        if (v$26 !== $no) {
-          all$24.push(v$26);
-        }
+    const all$24 = [];
+    for (const sol$25 of solve$2(text)) {
+      const front = sol$25[0]; const back = sol$25[1];
+      let v$26;
+      try {
+        v$26 = ((front + "|") + back);
+      } catch (e) {
+        if (!$outOfFuel(e)) throw e;
+        v$26 = $no;
       }
-      return $toList(all$24);
-    })();
+      if (v$26 !== $no) {
+        all$24.push(v$26);
+      }
+    }
+    return $toList(all$24);
+  })();
 }
 $meta(cuts, "a59962e7");
 
@@ -267,17 +267,17 @@ $meta(words, "84b6b4ae");
 // square roots of each
 function square_roots_of_each(squares) {
   return (() => {
-      const all$36 = [];
-      for (const r$38 of $fuel(10000, $meta((function* () {
-                for (const sol$37 of solve$3(square, squares)) {
-                  const list = sol$37[0];
-                  yield list;
-                }
-              }), "05bcb9b1", () => [["9225986f", squares]]), true)) {
-        all$36.push(r$38);
+    const all$36 = [];
+    for (const r$38 of $fuel(10000, $meta((function* () {
+      for (const sol$37 of solve$3(square, squares)) {
+        const list = sol$37[0];
+        yield list;
       }
-      return $toList(all$36);
-    })();
+    }), "05bcb9b1", () => [["9225986f", squares]]), true)) {
+      all$36.push(r$38);
+    }
+    return $toList(all$36);
+  })();
 }
 $meta(square_roots_of_each, "1b81256b");
 
@@ -312,11 +312,11 @@ $meta(map, "@9902gjnadddgv3jrh6ir29nf4q:1");
 // read numbers
 function* read_numbers(text2) {
   for (const r$45 of $fuel(10000, $meta((function* () {
-            for (const sol$44 of solve$4(text2)) {
-              const numbers2 = sol$44[0];
-              yield numbers2;
-            }
-          }), "25893be1", () => [["dc158ebb", text2]]), true)) {
+    for (const sol$44 of solve$4(text2)) {
+      const numbers2 = sol$44[0];
+      yield numbers2;
+    }
+  }), "25893be1", () => [["dc158ebb", text2]]), true)) {
     yield r$45;
   }
 }
