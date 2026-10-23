@@ -782,6 +782,34 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Binders holding an array here: the copy's array parameters, and lets
     // given one.
     const arrNow = new Map<Id, Kind>(sp.arr);
+    // Rest binders of a list taken apart where it is an array: the array
+    // and the index where the rest starts (`viewOf`).
+    const views = new Map<Id, { a: string; i: string }>();
+    // A match on a list, with no handler: nil and cons arms (or otherwise).
+    const listMatch = (n: NodeOf<"match">) => !handlerOf(n) && n.arms.length > 0 && n.arms.every((a) => { const v = node<"arm">(a).variant; return v === NIL || v === CONS; });
+    // Is every use of a cons arm's rest the scrutinee of another such
+    // match? Then the rest can stay an index into the array.
+    const onlyMatched = (arm: NodeOf<"arm">) => {
+      const rest = arm.binds[1];
+      const scrutinees = new Set<Id>();
+      for (const x of subtree(code, arm.body)) { const m = code.nodes[x]; if (m.kind === "match" && listMatch(m)) scrutinees.add(m.scrutinee); }
+      return subtree(code, arm.body).every((x) => { const r = code.nodes[x]; return !(r.kind === "ref" && r.target === rest) || scrutinees.has(x); });
+    };
+    // The array and index a matched list is, if it is one: a binder that
+    // holds a part of an array, or `split` and `characters`, whose arrays
+    // are made here. Only when the cons arm's rest is itself only matched.
+    function viewOf(id: Id): { pre: string; a: string; i: string } | null {
+      const m = code.nodes[up.get(id)!] as NodeOf<"match">;
+      const cons = m.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
+      if (cons && !onlyMatched(cons)) return null;
+      const n = code.nodes[id];
+      if (n.kind === "ref" && views.has(n.target)) return { pre: "", ...views.get(n.target)! };
+      if (reflective || n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      const f = node<"ref">(n.fn).target;
+      if (f !== TEXT_OPS.split && f !== TEXT_OPS.characters) return null;
+      const a = temp("a");
+      return { pre: `const ${a} = ${arraySource(id)!.js};\n`, a, i: "0" };
+    }
     // Fold results that arrive as their fields, in separate locals (G13
     // again, `foldArms`).
     const splitAt = new Map<Id, { variant: Id; fields: string[] }>();
@@ -926,8 +954,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
       switch (t.kind) {
         case "binder": {
-          const kind = arrNow.get(n.target), split = splitAt.get(n.target);
+          const kind = arrNow.get(n.target), split = splitAt.get(n.target), view = views.get(n.target);
           if (split) return construct(split.variant, split.fields);
+          if (view) return `$toList(${view.a}.slice(${view.i}))`;
           if (boolParams.has(n.target)) return `(${local(n.target)} ? $T : $F)`;
           return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
         }
@@ -1185,6 +1214,23 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
           return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out, reuse)}\n}\n${ret(e, tail, out, reuse)}`)}`;
+        }
+        const view = listMatch(n) ? viewOf(n.scrutinee) : null;
+        if (view) {
+          // A list that is an array from `split` (or a part of one), taken
+          // apart: an index into the array, and no cells (GAPS.md G23).
+          const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v);
+          const nil = arm(NIL), cons = arm(CONS);
+          const ifNil = nil ? ret(nil.body, tail, out, reuse) : ret(n.otherwise!, tail, out, reuse);
+          let ifCons: string;
+          if (cons) {
+            const [h, rest] = cons.binds, j = temp("j");
+            const head = referenced.has(h) ? `\nconst ${local(h)} = ${view.a}[${view.i}];` : "";
+            const next = referenced.has(rest) ? `\nconst ${j} = ${view.i === "0" ? "1" : `${view.i} + 1`};` : "";
+            if (referenced.has(rest)) views.set(rest, { a: view.a, i: j });
+            ifCons = `${head}${next}\n${ret(cons.body, tail, out, reuse)}`;
+          } else ifCons = ret(n.otherwise!, tail, out, reuse);
+          return `${view.pre}if (${view.i} >= ${view.a}.length) {\n${ifNil}\n} else {${ifCons}\n}`;
         }
         const s = temp("s");
         const scrut = code.nodes[n.scrutinee];

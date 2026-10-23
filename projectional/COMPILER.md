@@ -370,6 +370,10 @@ a[n − 1], …, a[0]: a `cons` pushes onto a when nothing has pushed past n
 yet, and copies otherwise, so a list made earlier never changes. Prior
 art: cdr-coding (Hansen, CACM 1969), which stores a list's cells one after
 another; here it's decided at compile time from how the list is used.
+A list from `split` or `characters` that is taken apart by matches, where
+each cons arm's rest is only matched again (ledger's `parse` on the fields
+of a line), is an index into the array: `nil` is the index at the end, the
+head is the item there, and the rest is the next index.
 
 This is the special case of deforestation (Philip Wadler, "Deforestation:
 transforming programs to eliminate trees", 1990) and short-cut fusion
