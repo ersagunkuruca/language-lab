@@ -8,7 +8,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, closures, sameLists, texts } from "../src/fixtures.ts";
+import { area, choices, closures, sameLists, texts } from "../src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -234,6 +234,57 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
       assert.deepStrictEqual(fromWasm(wm, wm[fn](...xs.map((x, i) => toWasm(wm, x, f.params[i]))), f.result), want, `${name}: ${fn}(${xs})`);
     }
   }
+});
+
+test("one answer or none in WebAssembly: a status after the answer, handlers as blocks, the evaluator's answers", async () => {
+  const p = choices();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  // index calls itself in tail position: a partial function's tail call stays one.
+  assert.match(m.wat, /return_call \$index\d+/);
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const ints = [0, 1, -1, 2, -2, 3, 7, -7, 10, 2 ** 31, -(2 ** 31), 2 ** 40 + 3];
+  const texts = ["", "0", "-0", "00", "007", "42", "-42", "+5", "4 2", "-", "9223372036854775807", "-9223372036854775808", "12a", "a", "é", "日", "🎉", "ab", "héllo wörld", "a🎉b"];
+  const codes = [-1, 0, 65, 127, 128, 233, 2047, 2048, 0xd7ff, 0xd800, 0xdfff, 0xe000, 0xffff, 0x10000, 0x1f389, 0x10ffff, 0x110000];
+  const lists = [[], ["1", "2", "3"], ["4", "x", "5"], ["-0"], Array.from({ length: 1e4 }, (_, i) => String(i))].map((xs) => toList(xs));
+  const cases: Record<keyof typeof p.defs, Value[][]> = {
+    quotient: ints.flatMap((a) => ints.map((b) => [a, b])),
+    remainder: ints.flatMap((a) => ints.map((b) => [a, b])),
+    power: [[2, 10], [-3, 3], [0, 0], [5, -1], [-1, 63], [1, 2 ** 40], [2, 62], [-2, 63], [10, 18]],
+    whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, NaN, Infinity, -Infinity].map((x) => [x]),
+    reread: texts.map((t) => [t]),
+    found: ["", "abc", "héllo wörld", "a🎉b🎉c", "aaa"].flatMap((t) => ["", "a", "b", "ö", "🎉", "c", "wörld", "aa", "zz"].map((q) => [t, q])),
+    code: texts.map((t) => [t]),
+    character: codes.map((n) => [n]),
+    position: ["1", "3", "x", "9999", "nope"].flatMap((key) => lists.map((xs) => [key, xs])),
+    sums: lists.map((xs) => [xs]),
+    readable: texts.map((t) => [t]),
+    unwrapped: texts.map((t) => [t]),
+    plusOne: texts.filter((t) => t !== "9223372036854775807").map((t) => [t]),
+    budgeted: [-1, 0, 1, 3, 4, 5, 6, 100].map((n) => [n]),
+    inside: [-1, 0, 1, 3, 4, 5, 6, 100].map((n) => [n]),
+  };
+  let compared = 0;
+  for (const [name, inputs] of Object.entries(cases)) {
+    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs) {
+      const want = first(r.call(r.value(def), ...xs));
+      let got: unknown = (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i])));
+      // A partial function's answer comes with its status.
+      if (f.partial) { const [v, status] = got as [unknown, number]; got = status === 0 ? fromWasm(w, v, f.result) : undefined; }
+      else got = fromWasm(w, got, f.result);
+      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
+      compared++;
+    }
+  }
+  assert.ok(compared > 500);
+  assert.ok(lowered.funcs.find((g) => g.def === p.defs.plusOne)!.partial);
+  // Past 2⁶³ an Int traps (big Ints are W5): reading one, or the smallest over -1.
+  assert.throws(() => w["reread"](toText(w, "9223372036854775808")), WebAssembly.RuntimeError);
+  assert.throws(() => w["quotient of"](-(2n ** 63n), -1n), WebAssembly.RuntimeError);
 });
 
 test("what isn't in the profile is refused, with the reason", () => {

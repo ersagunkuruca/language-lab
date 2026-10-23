@@ -3,8 +3,8 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2 and W3a are done (W2: functions as values, W3a:
-Int and Text, below). What runs in WebAssembly is the
+**Status.** Stages W1, W2, W3a and W4a are done (W2: functions as
+values, W3a: Int and Text, W4a: searches with one answer or none, below). What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -14,6 +14,28 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W4a came out. A search with one answer or none is a function that
+gives a status after its answer, `(result T i32)`: 0 with the answer, 1
+with a zero for none, the convention Mercury uses for semidet procedures
+(credited in CREDITS.md). Each call checks the status and branches to the
+block of the nearest handler (`br_if`), so no answer leaves every
+function between at once, without WebAssembly exceptions (whose
+current form Node 22 doesn't turn on by default) and no slower than a
+compare per call. A tail call to a function that gives the same stays a
+`return_call`, so a search through a long list runs in constant stack.
+`first`, `optional`, `all` and `count` are two blocks: the answer, or
+the default, none, an empty list, 0. `fail` is the branch itself, `value
+of` a match, and the Choice builtins (quotient, remainder, power, whole
+part, read, find, character code, character) are runtime functions with a
+status. Without `one of`, which stays refused, a search can't have two
+answers, so these are exactly the evaluator's. A function that spends
+from a budget is partial too: running out is no answer where it happens,
+and the nearest handler sees it, as in the evaluator (a `first` inside a
+budget gives its default when the budget runs out inside it). The
+shader profile keeps its count check. Not yet: functions with Choice as
+values (`keep` with a test that may have no answer), which W4b adds with
+Abort.
 
 How W3a came out. An Int is an `i64`; an add, subtract, multiply or
 negate whose answer doesn't fit traps, a runtime error rather than a
@@ -191,7 +213,9 @@ rest with the reason, so nothing breaks between stages.
    after W4's one-answer Choice, which wc's and ledger's reading needs). Programs: wc and
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
    installed).
-4. **W4 searches and effects.** Success continuations for `Choice`,
+4. **W4 searches and effects.** One answer or none as a status after
+   the answer (W4a, done), then functions with Choice as values and
+   Abort (W4b). Success continuations for `Choice`,
    multi-value single-answer returns, exceptions for `Abort`, the handler
    stack. Programs: queens, Countdown, calc.
 5. **W5 Int past 64 bits** through host bignums, then specialization

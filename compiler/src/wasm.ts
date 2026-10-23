@@ -27,7 +27,7 @@
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
 import { assemble, runtime, textBytes, type RtFn, type VT } from "./wasm-rt.ts";
-import { isData, isFn, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
 // The evaluator's show of a Number, which the runtime asks the host for
@@ -153,10 +153,12 @@ export function emitWasm(lowered: Lowered): Module {
   const refIndex = (t: RType | DType | FType) => (isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
   const typeOf = (t: LType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : [VAL[t]]);
   const keyOf = (t: LType) => (isRec(t) ? t.key : t);
-  const sigs: { key: string; params: LType[]; result: LType }[] = [];
-  const sig = (params: LType[], result: LType) => {
-    const key = `${params.map(keyOf).join(",")}>${keyOf(result)}`;
-    if (!sigs.some((x) => x.key === key)) sigs.push({ key, params, result });
+  // A partial function (one answer or none) gives a status after its
+  // answer: 0 for an answer, 1 for none.
+  const sigs: { key: string; params: LType[]; result: LType; partial?: boolean }[] = [];
+  const sig = (params: LType[], result: LType, partial?: boolean) => {
+    const key = `${params.map(keyOf).join(",")}>${keyOf(result)}${partial ? "!" : ""}`;
+    if (!sigs.some((x) => x.key === key)) sigs.push({ key, params, result, partial });
     return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
@@ -165,7 +167,7 @@ export function emitWasm(lowered: Lowered): Module {
   const codeOf = new Map<number, FType>();
   const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
   funcs.forEach((f) => closures(f.body));
-  const funcSig = funcs.map((f, i) => (codeOf.has(i) ? cloIndex.get(codeOf.get(i)!.key)! + 1 : sig(f.params, f.result)));
+  const funcSig = funcs.map((f, i) => (codeOf.has(i) ? cloIndex.get(codeOf.get(i)!.key)! + 1 : sig(f.params, f.result, f.partial)));
   // For the host, which can't look inside a struct: a reader for each
   // field of each record, exported as `Colour.red`; for each data type
   // `List.case`, the number of a value's case, and for each case a maker
@@ -197,7 +199,7 @@ export function emitWasm(lowered: Lowered): Module {
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   const rtType = (f: RtFn, t: VT): LType => (t === "list" ? listOf(f) : t);
-  const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)), rtType(f, f.result)));
+  const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
@@ -207,7 +209,7 @@ export function emitWasm(lowered: Lowered): Module {
   };
   const typeSec = vec([
     ...(structs.length ? [[0x4e, ...vec(structs.map(struct))]] : []),
-    ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([typeOf(x.result)])]),
+    ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([typeOf(x.result), ...(x.partial ? [[0x7f]] : [])])]),
   ]);
   const importSec = vec([
     ...hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]),
@@ -229,63 +231,97 @@ export function emitWasm(lowered: Lowered): Module {
   // what the checker couldn't see end just runs (only `data` calls it there).
   const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]]);
   const zero = (t: LType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
-  // fuel = fuel - 1; if fuel < 0, return zero
-  const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), 0x0f, 0x0b] : []);
+  // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
+  // no answer, which the nearest handler sees)
+  const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
+  // Whether f needs a local for a status: it's partial, or has no answer
+  // somewhere, or tries something that may have none.
+  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
+  const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
 
-  function code(e: SExpr): number[] {
+  // f's code. `d` is how many blocks are open around e, and `fl` the
+  // block a status goes to when there's no answer (counted from the
+  // outside; -1: none). A partial call's status is checked there: on to fl
+  // if it isn't 0. With nowhere to go (a function of no Choice, called
+  // through a closure under a budget that ran out) it's a trap, a runtime
+  // error rather than a wrong answer.
+  function coder(f: SFunc) {
+    const st = statusOf(f);
+    const to = (d: number, fl: number) => { if (fl < 0) throw new Error(`${f.name}: no answer, and nowhere to say so`); return u(d - 1 - fl); };
+    const check = (d: number, fl: number) => (fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x22, ...u(st), 0x20, ...u(st), 0x0d, ...to(d, fl), 0x1a]);
+    return function code(e: SExpr, d: number, fl: number): number[] {
+    const code1 = (x: SExpr) => code(x, d, fl);
     switch (e.k) {
       case "num": return [0x44, ...f64(e.v)];
       case "int": return [0x42, ...sBig(e.v)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
-      case "rt": return [...e.args.flatMap(code), 0x10, ...u(resolve.func(e.fn))];
+      case "rt": return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
-      case "let": return [...code(e.value), 0x21, ...u(e.i), ...code(e.body)];
-      case "if": return [...code(e.cond), 0x04, ...typeOf(e.t), ...code(e.then), 0x05, ...code(e.else), 0x0b];
-      case "call": return [...e.args.flatMap(code), e.tail ? 0x12 : 0x10, ...u(fnIndex(e.fn))];
-      case "make": return [...e.args.flatMap(code), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
-      case "get": return [...code(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i)];
-      case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
+      case "let": return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
+      case "if": return [...code1(e.cond), 0x04, ...typeOf(e.t), ...code(e.then, d + 1, fl), 0x05, ...code(e.else, d + 1, fl), 0x0b];
+      case "call": {
+        // A tail call only to a function that gives what this one gives.
+        const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
+        return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
+      }
+      case "make": return [...e.args.flatMap(code1), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
+      case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i)];
+      case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
       // ref.cast to the case, then its field (after the case's number).
-      case "field": { const k = caseIndex(e.t, e.c); return [...code(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
-      case "tag": return [...code(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
-      case "closure": return [0xd2, ...u(fnIndex(e.fn)), ...e.caps.flatMap(code), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
+      case "field": { const k = caseIndex(e.t, e.c); return [...code1(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
+      case "tag": return [...code1(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
+      case "closure": return [0xd2, ...u(fnIndex(e.fn)), ...e.caps.flatMap(code1), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
       // What a closure captured: the closure is the code's first input.
       case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + 1)];
       case "apply": {
         const c = cloIndex.get(e.t.key)!;
-        return [...code(e.fn), 0x21, ...u(e.tmp), 0x20, ...u(e.tmp), ...e.args.flatMap(code), 0x20, ...u(e.tmp), 0xfb, 0x02, ...u(c), 0x00, e.tail ? 0x15 : 0x14, ...u(c + 1)];
+        return [...code1(e.fn), 0x21, ...u(e.tmp), 0x20, ...u(e.tmp), ...e.args.flatMap(code1), 0x20, ...u(e.tmp), 0xfb, 0x02, ...u(c), 0x00, e.tail && !f.partial ? 0x15 : 0x14, ...u(c + 1)];
       }
       case "case": {
         // block $done; n blocks, innermost first jumped to by br_table on the
         // case's number; after the end of block j, arm j, then br $done.
         const n = e.arms.length, b = baseIndex.get(e.t.key)!;
         const there = e.scrut.k === "local" && e.scrut.i === e.s;
-        const out = [...(there ? [] : [...code(e.scrut), 0x21, ...u(e.s)]), 0x02, ...typeOf(e.result)];
+        const out = [...(there ? [] : [...code1(e.scrut), 0x21, ...u(e.s)]), 0x02, ...typeOf(e.result)];
         for (let j = 0; j < n; j++) out.push(0x02, 0x40);
         out.push(0x20, ...u(e.s), 0xfb, 0x02, ...u(b), 0x00, 0x0e, ...vec(e.arms.map((_, j) => u(j))), ...u(n - 1));
-        e.arms.forEach((a, j) => out.push(0x0b, ...(a ? code(a) : [0x00]), ...(j < n - 1 ? [0x0c, ...u(n - 1 - j)] : [])));
+        e.arms.forEach((a, j) => out.push(0x0b, ...(a ? code(a, d + n - j, fl) : [0x00]), ...(j < n - 1 ? [0x0c, ...u(n - 1 - j)] : [])));
         return [...out, 0x0b];
       }
       case "budget": {
-        // save = fuel; fuel = n; res = body; (if fuel < 0 then otherwise else res); fuel = save
+        // With `data`, running out is no answer (the functions that spend
+        // are partial), so a budget is an attempt that sets the fuel:
+        // save = fuel; fuel = n; block $done (block $none body; fuel = save; br $done) fuel = save; otherwise
+        if (failing(e.body)) return [
+          0x23, 0x00, 0x21, ...u(e.save), 0x44, ...f64(e.n), 0x24, 0x00,
+          0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x20, ...u(e.save), 0x24, 0x00, 0x0c, 0x01, 0x0b,
+          0x1a, 0x20, ...u(e.save), 0x24, 0x00, ...code(e.otherwise, d + 1, fl), 0x0b,
+        ];
+        // Otherwise: res = body; (if fuel < 0 then otherwise else res); fuel = save
         return [
-          0x23, 0x00, 0x21, ...u(e.save), 0x44, ...f64(e.n), 0x24, 0x00, ...code(e.body), 0x21, ...u(e.res),
-          0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, ...typeOf(e.t), ...code(e.otherwise), 0x05, 0x20, ...u(e.res), 0x0b,
+          0x23, 0x00, 0x21, ...u(e.save), 0x44, ...f64(e.n), 0x24, 0x00, ...code1(e.body), 0x21, ...u(e.res),
+          0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, ...typeOf(e.t), ...code(e.otherwise, d + 1, fl), 0x05, 0x20, ...u(e.res), 0x0b,
           0x20, ...u(e.save), 0x24, 0x00,
         ];
       }
+      case "fail": return [0x41, 0x01, 0x0c, ...to(d, fl)];
+      case "attempt": {
+        // block $done (block $none (result i32) body; res = it; ok; br $done) drop; otherwise
+        return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, 0x1a, ...code(e.otherwise, d + 1, fl), 0x0b];
+      }
       case "op": {
-        const args = e.args.flatMap(code);
+        const args = e.args.flatMap(code1);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
         return [...args, ...[INSTR[e.op]![0]].flat()];
       }
     }
+    };
   }
   const helperCode = helpers.map((x) => { const body = [0x00, ...x.code, 0x0b]; return [...u(body.length), ...body]; });
   const codeSec = vec([...funcs.map((f) => {
     // Locals past the parameters, grouped by runs of the same type.
-    const extra = f.locals.slice(f.params.length);
+    const extra = [...f.locals.slice(f.params.length), ...(statusOf(f) >= 0 ? ["i32" as const] : [])];
     const groups: number[][] = [];
     for (let i = 0; i < extra.length;) {
       let j = i;
@@ -293,7 +329,11 @@ export function emitWasm(lowered: Lowered): Module {
       groups.push([...u(j - i), ...typeOf(extra[i])]);
       i = j;
     }
-    const body = [...vec(groups), ...spend(f), ...code(f.body), 0x0b];
+    // A partial function's body is in a block a status goes to:
+    // block $none (result i32) body; 0; return end; status = it; zero; status
+    const st = statusOf(f), code = coder(f);
+    const main = f.partial ? [0x02, 0x7f, ...code(f.body, 1, 0), 0x41, 0x00, 0x0f, 0x0b, 0x21, ...u(st), ...zero(f.result), 0x20, ...u(st)] : code(f.body, 0, -1);
+    const body = [...vec(groups), ...spend(f), ...main, 0x0b];
     return [...u(body.length), ...body];
   }), ...helperCode, ...rtCode.map((c) => [...u(c.code.length), ...c.code])]);
 
@@ -312,47 +352,70 @@ export function emitWasm(lowered: Lowered): Module {
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType) => sname(refIndex(r));
   const ty = (t: LType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t);
-  function wat(e: SExpr, f: SFunc, d: string): string {
+  const zeroText = (t: LType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : `${t}.const 0`);
+  // As code(): `ld` blocks open around e, a status for none goes to fl.
+  function wat(e: SExpr, f: SFunc, d: string, ld: number, fl: number): string {
+    const w = (x: SExpr) => wat(x, f, d, ld, fl);
+    const st = local(f, statusOf(f));
+    const to = (ld2: number) => ld2 - 1 - fl;
+    const check = (ld2: number) => (fl < 0 ? [`${d}(if (then unreachable)) ;; no answer, nowhere to go`] : [`${d}local.tee ${st}`, `${d}local.get ${st}`, `${d}br_if ${to(ld2)} ;; no answer`, `${d}drop`]);
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
       case "int": return `${d}i64.const ${e.v}`;
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
-      case "rt": return [...e.args.map((a) => wat(a, f, d)), `${d}call $${e.fn}`].join("\n");
+      case "rt": return [...e.args.map(w), `${d}call $${e.fn}`, ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
-      case "let": return `${wat(e.value, f, d)}\n${d}local.set ${local(f, e.i)}\n${wat(e.body, f, d)}`;
-      case "if": return `${wat(e.cond, f, d)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ")})\n${d}  (else\n${wat(e.else, f, d + "    ")}))`;
-      case "call": return [...e.args.map((a) => wat(a, f, d)), `${d}${e.tail ? "return_call" : "call"} ${id(funcs[e.fn])}`].join("\n");
-      case "make": return [...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${recName(e.t)}`].join("\n");
-      case "get": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
-      case "new": return [`${d}i32.const ${e.c}`, ...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
-      case "field": { const k = sname(caseIndex(e.t, e.c)); return `${wat(e.rec, f, d)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
-      case "tag": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} 0`;
-      case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map((a) => wat(a, f, d)), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
+      case "let": return `${w(e.value)}\n${d}local.set ${local(f, e.i)}\n${w(e.body)}`;
+      case "if": return `${w(e.cond)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ", ld + 1, fl)})\n${d}  (else\n${wat(e.else, f, d + "    ", ld + 1, fl)}))`;
+      case "call": {
+        const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
+        return [...e.args.map(w), `${d}${tail ? "return_call" : "call"} ${id(g)}`, ...(g.partial && !tail ? check(ld) : [])].join("\n");
+      }
+      case "make": return [...e.args.map(w), `${d}struct.new ${recName(e.t)}`].join("\n");
+      case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
+      case "new": return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
+      case "field": { const k = sname(caseIndex(e.t, e.c)); return `${w(e.rec)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
+      case "tag": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} 0`;
+      case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map(w), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
       case "cap": return [`${d}local.get ${local(f, 0)}`, `${d}ref.cast (ref ${sname(shapeIndex[e.shape])})`, `${d}struct.get ${sname(shapeIndex[e.shape])} ${e.i + 1}`].join("\n");
       case "apply": {
         const c = cloIndex.get(e.t.key)!, t = local(f, e.tmp);
-        return [wat(e.fn, f, d), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map((a) => wat(a, f, d)), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${e.tail ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`].join("\n");
+        return [w(e.fn), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map(w), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${e.tail && !f.partial ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`].join("\n");
       }
       case "case": {
         const there = e.scrut.k === "local" && e.scrut.i === e.s;
-        const n = e.arms.length, lines = [...(there ? [] : [wat(e.scrut, f, d), `${d}local.set ${local(f, e.s)}`]), `${d}(block (result ${ty(e.result)})`];
+        const n = e.arms.length, lines = [...(there ? [] : [w(e.scrut), `${d}local.set ${local(f, e.s)}`]), `${d}(block (result ${ty(e.result)})`];
         for (let j = n - 1; j >= 0; j--) lines.push(`${d}${"  ".repeat(n - j)}(block ;; ${e.t.cases[j].name}`);
         const inner = d + "  ".repeat(n + 1);
         lines.push(`${inner}local.get ${local(f, e.s)}`, `${inner}struct.get ${recName(e.t)} 0`, `${inner}br_table ${e.arms.map((_, j) => j).join(" ")} ${n - 1})`);
         e.arms.forEach((a, j) => {
           const dd = d + "  ".repeat(n - j);
-          lines.push(a ? wat(a, f, dd) : `${dd}unreachable`);
+          lines.push(a ? wat(a, f, dd, ld + n - j, fl) : `${dd}unreachable`);
           lines.push(j < n - 1 ? `${dd}br ${n - 1 - j})` : `${dd.slice(2)})`);
         });
         return lines.join("\n");
       }
-      case "budget": return [
-        `${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`, wat(e.body, f, d), `${d}local.set ${local(f, e.res)}`,
-        `${d}global.get $fuel`, `${d}f64.const 0`, `${d}f64.lt`, `${d}(if (result ${ty(e.t)})`, `${d}  (then`, wat(e.otherwise, f, d + "    ") + ")", `${d}  (else`, `${d}    local.get ${local(f, e.res)}))`,
-        `${d}local.get ${local(f, e.save)}`, `${d}global.set $fuel`,
+      case "budget": {
+        const save = [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`];
+        if (failing(e.body)) return [
+          ...save, `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer, or ran out`, wat(e.body, f, d + "    ", ld + 2, ld + 1),
+          `${d}    local.get ${local(f, e.save)}`, `${d}    global.set $fuel`, `${d}    br 1)`, `${d}  drop`, `${d}  local.get ${local(f, e.save)}`, `${d}  global.set $fuel`,
+          wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
+        ].join("\n");
+        return [
+          ...save, w(e.body), `${d}local.set ${local(f, e.res)}`,
+          `${d}global.get $fuel`, `${d}f64.const 0`, `${d}f64.lt`, `${d}(if (result ${ty(e.t)})`, `${d}  (then`, wat(e.otherwise, f, d + "    ", ld + 1, fl) + ")", `${d}  (else`, `${d}    local.get ${local(f, e.res)}))`,
+          `${d}local.get ${local(f, e.save)}`, `${d}global.set $fuel`,
+        ].join("\n");
+      }
+      case "fail": return `${d}i32.const 1\n${d}br ${to(ld)} ;; no answer`;
+      case "attempt": return [
+        `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    local.set ${local(f, e.res)}`, wat(e.ok, f, d + "    ", ld + 2, fl), `${d}    br 1)`,
+        `${d}  drop`,
+        wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
-      case "op": return [...e.args.map((a) => wat(a, f, d)), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
+      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
@@ -371,10 +434,14 @@ export function emitWasm(lowered: Lowered): Module {
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
-      const ls = f.locals.slice(f.params.length).map((t, j) => ` (local ${local(f, f.params.length + j)} ${ty(t)})`).join("");
-      const none = isRec(f.result) ? `ref.null ${recName(f.result)}` : `${f.result}.const 0`;
+      const st = statusOf(f);
+      const ls = [...f.locals.slice(f.params.length), ...(st >= 0 ? ["i32" as const] : [])].map((t, j) => ` (local ${local(f, f.params.length + j)} ${ty(t)})`).join("");
+      const none = zeroText(f.result) + (f.partial ? " i32.const 1" : "");
       const spends = f.spends ? `    global.get $fuel\n    f64.const 1\n    f64.sub\n    global.set $fuel\n    global.get $fuel\n    f64.const 0\n    f64.lt\n    (if (then ${none} return))\n` : "";
-      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : ""}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
+      const body = f.partial
+        ? `    (block (result i32) ;; no answer\n${wat(f.body, f, "      ", 1, 0)}\n      i32.const 0\n      return)\n    local.set ${local(f, st)}\n    ${zeroText(f.result)}\n    local.get ${local(f, st)}`
+        : wat(f.body, f, "    ", 0, -1);
+      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : ""}${ps} (result ${ty(f.result)}${f.partial ? " i32" : ""})${ls}\n${spends}${body})`;
     }),
     ...helpers.map((x) => `  (func (export "${x.name}")${x.params.map((t) => ` (param ${ty(t)})`).join("")} (result ${ty(x.result)})\n${x.wat.map((l) => `    ${l}`).join("\n")})`),
     ...rtCode.map((c, k) => c.wat.replace(`(func $${rts[k].name}`, `(func $${rts[k].name}${RT_EXPORTS[rts[k].name] ? ` (export "${RT_EXPORTS[rts[k].name]}")` : ""}`)),
@@ -384,21 +451,6 @@ export function emitWasm(lowered: Lowered): Module {
   return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])] };
 }
 
-// The expressions directly inside e.
-function kids(e: SExpr): SExpr[] {
-  switch (e.k) {
-    case "op": case "call": case "make": case "new": return e.args;
-    case "if": return [e.cond, e.then, e.else];
-    case "let": return [e.value, e.body];
-    case "get": case "field": case "tag": return [e.rec];
-    case "case": return [e.scrut, ...e.arms.filter((a): a is SExpr => !!a)];
-    case "budget": return [e.body, e.otherwise];
-    case "closure": return e.caps;
-    case "apply": return [e.fn, ...e.args];
-    case "rt": return e.args;
-    default: return [];
-  }
-}
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
 const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);
 const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
