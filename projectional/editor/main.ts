@@ -946,7 +946,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
 
   if (n.kind === "binder" || n.kind === "def" || n.kind === "variant" || n.kind === "field") {
     const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
-    const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
+    const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
     input.addEventListener("change", () => rename(id, input.value));
     out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${nameLayer(id)}.json`), input));
   }
@@ -2101,9 +2101,14 @@ document.addEventListener("dblclick", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && ui.menu) { ui.menu = null; return render(); }
-  const typing = (e.target as HTMLElement).closest("input, textarea");
+  const field = (e.target as HTMLElement).closest<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
+  const typing = !!field;
   if (e.key === "Escape" && !typing && ui.selected) return select(null);
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !typing) {
+  // In a field that saves on Enter (data-commit) whose text is what was
+  // last saved (a rename just made, say), the browser has nothing of its own to undo, so the
+  // editor's Undo takes it: the rename itself is undone.
+  const committed = !!field && field.matches("[data-commit]") && field.value === field.defaultValue;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && (!typing || committed)) {
     e.preventDefault();
     return e.shiftKey ? travel(redo, undo, "Redid") : travel(undo, redo, "Undid");
   }
