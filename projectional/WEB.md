@@ -121,18 +121,30 @@ formulas can be made per item. It is noted, not built, in this step.
 
 ### The widgets are functions
 
-In the prelude, written in the language:
+In the html module (`library/html.json`, from `src/lang/html-source.ts`),
+written in the language (LANGUAGE.md "Pages: web apps" lists it):
 
 ```
-button(label: Text, click: () -[Cells, Update]-> Unit) : Html
-  = element("button", [on("click", e => click())], [text(() => label)])
-row(items: List Html) : Html      = element("div", [class("row")], items)
-column(items: List Html) : Html   = element("div", [class("column")], items)
-class(name: Text) : Attribute     = property("class", () => name)
-label(t: Text) : Html             = text(() => t)
+div(children: List Html) : Html = element("div", nil, children)     -- and p, span, h1, section, …
+words(t: Text) : Html           = text(() => t)
+button(label: Text, then)       = element("button", [on("click", then)], [words(label)])
+with(attributes, html) : Html   = html with these attributes after its own
+styled(style: Text, html)       = with([attribute("style", style)], html)    -- classed, named alike
+rule(selector, declarations)    = selector ++ " { " ++ declarations ++ " }"
+style sheet(rules: List Text)   = element("style", nil, [words(joined(rules, "\n"))])
 ```
 
-The programs on reactive.html moved onto this in their own PR, and the
+An element takes only its children, since most have no attributes; the
+attributes wrap it, so `styled("color: #777", p([words("Credits…")]))`
+reads as what it is. A style sheet is a list of rules, shown rule by rule
+and kept in a definition of its own, rather than one long text. The
+declarations of a rule stay text: a node per property would make the
+graph busier, not calmer. Moving `examples/dice` and `examples/converter`
+onto it took the dice page from 475 nodes to 382, and the converter's
+`main` from a style literal of over 2,000 characters and nested `element` calls to
+a page you can read (its style sheet is the definition `page style`).
+
+The programs on reactive.html moved onto Html in their own PR, and the
 DSL-local `UI` type in `cells-programs.ts` and `src/lang/ui.ts` are gone:
 one way to make a page.
 
@@ -235,6 +247,8 @@ showing a page program live, like its shader picture.
   architecture (Evan Czaplicki).
 - Elements as `(tag, attributes, children)`: HyperScript's `h()` (Dominic
   Tarr), as every virtual-DOM library since uses it.
+- The html module, each tag a function: Elm's Html module (Evan
+  Czaplicki); markup as plain data: Hiccup (James Reeves). Prior art.
 - Two-way binding: Svelte's `bind:value` (Rich Harris) for when an
   input's value is set; lenses (Foster et al., 2007) for "a setter is a projection
   run backwards".

@@ -20,6 +20,7 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|
 | | Editor: a function parameter can't be called until its type is known (no `f(□, □)` for an untyped `f`); blocks higher-order definitions written from scratch | GAPS round 3, editor 1 | 2026-10-23 |
 | | Editor: a text literal can't hold a newline (one-line field; `"\n"` is taken literally) | GAPS round 3, editor 2 | 2026-10-23 |
+| | Editor: multiline text (a style sheet) is drawn on one line in the node view, so the graph gets extremely wide; the tree view is no better. The converter no longer has one (L28), but any long text still does | Ersagun 2026-10-23 15:32 | 2026-10-23 |
 | | Editor: *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | 2026-10-23 |
 | | Editor: typing `0` in an Int hole offers nothing (E21 is now in the way of every program with Int) | GAPS round 3, editor 4 | 2026-10-23 |
 | | Editor: palette rows with the same label (`show(□)` ×3, `cents(□)` ×2) told apart only by the type line | GAPS round 3, editor 5 | 2026-10-23 |
@@ -79,7 +80,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L28 | Html that reads well in the editor: each tag an ordinary function (a prelude `html` module), attributes and children as compact data, styles as records or their own definitions instead of one long text. Rewrite the dice and converter pages with it. (Multiline text drawn on one line in the node view is lane E) | Ersagun 2026-10-23 15:32 | P1 | M | next |
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth. The drift half is guarded already: `compiler/test/builtins.test.ts` asks every job of every builtin. What's left is moving code across `compiler/` (lane C) and the editor, so it waits for a slot between lane C's items | R2 §4 | P2 | L | needs lane C between items |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: L11d a `det` mode drops `Choice` (needs run.ts and the compiler to hand back the one answer); lane C and E parts after | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a, L11b, L11c done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
@@ -143,7 +143,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L11c | `relate.ts` follows the schedule: each function in each mode runs its goals in the order modes.ts planned. The ordering rules (`cheap`, `computable`, `waitsOnly`, `hence` reversed, match and fold and solve orders) are gone; goals a stuck direction never reaches wait for what they need | this PR |
+| L28 | The html module: each tag a function of its children, attributes by wrapping (`styled`, `classed`, `named`, `with`), `button`, `words`, a style sheet as a list of rules. The dice and converter pages rewritten with it (dice 475 nodes to 382; the converter's style sheet is its own definition) | this PR |
+| L11c | `relate.ts` follows the schedule: each function in each mode runs its goals in the order modes.ts planned. The ordering rules (`cheap`, `computable`, `waitsOnly`, `hence` reversed, match and fold and solve orders) are gone; goals a stuck direction never reaches wait for what they need | #205 |
 | L11b | Types from modes: a relational `solve` is `Diverge` only when its mode may not end (says why), and a direction nothing pins down is an error at the `solve`; `mayLoop` removed | #198 |
 | L11a | `modes.ts`: a schedule, how many answers and whether it ends, for any mode; reports only, checked against relate.ts and the checker (`test/modes.test.ts`). `map` and `show numbers` backwards end, so their `Diverge` is a false alarm | #195 |
 | L11 | Design note for mode analysis: projectional/MODES.md | #193 |

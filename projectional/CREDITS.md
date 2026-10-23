@@ -169,6 +169,7 @@ not only code: an influence is credited even when nothing was copied.
 | Model, update, view for web apps | Considered, rejected | [The Elm architecture](https://guide.elm-lang.org/architecture/) (Evan Czaplicki). Still possible as a style, WEB.md. |
 | An input's value is set only when it differs, so typing isn't disturbed | Influence | Svelte's `bind:value` (Rich Harris). In `src/lang/html.ts`. |
 | Elements as (tag, attributes, children) | Influence | HyperScript's `h()` (Dominic Tarr), as virtual-DOM libraries since use it. `Html` in std.ts. |
+| The html module: each tag a function of its children, attributes added by wrapping, a style sheet as a list of rules | Prior art | Elm's Html module (Evan Czaplicki), each tag a function; Hiccup (James Reeves), markup as plain data. `src/lang/html-source.ts`, WEB.md "The widgets are functions". |
 | Two-way binding by running the view backwards | Our own | Follows from running functions backwards (Ersagun's idea, above). Prior art: lenses (Foster, Greenwald, Moore, Pierce and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS 2007). `examples/converter`. |
 | Mobile apps as a packaged web page | Plan | PWAs (W3C web app manifest), [Capacitor](https://capacitorjs.com) (Ionic). WEB.md. |
 

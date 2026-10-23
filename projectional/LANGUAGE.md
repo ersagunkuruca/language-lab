@@ -640,6 +640,19 @@ type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]
 type Event     = event(value: Text, key: Text)
 ```
 
+Pages are written with the **html module** (`library/html.json`, built
+from `src/lang/html-source.ts`), ordinary functions that build these
+values. Each tag is a function of its children (`p([words("Hello")])`,
+`section`, `h1`, …, and `tag(name, children)` for the rest); text that
+doesn't change is `words(t)`; attributes are added by wrapping:
+`styled("color: #777", p(…))`, `classed("lead", …)`, `named("roll", …)`,
+`with([attribute(name, value), on(…)], …)`. `button(label, then)` is a
+button with a click handler. A style sheet is a list of rules,
+`style sheet([rule("h1", "font-size: 28px"), media("(prefers-color-scheme:
+dark)", […])])`, which a program keeps as a definition of its own. Each
+tag a function is Elm's Html module (prior art), markup as plain data is
+Hiccup's.
+
 `main` runs once; each function in the value runs in a watcher of the
 Cells handler, so a write re-runs only the texts, attributes and parts
 that read that cell (Solid.js's model, no virtual DOM). The rows are the
