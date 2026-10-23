@@ -594,6 +594,15 @@ only walked or folded, is an array.
 gets an `$arr` copy taking an array and a start, chosen by a whole-program
 fixpoint. Conversions to cons cells happen only where a value stops being
 walked.
+*First part built:* lists walked whole. A parameter or let whose every use
+is a fold (that doesn't read the rest of the list), `join all`, `one of`,
+or handing it on to another such binder holds the array `split` or
+`characters` made; definitions get an `$arr` copy for calls that pass one.
+chapters' lines go from `split` to `sections` with no cells and no spine:
+3000 chapters, 199 → 167 ms (median of 31, alternating runs; ideal 86).
+*Left:* lists that are matched on (the array and a start, as designed), and
+lists built by consing and then walked (`taken` in `number`, now the
+biggest cost: an array grown at the end, read from the end).
 
 **G13 again.** `sections` builds a `Pile` record per line and takes it
 apart in the next step. The ideal carries two locals.

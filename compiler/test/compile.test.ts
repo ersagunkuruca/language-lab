@@ -244,6 +244,39 @@ test("steps over a list run as one loop: no list between split, keep and length 
   assert.deepEqual(defs["either way"]("a b"), run("either way", "a b")[0]);
 });
 
+test("lists that are only walked stay the arrays split makes (GAPS.md G21)", async () => {
+  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  // A fold from the end, so the order of the items shows.
+  const rev = k.def("rev");
+  k.define(rev, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.text(r!, h) },
+  ])));
+  const backwards = k.def("backwards");
+  k.define(backwards, k.fn(["t"], (t) => k.call(rev, k.call(T.split, t, k.lit(",")))));
+  const joined = k.def("joined");
+  k.define(joined, k.fn(["t"], (t) => k.let("parts", k.call(T.split, t, k.lit(",")), (ps) => k.call(T.joinAll, ps, k.lit("+")))));
+  const firstOf = k.def("first of");
+  k.define(firstOf, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.call(S.oneOf, k.call(T.split, t, k.lit(",")))), k.thunk(() => k.lit("none")))));
+  // A list that is also matched on stays cells.
+  const head = k.def("head or");
+  k.define(head, k.fn(["t"], (t) => k.let("parts", k.call(T.split, t, k.lit(",")), (ps) => k.text(k.call(rev, ps), k.match(ps, [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["h", "_"], body: ([h]) => h },
+  ])))));
+  const { defs, source } = await compiledDefs(k, ["rev", "backwards", "joined", "first of", "head or"], "arrays.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("backwards"), /rev\$arr\(\$text\.split\(t, ","\)\)/);
+  assert.doesNotMatch(body("rev$arr") + body("joined") + body("first_of"), /\$toList|builtin\.text|\.fields/);
+  assert.match(body("head_or"), /builtin\.text\.split/);
+  assert.equal(defs.backwards("a,b,c"), "cba");
+  assert.equal(defs.rev(toList(["a", "b"])), "ba");
+  assert.equal(defs.joined("a,b"), "a+b");
+  assert.equal(defs["first of"]("x,y"), "x");
+  assert.equal(defs["head or"]("p,q"), "qpp");
+});
+
 test("a fold over a million items compiles to a loop", async () => {
   const k = new Lang();
   const total = k.def("total");

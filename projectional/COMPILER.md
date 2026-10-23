@@ -343,6 +343,20 @@ same shape fuse too:
   the functions they're given must not choose. A test that chooses or
   aborts leaves the chain as calls.
 
+A list that is only walked whole stays the JS array that `split` or
+`characters` made (GAPS.md G21; NUMBERS.md, the `array` row). Walked whole
+means a fold that reads each item and the folded rest but not the rest
+itself, `join all`, `one of`, or being handed to a parameter or let that is
+itself only walked, worked out for the whole program at once. A definition
+with such a parameter gets an `$arr` copy that takes the array, and calls
+whose argument is an array use it; other calls, and uses as a value, keep
+the copy that takes cells. A fold over an array is an index loop from the
+end, or from the front when the step doesn't care about order (G15). If a
+use the compiler can't walk as an array ever meets one, it gets the cells
+back (`$toList`), so this can cost time but never change an answer. Prior
+art: cdr-coding (Hansen, CACM 1969), which stores a list's cells one after
+another; here it's decided at compile time from how the list is used.
+
 This is the special case of deforestation (Philip Wadler, "Deforestation:
 transforming programs to eliminate trees", 1990) and short-cut fusion
 (Andrew Gill, John Launchbury and Simon Peyton Jones, "A short cut to
