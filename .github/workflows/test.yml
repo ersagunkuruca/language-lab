@@ -1,6 +1,4 @@
-# Runs every test suite on pull requests. The browser tests run against a
-# build made here; the built pages aren't committed (pages.yml builds and
-# publishes them on main, without testing again).
+# Runs the unit test suites on pull requests.
 name: Tests
 
 # A pull request that only changes prose or pictures (a review, a QA
@@ -22,9 +20,9 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
-# Two jobs side by side, so a pull request waits for the slower one (about
-# 4 minutes) instead of both in a row (about 7.5). Each pays its own setup
-# (about 20 seconds), so the runner minutes stay about the same.
+# The browser tests (the editor, shaders, WGSL on a GPU) don't run here: a
+# pull request runs them locally before it's pushed, and pages.yml runs them
+# once per merge before it publishes, so a failure never reaches the site.
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -50,24 +48,3 @@ jobs:
       - name: compiler
         working-directory: compiler
         run: npm test
-
-  browser:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: projectional/package-lock.json
-      - name: projectional editor in a browser
-        working-directory: projectional
-        run: |
-          npm ci
-          npm run build-editor
-          npm run smoke
-          npm run smoke-shaders
-      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
-        working-directory: compiler
-        run: npm run gpu
