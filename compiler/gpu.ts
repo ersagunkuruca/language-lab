@@ -22,7 +22,7 @@ import type { Id } from "../projectional/src/model.ts";
 import { lowerScalar, type LType, type SType } from "./src/scalar.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
-import { area, corners, vectors } from "./src/fixtures.ts";
+import { area, corners, parts, vectors } from "./src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 const TRUE = "std.bool.true", FALSE = "std.bool.false";
@@ -51,6 +51,10 @@ const cases: Case[] = [
     // gcd by subtraction only ends for positive whole numbers; under a
     // budget of 1000 it gives 0 when it takes longer, or never ends.
     return { label: "corners", code: c.code, info: c.info, names: c.names, roots: Object.values(c.defs), inputs: (f) => (f.name === "gcd of" ? [[12, 18], [7, 3], [5, 5], [1, 100], [1, 5000], [0.5, 1]] : undefined) };
+  })(),
+  (() => {
+    const v = parts();
+    return { label: "vectors module", code: v.code, info: v.info, names: v.names, roots: Object.values(v.defs) };
   })(),
   (() => {
     const v = vectors();

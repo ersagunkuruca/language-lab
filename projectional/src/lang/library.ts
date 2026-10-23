@@ -2,6 +2,7 @@
 // Browser-safe (the editor uses it), so modules come in as JSON imports.
 
 import prelude0 from "../../library/prelude.json" with { type: "json" };
+import vectors0 from "../../library/vectors.json" with { type: "json" };
 import { merge, type Code, type Id } from "../model.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
@@ -9,7 +10,8 @@ import { adopt, library, type Module } from "./modules.ts";
 import { std, stdNames } from "./std.ts";
 
 export const PRELUDE = prelude0 as unknown as Module;
-export const MODULES: Module[] = [PRELUDE];
+export const VECTORS = vectors0 as unknown as Module;
+export const MODULES: Module[] = [PRELUDE, VECTORS];
 export const CORE: Code = merge(prelude, std);
 export const LIBRARY = library(CORE, layer<Names>(preludeNames, stdNames), MODULES);
 
