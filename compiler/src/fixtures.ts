@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { CONS, INT_OPS, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CONS, INT_OPS, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -269,6 +269,8 @@ export function searches() {
     k.if(k.call(TEXT_OPS.less, txt(x), txt(y)), k.call(S.concat, x, y), k.call(S.fail))));
   const apply = k.def("apply");
   k.define(apply, k.fn(["f", "t"], (f, t) => k.call(f, t)));
+  const down = k.def("down");
+  k.define(down, k.fn(["n"], (n) => k.if(k.equal(n, k.lit(0)), k.lit(0), k.call(down, k.call(B.sub, n, k.lit(1))))));
   const defs = {
     kept: d("kept", ["xs"], (xs) => k.call(lib("keep"), xs, k.fn(["t"], (t) => k.call(INT_OPS.less, k.int(2), k.call(INT_OPS.read, t))))),
     pairs: d("pairs", ["xs", "ys"], (xs, ys) => k.call(S.all, k.thunk(() => pair(xs, ys)))),
@@ -280,6 +282,13 @@ export function searches() {
     readCount: d("count read", ["xs"], (xs) => k.call(S.count, k.thunk(() => choose(xs, (x) => k.call(INT_OPS.read, txt(x)))))),
     mapped: d("mapped", ["xs"], (xs) => k.call(S.optional, k.thunk(() => k.call(lib("map"), xs, k.fn(["t"], (t) => k.call(INT_OPS.read, txt(t))))))),
     applied: d("applied", ["t"], (t) => k.call(S.first, k.thunk(() => k.call(apply, k.fn(["s"], (s) => k.call(INT_OPS.show, k.call(INT_OPS.read, s))), t)), k.thunk(() => k.lit("no")))),
+    // An abort goes on through first and a budget to its handler; an
+    // unhandled one is the function's.
+    caught: d("caught", ["t"], (t) => k.match(k.call(S.first, k.thunk(() => k.if(k.equal(txt(t), k.lit("x")), k.call(ABORT_OP, k.lit("an x")), k.call(INT_OPS.show, k.call(INT_OPS.read, t)))), k.thunk(() => k.lit("none"))),
+      [{ variant: ABORT_OP, names: ["reason"], body: ([r]) => k.call(S.concat, k.lit("caught: "), r) }])),
+    budgetAbort: d("budget abort", ["n"], (n) => k.match(within(k, 5, () => k.if(k.call(S.less, n, k.lit(0)), k.call(ABORT_OP, k.lit("negative")), k.call(down, n)), () => k.lit(-1)),
+      [{ variant: ABORT_OP, names: ["reason"], body: () => k.lit(-2) }])),
+    uncaught: d("uncaught", ["t"], (t) => k.if(k.equal(txt(t), k.lit("")), k.call(ABORT_OP, k.lit("nothing to read")), k.call(INT_OPS.add, k.call(INT_OPS.read, t), k.int(0)))),
   };
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };

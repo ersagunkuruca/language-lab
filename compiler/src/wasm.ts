@@ -196,6 +196,13 @@ export function emitWasm(lowered: Lowered): Module {
       }));
     });
   }
+  // Global 0 the fuel left (when something spends), then the reason of
+  // the last abort: the host reads it with Abort.reason when a function
+  // gives status 2.
+  const fuel = funcs.some((f) => f.spends || budgets(f.body));
+  const aborts = funcs.some((f) => mentions(f.body, "abort"));
+  const reasonG = fuel ? 1 : 0;
+  if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   const rtType = (f: RtFn, t: VT): LType => (t === "list" ? listOf(f) : t);
@@ -226,17 +233,16 @@ export function emitWasm(lowered: Lowered): Module {
     ...helpers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
     ...rtExports.map((f) => [...str(RT_EXPORTS[f.name]), 0x00, ...u(rtIndex(f.name))]),
   ]);
-  const fuel = funcs.some((f) => f.spends || budgets(f.body));
   // global 0: the fuel left, an f64. Outside any budget it's infinite, so
   // what the checker couldn't see end just runs (only `data` calls it there).
-  const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]]);
+  const globalSec = vec([...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []), ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : [])]);
   const zero = (t: LType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
   // Whether f needs a local for a status: it's partial, or has no answer
   // somewhere, or tries something that may have none.
-  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
+  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
 
   // f's code. `d` is how many blocks are open around e, and `fl` the
@@ -249,6 +255,9 @@ export function emitWasm(lowered: Lowered): Module {
     const st = statusOf(f);
     const to = (d: number, fl: number) => { if (fl < 0) throw new Error(`${f.name}: no answer, and nowhere to say so`); return u(d - 1 - fl); };
     const check = (d: number, fl: number) => (fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x22, ...u(st), 0x20, ...u(st), 0x0d, ...to(d, fl), 0x1a]);
+    // After a handler's block, the status on the stack: the one it handles
+    // (1: no answer, 2: an abort) stays, any other goes on out to fl.
+    const on = (mine: number, d: number, fl: number) => (fl < 0 ? [0x1a] : [0x21, ...u(st), 0x20, ...u(st), 0x20, ...u(st), 0x41, mine, 0x47, 0x0d, ...to(d, fl), 0x1a]);
     return function code(e: SExpr, d: number, fl: number): number[] {
     const code1 = (x: SExpr) => code(x, d, fl);
     switch (e.k) {
@@ -297,7 +306,7 @@ export function emitWasm(lowered: Lowered): Module {
         if (failing(e.body)) return [
           0x23, 0x00, 0x21, ...u(e.save), 0x44, ...f64(e.n), 0x24, 0x00,
           0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x20, ...u(e.save), 0x24, 0x00, 0x0c, 0x01, 0x0b,
-          0x1a, 0x20, ...u(e.save), 0x24, 0x00, ...code(e.otherwise, d + 1, fl), 0x0b,
+          0x21, ...u(st), 0x20, ...u(e.save), 0x24, 0x00, 0x20, ...u(st), ...on(1, d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b,
         ];
         // Otherwise: res = body; (if fuel < 0 then otherwise else res); fuel = save
         return [
@@ -309,7 +318,19 @@ export function emitWasm(lowered: Lowered): Module {
       case "fail": return [0x41, 0x01, 0x0c, ...to(d, fl)];
       case "attempt": {
         // block $done (block $none (result i32) body; res = it; ok; br $done) drop; otherwise
-        return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, 0x1a, ...code(e.otherwise, d + 1, fl), 0x0b];
+        return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, ...on(1, d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b];
+      }
+      // abort(reason): the reason in its global, then status 2.
+      case "abort": return [...code1(e.reason), 0x24, ...u(reasonG), ...(fl < 0 ? [0x00] : [0x41, 0x02, 0x0c, ...to(d, fl)])];
+      case "handle": {
+        // As an attempt for status 2, which puts the fuel back as it was
+        // when the handler started, as the evaluator does; the reason is the arm's.
+        const fuelBack = fuel ? [0x20, ...u(e.save), 0x24, 0x00] : [];
+        return [
+          ...(fuel ? [0x23, 0x00, 0x21, ...u(e.save)] : []),
+          0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x0c, 0x01, 0x0b, ...on(2, d + 1, fl),
+          ...fuelBack, 0x23, ...u(reasonG), 0x21, ...u(e.reason), ...code(e.arm, d + 1, fl), 0x0b,
+        ];
       }
       case "op": {
         const args = e.args.flatMap(code1);
@@ -341,7 +362,7 @@ export function emitWasm(lowered: Lowered): Module {
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
-    ...(fuel ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -360,6 +381,7 @@ export function emitWasm(lowered: Lowered): Module {
     const st = local(f, statusOf(f));
     const to = (ld2: number) => ld2 - 1 - fl;
     const check = (ld2: number) => (fl < 0 ? [`${d}(if (then unreachable)) ;; no answer, nowhere to go`] : [`${d}local.tee ${st}`, `${d}local.get ${st}`, `${d}br_if ${to(ld2)} ;; no answer`, `${d}drop`]);
+    const on = (mine: number, dd: string, ld2: number) => (fl < 0 ? [`${dd}drop`] : [`${dd}local.set ${st}`, `${dd}local.get ${st}`, `${dd}local.get ${st}`, `${dd}i32.const ${mine}`, `${dd}i32.ne`, `${dd}br_if ${to(ld2)} ;; not mine: on out`, `${dd}drop`]);
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
       case "int": return `${d}i64.const ${e.v}`;
@@ -401,7 +423,7 @@ export function emitWasm(lowered: Lowered): Module {
         const save = [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`];
         if (failing(e.body)) return [
           ...save, `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer, or ran out`, wat(e.body, f, d + "    ", ld + 2, ld + 1),
-          `${d}    local.get ${local(f, e.save)}`, `${d}    global.set $fuel`, `${d}    br 1)`, `${d}  drop`, `${d}  local.get ${local(f, e.save)}`, `${d}  global.set $fuel`,
+          `${d}    local.get ${local(f, e.save)}`, `${d}    global.set $fuel`, `${d}    br 1)`, `${d}  local.set ${st}`, `${d}  local.get ${local(f, e.save)}`, `${d}  global.set $fuel`, `${d}  local.get ${st}`, ...on(1, d + "  ", ld + 1),
           wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
         ].join("\n");
         return [
@@ -413,8 +435,17 @@ export function emitWasm(lowered: Lowered): Module {
       case "fail": return `${d}i32.const 1\n${d}br ${to(ld)} ;; no answer`;
       case "attempt": return [
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    local.set ${local(f, e.res)}`, wat(e.ok, f, d + "    ", ld + 2, fl), `${d}    br 1)`,
-        `${d}  drop`,
+        ...on(1, d + "  ", ld + 1),
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
+      ].join("\n");
+      case "abort": return [w(e.reason), `${d}global.set $reason`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const 2`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
+      case "handle": return [
+        ...(fuel ? [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`] : []),
+        `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; aborted`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    br 1)`,
+        ...on(2, d + "  ", ld + 1),
+        ...(fuel ? [`${d}  local.get ${local(f, e.save)}`, `${d}  global.set $fuel`] : []),
+        `${d}  global.get $reason`, `${d}  local.set ${local(f, e.reason)}`,
+        wat(e.arm, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
     }
@@ -432,6 +463,7 @@ export function emitWasm(lowered: Lowered): Module {
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
     ...(hostShow ? [`  (import "host" "show" (func $host.show (param f64) (result (ref null $bytes))))`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
+    ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
@@ -455,6 +487,7 @@ export function emitWasm(lowered: Lowered): Module {
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
 const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);
 const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
+const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some((x) => mentions(x, k));
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
 // `host.show` builds its text through the module's own Text.new and Text.put.

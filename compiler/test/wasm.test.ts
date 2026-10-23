@@ -3,12 +3,13 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { Aborted, bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { area, choices, closures, sameLists, searches, texts } from "../src/fixtures.ts";
+import { book } from "../gaps/ledger.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -309,10 +310,14 @@ function flat(v: unknown): string {
   return out.join(" ");
 }
 // A partial function's answer comes with its status; none is undefined, as first() of no answers.
-function answer(w: Exports, f: { partial?: boolean; result: LType }, got: unknown): Value | undefined {
+// An abort (status 2) is its reason, as the evaluator's Aborted is.
+function answer(w: Exports, f: { partial?: boolean; result: LType }, got: unknown): Value | { aborted: string } | undefined {
   if (!f.partial) return fromWasm(w, got, f.result);
   const [v, status] = got as [unknown, number];
-  return status === 0 ? fromWasm(w, v, f.result) : undefined;
+  return status === 0 ? fromWasm(w, v, f.result) : status === 2 ? { aborted: fromText(w, w["Abort.reason"]()) } : undefined;
+}
+function outcome(r: ReturnType<typeof makeRunner>, def: string, xs: Value[]): Value | { aborted: string } | undefined {
+  try { return first(r.call(r.value(def), ...xs)); } catch (e) { if (e instanceof Aborted) return { aborted: e.reason }; throw e; }
 }
 
 test("choosing one of a list in WebAssembly: a loop per choice, keep with a test that may have none, chapters' and calc's functions", async () => {
@@ -338,11 +343,14 @@ test("choosing one of a list in WebAssembly: a loop per choice, keep with a test
     // map is a recursion that isn't a tail call (not a fold), so short lists.
     mapped: short.map((xs) => [xs]),
     applied: ["", "12", "-3", "x", "05"].map((t) => [t]),
+    caught: ["", "12", "x", "y"].map((t) => [t]),
+    budgetAbort: [-1, 0, 3, 4, 5, 9].map((n) => [n]),
+    uncaught: ["", "12", "y"].map((t) => [t]),
   };
   for (const [name, inputs] of Object.entries(cases)) {
     const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs) {
-      const want = first(r.call(r.value(def), ...xs));
+      const want = outcome(r, def, xs);
       const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
       assert.equal(flat(got), flat(want), `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
     }
@@ -362,13 +370,51 @@ test("choosing one of a list in WebAssembly: a loop per choice, keep with a test
       if (f.inner || !f.params.length || !keys.every((k) => pool[k])) continue;
       const inputs = keys.reduce<Value[][]>((acc, k) => acc.flatMap((xs) => pool[k].map((v) => [...xs, v])), [[]]).slice(0, 60);
       for (const xs of inputs) {
-        const want = first(rr.call(rr.value(f.def), ...xs));
+        const want = outcome(rr, f.def, xs);
         const got = answer(wm, f, wm[f.name](...xs.map((x, i) => toWasm(wm, x, f.params[i]))));
         assert.deepStrictEqual(got, want, `${name}: ${f.name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
         compared++;
       }
     }
     assert.ok(compared > 20, `${name}: ${compared} compared`);
+  }
+});
+
+test("Abort in WebAssembly: status 2 and a reason, through first and budgets; calc parses and ledger reads and reports as the evaluator does", async () => {
+  // calc: tokens, then the parser (which aborts on what it can't read), then evaluate.
+  const calc = load("calc");
+  const lc = lowerScalar(calc.code, calc.info, calc.pres.names, calc.own.defs, { data: true });
+  for (const fn of ["tokens", "whole expression", "evaluate"]) assert.ok(lc.funcs.some((g) => g.name === fn && !g.inner), `calc: ${fn} compiles (${lc.refused.get(calc.named(fn))})`);
+  const wc = await instantiate(emitWasm(lc)) as unknown as Exports;
+  const rc = makeRunner(calc.code, calc.info, { print: () => {} });
+  const fnOf = (l: typeof lc, name: string) => l.funcs.find((g) => g.name === name && !g.inner)!;
+  const [tokens, whole, evaluate] = ["tokens", "whole expression", "evaluate"].map((x) => fnOf(lc, x));
+  let aborted = 0;
+  for (const line of ["1 + 2*3", "(1+2)*3", "2^10", "2^-1", "7 - -2", "10 / 3", "10 / 0", "x", "1 +", ")", "((4))", "", "3 4", "1+2+3+4+5+6+7+8+9", "-(2*3)^2"]) {
+    const t = first(rc.call(rc.value(tokens.def), line))!;
+    const wt = wc.tokens(toText(wc, line));
+    assert.equal(flat(fromWasm(wc, wt, tokens.result)), flat(t), `tokens(${line})`);
+    const e = outcome(rc, whole.def, [t]);
+    const we = wc["whole expression"](wt) as [unknown, number];
+    assert.equal(flat(answer(wc, whole, we)), flat(e), `whole expression(${line})`);
+    if (e && typeof e === "object" && "aborted" in e) { aborted++; continue; }
+    const none = toList([]);
+    assert.equal(flat(answer(wc, evaluate, wc.evaluate(we[0], toWasm(wc, none, evaluate.params[1])))), flat(outcome(rc, evaluate.def, [e as Value, none])), `evaluate(${line})`);
+  }
+  assert.ok(aborted >= 3, `${aborted} lines abort`);
+  // ledger: the lines of a file into entries (aborting on a bad one), then the report.
+  const ledger = load("ledger");
+  const ll = lowerScalar(ledger.code, ledger.info, ledger.pres.names, ledger.own.defs, { data: true });
+  const wl = await instantiate(emitWasm(ll)) as unknown as Exports;
+  const rl = makeRunner(ledger.code, ledger.info, { print: () => {} });
+  const [entries, report] = ["entries", "report"].map((x) => fnOf(ll, x));
+  for (const file of ["# a comment\n2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n\n2026-10-03,coffee,-450,beans\n2026-10-07,coffee,-5,gum\n", book(2000), "2026-01-01,a,1,x\n2026-01-02,b,2\n", "2026-01-01,a,1,x,y\n", "\n2026-01-01,a,1.5,x\n"]) {
+    const lines = toList(file.split("\n"));
+    const want = outcome(rl, entries.def, [lines, 1]);
+    const got = wl.entries(toWasm(wl, lines, entries.params[0]), 1n) as [unknown, number];
+    assert.equal(flat(answer(wl, entries, got)), flat(want), `entries of a file of ${file.length} bytes`);
+    if (want && typeof want === "object" && "aborted" in want) continue;
+    assert.equal(answer(wl, report, wl.report(got[0])), outcome(rl, report.def, [want as Value]), "report");
   }
 });
 

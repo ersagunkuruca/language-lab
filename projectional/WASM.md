@@ -3,9 +3,11 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2, W3a, W4a and W4b are done (W2: functions as
-values, W3a: Int and Text, W4a: searches with one answer or none, W4b:
-choosing inside a handler, below). What runs in WebAssembly is the
+**Status.** Stages W1, W2, W3a, W4a, W4b and W4c are done (W2: functions
+as values, W3a: Int and Text, W4a: searches with one answer or none,
+W4b: choosing inside a handler, W4c: Abort, below). Of wc, ledger,
+chapters and calc, everything but what reads and writes the world now
+runs in WebAssembly; that's W3b. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -15,6 +17,17 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W4c came out. Abort is a third status, 2, with its reason in a
+global, so it leaves every function between at once the way no answer
+does. A match on Abort is two blocks, like `first`: status 2 gives the
+arm, with the reason, after putting the fuel back as it was when the
+handler started (the evaluator does the same); any other status goes on
+out. `first`, `optional`, `all`, `count` and budgets let a 2 go on out
+in turn. One not handled is the function's status, and the host reads
+the reason with `Abort.reason`. calc's parser, which aborts on what it
+can't read, and ledger's `entries` and `report` give the evaluator's
+answers and reasons.
 
 How W4b came out. Inside `first`, `optional`, `all` and `count`, lets
 whose value is `one of` a list (keep: let item = one of list, item if
@@ -231,8 +244,8 @@ rest with the reason, so nothing breaks between stages.
    installed).
 4. **W4 searches and effects.** One answer or none as a status after
    the answer (W4a, done), choosing inside a handler and functions with
-   Choice as values (W4b, done), then Abort, then `one of` in called
-   functions. Success continuations for `Choice`,
+   Choice as values (W4b, done), Abort as a third status (W4c, done),
+   then `one of` in called functions. Success continuations for `Choice`,
    multi-value single-answer returns, exceptions for `Abort`, the handler
    stack. Programs: queens, Countdown, calc.
 5. **W5 Int past 64 bits** through host bignums, then specialization
