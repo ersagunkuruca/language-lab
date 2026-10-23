@@ -28,8 +28,10 @@ node --test test/backwards.test.ts
   [μKanren](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)).
 - **Does a function have to be written specially?** No. Every example
   below is an ordinary function, written forward.
-- **What does it cost in the types?** Running something backwards always
-  has `Choice` (any number of answers, including none). It also has
+- **What does it cost in the types?** Running something backwards has
+  `Choice` (any number of answers, including none), unless its direction
+  always gives exactly one: a pair taken apart is always a pair, so
+  `solve make(a, b) = p` is an ordinary call (MODES.md). It also has
   `Diverge` when the search may not end: when it unfolds or recurses on
   something that doesn't get smaller each time (MODES.md). Reading text
   back into numbers ends, since each step reads a shorter text; a list

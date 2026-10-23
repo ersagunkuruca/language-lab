@@ -16,7 +16,7 @@ import type { Names } from "../presentation.ts";
 import { unitProblems } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
-import { solveMode } from "./modes.ts";
+import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
@@ -488,7 +488,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const v = solveMode(code, n, names);
       // (A hole is a gap the editor already shows; the search runs up to it.)
       if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(n.fn)} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
-      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0]);
+      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n));
       return expr(n.body, inner, row);
     }
     // A predicate's out = true is a Bool; every other port is a number.
@@ -511,10 +511,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // Ports of a function: its params (by binder id, or by position for a
   // builtin) and "out", typed from the function's type. Running backwards
-  // adds Choice (any number of answers), Diverge when it may unfold
-  // forever, and whatever the function itself does, except printing, which
-  // can't be undone.
-  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string) {
+  // adds Choice (any number of answers) unless its mode always gives
+  // exactly one, Diverge when it may unfold forever, and whatever the
+  // function itself does, except printing, which can't be undone.
+  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false) {
     const ft = s.resolve(refType(n.id, n.fn, env));
     if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
     const t = code.nodes[n.fn];
@@ -541,6 +541,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // effects of our own either, whose handlers could be anything.
     const acts = own.filter((e) => e !== CHOICE && e !== DIVERGE);
     if (acts.length) err(n.id, `${nm(n.fn)} performs ${acts.map(nm).join(", ")}, and a function that acts can't be run backwards`);
+    if (one) return;
     const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : [])])];
     choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? ` and may search forever (Diverge${why ? `: ${why}` : ""})` : ""}, which nothing here handles`);
   }
@@ -712,7 +713,7 @@ function worldUnderChoice(code: Code, info: Info, isOperation: (id: Id) => boole
         }
       }
       if (n.kind === "solve") {
-        try { const p = planSolve(code, n); if (p.mode === "relational" || !p.unique) out.add(CHOICE); } catch { /* reported elsewhere */ }
+        try { if (!oneAnswer(code, n)) out.add(CHOICE); } catch { /* reported elsewhere */ }
       }
       if (n.kind === "lambda") return;
       for (const c of kids(n)) walk(c);
@@ -939,7 +940,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       // A search's Diverge, and whether it can run at all, are its mode's.
       // (Running up to the hole being filled isn't a difference.)
       const v = p.mode === "relational" ? solveMode(c, n, {}) : null;
-      return [p.mode, p.status, p.needMore, p.many, p.canFail, p.unique, p.predicate, p.rel?.ports.join(","), v ? `${v.ends}/${v.stuck.filter((x) => x !== "a hole").join(",")}` : ""].join("|");
+      return [p.mode, p.status, p.needMore, p.many, p.canFail, p.unique, p.predicate, p.rel?.ports.join(","), v ? `${v.ends}/${determinism(v.answers)}/${v.stuck.filter((x) => x !== "a hole").join(",")}` : ""].join("|");
     }
     catch (e) { return `!${(e as Error).message}`; }
   }).join(";");

@@ -23,6 +23,7 @@ import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
+import { oneAnswer } from "./modes.ts";
 import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
@@ -612,7 +613,15 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           yield Object.keys(n.binds).map((k) => sol[k]!);
         }
       };
-      this.from(bodies(), (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound as Value[])));
+      // A solve with exactly one answer (oneAnswer, MODES.md) leaves no
+      // choice point: its first answer is the answer.
+      let answers: Iterable<Value[]> = bodies();
+      if (p.mode === "relational" && oneAnswer(code, n)) {
+        const r = (answers as Generator<Value[]>).next();
+        if (r.done) throw new Error(`solving ${rt.names?.[n.fn] ?? n.fn} this way gives exactly one answer, and it gave none`);
+        answers = [r.value];
+      }
+      this.from(answers, (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound as Value[])));
     }
   }
 

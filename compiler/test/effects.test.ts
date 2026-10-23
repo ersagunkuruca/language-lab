@@ -7,13 +7,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import type { Id } from "../../projectional/src/model.ts";
+import type { Id, NodeOf } from "../../projectional/src/model.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { Aborted, makeRunner, runMain, type Value, type World } from "../../projectional/src/lang/run.ts";
 import { fractionsProgram } from "../../projectional/src/lang/cells-programs.ts";
-import { ABORT_OP, CELL_OPS, IO, LOG_OP, NOW_OP, RANDOM_OP, S, SHOW_ANY, WAIT_OP } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, INT_OPS, IO, LOG_OP, NOW_OP, PAIR_V, RANDOM_OP, S, SHOW_ANY, WAIT_OP } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint, $setWorld } from "../src/runtime.js";
@@ -53,7 +53,8 @@ async function both(build: (k: Lang) => Id, files: Record<string, string> = {}, 
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const path = join(dir, `p${n++}.js`);
-  writeFileSync(path, compile(code, info, names, { runtime, exports: [names[main]] }));
+  const js = compile(code, info, names, { runtime, exports: [names[main]] });
+  writeFileSync(path, js);
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
   const run = (go: (print: (s: string) => void, world: World) => void) => {
     const w = fakeWorld({ ...files }, input);
@@ -64,7 +65,7 @@ async function both(build: (k: Lang) => Id, files: Record<string, string> = {}, 
   const want = run((print, world) => runMain(code, info, main, { print, names, world }));
   const got = run((print, world) => { $setPrint(print); $setWorld(world); defs[names[main]](); });
   assert.deepEqual(got, want);
-  return want;
+  return { ...want, js };
 }
 
 const show = (k: Lang, x: Id) => k.call(S.show, x);
@@ -250,4 +251,21 @@ test("fetch text: the world's body, a failure as an Abort, compiled the same", a
     return main;
   });
   assert.deepEqual(r.lines, ["A", "could not fetch /b: 404 Not Found", "[\"A\", \"-\"]", "aborted: could not fetch /d: 404 Not Found"]);
+});
+
+test("a solve with exactly one answer is a plain call: no Choice, no generator", async () => {
+  // A Pair taken apart has exactly one answer (MODES.md, L11d), so the
+  // function around it is an ordinary function, which takes its answer.
+  const r = await both((k) => {
+    const make = k.def("make");
+    k.define(make, k.fn(["a", "b"], (a, b) => k.call(PAIR_V, a, b)));
+    const [a, b] = (k.code.nodes[(k.code.nodes[make] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+    const sum = k.def("sum of");
+    k.define(sum, k.fn(["p"], (p) => k.solve(make, { out: p }, { [a]: "a", [b]: "b" }, ({ [a]: x, [b]: y }) => k.call(INT_OPS.add, x, y))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(sum, k.call(PAIR_V, k.int(1), k.int(2)))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["3"]);
+  assert.match(r.js, /function sum_of\(p\) \{\n  return .*\$one\(solve\$0\(p\)\)/);
 });

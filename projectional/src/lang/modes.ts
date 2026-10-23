@@ -494,9 +494,12 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
       ]);
     }
     if (fn.k === "variant") {
+      // Taken apart, a known value is this variant or not, unless its type
+      // has no other: then it always is (a Pair, a record).
+      const only = variantsOf(fn.id).length === 1;
       return sided(text, sides, call, [
         { needs: all, gives: [o], answers: ONE },
-        { needs: [o], gives: all, answers: CHECK, sizes: within(o, all, () => all.map(() => true)) },
+        { needs: [o], gives: all, answers: only ? ONE : CHECK, sizes: within(o, all, () => all.map(() => true)) },
       ]);
     }
     if (fn.k === "field") {
@@ -848,6 +851,21 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 // relational interpreter's kind of search (a builtin's own equation).
 export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, string> = {}): Verdict | null {
   return analyzer(code, names).ofSolve(n);
+}
+
+// Does this solve always give exactly one answer, so its type has no
+// Choice (MODES.md, L11d)? The equation solver's unique directions, and a
+// relational mode that's det and ends: one answer, found in finite time.
+const single = new WeakMap<Code, Map<Id, boolean>>();
+export function oneAnswer(code: Code, n: NodeOf<"solve">): boolean {
+  let m = single.get(code);
+  if (!m) single.set(code, (m = new Map()));
+  if (!m.has(n.id)) {
+    const p = planSolve(code, n);
+    const v = p.mode === "relational" ? solveMode(code, n) : null;
+    m.set(n.id, v ? !v.stuck.length && v.ends && determinism(v.answers) === "det" : p.unique);
+  }
+  return m.get(n.id)!;
 }
 
 // In words, as the editor will say it.

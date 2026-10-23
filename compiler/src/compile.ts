@@ -34,6 +34,7 @@ import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/ne
 import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, S, SET, SHOW_ANY, STD_IMPL, STD_MANY, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
+import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
 
@@ -825,7 +826,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
         case "match": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)) || (!!n.otherwise && streamy(n.otherwise)); break;
         case "fold": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)); break;
-        case "solve": r = !planSolve(code, n).unique || Object.values(n.given).some(streamy) || streamy(n.body); break;
+        case "solve": r = !solvedOnce(code, n) || Object.values(n.given).some(streamy) || streamy(n.body); break;
       }
       memo.set(id, r);
       return r;
