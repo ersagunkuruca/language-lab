@@ -3,10 +3,13 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Design only. What runs in WebAssembly today is the scalar
-profile (`compiler/src/scalar.ts`, `wasm.ts`): Numbers, Bools, records of
-them flattened into locals, calls, tail calls as `return_call`, and a
-budget. Everything else is refused with a reason, which the editor shows.
+**Status.** Stage W1 has begun: records are WasmGC structs (W1a). What
+runs in WebAssembly is the scalar profile (`compiler/src/scalar.ts`,
+`wasm.ts`): Numbers, Bools, records of them as immutable structs with an
+exported reader per field (`Colour.red`), calls, tail calls as
+`return_call`, and a budget. The ray marcher's colours come out of
+WebAssembly exactly as the evaluator's. Everything else is refused with
+a reason, which the editor shows.
 
 ## What it's for
 
@@ -117,7 +120,8 @@ compiled JS and the ideal.
 One PR each, in this order. Each stage widens what runs, and refuses the
 rest with the reason, so nothing breaks between stages.
 
-1. **W1 data.** Variants and records of any fields, matches and folds
+1. **W1 data.** Records first (W1a, done: one struct type per record
+   type, readers for the host). Then variants and records of any fields, matches and folds
    over them (folds as the loops the JS backend makes), lists as cons
    cells, structural `equal`. The binary encoder in wasm.ts gets the type
    section's recursion groups, struct and array types and reference
