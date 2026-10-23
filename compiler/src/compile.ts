@@ -51,6 +51,10 @@ export interface Options {
   // expression for the runtime already loaded (a page's prebuilt one), and
   // the definitions are a `const defs` the script after it uses.
   link?: "import" | "global";
+  // false: nothing runs this code under a page's step budget (run.ts
+  // `withSteps`), as in a program `lab compile` writes. Then only calls
+  // that can be under a `with fuel` spend steps.
+  steps?: boolean;
 }
 
 // Builtins that are just JavaScript. `bool` ones produce a JS boolean.
@@ -160,6 +164,25 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const handlerOf = (n: NodeOf<"match">) => (n.arms.length ? effectOf((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : null);
   const perform = (op: Id, args: string[]) => `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`;
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
+  // Which possibly-divergent definitions spend a step per call (GAPS.md G1,
+  // fuel). Only those that can run under a `with fuel`, or under a page's
+  // step budget when the code may run in a page. Under fuel means: called,
+  // directly or through other definitions, from a `with fuel`'s arguments,
+  // or used as a value anywhere, since a value can be called from anywhere.
+  const underFuel = new Set<Id>();
+  {
+    const isDef = (t: Id) => code.nodes[t]?.kind === "def";
+    const todo: Id[] = [];
+    const reach = (id: Id) => { for (const x of subtree(code, id)) { const r = code.nodes[x]; if (r.kind === "ref" && isDef(r.target) && !underFuel.has(r.target)) { underFuel.add(r.target); todo.push(r.target); } } };
+    const heads = new Set<Id>();
+    for (const n of Object.values(code.nodes)) if (n.kind === "call") heads.add(n.fn);
+    for (const n of Object.values(code.nodes)) {
+      if (n.kind === "call" && code.nodes[n.fn].kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.fuel) n.args.forEach(reach);
+      if (n.kind === "ref" && isDef(n.target) && !heads.has(n.id) && !underFuel.has(n.target)) { underFuel.add(n.target); todo.push(n.target); }
+    }
+    for (let d = todo.pop(); d !== undefined; d = todo.pop()) reach(d);
+  }
+  const spends = (def: Id) => info.divergent.has(def) && (opts.steps !== false || underFuel.has(def));
   // `equal`, one rule on every type (run.ts `sameNumber`). A Number, an Int
   // or a text on its own is compared without the general loop: an Int is
   // always whole, so === is the rule for it.
@@ -937,7 +960,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const s = defCall(n);
           if (s.bool) {
             const c = `${s.name}(${argsOf(n, s).join(", ")})`;
-            return info.divergent.has(target) ? `($spendOrThrow(), ${c})` : c;
+            return spends(target) ? `($spendOrThrow(), ${c})` : c;
           }
         }
       }
@@ -1098,7 +1121,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const s = defCall(n);
           const c = `${s.name}(${argsOf(n, s).join(", ")})`;
           const v = s.bool ? `$bool(${c})` : c;
-          return info.divergent.has(f.target) ? `($spendOrThrow(), ${v})` : v;
+          return spends(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
       }
       return `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
@@ -1256,7 +1279,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const lam = node<"lambda">(d.body!);
         const fields = c.args.slice(0, last).map(ex);
         const args = argsOf(node<"call">(c.args[last]), sp);
-        const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
+        const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         let cell = inCell;
         const made = cell ? same(c.args[0], 0) ? "" : `${cell}.fields[0] = ${fields[0]};\n` : `const ${(cell = temp("cell"))} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n`;
         // A reused cell is usually still where the last one points.
@@ -1276,7 +1299,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         jumps = true;
         const lam = node<"lambda">(d.body!);
         const args = argsOf(n as NodeOf<"call">, sp);
-        const spend = info.divergent.has(sp.def) ? "$spendOrThrow();\n" : "";
+        const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         return `${spend}${lam.params.map((p, i) => `${local(p)}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
       return out.leaf(out.bool ? exBool(id) : ex(id));
@@ -1853,7 +1876,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = guarded(n.id, c, k);
         // Out of fuel: this call has no result, the others carry on.
-        return target && info.divergent.has(target) ? `if ($spend()) {\n${out}\n}` : out;
+        return target && spends(target) ? `if ($spend()) {\n${out}\n}` : out;
       });
     }
 
