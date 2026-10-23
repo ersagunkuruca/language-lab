@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E46 | CPU picture blocky (ray marcher 51×51 stretched to 306 px): sharpen while still; shorter no-GPU status | QA3 L3 | P3 | S | |
 | E47 | First view of a big `main` lopsided (left 40% empty, Fit pill and minimap over nodes); `colour₁` name clash in ray marcher; dice page "1 rolls" and resets on program switch | QA3 L4, L5, L6 | P3 | S | |
 
 ## C: Compiler and targets
@@ -89,6 +88,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E46 | CPU picture: still or paused (click) pictures redraw sharp at canvas size; one-line status | #296 |
 | E45 | Folded box names its calls; unfolding moves contents to the nearest clear place (tidy keeps a folded frame's space on purpose) | #295 |
 | E44 | Run main in a worker with Stop; Countdown's run keeps frames under 60 ms | #294 |
 | E43 | Palette arithmetic reads names in scope: x * 2 in double(x) | #292 |
