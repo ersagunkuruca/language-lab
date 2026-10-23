@@ -1169,6 +1169,15 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
   const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
+  // Rows that would read the same (show(□) for a Number, an Int, anything)
+  // say what each of their holes takes: show(□: Int).
+  const seen = new Map<string, number>();
+  for (const { l } of all) seen.set(l[0], (seen.get(l[0]) ?? 0) + 1);
+  for (const x of all) {
+    const t = x.f.kind === "call" ? info.subst.resolve(x.f.type) : null;
+    if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length)
+      x.l = [`${names[x.f.target] ?? x.f.target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`, x.l[1], x.l[2]];
+  }
   // Searching: names that are the text, then start with it, then have a
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
