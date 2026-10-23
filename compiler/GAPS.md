@@ -527,6 +527,12 @@ ideal counts as it cuts. `slug` is worse on paper, with `characters`, `map`,
 *Fix:* builder/consumer fusion (`projectional/NUMBERS.md`, after its
 table of fold rows), now with a measured case. `length ∘ keep` and `join all ∘ map`
 are the first two to do.
+*DONE for chains of known steps:* COMPILER.md, "Folds are loops". `words`
+and `slug`'s `joinAll(map(characters …))` are now one loop each, with no
+list. chapters, 3000 chapters, 21 runs: 550 → 200 ms (the ideal: 86 ms),
+mostly garbage the lists no longer make; at 1000 chapters it's 67 → 59 ms
+(the ideal: 19). Not yet: `slug`'s second chain starts from a `let`
+(`parts`), and the test lambda is still called rather than inlined (G3).
 
 **G3 again. A test passed to `keep` returns a Bool object (perf: 51 →
 46.5 ms).** `keep(parts, p => p ≠ "")` compiles the lambda to `p =>

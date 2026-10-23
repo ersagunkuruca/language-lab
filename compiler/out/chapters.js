@@ -54,28 +54,28 @@ function split_book(path2, folder2) {
 // sections
 function sections(lines) {
   const top = (() => {
-      const step$3 = (s$4, rs$5) => {
-        switch (s$4.tag) {
+      const step$5 = (s$6, rs$7) => {
+        switch (s$6.tag) {
           case "std.list.nil" /* nil */: {
             return $k0;
           }
           case "std.list.cons" /* cons */: {
-            const line = s$4.fields[0];
-            const after = rs$5;
-            const s$6 = (() => {
-                let got$7 = $no;
+            const line = s$6.fields[0];
+            const after = rs$7;
+            const s$8 = (() => {
+                let got$9 = $no;
                 (() => {
-                    const r$8 = heading(line);
-                    if (r$8 !== $no) {
-                      got$7 = r$8;
+                    const r$10 = heading(line);
+                    if (r$10 !== $no) {
+                      got$9 = r$10;
                       return true;
                     }
                   })();
-                return got$7 !== $no ? { tag: "std.optional.some" /* some */, fields: [got$7] } : { tag: "std.optional.none" /* none */, fields: [] };
+                return got$9 !== $no ? { tag: "std.optional.some" /* some */, fields: [got$9] } : { tag: "std.optional.none" /* none */, fields: [] };
               })();
-            switch (s$6.tag) {
+            switch (s$8.tag) {
               case "std.optional.some" /* some */: {
-                const title = s$6.fields[0];
+                const title = s$8.fields[0];
                 return ({ tag: "r3tkmnarf64tumeu6n5m065kik" /* pile */, fields: [$nil, $cons(({ tag: "0mc116a0nj9n5g7uosr74es0sq" /* section */, fields: [title, after.fields[0]] }), after.fields[1])] });
               }
               case "std.optional.none" /* none */: {
@@ -85,15 +85,15 @@ function sections(lines) {
           }
         }
       };
-      const spine$11 = [];
-      let v$9 = lines;
-      for (let k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1; k$13 >= 0; k$13 = v$9.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-        spine$11.push(v$9);
-        v$9 = v$9.fields[k$13];
+      const spine$13 = [];
+      let v$11 = lines;
+      for (let k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1; k$15 >= 0; k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+        spine$13.push(v$11);
+        v$11 = v$11.fields[k$15];
       }
-      let r$10 = step$3(v$9);
-      for (let i$12 = spine$11.length - 1; i$12 >= 0; i$12--) r$10 = step$3(spine$11[i$12], r$10);
-      return r$10;
+      let r$12 = step$5(v$11);
+      for (let i$14 = spine$13.length - 1; i$14 >= 0; i$14--) r$12 = step$5(spine$13[i$14], r$12);
+      return r$12;
     })();
   if ((0 < words_in(top.fields[0]))) {
     return $cons(({ tag: "0mc116a0nj9n5g7uosr74es0sq" /* section */, fields: ["Preface", top.fields[0]] }), top.fields[1]);
@@ -103,14 +103,14 @@ function sections(lines) {
 
 // number
 function number(sections2, n, taken) {
-  const s$14 = sections2;
-  switch (s$14.tag) {
+  const s$17 = sections2;
+  switch (s$17.tag) {
     case "std.list.nil" /* nil */: {
       return $nil;
     }
     case "std.list.cons" /* cons */: {
-      const section = s$14.fields[0];
-      const rest2 = s$14.fields[1];
+      const section = s$17.fields[0];
+      const rest2 = s$17.fields[1];
       const name = slug(section.fields[0]);
       return $cons(({ tag: "t9iqhjdous3r5gfajeltfunt5g" /* chapter */, fields: [n, section.fields[0], (((two_digits(n) + "-") + unique(name, taken)) + ".md"), words_in(section.fields[1]), text_of(section)] }), number(rest2, $int.add(n, 1), $cons(name, taken)));
     }
@@ -121,14 +121,14 @@ function number(sections2, n, taken) {
 function for_each(list$in, action$in) {
   for (;;) {
     const list = list$in, action = action$in;
-    const s$15 = list;
-    switch (s$15.tag) {
+    const s$19 = list;
+    switch (s$19.tag) {
       case "std.list.nil" /* nil */: {
         return $unit;
       }
       case "std.list.cons" /* cons */: {
-        const item = s$15.fields[0];
-        const rest3 = s$15.fields[1];
+        const item = s$19.fields[0];
+        const rest3 = s$19.fields[1];
         action(item);
         list$in = rest3;
         action$in = action;
@@ -140,28 +140,40 @@ function for_each(list$in, action$in) {
 
 // contents
 function contents(chapters2) {
-  return (("# Contents\n\n" + $impl["builtin.text.joinAll"](map(chapters2, entry), "\n")) + "\n");
+  return (("# Contents\n\n" + (() => {
+          const change = entry;
+          const by$21 = "\n";
+          const parts$20 = [];
+          for (let l$23 = chapters2; l$23.tag === "std.list.cons"; l$23 = l$23.fields[1]) {
+            const x$22 = l$23.fields[0];
+            {
+              const item2 = x$22;
+              parts$20.push(change(item2));
+            }
+          }
+          return parts$20.join(by$21);
+        })()) + "\n");
 }
 
 // length
 function length(list2) {
-  let acc$21 = 0;
-  let l$22 = list2;
-  for (; l$22.tag === "std.list.cons" /* cons */; l$22 = l$22.fields[1]) {
-    acc$21 = $int.add(1, acc$21);
+  let acc$29 = 0;
+  let l$30 = list2;
+  for (; l$30.tag === "std.list.cons" /* cons */; l$30 = l$30.fields[1]) {
+    acc$29 = $int.add(1, acc$29);
   }
-  return acc$21;
+  return acc$29;
 }
 
 // total words
 function total_words(chapters3) {
-  let acc$28 = 0;
-  let l$29 = chapters3;
-  for (; l$29.tag === "std.list.cons" /* cons */; l$29 = l$29.fields[1]) {
-    const chapter2 = l$29.fields[0];
-    acc$28 = $int.add(chapter2.fields[3], acc$28);
+  let acc$36 = 0;
+  let l$37 = chapters3;
+  for (; l$37.tag === "std.list.cons" /* cons */; l$37 = l$37.fields[1]) {
+    const chapter2 = l$37.fields[0];
+    acc$36 = $int.add(chapter2.fields[3], acc$36);
   }
-  return acc$28;
+  return acc$36;
 }
 
 // write chapter
@@ -172,13 +184,13 @@ function write_chapter(folder3, chapter3) {
 
 // words in
 function words_in(lines2) {
-  let acc$35 = 0;
-  let l$36 = lines2;
-  for (; l$36.tag === "std.list.cons" /* cons */; l$36 = l$36.fields[1]) {
-    const line2 = l$36.fields[0];
-    acc$35 = $int.add(words(line2), acc$35);
+  let acc$43 = 0;
+  let l$44 = lines2;
+  for (; l$44.tag === "std.list.cons" /* cons */; l$44 = l$44.fields[1]) {
+    const line2 = l$44.fields[0];
+    acc$43 = $int.add(words(line2), acc$43);
   }
-  return acc$35;
+  return acc$43;
 }
 
 // heading
@@ -194,8 +206,35 @@ function heading(line3) {
 
 // slug
 function slug(title2) {
-  const parts = $impl["builtin.text.split"]($impl["builtin.text.joinAll"](map($impl["builtin.text.characters"](title2), slug_character), ""), "-");
-  const name2 = $impl["builtin.text.joinAll"](keep$plain(parts, ((p) => $bool(!(p === "")))), "-");
+  const parts = $impl["builtin.text.split"]((() => {
+        const change = slug_character;
+        const by$46 = "";
+        const parts$45 = [];
+        for (const x$47 of $text.characters(title2)) {
+          {
+            const item2 = x$47;
+            parts$45.push(change(item2));
+          }
+        }
+        return parts$45.join(by$46);
+      })(), "-");
+  const name2 = (() => {
+      const test = ((p) => $bool(!(p === "")));
+      const by$49 = "-";
+      const parts$48 = [];
+      for (let l$51 = parts; l$51.tag === "std.list.cons"; l$51 = l$51.fields[1]) {
+        const x$50 = l$51.fields[0];
+        {
+          const item3 = x$50;
+          if ((test(item3).tag === "std.bool.true")) {
+            parts$48.push(item3);
+          } else {
+            /* fail */
+          }
+        }
+      }
+      return parts$48.join(by$49);
+    })();
   if ((name2 === "")) {
     return "section";
   }
@@ -224,21 +263,6 @@ function text_of(section2) {
   return (((("# " + section2.fields[0]) + "\n") + $impl["builtin.text.joinAll"](section2.fields[1], "\n")) + "\n");
 }
 
-// map
-function map(list3, change) {
-  const s$37 = list3;
-  switch (s$37.tag) {
-    case "std.list.nil" /* nil */: {
-      return $nil;
-    }
-    case "std.list.cons" /* cons */: {
-      const item2 = s$37.fields[0];
-      const rest6 = s$37.fields[1];
-      return $cons(change(item2), map(rest6, change));
-    }
-  }
-}
-
 // entry
 function entry(chapter4) {
   return (((((((String(chapter4.fields[0]) + ". [") + chapter4.fields[1]) + "](") + chapter4.fields[2]) + ") — ") + String(chapter4.fields[3])) + ((chapter4.fields[3] === 1) ? " word" : " words"));
@@ -246,25 +270,20 @@ function entry(chapter4) {
 
 // words
 function words(line4) {
-  return length(keep$plain($impl["builtin.text.split"](line4, " "), ((w) => $bool(!(w === "")))));
-}
-
-// keep
-function keep$plain(list4, test) {
   return (() => {
-      const got$38 = [];
-      (() => {
-          for (let l$39 = list4; l$39.tag === "std.list.cons"; l$39 = l$39.fields[1]) {
-            const x$40 = l$39.fields[0];
-            const item3 = x$40;
-            if ((test(item3).tag === "std.bool.true")) {
-              got$38.push(item3);
-            } else {
-              /* fail */
-            }
+      const test = ((w) => $bool(!(w === "")));
+      let acc$57 = 0;
+      for (const x$58 of $text.split(line4, " ")) {
+        {
+          const item3 = x$58;
+          if ((test(item3).tag === "std.bool.true")) {
+            acc$57 = $int.add(1, acc$57);
+          } else {
+            /* fail */
           }
-        })();
-      return $toList(got$38);
+        }
+      }
+      return acc$57;
     })();
 }
 
@@ -278,30 +297,30 @@ function slug_character(c) {
 
 // times in
 function times_in(x, list5) {
-  let acc$46 = 0;
-  let l$47 = list5;
-  for (; l$47.tag === "std.list.cons" /* cons */; l$47 = l$47.fields[1]) {
-    const y = l$47.fields[0];
-    acc$46 = ((x === y) ? $int.add(1, acc$46) : acc$46);
+  let acc$67 = 0;
+  let l$68 = list5;
+  for (; l$68.tag === "std.list.cons" /* cons */; l$68 = l$68.fields[1]) {
+    const y = l$68.fields[0];
+    acc$67 = ((x === y) ? $int.add(1, acc$67) : acc$67);
   }
-  return acc$46;
+  return acc$67;
 }
 
 // lower
 function lower(c2) {
   if ((!(c2 < "A") && !("Z" < c2))) {
     return (() => {
-        let got$48 = $no;
+        let got$69 = $no;
         (() => {
-            for (const r$49 of $many["builtin.text.code"](c2)) {
-              const t$50 = $int.add(r$49, 32);
-              for (const r$51 of $many["builtin.text.fromCode"](t$50)) {
-                got$48 = r$51;
+            for (const r$70 of $many["builtin.text.code"](c2)) {
+              const t$71 = $int.add(r$70, 32);
+              for (const r$72 of $many["builtin.text.fromCode"](t$71)) {
+                got$69 = r$72;
                 return true;
               }
             }
           })();
-        if (got$48 !== $no) return got$48;
+        if (got$69 !== $no) return got$69;
         return c2;
       })();
   }
