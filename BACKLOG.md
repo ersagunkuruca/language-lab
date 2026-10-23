@@ -68,7 +68,6 @@ since 2026-10-23. Plan and measurements: projectional/TESTING.md.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T2 | `npm run affected`: run only the tests a change reaches (import graph, plus `EXAMPLES=` for the example sweeps); CI and threads before pushing | TESTING.md T2 | P1 | M | |
 | T5 | Nightly full run when main changed: every test and sweep in full, every definition in the smoke, the GPU check; green moves the `good` tag, red is a P0 | TESTING.md T5 | P1 | S | |
 | T6 | Testing rules against the paradigm pin in WORKFLOW.md; read the three tests that mention `cons` against them | TESTING.md T6 | P2 | S | |
 
@@ -185,7 +184,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| T3 | The four slowest test files check a rotating eighth of their sweep per run (`SWEEP=all` for everything, `SWEEP_AT` picks the eighth; Check main passes its run number): about 330 s → 60 s; lang.test.ts no longer repeats palette.test.ts's queens sweep | this PR |
+| T2 | `npm run affected` runs only the tests a change reaches: the import graph across the three packages, the test files that read a changed example, the browser tests when the pages could change; Check main runs it from its last green commit. Over the last 40 merges: 6 needed nothing, 5 nearly every unit test, the rest a few files; the browser tests (now the long pole, T4) for 31 | this PR |
+| T3 | The four slowest test files check a rotating eighth of their sweep per run (`SWEEP=all` for everything, `SWEEP_AT` picks the eighth; Check main passes its run number): about 330 s → 60 s; lang.test.ts no longer repeats palette.test.ts's queens sweep | #264 |
 | T1 | Deploy first: a merge is live in about 2 minutes (86 s for #262); the suites run beside it in "Check main" and report instead of blocking | #261 |
 | P4 | CI on a pull request is only the type check (under a minute); unit and browser tests run once per merge before the deploy | #187 |
 

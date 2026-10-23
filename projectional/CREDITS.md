@@ -202,6 +202,13 @@ not only code: an influence is credited even when nothing was copied.
 | Known visual-programming pitfalls | Influence | M. Burnett et al., "Scaling Up Visual Programming Languages", IEEE Computer, 1995, and the sources in NODE-EDITOR.md. |
 | Visual design (Design E, neutral colours) | Our own | Designed in the project. Fonts: Red Hat Display and DM Mono (SIL Open Font License, via Google Fonts). |
 
+## Testing
+
+| What | Label | Credit |
+|---|---|---|
+| `npm run affected`: run the tests whose imports reach a change | Prior art | Google's TAP runs the test targets that depend on the changed files: A. Memon et al., "Taming Google-Scale Continuous Testing", ICSE-SEIP 2017. Regression test selection is an old field; see also Ekstazi (M. Gligoric et al., ISSTA 2015). Credited in `test/affected.ts`. |
+| A slice of each sweep per run, all of it at other times | Prior art | Close to Facebook's predictive test selection, which runs a learned subset of the affected tests per change (M. Machalica et al., ICSE-SEIP 2019); ours is a fixed rotating slice, with no learning. |
+
 ## Example programs
 
 | Example | Label | Who and where |
