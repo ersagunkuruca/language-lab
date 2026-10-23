@@ -977,7 +977,32 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     function equality(n: NodeOf<"call">): string {
+      // A name against a value built in place (`t = word("let")`): a tag
+      // test and its fields, with nothing built (GAPS.md G2).
+      for (const [a, b] of [[0, 1], [1, 0]]) {
+        const x = code.nodes[n.args[a]];
+        if (x.kind !== "ref" || code.nodes[x.target]?.kind !== "binder" || !shaped(n.args[b])) continue;
+        const v = ex(n.args[a]);
+        if (/^[\p{L}\p{N}_$]+$/u.test(v)) return sameShape(v, n.args[b]);
+      }
       return equalJs(n.args[0], n.args.map(ex));
+    }
+    // A variant (not a list's, Bool's or an effect's) with fields that are
+    // literals, names, or such values again.
+    function builtAt(id: Id): { variant: Id; args: Id[] } | null {
+      const n = code.nodes[id];
+      const v = n.kind === "ref" ? n.target : n.kind === "call" && code.nodes[n.fn].kind === "ref" ? node<"ref">(n.fn).target : null;
+      if (!v || code.nodes[v]?.kind !== "variant" || [CONS, NIL, TRUE, FALSE, UNIT_V].includes(v) || effectOf(v)) return null;
+      const args = n.kind === "call" ? n.args : [];
+      return args.length === node<"variant">(v).fields.length ? { variant: v, args } : null;
+    }
+    function shaped(id: Id): boolean {
+      const b = builtAt(id);
+      return !!b && b.args.every((f) => { const x = code.nodes[f]; return x.kind === "lit" || (x.kind === "ref" && code.nodes[x.target]?.kind === "binder") || shaped(f); });
+    }
+    function sameShape(v: string, id: Id): string {
+      const { variant, args } = builtAt(id)!;
+      return `(${[`${v}.tag === ${tag(variant)}`, ...args.map((f, i) => (builtAt(f) ? sameShape(`${v}.fields[${i}]`, f) : equalJs(f, [`${v}.fields[${i}]`, ex(f)])))].join(" && ")})`;
     }
 
     function refValue(n: NodeOf<"ref">): string {

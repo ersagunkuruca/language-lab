@@ -2,9 +2,7 @@
 import { $no, $stream0, $showAny, $int, $text, $impl, $many, $partial, $setPath, $T, $F, $unit, $nil, $cons, $bool, $toList, $snoc, $fromBack, $range, $eq, $show, $mod, $mapParts, $zipParts, $total, $first, $firstS, $all, $count, $oneOf, $fail, $lift, $one, $hole, $fuel, $enter, $caught, $leave, $spend, $spendOrThrow, $outOfFuel, $ok, $clean, $key, $close, $near, $sameNumber, $planned, $solveRuntime, $print, $FN, $perform, $handle, $handleS, $io, $seeded, $seededS, $optional, $cells, $listArrays, $spread, $self, $foldNested } from "../src/runtime.js";
 
 const $k0 = ({ tag: "sp3nhthm2f80ipu3diun4hkjbs" /* session */, fields: [$nil, 0] });
-const $k1 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: ["let"] });
-const $k2 = ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: ["?"] });
-const $k3 = { tag: "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */, fields: [] };
+const $k1 = { tag: "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */, fields: [] };
 
 // main
 function main() {
@@ -75,7 +73,7 @@ function run_line(line2, bindings2) {
     case "std.list.cons" /* cons */: {
       const t = s$5.fields[0];
       const more = s$5.fields[1];
-      if ($eq(t, $k1)) {
+      if ((t.tag === "sob4uovkjgvtl08hmomq2g7s9j" /* word */ && (t.fields[0] === "let"))) {
         const s$6 = more;
         switch (s$6.tag) {
           case "std.list.cons" /* cons */: {
@@ -99,7 +97,7 @@ function run_line(line2, bindings2) {
           }
         }
       }
-      if ($eq(t, $k2)) {
+      if ((t.tag === "heiprc4fnbobd3nei81ji3c5lj" /* symbol */ && (t.fields[0] === "?"))) {
         $print(parenthesized(whole_expression(more)));
         return bindings2;
       }
@@ -117,7 +115,7 @@ function tokens(line3) {
         };
         const cons$10 = (c, after2) => {
           if (blank(c)) {
-            return $cons($k3, after2);
+            return $cons($k1, after2);
           }
           if (digit(c)) {
             const s$12 = after2;
@@ -189,7 +187,7 @@ function tokens(line3) {
           r$11 = cons$10(t$20.slice(j$21, i$19), r$11);
         }
         return r$11;
-      })(), ((t2) => $bool(!$eq(t2, $k3))));
+      })(), ((t2) => $bool(!(t2.tag === "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */))));
 }
 
 // expect
@@ -199,7 +197,7 @@ function expect(mark, tokens2) {
     case "std.list.cons" /* cons */: {
       const t3 = s$22.fields[0];
       const more4 = s$22.fields[1];
-      if ($eq(t3, ({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [mark] }))) {
+      if ((t3.tag === "heiprc4fnbobd3nei81ji3c5lj" /* symbol */ && (t3.fields[0] === mark))) {
         return more4;
       }
       return $perform("std.abort", "std.abort.abort" /* abort */, [((("expected “" + mark) + "”, got ") + describe(tokens2))]);

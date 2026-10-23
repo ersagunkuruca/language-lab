@@ -267,7 +267,7 @@ function simplify(expression3) {
                 }
               }
             }
-            return ($eq(l4, $k20) ? r4 : ($eq(r4, $k20) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
+            return ((l4.tag === "6bce4e58" /* number */ && $sameNumber(l4.fields[0], 0)) ? r4 : ((r4.tag === "6bce4e58" /* number */ && $sameNumber(r4.fields[0], 0)) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
           })();
       }
       case "f2da4c50" /* difference */: {
@@ -299,7 +299,7 @@ function simplify(expression3) {
                 }
               }
             }
-            return ($eq(r5, $k20) ? l5 : ($eq(l5, $k20) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
+            return ((r5.tag === "6bce4e58" /* number */ && $sameNumber(r5.fields[0], 0)) ? l5 : ((l5.tag === "6bce4e58" /* number */ && $sameNumber(l5.fields[0], 0)) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
           })();
       }
       case "24d4c71f" /* product */: {
@@ -331,7 +331,7 @@ function simplify(expression3) {
                 }
               }
             }
-            return (($eq(l6, $k20) || $eq(r6, $k20)) ? $k20 : ($eq(l6, $k8) ? r6 : ($eq(r6, $k8) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
+            return (((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 0)) || (r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 0))) ? $k20 : ((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 1)) ? r6 : ((r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 1)) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
           })();
       }
       case "af14d535" /* negative */: {
@@ -376,7 +376,7 @@ function simplify(expression3) {
       case "563662e0" /* quotient */: {
         const t2 = rs$26[0];
         const b2 = rs$26[1];
-        if ($eq(b2, $k8)) {
+        if ((b2.tag === "6bce4e58" /* number */ && $sameNumber(b2.fields[0], 1))) {
           return t2;
         }
         return ({ tag: "563662e0" /* quotient */, fields: [t2, b2] });
