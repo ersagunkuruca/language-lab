@@ -15,6 +15,14 @@
 // read by its fields or by a match with one arm. WebAssembly has them as
 // WasmGC structs (wasm.ts).
 //
+// With `data` (WebAssembly only, which has a garbage collector), the
+// profile also takes data types with several cases and types that
+// contain themselves: lists, expression trees, Optional. They're built by
+// their cases, taken apart by a match or by their fields, and their values
+// live on the heap (DType). Something that may not finish is allowed too,
+// as in the JS backend, since a module that loops is a program that
+// loops, not a hung GPU; a budget still counts the same way.
+//
 // The lowering is to a tiny expression tree with numbered locals. A
 // definition outside the profile is refused with the reason, the way a
 // type error is reported, so "can this run on the GPU / in WASM" is a
@@ -54,7 +62,15 @@ const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fue
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
 export interface RType { key: string; name: string; def: Id; variant: Id; fields: { name: string; t: LType }[] }
-export type LType = SType | RType;
+// A data type with several cases, or one that contains itself (`data`).
+// A case's fields are in the order written.
+export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[] }
+export type LType = SType | RType | DType;
+export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
+export const isRecord = (t: LType): t is RType => typeof t === "object" && !("cases" in t);
+// For a printer of a target without a heap (WGSL, the JS fallback for
+// shaders), which is never given data.
+export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a heap: lower without \`data\``); };
 
 export type SExpr =
   | { k: "num"; v: number }
@@ -66,6 +82,13 @@ export type SExpr =
   | { k: "call"; fn: number; args: SExpr[]; tail: boolean }
   | { k: "make"; t: RType; args: SExpr[] }
   | { k: "get"; rec: SExpr; t: RType; i: number }
+  // A value of case c of t, and field i of one (it is that case: the
+  // checker says so, or the match just looked).
+  | { k: "new"; t: DType; c: number; args: SExpr[] }
+  | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
+  // A match on t: scrut goes into local s, then the arm for its case
+  // runs (null: no arm, which the checker rules out).
+  | { k: "case"; scrut: SExpr; s: number; t: DType; arms: (SExpr | null)[]; result: LType }
   // first(() => with fuel(n, () => body), () => otherwise): body with n
   // calls to spend, or otherwise if it ran out. `save` is a Number local
   // for the budget around this one, `res` one for body's value.
@@ -86,11 +109,12 @@ export const OPS = {
 
 // `spends`: each call spends one from the budget (the checker couldn't see
 // it end). `budgeted`: its type has Diverge, so it may only be called under
-// a budget, never from outside.
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean }
+// a budget, never from outside. `inner`: made by the lowering (a fold
+// is a function of its own), so not something to call from outside either.
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; code: Code; info: Info }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; code: Code; info: Info }
 
 class Refused extends Error {}
 
@@ -99,7 +123,8 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean } = {}): Lowered {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean } = {}): Lowered {
+  if (opts.data) opts = { ...opts, records: true };
   // derivative(f) of a function written right there becomes the code of
   // its derivative (derive.ts), checked again, so the GPU gets exact
   // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
@@ -124,18 +149,24 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const zonk = (id: Id): Type => put(info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 }), at);
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
-  const OTHER = opts.records ? "something other than Number, Bool or a record of them" : "something other than Number or Bool";
+  const datas = new Map<string, DType>();
+  const OTHER = opts.data ? "something other than Number, Bool or data of them" : opts.records ? "something other than Number, Bool or a record of them" : "something other than Number or Bool";
 
   // The profile's type for t, or null if t isn't in it.
   function stype(t: Type, inside: Id[] = []): LType | null {
     if (t.t !== "con") return null;
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
-    if (!opts.records || inside.includes(t.id)) return null;
-    const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
-    if (td?.kind !== "typedef" || td.effect || td.variants.length !== 1) return null;
+    if (!opts.records) return null;
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
     if (records.has(key)) return records.get(key)!;
+    if (datas.has(key)) return datas.get(key)!;
+    if (inside.includes(t.id)) return null;
+    const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
+    if (td?.kind !== "typedef" || td.effect) return null;
+    const self = (v: Id) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type, t.id));
+    const many = td.variants.length !== 1 || self(td.variants[0]);
+    if (many && !opts.data) return null;
     // The fields' types, with the type's parameters replaced by t's arguments.
     const args = new Map(td.params.map((p, i) => [p, t.args[i]] as const));
     const te = (tid: Id): Type | null => {
@@ -145,15 +176,34 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const xs = n.args.map(te);
       return xs.every((x) => x) ? { t: "con", id: n.target, args: xs as Type[] } : null;
     };
-    const variant = code.nodes[td.variants[0]] as NodeOf<"variant">;
-    const fields: RType["fields"] = [];
-    for (const f of variant.fields) {
-      const ft = te((code.nodes[f] as NodeOf<"field">).type);
-      const lt = ft && stype(info.subst.zonk(ft), [...inside, t.id]);
-      if (!lt) return null;
-      fields.push({ name: nm(f), t: lt });
+    const fieldsOf = (v: Id): RType["fields"] | null => {
+      const fields: RType["fields"] = [];
+      for (const f of (code.nodes[v] as NodeOf<"variant">).fields) {
+        const ft = te((code.nodes[f] as NodeOf<"field">).type);
+        const lt = ft && stype(info.subst.zonk(ft), [...inside, t.id]);
+        if (!lt) return null;
+        fields.push({ name: nm(f), t: lt });
+      }
+      return fields;
+    };
+    if (many) {
+      // Registered first, so a field of the type itself finds it.
+      const d: DType = { key, name: nm(t.id), def: t.id, cases: [] };
+      const had = new Set([...datas.keys(), ...records.keys()]);
+      datas.set(key, d);
+      for (const v of td.variants) {
+        const fields = fieldsOf(v);
+        if (!fields) {
+          // Not in the profile, nor is anything made since that holds it.
+          for (const k of [...datas.keys(), ...records.keys()]) if (!had.has(k)) { datas.delete(k); records.delete(k); }
+          return null;
+        }
+        d.cases.push({ variant: v, name: nm(v), fields });
+      }
+      return d;
     }
-    if (!fields.length) return null;
+    const fields = fieldsOf(td.variants[0]);
+    if (!fields || (!fields.length && !opts.data)) return null;
     const r: RType = { key, name: nm(t.id), def: t.id, variant: td.variants[0], fields };
     records.set(key, r);
     return r;
@@ -163,13 +213,22 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.t === "fn") return "a function (that needs closures)";
     if (t.t === "var") return "a value of any type";
     const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
-    if (inside.includes(t.id)) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     if (td?.kind !== "typedef" || td.effect) return nm(t.id);
+    if (opts.data) {
+      const arg = t.args.find((a) => !stype(a));
+      return arg ? `${nm(t.id)} of ${whyNot(arg, [...inside, t.id])}` : `${nm(t.id)}, which has a field that isn't a Number, Bool or data of them`;
+    }
+    if (inside.includes(t.id)) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     if (td.variants.length !== 1) return `${nm(t.id)}, which has ${td.variants.length} cases (only one-case records fit)`;
     const ft = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => code.nodes[(code.nodes[f] as NodeOf<"field">).type]);
     if (ft.some((n) => n?.kind === "tref" && (n.target === t.id || inside.includes(n.target)))) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     return `${nm(t.id)}, which has a field that isn't a Number, Bool or record`;
   }
+  // Whether a type written in the program mentions `target`.
+  const mentions = (tid: Id, target: Id): boolean => {
+    const n = code.nodes[tid];
+    return n?.kind === "tref" && (n.target === target || n.args.some((a) => mentions(a, target)));
+  };
   const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret)]);
   const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : "fn");
 
@@ -188,7 +247,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function func(def: Id, types = new Map<number, Type>()): number {
     const raw = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
     const t = raw && put(raw, types);
-    if (!underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
+    if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
     const key = used.length ? `${def}|${used.map((v) => `${v}=${show(types.get(v)!)}`).join(",")}` : def;
     if (index.has(key)) return index.get(key)!;
@@ -209,7 +268,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     const effs = info.subst.resolveRow(ft.eff).effs.filter((e) => !BUDGETED.includes(e));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
-    const budgeted = diverges(ft);
+    const budgeted = !opts.data && diverges(ft);
 
     // Reserve the index now, so recursion finds it.
     const i = funcs.length;
@@ -249,6 +308,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "ref": {
         if (n.target === TRUE || n.target === FALSE) return { k: "bool", v: n.target === TRUE };
         if (env.has(n.target)) return { k: "local", i: env.get(n.target)! };
+        const later = inlined.get(n.target);
+        if (later) return { ...later, tail };
+        // A case with no fields (empty, nothing) written alone.
+        if (opts.data && code.nodes[n.target]?.kind === "variant") return build(n.target, zonk(id), []);
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
@@ -273,7 +336,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const target = head.target;
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
-          if (t !== "f64" && t !== "i32") throw new Refused("compares values that aren't Numbers or Bools");
+          if (t !== "f64" && t !== "i32") throw new Refused(opts.data ? "compares data (structural equal isn't in WebAssembly yet)" : "compares values that aren't Numbers or Bools");
           if (t === "i32") return { k: "op", op: "beq", args: args() };
           // The evaluator's rule (run.ts sameNumber): two whole numbers
           // exactly, any other pair within 1e-9 relative to their size.
@@ -312,15 +375,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           });
           return { k: "call", fn, args: args(), tail };
         }
-        if (opts.records && t?.kind === "variant") {
-          // A record built by its case.
-          const r = stype(zonk(id));
-          if (!r || typeof r === "string" || r.variant !== target) throw new Refused(`builds ${nm(target)}, which isn't a record of Numbers and Bools`);
-          return { k: "make", t: r, args: args() };
-        }
+        if (opts.records && t?.kind === "variant") return build(target, zonk(id), args());
         if (opts.records && t?.kind === "field" && n.args.length === 1) {
           const r = stype(zonk(n.args[0]));
-          if (!r || typeof r === "string") throw new Refused(`takes ${nm(target)} of something that isn't a record of Numbers and Bools`);
+          if (r && isData(r)) {
+            const c = r.cases.findIndex((x) => (code.nodes[x.variant] as NodeOf<"variant">).fields.includes(target));
+            return { k: "field", rec: expr(n.args[0], env, f, false), t: r, c, i: fieldIndex(code, target) };
+          }
+          if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Numbers and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
         const why = TARGETS[target]?.scalar;
@@ -329,7 +391,26 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
         const st = opts.records ? stype(zonk(n.scrutinee)) : null;
-        if (st && typeof st !== "string" && arms.length === 1 && arms[0].variant === st.variant) {
+        if (st && isData(st)) {
+          // Each case's arm, its fields as lets read from the scrutinee's local.
+          const s = f.locals.push(st) - 1;
+          const result = stype(zonk(id));
+          if (!result) throw new Refused(`has a match whose value is ${OTHER}`);
+          const arms2 = st.cases.map((c, ci): SExpr | null => {
+            const a = arms.find((x) => x.variant === c.variant);
+            if (!a) return n.otherwise ? expr(n.otherwise, env, f, tail) : null;
+            let inner = new Map(env);
+            const lets: { i: number; value: SExpr }[] = [];
+            a.binds.forEach((b, j) => {
+              const i = f.locals.push(c.fields[j].t) - 1;
+              inner = new Map(inner).set(b, i);
+              lets.push({ i, value: { k: "field", rec: { k: "local", i: s }, t: st, c: ci, i: j } });
+            });
+            return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, f, tail));
+          });
+          return { k: "case", scrut: expr(n.scrutinee, env, f, false), s, t: st, arms: arms2, result };
+        }
+        if (st && isRecord(st) && arms.length === 1 && arms[0].variant === st.variant) {
           // Taking a record apart: its fields are lets.
           const r = f.locals.push(st) - 1;
           let inner = new Map(env);
@@ -349,11 +430,82 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (!t) throw new Refused(`has an if whose value is ${OTHER}`);
         return { k: "if", cond: expr(n.scrutinee, env, f, false), then: expr(arm(TRUE), env, f, tail), else: expr(arm(FALSE), env, f, tail), t };
       }
-      case "fold": throw new Refused("folds over data (needs a heap)");
+      case "fold": {
+        if (!opts.data) throw new Refused("folds over data (needs a heap)");
+        return fold(n, id, env, f, tail);
+      }
       case "solve": throw new Refused("solves a relation (not in this profile yet)");
       case "hole": throw new Refused("has a hole");
       default: throw new Refused(`has a ${n.kind}`);
     }
+  }
+
+  // A fold's result binder used once, by the call that computes it.
+  const inlined = new Map<Id, Extract<SExpr, { k: "call" }>>();
+  // A fold is a recursive function of its own: the value folded is its
+  // first input, then the locals its arms use from around it. Each arm
+  // calls it on the fields of the type itself, before its body, which
+  // gets those results (structural recursion, as written).
+  function fold(n: NodeOf<"fold">, id: Id, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const st = stype(zonk(n.scrutinee)), result = stype(zonk(id));
+    if (!st || !isData(st)) throw new Refused(`folds over ${st ? "a record (a match takes it apart)" : OTHER}`);
+    if (!result) throw new Refused(`has a fold whose value is ${OTHER}`);
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
+    const params = [st, ...free.map((b) => f.locals[env.get(b)!])];
+    const g: SFunc = { def: id, name: `${f.name}.fold`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    const captured: SExpr[] = free.map((_, j) => ({ k: "local", i: j + 1 }));
+    const genv = new Map(free.map((b, j) => [b, j + 1]));
+    const scrut: SExpr = { k: "local", i: 0 };
+    const bodies = st.cases.map((c, ci): SExpr | null => {
+      const a = arms.find((x) => x.variant === c.variant);
+      if (!a) return null;
+      let inner = new Map(genv);
+      const lets: { i: number; value: SExpr }[] = [];
+      const bind = (b: Id, t: LType, value: SExpr) => { const i = g.locals.push(t) - 1; inner = new Map(inner).set(b, i); lets.push({ i, value }); };
+      a.binds.forEach((b, j) => bind(b, c.fields[j].t, { k: "field", rec: scrut, t: st, c: ci, i: j }));
+      a.results.forEach((r, j) => {
+        if (!r) return;
+        if (c.fields[j].t !== st) throw new Refused("folds over data inside other data (a nested fold isn't in WebAssembly yet)");
+        const call: Extract<SExpr, { k: "call" }> = { k: "call", fn: gi, args: [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured], tail: false };
+        // A result used once is computed where it's used, so an arm that
+        // doesn't need it (insert, once it found the place) stops there.
+        // Outside a budget nothing can tell; under one, the evaluator's
+        // order is kept, so the count is the same.
+        // (Not from inside a fold in the arm: that's a function of its own.)
+        const uses = refsIn(a.body).filter((x) => x === r).length;
+        if (!underBudget && uses <= 1 && refsIn(a.body, false).filter((x) => x === r).length === uses) inlined.set(r, call);
+        else bind(r, result, call);
+      });
+      return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
+    });
+    g.body = { k: "case", scrut, s: 0, t: st, arms: bodies, result };
+    return { k: "call", fn: gi, args: [expr(n.scrutinee, env, f, false), ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail };
+  }
+  // The binders a piece of the program refers to (inside its folds too, or not).
+  function refsIn(id: Id, folds = true): Id[] {
+    const n = code.nodes[id], all = (ids: Id[]) => ids.flatMap((x) => refsIn(x, folds));
+    switch (n?.kind) {
+      case "ref": return [n.target];
+      case "call": return all([n.fn, ...n.args]);
+      case "lambda": case "arm": return all([n.body]);
+      case "match": return all([n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])]);
+      case "fold": return all(folds ? [n.scrutinee, ...n.arms] : [n.scrutinee]);
+      case "solve": return all([...Object.values(n.given), n.body]);
+      default: return [];
+    }
+  }
+
+  // A value of `variant` at type t, from its fields' values.
+  function build(variant: Id, t: Type, args: SExpr[]): SExpr {
+    const r = stype(t);
+    if (r && isData(r)) {
+      const c = r.cases.findIndex((x) => x.variant === variant);
+      if (c >= 0) return { k: "new", t: r, c, args };
+    }
+    if (r && isRecord(r) && r.variant === variant) return { k: "make", t: r, args };
+    throw new Refused(`builds ${nm(variant)}, which isn't ${opts.data ? "data" : "a record"} of Numbers and Bools`);
   }
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing
@@ -395,7 +547,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const recs = target === S.total ? n.args : n.args.slice(1);
     const t = stype(zonk(recs[0]));
-    if (t !== "f64" && (!t || typeof t === "string" || t.fields.some((x) => x.t !== "f64"))) throw new Refused(`takes the parts of something that isn't a record of Numbers`);
+    if (t !== "f64" && (!t || !isRecord(t) || t.fields.some((x) => x.t !== "f64"))) throw new Refused(`takes the parts of something that isn't a record of Numbers`);
     const lets: { i: number; value: SExpr }[] = [];
     const partsOf = (id: Id): SExpr[] => {
       const e = expr(id, env, f, false);
@@ -434,5 +586,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], code, info };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], code, info };
 }

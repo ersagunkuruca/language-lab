@@ -12,15 +12,21 @@
 // A record (lowered with `records`) is a WasmGC struct with immutable
 // fields, one struct type per record type, and a value of it is a
 // reference to one: built by `struct.new`, read by `struct.get`
-// (projectional/WASM.md, stage W1). Records hold Numbers, Bools and
-// records, never themselves, so their types need no recursion group.
+// (projectional/WASM.md, stage W1).
+//
+// Data with several cases (lowered with `data`: lists, expression trees)
+// is a base struct holding the case's number as an i32, and one subtype
+// of it per case, which adds the case's fields. A match puts the value in
+// a local and jumps on the number with `br_table`; reading a field casts
+// to the case first. Since such types may contain themselves, all the
+// structs are written as one recursion group.
 //
 // No dependencies: the binary format is small enough to write directly
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
-import { OPS, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { isData, isRecord, OPS, type DType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType, number> = { f64: 0x7c, i32: 0x7f };
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
@@ -51,7 +57,7 @@ export function emitWasm(lowered: Lowered): Module {
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (typeof t === "string" ? (t === "f64" ? "Number" : "Bool") : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : t.name)).join(", ")})`;
   };
 
   // ---- binary
@@ -65,44 +71,81 @@ export function emitWasm(lowered: Lowered): Module {
   const section = (id: number, body: number[]) => [id, ...u(body.length), ...body];
   const f64 = (v: number) => [...new Uint8Array(new Float64Array([v]).buffer)];
 
-  // Types: the records' structs first, each after the records in its
-  // fields (lowered.records is in that order), then one function type per
-  // distinct signature. A record value is a nullable reference, so a
-  // local of one starts as null and `ref.null` is its zero.
-  const recs = lowered.records;
-  const recIndex = new Map<string, number>(recs.map((r, i) => [r.key, i]));
-  const isRec = (t: LType): t is RType => typeof t !== "string";
-  const typeOf = (t: LType): number[] => (isRec(t) ? [0x63, ...s(recIndex.get(t.key)!)] : [VAL[t]]);
+  // Types: the structs first, as one recursion group: each record's, and
+  // for each data type its base and then its cases'. Then one function
+  // type per distinct signature. A value of either is a nullable
+  // reference, so a local of one starts as null and `ref.null` is its zero.
+  const recs = lowered.records, datas = lowered.data;
+  const structs: { name: string; fields: { name: string; t: LType }[]; sup?: number; final: boolean }[] = [];
+  const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
+  const ident = (x: string) => x.replace(/[^\w]+/g, "_");
+  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true }); }
+  const CASE = { name: "case", t: "i32" as const };
+  for (const d of datas) {
+    const b = structs.length, name = `${ident(d.name)}${b}`;
+    baseIndex.set(d.key, b);
+    structs.push({ name, fields: [CASE], final: false });
+    for (const c of d.cases) structs.push({ name: `${name}.${ident(c.name)}`, fields: [CASE, ...c.fields], sup: b, final: true });
+  }
+  const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
+  const isRec = (t: LType): t is RType | DType => typeof t !== "string";
+  const refIndex = (t: RType | DType) => (isData(t) ? baseIndex.get(t.key)! : recIndex.get(t.key)!);
+  const typeOf = (t: LType): number[] => (isRec(t) ? [0x63, ...s(refIndex(t))] : [VAL[t]]);
   const keyOf = (t: LType) => (isRec(t) ? t.key : t);
   const sigs: { key: string; params: LType[]; result: LType }[] = [];
   const sig = (params: LType[], result: LType) => {
     const key = `${params.map(keyOf).join(",")}>${keyOf(result)}`;
     if (!sigs.some((x) => x.key === key)) sigs.push({ key, params, result });
-    return recs.length + sigs.findIndex((x) => x.key === key);
+    return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
   const funcSig = funcs.map((f) => sig(f.params, f.result));
-  // A reader for each field of each record, exported as `Colour.red`, so
-  // a host can take an answer apart (a struct is opaque outside).
-  const readers = recs.flatMap((r) => r.fields.map((x, j) => ({ r, j, t: x.t, name: `${r.name}.${x.name}` })));
-  readers.forEach((x, k) => { if (readers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.r.key})`; });
-  const readerSig = readers.map((x) => sig([x.r], x.t));
+  // For the host, which can't look inside a struct: a reader for each
+  // field of each record, exported as `Colour.red`; for each data type
+  // `List.case`, the number of a value's case, and for each case a maker
+  // (`List.cons`) and its fields' readers (`List.cons.head`).
+  const helpers: { name: string; key: string; params: LType[]; result: LType; code: number[]; wat: string[] }[] = [];
+  for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j)], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`] }));
+  for (const d of datas) {
+    const b = baseIndex.get(d.key)!;
+    helpers.push({ name: `${d.name}.case`, key: d.key, params: [d], result: "i32", code: [0x20, 0x00, 0xfb, 0x02, ...u(b), 0x00], wat: ["local.get 0", `struct.get $${structs[b].name} 0`] });
+    d.cases.forEach((c, ci) => {
+      const k = caseIndex(d, ci), sn = `$${structs[k].name}`;
+      helpers.push({
+        name: `${d.name}.${c.name}`, key: d.key, params: c.fields.map((x) => x.t), result: d,
+        code: [0x41, ...s(ci), ...c.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)],
+        wat: [`i32.const ${ci}`, ...c.fields.map((_, j) => `local.get ${j}`), `struct.new ${sn}`],
+      });
+      c.fields.forEach((x, j) => helpers.push({
+        name: `${d.name}.${c.name}.${x.name}`, key: d.key, params: [d], result: x.t,
+        code: [0x20, 0x00, 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(j + 1)],
+        wat: ["local.get 0", `ref.cast (ref ${sn})`, `struct.get ${sn} ${j + 1}`],
+      }));
+    });
+  }
+  helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
+  const helperSig = helpers.map((x) => sig(x.params, x.result));
+  const struct = (x: (typeof structs)[number]) => {
+    const body = [0x5f, ...vec(x.fields.map((y) => [...typeOf(y.t), 0x00]))];
+    return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
+  };
   const typeSec = vec([
-    ...recs.map((r) => [0x5f, ...vec(r.fields.map((x) => [...typeOf(x.t), 0x00]))]),
+    ...(structs.length ? [[0x4e, ...vec(structs.map(struct))]] : []),
     ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([typeOf(x.result)])]),
   ]);
   const importSec = vec(hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]));
-  const funcSec = vec([...funcSig, ...readerSig].map((t) => u(t)));
+  const funcSec = vec([...funcSig, ...helperSig].map((t) => u(t)));
   // Only what can be called from outside a budget is exported.
-  const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted);
+  const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
   const exportSec = vec([
     ...entries.map(([f, i]) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]),
-    ...readers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
+    ...helpers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
   ]);
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
-  // global 0: the fuel left, an f64 starting at 0.
-  const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(0), 0x0b]]);
-  const zero = (t: LType) => (isRec(t) ? [0xd0, ...s(recIndex.get(t.key)!)] : t === "f64" ? [0x44, ...f64(0)] : [0x41, 0x00]);
+  // global 0: the fuel left, an f64. Outside any budget it's infinite, so
+  // what the checker couldn't see end just runs (only `data` calls it there).
+  const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]]);
+  const zero = (t: LType) => (isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), 0x0f, 0x0b] : []);
 
@@ -116,6 +159,20 @@ export function emitWasm(lowered: Lowered): Module {
       case "call": return [...e.args.flatMap(code), e.tail ? 0x12 : 0x10, ...u(fnIndex(e.fn))];
       case "make": return [...e.args.flatMap(code), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
       case "get": return [...code(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i)];
+      case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
+      // ref.cast to the case, then its field (after the case's number).
+      case "field": { const k = caseIndex(e.t, e.c); return [...code(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
+      case "case": {
+        // block $done; n blocks, innermost first jumped to by br_table on the
+        // case's number; after the end of block j, arm j, then br $done.
+        const n = e.arms.length, b = baseIndex.get(e.t.key)!;
+        const there = e.scrut.k === "local" && e.scrut.i === e.s;
+        const out = [...(there ? [] : [...code(e.scrut), 0x21, ...u(e.s)]), 0x02, ...typeOf(e.result)];
+        for (let j = 0; j < n; j++) out.push(0x02, 0x40);
+        out.push(0x20, ...u(e.s), 0xfb, 0x02, ...u(b), 0x00, 0x0e, ...vec(e.arms.map((_, j) => u(j))), ...u(n - 1));
+        e.arms.forEach((a, j) => out.push(0x0b, ...(a ? code(a) : [0x00]), ...(j < n - 1 ? [0x0c, ...u(n - 1 - j)] : [])));
+        return [...out, 0x0b];
+      }
       case "budget": {
         // save = fuel; fuel = n; res = body; (if fuel < 0 then otherwise else res); fuel = save
         return [
@@ -131,7 +188,7 @@ export function emitWasm(lowered: Lowered): Module {
       }
     }
   }
-  const readerCode = readers.map((x) => { const body = [0x00, 0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(x.r.key)!), ...u(x.j), 0x0b]; return [...u(body.length), ...body]; });
+  const helperCode = helpers.map((x) => { const body = [0x00, ...x.code, 0x0b]; return [...u(body.length), ...body]; });
   const codeSec = vec([...funcs.map((f) => {
     // Locals past the parameters, grouped by runs of the same type.
     const extra = f.locals.slice(f.params.length);
@@ -144,7 +201,7 @@ export function emitWasm(lowered: Lowered): Module {
     }
     const body = [...vec(groups), ...spend(f), ...code(f.body), 0x0b];
     return [...u(body.length), ...body];
-  }), ...readerCode]);
+  }), ...helperCode]);
 
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
@@ -155,7 +212,8 @@ export function emitWasm(lowered: Lowered): Module {
   // ---- text, for reading
   const id = (f: SFunc) => `$${f.name.replace(/[^\w]+/g, "_")}${funcs.indexOf(f)}`;
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
-  const recName = (r: RType) => `$${r.name.replace(/[^\w]+/g, "_")}${recIndex.get(r.key)}`;
+  const sname = (i: number) => `$${structs[i].name}`;
+  const recName = (r: RType | DType) => sname(refIndex(r));
   const ty = (t: LType) => (isRec(t) ? `(ref null ${recName(t)})` : t);
   function wat(e: SExpr, f: SFunc, d: string): string {
     switch (e.k) {
@@ -167,6 +225,21 @@ export function emitWasm(lowered: Lowered): Module {
       case "call": return [...e.args.map((a) => wat(a, f, d)), `${d}${e.tail ? "return_call" : "call"} ${id(funcs[e.fn])}`].join("\n");
       case "make": return [...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${recName(e.t)}`].join("\n");
       case "get": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
+      case "new": return [`${d}i32.const ${e.c}`, ...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
+      case "field": { const k = sname(caseIndex(e.t, e.c)); return `${wat(e.rec, f, d)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
+      case "case": {
+        const there = e.scrut.k === "local" && e.scrut.i === e.s;
+        const n = e.arms.length, lines = [...(there ? [] : [wat(e.scrut, f, d), `${d}local.set ${local(f, e.s)}`]), `${d}(block (result ${ty(e.result)})`];
+        for (let j = n - 1; j >= 0; j--) lines.push(`${d}${"  ".repeat(n - j)}(block ;; ${e.t.cases[j].name}`);
+        const inner = d + "  ".repeat(n + 1);
+        lines.push(`${inner}local.get ${local(f, e.s)}`, `${inner}struct.get ${recName(e.t)} 0`, `${inner}br_table ${e.arms.map((_, j) => j).join(" ")} ${n - 1})`);
+        e.arms.forEach((a, j) => {
+          const dd = d + "  ".repeat(n - j);
+          lines.push(a ? wat(a, f, dd) : `${dd}unreachable`);
+          lines.push(j < n - 1 ? `${dd}br ${n - 1 - j})` : `${dd.slice(2)})`);
+        });
+        return lines.join("\n");
+      }
       case "budget": return [
         `${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`, wat(e.body, f, d), `${d}local.set ${local(f, e.res)}`,
         `${d}global.get $fuel`, `${d}f64.const 0`, `${d}f64.lt`, `${d}(if (result ${ty(e.t)})`, `${d}  (then`, wat(e.otherwise, f, d + "    ") + ")", `${d}  (else`, `${d}    local.get ${local(f, e.res)}))`,
@@ -177,21 +250,26 @@ export function emitWasm(lowered: Lowered): Module {
   }
   const text = [
     "(module",
-    ...recs.map((r) => `  (type ${recName(r)} (struct${r.fields.map((x) => ` (field $${x.name.replace(/[^\w]+/g, "_")} ${ty(x.t)})`).join("")}))`),
+    ...(structs.length ? ["  (rec"] : []),
+    ...structs.map((x) => {
+      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${ty(y.t)})`).join("")})`;
+      return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
+    }),
+    ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
-    ...(fuel ? ["  (global $fuel (mut f64) (f64.const 0))"] : []),
+    ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...funcs.map((f) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
       const ls = f.locals.slice(f.params.length).map((t, j) => ` (local ${local(f, f.params.length + j)} ${ty(t)})`).join("");
       const none = isRec(f.result) ? `ref.null ${recName(f.result)}` : `${f.result}.const 0`;
       const spends = f.spends ? `    global.get $fuel\n    f64.const 1\n    f64.sub\n    global.set $fuel\n    global.get $fuel\n    f64.const 0\n    f64.lt\n    (if (then ${none} return))\n` : "";
-      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted ? "" : ` (export "${exportName(f)}")`}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
+      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
     }),
-    ...readers.map((x) => `  (func (export "${x.name}") (param ${ty(x.r)}) (result ${ty(x.t)})\n    local.get 0\n    struct.get ${recName(x.r)} ${x.j})`),
+    ...helpers.map((x) => `  (func (export "${x.name}")${x.params.map((t) => ` (param ${ty(t)})`).join("")} (result ${ty(x.result)})\n${x.wat.map((l) => `    ${l}`).join("\n")})`),
     ")",
   ].join("\n");
 
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...readers.map((x) => x.name)] };
+  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name)] };
 }
 
 function uses(e: SExpr, op: Op): boolean {
@@ -199,8 +277,9 @@ function uses(e: SExpr, op: Op): boolean {
     case "op": return e.op === op || e.args.some((a) => uses(a, op));
     case "if": return uses(e.cond, op) || uses(e.then, op) || uses(e.else, op);
     case "let": return uses(e.value, op) || uses(e.body, op);
-    case "call": case "make": return e.args.some((a) => uses(a, op));
-    case "get": return uses(e.rec, op);
+    case "call": case "make": case "new": return e.args.some((a) => uses(a, op));
+    case "get": case "field": return uses(e.rec, op);
+    case "case": return uses(e.scrut, op) || e.arms.some((a) => a && uses(a, op));
     case "budget": return uses(e.body, op) || uses(e.otherwise, op);
     default: return false;
   }
@@ -208,8 +287,9 @@ function uses(e: SExpr, op: Op): boolean {
 function budgets(e: SExpr): boolean {
   switch (e.k) {
     case "budget": return true;
-    case "op": case "call": case "make": return e.args.some(budgets);
-    case "get": return budgets(e.rec);
+    case "op": case "call": case "make": case "new": return e.args.some(budgets);
+    case "get": case "field": return budgets(e.rec);
+    case "case": return budgets(e.scrut) || e.arms.some((a) => a && budgets(a));
     case "if": return budgets(e.cond) || budgets(e.then) || budgets(e.else);
     case "let": return budgets(e.value) || budgets(e.body);
     default: return false;
