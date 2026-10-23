@@ -595,7 +595,11 @@ every failure goes through `$perform`, which walks the stack and throws an
 `Escape`. The ideal is a try/catch. It matters only when a handler is
 entered in a loop. *Fix:* a handler whose operations all escape (none
 resumes) around a call is `try`/`catch` on a class of its own. Low
-priority.
+priority. **Done** (Backlog C12): such a match is compiled inline,
+`$enter` before the body, `$caught` in the catch and `$leave` in the
+finally, with no tables of cases or closure for the body. calc enters one
+per line; on a 40,000-line session the gain is within noise, though a
+micro-benchmark of a million entries, half of them aborting, takes 0.55 s instead of 0.9.
 
 All of the above together, patched by hand: 51 → 30 ms. The rest, 30 →
 9 to 12 ms, is the data representation:
