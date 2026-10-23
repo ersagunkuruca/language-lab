@@ -50,27 +50,14 @@ import diceComments from "../examples/dice/comments.json" with { type: "json" };
 import converterCode from "../examples/converter/code.json" with { type: "json" };
 import converterNames from "../examples/converter/names.default.json" with { type: "json" };
 import converterComments from "../examples/converter/comments.json" with { type: "json" };
-import raymarchCredits from "../examples/raymarch/credits.json" with { type: "json" };
-import diceCredits from "../examples/dice/credits.json" with { type: "json" };
-import converterCredits from "../examples/converter/credits.json" with { type: "json" };
 import conjugateCode from "../examples/conjugate/code.json" with { type: "json" };
 import conjugateNames from "../examples/conjugate/names.default.json" with { type: "json" };
 import conjugateComments from "../examples/conjugate/comments.json" with { type: "json" };
-import conjugateCredits from "../examples/conjugate/credits.json" with { type: "json" };
 import countdownCode from "../examples/countdown/code.json" with { type: "json" };
 import countdownNames from "../examples/countdown/names.default.json" with { type: "json" };
 import countdownDescriptive from "../examples/countdown/names.descriptive.json" with { type: "json" };
 import countdownComments from "../examples/countdown/comments.json" with { type: "json" };
 import countdownLayout from "../examples/countdown/layout.json" with { type: "json" };
-import countdownCredits from "../examples/countdown/credits.json" with { type: "json" };
-import shadersCredits from "../examples/shaders/credits.json" with { type: "json" };
-import queensCredits from "../examples/queens/credits.json" with { type: "json" };
-import sortCredits from "../examples/sort/credits.json" with { type: "json" };
-import physicsCredits from "../examples/physics/credits.json" with { type: "json" };
-import calculusCredits from "../examples/calculus/credits.json" with { type: "json" };
-import backwardsCredits from "../examples/backwards/credits.json" with { type: "json" };
-import relationsCredits from "../examples/relations/credits.json" with { type: "json" };
-import effectsCredits from "../examples/effects/credits.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -133,15 +120,10 @@ interface Layout {
 type Program = string;
 const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
-// What each example adapts, follows or was done before by (credits.json,
-// one line each, after CREDITS.md). An example's are always the shipped
-// ones, so an edit can't drop them.
-const CREDITS: Record<Program, string[]> = {
-  numbers: physicsCredits, sort: sortCredits, queens: queensCredits, calculus: calculusCredits, backwards: backwardsCredits,
-  relations: relationsCredits, effects: effectsCredits, shaders: shadersCredits, raymarch: raymarchCredits,
-  dice: diceCredits, converter: converterCredits, countdown: countdownCredits, conjugate: conjugateCredits,
-};
 const MINE = "mine.";
+// The program's own comment, in comments.json like any other: what it is,
+// and whose code or ideas it uses (CREDITS.md has every one).
+const PROGRAM = "program";
 
 interface Doc {
   program: Program;
@@ -157,9 +139,6 @@ interface Doc {
   // Example inputs per definition, as text (src/lang/values.ts): what the
   // graph shows values for. A side table like names: never code.
   examples?: Record<Id, string[]>;
-  // Where the program's ideas and code come from, a line each: a side
-  // table, shown in the Program tab and above a picture.
-  credits?: string[];
   // Changed by you since it was loaded (an example as shipped is not saved
   // as yours, so it keeps up with the shipped one).
   edited?: boolean;
@@ -259,6 +238,9 @@ try {
 // change is kept unless it uses something the library no longer has.
 function onToday(d: Doc): Doc {
   const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
+  // Credits kept apart, as the editor once did, are the program's comment now.
+  const { credits, ...rest } = d as Doc & { credits?: string[] };
+  if (credits?.length) d = { ...rest, comments: { ...d.comments, [PROGRAM]: [d.comments[PROGRAM], ...credits].filter(Boolean).join("\n") } };
   return { ...d, code: {
     nodes: { ...BASE.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
     defs: [...BASE.defs, ...d.code.defs.filter(own)],
@@ -280,7 +262,7 @@ const defNamed = (name: string) => doc.code.defs.find((d) => (doc.names.short[d]
 const showcase = () => defNamed(START[doc.program] ?? "main") ?? ownDefs()[0] ?? doc.code.defs[0];
 const startDef = () => defNamed("main") ?? showcase();
 const startTabs = () => [...new Set([startDef(), showcase()])];
-const creditsOf = (d: Doc) => (isExample(d.program) ? CREDITS[d.program] : d.credits) ?? [];
+const noteOf = (d: Doc) => d.comments[PROGRAM] ?? "";
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
 
 const ui: UI = {
@@ -384,7 +366,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {}, credits: creditsOf(doc) }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -406,7 +388,7 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, credits: x.credits },
+    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -574,7 +556,6 @@ const files = () => [
   { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
   { name: "layout.json", get: (d: Doc) => JSON.stringify(d.layout) },
   { name: "examples.json", get: (d: Doc) => JSON.stringify(d.examples ?? {}) },
-  { name: "credits.json", get: (d: Doc) => JSON.stringify(creditsOf(d)) },
 ];
 
 function fnv(s: string) {
@@ -657,7 +638,7 @@ function rename(id: Id, value: string) {
 function setComment(id: Id, value: string) {
   const comments = { ...doc.comments };
   if (value.trim()) comments[id] = value; else delete comments[id];
-  commit({ comments }, ["comments.json"], "Comment saved on the node itself, not on a line.");
+  commit({ comments }, ["comments.json"], id === PROGRAM ? "The program's comment is saved." : "Comment saved on the node itself, not on a line.");
 }
 
 // A unit is part of a number's type, so declaring one goes through the
@@ -1526,29 +1507,24 @@ function programPanel(): HTMLElement {
     h("button", { class: "btn", type: "button", "data-act": "save-file" }, "Save file"),
     mine ? h("button", { class: "btn danger", type: "button", "data-act": "delete-program" }, "Delete") : null),
     h("p", { class: "hint" }, "Every edit is kept in this browser as you go. A file holds the code, names, comments and layout together."));
-  out.append(creditsList(creditsOf(doc)) ?? h("p", { class: "hint" }, "No credits yet."));
-  if (mine) {
-    const ta = h("textarea", { id: "f-credits", rows: "3", placeholder: "Adapted: … (who, and a link). Influence: … Prior art: …" }) as HTMLTextAreaElement;
-    ta.value = creditsOf(doc).join("\n");
-    ta.addEventListener("change", () => {
-      const credits = ta.value.split("\n").map((l) => l.trim()).filter(Boolean);
-      if (credits.join("\n") !== creditsOf(doc).join("\n")) commit({ credits }, ["credits.json"], "Credits saved: they show in the Program tab and above a picture.");
-    });
-    out.append(h("label", { class: "field", for: "f-credits" }, h("span", {}, "Credits · credits.json, a line each"), ta));
-  }
+  // The program's comment, as a definition has one: what it is, and whose
+  // code or ideas it uses, links as links.
+  const shown = noteView(noteOf(doc));
+  if (shown) out.append(shown);
+  const ta = h("textarea", { id: "f-program-comment", rows: "4", placeholder: "What this program is. Whose code it adapts or whose idea it follows: who, and a link." }) as HTMLTextAreaElement;
+  ta.value = noteOf(doc);
+  ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
+  out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", {}, "Comment · comments.json"), ta));
   return out;
 }
 
-// A program's credits, links as links. What each line credits, and how
-// (adapted, influence, prior art), is in the line; CREDITS.md has them all.
-function creditsList(lines: string[]): HTMLElement | null {
+// A comment shown as text, a paragraph a line, links as links.
+function noteView(text: string): HTMLElement | null {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   const linked = (line: string) => line.split(/(https?:\/\/[^\s]+[^\s.,;:)])/).map((part, i) =>
     i % 2 ? h("a", { href: part, target: "_blank", rel: "noopener" }, part.replace(/^https?:\/\//, "").replace(/\/$/, "")) : part);
-  return h("div", { class: "credits" },
-    h("strong", {}, "Credits"),
-    h("ul", {}, ...lines.map((l) => h("li", {}, ...linked(l)))),
-    h("a", { href: "tutorial.html#credits" }, "Every influence and source"));
+  return h("div", { class: "note" }, ...lines.map((l) => h("p", {}, ...linked(l))));
 }
 
 // The graph, with any calls shown inline. Their copies are a view, so every
@@ -1795,12 +1771,12 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 // again after every edit. When the compiler can't take it to the GPU, its
 // reason shows instead. The canvas outlives renders, so the drawing goes on.
 const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint" }), for: null as Code | null, now: null as Picture | null };
-const picCredits = h("div", {});
-const picBox = h("div", { class: "picture-box" }, picCredits, pic.canvas, pic.status);
+const picNote = h("div", {});
+const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
 function pictureSection(info: T.Info | null): HTMLElement | null {
   const entries = pictureEntries(doc.code.defs, pres().names);
   if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
-  picCredits.replaceChildren(creditsList(creditsOf(doc)) ?? "");
+  picNote.replaceChildren(noteView(noteOf(doc)) ?? "");
   if (pic.for !== doc.code) {
     const code = pic.for = doc.code;
     pic.now?.stop();
@@ -2057,7 +2033,7 @@ function guide(): HTMLElement {
   return h("section", { class: "guide", "aria-label": "Guide" },
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
     h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
-    h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its definitions' comments say so, and the Program tab lists its credits (above the picture too, for a shader). Credits, in the menu, lists every influence and source of the language itself."));
+    h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its comments say so: a definition's, or the program's own (in the Program tab, and above a picture). Credits, in the menu, lists every influence and source of the language itself."));
 }
 
 // A built-in isn't a black box: show its equation, its code, and every

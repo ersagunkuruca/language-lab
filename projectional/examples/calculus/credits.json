@@ -1,4 +1,0 @@
-[
- "Textbook: symbolic differentiation (the product and quotient rules) and Newton's method.",
- "Prior art: a fold carrying (value, slope) pairs is forward-mode automatic differentiation (Wengert, 1964) with dual numbers (Clifford, 1873)."
-]

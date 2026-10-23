@@ -8,5 +8,6 @@
   "h5fradvq8oqdt1t6d19hk06uvk": "Haar's split: each pair of samples as their average (the slow band) and half their difference (the fast band). Run backwards it joins them again.",
   "bc3492eg05kckkm4ml9pet06ro": "Halve the fast band and keep the slow one: a treble cut that leaves the low end alone.",
   "pc02eo6vkt4vdvp1j6lhddt9c7": "The signal with its highs softened: split, soften, join. A pedal's multiband compressor is this with a crossover for the split and a compressor for the change.",
-  "bm3m8tetgroatk1rb6u1tk39p9": "Each edit done in another space and brought back, beside the same edit done in place."
+  "bm3m8tetgroatk1rb6u1tk39p9": "Each edit done in another space and brought back, beside the same edit done in place.",
+  "program": "Ersagun's idea: go to another space, act, come back, as in a Rubik's cube commutator. Conjugation, f⁻¹ ∘ g ∘ f, is standard group theory.\nTextbook: the 2.2 power is the simple form of the sRGB transfer curve (IEC 61966-2-1); doubling light in linear light, not in stored values, is standard colour practice.\nPrior art: the band split is the Haar wavelet (Alfréd Haar, 1910); a multiband compressor splits with a crossover filter instead."
 }

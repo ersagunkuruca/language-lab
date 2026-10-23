@@ -87,6 +87,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E34 | Programs have a comment like definitions; each example's credits became that comment, credits.json is gone (Ersagun 19:34) | #253 |
 | E15 | Tab and Shift+Tab step through a program's parts in reading order; Enter edits the selected one | #251 |
 | E33 | Bug: a list of tall items showed as cons(…) in the blocks (Ersagun 19:16) | #248 |
 | E14 | Palette: most-used first, √ finds sqrt, typed arithmetic fills as calls | #247 |

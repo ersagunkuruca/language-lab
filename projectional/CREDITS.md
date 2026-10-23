@@ -44,7 +44,7 @@ The rule (Ersagun, 2026-10-22) applies to every file in the repository:
 4. **Visible where people look**: a page that shows the work (the editor,
    `shaders.html`, `reactive.html`, the tutorial) shows the credit on the
    page, not only in the source. In the editor, an example's
-   `credits.json` (a line each, labelled as below) shows in the Program tab
+   program comment (a line each, labelled as below) shows in the Program tab
    and above its picture, and the menu bar's Credits link comes to this list.
 
 Prefer original demos. When reusing, link the source and respect its

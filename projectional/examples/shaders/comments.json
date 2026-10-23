@@ -4,5 +4,6 @@
   "agct4svallg61andm9i4a2ue3a": "1 in the middle, falling to 0 at distance 1 and staying 0 outside.",
   "p2vkil3v0h74lt4bukvrtj3a79": "How red the pixel at (x, y) is at this time, from 0 to 1. The page runs red, green and blue on the GPU for every pixel.",
   "3s1is2rsc0c3vmuo4ditiasoji": "How green: brighter where the ripples are strong either way.",
-  "4r961huh4lkkdhdsdg5m92bj6n": "How blue: the opposite of red, so troughs are blue and crests are orange."
+  "4r961huh4lkkdhdsdg5m92bj6n": "How blue: the opposite of red, so troughs are blue and crests are orange.",
+  "program": "Our own: the ripples were written for this project."
 }
