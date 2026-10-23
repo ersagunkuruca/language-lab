@@ -91,6 +91,28 @@ async function deleteAndUndo() {
   await p.close();
 }
 
+// A definition made, filled and deleted: the editor draws the program
+// without it (it once drew the deleted one first, and threw).
+async function newAndDeleteDefinition() {
+  where = "new definition, deleted";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("double");
+  await p.locator("#f-def-inputs").fill("x");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator(".opt").first().click();
+  await p.keyboard.press("Escape");
+  await p.locator("button", { hasText: "Delete double" }).click();
+  if ((await p.locator(".nav-row[data-def]").allInnerTexts()).some((s) => s.trim() === "double")) errors.push(`${where}: Delete left the definition in the list`);
+  await p.close();
+}
+
 // reactive.html, next to the editor: both Cells programs run, and a click
 // and a slider change what they should.
 async function cellsPage() {
@@ -115,6 +137,7 @@ const fresh = defs;
 await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
 await deleteAndUndo();
+await newAndDeleteDefinition();
 await cellsPage();
 await browser.close();
 console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor`);
