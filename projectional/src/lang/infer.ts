@@ -880,7 +880,7 @@ export type Filling =
   | { kind: "lit"; of: "number" | "text" | "int" }
   // `on` null: on a value given next (the scrutinee starts as a hole).
   | { kind: "match" | "fold"; on: Id | null; type: Id }
-  | { kind: "lambda"; arity: number };
+  | { kind: "lambda"; arity: number; params?: Type[] };
 
 // Everything that can go in a hole without a type or effect error: variables
 // in scope, definitions, builtins and constructors (as values, or called with
@@ -973,7 +973,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   lit("text", str);
   lit("int", { t: "con", id: INT, args: [] });
   const ex = info.subst.resolve(h.expected);
-  if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length });
+  if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length, params: ex.params.map((t) => info.subst.zonk(t)) });
   const dataTypes = [...new Set(info.owner.values())].filter((d) => !(code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect);
   // The standard library's types that are data you write programs about;
   // the rest (Unit, Html, Event…) would only crowd the palette.

@@ -5,10 +5,10 @@ import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { addVariant, fillHole } from "../src/lang/refactor.ts";
+import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { S } from "../src/lang/std.ts";
-import { showType } from "../src/lang/types.ts";
+import { INT, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
 
 // A program written from nothing with the editor's gestures only: the same
@@ -479,4 +479,11 @@ test("a match inside a match on the same type names its binders apart", () => {
   s.fill(second, (f) => f.kind === "match" && f.on === tail);
   const named = (Object.values(s.code.nodes) as Node[]).filter((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)).map((n) => (n as NodeOf<"arm">).binds.map((b) => s.names[b]).join(", "));
   assert.deepEqual(named.sort(), ["head 2, tail 2", "head, tail"]);
+});
+
+test("a new function's parameters are named for what they take", () => {
+  const con = (id: Id) => ({ t: "con" as const, id, args: [] });
+  const names = { ...baseNames({}), chap: "Chapter" };
+  assert.deepEqual([con(NUMBER), con(INT), con(STRING), con("std.list"), con("chap"), { t: "var" as const, v: 1 }, undefined].map((t) => paramName(t, names)),
+    ["x", "n", "text", "items", "chapter", "value", "value"]);
 });
