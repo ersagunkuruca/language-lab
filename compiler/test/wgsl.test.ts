@@ -17,8 +17,8 @@ import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { S } from "../../projectional/src/lang/std.ts";
-import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
-import type { Id } from "../../projectional/src/model.ts";
+import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
+import { merge, type Id, type NodeOf } from "../../projectional/src/model.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");
@@ -41,14 +41,14 @@ test("examples/shaders: red, green and blue, and everything they call, go to the
 
 test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all", () => {
   const p = load("raymarch");
-  // The source has no derivative code: shade asks derivative((x) ↦ scene(x, y, z, time)) and so on.
+  // The source has no derivative code, and no code per axis: shade asks
+  // unit(gradient((q) ↦ scene(q, time))(p)), and points are Vecs.
   assert.ok(!Object.values(p.pres.names).some((n) => n.includes("∂")), "no ∂ definitions in the source");
   const lowered = lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true });
   const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.keys()], []);
-  const names = lowered.funcs.map((f) => f.name);
-  // The normals are partial derivatives generated from scene for the shader, not finite differences.
-  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "∂ring/∂x", "march", "shadow", "shade", "trace"]) assert.ok(names.includes(d), d);
+  const funcs = lowered.funcs.map((f) => f.name);
+  for (const d of ["march", "shadow", "shade", "trace", "scene", "plus", "scale", "unit"]) assert.ok(funcs.includes(d), d);
   // Only colour is a place to start: the rest may not finish, so they run
   // under its budget.
   assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour"]);
@@ -58,37 +58,50 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
     const body = s.wgsl.slice(s.wgsl.indexOf(`// ${name}\nfn `));
     assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{\n {4}lab_fuel = lab_fuel - 1\.0;[\s\S]*continue;/);
   }
-  // Colours and points are vectors, and arithmetic written field by field
-  // is vector arithmetic.
+  // Colours and points are vectors, and the vectors module's operations
+  // are the GPU's.
   assert.match(s.wgsl, /\/\/ Colour is a vec3f: red is \.x, green is \.y, blue is \.z\./);
+  assert.match(s.wgsl, /fn march_\d+\(a0: vec3f, a1: vec3f, a2: f32, a3: f32, a4: f32\) -> f32/);
   assert.match(s.wgsl, /fn mix_\d+\(p0: vec3f, p1: vec3f, p2: f32\) -> vec3f \{\n {2}return mix\(p0, p1, p2\);/);
   assert.match(s.wgsl, /fn dot_\d+\(p0: vec3f, p1: vec3f\) -> f32 \{\n {2}return dot\(p0, p1\);/);
-  assert.match(s.wgsl, /return vec3f\(0\.55, 0\.68, 0\.85\) \+ \(vec3f\(0\.2, 0\.2, 0\.1\) \* p0\);/);
-  assert.match(s.wgsl, /return clamp\(l\d+ \* l\d+, vec3f\(0\.0\), vec3f\(1\.0\)\);/);
+  assert.match(s.wgsl, /fn magnitude_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
+  assert.match(s.wgsl, /fn minus_\d+\(p0: vec3f, p1: vec3f\) -> vec3f \{\n {2}return p0 - p1;/);
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
-  // And they are the gradient: close to central differences, away from the
-  // blend's seams. Both the definitions the shader gets and the evaluator's
-  // own derivative, taken at run time.
-  const x = expandDerivatives(p.code, p.pres.names);
+  // And the normal is the gradient: close to central differences, away
+  // from the blend's seams, both from the code the shader gets and from
+  // the evaluator's own gradient, taken at run time.
+  const k = new Lang(p.code);
+  const normal = k.def("normal");
+  k.define(normal, k.fn(["p", "time"], (pt, t) => k.call(k.call(S.gradient, k.fn(["q"], (q) => k.call(p.named("scene"), q, t))), pt)));
+  const code = merge(p.code, k.code), names = { ...p.pres.names, ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const variant = (call: Id) => {
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0])!);
+    return f.t === "fn" && f.params[0].t === "con" ? recordVariant(code, f.params[0].id) : null;
+  };
+  const x = expandDerivatives(code, names, variant);
+  assert.equal(x.expanded.length, 2, "shade's gradient and normal's");
   const xi = infer(x.code, x.names);
   assert.deepEqual(xi.errors, []);
-  const generated = (n: string) => x.code.defs.find((d) => x.names[d] === n)!;
-  const r = makeRunner(x.code, xi, { print: () => {} });
-  const at = (def: Id, ...xs: number[]) => { for (const v of r.call(r.value(def), ...xs)) return v as number; return NaN; };
-  const scene = p.named("scene");
-  // The evaluator, given the source, differentiates at run time with the
-  // same deriver: it shades every point the same as the expanded program.
-  const src = makeRunner(p.code, p.info, { print: () => {} });
-  const shade = (run: typeof r, ...xs: number[]) => { for (const v of run.call(run.value(p.named("shade")), ...xs)) return JSON.stringify(v); return "none"; };
-  for (const pt of [[0.3, -0.75, -0.2, 1], [0.6, 0.2, 0.3, 2]]) assert.equal(shade(src, ...pt), shade(r, ...pt));
+  const expanded = makeRunner(x.code, xi, { print: () => {} }), src = makeRunner(code, info, { print: () => {} });
+  const vecV = (code.nodes[(code.nodes[p.named("Vec")] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+  const vec = (xs: number[]) => ({ tag: vecV, fields: xs });
+  const first = (run: typeof src, f: Id, ...xs: unknown[]) => { for (const v of run.call(run.value(f), ...(xs as never[]))) return v; return undefined; };
+  for (const [px, py, pz, t] of [[0.3, -0.75, -0.2, 1], [0.6, 0.2, 0.3, 2]]) {
+    assert.equal(JSON.stringify(first(src, p.named("shade"), vec([px, py, pz]), t)), JSON.stringify(first(expanded, p.named("shade"), vec([px, py, pz]), t)));
+  }
   const h = 1e-5;
   for (const [px, py, pz, t] of [[0.3, 0.1, -0.2, 1], [1.2, 0.4, 0.5, 2], [-0.5, -0.3, 0.9, 0], [0.1, 1.5, -1, 3]]) {
     const pt = [px, py, pz];
-    ["x", "y", "z"].forEach((axis, i) => {
-      const plus = pt.map((v, j) => (j === i ? v + h : v)), minus = pt.map((v, j) => (j === i ? v - h : v));
-      const numeric = (at(scene, ...plus, t) - at(scene, ...minus, t)) / (2 * h);
-      assert.ok(Math.abs(at(generated(`∂scene/∂${axis}`), px, py, pz, t) - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
-    });
+    const scene = (q: number[]) => first(src, p.named("scene"), vec(q), t) as number;
+    for (const run of [src, expanded]) {
+      const g = (first(run, normal, vec(pt), t) as { fields: number[] }).fields;
+      ["x", "y", "z"].forEach((axis, i) => {
+        const numeric = (scene(pt.map((v, j) => (j === i ? v + h : v))) - scene(pt.map((v, j) => (j === i ? v - h : v)))) / (2 * h);
+        assert.ok(Math.abs(g[i] - numeric) < 1e-5, `∂scene/∂${axis} at ${pt}`);
+      });
+    }
   }
 });
 

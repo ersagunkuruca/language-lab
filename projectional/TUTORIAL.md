@@ -535,13 +535,13 @@ read a slope (through `floor`), the derivative fails there, so its type has
 read, the checker knows the derivative fails only where the function does,
 and drops the `Choice`.
 
-That's how the ray marcher gets its normals. `shade` asks for
-`derivative((x) ↦ scene(x, y, z, time))(x)`, the slope of the scene along x
-with y, z and time held still, and the same along y and z. There is no
-derivative code in the program: change `scene` and the normals follow. For
-the GPU, the compiler generates the derivative's code before printing the
-shader (`∂scene/∂x` and the partials it calls), so the shader gets exact
-slopes as plain arithmetic.
+That's how the ray marcher gets its normals. Its points are `Vec`s, and
+`shade` asks for `unit(gradient((q) ↦ scene(q, time))(p))`: `gradient` is
+the slope of the scene along x, along y and along z, with time held still,
+as one Vec. There is no derivative code in the program: change `scene` and
+the normals follow. For the GPU, the compiler generates the gradient's code
+before printing the shader, so the shader gets exact slopes as plain
+arithmetic.
 
 The other half of calculus is running backwards: `zeros of cubic` is `cubic`
 run backwards from 0, and `zeros of x² − 2` gives both `±1.414…`, where
