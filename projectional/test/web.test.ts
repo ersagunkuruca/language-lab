@@ -15,6 +15,8 @@ import { browserWorld } from "../src/lang/browser.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { pageProgram } from "./page-program.ts";
+import { PAGE_HANDLER, PAGE_VIEW } from "../src/lang/std.ts";
+import { RUNTIME_HANDLES } from "../src/lang/run.ts";
 
 const lab = join(import.meta.dirname, "../cli/lab.ts");
 const dir = mkdtempSync(join(tmpdir(), "web-"));
@@ -147,4 +149,10 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   assert.equal(root.find("status").textContent, "201 rolls; the last 0 s ago");
   frame(1_002_500);
   assert.equal(root.find("status").textContent, "201 rolls; the last 2 s ago");
+});
+
+test("what a page's views and handlers may do is named once, and the runtime handles all of it", () => {
+  for (const e of [...PAGE_VIEW, ...PAGE_HANDLER]) assert.ok(RUNTIME_HANDLES.includes(e), `${e} is in a page's row but the runtime doesn't handle it`);
+  // A view only reads: everything it may do, a handler may do too.
+  for (const e of PAGE_VIEW) assert.ok(PAGE_HANDLER.includes(e), e);
 });

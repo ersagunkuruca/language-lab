@@ -81,7 +81,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L6 | A page's `on` row is closed and hand-picked; a named row defined once, or an open row | R2 §5 | P2 | M | |
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth | R2 §4 | P2 | L | before C7 |
 | L8 | The error table generated from tests, each row pointing at its test | R2 §6, REVIEW.md §9 | P2 | M | |
 | L9 | Retire or archive `examples/compose` and `examples/quadratic` (untyped, 32-bit ids, six check errors) | R2 §5 | P2 | S | |
@@ -102,6 +101,7 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
 | L25 | Container matrix, the other four places: a `solve` body, a shader, a representation's job, a pinned export | R2 §1.2, L5 | P2 | M | |
 | L26 | The ledger in code: every place that removes an effect from a row calls one `discharge(effect, why)`, and a test compares the calls with the table | R2 §1.2 | P2 | M | |
+| L27 | `Log` in a page's views and handlers: the runtime handles it everywhere else, but neither page row allows it | L6 | P3 | S | |
 
 ## Coordinator and process
 
@@ -136,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L6 | A page's rows named once (`PAGE_VIEW`, `PAGE_HANDLER`), checked against the runtime; closed on purpose, WEB.md says why | this PR |
 | L5 | Container matrix: 10 places a function can wait × 4 effects, each reaches the type, is refused, or is the runtime's on purpose; no holes found | this PR |
 | L4 | One page model: reactive.html draws std's `Html`, its widgets are definitions, `ui.ts` and `UI` removed | #183 |
 | L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | #181 |
