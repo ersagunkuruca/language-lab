@@ -1,10 +1,8 @@
-# Runs the unit test suites on pull requests.
+# A pull request's only check: TypeScript's type check, under a minute.
 name: Tests
 
 # A pull request that only changes prose or pictures (a review, a QA
-# report, notes) has nothing to test, so it doesn't start a run. Markdown
-# that a build or test reads is the exception: TUTORIAL.md becomes
-# tutorial.html.
+# report, notes) has nothing to type-check, so it doesn't start a run.
 on:
   pull_request:
     paths:
@@ -13,21 +11,20 @@ on:
       - "!**.png"
       - "!**.jpg"
       - "!**.gif"
-      - "projectional/TUTORIAL.md"
   workflow_dispatch:
 
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
-# The browser tests (the editor, shaders, WGSL on a GPU) don't run here: a
-# pull request runs them locally before it's pushed, and pages.yml runs them
-# once per merge before it publishes, so a failure never reaches the site.
+# Every test suite (unit, the editor in a browser, shaders, WGSL on a GPU)
+# runs once per merge in pages.yml, before it publishes: a failure there
+# stops the deploy, so the live site keeps its last good build, and the
+# next pull request fixes main. Run the suites locally before pushing.
 jobs:
-  unit:
+  typecheck:
     runs-on: ubuntu-latest
-    # A hang stops at 15 minutes instead of GitHub's 6 hours.
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,17 +32,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: projectional/package-lock.json
-      # Node runs (cores - 1) test files at a time, which is one on the
-      # runner's two cores; two at a time takes 2.5 minutes instead of 4.
       - name: projectional
         working-directory: projectional
         run: |
           npm ci
           npm run typecheck
-          node --test --test-concurrency=2 test/*.test.ts
-      - name: invertible
-        working-directory: invertible
-        run: npm test
-      - name: compiler
-        working-directory: compiler
-        run: npm test

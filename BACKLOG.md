@@ -141,6 +141,12 @@ roadmap's Done table; this section keeps about a week.
 | L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | #181 |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 
+### Coordinator and process
+
+| id | item | PR |
+|---|---|---|
+| P4 | CI on a pull request is only the type check (under a minute); unit and browser tests run once per merge before the deploy | this PR |
+
 ### Before the backlog
 
 | id | item | PR |
