@@ -87,7 +87,12 @@ async function visit(saved: string | null, only?: string) {
           await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
           await click('.ctx-item[data-menu="tidy-all"]');
           // The map, when part of the graph is out of the window.
-          if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) await click(".p-graph .minimap");
+          if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) {
+            // Drawn with the graph's own colours: a frame there was once black.
+            const black = await p.locator(".p-graph .minimap .rg").evaluateAll((els) => els.filter((e) => getComputedStyle(e).fill === "rgb(0, 0, 0)").length);
+            if (black) errors.push(`${where}: ${black} frames in the map are black`);
+            await click(".p-graph .minimap");
+          }
           await click(".p-graph .reroute:not(.silent)");
           await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
           await click('.ctx-item[data-menu="named"]');

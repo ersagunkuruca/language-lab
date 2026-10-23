@@ -126,9 +126,8 @@ const views = new Map<string, View>();
 const READABLE = 0.6;
 // The height the Fit / zoom pill takes at the bottom of the window.
 const PILL = 36;
-// The map's size, and a count to name each window's picture for it.
+// The map's size.
 const MAP = { w: 168, h: 112 };
-let worlds = 0;
 
 export function infiniteCanvas(key: string, cls: string): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
@@ -224,11 +223,20 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   // The map: the whole picture small, with the window on it as a frame,
   // shown only while part of the picture is out of the window, so it is
   // also the sign that there's more. Click or drag on it to look there.
-  const id = `world-${++worlds}`;
-  world.id = id;
+  // The picture is copied in, not drawn through <use>: rules like
+  // `.tgraph .rg` don't reach into a <use>'s copy, which left frames black.
+  // The copy keeps classes (so the same rules style it) and drops ids and
+  // data-* (so nothing finds it instead of the real one).
   const map = s("svg", { class: "minimap", width: MAP.w, height: MAP.h }) as SVGSVGElement;
-  const shrink = s("g") as SVGGElement;
-  shrink.append(s("use", { href: `#${id}` }));
+  const shrink = s("g", { class: cls }) as SVGGElement;
+  let stale = true;
+  const copy = () => {
+    const c = world.cloneNode(true) as SVGGElement;
+    c.removeAttribute("transform");
+    for (const e of [c, ...c.querySelectorAll("*")]) for (const a of [...e.attributes]) if (a.name === "id" || a.name.startsWith("data-")) e.removeAttribute(a.name);
+    shrink.replaceChildren(c);
+    stale = false;
+  };
   const frame = s("rect", { class: "minimap-view", rx: 2 });
   map.append(shrink, frame);
   let whole: DOMRect | null = null, k = 1, at = { x: 0, y: 0 };
@@ -241,12 +249,12 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     if (!out) return;
     k = Math.min((MAP.w - 8) / whole.width, (MAP.h - 8) / whole.height);
     at = { x: (MAP.w - whole.width * k) / 2 - whole.x * k, y: (MAP.h - whole.height * k) / 2 - whole.y * k };
-    // The clone carries the window's transform; undo it, then shrink.
-    shrink.setAttribute("transform", `translate(${at.x},${at.y}) scale(${k}) scale(${1 / view.z}) translate(${-view.x},${-view.y})`);
+    if (stale) copy();
+    shrink.setAttribute("transform", `translate(${at.x},${at.y}) scale(${k})`);
     Object.entries({ x: at.x + sx * k, y: at.y + sy * k, width: sw * k, height: sh * k }).forEach(([a, v]) => frame.setAttribute(a, String(v)));
   };
   // (Tests draw graphs in a DOM without observers, and need no map.)
-  if (typeof MutationObserver !== "undefined") new MutationObserver(() => { whole = root.isConnected ? world.getBBox() : null; mapped(); }).observe(world, { childList: true });
+  if (typeof MutationObserver !== "undefined") new MutationObserver(() => { whole = root.isConnected ? world.getBBox() : null; stale = true; mapped(); }).observe(world, { childList: true });
   // Look at the point under the pointer: it goes to the window's middle.
   const look = (e: PointerEvent) => {
     if (!view) return;
