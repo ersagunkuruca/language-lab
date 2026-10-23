@@ -419,7 +419,9 @@ function pasteIntoSelected() {
 // Every change to code.json goes through the type checker (typed.ts),
 // which refuses an edit that would introduce an error, units included. A
 // refusal changes nothing and says why.
-function applyT(e: T.TEdit): boolean {
+// `then` sets what the editor shows after the edit (which definition is
+// open, what's selected) before it's drawn.
+function applyT(e: T.TEdit, then?: () => void): boolean {
   if (!e.ok) {
     ui.menu = null;
     ui.note = `Refused: ${e.reason}. Nothing changed.`;
@@ -429,6 +431,7 @@ function applyT(e: T.TEdit): boolean {
     return false;
   }
   if (e.select) ui.selected = e.select;
+  then?.();
   const short = e.names;
   commit({ code: e.code, names: { ...doc.names, short: short } }, ["code.json", "names.short.json"], e.note);
   return true;
@@ -1077,7 +1080,9 @@ function typeChoice(id: string, type: Id, names: Names, current: string | null) 
 
 // Run a top-level edit; `then` adjusts what's shown once it's in.
 function runTop(info: T.Info, r: Top.Top, then?: (r: Extract<Top.Top, { ok: true }>) => void) {
-  if (applyT(topT(info, r)) && r.ok && then) { then(r); render(); }
+  // Before drawing: drawn first, a deleted definition would still be the
+  // open one, with its nodes gone.
+  applyT(topT(info, r), r.ok && then ? () => then(r) : undefined);
 }
 
 const row = (...kids: Kid[]) => h("div", { class: "srow" }, ...kids);
