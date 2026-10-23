@@ -330,6 +330,12 @@ don't care about order, and nothing can see the order of effect-free
 items. Number `+` keeps the spine: floating point isn't associative. This
 is how `length`, sums and counts compile (compiler/GAPS.md, G15).
 
+A fold whose answer is a record (a type with one case, such as chapters'
+`pile` of lines and sections) carries the record's fields in separate
+locals when each step only reads fields of the folded rest. The arms set
+the locals instead of returning a new record per item, and the record is
+built once, at the end (GAPS.md G13 again).
+
 A chain of steps over a list runs as one loop, with no list in between
 (GAPS.md G16). `length(keep(split(line, " "), w ≠ ""))` counts as it cuts,
 and `joinAll(map(characters(t), f), "")` joins as it maps. Each kind of

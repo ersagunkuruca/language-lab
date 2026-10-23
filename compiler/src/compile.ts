@@ -687,6 +687,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const name = `$k${constNames.size}`;
       constNames.set(js, name);
       constants.push(`const ${name} = ${js};`);
+      if (pieces.has(js)) pieces.set(name, pieces.get(js)!);
     }
     return constNames.get(js)!;
   }
@@ -762,6 +763,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Binders holding an array here: the copy's array parameters, and lets
     // given one.
     const arrNow = new Map<Id, Kind>(sp.arr);
+    // Fold results that arrive as their fields, in separate locals (G13
+    // again, `foldArms`).
+    const splitAt = new Map<Id, { variant: Id; fields: string[] }>();
     // The array an expression is, without making cells, if it is one: a JS
     // array in list order (front), or `{ a, n }` from the other end (back).
     // `held`: the value goes to a binder, where an empty list is worth
@@ -903,7 +907,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const wrap = (f: string, isGen: boolean) => (streamsFn(ty(n.id), rho) && !isGen ? `$lift(${f})` : f);
       switch (t.kind) {
         case "binder": {
-          const kind = arrNow.get(n.target);
+          const kind = arrNow.get(n.target), split = splitAt.get(n.target);
+          if (split) return construct(split.variant, split.fields);
           if (boolParams.has(n.target)) return `(${local(n.target)} ? $T : $F)`;
           return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
         }
@@ -974,6 +979,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const whole = new RegExp(`(?<![\\p{L}\\p{N}_$])${r.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(rest);
       return `(${fs.join(", ")}) => {\n${whole ? `const ${r} = ({ tag: ${tag(variant)}, fields: [${fs.join(", ")}] });\n` : ""}${rest}\n}`;
     }
+    // A field of a record, read from its pieces when it was just built
+    // from locals (anything else might have effects to run).
+    function field(record: string, f: Id): string {
+      const p = pieces.get(record);
+      return p && p.fields.every((x) => /^[\p{L}\p{N}_$]+$/u.test(x)) ? p.fields[fieldIndex(f)] : `${record}.fields[${fieldIndex(f)}]`;
+    }
     function fieldIndex(field: Id): number {
       const def = info.owner.get(field)!;
       const variant = node<"typedef">(node<"def">(def).body!).variants[0];
@@ -1034,7 +1045,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
         if (t.kind === "variant" && isConst(n.id)) return hoist(construct(f.target, n.args.map(ex)));
         if (t.kind === "variant") return effectOf(f.target) ? perform(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
-        if (t.kind === "field") return `${ex(n.args[0])}.fields[${fieldIndex(f.target)}]`;
+        if (t.kind === "field") return field(ex(n.args[0]), f.target);
         if (t.kind === "def") {
           const s = defCall(n);
           const c = `${s.name}(${argsOf(n, s).join(", ")})`;
@@ -1527,40 +1538,85 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `let ${acc} = ${ex(fwd.end.body)};\nconst ${a} = ${input.js};\n` +
           `${eachOf(held, x, `${referenced.has(item) ? `const ${local(item)} = ${x};\n` : ""}${acc} = ${fwd.step(acc)};`, "any")}\nreturn ${acc};`;
       }
-      const [nil, cons, nilFn, consFn, , r] = foldArms(n);
-      return `${nilFn}${consFn}const ${a} = ${input.js};\nlet ${r} = ${nil}();\n${eachOf(held, x, `${r} = ${cons}(${x}, ${r});`, "end")}\nreturn ${r};`;
+      const f = foldArms(n);
+      return `${f.pre}const ${a} = ${input.js};\n${f.start}\n${eachOf(held, x, f.step(x), "end")}\nreturn ${f.end};`;
     }
 
     // A fold over `characters(t)`, run on t: the characters from the end,
     // a surrogate pair taken as one, as `characters` splits them. No list.
     function foldText(n: NodeOf<"fold">, input: string): string {
-      const [nil, cons, nilFn, consFn, i, r] = foldArms(n);
+      const f = foldArms(n), i = temp("i");
       const t = temp("t"), j = temp("j");
-      return `${nilFn}${consFn}const ${t} = ${input};\nlet ${r} = ${nil}();\n` +
+      return `${f.pre}const ${t} = ${input};\n${f.start}\n` +
         `for (let ${i} = ${t}.length, ${j}; ${i} > 0; ${i} = ${j}) {\n${j} = ${i} - 1;\n` +
         `if (${j} > 0 && (${t}.charCodeAt(${j}) & 0xfc00) === 0xdc00 && (${t}.charCodeAt(${j} - 1) & 0xfc00) === 0xd800) ${j}--;\n` +
-        `${r} = ${cons}(${t}.slice(${j}, ${i}), ${r});\n}\nreturn ${r};`;
+        `${f.step(`${t}.slice(${j}, ${i})`)}\n}\nreturn ${f.end};`;
     }
 
     // A fold over `range(n)`, run on n: the cons arm for n − 1 down to 0,
     // as many as `range` makes (the whole part of n for a Number, none for
     // NaN or below 1). No list.
     function foldCount(n: NodeOf<"fold">, input: string, int: boolean): string {
-      const [nil, cons, nilFn, consFn, i, r] = foldArms(n);
-      return `${nilFn}${consFn}let ${r} = ${nil}();\n` +
-        `for (let ${i} = ${int ? `Number(${input})` : `Math.floor(${input})`} - 1; ${i} >= 0; ${i}--) ${r} = ${cons}(${i}, ${r});\nreturn ${r};`;
+      const f = foldArms(n), i = temp("i");
+      return `${f.pre}${f.start}\n` +
+        `for (let ${i} = ${int ? `Number(${input})` : `Math.floor(${input})`} - 1; ${i} >= 0; ${i}--) ${f.step(i)}\nreturn ${f.end};`;
     }
 
     // The two arms of a fold over a list as local functions, for the
     // templates that run it on other storage: () for nil, (item, folded
-    // rest) for cons.
-    function foldArms(n: NodeOf<"fold">): [string, string, string, string, string, string] {
+    // rest) for cons. `pre` comes before the loop, `start` runs nil, `step`
+    // runs cons on an item, and `end` is the answer.
+    // When the answer is a record (a type with one case, such as
+    // chapters' `pile`) and the cons arm only reads fields of the folded
+    // rest, the fields are carried in separate locals and the record is
+    // built once, at the end: the arms set the locals instead of returning
+    // a record per item (GAPS.md G13 again).
+    function foldArms(n: NodeOf<"fold">): { pre: string; start: string; step: (x: string) => string; end: string } {
       const arm = (v: Id) => n.arms.map((a) => node<"arm">(a)).find((a) => a.variant === v)!;
       const nil = arm(NIL), cons = arm(CONS);
       const ifNil = temp("nil"), ifCons = temp("cons");
       const c = referenced.has(cons.binds[0]) ? local(cons.binds[0]) : temp("c");
-      const after = cons.results[1] ? local(cons.results[1]) : temp("after");
-      return [ifNil, ifCons, `const ${ifNil} = () => {\n${ret(nil.body)}\n};\n`, `const ${ifCons} = (${c}, ${after}) => {\n${ret(cons.body)}\n};\n`, temp("i"), temp("r")];
+      const rest = cons.results[1];
+      const variant = recordOf(ty(n.id));
+      if (variant && rest && onlyFieldsOf(cons.body, rest)) {
+        const rs = node<"variant">(variant).fields.map(() => temp("r"));
+        const afters = rs.map(() => temp("after"));
+        const leaf = (js: string) => {
+          const p = pieces.get(js);
+          if (p?.variant === variant) return `${rs.map((r, i) => `${r} = ${p.fields[i]};`).join("\n")}\nreturn;`;
+          const t = temp("t");
+          return `const ${t} = ${js};\n${rs.map((r, i) => `${r} = ${t}.fields[${i}];`).join("\n")}\nreturn;`;
+        };
+        const out: Out = { bool: false, leaf };
+        splitAt.set(rest, { variant, fields: afters });
+        const consFn = `const ${ifCons} = (${[c, ...afters].join(", ")}) => {\n${ret(cons.body, false, out)}\n};\n`;
+        return {
+          pre: `let ${rs.join(", ")};\nconst ${ifNil} = () => {\n${ret(nil.body, false, out)}\n};\n${consFn}`,
+          start: `${ifNil}();`, step: (x) => `${ifCons}(${[x, ...rs].join(", ")});`, end: construct(variant, rs),
+        };
+      }
+      const r = temp("r"), after = rest ? local(rest) : temp("after");
+      return {
+        pre: `const ${ifNil} = () => {\n${ret(nil.body)}\n};\nconst ${ifCons} = (${c}, ${after}) => {\n${ret(cons.body)}\n};\n`,
+        start: `let ${r} = ${ifNil}();`, step: (x) => `${r} = ${ifCons}(${x}, ${r});`, end: r,
+      };
+    }
+    // The case of a type with one case and some fields, not a list.
+    function recordOf(t: Type): Id | null {
+      const z = sub.zonk(t), d = z.t === "con" ? code.nodes[z.id] : null;
+      const td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+      if (td?.kind !== "typedef" || td.effect || td.variants.length !== 1) return null;
+      const v = td.variants[0];
+      return v !== CONS && node<"variant">(v).fields.length > 0 ? v : null;
+    }
+    // Is every use of `b` in `id` a field read?
+    function onlyFieldsOf(id: Id, b: Id): boolean {
+      const all = subtree(code, id), read = new Set<Id>();
+      for (const x of all) {
+        const c = code.nodes[x], f = c.kind === "call" && c.args.length === 1 ? code.nodes[c.fn] : null;
+        if (c.kind === "call" && f?.kind === "ref" && code.nodes[f.target].kind === "field") read.add(c.args[0]);
+      }
+      return all.every((x) => !refTo(x, b) || read.has(x));
     }
 
     function foldNested(input: string, arms: NodeOf<"arm">[], recOf: (a: NodeOf<"arm">) => number[]): string {
@@ -1711,7 +1767,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         let c: string;
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
-        else if (kind === "field") c = `${args[0]}.fields[${fieldIndex(target!)}]`;
+        else if (kind === "field") c = field(args[0], target!);
         else if (kind === "builtin" && OPS[target!]) {
           const js = OPS[target!].js(BOOL_ARGS.has(target!) ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
           c = OPS[target!].bool ? `$bool(${js})` : js;

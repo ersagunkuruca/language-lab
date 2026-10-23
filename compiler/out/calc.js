@@ -110,18 +110,18 @@ function tokens(line3) {
             return $cons($k3, after2);
           }
           if (digit(c)) {
-            const s$9 = after2;
-            switch (s$9.tag) {
+            const s$10 = after2;
+            switch (s$10.tag) {
               case "std.list.cons" /* cons */: {
-                const next = s$9.fields[0];
-                const more2 = s$9.fields[1];
-                const s$10 = next;
-                switch (s$10.tag) {
+                const next = s$10.fields[0];
+                const more2 = s$10.fields[1];
+                const s$11 = next;
+                switch (s$11.tag) {
                   case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-                    const d = s$10.fields[0];
-                    const h$11 = ({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [(c + d)] });
-                    s$9.fields[0] = h$11;
-                    return s$9;
+                    const d = s$11.fields[0];
+                    const h$12 = ({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [(c + d)] });
+                    s$10.fields[0] = h$12;
+                    return s$10;
                   }
                   case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
                     return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
@@ -140,24 +140,24 @@ function tokens(line3) {
             }
           }
           if (letter(c)) {
-            const s$12 = after2;
-            switch (s$12.tag) {
+            const s$13 = after2;
+            switch (s$13.tag) {
               case "std.list.cons" /* cons */: {
-                const next2 = s$12.fields[0];
-                const more3 = s$12.fields[1];
-                const s$13 = next2;
-                switch (s$13.tag) {
+                const next2 = s$13.fields[0];
+                const more3 = s$13.fields[1];
+                const s$14 = next2;
+                switch (s$14.tag) {
                   case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
-                    const w = s$13.fields[0];
-                    const h$14 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + w)] });
-                    s$12.fields[0] = h$14;
-                    return s$12;
+                    const w = s$14.fields[0];
+                    const h$15 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + w)] });
+                    s$13.fields[0] = h$15;
+                    return s$13;
                   }
                   case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-                    const d2 = s$13.fields[0];
-                    const h$15 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + d2)] });
-                    s$12.fields[0] = h$15;
-                    return s$12;
+                    const d2 = s$14.fields[0];
+                    const h$16 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + d2)] });
+                    s$13.fields[0] = h$16;
+                    return s$13;
                   }
                   default: {
                     return $cons(({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [c] }), after2);
@@ -172,13 +172,13 @@ function tokens(line3) {
           return $cons(({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [c] }), after2);
         };
         const t$18 = line3;
-        let r$17 = nil$7();
-        for (let i$16 = t$18.length, j$19; i$16 > 0; i$16 = j$19) {
-          j$19 = i$16 - 1;
+        let r$9 = nil$7();
+        for (let i$17 = t$18.length, j$19; i$17 > 0; i$17 = j$19) {
+          j$19 = i$17 - 1;
           if (j$19 > 0 && (t$18.charCodeAt(j$19) & 0xfc00) === 0xdc00 && (t$18.charCodeAt(j$19 - 1) & 0xfc00) === 0xd800) j$19--;
-          r$17 = cons$8(t$18.slice(j$19, i$16), r$17);
+          r$9 = cons$8(t$18.slice(j$19, i$17), r$9);
         }
-        return r$17;
+        return r$9;
       })(), ((t2) => $bool(!$eq(t2, $k3))));
 }
 
