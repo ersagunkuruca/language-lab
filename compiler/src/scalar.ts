@@ -48,7 +48,7 @@ import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { BOOL, CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -71,6 +71,9 @@ const RT: Record<Id, string> = {
   [TEXT_OPS.find]: "text.find", [TEXT_OPS.code]: "text.code", [TEXT_OPS.fromCode]: "text.fromCode",
 };
 
+// What a partial function (`data`) may do besides answer: have no answer,
+// not finish (running out of a budget), or abort.
+const PARTIAL: Id[] = [CHOICE, DIVERGE, ABORT];
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
@@ -98,16 +101,16 @@ export interface Shape { t: FType; caps: LType[] }
 // For a printer of a target without a heap (WGSL, the JS fallback for
 // shaders), which is never given data.
 export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a heap: lower without \`data\``); };
-// Whether e can end with no answer: it fails, or calls something partial.
-// An attempt can't, unless its parts can (its body's "none" it handles).
+// Whether e can end with no answer or abort: it fails or aborts, or calls
+// something partial.
 export function fails(e: SExpr, funcs: SFunc[]): boolean {
   switch (e.k) {
-    case "fail": return true;
+    case "fail": case "abort": return true;
     case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
     case "rt": return !!runtime(e.fn).partial || e.args.some((a) => fails(a, funcs));
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
-    case "attempt": return fails(e.ok, funcs) || fails(e.otherwise, funcs);
-    case "budget": return fails(e.otherwise, funcs);
+    // An abort goes on through first and budgets, so their bodies count.
+    case "attempt": case "budget": return kids(e).some((a) => fails(a, funcs));
     default: return kids(e).some((a) => fails(a, funcs));
   }
 }
@@ -123,6 +126,8 @@ export function kids(e: SExpr): SExpr[] {
     case "closure": return e.caps;
     case "apply": return [e.fn, ...e.args];
     case "attempt": return [e.body, e.ok, e.otherwise];
+    case "abort": return [e.reason];
+    case "handle": return [e.body, e.arm];
     default: return [];
   }
 }
@@ -167,7 +172,12 @@ export type SExpr =
   // first, optional, all and count over a search with one answer or none:
   // body's answer goes into local res and ok is the value; if it has
   // none, otherwise is.
-  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType };
+  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType }
+  // abort(reason) (`data`): the computation ends, out to the nearest
+  // handler of Abort, which gets the reason in local `reason` and gives
+  // arm's value instead (a match on Abort).
+  | { k: "abort"; reason: SExpr }
+  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
 // WebAssembly instructions; a WASM module imports them, a shader has them
@@ -240,10 +250,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // The profile's type for t, or null if t isn't in it.
   function stype(t: Type, inside: Id[] = []): LType | null {
     if (t.t === "fn" && opts.data) {
-      // A function that may not finish, or have no answer, is fine here
-      // (a partial one, giving a status); one with other effects isn't yet.
+      // A function that may not finish, have no answer or abort is fine
+      // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
-      if (effs.some((e) => e !== DIVERGE && e !== CHOICE)) return null;
+      if (effs.some((e) => !PARTIAL.includes(e))) return null;
       const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.length > 0;
@@ -378,8 +388,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = !!opts.data && (all.includes(CHOICE) || (!constant && info.divergent.has(def)));
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && e === CHOICE));
+    const partial = !!opts.data && (all.includes(CHOICE) || all.includes(ABORT) || (!constant && info.divergent.has(def)));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && PARTIAL.includes(e)));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -482,6 +492,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
+        if (target === ABORT_OP && opts.data && n.args.length === 1) return { k: "abort", reason: expr(n.args[0], env, f, false) };
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (opts.data && [S.first, S.optional, S.all, S.count].includes(target) && !isBudget(n)) return attempt(n, id, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
@@ -512,6 +523,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       }
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+        if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
+          // A handler of Abort: the scrutinee is the computation.
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`handles Abort with a value that is ${OTHER}`);
+          const reason = f.locals.push("text") - 1, save = f.locals.push("f64") - 1;
+          const body = expr(n.scrutinee, env, f, false);
+          const arm = expr(arms[0].body, new Map(env).set(arms[0].binds[0], reason), f, false);
+          return { k: "handle", body, reason, arm, t, save };
+        }
         const st = opts.records ? stype(zonk(n.scrutinee)) : null;
         if (st && isData(st)) {
           // Each case's arm, its fields as lets read from the scrutinee's local.
