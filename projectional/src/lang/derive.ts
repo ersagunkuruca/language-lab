@@ -37,7 +37,9 @@
 // it reads what it can and puts `fail` where it can't: no slope there,
 // which is why derivative's result may fail (Choice). Only the part that
 // needs the missing slope fails; a piecewise function keeps the slopes of
-// its other pieces.
+// its other pieces. When f is written right where derivative is applied
+// and every slope can be read (smoothDerivative, below), the checker drops
+// the Choice, and compilers generate the derivative ahead of time.
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
@@ -403,4 +405,73 @@ export function derivativeLambda(code: Code, fn: { lambda: Id } | { prim: Id }):
     c.set(key, deriver(code, {}, true).lambda(lambda, 0));
   }
   return c.get(key)!;
+}
+
+// `derivative(f)` where f is written right there: a lambda, a definition,
+// or an arithmetic builtin. Then the derivative can be generated before the
+// program runs (by the checker and the compilers), not only by the
+// evaluator. Returns the lambda to differentiate, writing a wrapper into
+// `code` for a builtin.
+function knownFunction(code: Code, arg: Id): Id | null {
+  const n = code.nodes[arg];
+  if (n?.kind === "lambda") return n.params.length === 1 ? arg : null;
+  if (n?.kind !== "ref") return null;
+  const t = code.nodes[n.target];
+  if (t?.kind === "def") {
+    const body = t.body ? code.nodes[t.body] : null;
+    return body?.kind === "lambda" && body.params.length === 1 ? body.id : null;
+  }
+  if (!OPS[n.target]) return null;
+  const x = freshId(), r = freshId(), head = freshId(), body = freshId(), lambda = freshId();
+  code.nodes[x] = { id: x, kind: "binder" };
+  code.nodes[r] = { id: r, kind: "ref", target: x };
+  code.nodes[head] = { id: head, kind: "ref", target: n.target };
+  code.nodes[body] = { id: body, kind: "call", fn: head, args: [r] };
+  code.nodes[lambda] = { id: lambda, kind: "lambda", params: [x], body };
+  return lambda;
+}
+
+const derivativeCall = (code: Code, id: Id): id is Id => {
+  const n = code.nodes[id];
+  return n?.kind === "call" && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.derivative;
+};
+
+// Does derivative(arg) have a slope everywhere f has a value? It does when
+// f is known and every node on the way is one derive.ts can read: then
+// the derivative never fails where f doesn't, and the checker types it
+// without Choice. A function value passed in (unknown until run time), or
+// floor, or data taken apart, keeps Choice.
+export function smoothDerivative(code: Code, arg: Id): boolean {
+  const scratch: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  try {
+    const lam = knownFunction(scratch, arg);
+    if (!lam) return false;
+    const before = new Set(Object.keys(scratch.nodes));
+    deriver(scratch).lambda(lam, 0);
+    // A call of a function value inside asks `derivative` again at run time.
+    return !Object.values(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && n.target === S.derivative);
+  } catch {
+    return false;
+  }
+}
+
+// A copy of the program where each smooth `derivative(f)` is replaced by
+// the lambda it stands for, with the partial derivatives it calls added as
+// definitions (∂scene/∂x …, shared between calls). This is what a compiler
+// that can't run the evaluator inside it (the GPU's) compiles: the same
+// code the evaluator would generate at run time, generated ahead of it.
+// The source keeps saying derivative(f), so editing f changes the slope.
+export function expandDerivatives(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
+  const calls = Object.keys(code.nodes).filter((id) => derivativeCall(code, id) && smoothDerivative(code, (code.nodes[id] as NodeOf<"call">).args[0]));
+  if (!calls.length) return { code, names, expanded: [] };
+  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const d = deriver(out, names);
+  for (const id of calls) {
+    const lam = d.lambda(knownFunction(out, (out.nodes[id] as NodeOf<"call">).args[0])!, 0);
+    // The call node itself becomes the lambda, so whatever points at it
+    // (the call that applies it, usually) now applies the derivative.
+    out.nodes[id] = { ...out.nodes[lam], id } as Node;
+  }
+  out.defs.push(...d.defs);
+  return { code: out, names: { ...names, ...d.names }, expanded: calls };
 }
