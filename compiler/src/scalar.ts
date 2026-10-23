@@ -12,8 +12,8 @@
 // with one case whose fields are Numbers, Bools or records again (a
 // point, a colour, a ray). They need no heap either, since their size is
 // known; a shader has them as structs (or vectors, wgsl.ts). A record is built by its case,
-// read by its fields or by a match with one arm. WebAssembly doesn't take
-// them yet (it would need multiple results), so wasm.ts lowers without.
+// read by its fields or by a match with one arm. WebAssembly has them as
+// WasmGC structs (wasm.ts).
 //
 // The lowering is to a tiny expression tree with numbered locals. A
 // definition outside the profile is refused with the reason, the way a

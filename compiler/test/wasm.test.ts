@@ -38,6 +38,27 @@ for (const [name, expected] of [
   });
 }
 
+test("records are WasmGC structs: the ray marcher's colours in WebAssembly, exactly the evaluator's", async () => {
+  const p = load("raymarch");
+  const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
+  assert.deepEqual(lowered.records.map((r) => r.name), ["Vec", "Colour"]);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  assert.match(m.wat, /\(type \$Colour\d+ \(struct \(field \$\w+ f64\)/);
+  assert.match(m.wat, /struct\.new \$Vec/);
+  const w = await instantiate(m) as unknown as Record<string, (...xs: unknown[]) => unknown>;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const colour = lowered.funcs.find((f) => f.name === "colour" && f.params.every((t) => t === "f64"))!;
+  const fields = (lowered.records[1]).fields.map((x) => x.name);
+  for (const [x, y, t] of [[0, 0, 0], [0.3, -0.2, 1.5], [-0.9, 0.7, 4], [0.5, 0.5, 10]]) {
+    const want = first(r.call(r.value(colour.def), x, y, t)) as { fields: number[] };
+    const got = w.colour(x, y, t);
+    fields.forEach((name, i) => assert.ok(Object.is(w[`Colour.${name}`](got), want.fields[i]), `colour(${x}, ${y}, ${t}).${name}: ${w[`Colour.${name}`](got)} ≠ ${want.fields[i]}`));
+  }
+  // A generic definition at two types is exported once by its name, then by its types.
+  assert.ok(m.exports.includes("plus") && m.exports.some((e) => /^plus\(/.test(e)), m.exports.join(" "));
+});
+
 test("what isn't in the profile is refused, with the reason", () => {
   const p = load("calculus");
   const { refused } = lowerScalar(p.code, p.info, p.pres.names, p.own.defs);

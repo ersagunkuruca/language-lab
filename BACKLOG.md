@@ -18,6 +18,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I1 | Editor: the picture's CPU fallback can run a colour record in WebAssembly now (`Colour.red` readers, C7 W1a), not JavaScript; picture.ts still says WebAssembly takes no records | lane C | 2026-10-23 |
 
 ## E: Editor
 
@@ -36,7 +37,7 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C7 | WebAssembly for full programs (WasmGC), staged W1 data, W2 closures, W3 text and the world, W4 searches and effects, W5 big Int; design in projectional/WASM.md | ROADMAP 6 | P2 | L | ▶ design done; W1 next |
+| C7 | WebAssembly for full programs (WasmGC), staged W1 data, W2 closures, W3 text and the world, W4 searches and effects, W5 big Int; design in projectional/WASM.md | ROADMAP 6 | P2 | L | ▶ design done, W1a records done; W1b cases and lists next |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
 | C17 | Native binaries through WASM (wasm2c) or C with reference counting | ROADMAP 6 | P3 | L | after C7 |
@@ -130,7 +131,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C7 design | projectional/WASM.md: whole programs to WasmGC by growing the scalar profile towards the heap; representation table, text as UTF-8 arrays, Int past 64 bits from the host, the five stages | this PR |
+| C7 W1a | Records in WebAssembly as WasmGC structs, an exported reader per field (`Colour.red`), a generic definition at two types exported under both; the ray marcher's colours match the evaluator exactly. The editor's CPU fallback could now use WebAssembly for colour records (Inbox) | this PR |
+| C7 design | projectional/WASM.md: whole programs to WasmGC by growing the scalar profile towards the heap; representation table, text as UTF-8 arrays, Int past 64 bits from the host, the five stages | #262 |
 | C6 | G13 again, the part left: a single-answer function whose answers are one record leaves their fields in `$got` (a `$fields` copy) when its caller goes on with the answer; Countdown's `join` builds no `found`, 1.47× → 1.30× the ideal | #259 |
 | C22 | G23's last part measured and left: `entries` kept as an array for the folds from the end made 50,000 lines 146 ms against 138 ms (noise), since each step's `add to` is the cost, not the spine (GAPS.md G23) | #255 |
 | C22 | G23 part 2: a list from `split` matched and handed back to its own definition (ledger's `entries`, calc's `run lines`) is the array and an index; the folds from the end are still open above | #246 |
