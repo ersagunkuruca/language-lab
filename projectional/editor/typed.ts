@@ -287,10 +287,24 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
 export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: string, defId?: Id): TEdit {
   const r = parseValue(text, code, { ...display, ...names });
   if ("error" in r) return { ok: false, reason: r.error };
+  const plain = written(code, names, info, hole, text, r.value, false, defId);
+  // A whole number where an Int goes is an Int: 0 in slice's position.
+  const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
+  if (plain.ok || !whole(r.value)) return plain;
+  const int = written(code, names, info, hole, text, r.value, true, defId);
+  return int.ok ? int : plain;
+}
+
+function written(code: Code, names: Names, info: Info, hole: Id, text: string, value: Value, int: boolean, defId?: Id): TEdit {
   const nodes = { ...code.nodes };
+  // Typed alone, an Int is read from the text, so one past 2⁵³ stays exact.
+  const exact = /^\s*-?\d+\s*$/.test(text) ? readInt(text.trim())[0] : undefined;
   const build = (v: Value, at?: Id): Id => {
     const id = at ?? freshId();
-    if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
+    if (int && typeof v === "number" && Number.isInteger(v)) {
+      const n = exact ?? v;
+      nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), of: INT };
+    } else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
     else if (typeof v === "object" && "tag" in v) {
       const fn = v.fields.length ? freshId() : id;
       nodes[fn] = { id: fn, kind: "ref", target: v.tag };
@@ -298,7 +312,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     } else throw new Error("only plain values can be written out");
     return id;
   };
-  build(r.value, hole);
+  build(value, hole);
   const next = { nodes, defs: code.defs };
   const after = defId ? nextHole(next, defId, hole) : undefined;
   return guardTyped(info, next, names, after ?? hole, `Filled with ${text.trim()}.`);
