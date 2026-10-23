@@ -23,7 +23,9 @@ import { loadProgram } from "../src/lang/load.ts";
 const here = new URL(".", import.meta.url).pathname;
 const site = here + "../../";
 // What the editor's "Save page" puts before a page's compiled program.
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()) } });
+// The worker Run uses (editor/runWorker.ts), as text the editor starts.
+const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text) } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);

@@ -55,6 +55,12 @@ async function visit(saved: string | null, only?: string) {
       const blocks = await p.locator(".blocks-wrap").first().innerText({ timeout: 500 }).catch(() => "");
       if (/^\s*cons\($/m.test(blocks) && /\bnil\b/.test(blocks)) errors.push(`${where}: a list shows as cons(…) in the blocks`);
       await click('[data-act="t-run"]');
+      // Run goes to a worker, and what it printed comes back.
+      if (i === 0 && def.trim() === "main" && await p.locator('[data-act="t-stop"], [data-act="t-run"]').count()) {
+        await p.locator('[data-act="t-run"]').waitFor({ timeout: 10000 }).catch(() => errors.push(`${where}: Run didn't finish in 10 s`));
+        const out = await p.locator(".run pre.out").innerText({ timeout: 500 }).catch(() => "");
+        if (!out || out === "Running…") errors.push(`${where}: Run showed nothing`);
+      }
       await click('[data-act="t-values"]');
       await stopped(p);
       // Its first nodes, where a click reaches them: a frame is mostly under
