@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { CONS, NIL, NONE, PAIR_V, S, SECOND, SOME } from "../../projectional/src/lang/std.ts";
+import { CONS, INT_OPS, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -187,4 +187,26 @@ export function closures() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), shifted, squaredTwice };
+}
+
+// Text and Int: each text builtin once, so WebAssembly's runtime
+// (wasm-rt.ts) can be compared with the evaluator on any input.
+export function texts() {
+  const k = new Lang();
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const defs = {
+    sliced: d("sliced", ["t", "a", "b"], (t, a, b) => k.call(TEXT_OPS.slice, t, a, b)),
+    length: d("length of", ["t"], (t) => k.call(TEXT_OPS.length, t)),
+    pieces: d("pieces", ["t", "by"], (t, by) => k.call(TEXT_OPS.joinAll, k.call(TEXT_OPS.split, t, by), k.lit("|"))),
+    chars: d("chars", ["t"], (t) => k.call(TEXT_OPS.joinAll, k.call(TEXT_OPS.characters, t), k.lit(","))),
+    before: d("before", ["a", "b"], (a, b) => k.call(TEXT_OPS.less, a, b)),
+    same: d("same", ["a", "b"], (a, b) => k.equal(k.call(S.concat, a, k.lit("")), b)),
+    glued: d("glued", ["a", "b"], (a, b) => k.call(S.concat, a, k.call(S.concat, k.lit("·"), b))),
+    shown: d("shown", ["x"], (x) => k.call(S.show, k.call(B.add, x, k.lit(0)))),
+    arith: d("arith", ["a", "b"], (a, b) => k.call(INT_OPS.show, k.call(INT_OPS.add, k.call(INT_OPS.sub, k.call(INT_OPS.mul, a, b), a), k.call(INT_OPS.neg, k.call(INT_OPS.abs, b))))),
+    smaller: d("smaller", ["a", "b"], (a, b) => k.if(k.call(INT_OPS.less, a, b), k.call(INT_OPS.toNumber, a), k.call(INT_OPS.toNumber, b))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
 }

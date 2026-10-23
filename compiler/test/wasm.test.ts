@@ -5,10 +5,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
-import { isData, lowerScalar, type LType } from "../src/scalar.ts";
-import { emitWasm, instantiate } from "../src/wasm.ts";
+import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
+import { emitWasm, fromText, instantiate, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, closures, sameLists } from "../src/fixtures.ts";
+import { area, closures, sameLists, texts } from "../src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -66,8 +66,11 @@ type Data = { tag: string; fields: Value[] };
 const helper = (w: Exports, name: string, key: string) => w[`${name}(${key})`] ?? w[name];
 function toWasm(w: Exports, v: Value, t: LType): unknown {
   if (t === "f64") return v;
+  if (t === "text") return toText(w, v as string);
+  if (t === "i64") return BigInt(v as number | bigint);
+  if (isRecord(t)) return helper(w, `${t.name}.${t.case}`, t.key)(...t.fields.map((f, j) => toWasm(w, (v as Data).fields[j], f.t)));
   if (t === "i32") return (v as Data).tag === TRUE ? 1 : 0;
-  if (!isData(t)) throw new Error("no makers for records");
+  if (!isData(t)) throw new Error("no makers for functions");
   // Down a list's tails first, then built from the end, so a long one needs no stack.
   const spine: Data[] = [];
   let d = v as Data;
@@ -85,7 +88,11 @@ function toWasm(w: Exports, v: Value, t: LType): unknown {
 }
 function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "f64") return x as number;
+  if (t === "text") return fromText(w, x);
+  // An Int is a JS number while it's safe, as in the evaluator (int.ts).
+  if (t === "i64") { const n = x as bigint; return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
   if (t === "i32") return bool(x === 1);
+  if (isFn(t)) throw new Error("no readers for functions");
   if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
   const c = t.cases[helper(w, `${t.name}.case`, t.key)(x) as number];
   return { tag: c.variant, fields: c.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${c.name}.${f.name}`, t.key)(x), f.t)) };
@@ -172,6 +179,59 @@ test("functions as values in WebAssembly: closures, call_ref, a definition by na
       if (name === "numbers") { const nat = f.params[0] as { cases: { variant: string }[] }; const fix = (v: Data): Data => (v.fields.length ? { tag: nat.cases[1].variant, fields: [fix(v.fields[0] as Data)] } : { tag: nat.cases[0].variant, fields: [] }); xs = [fix(xs[0] as Data)]; }
       const want = first(rr.call(rr.value(f.def), ...xs));
       assert.deepStrictEqual(fromWasm(wm, wm[fn](...xs.map((x, i) => toWasm(wm, x, f.params[i]))), f.result), want, `${name}: ${fn}`);
+    }
+  }
+});
+
+test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, characters counted, not bytes", async () => {
+  const p = texts();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const words = ["", "a", "héllo wörld", "naïve café 🎉 ok", "a,b,,c", "aaa", "Zebra", "zebra", "日本語のテキスト"];
+  const cases: Record<keyof typeof p.defs, Value[][]> = {
+    sliced: words.flatMap((t) => [[t, 0, 3], [t, 2, 99], [t, -5, 1], [t, 4, 2], [t, 1, 1]]),
+    length: words.map((t) => [t]),
+    pieces: words.flatMap((t) => [[t, ","], [t, ""], [t, "aa"], [t, " "], [t, "ö"]]),
+    chars: words.map((t) => [t]),
+    before: words.flatMap((a) => words.map((b) => [a, b])),
+    same: words.flatMap((a) => words.map((b) => [a, b])),
+    glued: [["", ""], ["héllo", "🎉"]],
+    shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, NaN, Infinity, -Infinity, 2.0000000001].map((x) => [x]),
+    arith: [[0, 0], [6, 7], [-3, 5], [123456789, 1000], [2 ** 31, 2 ** 31]],
+    smaller: [[1, 2], [5, -5], [0, 0]],
+  };
+  for (const [name, inputs] of Object.entries(cases)) {
+    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs) {
+      const want = first(r.call(r.value(def), ...xs));
+      const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => JSON.stringify(x)).join(", ")})`);
+    }
+  }
+  // Past 2⁶³ an Int traps, a runtime error rather than a wrong answer (big Ints are W5).
+  assert.throws(() => w.arith(2n ** 62n, 4n), WebAssembly.RuntimeError);
+  // Programs: wc's and chapters' text functions, the evaluator's answers.
+  for (const [name, fn, inputs] of [
+    ["wc", "blank", [[""], ["  "], ["a b"], ["\t x"]]],
+    ["wc", "pad", [[0], [7], [12345], [-3]]],
+    ["chapters", "two digits", [[0], [5], [42], [123]]],
+    ["ledger", "money", [[0], [5], [1234567], [-250], [-5]]],
+    ["ledger", "pad", [["7", 3], ["12345", 2], ["", 4]]],
+    ["ledger", "with point", [["12345"], ["5"], ["123"]]],
+  ] as const) {
+    const q = load(name);
+    const l = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
+    const f = l.funcs.find((g) => g.name === fn && !g.inner)!;
+    assert.ok(f, `${name}: ${fn} compiles`);
+    const wm = await instantiate(emitWasm(l)) as unknown as Exports;
+    const rr = makeRunner(q.code, q.info, { print: () => {} });
+    for (const xs of inputs as unknown as Value[][]) {
+      const want = first(rr.call(rr.value(f.def), ...xs));
+      assert.deepStrictEqual(fromWasm(wm, wm[fn](...xs.map((x, i) => toWasm(wm, x, f.params[i]))), f.result), want, `${name}: ${fn}(${xs})`);
     }
   }
 });
