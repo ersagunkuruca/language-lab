@@ -118,8 +118,11 @@ const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> 
 };
 // Other std builtins run their implementation from std.ts: `$impl` for
 // those with one answer, `$many` (an array of answers) for those with Choice.
+// Every Choice builtin is partial, with no answer or one (std.ts `choice`),
+// so a call runs `$partial`, which gives the answer or $no (GAPS.md G24).
 const implOf = (id: Id) => (OPS[id] ? null : STD_IMPL[id] ? `$impl[${JSON.stringify(id)}]` : null);
 const manyOf = (id: Id) => (STD_MANY[id] ? `$many[${JSON.stringify(id)}]` : null);
+const oneOf = (id: Id) => (STD_MANY[id] ? `$partial[${JSON.stringify(id)}]` : null);
 const BOOL_ARGS = new Set([S.and, S.hence, S.or, S.not]);
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 
@@ -313,10 +316,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const singles = new Map<Id, boolean>();
   const looking = new Set<Id>();
   const STREAMING = new Set<Id>([S.oneOf, S.fuel, S.first, S.seeded]);
-  function singleDef(def: Id): boolean {
-    if (singles.has(def)) return singles.get(def)!;
-    if (looking.has(def)) return false;
-    looking.add(def);
+  // Does `id` give one answer or none? `def`: the definition being looked
+  // at, whose calls of itself count as one.
+  function oneAnswer(id: Id, def: Id | null): boolean {
     const noChoice = (t: Type) => t.t === "fn" && !t.eff.effs.includes(CHOICE) && t.eff.tail === null;
     const one = (id: Id): boolean => {
       const n = code.nodes[id];
@@ -331,7 +333,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.kind !== "ref") return one(n.fn) && noChoice(ty(n.fn));
           const t = code.nodes[f.target];
           if (t.kind === "variant" || t.kind === "field") return true;
-          if (t.kind === "builtin") return f.target === S.fail || (!STREAMING.has(f.target) && !manyOf(f.target));
+          if (t.kind === "builtin") return !STREAMING.has(f.target);
           if (t.kind === "def") {
             if (f.target === def) return true;
             const scheme = info.schemes.get(f.target)!.type;
@@ -342,7 +344,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         default: return false;
       }
     };
-    const r = isFnDef(def) && one(node<"lambda">(node<"def">(def).body!).body);
+    return one(id);
+  }
+  function singleDef(def: Id): boolean {
+    if (singles.has(def)) return singles.get(def)!;
+    if (looking.has(def)) return false;
+    looking.add(def);
+    const r = isFnDef(def) && oneAnswer(node<"lambda">(node<"def">(def).body!).body, def);
     looking.delete(def);
     singles.set(def, r);
     return r;
@@ -1013,6 +1021,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const search = (leaf: K) => `(() => {\n${scoped(true, () => st(body!.body, leaf))}\n})();`;
       if (!reflective && body && h !== S.fuel) {
         const got = temp("got");
+        if (h === S.first && oneAnswer(body.body, null)) {
+          // At most one answer: no search to stop (GAPS.md G24).
+          const g = thunk(n.args[1]);
+          return `(() => {\n${scoped(false, () => st(body.body, (v) => `return ${v};`))}\nreturn ${g ? ex(g.body) : `${ex(n.args[1])}()`};\n})()`;
+        }
         if (h === S.first) {
           const g = thunk(n.args[1]);
           return `(() => {\nlet ${got} = $no;\n${search((v) => `${got} = ${v};\nreturn true;`)}\nif (${got} !== $no) return ${got};\nreturn ${g ? ex(g.body) : `${ex(n.args[1])}()`};\n})()`;
@@ -1650,12 +1663,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         else if (target === S.gradient) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
         else if (target === S.exists) c = `$exists($program, ${args[0]})`;
         else if (target === SET) c = setCall(n.args[0], args[1], args[2]);
-        else if (kind === "builtin" && (manyOf(target!) ?? implOf(target!))) c = `${manyOf(target!) ?? implOf(target!)}(${args.join(", ")})`;
+        else if (kind === "builtin" && (oneOf(target!) ?? implOf(target!))) c = `${oneOf(target!) ?? implOf(target!)}(${args.join(", ")})`;
         else c = `${fn}(${args.join(", ")})`;
         let out: string;
         if (callStreams(n)) {
           const r = temp("r");
-          if (callee?.single) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
+          if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
             const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
@@ -1799,7 +1812,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
   for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
 
-  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];

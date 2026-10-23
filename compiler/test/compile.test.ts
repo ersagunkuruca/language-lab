@@ -149,6 +149,27 @@ async function compiledDefs(k: Lang, exports: string[], file: string) {
   return { code, info, names, source, defs: (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown> };
 }
 
+test("partial builtins give their answer or none, and `first` over one runs no search (GAPS.md G24)", async () => {
+  const { INT_OPS: I, TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  // the number in a text, or -1
+  const number = k.def("number");
+  k.define(number, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.call(I.read, t)), k.thunk(() => k.int(-1)))));
+  // upper case of one letter, through code and character: one answer
+  const upper = k.def("upper");
+  k.define(upper, k.fn(["c"], (c) => k.call(T.fromCode, k.call(I.add, k.call(T.code, c), k.int(-32)))));
+  const both = k.def("both");
+  k.define(both, k.thunk(() => k.list(k.call(I.show, k.call(number, k.lit("42"))), k.call(I.show, k.call(number, k.lit("4x"))), k.call(S.first, k.thunk(() => k.call(upper, k.lit("q"))), k.thunk(() => k.lit("?"))))));
+  const { code, info, source, defs } = await compiledDefs(k, ["both"], "partial.js");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.doesNotMatch(fn("number"), /for \(|\$many/);
+  assert.match(source, /^function upper\(/m);
+  assert.doesNotMatch(fn("upper"), /function\*|for \(/);
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.deepEqual(fromList(defs.both() as Value), fromList([...r.call(r.value(both))][0]));
+  assert.deepEqual(fromList(defs.both() as Value), ["42", "-1", "Q"]);
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");

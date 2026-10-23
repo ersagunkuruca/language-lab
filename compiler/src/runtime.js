@@ -73,6 +73,9 @@ export function $eq(a, b) {
 export * as $int from '../../projectional/src/lang/int.ts';
 export * as $text from '../../projectional/src/lang/text.ts';
 export { STD_IMPL as $impl, STD_MANY as $many } from '../../projectional/src/lang/std.ts';
+// A Choice builtin's answer, or $no: each has at most one (GAPS.md G24).
+import { STD_MANY } from '../../projectional/src/lang/std.ts';
+export const $partial = Object.fromEntries(Object.entries(STD_MANY).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
 import { showValue } from '../../projectional/src/lang/run.ts';
 export const $showAny = (v, names) => showValue(v, null, names);

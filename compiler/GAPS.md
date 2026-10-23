@@ -748,6 +748,10 @@ answers, inside a closure called in place. The ideal is one regular
 expression test. The same holds for `newline`'s `character(10)`. *Fix:*
 G14's single-answer copies for builtins: `read`, `code`, `fromCode`,
 `quotient`, `remainder` and `find` have at most one answer.
+**Done** (C5): every Choice builtin is partial (std.ts `choice`), so a
+call runs `$partial`, the answer or `$no`, and counts as one answer for
+G14. A `first` whose body has at most one answer runs it in place, with no
+search to stop: `amount` is a read and a test, and chapters' `lower` too.
 
 **G3 again. A Bool parameter is data.** `sort(…, false)` passes `$F`, and
 `goes before` tests `.tag === "std.bool.true"` for each comparison. G3's
