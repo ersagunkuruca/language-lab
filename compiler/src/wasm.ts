@@ -27,9 +27,11 @@ const HOST: Partial<Record<Op, { name: string; params: number }>> = {
 };
 // The evaluator's own mod (std.ts), imported like Math's, so WASM agrees with it.
 const MOD = STD_IMPL[S.mod] as (a: number, b: number) => number;
-const INSTR: Partial<Record<Op, [number, string]>> = {
+// float32: to f32 and back, which rounds to the nearest binary32 value.
+const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   add: [0xa0, "f64.add"], sub: [0xa1, "f64.sub"], mul: [0xa2, "f64.mul"], div: [0xa3, "f64.div"],
   neg: [0x9a, "f64.neg"], abs: [0x99, "f64.abs"], sqrt: [0x9f, "f64.sqrt"], floor: [0x9c, "f64.floor"],
+  float32: [[0xb6, 0xbb], "f32.demote_f64 f64.promote_f32"],
   less: [0x63, "f64.lt"], equal: [0x61, "f64.eq"], beq: [0x46, "i32.eq"], and: [0x71, "i32.and"], or: [0x72, "i32.or"], not: [0x45, "i32.eqz"],
 };
 
@@ -99,7 +101,7 @@ export function emitWasm(lowered: Lowered): Module {
       case "op": {
         const args = e.args.flatMap(code);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
-        return [...args, INSTR[e.op]![0]];
+        return [...args, ...[INSTR[e.op]![0]].flat()];
       }
     }
   }

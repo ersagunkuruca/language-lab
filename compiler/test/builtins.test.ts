@@ -110,7 +110,9 @@ test("every number builtin has a derivative, or says why not", () => {
     const run = (g: Id, xs: number[]) => r.call(r.value(g), ...xs).next().value as number;
     for (const x of [0.3, 1.7, 2.45]) {
       const xs = SAMPLE.slice(0, arity(id)).map((v, i) => (i === 0 ? x : v));
-      const h = 1e-6, up = [...xs], down = [...xs];
+      // Rounding to Float32 is flat between f32 values (about 1e-7 apart
+      // here), so its difference quotient needs a wider step.
+      const h = id === S.float32 ? 1e-2 : 1e-6, up = [...xs], down = [...xs];
       up[0] += h; down[0] -= h;
       const want = (run(f, up) - run(f, down)) / (2 * h);
       assert.ok(Math.abs(run(d.def, xs) - want) < 1e-4 * (1 + Math.abs(want)), `${name(id)}′ at ${xs}: ${run(d.def, xs)} ≠ ${want}`);

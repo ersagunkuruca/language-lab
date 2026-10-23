@@ -83,7 +83,7 @@ it with the wait in `residual`).
 | the world's operations (`read file`, `write file`, `read line`, …) | The same reason as `print`: they can't be undone, and a search would do them once per guess. |
 | `cell`, `formula`, `read`, `write` | Cells are the runtime's state, kept by its handler, and only run forward. |
 | `seeded` | It answers `Random` from a generator. Backwards it would have to search the generator's seeds. |
-| `floor`, `mod` | Many inputs give the same output, a whole interval or every multiple of `b`. That's a continuum, not a list to choose from, so these wait until their input is known and only run forward. An answer whose input never becomes known keeps the constraint as a residual. |
+| `floor`, `mod`, `round to Float32` | Many inputs give the same output, a whole interval or every multiple of `b`. That's a continuum, not a list to choose from, so these wait until their input is known and only run forward. An answer whose input never becomes known keeps the constraint as a residual. |
 | `less` producing a number | `x < 3` has a continuum of answers, so comparisons only check. `magnitude` backwards works because its arms produce the numbers and the condition only rejects. |
 | calling an unknown function | Functions can't be enumerated. `map` runs backwards only when its function is given. |
 | `first`, `all`, `count`, `optional` with unknown inputs | They look at *every* answer of their action at once. Backwards, that would mean "find inputs for which the set of answers is exactly this", which is not one choice per answer (it's Prolog's negation-as-failure problem). They wait until everything their action uses is known, then run it forward. |

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get } from "../src/model.ts";
+import { get, type Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
@@ -125,3 +125,36 @@ function toData(t: unknown): Data {
   if (x.tag) return { tag: x.tag, fields: x.fields!.map(toData) };
   throw new Error(`not data: ${JSON.stringify(t)}`);
 }
+
+test("a builtin type can be represented too: Number with every job rounded, as Float32 will be", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { S } = await import("../src/lang/std.ts");
+  const { B } = await import("../src/prelude.ts");
+  const { NUMBER } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  const round = k.def("round");
+  k.define(round, k.fn(["x"], (x) => k.call(S.float32, x)));
+  const rounded = (op: Id, name: string) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.float32, k.call(op, a, b))));
+    return d;
+  };
+  const add32 = rounded(B.add, "add32"), mul32 = rounded(B.mul, "mul32"), div32 = rounded(B.div, "div32");
+  const f = k.def("f");
+  k.define(f, k.fn(["x"], (x) => k.call(B.add, k.call(B.mul, x, k.lit(0.1)), k.call(B.div, k.lit(1), k.lit(3)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const rep: Representation = { name: "rounded", of: NUMBER, type: NUMBER, meaning: null, canonical: true, approximate: true, literal: round, impl: { [B.add]: add32, [B.mul]: mul32, [B.div]: div32 }, cost: {} };
+  const spec: Representation = { name: "Number", of: NUMBER, type: NUMBER, meaning: null, canonical: true, impl: {}, cost: {} };
+  // Never picked by cost, though it costs the same.
+  assert.equal(choose(code, f, [rep, spec]).rep.name, "Number");
+  const out = represent(code, [f], rep);
+  const i = infer(out, names);
+  assert.deepEqual(i.errors, []);
+  const run = (c: typeof code, inf: typeof i, x: number) => { const rr = makeRunner(c, inf, { print: () => {} }); for (const v of rr.call(rr.value(f), x)) return v as number; };
+  const fr = Math.fround;
+  for (const x of [0.7, 3, 1e-3]) {
+    assert.equal(run(out, i, x), fr(fr(x * fr(0.1)) + fr(fr(1) / fr(3))));
+    assert.equal(run(code, infer(code, names), x), x * 0.1 + 1 / 3);
+  }
+});

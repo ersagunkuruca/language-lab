@@ -60,7 +60,7 @@ function rules(op: string, port: (k: string) => string, why: string, node: Id): 
   const is = (a: string, v: Vec): Constraint => ({ terms: [[a, 1]], rhs: v, why, node });
   switch (op) {
     case "add": case "sub": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
-    case "neg": case "abs": case "floor": return [eq(port("0"), port("out"))];
+    case "neg": case "abs": case "floor": case "float32": return [eq(port("0"), port("out"))];
     // mod(7 m, 3 m) is 1 m: both sides and the answer share a unit.
     case "mod": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
     case "mul": return [{ terms: [[port("out"), 1], [port("0"), -1], [port("1"), -1]], rhs: ZERO, why, node }];

@@ -177,6 +177,9 @@ export const S = {
   not: builtin("not", "not", pure([bool], bool)),
   abs: builtin("abs", "abs", pure([num], num), Math.abs),
   floor: builtin("floor", "floor", pure([num], num), Math.floor),
+  // The nearest binary32 value (ties to even): what a GPU holds. The job
+  // of every Number operation in the Float32 representation (NUMBERS.md).
+  float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
   mod: builtin("mod", "mod", pure([num, num], num), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
   show: builtin("show", "show", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
