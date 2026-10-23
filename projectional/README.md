@@ -175,8 +175,8 @@ assigns paths), not something the compiler has to resolve.
 
 ## The editor
 
-The repository's root `index.html` is a self-contained browser editor over the same
-core (open it directly, or rebuild with `npm install && npm run build-editor`).
+`npm install && npm run build-editor` writes the repository's root `index.html`, a
+self-contained browser editor over the same core; open it directly.
 It never shows editable source text. Every program is typed, and there is
 one kind of definition: a function (or a value, or a data type), shown as a
 graph, as blocks and as text, with selection shared between them.
@@ -289,11 +289,10 @@ with `node examples/unpack.ts saved.json examples/sort`. Nothing
 regenerates the examples from TypeScript any more; their JSON is the
 program.
 
-The editor is published by GitHub Pages from the repository as it is on
+The editor is published by `.github/workflows/pages.yml` on every push to
 main: https://ersagunkuruca.github.io/language-lab/ (the build writes the editor
-and the tutorial to the repository root, which is the site). So commit what
-`npm run build-editor` writes; the Tests workflow fails a pull request whose
-committed pages are older than its source.
+and the tutorial to the repository root, which is the site). The built pages
+are not committed, so pull requests never conflict over them.
 
 ## Errors you can't make
 

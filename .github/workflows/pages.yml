@@ -1,0 +1,53 @@
+# Publishes the site on every push to main: the repository as it is, plus
+# the pages the editor build writes at its root (index.html is the editor,
+# so the editor is the home page, with no redirect). The built pages are not
+# committed, so parallel pull requests never conflict over them.
+#
+# Needs Settings → Pages → Source: "GitHub Actions".
+#
+# It only builds and publishes, in one job (about a minute): every suite has
+# already run on the pull request.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A newer push supersedes a deploy that hasn't finished.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the pages
+        working-directory: projectional
+        run: |
+          npm ci
+          npm run build-editor
+      - name: Lay out the site like the repository
+        run: |
+          mkdir _site
+          git archive HEAD | tar -x -C _site
+          cp -r index.html tutorial.html reactive.html shaders.html apps _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
