@@ -1036,8 +1036,12 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
   // at a hole of any type it would otherwise come before calling it.
-  const order = ["in scope", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
-  const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: fillLabel(f, info, names) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
+  // Where a call's function goes (Change the function…), functions are
+  // what's wanted, and they will be called.
+  const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
+  const order = [...(head ? ["functions"] : []), "in scope", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
+  const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
+  const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
   const shown = all.filter(({ l }) => !q || l.some((s) => s.toLowerCase().includes(q)));
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
   input.addEventListener("input", () => {
@@ -1427,6 +1431,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear"));
+    const n = doc.code.nodes[id];
+    if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
   }
@@ -1472,6 +1478,15 @@ function menuAction(act: string, target: Id | undefined) {
     case "inline": return toggleInline(target!);
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
+    case "swap": {
+      // The function becomes a hole and the inputs stay where they are: the
+      // palette then offers what takes them.
+      const fn = (doc.code.nodes[target!] as NodeOf<"call">).fn;
+      const r = T.toHole(doc.code, doc.names.short, info, fn);
+      if (!applyT(r.ok ? { ...r, note: "The function is a hole now and its inputs stayed: pick another from the palette." } : r)) return;
+      if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
+      return;
+    }
     case "tidy-all": return graph?.tidy(null);
     case "tidy-picked": return graph?.tidy(graph.picked());
     case "tidy-frame": return graph?.tidy([target!]);
