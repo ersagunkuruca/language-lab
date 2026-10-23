@@ -1052,14 +1052,24 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (hole) out.append(fillPalette(id, info, names));
 
   if (n.kind === "lit") {
-    // A long or multiline text gets a box that keeps its lines.
-    const long = typeof n.value === "string" && (n.value.includes("\n") || n.value.length > 60);
-    const input = (long
-      ? h("textarea", { id: "f-lit", rows: String(Math.min(16, String(n.value).split("\n").length + 1)), spellcheck: "false", class: "lit-text" }, String(n.value))
+    // A text gets a box that keeps its lines: Shift+Enter starts a new one,
+    // and once it has several, Enter does too. A long text starts taller.
+    const text = typeof n.value === "string" && n.of !== INT;
+    const lines = String(n.value).split("\n").length;
+    const multi = text && lines > 1;
+    const input = (text
+      ? h("textarea", { id: "f-lit", rows: String(multi || String(n.value).length > 60 ? Math.min(16, lines + 1) : 1), spellcheck: "false", class: "lit-text", title: multi ? "" : "Shift+Enter for a new line" }, String(n.value))
       : h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" })) as HTMLInputElement;
-    input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    const next = () => { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); };
+    let done = false;
+    const commit = () => { if (done) return; done = true; if (input.value === String(n.value)) next(); else if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) next(); };
+    input.addEventListener("change", () => { if (input.value !== String(n.value)) commit(); });
     // Enter on an unchanged value (an empty text, say) moves on too.
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !long && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || multi) return;
+      e.preventDefault();
+      commit();
+    });
     out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 

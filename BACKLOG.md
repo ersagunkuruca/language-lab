@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E29 | A short text literal can't get a newline (the multiline box only opens for text that already has one, #206) | GAPS round 3, editor 2 | P2 | S | |
 | E30 | *Add a value here…* adds a step only at a definition's top, never inside a match arm | GAPS round 3, editor 3 | P2 | M | |
 | E31 | Palette rows with the same label (`show(□)` ×3) told apart only by the type line | GAPS round 3, editor 5 | P2 | S | |
 | E32 | Picture CPU fallback and its check run in float64; run them in Float32 (`withFloat32` + `represent`, as compiler/gpu.ts) | C8 | P2 | S | |
@@ -95,6 +94,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E29 | A short text literal gets a new line with Shift+Enter | #241 |
 | E28 | An untyped input can be called from the palette: before(□, □) | #239 |
 | E27 | A whole number typed in an Int hole fills it as an Int | #237 |
 | E26 | Definitions that print or write files run only when asked | #236 |
