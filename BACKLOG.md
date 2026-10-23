@@ -89,6 +89,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E33 | Bug: a list of tall items showed as cons(…) in the blocks (Ersagun 19:16) | #248 |
 | E14 | Palette: most-used first, √ finds sqrt, typed arithmetic fills as calls | #247 |
 | E32 | Picture CPU fallback and its GPU check run in Float32 | #245 |
 | E31 | Same-label palette rows name their holes' types: show(□: Int) | #244 |

@@ -185,6 +185,13 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       return x(id, "blk", line(kw("solve "), x(n.fn, "ref fn", name(n.fn)), sep("("), ...given, sep(")"), kw(" for "), ...wanted), block(n.body));
     }
     if (n.kind === "call") {
+      // A list of tall items (a page's elements) is still a list: [ … ],
+      // one item under another, as on one line.
+      const items = listItems(id);
+      if (items) {
+        const comma = (i: number) => (i < items.length - 1 ? sep(",") : null);
+        return x(id, "blk", line(sep("[")), indent(...items.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep("]")));
+      }
       const f = node(n.fn);
       if (tall(n.fn) && !n.args.some(tall)) {
         return x(id, "blk", line(kw("apply")), indent(block(n.fn)), line(kw("to "), sep("("), ...list(n.args, (a) => inline(a)[0]), sep(")")));
