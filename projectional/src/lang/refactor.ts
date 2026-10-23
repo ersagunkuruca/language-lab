@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { freshId, ownerOfTypeParts } from "../model.ts";
+import { children, freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT } from "./types.ts";
@@ -40,8 +40,10 @@ function recursiveField(code: Code, def: Id, f: Id): boolean {
 // Arms for every variant of `def`, each with fresh binders named after the
 // fields and a hole for a body. A field's name is the program's or else the
 // library's (`library`), which the program doesn't store.
-function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean, library: Names = {}): Id[] {
-  const fieldName = (f: Id) => names[f] ?? library[f] ?? "field";
+// `taken`: names already visible where the arms go, so a match inside
+// another match on a list gets `head 2`, not a second `head`.
+function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean, library: Names = {}, taken = new Set<string>()): Id[] {
+  const fieldName = (f: Id) => unique(names[f] ?? library[f] ?? "field", taken);
   return variants.map((v) => {
     const fields = (code.nodes[v] as NodeOf<"variant">).fields;
     const binds = fields.map((f) => { const b = add({ kind: "binder" }); names[b] = fieldName(f); return b; });
@@ -55,6 +57,36 @@ function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, v
   });
 }
 
+// `name`, or `name 2`, `name 3`… if a binder in view has it already.
+function unique(name: string, taken: Set<string>): string {
+  if (!taken.has(name)) return name;
+  let i = 2;
+  while (taken.has(`${name} ${i}`)) i++;
+  return `${name} ${i}`;
+}
+
+// The names of the binders `hole` can see: those of every node around it
+// that binds (a definition's lambda, a match's arms, a solve).
+function namesInScope(code: Code, names: Names, hole: Id): Set<string> {
+  const out = new Set<string>();
+  const path: Id[] = [];
+  const find = (id: Id): boolean => {
+    if (id === hole) return true;
+    const n = code.nodes[id];
+    if (!n) return false;
+    path.push(id);
+    for (const c of children(n)) if (find(c)) return true;
+    path.pop();
+    return false;
+  };
+  for (const d of code.defs) {
+    if (!find(d)) continue;
+    for (const id of path) for (const c of children(code.nodes[id])) if (code.nodes[c]?.kind === "binder" && names[c]) out.add(names[c]);
+    break;
+  }
+  return out;
+}
+
 export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library: Names = {}): Edit {
   const { nodes, add } = adder(code);
   const nn: Names = { ...names };
@@ -65,14 +97,15 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
     case "call": data = { kind: "call", fn: add({ kind: "ref", target: f.target }), args: holes(f.arity) }; break;
     case "lit": data = f.of === "int" ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: f.of === "number" ? 0 : "" }; break;
     case "lambda": {
-      const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = `input ${i + 1}`; return b; });
+      const taken = namesInScope(code, names, hole);
+      const params = Array.from({ length: f.arity }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = unique(`input ${i + 1}`, taken); return b; });
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };
       break;
     }
     case "match":
     case "fold": {
       const scrutinee = add(f.on ? { kind: "ref", target: f.on } : { kind: "hole" });
-      const arms = makeArms({ ...code, nodes }, add, nn, f.type, variantsOf(code, f.type), f.kind === "fold", library);
+      const arms = makeArms({ ...code, nodes }, add, nn, f.type, variantsOf(code, f.type), f.kind === "fold", library, namesInScope(code, names, hole));
       data = f.kind === "match" ? { kind: "match", scrutinee, arms, otherwise: null } : { kind: "fold", scrutinee, arms };
       break;
     }

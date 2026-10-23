@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPublished, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -44,7 +44,7 @@ class Session {
     const info = this.info();
     const f = fillings(this.code, info, hole).find(pick);
     assert.ok(f, `nothing in the palette fits at ${hole}`);
-    const e = fillHole(this.code, this.names, hole, f!);
+    const e = fillHole(this.code, this.names, hole, f!, baseNames({}));
     this.code = e.code;
     this.names = e.names;
     assert.equal(this.info().errors.length, info.errors.length);
@@ -464,4 +464,19 @@ test("match on a Pair or an Optional of the standard library is in the palette",
   s.fill(n, (f) => f.kind === "ref" && s.code.nodes[f.target]?.kind === "binder");
   assert.equal(s.info().errors.length, 0);
   assert.equal(showValue(runMain(s.code, s.info(), n), s.code, s.all()), "5");
+});
+
+test("a match inside a match on the same type names its binders apart", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "second", { kind: "function", params: ["xs"] }));
+  const second = s.def("second");
+  const xs = Object.keys(s.names).find((k) => s.names[k] === "xs")!;
+  s.fill(second, (f) => f.kind === "match" && f.on === xs && f.type === "std.list");
+  const arm = (Object.values(s.code.nodes) as Node[]).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
+  const tail = arm.binds[1];
+  // Fill the nil arm first, then match on tail in the cons arm.
+  s.number(second, 0);
+  s.fill(second, (f) => f.kind === "match" && f.on === tail);
+  const named = (Object.values(s.code.nodes) as Node[]).filter((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)).map((n) => (n as NodeOf<"arm">).binds.map((b) => s.names[b]).join(", "));
+  assert.deepEqual(named.sort(), ["head 2, tail 2", "head, tail"]);
 });
