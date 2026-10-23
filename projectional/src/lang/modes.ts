@@ -60,7 +60,46 @@ export interface Verdict {
   dynamic: string[];
   // The goals in the order they ran, in words (the first branch's).
   order: string[];
+  // The schedule relate.ts runs (MODES.md, step 3).
+  plan: Plan;
 }
+
+// A mode, as relate.ts asks for one: the ports known, and the functions
+// known for function parameters.
+export interface Mode { known: string[]; spec: [number, Fn][] }
+
+// One goal of a schedule, as relate.ts runs it. Ids are nodes, or the
+// slots of a fold run one level down (`<fold>#part`, `<fold>#out`).
+// waits: a goal the plan never made ready (the mode is stuck); it runs
+// only once what it needs is known.
+export type Exec = { waits?: true } & (
+  // A literal, or a reference to something defined.
+  | { k: "given"; node: Id }
+  // A function written here.
+  | { k: "closure"; node: Id }
+  // A call, and the mode its function runs in when that's known here.
+  | { k: "call"; node: Id; callee?: Mode }
+  // Two slots that are one value.
+  | { k: "same"; a: Id; b: Id }
+  // The value examined is this case, with these fields.
+  | { k: "case"; value: Id; variant: Id; binds: Id[] }
+  // A recursive part (field `index` of `variant`) and its folded
+  // value: the fold one level down, run by its own plan.
+  | { k: "unfold"; fold: Id; variant: Id; index: number; part: Id; result: Id; plan: () => Plan }
+  | { k: "solve"; node: Id; callee?: Mode }
+  | { k: "hole"; node: Id });
+
+// The goals in order, then a choice of arms, each going on with its own
+// plan (the goals after the choice are in each arm's).
+export interface Plan { steps: Exec[]; branch?: Choice }
+export interface Choice {
+  node: Id; value: Id; out: Id;
+  // The value examined was known: exactly one arm applies, and its fields
+  // are taken from the value.
+  exclusive: boolean;
+  arms: { variant: Id | null; binds: Id[]; plan: Plan }[];
+}
+const NO_PLAN: Plan = { steps: [] };
 
 // A function known before running: a definition, a builtin, a case or a
 // field, or a lambda written in place.
@@ -85,13 +124,25 @@ interface Firing {
   chosen?: () => void;
   // Arms are exclusive (the value examined was known), so at most one runs.
   exclusive?: boolean;
+  // Where the choice is, for the plan.
+  at?: { node: Id; value: Id; out: Id };
+  // What relate.ts runs, when it's more than the goal's own exec says.
+  exec?: Exec;
   cost: number;
 }
-interface Branch { goals: Goal[]; gives: Id[]; sizes: [Id, Size][]; text: string }
-interface Goal { text: string; slots: Id[]; numeric?: boolean; ready(st: St): Firing | null }
+interface Branch { goals: Goal[]; gives: Id[]; sizes: [Id, Size][]; text: string; variant: Id | null; binds: Id[] }
+// posts: relate.ts can post it before it's ready, as a constraint that
+// waits and never branches (join text, show), which a choice it constrains
+// can then see.
+interface Goal { text: string; slots: Id[]; numeric?: boolean; posts?: boolean; exec: Exec; ready(st: St): Firing | null }
 
 interface St {
   known: Set<Id>;
+  // After equations solved together, what they give is known only if the
+  // solver finishes them: the goals after that wait for it in relate.ts.
+  soft?: boolean;
+  // Goals already posted as constraints (see Goal.posts).
+  posted?: Set<Goal>;
   sizes: Map<Id, Size>;
   goals: Goal[];
   answers: Answers;
@@ -104,7 +155,10 @@ interface St {
 const strict = (s: Size | undefined): Size => new Map([...(s ?? new Map()).keys()].map((p) => [p, true]));
 const same = (s: Size | undefined): Size => new Map(s ?? []);
 
-export function analyzer(code: Code, names: Record<Id, string> = {}) {
+// plansOnly: for relate.ts, which needs the schedules and not whether
+// they end (the size-change check, run again for each mode planned while
+// the search runs, would be most of its time).
+export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly = false } = {}) {
   const nodes = code.nodes;
   const owner = ownerOfTypeParts(code);
   const nm = (id: Id) => names[id] ?? id;
@@ -115,15 +169,25 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   const find = (id: Id): Id => { let r = id; while (parent.has(r)) r = parent.get(r)!; return r; };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
   const isLet = (n: NodeOf<"call">) => nodes[n.fn]?.kind === "lambda" && (nodes[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
-  for (const n of Object.values(nodes)) {
-    if (n.kind === "ref" && nodes[n.target]?.kind === "binder") union(n.id, n.target);
-    if (n.kind === "call" && isLet(n)) {
-      const lam = nodes[n.fn] as NodeOf<"lambda">;
-      lam.params.forEach((p, i) => union(p, n.args[i]));
-      union(n.id, lam.body);
+  // Nodes can be added while a program runs (a derivative is a new
+  // lambda), so the slots are brought up to date when one is asked for.
+  const seen = new Set<Id>();
+  const refresh = () => {
+    for (const n of Object.values(nodes)) {
+      if (seen.has(n.id)) continue;
+      seen.add(n.id);
+      if (n.kind === "ref" && nodes[n.target]?.kind === "binder") union(n.id, n.target);
+      if (n.kind === "call" && isLet(n)) {
+        const lam = nodes[n.fn] as NodeOf<"lambda">;
+        lam.params.forEach((p, i) => union(p, n.args[i]));
+        union(n.id, lam.body);
+      }
     }
-  }
+  };
+  refresh();
   const slot = find;
+  // The plans of a lambda made after the analyzer was.
+  const fresh = (lam: Id) => { if (!seen.has(lam)) refresh(); };
 
   // Binders a lambda uses from outside itself.
   const freeOf = new Map<Id, Id[]>();
@@ -168,20 +232,22 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   function mode(f: Fn, known: Set<string>, spec: Map<number, Fn>): Verdict {
     if (f.k === "def") {
       const body = nodes[(nodes[f.id] as NodeOf<"def">).body!];
-      if (body?.kind !== "lambda") return { answers: known.has("out") ? CHECK : ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [] };
+      if (body?.kind !== "lambda") return { answers: known.has("out") ? CHECK : ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
       return lambdaMode(body.id, known, spec, f.id);
     }
     if (f.k === "lambda") return lambdaMode(f.id, known, spec, null);
-    return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [] };
+    return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
   }
 
+  // A lambda's mode, or (with root a definition's body that isn't a
+  // lambda) a value defined once, whose only port is "out".
   function lambdaMode(lam: Id, known: Set<string>, spec: Map<number, Fn>, def: Id | null): Verdict {
-    const l = nodes[lam] as NodeOf<"lambda">;
+    const l = nodes[lam].kind === "lambda" ? nodes[lam] as NodeOf<"lambda"> : { params: [] as Id[], body: lam };
     const key = `${lam}|${[...known].sort().join(",")}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`;
     const ports: Port[] = [...l.params.map((_, i) => String(i)), "out"];
     const hit = memo.get(key);
     if (hit) return hit;
-    if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [] };
+    if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
     running.add(key);
     const st: St = { known: new Set(), sizes: new Map(), goals: [], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
     const fns = new Map<Id, Fn>();
@@ -200,7 +266,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     running.delete(key);
     // Its own recursion, as far as it's known now (a cycle through a mode
     // still being worked out is checked again at the end, in checked()).
-    const t = terminates(key);
+    const t = plansOnly ? { ok: true } : terminates(key);
     if (!t.ok) v = { ...v, ends: false, loops: [...v.loops, `${def ? nm(def) : "a function"} calls itself on something that isn't smaller`] };
     memo.set(key, v);
     return v;
@@ -223,6 +289,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   // ----------------------------------------------------------- the search
 
   function run(st: St, need: Id[], ctx: Ctx): Verdict {
+    const steps: Exec[] = [];
     for (;;) {
       let best: { g: Goal; f: Firing } | null = null;
       for (const g of st.goals) {
@@ -232,18 +299,41 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
       if (!best) {
         // Equations left with several unknowns are solved together, as
         // relate.ts hands them to the solver as a block.
-        const eqs = st.goals.filter((g) => g.numeric);
+        // Fewest unknowns first, so the solver can start on one it can
+        // undo (in polar, length · length = x² + y² before 0 = length ·
+        // cos(angle), which on its own splits).
+        const unknowns = (g: Goal) => new Set(g.slots.filter((x) => !st.known.has(x))).size;
+        const eqs = st.goals.filter((g) => g.numeric).map((g, i) => ({ g, i, u: unknowns(g) })).sort((a, b) => a.u - b.u || a.i - b.i).map((e) => e.g);
         if (!eqs.length) break;
         st.goals = st.goals.filter((g) => !g.numeric);
         for (const g of eqs) for (const s of g.slots) st.known.add(s);
         st.answers = both(st.answers, MANY);
         st.dynamic.push(`equations solved together: ${eqs.map((g) => g.text).join(", ")}`);
         st.order.push("equations together");
+        steps.push(...eqs.map((g) => g.exec));
+        st.soft = true;
         continue;
       }
       const { g, f } = best;
       st.goals = st.goals.filter((x) => x !== g);
       st.order.push(g.text);
+      // A choice goes after the constraints on what it gives: cutting text
+      // after a number can only cut where a number ends.
+      // So do the constraints on those, all the way down.
+      if (f.answers.many && !f.branches) {
+        const near = new Set(f.gives);
+        for (let grew = true; grew;) {
+          grew = false;
+          for (const x of st.goals) {
+            if (!x.posts || x === g || st.posted?.has(x) || !x.slots.some((sl) => near.has(sl))) continue;
+            (st.posted ??= new Set()).add(x);
+            x.slots.forEach((sl) => near.add(sl));
+            steps.push(x.exec);
+            grew = true;
+          }
+        }
+      }
+      if (!f.branches && !st.posted?.has(g)) steps.push(st.soft && !g.numeric ? { ...(f.exec ?? g.exec), waits: true } : f.exec ?? g.exec);
       f.chosen?.();
       for (const s of f.gives) st.known.add(s);
       for (const [s, z] of f.sizes ?? []) st.sizes.set(s, mergeSize(st.sizes.get(s), z));
@@ -252,7 +342,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
       if (f.dynamic) st.dynamic.push(f.dynamic);
       if (f.branches) {
         const out = f.branches.map((b) => {
-          const sub: St = { known: new Set(st.known), sizes: new Map(st.sizes), goals: [...b.goals, ...st.goals], answers: st.answers, ends: st.ends, loops: [...st.loops], dynamic: [...st.dynamic], order: [...st.order, b.text] };
+          const sub: St = { soft: st.soft, posted: new Set(st.posted), known: new Set(st.known), sizes: new Map(st.sizes), goals: [...b.goals, ...st.goals], answers: st.answers, ends: st.ends, loops: [...st.loops], dynamic: [...st.dynamic], order: [...st.order, b.text] };
           for (const s of b.gives) sub.known.add(s);
           for (const [s, z] of b.sizes) sub.sizes.set(s, mergeSize(sub.sizes.get(s), z));
           return run(sub, need, ctx);
@@ -270,11 +360,16 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
           stuck: live.length ? [] : [...new Set(out.flatMap((v) => v.stuck))],
           dynamic: [...new Set(out.flatMap((v) => v.dynamic))],
           order: (live[0] ?? out[0]).order,
+          plan: { steps, branch: { ...f.at!, exclusive: !!f.exclusive, arms: f.branches.map((b, i) => ({ variant: b.variant, binds: b.binds, plan: out[i].plan })) } },
         };
       }
     }
     const stuck = [...st.goals.map((g) => g.text), ...need.filter((s) => !st.known.has(s)).map((s) => `nothing gives ${describe(s)}`)];
-    return { answers: st.answers, ends: st.ends, loops: st.loops, stuck, dynamic: st.dynamic, order: st.order };
+    // Goals left wait, in the order they're written: relate.ts runs each
+    // once what it needs is known, and an answer that leaves one waiting
+    // isn't pinned down.
+    steps.push(...st.goals.map((g): Exec => ({ ...g.exec, waits: true })));
+    return { answers: st.answers, ends: st.ends, loops: st.loops, stuck, dynamic: st.dynamic, order: st.order, plan: { steps } };
   }
 
   function mergeSize(a: Size | undefined, b: Size): Size {
@@ -314,7 +409,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
           return;
         }
         case "lambda": out.push(closure(id)); return;
-        case "hole": out.push({ text: "a hole", slots: [slot(id)], ready: () => null }); return;
+        case "hole": out.push({ text: "a hole", slots: [slot(id)], exec: { k: "hole", node: id }, ready: () => null }); return;
         case "call":
           if (isLet(n)) { n.args.forEach(walk); walk((nodes[n.fn] as NodeOf<"lambda">).body); return; }
           if (nodes[n.fn].kind !== "ref" && nodes[n.fn].kind !== "lambda") walk(n.fn);
@@ -339,13 +434,13 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
 
   // A literal or a reference to something defined: known from the start.
   const given = (id: Id, text: string): Goal => ({
-    text, slots: [slot(id)],
+    text, slots: [slot(id)], exec: { k: "given", node: id },
     ready: (st) => ({ gives: st.known.has(slot(id)) ? [] : [slot(id)], answers: st.known.has(slot(id)) ? CHECK : ONE, ends: true, cost: -1 }),
   });
 
   // A lambda's value is known once what it uses from outside is.
   const closure = (id: Id): Goal => ({
-    text: "a function written here", slots: [slot(id)],
+    text: "a function written here", slots: [slot(id)], exec: { k: "closure", node: id },
     ready: (st) => (st.known.has(slot(id)) ? { gives: [], answers: ONE, ends: true, cost: -1 }
       : free(id).every((b) => st.known.has(b)) ? { gives: [slot(id)], answers: ONE, ends: true, cost: -1 } : null),
   });
@@ -353,10 +448,10 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   // A goal over sides (inputs, then the value), from a list of ways to run
   // it: what each way needs known, and what it gives.
   interface Way { needs: number[]; gives: number[]; answers: Answers; ends?: boolean; why?: string; dynamic?: string; sizes?: (sides: Id[], st: St) => [Id, Size][]; cost?: number }
-  function sided(text: string, sides: Id[], ways: Way[], extra: Partial<Goal> = {}): Goal {
+  function sided(text: string, sides: Id[], exec: Exec, ways: Way[], extra: Partial<Goal> = {}): Goal {
     const ss = sides.map(slot);
     return {
-      text, slots: ss,
+      text, slots: ss, exec,
       ready: (st) => {
         for (const w of ways) {
           if (!w.needs.every((i) => st.known.has(ss[i]))) continue;
@@ -390,15 +485,16 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     const all = n.args.map((_, i) => i);
     const fn = fnAt(n.fn, ctx);
     const text = `${fn ? (fn.k === "lambda" ? "a function written here" : nm(fn.id)) : "a function"}(${n.args.length ? "…" : ""})`;
+    const call: Exec = { k: "call", node: n.id };
     if (!fn) {
       // A function only known when the program runs.
-      return sided(text, [n.fn, ...sides], [
+      return sided(text, [n.fn, ...sides], call, [
         { needs: [0, ...all.map((i) => i + 1)], gives: [o + 1], answers: ONE, dynamic: "a call of a function only known when it runs" },
         { needs: [0, o + 1], gives: all.map((i) => i + 1), answers: MANY, ends: false, why: "a call of a function only known when it runs, backwards", dynamic: "a call of a function only known when it runs" },
       ]);
     }
     if (fn.k === "variant") {
-      return sided(text, sides, [
+      return sided(text, sides, call, [
         { needs: all, gives: [o], answers: ONE },
         { needs: [o], gives: all, answers: CHECK, sizes: within(o, all, () => all.map(() => true)) },
       ]);
@@ -406,7 +502,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     if (fn.k === "field") {
       const v = (nodes[owner.get(fn.id)!] as NodeOf<"def">);
       const one = (nodes[v.body!] as NodeOf<"typedef">).variants.length === 1 && fieldCount((nodes[v.body!] as NodeOf<"typedef">).variants[0]) === 1;
-      return sided(text, sides, [
+      return sided(text, sides, call, [
         { needs: [0], gives: [1], answers: ONE, sizes: within(0, [1], () => [true]) },
         ...(one ? [{ needs: [1], gives: [0], answers: ONE }] : []),
       ]);
@@ -414,7 +510,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     if (fn.k === "builtin") return builtinGoal(fn.id, text, n, sides, ctx);
     // A definition or a lambda: its own mode, with what's known here.
     return {
-      text, slots: sides.map(slot),
+      text, slots: sides.map(slot), exec: call,
       ready: (st) => {
         const ss = sides.map(slot);
         const known = new Set<string>(ss.flatMap((s, i) => (st.known.has(s) ? [i === o ? "out" : String(i)] : [])));
@@ -436,10 +532,13 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
               if (i >= 0) arcs.push([i, j, strictly]);
             }
           });
-          graphs.push({ from: ctx.key, to: calleeKey, arcs });
+          if (!plansOnly) graphs.push({ from: ctx.key, to: calleeKey, arcs });
         };
         return {
-          chosen,
+          // A call that makes an input up and may not end doing it (a
+          // recursion guessing what it isn't given) waits in relate.ts
+          // until its inputs or its value are known instead.
+          chosen, exec: { k: "call", node: n.id, callee: { known: [...known], spec: [...spec] }, ...(!known.has("out") && known.size < o && !v.ends ? { waits: true as const } : {}) },
           gives: ss.filter((s) => !st.known.has(s)), answers: v.answers, ends: v.ends, why: v.loops[0],
           // With its result unknown and an input unknown too, the call
           // makes that input up: only when nothing else can run (relate.ts
@@ -458,6 +557,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   function builtinGoal(id: Id, text: string, n: NodeOf<"call">, sides: Id[], ctx: Ctx): Goal {
     const o = n.args.length;
     const ins = n.args.map((_, i) => i);
+    const call: Exec = { k: "call", node: n.id };
     const forward: Way = { needs: ins, gives: [o], answers: STD_MANY[id] ? MANY : ONE };
     if (NUMERIC[id]) {
       const op = NUMERIC[id];
@@ -467,7 +567,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
       // × and ÷ (a zero), several for the rest (both square roots, every
       // 2πk, cut off at 64 in relate.ts).
       for (let i = 0; i < o; i++) ways.push({ needs: [...ins.filter((j) => j !== i), o], gives: [i], answers: exact ? ONE : op === "mul" || op === "div" ? CHECK : MANY });
-      return sided(text, sides, ways, { numeric: true });
+      return sided(text, sides, call, ways, { numeric: true });
     }
     const fnArg = (i: number) => fnAt(n.args[i], ctx);
     const forwardOf = (i: number): Way => {
@@ -479,42 +579,42 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     switch (id) {
       case S.concat: {
         const lit = (i: number) => nonEmptyText(n.args[i]);
-        return sided(text, sides, [
+        return sided(text, sides, call, [
           forward,
           { needs: [0, 2], gives: [1], answers: CHECK, sizes: within(2, [1], () => [lit(0)]) },
           { needs: [1, 2], gives: [0], answers: CHECK, sizes: within(2, [0], () => [lit(1)]) },
           { needs: [2], gives: [0, 1], answers: MANY, sizes: within(2, [0, 1], () => [lit(1), lit(0)]) },
-        ]);
+        ], { posts: true });
       }
-      case S.show: return sided(text, sides, [forward, { needs: [1], gives: [0], answers: CHECK }]);
-      case S.less: return sided(text, sides, [forward]);
-      case S.equal: return sided(text, sides, [forward, { needs: [0, 2], gives: [1], answers: CHECK }, { needs: [1, 2], gives: [0], answers: CHECK }]);
-      case S.and: case S.hence: case S.or: case S.not: return sided(text, sides, [forward, { needs: [o], gives: ins, answers: MANY }]);
-      case S.oneOf: return sided(text, sides, [{ needs: [0], gives: [1], answers: MANY, sizes: within(0, [1], () => [true]) }]);
-      case S.fail: return { text, slots: [slot(n.id)], ready: (st) => ({ gives: st.known.has(slot(n.id)) ? [] : [slot(n.id)], answers: { fail: true, many: false }, ends: true, cost: 0 }) };
-      case S.first: case S.all: case S.count: case S.optional: return sided(text, sides, [forwardOf(0)]);
-      case S.fuel: return sided(text, sides, [{ needs: ins, gives: [o], answers: MANY }]);
+      case S.show: return sided(text, sides, call, [forward, { needs: [1], gives: [0], answers: CHECK }], { posts: true });
+      case S.less: return sided(text, sides, call, [forward]);
+      case S.equal: return sided(text, sides, call, [forward, { needs: [0, 2], gives: [1], answers: CHECK }, { needs: [1, 2], gives: [0], answers: CHECK }]);
+      case S.and: case S.hence: case S.or: case S.not: return sided(text, sides, call, [forward, { needs: [o], gives: ins, answers: MANY }]);
+      case S.oneOf: return sided(text, sides, call, [{ needs: [0], gives: [1], answers: MANY, sizes: within(0, [1], () => [true]) }]);
+      case S.fail: return { text, slots: [slot(n.id)], exec: call, ready: (st) => ({ gives: st.known.has(slot(n.id)) ? [] : [slot(n.id)], answers: { fail: true, many: false }, ends: true, cost: 0 }) };
+      case S.first: case S.all: case S.count: case S.optional: return sided(text, sides, call, [forwardOf(0)]);
+      case S.fuel: return sided(text, sides, call, [{ needs: ins, gives: [o], answers: MANY }]);
       case S.exists: {
         const f = fnArg(0);
         const v = f ? mode(f, new Set(["out"]), new Map()) : null;
-        return sided(text, sides, [{ needs: [0], gives: [o], answers: MANY, ends: v?.ends ?? false, why: v?.loops[0] ?? "for some of a function only known when it runs" }]);
+        return sided(text, sides, call, [{ needs: [0], gives: [o], answers: MANY, ends: v?.ends ?? false, why: v?.loops[0] ?? "for some of a function only known when it runs" }]);
       }
     }
     if (id === INT_OPS.add || id === INT_OPS.sub || id === INT_OPS.neg) {
       const all = [...ins, o];
-      return sided(text, sides, all.map((i) => ({ needs: all.filter((j) => j !== i), gives: [i], answers: ONE })));
+      return sided(text, sides, call, all.map((i) => ({ needs: all.filter((j) => j !== i), gives: [i], answers: ONE })));
     }
-    if (id === TEXT_OPS.split) return sided(text, sides, [forward, { needs: [1, 2], gives: [0], answers: CHECK }]);
-    if (id === SET || STD_IMPL[id] || STD_MANY[id]) return sided(text, sides, [forward]);
-    return sided(text, sides, [forward]);
+    if (id === TEXT_OPS.split) return sided(text, sides, call, [forward, { needs: [1, 2], gives: [0], answers: CHECK }]);
+    if (id === SET || STD_IMPL[id] || STD_MANY[id]) return sided(text, sides, call, [forward]);
+    return sided(text, sides, call, [forward]);
   }
 
   // A case taken apart: the value examined and the arm's fields. Known
   // value: the fields, each smaller. Known fields: the value.
-  function caseGoal(value: Id, binds: Id[], text: string): Goal {
+  function caseGoal(value: Id, variant: Id, binds: Id[], text: string): Goal {
     const sides = [...binds, value];
     const o = binds.length;
-    return sided(text, sides, [
+    return sided(text, sides, { k: "case", value, variant, binds }, [
       { needs: [o], gives: binds.map((_, i) => i), answers: ONE, sizes: within(o, binds.map((_, i) => i), () => binds.map(() => true)), cost: -1 },
       { needs: binds.map((_, i) => i), gives: [o], answers: ONE, cost: -1 },
     ]);
@@ -532,7 +632,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     const others = arms.length && n.otherwise ? variantsOf(arms[0].variant).filter((v) => !arms.some((a) => a.variant === v)) : [];
     const v = slot(n.scrutinee), out = slot(n.id);
     return {
-      text: "match", slots: [v, out],
+      text: "match", slots: [v, out], exec: { k: "same", a: n.id, b: n.id },
       ready: (st) => {
         const exclusive = st.known.has(v);
         // Neither the value examined nor the result known: relate.ts tries
@@ -540,24 +640,24 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
         const guess = !exclusive && !st.known.has(out);
         const branches: Branch[] = [
           ...arms.map((arm) => ({
-            text: `arm ${nm(arm.variant)}`,
-            goals: [...(exclusive ? [] : [caseGoal(n.scrutinee, arm.binds, `case ${nm(arm.variant)}`)]), ...goalsOf(arm.body, ctx), sameValue(arm.body, n.id)],
+            text: `arm ${nm(arm.variant)}`, variant: arm.variant, binds: arm.binds,
+            goals: [...(exclusive ? [] : [caseGoal(n.scrutinee, arm.variant, arm.binds, `case ${nm(arm.variant)}`)]), ...goalsOf(arm.body, ctx), sameValue(arm.body, n.id)],
             ...taken(exclusive, v, arm.binds, st),
           })),
           ...(n.otherwise ? [{
-            text: "otherwise",
+            text: "otherwise", variant: null, binds: [],
             // The value is some other case: its fields aren't known here.
             goals: [...goalsOf(n.otherwise, ctx), sameValue(n.otherwise, n.id), ...(others.every((o) => fieldCount(o) === 0) && others.length === 1 ? [] : [])],
             gives: others.length === 1 && fieldCount(others[0]) === 0 ? [v] : [], sizes: [],
           }] : []),
         ];
-        return { gives: [], answers: ONE, ends: true, branches, exclusive, cost: exclusive ? 1 : guess ? 30 : 4 };
+        return { gives: [], answers: ONE, ends: true, branches, exclusive, at: { node: n.id, value: v, out }, cost: exclusive ? 1 : guess ? 30 : 4 };
       },
     };
   }
 
   // Two slots that are one value (an arm's body is the match's value).
-  const sameValue = (a: Id, b: Id): Goal => sided("", [a, b], [
+  const sameValue = (a: Id, b: Id): Goal => sided("", [a, b], { k: "same", a, b }, [
     { needs: [0], gives: [1], answers: ONE, sizes: within(0, [1]), cost: -1 },
     { needs: [1], gives: [0], answers: ONE, sizes: within(1, [0]), cost: -1 },
   ]);
@@ -566,27 +666,30 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   // folded value is the fold again, one level down. Run backwards (the
   // result known) it unfolds, which ends when each recursive part's folded
   // value is smaller than the result it came from.
-  function foldGoal(n: NodeOf<"fold">, ctx: Ctx): Goal {
-    const v = slot(n.scrutinee), out = slot(n.id);
+  // v and out are the slots of the value folded and the result: the
+  // fold's own, or (one level down) a part and its folded value.
+  function foldGoal(n: NodeOf<"fold">, ctx: Ctx, v = slot(n.scrutinee), out = slot(n.id)): Goal {
     const measure = `fold:${n.id}`;
     return {
-      text: "fold", slots: [v, out],
+      text: "fold", slots: [v, out], exec: { k: "same", a: n.id, b: n.id },
       ready: (st) => {
         const exclusive = st.known.has(v);
         const guess = !exclusive && !st.known.has(out);
         const sizes: [Id, Size][] = exclusive ? [] : [[out, mergeSize(st.sizes.get(out), new Map([[measure, false]]))]];
         const branches: Branch[] = n.arms.map((a) => {
           const arm = nodes[a] as NodeOf<"arm">;
-          const children: Goal[] = arm.results.flatMap((r, i) => (r ? [unfold(arm.binds[i], r, measure, nm(arm.variant))] : []));
+          const outside = free(n.id).filter((b) => st.known.has(b));
+          const children: Goal[] = arm.results.flatMap((r, i) => (r ? [unfold(n, ctx, outside, arm.variant, i, r, measure)] : []));
           const t = taken(exclusive, v, arm.binds, st);
           return {
-            text: `arm ${nm(arm.variant)}`,
-            goals: [...(exclusive ? [] : [caseGoal(n.scrutinee, arm.binds, `case ${nm(arm.variant)}`)]), ...goalsOf(arm.body, ctx), sameValue(arm.body, n.id), ...children],
+            text: `arm ${nm(arm.variant)}`, variant: arm.variant, binds: arm.binds,
+            goals: [...(exclusive ? [] : [caseGoal(v, arm.variant, arm.binds, `case ${nm(arm.variant)}`)]), ...goalsOf(arm.body, ctx), sameValue(arm.body, out), ...children],
             gives: t.gives, sizes: [...sizes, ...t.sizes],
           };
         });
-        if (guess) return { gives: [], answers: ONE, ends: false, why: `a fold over ${describe(v)}, which nothing gives, unfolded case by case`, branches, cost: 30 };
-        return { gives: [], answers: ONE, ends: true, branches, exclusive, cost: exclusive ? 1 : 4 };
+        const at = { node: n.id, value: v, out };
+        if (guess) return { gives: [], answers: ONE, ends: false, why: `a fold over ${describe(v)}, which nothing gives, unfolded case by case`, branches, at, cost: 30 };
+        return { gives: [], answers: ONE, ends: true, branches, exclusive, at, cost: exclusive ? 1 : 4 };
       },
     };
   }
@@ -594,15 +697,20 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   // A recursive part and its folded value: the fold one level down.
   // Forward (the part known) it ends, the part being smaller; backwards
   // (the folded value known) only if that value is smaller than the result.
-  const unfold = (part: Id, result: Id, measure: Port, variant: string): Goal => {
+  // outside: the slots from outside the fold known when it was chosen,
+  // which one level down are known too.
+  const unfold = (n: NodeOf<"fold">, ctx: Ctx, outside: Id[], variant: Id, index: number, result: Id, measure: Port): Goal => {
+    const arm = nodes[n.arms.find((a) => (nodes[a] as NodeOf<"arm">).variant === variant)!] as NodeOf<"arm">;
+    const part = arm.binds[index];
     const p = slot(part), r = slot(result);
+    const exec = (has: "part" | "result" | "neither"): Exec => ({ k: "unfold", fold: n.id, variant, index, part, result, plan: () => foldPlan(n, ctx, outside, has) });
     return {
-      text: `fold the rest of a ${variant}`, slots: [p, r],
+      text: `fold the rest of a ${nm(variant)}`, slots: [p, r], exec: exec("neither"),
       ready(st) {
-        if (st.known.has(p) && !st.known.has(r)) return { gives: [r], answers: ONE, ends: true, cost: 1 };
+        if (st.known.has(p) && !st.known.has(r)) return { gives: [r], answers: ONE, ends: true, exec: exec("part"), cost: 1 };
         if (st.known.has(r) && !st.known.has(p)) {
           const shrinks = st.sizes.get(r)?.get(measure) === true;
-          return { gives: [p], answers: ONE, ends: shrinks, why: shrinks ? undefined : `a fold run backwards from ${describe(r)}, which isn't smaller each time`, sizes: [[p, same(st.sizes.get(r))]], cost: shrinks ? 2 : 12 };
+          return { gives: [p], answers: ONE, ends: shrinks, why: shrinks ? undefined : `a fold run backwards from ${describe(r)}, which isn't smaller each time`, sizes: [[p, same(st.sizes.get(r))]], exec: exec("result"), cost: shrinks ? 2 : 12 };
         }
         // Neither: it unfolds by guessing, as the fold above it did.
         if (!st.known.has(p) && !st.known.has(r)) return { gives: [], answers: MANY, ends: false, why: `a fold over ${describe(p)}, which nothing gives, unfolded case by case`, cost: 30 };
@@ -611,17 +719,35 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     };
   };
 
+  // The plan for a fold one level down: its value folded and its result
+  // are slots of their own, and what came from outside is as it was.
+  const foldPlans = new Map<string, Plan>();
+  function foldPlan(n: NodeOf<"fold">, ctx: Ctx, outside: Id[], has: "part" | "result" | "neither"): Plan {
+    const key = `${n.id}|${has}|${ctx.key}|${[...outside].sort().join(",")}`;
+    const hit = foldPlans.get(key);
+    if (hit) return hit;
+    const part = `${n.id}#part`, out = `${n.id}#out`;
+    const st: St = { known: new Set(outside), sizes: new Map(), goals: [foldGoal(n, ctx, part, out)], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
+    if (has === "part") st.known.add(part);
+    if (has === "result") st.known.add(out);
+    const { plan } = run(st, [], ctx);
+    foldPlans.set(key, plan);
+    return plan;
+  }
+
   // A solve inside: the function in the mode it names.
   function solveGoal(n: NodeOf<"solve">, ctx: Ctx): Goal {
     const givenSlots = Object.values(n.given).map(slot);
     const bound = Object.values(n.binds).map(slot);
     return {
-      text: `solve ${nm(n.fn)}`, slots: [...givenSlots, ...bound],
+      text: `solve ${nm(n.fn)}`, slots: [...givenSlots, ...bound], exec: { k: "solve", node: n.id },
       ready: (st) => {
         if (!givenSlots.every((s) => st.known.has(s)) || bound.every((s) => st.known.has(s))) return null;
         const v = solveVerdict(n, ctx);
         if (!v || v.stuck.length) return null;
-        return { gives: bound, answers: v.answers, ends: v.ends, why: v.loops[0], cost: (v.answers.many ? 3 : 0) + (v.ends ? 0 : 10) };
+        const k = solveKey(n, ctx);
+        const exec: Exec = { k: "solve", node: n.id, callee: k ? { known: [...k.known], spec: [...k.spec] } : undefined };
+        return { gives: bound, answers: v.answers, ends: v.ends, why: v.loops[0], exec, cost: (v.answers.many ? 3 : 0) + (v.ends ? 0 : 10) };
       },
     };
   }
@@ -631,8 +757,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
     // answers, and its search ends (solve.ts).
     let plan: SolvePlan | null = null;
     try { plan = planSolve(code, n); } catch { return null; }
-    if (plan.mode === "solver") return { answers: { fail: plan.canFail, many: plan.many }, ends: true, loops: [], stuck: [], dynamic: [], order: [] };
-    if (nodes[n.fn].kind !== "def") return { answers: MANY, ends: true, loops: [], stuck: [], dynamic: [], order: [] };
+    if (plan.mode === "solver") return { answers: { fail: plan.canFail, many: plan.many }, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
+    if (nodes[n.fn].kind !== "def") return { answers: MANY, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
     const k = solveKey(n, ctx);
     return k && mode({ k: "def", id: n.fn }, k.known, k.spec);
   }
@@ -709,7 +835,13 @@ export function analyzer(code: Code, names: Record<Id, string> = {}) {
   const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) =>
     checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!;
 
-  return { ofSolve, ofMode };
+  // The plan relate.ts runs for a function in a mode, and for a value
+  // defined once (with its result known or not).
+  const planOf = (f: Fn, m: Mode): Plan => { fresh(f.id); return mode(f, new Set(m.known), new Map(m.spec)).plan; };
+  const planOfValue = (def: Id, known: boolean): Plan =>
+    lambdaMode((nodes[def] as NodeOf<"def">).body!, new Set(known ? ["out"] : []), new Map(), def).plan;
+
+  return { ofSolve, ofMode, planOf, planOfValue, slot, isLet, fresh };
 }
 
 // The verdict for one solve node, or null when it isn't run by the

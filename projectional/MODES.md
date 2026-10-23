@@ -3,19 +3,21 @@
 Design note for BACKLOG.md L11 (REVIEW-2026-10-22b.md §3, REVIEW.md §1.2,
 COMPILER.md stage 1b). Written 2026-10-23. The last section is the plan.
 
-**Status.** Steps 1 and 2 are built. `src/lang/modes.ts` gives the verdict
+**Status.** Steps 1 to 3 are built. `src/lang/modes.ts` gives the verdict
 for any mode, and `test/modes.test.ts` checks it against what relate.ts
 does and against the checker. The checker types a relational `solve` from
 it: `Diverge` only when its mode may not end, and an error when it's
 stuck. As planned, `map` and `show numbers` backwards end, so they lost
-their `Diverge`. `Choice` stays on every relational solve for now: a `det`
-mode without it needs run.ts and the compiler to hand back the one answer
-directly, which belongs with step 3. Forward, the verdict agrees with the checker's
-`Diverge` on every definition in the examples, leaving out the few that
-call a function they were passed, since there it's that function's effect
-row. Known is two levels for now (known or not). The third (the case known,
-not the fields) waits for a program that needs it: today a projection run
-backwards waits for its record.
+their `Diverge`. `relate.ts` now runs each function in each mode by the
+schedule modes.ts plans for it (step 3, below), and the ordering rules in
+the first table are gone. `Choice` stays on every relational solve for
+now: a `det` mode without it needs run.ts and the compiler to hand back
+the one answer directly (L11d). Forward, the verdict agrees with the
+checker's `Diverge` on every definition in the examples, leaving out the
+few that call a function they were passed, since there it's that
+function's effect row. Known is two levels for now (known or not). The
+third (the case known, not the fields) waits for a program that needs it:
+today a projection run backwards waits for its record.
 
 ## The problem
 
@@ -188,8 +190,52 @@ One PR each, in this order:
 3. **L11c `relate.ts` follows the schedule.** The rules in the first
    table are deleted. Every backwards test and example gives the same
    answers. Where the order of answers changes, the test lists it.
-4. **Lane C: compile `det` and `semidet` modes** as plain functions.
-5. **Lane E: the `solve` node says its mode** in the editor.
+   (Built; see "How relate.ts runs a plan" below.)
+4. **L11d a `det` mode drops `Choice`**, once run.ts and the compiler
+   hand back its one answer directly.
+5. **Lane C: compile `det` and `semidet` modes** as plain functions.
+6. **Lane E: the `solve` node says its mode** in the editor.
+
+## How relate.ts runs a plan
+
+A plan is the goals of a body in order, then a choice of arms, each arm
+with its own plan (the goals after a choice are copied into each arm, as
+the analysis explores them). A body runs in a frame: one logic variable
+per slot. Each goal is one node's relation over its slots, the same
+whichever way it runs (unification, a builtin, a call); the plan only says
+when. A call names the mode its function runs in, so the callee's plan is
+looked up, not worked out again. A fold one level down has a plan of its
+own, for its part known, its result known, or neither, and runs in a
+frame of its own (on a fresh stack, so reading back a long text isn't
+bounded by the JS stack).
+
+What the analysis can't decide stays at run time, as planned under
+"Where it can't decide":
+
+- a call of a function only known then runs in the mode it's in when it's
+  reached (what's known then);
+- the builtins keep their own waits (`one of` for its list, `first`,
+  `all` and `count` for their action, comparisons for both sides), which
+  only matter when a plan reaches them early;
+- in a stuck mode, the goals the plan never made ready wait for their
+  inputs or their value, and run then; an answer that leaves one waiting
+  isn't pinned down, as before;
+- after equations solved together, the goals that use what they give
+  wait for the solver to finish them, since until then those values are
+  only known if it can.
+
+Two of the old rules came back as rules of the planner, where they are
+decided once. Join text and show are posted as constraints before a
+choice that gives their inputs (the old `waitsOnly`): they never branch,
+and a cut of a text can then only fall where a number ends. And among
+equations solved together, the one with the fewest unknowns goes to the
+solver first (the old `hence` reversal, which was there so that in
+`polar` x² + y² = length² comes before 0 = length · cos(angle)).
+
+Answers come in a different order in one place: `map` run backwards with
+`square` now varies the first item's root fastest, because the plan runs
+the recursive call (which only takes the known result apart) before
+square's two roots.
 
 Credits for this design: Mercury (influence, already in CREDITS.md),
 size-change termination (adapted, already in CREDITS.md), and TermiLog

@@ -27,9 +27,10 @@
 //   for some     a fresh unknown, and the function's body run backwards
 //                from true.
 //   calls        a call to a known function runs that function's body.
-//                Information flows from whatever is known: when the call's
-//                value is known it is pushed into the function first, else
-//                the inputs are computed first.
+//
+// The order the goals of a body run in isn't decided here: modes.ts plans
+// it for each function in each mode before the search starts (MODES.md),
+// and the interpreter follows the plan (see "The schedule" below).
 //
 // Some things only run forward: floor and mod (many inputs, one output),
 // first/all/count (they look at every answer of an action at once),
@@ -60,6 +61,7 @@ import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
 import { close, fromList, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
+import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
 import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, intLit, neg as intNeg, sub as intSub, type Int } from "./int.ts";
@@ -444,6 +446,17 @@ export interface Options {
   names?: Names;
   // What `random()` answers with, inside `seeded` (set by its reading below).
   random?: () => number;
+  // The schedules, when an interpreter inside this one (seeded, with fuel)
+  // runs the same code.
+  plans?: ReturnType<typeof analyzer>;
+}
+
+// One analyzer per program, brought up to date as nodes are added.
+const analyzers = new WeakMap<Code, ReturnType<typeof analyzer>>();
+function plansFor(code: Code, names?: Names): ReturnType<typeof analyzer> {
+  let a = analyzers.get(code);
+  if (!a) { a = analyzer(code, names as Record<Id, string> | undefined, { plansOnly: true }); analyzers.set(code, a); }
+  return a;
 }
 
 export function interpreter(code: Code, opts: Options = {}) {
@@ -468,30 +481,182 @@ export function interpreter(code: Code, opts: Options = {}) {
   };
   const fieldCount = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields.length;
 
-  function ev(id: Id, env: Env, out: Term): Goal {
-    const n = nodes[id];
-    switch (n.kind) {
-      case "lit": return eq(out, n.of === INT ? intLit(n.value) as Term : n.value);
-      case "ref": return refGoal(n.target, env, out);
-      case "lambda": return eq(out, { k: "closure", lambda: id, env });
-      case "call": return callGoal(n, env, out);
-      case "match": return matchGoal(n, env, out);
-      case "fold": return foldGoal(n, env, out);
-      case "solve": return solveGoal(n, env, out);
-      case "hole": throw new NotInvertible("the program has a hole here");
-      default: throw new NotInvertible(`a ${n.kind} is not an expression`);
+  // The schedule (modes.ts, MODES.md): for a function in a mode, the order
+  // its goals run in, decided before the search starts. A body runs in a
+  // frame, one logic variable per slot (a node's value or a binder's: a
+  // ref and its binder, a let's parameter and its argument, a let and its
+  // body share one). Each goal below is one node's relation over its
+  // slots, the same whichever way it runs; the plan says when it runs.
+  // What the plan can't decide (a call of a function only known then) is
+  // decided here, from what's known when it's reached.
+  const plans = opts.plans ?? plansFor(code, opts.names);
+  const slot = plans.slot;
+  type Frame = Map<Id, Term>;
+  const sl = (f: Frame, id: Id): Term => {
+    const t = f.get(slot(id));
+    if (t === undefined) throw new NotInvertible("a variable is used outside its scope");
+    return t;
+  };
+
+  // The binders a lambda uses from outside itself.
+  const lamFree = new Map<Id, Id[]>();
+  const freeBinders = (lam: Id): Id[] => {
+    let out = lamFree.get(lam);
+    if (!out) {
+      const inside = new Set(subtree(code, lam));
+      out = [...new Set(subtree(code, lam).flatMap((x) => {
+        const n = nodes[x];
+        return n.kind === "ref" && nodes[n.target]?.kind === "binder" && !inside.has(n.target) ? [n.target] : [];
+      }))];
+      lamFree.set(lam, out);
+    }
+    return out;
+  };
+
+  // The slots a body has of its own, not going into the functions written
+  // in it (each call of one gets its own frame), and the binders it uses
+  // from outside.
+  const owned = new Map<string, { own: Id[]; outside: Id[] }>();
+  function slotsOf(key: string, starts: Id[]) {
+    let hit = owned.get(key);
+    if (hit) return hit;
+    const roots = new Set<Id>(), inside = new Set<Id>(), used = new Set<Id>();
+    const visit = (id: Id) => {
+      const n = nodes[id];
+      if (!n) return;
+      roots.add(slot(id));
+      switch (n.kind) {
+        case "binder": inside.add(id); return;
+        case "ref": if (nodes[n.target]?.kind === "binder") used.add(n.target); return;
+        case "lambda": for (const b of freeBinders(id)) used.add(b); return;
+        case "call":
+          if (plans.isLet(n)) {
+            const lam = nodes[n.fn] as NodeOf<"lambda">;
+            n.args.forEach(visit);
+            lam.params.forEach(visit);
+            visit(lam.body);
+            return;
+          }
+      }
+      children(n).forEach(visit);
+    };
+    starts.forEach(visit);
+    const outside = [...used].filter((b) => !inside.has(b));
+    const theirs = new Set(outside.map(slot));
+    hit = { own: [...roots].filter((r) => !theirs.has(r)), outside };
+    owned.set(key, hit);
+    return hit;
+  }
+
+  // A new frame: its own slots fresh, what it uses from outside from
+  // `outer`, and each port tied to what's passed in.
+  function framed(key: string, starts: Id[], outer: (b: Id) => Term | undefined, ports: [Id, Term][], then: (f: Frame) => Goal): Goal {
+    return (s0) => {
+      const { own, outside } = slotsOf(key, starts);
+      const [vs, s] = freshVars(s0, own.length);
+      const f: Frame = new Map(own.map((r, i) => [r, vs[i]]));
+      const set = new Set<Id>();
+      for (const b of outside) {
+        const t = outer(b);
+        if (t === undefined) throw new NotInvertible("a variable is used outside its scope");
+        f.set(slot(b), t);
+        set.add(slot(b));
+      }
+      const ties: Goal[] = [];
+      for (const [id, t] of ports) {
+        const r = slot(id);
+        if (set.has(r)) ties.push(eq(f.get(r)!, t));
+        else { set.add(r); f.set(r, t); }
+      }
+      return conj(...ties, then(f))(s);
+    };
+  }
+
+  // The mode a call runs in when the plan couldn't say: what's known now.
+  const fnOf = (t: Term): Fn | null => {
+    if (typeof t !== "object" || t instanceof LVar || isData(t)) return null;
+    if (t.k === "closure") return t.gradient ? null : { k: "lambda", id: t.lambda };
+    const k = nodes[t.id]?.kind;
+    return k === "builtin" || k === "variant" || k === "field" ? { k, id: t.id } : null;
+  };
+  const modeNow = (args: Term[], out: Term, s: State): Mode => ({
+    known: [...args.flatMap((a, i) => (known(a, s) ? [String(i)] : [])), ...(known(out, s) ? ["out"] : [])],
+    spec: args.flatMap((a, i): [number, Fn][] => { const g = fnOf(walk(a, s)); return g ? [[i, g]] : []; }),
+  });
+
+  function invoke(c: Closure, args: Term[], out: Term, mode?: Mode): Goal {
+    plans.fresh(c.lambda);
+    const lam = nodes[c.lambda] as NodeOf<"lambda">;
+    return framed(c.lambda, [...lam.params, lam.body], (b) => (c.env.has(b) ? fromValue(c.env.get(b)) : undefined),
+      [...lam.params.map((p, i): [Id, Term] => [p, args[i]]), [lam.body, out]],
+      (f) => (s) => runPlan(plans.planOf({ k: "lambda", id: c.lambda }, mode ?? modeNow(args, out, s)), f)(s));
+  }
+
+  function runPlan(p: Plan, f: Frame): Goal {
+    const goals = p.steps.map((e) => exec(e, f));
+    if (p.branch) goals.push(choose(p.branch, f));
+    return conj(...goals);
+  }
+
+  function exec(e: Exec, f: Frame): Goal {
+    // A goal the mode never got to: it waits for what it needs.
+    // A builtin waits on its own for what it needs, so it goes in as it is.
+    if (e.waits && (e.k === "call" && !isBuiltinCall(e.node) || e.k === "solve" || e.k === "unfold")) {
+      // When it runs, it runs in the mode it's in then.
+      const g = exec({ ...e, waits: undefined, ...("callee" in e ? { callee: undefined } : {}) }, f);
+      const ready = needs(e, f);
+      return wait({ k: "later", text: waitText(e), ready, then: g });
+    }
+    switch (e.k) {
+      case "given": {
+        const n = nodes[e.node];
+        if (n.kind === "lit") return eq(sl(f, e.node), n.of === INT ? intLit(n.value) as Term : n.value);
+        return refGoal((n as NodeOf<"ref">).target, sl(f, e.node));
+      }
+      case "closure": {
+        const env: Env = new Map();
+        for (const b of freeBinders(e.node)) env.set(b, sl(f, b));
+        return eq(sl(f, e.node), { k: "closure", lambda: e.node, env });
+      }
+      case "call": return callGoal(nodes[e.node] as NodeOf<"call">, f, e.callee);
+      case "same": return e.a === e.b ? succeed : eq(sl(f, e.a), sl(f, e.b));
+      case "case": return eq(sl(f, e.value), dataT(e.variant, e.binds.map((b) => sl(f, b))));
+      case "unfold": return unfoldGoal(e, f);
+      case "solve": return solveGoal(nodes[e.node] as NodeOf<"solve">, f, e.callee);
+      case "hole": return () => { throw new NotInvertible("the program has a hole here"); };
     }
   }
 
-  function refGoal(target: Id, env: Env, out: Term): Goal {
+  const isBuiltinCall = (id: Id) => { const h = nodes[(nodes[id] as NodeOf<"call">).fn]; return h.kind === "ref" && nodes[h.target]?.kind === "builtin"; };
+
+  // What a waiting goal needs: a call its inputs or its value, a solve
+  // what it's given, a fold one level down its part or its result.
+  function needs(e: Exec, f: Frame): (s: State) => boolean {
+    if (e.k === "call") {
+      const n = nodes[e.node] as NodeOf<"call">;
+      const ins = n.args.map((a) => sl(f, a)), out = sl(f, n.id);
+      return (s) => ins.every((t) => known(t, s)) || known(out, s);
+    }
+    if (e.k === "solve") {
+      const ins = Object.values((nodes[e.node] as NodeOf<"solve">).given).map((x) => sl(f, x));
+      return (s) => ins.every((t) => known(t, s));
+    }
+    if (e.k === "unfold") { const p = sl(f, e.part), r = sl(f, e.result); return (s) => known(p, s) || known(r, s); }
+    return () => true;
+  }
+  const waitText = (e: Exec): string => {
+    if (e.k === "call") { const h = nodes[(nodes[e.node] as NodeOf<"call">).fn]; return h.kind === "ref" ? opts.names?.[h.target] ?? stdNames[h.target] ?? "call" : "call"; }
+    return e.k === "solve" ? "solve" : "fold";
+  };
+
+  function refGoal(target: Id, out: Term): Goal {
     const t = nodes[target];
     switch (t.kind) {
-      case "binder":
-        if (!env.has(target)) throw new NotInvertible("a variable is used outside its scope");
-        return eq(out, fromValue(env.get(target)));
       case "def": {
         const body = nodes[t.body!];
-        return body.kind === "lambda" ? eq(out, { k: "closure", lambda: body.id, env: new Map() }) : ev(body.id, new Map(), out);
+        if (body.kind === "lambda") return eq(out, { k: "closure", lambda: body.id, env: new Map() });
+        // A value defined once: its body, in a frame of its own.
+        return framed(body.id, [body.id], () => undefined, [[body.id, out]], (f) => (s) => runPlan(plans.planOfValue(target, known(out, s)), f)(s));
       }
       case "builtin": return eq(out, { k: "prim", id: target });
       case "variant": return eq(out, t.fields.length ? { k: "prim", id: target } : dataT(target));
@@ -500,71 +665,101 @@ export function interpreter(code: Code, opts: Options = {}) {
     }
   }
 
-  // Lits, refs and lambdas never search, so they always go first. The rest
-  // go before the call when its value is unknown (forward), after it when
-  // the value is known (backwards), so information flows from what's known.
-  const cheap = (id: Id) => ["lit", "ref", "lambda"].includes(nodes[id].kind);
-  // An argument computed only from known values goes first, in either
-  // direction: run forward it's a value, where backwards it would be a
-  // search. Backwards, polynomial([-2, 0, 1], x) would otherwise unfold its
-  // fold over every list before building this one, and a let of a shape's
-  // distance would be guessed from the blend it feeds.
-  const mentions = new Map<Id, Id[]>();
-  const binders = (id: Id): Id[] => {
-    let out = mentions.get(id);
-    if (out) return out;
-    const n = nodes[id];
-    out = n.kind === "ref" ? (nodes[n.target]?.kind === "binder" ? [n.target] : []) : [...new Set(children(n).flatMap(binders))];
-    mentions.set(id, out);
-    return out;
-  };
-  const computable = (id: Id, env: Env, s: State): boolean =>
-    binders(id).every((b) => !env.has(b) || ground(env.get(b) as Term, s) !== undefined);
-
-  // A call of a builtin that never branches when its inputs are unknown
-  // (it waits, or adds an equation), all the way down.
-  const WAITING = new Set<Id>([S.concat, S.show, ...Object.keys(NUMERIC)]);
-  const waitsOnly = (id: Id): boolean => {
-    const n = nodes[id];
-    if (cheap(id)) return true;
-    if (n.kind !== "call") return false;
+  function callGoal(n: NodeOf<"call">, f: Frame, callee?: Mode): Goal {
+    const args = n.args.map((a) => sl(f, a)), out = sl(f, n.id), fn = sl(f, n.fn);
     const head = nodes[n.fn];
-    if (head.kind !== "ref") return false;
-    const t = nodes[head.target];
-    if (!(t?.kind === "builtin" && WAITING.has(head.target)) && t?.kind !== "variant") return false;
-    return n.args.every(waitsOnly);
-  };
+    const applyG: Goal = (s) => apply(walk(fn, s), args, out, callee)(s);
+    // A function named here: its value is known before anything runs.
+    if (head.kind === "ref" && nodes[head.target]?.kind !== "binder") return conj(refGoal(head.target, fn), applyG);
+    return applyG;
+  }
 
-  function callGoal(n: NodeOf<"call">, env: Env, out: Term): Goal {
-    return (s0) => {
-      const [[f, ...args], s] = freshVars(s0, n.args.length + 1);
-      const argGoals = n.args.map((a, i) => ev(a, env, args[i]));
-      const easy = argGoals.filter((_, i) => cheap(n.args[i]));
-      const hard = argGoals.filter((_, i) => !cheap(n.args[i]));
-      const applyG: Goal = (st) => apply(walk(f, st), args, out)(st);
-      const known = !(walk(out, s) instanceof LVar);
-      if (!known) return conj(ev(n.fn, env, f), ...easy, ...hard, applyG)(s);
-      // Backwards into a builtin that waits for its inputs (join text, show,
-      // arithmetic): its arguments that are themselves such calls go first.
-      // They only record what they are waiting for, never branch, and then
-      // the call can see the shape of its inputs (text(show(n), " ", rest)
-      // can only be cut at a space after a number) instead of guessing.
-      const first = n.args.map((a) => !cheap(a) && computable(a, env, s));
-      const waits = n.args.map((a, i) => !cheap(a) && !first[i] && waitsOnly(a) && waitsOnly(n.id));
-      const before = argGoals.filter((_, i) => first[i] || waits[i]), after = argGoals.filter((_, i) => !cheap(n.args[i]) && !first[i] && !waits[i]);
-      // a, hence b: b is the way in, so it goes first. In polar, x² + y² =
-      // length² gives the length from x and y in closed form; the two
-      // equations on their own have two unknowns each, and from x = 0 the
-      // numeric tear can't start (0 = length · cos(angle) splits).
-      const head = nodes[n.fn];
-      if (head?.kind === "ref" && head.target === S.hence) after.reverse();
-      return conj(ev(n.fn, env, f), ...easy, ...before, applyG, ...after)(s);
+  // A choice of arms (a match, or a fold's first level). The value
+  // examined known: its arm. Else each arm is a branch.
+  function choose(c: Choice, f: Frame): Goal {
+    const node = nodes[c.node] as NodeOf<"match"> | NodeOf<"fold">;
+    const v = sl(f, c.value);
+    const written = node.arms.map((a) => (nodes[a] as NodeOf<"arm">).variant);
+    const others = node.kind === "match" && node.otherwise && written.length ? variantsOf(written[0]).filter((x) => !written.includes(x)) : [];
+    const arm = (a: Choice["arms"][number]): Goal => {
+      const rest = runPlan(a.plan, f);
+      // Otherwise: the value is one of the cases not written.
+      if (a.variant === null) {
+        if (!written.length) return rest;
+        return (s) => {
+          const d = walk(v, s);
+          if (isData(d)) return others.includes(d.tag) ? rest(s) : null;
+          return disj(...others.map((o) => (s1: State) => {
+            const [fs, s2] = freshVars(s1, fieldCount(o));
+            return conj(eq(v, dataT(o, fs)), rest)(s2);
+          }))(s);
+        };
+      }
+      return c.exclusive ? conj(eq(v, dataT(a.variant, a.binds.map((b) => sl(f, b)))), rest) : rest;
+    };
+    return (s) => {
+      const d = walk(v, s);
+      if (isData(d)) {
+        const a = c.arms.find((x) => x.variant === d.tag) ?? c.arms.find((x) => x.variant === null);
+        return a ? arm(a)(s) : null;
+      }
+      const g = disj(...c.arms.map(arm));
+      // Unfolding a value whose case isn't known may go on forever.
+      return (node.kind === "fold" ? step(g) : g)(s);
     };
   }
 
-  function apply(f: Term, args: Term[], out: Term): Goal {
+  // A recursive part and its folded value: the fold one level down, in a
+  // frame of its own. A container of trees (a rose tree's children) is the
+  // same container with each tree's folded value in its place.
+  function unfoldGoal(e: Extract<Exec, { k: "unfold" }>, f: Frame): Goal {
+    const n = nodes[e.fold] as NodeOf<"fold">;
+    // Each level starts on a fresh stack (a suspension, which spends no
+    // fuel): a long list read back would otherwise run out of it.
+    const once = (p: Term, r: Term): Goal => {
+      const g = framed(`${e.fold}#arms`, n.arms, (b) => f.get(slot(b)), [[`${e.fold}#part`, p], [`${e.fold}#out`, r]], (h) => runPlan(e.plan(), h));
+      return (s) => () => g(s);
+    };
+    const def = owner.get(e.variant)!;
+    const part = sl(f, e.part), result = sl(f, e.result);
+    if (fieldShapes(code, def, e.variant)[e.index] !== "nested") return once(part, result);
+    const fid = (nodes[e.variant] as NodeOf<"variant">).fields[e.index];
+    return mapped(def, { tid: (nodes[fid] as NodeOf<"field">).type, env: new Map() }, part, result, once);
+  }
+
+  // Either side may be what's known, so the shape comes from whichever is.
+  function mapped(def: Id, at: { tid: Id; env: TypeEnv }, v: Term, r: Term, once: (v: Term, r: Term) => Goal): Goal {
+    const place = look(code, def, at.tid, at.env);
+    if (place.k === "self") return once(v, r);
+    if (place.k === "other") return eq(r, v);
+    const shape = (variant: Id): Goal => (s0) => {
+      const n = fieldCount(variant);
+      const [vs, s1] = freshVars(s0, n);
+      const [rs, s2] = freshVars(s1, n);
+      const fs = place.fields(variant);
+      return conj(eq(v, dataT(variant, vs)), eq(r, dataT(variant, rs)), ...fs.map((x, i) => mapped(def, x, vs[i], rs[i], once)))(s2);
+    };
+    return (s) => {
+      const d = walk(v, s), e = walk(r, s);
+      if (isData(d)) return shape(d.tag)(s);
+      if (isData(e)) return shape(e.tag)(s);
+      return step(disj(...place.variants.map(shape)))(s);
+    };
+  }
+
+  // A solve node is a call with some ports connected to expressions and the
+  // others to binders: the same thing as any other call, read sideways.
+  function solveGoal(n: NodeOf<"solve">, f: Frame, callee?: Mode): Goal {
+    const at: Record<string, Term> = {};
+    for (const [p, e] of Object.entries(n.given)) at[p] = sl(f, e);
+    for (const [p, b] of Object.entries(n.binds)) at[p] = sl(f, b);
+    return relationGoal(n.fn, at, callee);
+  }
+
+  // mode: the mode the plan says the function runs in, when it says.
+  function apply(f: Term, args: Term[], out: Term, mode?: Mode): Goal {
     // Functions can't be guessed: wait until it's known which one this is.
-    if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out)(s), text: "call" });
+    if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out, mode)(s), text: "call" });
     if (isData(f) && f.tag === RANDOM_OP && !args.length) {
       if (!opts.random) throw new NotInvertible("random() outside seeded answers from the world, which only runs forward");
       const next = opts.random;
@@ -583,12 +778,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       });
     }
     if (f.k === "closure") {
-      const lam = nodes[f.lambda] as NodeOf<"lambda">;
-      const g: Goal = (s) => {
-        const env = new Map(f.env);
-        lam.params.forEach((p, i) => env.set(p, args[i]));
-        return ev(lam.body, env, out)(s);
-      };
+      const g = invoke(f, args, out, mode);
       return isRecursive(f.lambda) ? step(g) : g;
     }
     const t = nodes[f.id];
@@ -657,7 +847,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         return wait({
           k: "later", text: "seeded", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
             const gen = seededGenerator(walk(a, s) as number);
-            return interpreter(code, { ...opts, spend, random: () => gen.next() }).apply(walk(b, s), [], out)(s);
+            return interpreter(code, { ...opts, spend, plans, random: () => gen.next() }).apply(walk(b, s), [], out)(s);
           },
         });
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
@@ -689,7 +879,7 @@ export function interpreter(code: Code, opts: Options = {}) {
             const inner = () => left-- > 0 && spend();
             // Inside, the solver spends the action's budget; its answers go
             // on with the outer one.
-            return bind(interpreter(code, { spend: inner }).apply(walk(b, s), [], out)({ ...s, spend: inner }), (t) => unit({ ...t, spend: s.spend }));
+            return bind(interpreter(code, { spend: inner, plans }).apply(walk(b, s), [], out)({ ...s, spend: inner }), (t) => unit({ ...t, spend: s.spend }));
           },
         });
     }
@@ -900,117 +1090,10 @@ export function interpreter(code: Code, opts: Options = {}) {
     return true;
   }
 
-  function matchGoal(n: NodeOf<"match">, env: Env, out: Term): Goal {
-    const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
-    const others = arms.length && n.otherwise ? variantsOf(arms[0].variant).filter((v) => !arms.some((a) => a.variant === v)) : [];
-    const armGoal = (arm: NodeOf<"arm">, fields: Term[]) => {
-      const inner = new Map(env);
-      arm.binds.forEach((b, i) => inner.set(b, fields[i]));
-      return ev(arm.body, inner, out);
-    };
-    // A case, for a value whose case isn't known yet: give it that shape.
-    const shaped = (v: Term, variant: Id, then: (fields: Term[]) => Goal): Goal => (s0) => {
-      const [fs, s] = freshVars(s0, fieldCount(variant));
-      return conj(eq(v, dataT(variant, fs)), then(fs))(s);
-    };
-    const branch = (v: Term): Goal => (s) => {
-      const d = walk(v, s);
-      if (isData(d)) {
-        const arm = arms.find((a) => a.variant === d.tag);
-        return (arm ? armGoal(arm, d.fields) : ev(n.otherwise!, env, out))(s);
-      }
-      if (!arms.length) return ev(n.otherwise!, env, out)(s);
-      return disj(
-        ...arms.map((arm) => shaped(v, arm.variant, (fs) => armGoal(arm, fs))),
-        ...others.map((variant) => shaped(v, variant, () => ev(n.otherwise!, env, out))),
-      )(s);
-    };
-    return (s0) => {
-      const [[v], s] = freshVars(s0, 1);
-      const scrut = ev(n.scrutinee, env, v);
-      const backwards = !(walk(out, s) instanceof LVar) && !cheap(n.scrutinee);
-      return (backwards ? conj(branch(v), scrut) : conj(scrut, branch(v)))(s);
-    };
-  }
-
-  function foldGoal(n: NodeOf<"fold">, env: Env, out: Term): Goal {
-    const arms = new Map(n.arms.map((a) => { const arm = nodes[a] as NodeOf<"arm">; return [arm.variant, arm]; }));
-    const armGoal = (arm: NodeOf<"arm">, fields: Term[], res: Term): Goal => (s0) => {
-      const rec = arm.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
-      const [rs, s] = freshVars(s0, rec.length);
-      const inner = new Map(env);
-      arm.binds.forEach((b, i) => inner.set(b, fields[i]));
-      rec.forEach((i, k) => inner.set(arm.results[i]!, rs[k]));
-      const body = ev(arm.body, inner, res);
-      const shapes = fieldShapes(code, owner.get(arm.variant)!, arm.variant);
-      const fids = (nodes[arm.variant] as NodeOf<"variant">).fields;
-      const children = conj(...rec.map((i, k) => shapes[i] === "nested"
-        ? mapped(owner.get(arm.variant)!, { tid: (nodes[fids[i]] as NodeOf<"field">).type, env: new Map() }, fields[i], rs[k])
-        : fold(fields[i], rs[k])));
-      return (walk(res, s) instanceof LVar ? conj(children, body) : conj(body, children))(s);
-    };
-    // A container of trees (a rose tree's children) and its folded value:
-    // the same container with each tree's folded value in its place. Either
-    // side may be what's known, so the shape comes from whichever is.
-    const mapped = (def: Id, at: { tid: Id; env: TypeEnv }, v: Term, r: Term): Goal => {
-      const place = look(code, def, at.tid, at.env);
-      if (place.k === "self") return fold(v, r);
-      if (place.k === "other") return eq(r, v);
-      const shape = (variant: Id): Goal => (s0) => {
-        const n = fieldCount(variant);
-        const [vs, s1] = freshVars(s0, n);
-        const [rs, s2] = freshVars(s1, n);
-        const fs = place.fields(variant);
-        return conj(eq(v, dataT(variant, vs)), eq(r, dataT(variant, rs)), ...fs.map((f, i) => mapped(def, f, vs[i], rs[i])))(s2);
-      };
-      return (s) => {
-        const d = walk(v, s), e = walk(r, s);
-        if (isData(d)) return shape(d.tag)(s);
-        if (isData(e)) return shape(e.tag)(s);
-        return step(disj(...place.variants.map(shape)))(s);
-      };
-    };
-    // Folding a value whose shape is unknown is unfolding it: one choice per
-    // case, and each recursive part is unfolded in turn.
-    const fold = (v: Term, res: Term): Goal => (s) => {
-      const d = walk(v, s);
-      if (isData(d)) return armGoal(arms.get(d.tag)!, d.fields, res)(s);
-      return step(disj(...[...arms.values()].map((arm) => (s1: State) => {
-        const [fs, s2] = freshVars(s1, fieldCount(arm.variant));
-        return conj(eq(v, dataT(arm.variant, fs)), armGoal(arm, fs, res))(s2);
-      })))(s);
-    };
-    return (s0) => {
-      const [[v], s] = freshVars(s0, 1);
-      return conj(ev(n.scrutinee, env, v), fold(v, out))(s);
-    };
-  }
-
-  // A solve node is a call with some ports connected to expressions and the
-  // others to binders: the same thing as any other call, read sideways.
-  function solveGoal(n: NodeOf<"solve">, env: Env, out: Term): Goal {
-    return (s0) => {
-      const ports = [...Object.keys(n.given), ...Object.keys(n.binds)];
-      const [vs, s] = freshVars(s0, ports.length);
-      const at = Object.fromEntries(ports.map((p, i) => [p, vs[i]]));
-      const inner = new Map(env);
-      for (const [p, b] of Object.entries(n.binds)) inner.set(b, at[p]);
-      const given = Object.entries(n.given).map(([p, e]) => ev(e, env, at[p]));
-      // With the answer known, the body goes first: what it says about the
-      // bound ports narrows the relation's search (reading text back to a
-      // known list of numbers checks that list, instead of unfolding every
-      // list and comparing at the end, which never ends after the last
-      // answer).
-      const body = ev(n.body, inner, out);
-      const known = !(walk(out, s) instanceof LVar);
-      return (known ? conj(...given, body, relationGoal(n.fn, at)) : conj(...given, relationGoal(n.fn, at), body))(s);
-    };
-  }
-
   // fn as a relation over named ports. A function's ports are its params
   // (by binder id, or position for a builtin) and "out". A numeric builtin
   // contributes its equation.
-  function relationGoal(fn: Id, at: Record<string, Term>): Goal {
+  function relationGoal(fn: Id, at: Record<string, Term>, mode?: Mode): Goal {
     const t = nodes[fn];
     return (s0) => {
       let s = s0;
@@ -1021,7 +1104,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       const body = t.kind === "def" && t.body ? nodes[t.body] : null;
       if (body?.kind === "lambda") {
         const args = body.params.map(port);
-        return apply({ k: "closure", lambda: body.id, env: new Map() }, args, port("out"))(s);
+        return apply({ k: "closure", lambda: body.id, env: new Map() }, args, port("out"), mode)(s);
       }
       if (isFunctionBuiltin(code, fn)) {
         return builtin(fn, Array.from({ length: arity(fn) }, (_, i) => port(String(i))), port("out"))(s);
@@ -1037,7 +1120,7 @@ export function interpreter(code: Code, opts: Options = {}) {
     };
   }
 
-  return { ev, apply, relationGoal };
+  return { apply, relationGoal };
 }
 
 const arity = (fn: Id) => { const t = SIGS[fn]?.(new Subst()); return t?.t === "fn" ? t.params.length : 0; };

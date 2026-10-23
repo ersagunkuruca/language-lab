@@ -122,10 +122,10 @@ test("the printer is a parser at real sizes: show numbers read back from 500 num
   assert.equal(answers.length, 1);
   const xs = Object.values(answers[0].values).map((v) => toValue(v)).find((v) => typeof v === "object");
   assert.deepEqual(fromList(xs!), numbers);
-  // It was cubic: 400 numbers took four minutes. Now about linear. (The
-  // relational interpreter still recurses on the JS stack, which runs out
-  // somewhere past 1,000 numbers depending on the Node version: REVIEW.md
-  // §2.2.)
+  // It was cubic: 400 numbers took four minutes. Now about linear. (Each
+  // level of a fold run backwards starts on a fresh stack, so the length
+  // isn't bounded by the JS stack any more: 3,000 numbers read back in
+  // about a second and a half.)
   assert.ok(performance.now() - t < 5000, `took ${performance.now() - t} ms`);
 });
 
