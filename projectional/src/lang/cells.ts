@@ -42,6 +42,9 @@ export interface CellNode {
   label: string;
   runs: number;
   disposed: boolean;
+  // Why its last computation stopped (a page's step budget ran out): read,
+  // it stops the same way, until a cell it read changes.
+  error?: unknown;
 }
 
 // A cell, as a value of the language: a function value (so equality is
@@ -74,6 +77,9 @@ export class Cells {
   // Every formula and watcher run, for showing what work was done.
   runs = 0;
   onRun: ((node: CellNode) => void) | null = null;
+  // How each watcher's update runs, the formulas it checks included: a page
+  // gives each one its own step budget (html.ts).
+  around: (update: () => void) => void = (update) => update();
   private same: (a: Value, b: Value) => boolean;
 
   constructor(same: (a: Value, b: Value) => boolean = Object.is) {
@@ -104,11 +110,14 @@ export class Cells {
   read(c: Value): Value {
     const n = nodeOf(c);
     if (!n) throw new Error("read needs a cell");
-    if (n.compute) this.update(n);
+    // The reader depends on it even if computing it stops part way, so it
+    // runs again when what the formula read changes.
     if (this.current && !this.current.sources.includes(n)) {
       this.current.sources.push(n);
       n.observers.add(this.current);
     }
+    if (n.compute) this.update(n);
+    if (n.error !== undefined) throw n.error;
     return n.value as Value;
   }
 
@@ -161,7 +170,7 @@ export class Cells {
   private flush(): void {
     while (this.queue.length) {
       const n = this.queue.shift()!;
-      if (!n.disposed) this.update(n);
+      if (!n.disposed) this.around(() => this.update(n));
     }
   }
 
@@ -170,11 +179,25 @@ export class Cells {
   private update(n: CellNode): void {
     if (n.state === CHECK) {
       for (const s of n.sources) {
-        if (s.compute) this.update(s);
+        // A source that stops makes this one run again, and stop the same
+        // way inside its own run, where a page can say so.
+        if (s.compute) try { this.update(s); } catch { n.state = DIRTY; }
         if (n.state === DIRTY) break;
       }
     }
-    if (n.state === DIRTY) this.recompute(n);
+    if (n.state === DIRTY) {
+      const stopped = n.error !== undefined;
+      try {
+        this.recompute(n);
+        // It has a value again: whoever read it last saw it stop.
+        if (stopped) { n.error = undefined; for (const o of n.observers) o.state = DIRTY; }
+      } catch (e) {
+        if (e instanceof Pending) throw e;
+        n.error = e;
+        n.state = CLEAN;
+        throw e;
+      }
+    }
     n.state = CLEAN;
   }
 

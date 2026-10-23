@@ -473,7 +473,7 @@ has one more effect, with its handler in the runtime (`src/lang/cells.ts`):
 ```
 cell    : (a) -[Cells]-> Cell a                       -- Solid's createSignal
 formula : (() -[Cells, Diverge]-> a) -[Cells]-> Cell a  -- createMemo, lazy
-read    : (Cell a) -[Cells]-> a                       -- reading either
+read    : (Cell a) -[Cells, Diverge]-> a              -- reading either
 write   : (Cell a, a) -[Update]-> Unit                -- the setter
 ```
 
@@ -536,13 +536,21 @@ What is deliberately not there, and why:
   nor continuations, so it is the runtime's, like `Console`'s. A program
   can't swap it for, say, a server-side renderer that answers every read
   with the initial value; with handler state that would be one `match`.
-- **`Cells` covers `Diverge` inside formulas.** A formula's action runs at
-  some later read, so its effects can't show up where it was made; the
-  ones it may have are the handler's: `Cells`, and `Diverge`, because a
-  lazy producer of endless data (`√2`'s terms) is recursion the checker
-  can't see end. So `read` can loop. A check for *guarded corecursion*
-  (each step builds a `term` before recursing, under a `formula`) would
-  give productive producers no `Diverge` at all; it isn't written yet.
+- **`read` says `Diverge`.** A formula's action runs at some later read,
+  so its effects can't show up where it was made. It may have `Cells`, and
+  `Diverge`, because a lazy producer of endless data (`√2`'s terms) is
+  recursion the checker can't see end. So `read` may not finish, and its
+  type says so: everything that reads a cell is `Diverge` too, the way
+  everything that calls a possibly endless function is. (Before the second
+  review, `read` hid it, and a page could hang with a total type.) A page
+  handles it: each update (a text, a part, an attribute, a handler) runs
+  under a step budget, the same count as `with fuel`, a million calls into
+  definitions not proven to end. One that runs out shows "didn't finish"
+  in place of its text or part, and runs again when a cell it read
+  changes; a handler that runs out stops, keeping the writes it made. A
+  check for *guarded corecursion* (each step builds a `term` before
+  recursing, under a `formula`) would give productive producers no
+  `Diverge` at all; it isn't written yet.
 - **Compiled, Cells runs on the same handler.** The compiler turns
   `cell`, `formula`, `read` and `write` into calls on one `Cells` instance
   in its runtime (cells.ts), so a compiled program updates and remembers
@@ -621,7 +629,7 @@ type Html      = element(tag: Text, attributes: List Attribute, children: List H
                | text(shows: () -[Cells, Diverge, Time, Network]-> Text)
                | part(view: () -[Cells, Diverge, Time, Network]-> Html)
 type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
-               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time, Network, Random]-> Unit)
+               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random]-> Unit)
 type Event     = event(value: Text, key: Text)
 ```
 

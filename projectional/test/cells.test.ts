@@ -90,9 +90,9 @@ test("the types: reading is Cells, writing is Update (a world effect), and a for
   k.define(reading, k.fn(["c"], (c) => k.call(S.all, k.thunk(() => k.call(B.add, k.call(CELL_OPS.read, c), k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))));
   const p = check(k);
   assert.equal(p.type(counter), "() -[Cells]-> Cell Number");
-  assert.equal(p.type(bump), "(Cell Number) -[Cells, Update]-> Unit");
+  assert.equal(p.type(bump), "(Cell Number) -[Cells, Diverge, Update]-> Unit");
   assert.equal(p.type(twice), "(Cell Number) -[Cells]-> Cell Number");
-  assert.equal(p.type(reading), "(Cell Number) -[Cells]-> List Number");
+  assert.equal(p.type(reading), "(Cell Number) -[Cells, Diverge]-> List Number");
   const errs = p.info.errors.map((e) => `${p.names[e.id] ?? ""} ${e.message}`).join("\n");
   assert.match(errs, /Update/);
   assert.ok(p.info.errors.some((e) => e.message.includes("while a Choice is open")), errs);
