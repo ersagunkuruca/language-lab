@@ -104,8 +104,24 @@ answers are skipped (the same rule `solve` already had for `0·x = 0`).
   Unification takes the pair apart and the solver eliminates the two
   equations together.
 - Running forward through the relational interpreter gives the same answers
-  as the evaluator (a test checks queens of 5 both ways). The evaluator in
-  `run.ts` is just the fast special case where inputs are always known.
+  as the evaluator. `test/agreement.test.ts` checks that for every pure
+  function of every example, on sample inputs, and also that backwards
+  from the result finds those inputs and only answers that run forward to
+  it. The evaluator in `run.ts` is just the fast special case where inputs
+  are always known.
+
+## Order of work
+
+What runs first decides whether a search ends, so the interpreter follows
+three rules. An argument computed only from known values runs first, in
+either direction: it's a value, where backwards it would be a guess
+(`polynomial([-2, 0, 1], x)` backwards builds the list before unfolding the
+fold, and a let whose inputs are known is computed, not solved for). A
+`solve` whose answer is known runs its body before its relation, so what
+the body says about the bound ports narrows the search. And every answer
+the equation solver gives is checked against the equations it came from: a
+step that is right in general can be wrong at a singular point (`y = x·tan θ`
+undoes `atan2` except at `x = 0`).
 
 ## Calculus on real functions (`examples/calculus`)
 
