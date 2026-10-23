@@ -206,6 +206,26 @@ test("Bool parameters and tests passed to keep are JS booleans, and boxed where 
   assert.deepEqual(fromList(defs.main() as Value), fromList([...r.call(r.value(main))][0]));
 });
 
+test("running out of fuel in plain code inside a search fails that branch only, as in the evaluator", async () => {
+  const k = new Lang();
+  // counts up from x forever when x ≥ 0: the checker can't show it ends
+  const spin = k.def("spin");
+  k.define(spin, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), x, k.call(spin, k.call(B.add, x, k.lit(1))))));
+  // plain code that calls it
+  const plus = k.def("plus");
+  k.define(plus, k.fn(["x"], (x) => k.call(B.add, k.call(spin, x), k.lit(1))));
+  // the first branch runs out inside `plus`, which spends the budget, so the
+  // second runs out at once; the last makes no divergent call and answers
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.all, k.thunk(() => k.call(S.fuel, k.lit(50), k.thunk(() =>
+    k.let("x", k.call(S.oneOf, k.list(k.lit(0), k.lit(-5), k.lit(7))), (x) => k.if(k.call(S.less, x, k.lit(5)), k.call(plus, x), x))))))));
+  const { code, info, defs } = await compiledDefs(k, ["main"], "fuel-branch.js");
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(main))][0]);
+  assert.deepEqual(want, [7]);
+  assert.deepEqual(fromList(defs.main() as Value), want);
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");
