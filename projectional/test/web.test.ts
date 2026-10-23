@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runInNewContext } from "node:vm";
+import { createContext, runInContext, runInNewContext } from "node:vm";
 import { toFile } from "../editor/files.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -108,22 +108,30 @@ test("the converter app: typing in any field moves the others, and text with no 
 // examples/dice, the app at apps/dice.html: a Roll button drawing from the
 // world, a hundred seeded rolls that are the same every time, and a status
 // line that reads the clock, so it runs again each frame.
-test("the dice app: seeded rolls repeat exactly, and the clock ticks frame by frame", async () => {
-  const { webPage } = await import("../cli/web.ts");
+// Both ways of making the page: `lab build-web`'s bundle, and the editor's
+// "Save page" (page.ts pageFile: the whole runtime prebuilt, then the
+// program compiled as a plain script), which has two scripts.
+for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
+  const { webPage, pageRuntime } = await import("../cli/web.ts");
+  const { pageFile } = await import("../src/lang/page.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
-  const html = await webPage("Dice", p.code, info, p.pres.names, p.named("main"));
+  const html = way === "lab build-web" ? await webPage("Dice", p.code, info, p.pres.names, p.named("main"))
+    : pageFile("Dice", await pageRuntime(), p.code, info, p.pres.names, p.named("main"));
+  // nothing is loaded from anywhere: inline scripts only
+  assert.doesNotMatch(html, /<script src|<link /);
   const body = new FakeEl("body");
   let frames: (() => void)[] = [];
   let time = 1_000_000;
   const DateNow = { now: () => time };
-  runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], {
+  const context = createContext({
     document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, Date: DateNow, crypto,
     requestAnimationFrame: (f: () => void) => frames.push(f),
   });
+  for (const [, js] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) runInContext(js, context);
   const root = body.kids[0] as FakeEl;
   const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
   const bars = () => [...root.html().matchAll(/px"><\/span>(\d+)/g)].map((m) => Number(m[1]));

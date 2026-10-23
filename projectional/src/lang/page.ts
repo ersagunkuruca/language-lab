@@ -13,6 +13,7 @@ import { browserWorld, type Store } from "./browser.ts";
 import { Cells } from "./cells.ts";
 import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
+import { compile } from "../../../compiler/src/compile.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -56,4 +57,35 @@ export function showPage(o: PageOptions): Preview {
   const value = runMain(o.code, o.info, o.main, { print: (line) => out.log(line), names: o.names, cells, world });
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran });
   return { root, cells, stop: () => { stopped = true; } };
+}
+
+// A page as one HTML file around its scripts: what `lab build-web` writes,
+// and what the editor's "Save page" gives you. Nothing is loaded from
+// anywhere else.
+export function pageShell(title: string, ...scripts: string[]): string {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<!-- ${esc(title)}, built from a program in the language (projectional/WEB.md). -->
+</head>
+<body>
+${scripts.map((js) => `<script>${js.replace(/<\/script/gi, "<\\/script")}</script>`).join("\n")}
+</body>
+</html>
+`;
+}
+
+// The same page made without a bundler, in a browser: `runtime` is
+// page-runtime.ts prebuilt as a script that sets `$lab` (cli/web.ts
+// pageRuntime), and the program is compiled to a script that takes its
+// helpers from there. Bigger than `lab build-web`'s, which keeps only what
+// the program uses, and the same page.
+export function pageFile(title: string, runtime: string, code: Code, info: Info, names: Names, main: Id): string {
+  const name = names[main];
+  const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global" });
+  return pageShell(title, runtime, `(() => {\n${program}\n$lab.startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)});\n})();`);
 }

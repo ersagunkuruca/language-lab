@@ -191,6 +191,12 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   document, so the editor can show a page live and redraw it after each
   edit without compiling. `stop()` ends its clock. `pageMain` finds the
   `main` that makes a program a page.
+- **Save page** (`src/lang/page.ts` pageFile): the same one-file page
+  made in a browser, with no bundler. `cli/web.ts` pageRuntime prebuilds
+  `src/lang/page-runtime.ts` (runtime, mount, browser world, startPage) as
+  a script that sets `$lab`; the program is compiled with
+  `link: "global"`, a plain script taking its helpers from `$lab`. About
+  100 KB more than `lab build-web`'s, which keeps only what it uses.
 - **What `main` may do**: return `Html`; take no arguments; use `Cells`,
   `Update`, `Console`, `Files` (run.ts `pageProblem` says why not).
 
