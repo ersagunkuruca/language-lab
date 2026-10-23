@@ -85,6 +85,24 @@ test("abort, caught by a match and not caught at all", async () => {
   assert.deepEqual(r.lines, ["3", "refused: negative", "aborted: negative"]);
 });
 
+test("a match whose cases all escape is a try/catch; its case runs outside it (GAPS.md G18)", async () => {
+  const r = await both((k) => {
+    const check = k.def("check");
+    k.define(check, k.fn(["n"], (n) => k.if(k.call(S.less, n, k.lit(0)), k.call(ABORT_OP, k.lit("negative")), k.call(B.sqrt, n))));
+    // the inner case aborts again: the outer match catches it, not the inner
+    const safe = k.def("safe");
+    k.define(safe, k.fn(["n"], (n) => k.handle(k.handle(show(k, k.call(check, n)), [
+      { variant: ABORT_OP, names: ["why"], body: ([why]) => k.call(ABORT_OP, k.text(k.lit("again: "), why)) },
+    ]), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.text(k.lit("outer: "), why) }])));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(S.print, k.call(safe, k.lit(4))), k.call(S.print, k.call(safe, k.lit(-1))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["2", "outer: again: negative"]);
+  assert.doesNotMatch(r.js, /\$handle\(/);
+  assert.match(r.js, /\$caught\(/);
+});
+
 test("answers, deep handlers, and Log to the runtime", async () => {
   const r = await both((k) => {
     const ask = k.effect("Ask", [["ask", [["question", () => k.tref("type.string")]], () => k.tref("type.number")]]);

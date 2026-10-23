@@ -245,3 +245,10 @@ test("a chain of one associative operator is one call however it nests; others k
   const text = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("main"));
   assert.match(text, /\n {4}\)\n {4}\+\+ " · "\n {4}\+\+ handle show/);
 });
+
+test("an if on one line is bracketed when it is an operand of ++", () => {
+  const p = load("ledger");
+  const out = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("money"));
+  assert.match(out, /^ {2}\(if .* then "-" else ""\)$/m);
+  assert.match(out, /^ {2}\+\+ /m);
+});
