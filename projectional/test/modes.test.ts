@@ -8,9 +8,10 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { get, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { base, loadProgram } from "../src/lang/load.ts";
 import { analyzer, describeVerdict, type Fn, type Verdict } from "../src/lang/modes.ts";
 import { relate } from "../src/lang/relate.ts";
@@ -156,13 +157,25 @@ test("every relational solve in the examples has a mode that isn't stuck, and it
 test("forward, a definition ends exactly when the checker finds no Diverge of its own", () => {
   // Forward is a mode too: every parameter known. Where a definition calls
   // a function it was passed, whether that ends is the function's own
-  // effect row, which the checker adds; those are left out here.
+  // effect row, which the checker adds; those are left out here. So is
+  // the one place the checker is knowingly coarser: a function handed to
+  // inverse is looked inside by the modes, at the call, but typed by
+  // inverse's own type, which can't know it (Diverge, never too little).
+  const inverse = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "inverse" && LIBRARY.code.nodes[d]?.kind === "def")!;
   const disagree: string[] = [];
   let n = 0;
   for (const e of readdirSync(join(root, "examples")).filter((e) => existsSync(join(root, "examples", e, "code.json")))) {
     const p = load(e);
     const info = infer(p.code, p.pres.names);
     const a = analyzer(p.code, p.pres.names);
+    const reaches = new Map<Id, boolean>();
+    const viaInverse = (d: Id): boolean => {
+      if (!reaches.has(d)) {
+        reaches.set(d, false);
+        reaches.set(d, subtree(p.code, d).some((x) => { const t = (p.code.nodes[x] as Partial<NodeOf<"ref">>).target; return t === inverse || (!!t && t !== d && p.code.nodes[t]?.kind === "def" && viaInverse(t)); }));
+      }
+      return reaches.get(d)!;
+    };
     for (const d of p.own.defs) {
       const body = p.code.nodes[(p.code.nodes[d] as NodeOf<"def">).body!];
       const t = info.typeOf.get(d);
@@ -171,6 +184,7 @@ test("forward, a definition ends exactly when the checker finds no Diverge of it
       if (v.dynamic.some((x) => /only known when it runs/.test(x))) continue;
       n++;
       const diverges = t.eff.effs.includes(DIVERGE);
+      if (v.ends && diverges && viaInverse(d)) continue;
       if (v.stuck.length || v.ends === diverges) disagree.push(`${e}: ${p.pres.names[d]}: ${describeVerdict(v)}, typed ${diverges ? "" : "without "}Diverge`);
     }
   }

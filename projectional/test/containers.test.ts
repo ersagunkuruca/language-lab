@@ -17,6 +17,7 @@ import { root } from "../src/io.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { makeModule, publish } from "../src/lang/modules.ts";
 import { jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { CELL_OPS, HTML_V, S } from "../src/lang/std.ts";
@@ -144,6 +145,7 @@ function judged(code: Code, names: Record<Id, string>, main: Id, eff: Effect): {
   if (errors.length) return { got: "refused", errors };
   return { got: rowOf(info, main).includes(ID[eff]) ? "row" : "dropped", errors };
 }
+const inverseDef = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "inverse" && LIBRARY.code.nodes[d]?.kind === "def")!;
 const params = (code: Code, d: Id) => (code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
 
 const places: Record<string, (eff: Effect) => { got: Got; errors: string[] }> = {
@@ -166,6 +168,25 @@ const places: Record<string, (eff: Effect) => { got: Got; errors: string[] }> = 
     const main = k.def("main");
     k.define(main, k.thunk(() => k.call(S.show, k.solve(h, { out: k.lit(2) }, { [x]: "x" }, ({ [x]: v }) => v))));
     return judged(base(k.code), baseNames(k.names), main, eff);
+  },
+  // The same, when the function is a value given as a port: its effects
+  // come in with it (they used to be dropped, BACKLOG.md L14).
+  "in a function given to a solve": (eff) => {
+    const { k, f } = effectful(eff);
+    const applied = k.def("applied");
+    k.define(applied, k.fn(["g", "x"], (g, x) => k.call(g, x)));
+    const [g, x] = params(k.code, applied);
+    const main = k.def("main");
+    const port = k.fn(["y"], (y) => k.call(B.add, y, k.call(f)));
+    k.define(main, k.thunk(() => k.call(S.show, k.solve(applied, { [g]: port, out: k.lit(2) }, { [x]: "x" }, ({ [x]: v }) => v))));
+    return judged(base(k.code), baseNames(k.names), main, eff);
+  },
+  // The prelude's inverse(f, y) is that solve, with f given where it's called.
+  "in a function given to inverse": (eff) => {
+    const { k, f } = effectful(eff, LIBRARY.code);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.show, k.call(inverseDef, k.fn(["y"], (y) => k.call(B.add, y, k.call(f))), k.lit(2)))));
+    return judged(base(merge(LIBRARY.code, k.code)), { ...baseNames(k.names), ...LIBRARY.names }, main, eff);
   },
   // A shader is compiled for the GPU (compiler/src/scalar.ts): refused
   // there, or it compiles with nothing left over.
@@ -242,6 +263,8 @@ const backwards: Record<Effect, Outcome> = { Console: "refused", Choice: "row", 
 const placesExpected: Record<string, Record<Effect, Outcome>> = {
   "in a solve's body": plain,
   "in a function run backwards": backwards,
+  "in a function given to a solve": backwards,
+  "in a function given to inverse": backwards,
   "in a shader": allRefused,
   "in a shader, under a literal with fuel": { ...allRefused, Diverge: SHADER_BUDGET },
   "in a representation's job": allRefused,

@@ -76,7 +76,7 @@ same app, packaged.
   with the compiled program, its runtime and the mount in one `<script>`.
   No server, no build step for the reader, opens from `file://`.
 - **And two-way binding?** A field shows `view(read(c))` and, when edited,
-  writes back what `solve view(result = typed) for x` finds. "Setters are
+  writes back what `inverse(view, typed)` finds. "Setters are
   projections run backwards" (REVIEW.md §5.3) becomes a working page: a
   temperature converter has one cell and two forward functions; typing in
   either field runs that function backwards. **Input with no preimage is
@@ -185,11 +185,17 @@ only when it differs from what the input already shows, which is Svelte's
 rule for `bind:value` (Rich Harris).
 
 A `solve` names a definition, not a function value (LANGUAGE.md, "solve"),
-so the binding is written at each field rather than once as a library
-`bind(cell, view)`. Letting `solve` take a function parameter (relate.ts
-can already run a known function value backwards) would make `bind` one
-prelude function; that is a checker change for later, recorded in
-ROADMAP.md.
+so the prelude has one definition that calls a function it's given,
+`applied(f, x) = f(x)`, and `inverse(f, y) = solve applied(f = f, out = y)
+for x` (BACKLOG.md L14). With it the binding is written once: the
+converter's `field(caption, view, name, quantity)` reads back with
+`inverse(view, typed)`, and its ten `from °C`-style definitions are gone.
+`inverse` has type `((a) -[e]-> b, b) -[Choice, Diverge, e]-> a`: what f
+does comes out where inverse is called, so a function that prints, handed
+to it, is refused there (it would print while a Choice is open), and one
+that writes a cell is refused when it runs (relate.ts: cells only run
+forward). Diverge because the checker can't see which f it will be; the
+modes see it at the call (MODES.md).
 
 Records work the same way: a field showing `name(read(person))` edits
 with `set` (records.ts), which is the projection run backwards with the
@@ -244,7 +250,8 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
    functions in the prelude.
 
 Later, each on its own: reactive.html's programs moved onto `Html`; keyed
-lists; `solve` over function values (one generic `bind`); static output
+lists (done: `for each`); `solve` over function values (done: the
+prelude's `inverse`); static output
 from `lab run`; time, randomness and HTTP world effects; the editor
 showing a page program live, like its shader picture.
 

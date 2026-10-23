@@ -7,12 +7,13 @@ import { get, replace, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { impl } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
 import { bool, fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
+import { CONS, HTML_V, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -23,8 +24,8 @@ const shown = (a: Answer, port: string) => showTerm(a.values[port]);
 const close = (a: number, b: number, what = "") => assert.ok(Math.abs(a - b) < 1e-6 * (1 + Math.abs(b)), `${what} ${a} ≈ ${b}`);
 
 // A little program built in place, checked, with a runner.
-function program(build: (k: Lang) => void) {
-  const k = new Lang();
+function program(build: (k: Lang) => void, known?: Code) {
+  const k = known ? new Lang(known) : new Lang();
   build(k);
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
@@ -197,6 +198,48 @@ test("a direction with exactly one answer has no Choice, and gives its answer", 
   assert.deepEqual([...r.call(r.value(c.named("sum of")), [...r.call(r.value(PAIR_V), 1, 2)][0])], [3]);
   assert.equal(showType(c.info.typeOf.get(c.named("name in"))!, c.names), "(Text) -> Text");
   assert.deepEqual([...r.call(r.value(c.named("name in")), "goodbye")], ["nobody"]);
+});
+
+test("inverse runs any function value backwards: a definition, a lambda, a builtin", () => {
+  const inverse = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "inverse" && LIBRARY.code.nodes[d]?.kind === "def")!;
+  const c = program((k) => {
+    const fahrenheit = k.def("as °F");
+    k.define(fahrenheit, k.fn(["c"], (c) => k.call(S.show, k.call(B.add, k.call(B.mul, c, k.lit(1.8)), k.lit(32)))));
+    const all = (f: Id, y: Id) => k.thunk(() => k.call(S.all, k.thunk(() => k.call(inverse, f, y))));
+    k.define(k.def("from °F"), all(k.x(fahrenheit), k.lit("212")));
+    k.define(k.def("halved"), all(k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2))), k.lit(7)));
+    k.define(k.def("parsed"), all(k.x(S.show), k.lit("2.5")));
+    // A function that acts can't be searched: refused, as when solve names it.
+    const loud = k.def("loud");
+    k.define(loud, k.fn(["n"], (n) => k.seq(k.call(S.print, k.lit("hi")), n)));
+    k.define(k.def("printed"), all(k.x(loud), k.lit(1)));
+  }, LIBRARY.code);
+  assert.equal(showType(c.info.typeOf.get(inverse)!, c.names), "((a) -[e]-> b, b) -[Choice, Diverge, e]-> a");
+  assert.equal(c.info.errors.length, 1);
+  assert.match(c.info.errors[0].message, /Console while a Choice is open/);
+  const r = makeRunner(c.code, c.info, { print: () => {} });
+  const run = (n: string) => fromList([...r.call(r.value(c.named(n)))][0]);
+  assert.deepEqual(run("from °F"), [100]);
+  assert.deepEqual(run("halved"), [3.5]);
+  assert.deepEqual(run("parsed"), [2.5]);
+});
+
+test("a function in a variable, closed where it was first used, can be used where more happens", () => {
+  // view is shown in a page's text (whose thunk's row is closed: a view
+  // may read cells, not write them), then handed to inverse in a function
+  // that also prints. Each use opens the row; else the two would clash.
+  const inverse = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "inverse" && LIBRARY.code.nodes[d]?.kind === "def")!;
+  const c = program((k) => {
+    const shown = k.def("shown");
+    k.define(shown, k.fn(["view"], (view) => k.call(HTML_V.text, k.thunk(() => k.call(view, k.lit(1))))));
+    const both = k.def("both");
+    // (A seq's later steps are checked first: shown comes first here.)
+    k.define(both, k.fn(["view", "t"], (view, t) => k.seq(
+      k.call(S.print, k.call(S.show, k.call(S.first, k.thunk(() => k.call(inverse, view, t)), k.thunk(() => k.lit(0))))),
+      k.call(shown, view))));
+  }, LIBRARY.code);
+  assert.deepEqual(c.info.errors, []);
+  assert.equal(showType(c.info.typeOf.get(c.named("both"))!, c.names), "((Number) -[Cells, Diverge, Network, Time]-> Text, Text) -[Cells, Console, Diverge, Network, Time]-> Html");
 });
 
 test("backwards: main prints what each function run backwards gives", () => {

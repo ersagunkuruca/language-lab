@@ -253,8 +253,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // own node table for the interpreter to read.
   const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
   // Only nodes the definitions hold: an expanded derivative leaves its old
-  // `derivative` reference behind in the table.
-  const reflective = code.defs.flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
+  // `derivative` reference behind in the table. And only definitions the
+  // exports reach: the prelude's inverse is in every program.
+  const exportsReach = new Set<Id>();
+  const reachFrom = (d: Id | undefined) => {
+    if (!d || exportsReach.has(d)) return;
+    exportsReach.add(d);
+    for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") reachFrom(n.target); }
+  };
+  for (const x of opts.exports) reachFrom(code.defs.findLast((d) => names[d] === x));
+  const reflective = code.defs.filter((d) => exportsReach.has(d)).flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
@@ -977,10 +985,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return wrap(`((${t.fields.map((_, i) => `a${i}`).join(", ")}) => ${construct(n.target, t.fields.map((_, i) => `a${i}`))})`, false);
         case "field": return wrap(`((d) => d.fields[${fieldIndex(n.target)}])`, false);
         case "builtin": {
+          // Where functions are looked inside (inverse(show, …)), a builtin
+          // value says which builtin it is, as the evaluator's do.
+          const prim = (js: string) => (reflective ? `$prim(${js}, ${JSON.stringify(n.target)})` : js);
           if (OPS[n.target]) {
             const ps = Array.from({ length: arity(n.id) }, (_, i) => `a${i}`);
             const js = OPS[n.target].bool ? `$bool(${OPS[n.target].js(ps)})` : OPS[n.target].js(ps);
-            return wrap(`((${ps.join(", ")}) => ${js})`, false);
+            return wrap(prim(`((${ps.join(", ")}) => ${js})`), false);
           }
           const runtime: Record<Id, [string, boolean]> = {
             [S.oneOf]: ["$oneOf", true], [S.fail]: ["$fail", true], [S.all]: ["$all", false], [S.count]: ["$count", false], [S.optional]: ["$optional", false],
@@ -989,7 +1000,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (n.target === S.first) return streamsFn(ty(n.id), rho) ? "$firstS" : "$first";
           if (n.target === S.seeded) return streamsFn(ty(n.id), rho) ? "$seededS" : "$seeded";
           if (manyOf(n.target)) return wrap(manyOf(n.target)!, true);
-          if (implOf(n.target)) return wrap(implOf(n.target)!, false);
+          if (implOf(n.target)) return wrap(reflective ? prim(`((...a) => ${implOf(n.target)!}(...a))`) : implOf(n.target)!, false);
           if (runtime[n.target]) return wrap(...runtime[n.target]);
           throw new Error(`${names[n.target] ?? n.target} can't be used as a value yet`);
         }
@@ -1994,7 +2005,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested",
-    ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
+    ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
   return indent([

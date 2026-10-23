@@ -328,12 +328,25 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     catch (e) { if (e instanceof TypeError) return false; throw e; }
   }
 
+  // A function in a variable whose row is already closed (it does these
+  // effects and no others) can be used where more may happen: each use
+  // gets an open copy, so a field's `view`, closed by the page thunk it's
+  // shown in, can still be handed to inverse in a handler that does more.
+  // Only the outer row: its parameters keep their types. Koka's `open`
+  // (Leijen, "Type directed compilation of row-typed algebraic effects").
+  function opened(t: Type): Type {
+    const r = s.resolve(t);
+    if (r.t !== "fn") return t;
+    const row = s.resolveRow(r.eff);
+    return row.tail === null ? { ...r, eff: { effs: row.effs, tail: s.next++ } } : t;
+  }
+
   function refType(id: Id, target: Id, env: Map<Id, Type>): Type {
     const t = code.nodes[target];
     if (!t) { err(id, "points at nothing"); return s.fresh(); }
     switch (t.kind) {
       case "binder":
-        if (env.has(target)) return env.get(target)!;
+        if (env.has(target)) return opened(env.get(target)!);
         err(id, `${nm(target)} is used outside the function or case that introduces it`);
         return s.fresh();
       case "def":
@@ -544,9 +557,21 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // effects of our own either, whose handlers could be anything.
     const acts = own.filter((e) => e !== CHOICE && e !== DIVERGE);
     if (acts.length) err(n.id, `${nm(n.fn)} performs ${acts.map(nm).join(", ")}, and a function that acts can't be run backwards`);
-    if (one) return;
-    const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : [])])];
-    choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? ` and may search forever (Diverge${why ? `: ${why}` : ""})` : ""}, which nothing here handles`);
+    // What the function's row doesn't name yet (a function given as a
+    // port, as in inverse) is whatever that function turns out to do: it
+    // goes into the row around, as a call's would, rather than nowhere.
+    // Only that part: the search's own Choice and Diverge stay outside.
+    // Which function it is shows only where inverse is called, so one that
+    // acts is refused when it's run backwards (relate.ts), not here.
+    if (!one) {
+      const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : [])])];
+      choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? ` and may search forever (Diverge${why ? `: ${why}` : ""})` : ""}, which nothing here handles`);
+    }
+    const tail = s.resolveRow(ft.eff).tail;
+    if (acts.length || tail === null) return;
+    const around = s.resolveRow(row);
+    try { s.unifyRow(around, { effs: around.effs, tail }); }
+    catch (e) { if (e instanceof EffectError) err(n.id, `running ${nm(n.fn)} backwards performs ${effName(e)}, which nothing here handles`); else throw e; }
   }
 
   function callee(n: NodeOf<"call">): string {
