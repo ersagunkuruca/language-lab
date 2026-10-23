@@ -6,6 +6,11 @@ its own top-level folder with its own README.
 - `compiler/`: compiles the typed core of `projectional/` to JavaScript, guided by its effect types (see `projectional/COMPILER.md`), and its numeric part to WebAssembly and to WGSL for the GPU ([shaders.html](https://ersagunkuruca.github.io/language-lab/shaders.html)).
 - `apps/`: web apps written in the language and built by `projectional/editor/build.ts` (`lab build-web`, see `projectional/WEB.md`), e.g. [apps/converter.html](https://ersagunkuruca.github.io/language-lab/apps/converter.html) and [apps/dice.html](https://ersagunkuruca.github.io/language-lab/apps/dice.html).
 
+## Planning
+
+Open work from every source is in [BACKLOG.md](BACKLOG.md), in priority order
+per lane; how it's picked and run is in [WORKFLOW.md](WORKFLOW.md).
+
 ## Credits
 
 The language is Ersagun's experiment, but many of its ideas were had before,
