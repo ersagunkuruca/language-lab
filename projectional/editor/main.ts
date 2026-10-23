@@ -1290,6 +1290,20 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   } else if (n?.kind === "binder" && body?.kind === "lambda" && body.params.includes(sel)) {
     out.append(h("div", { class: "sub-head" }, `Input of ${dname} · code.json`), paramRow(info, names, sel));
     return out;
+  } else if (innerLambda(sel)) {
+    const lam = innerLambda(sel)!;
+    out.append(h("div", { class: "sub-head" }, "Inputs of this function · code.json"));
+    if (!lam.params.length) out.append(h("p", { class: "hint" }, "None."));
+    lam.params.forEach((p) => out.append(paramRow(info, names, p, lam.id)));
+    const c = textField("f-new-input", "New input", "its name");
+    const add = h("button", { class: "btn", type: "button" }, "Add the input");
+    add.addEventListener("click", () => runTop(info, Top.addParameter(code, sh, lam.id, c.input.value)));
+    c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
+    out.append(c.el, h("div", { class: "acts" }, add), h("p", { class: "hint" }, "What it's passed to has to take the new inputs, or the edit is refused."));
+    return out;
+  } else if (n?.kind === "binder" && innerLambda(inputOf(sel))) {
+    out.append(h("div", { class: "sub-head" }, "Input of a function · code.json"), paramRow(info, names, sel, inputOf(sel)!));
+    return out;
   } else if (n?.kind === "variant") {
     const type = info.owner.get(sel)!;
     const w = words(type);
@@ -1334,14 +1348,24 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   return out;
 }
 
-function paramRow(info: T.Info, names: Names, p: Id) {
+function paramRow(info: T.Info, names: Names, p: Id, of: Id = ui.def) {
   const code = doc.code, sh = doc.names.short;
-  const mv = (by: -1 | 1) => Top.moveParameter(code, sh, ui.def, p, by);
+  const mv = (by: -1 | 1) => Top.moveParameter(code, sh, of, p, by);
   return row(pick(p, names[p] ?? "input"),
     edit("↑", "Move earlier", mv(-1), () => runTop(info, mv(-1)), "btn mini"),
     edit("↓", "Move later", mv(1), () => runTop(info, mv(1)), "btn mini"),
-    edit("×", "Remove this input", Top.removeParameter(code, sh, ui.def, p), () => runTop(info, Top.removeParameter(code, sh, ui.def, p), () => { ui.selected = null; }), "btn mini"));
+    edit("×", "Remove this input", Top.removeParameter(code, sh, of, p), () => runTop(info, Top.removeParameter(code, sh, of, p), () => { ui.selected = of === ui.def ? null : of; }), "btn mini"));
 }
+
+// A function written inside a body, (x) => …, passed to map or keep say:
+// not a definition's own, and not a let (a function applied right where it
+// is written, drawn as dots). Its inputs are edited like a definition's.
+function innerLambda(id: Id | null): NodeOf<"lambda"> | null {
+  const n = id ? node(id) : null;
+  if (n?.kind !== "lambda" || n.id === defBody(ui.def)?.id) return null;
+  return Object.values(doc.code.nodes).some((c) => c.kind === "call" && c.fn === n.id) ? null : n;
+}
+const inputOf = (binder: Id) => Object.values(doc.code.nodes).find((l) => l.kind === "lambda" && l.params.includes(binder))?.id ?? null;
 
 // + New: a function (with its inputs), a value, or a data type.
 function newDefinitionForm(info: T.Info): HTMLElement {
