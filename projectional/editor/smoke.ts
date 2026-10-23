@@ -193,6 +193,13 @@ async function phone() {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await p.waitForTimeout(100);
   };
+  // Two fingers moving apart zoom in.
+  const scale = async () => Number(/scale\(([\d.]+)\)/.exec((await p.locator(".p-graph svg.canvas > g.world").getAttribute("transform")) ?? "")?.[1] ?? 0);
+  const z0 = await scale(), c = { x: bb.x + bb.width / 2, y: bb.y + 40 };
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: c.x - 30, y: c.y, id: 1 }, { x: c.x + 30, y: c.y, id: 2 }] });
+  for (let i = 1; i <= 5; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: c.x - 30 - i * 10, y: c.y, id: 1 }, { x: c.x + 30 + i * 10, y: c.y, id: 2 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  if (!(await scale() > z0)) errors.push(`${where}: a pinch didn't zoom in (${z0} to ${await scale()})`);
   await hold(bb.x + bb.width - 20, bb.y + 20);
   if ((await p.locator(".ctx-menu").count()) !== 1) errors.push(`${where}: a long press opened ${await p.locator(".ctx-menu").count()} menus`);
   await p.keyboard.press("Escape");
