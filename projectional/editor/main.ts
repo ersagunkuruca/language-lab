@@ -1065,7 +1065,7 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
     case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
     case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
-    case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function", "literals"];
+    case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
     default: return words(f.type).effect
       ? [`handle ${nm(f.type)} in □`, `one case per operation of ${nm(f.type)}, on the computation you give next`, "case analysis"]
       : [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
@@ -1079,7 +1079,8 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Where a call's function goes (Change the function…), functions are
   // what's wanted, and they will be called.
   const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
-  const order = [...(head ? ["functions"] : []), "in scope", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
+  // Where a function goes, writing one here is often what's meant.
+  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
   const all = T.fillings(doc.code, info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
   // Searching: names that are the text, then start with it, then have a
