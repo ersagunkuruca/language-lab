@@ -45,6 +45,11 @@ import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
+import { discharge } from "../../projectional/src/lang/ledger.ts";
+
+// A shader (or a ray marcher's loop) may call what might not finish only
+// under a literal with fuel; the rest of its type must be empty.
+const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
@@ -207,7 +212,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const bad = [...ft.params, ft.ret][[...params, result].findIndex((x) => !x)];
       fail(opts.records ? `takes or gives ${whyNot(info.subst.zonk(bad))}` : `takes or gives ${OTHER}`);
     }
-    const effs = info.subst.resolveRow(ft.eff).effs.filter((e) => e !== DIVERGE);
+    const effs = info.subst.resolveRow(ft.eff).effs.filter((e) => !BUDGETED.includes(e));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = diverges(ft);
 
