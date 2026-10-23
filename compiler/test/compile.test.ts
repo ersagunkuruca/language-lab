@@ -226,6 +226,35 @@ test("running out of fuel in plain code inside a search fails that branch only, 
   assert.deepEqual(fromList(defs.main() as Value), want);
 });
 
+test("a fold whose answer is one record carries its fields in locals, and builds it once (GAPS.md G13 again)", async () => {
+  const { INT } = await import("../../projectional/src/lang/types.ts");
+  const { INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const deal = k.type("deal", [], [["hands", [["mine", () => k.tref("std.list", k.tref(INT))], ["yours", () => k.tref("std.list", k.tref(INT))]]]]);
+  const mine = deal.f["hands.mine"], yours = deal.f["hands.yours"];
+  // Deals 0 … n − 1 to two hands in turn: each step reads the fields of the
+  // rest and builds a new deal.
+  const dealt = k.def("dealt");
+  k.define(dealt, k.fn(["n"], (n) => k.fold(k.call(I.range, n), [
+    { variant: NIL, names: [], body: () => k.call(deal.v.hands, NIL, NIL) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.call(deal.v.hands, k.call(CONS, i, k.call(yours, r!)), k.call(mine, r!)) },
+  ])));
+  // Keeps the rest whole when the item is 2, so it stays one record.
+  const whole = k.def("whole");
+  k.define(whole, k.fn(["n"], (n) => k.fold(k.call(I.range, n), [
+    { variant: NIL, names: [], body: () => k.call(deal.v.hands, NIL, NIL) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.if(k.call(S.equal, i, k.int(2)), r!, k.call(deal.v.hands, k.call(yours, r!), k.call(CONS, i, k.call(mine, r!)))) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(k.call(SHOW_ANY, k.call(dealt, k.int(5))), k.call(SHOW_ANY, k.call(whole, k.int(5))))));
+  const { source, defs } = await compiledDefs(k, ["main"], "split-fold.js");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.equal(fn("dealt").match(/hands \*\//g)!.length, 1);
+  assert.doesNotMatch(fn("dealt"), /\.fields\[/);
+  assert.match(fn("whole"), /\.fields\[/);
+  assert.deepEqual(fromList(defs.main() as Value), ["hands([0, 2, 4], [1, 3])", "hands([1, 4], [0, 3])"]);
+});
+
 test("a Choice function with at most one answer is a plain function (GAPS.md G14)", async () => {
   const k = new Lang();
   const positive = k.def("positive");

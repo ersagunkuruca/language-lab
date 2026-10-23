@@ -435,9 +435,9 @@ function zeros(t4, width) {
   const cons$87 = (c$88, padded) => {
     return ("0" + padded);
   };
-  let r$90 = nil$86();
-  for (let i$89 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$89 >= 0; i$89--) r$90 = cons$87(i$89, r$90);
-  return r$90;
+  let r$89 = nil$86();
+  for (let i$90 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$90 >= 0; i$90--) r$89 = cons$87(i$90, r$89);
+  return r$89;
 }
 
 // with point
@@ -461,9 +461,9 @@ function pad_right(t5, width2) {
   const cons$92 = (c$93, padded2) => {
     return (padded2 + " ");
   };
-  let r$95 = nil$91();
-  for (let i$94 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$94 >= 0; i$94--) r$95 = cons$92(i$94, r$95);
-  return r$95;
+  let r$94 = nil$91();
+  for (let i$95 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$95 >= 0; i$95--) r$94 = cons$92(i$95, r$94);
+  return r$94;
 }
 
 // pad
@@ -474,9 +474,9 @@ function pad(t6, width3) {
   const cons$97 = (c$98, padded3) => {
     return (" " + padded3);
   };
-  let r$100 = nil$96();
-  for (let i$99 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$99 >= 0; i$99--) r$100 = cons$97(i$99, r$100);
-  return r$100;
+  let r$99 = nil$96();
+  for (let i$100 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$100 >= 0; i$100--) r$99 = cons$97(i$100, r$99);
+  return r$99;
 }
 
 // larger

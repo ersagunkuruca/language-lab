@@ -616,6 +616,12 @@ alternating, median of 31; the machine was noisy, so ratios rather than ms).
 
 **G13 again.** `sections` builds a `Pile` record per line and takes it
 apart in the next step. The ideal carries two locals.
+*DONE (the fold part):* a fold whose answer is one record, and whose
+steps only read the fields of the folded rest, carries the fields in
+locals and builds the record once (`foldArms` in compile.ts). Within the
+machine's noise on chapters (one record fewer per line). Left: a
+single-answer function such as `join` still builds its record to return
+it; that needs a way to return several values.
 
 ### Running it backwards
 
