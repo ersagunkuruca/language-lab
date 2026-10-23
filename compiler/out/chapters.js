@@ -276,7 +276,7 @@ function times_in(x, list5) {
   let l$46 = list5;
   for (; l$46.tag === "std.list.cons" /* cons */; l$46 = l$46.fields[1]) {
     const y = l$46.fields[0];
-    acc$45 = ($eq(x, y) ? $int.add(1, acc$45) : acc$45);
+    acc$45 = ((x === y) ? $int.add(1, acc$45) : acc$45);
   }
   return acc$45;
 }

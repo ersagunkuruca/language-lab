@@ -142,8 +142,53 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // `equal`, one rule on every type (run.ts `sameNumber`). A Number, an Int
   // or a text on its own is compared without the general loop: an Int is
   // always whole, so === is the rule for it.
+  // A generic definition that the program uses at one type only compares
+  // its values as that type (GAPS.md G17): `times in` on Text uses ===. The
+  // type each use gives a type variable, followed through generic callers;
+  // exported definitions can be called at any type, so they keep $eq. This is
+  // the one-instance case of specializing by type, as MLton does for all.
+  const monoVars = new Map<number, Type>();
+  {
+    const exportedDefs = new Set(opts.exports.map((x) => code.defs.findLast((d) => names[d] === x)));
+    const uses = new Map<Id, Type[]>();
+    for (const n of Object.values(code.nodes)) {
+      if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "def") continue;
+      const t = info.typeOf.get(n.id);
+      if (!uses.has(n.target)) uses.set(n.target, []);
+      uses.get(n.target)!.push(t ? sub.zonk(t) : { t: "var", v: -1 });
+    }
+    const apply = (t: Type): Type =>
+      t.t === "var" ? (monoVars.has(t.v) ? monoVars.get(t.v)! : t)
+      : t.t === "con" ? { ...t, args: t.args.map(apply) }
+      : { ...t, params: t.params.map(apply), ret: apply(t.ret) };
+    const closed = (t: Type): boolean => (t.t === "var" ? false : t.t === "con" ? t.args.every(closed) : t.params.every(closed) && closed(t.ret));
+    const bind = (pat: Type, t: Type, vars: Set<number>, out: Map<number, Type[]>): boolean => {
+      if (pat.t === "var") {
+        if (vars.has(pat.v) && !(t.t === "var" && t.v === pat.v)) out.set(pat.v, [...(out.get(pat.v) ?? []), t]);
+        return true;
+      }
+      if (pat.t === "con") return t.t === "con" && t.id === pat.id && t.args.length === pat.args.length && pat.args.every((a, i) => bind(a, t.args[i], vars, out));
+      return t.t === "fn" && t.params.length === pat.params.length && pat.params.every((a, i) => bind(a, t.params[i], vars, out)) && bind(pat.ret, t.ret, vars, out);
+    };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [def, ts] of uses) {
+        const sc = info.schemes.get(def);
+        if (!sc || !sc.vars.length || exportedDefs.has(def)) continue;
+        const vars = new Set(sc.vars), out = new Map<number, Type[]>();
+        if (!ts.every((t) => bind(sc.type, t, vars, out))) continue;
+        for (const [v, at] of out) {
+          if (monoVars.has(v)) continue;
+          const keys = new Set(at.map((t) => JSON.stringify(apply(t))));
+          const only = apply(at[0]);
+          if (keys.size === 1 && closed(only)) { monoVars.set(v, only); changed = true; }
+        }
+      }
+    }
+  }
+  const monoType = (t: Type): Type => (t.t === "var" && monoVars.has(t.v) ? monoVars.get(t.v)! : t);
   const equalJs = (arg: Id, [a, b]: string[]) => {
-    const t = ty(arg);
+    const t = monoType(ty(arg));
     if (t.t === "con" && t.id === NUMBER) return `$sameNumber(${a}, ${b})`;
     if (t.t === "con" && (t.id === STRING || t.id === INT)) return `(${a} === ${b})`;
     return `$eq(${a}, ${b})`;
