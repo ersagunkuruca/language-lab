@@ -648,6 +648,13 @@ locals and builds the record once (`foldArms` in compile.ts). Within the
 machine's noise on chapters (one record fewer per line). Left: a
 single-answer function such as `join` still builds its record to return
 it; that needs a way to return several values.
+**Done** (Backlog C6): a single-answer function whose answers are all
+one record, called where the search goes on with its answer, has a
+`$fields` copy that leaves the fields in `$got` and returns whether it
+has an answer; the caller reads them into locals and builds the record
+only if it keeps it whole, as G13's `$k` copies do. Countdown's `join`
+builds no `found`: biggest instance 1.47× → 1.30× the ideal (median of
+eight alternating runs against main, noisy).
 
 ### Running it backwards
 

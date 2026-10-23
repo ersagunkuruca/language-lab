@@ -489,6 +489,31 @@ test("a search whose answers are one record passes its fields, and builds it onl
   assert.deepEqual(fromList(defs.products() as Value), [9, 16, 21]);
 });
 
+test("a function with one answer or none, all one record, leaves its fields for the caller (GAPS.md G13 again)", async () => {
+  const k = new Lang();
+  const cut = k.type("cut", [], [["halves", [["a", () => k.tref("type.number")], ["b", () => k.tref("type.number")]]]]);
+  const half = k.def("half");
+  k.define(half, k.fn(["n"], (n) => k.if(k.call(S.less, n, k.lit(10)), k.call(cut.v.halves, n, k.call(B.mul, n, k.lit(2))), k.call(S.fail))));
+  const xs = () => k.call(S.oneOf, k.list(k.lit(1), k.lit(20), k.lit(3)));
+  const sums = k.def("sums");
+  k.define(sums, k.thunk(() => k.call(S.all, k.thunk(() => k.match(k.call(half, xs()), [{ variant: cut.v.halves, names: ["a", "b"], body: ([a, b]) => k.call(B.add, a, b) }])))));
+  const kept = k.def("kept");
+  k.define(kept, k.thunk(() => k.call(S.all, k.thunk(() => k.call(half, xs())))));
+  const { code, info, names, source, defs } = await compiledDefs(k, ["sums", "kept"], "fields.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("half$fields"), /\$got\[1\] = /);
+  assert.doesNotMatch(body("half$fields") + body("sums"), /halves \*\//);
+  assert.match(body("sums"), /if \(half\$fields\(/);
+  // Kept whole: built once, by the caller.
+  assert.match(body("kept"), /halves \*\//);
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const name of ["sums", "kept"]) {
+    const def = code.defs.find((d) => names[d] === name)!;
+    assert.deepEqual(defs[name](), [...r.call(r.value(def))][0]);
+  }
+  assert.deepEqual(fromList(defs.sums() as Value), [3, 9]);
+});
+
 test("steps over a list run as one loop: no list between split, keep and length (GAPS.md G16)", async () => {
   const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
   const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
