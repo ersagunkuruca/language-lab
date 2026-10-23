@@ -53,12 +53,11 @@ so the next bigger program can be built in the editor.
 
 ## C: Compiler and targets
 
-Thread "Bigger programs and compiler gaps". Current step: G22, the
-stack overflow round 3 found (ledger), then the rest in order.
+Thread "Bigger programs and compiler gaps". Current step: C2's part left (lists matched on,
+and lists built by G22's loops), then the rest in order.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C19 | G22 a recursion that builds a list (`cons(x, self(rest))`) keeps a JS frame per item: ledger overflows past about 5000 lines without G1's big stack, so in the editor and the browser. Tail recursion modulo cons (credit Friedman and Wise 1975; OCaml's `[@tail_mod_cons]`, Bour, Clément and Scherer 2021) | GAPS G22 | P1 | M | |
 | C2 | G21 lists as arrays, the part left: lists that are matched on (the array and a start), and lists built by G22's loops; ledger's G23 is the first program that needs it (four spines per run, `split` lines matched in `entries` and `parse`) | GAPS G21, G23 | P2 | M | parts 1 #182, 2 #188 done |
 | C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test); a Bool parameter is data too (ledger's `by name`) | GAPS G3, round 3 | P2 | S | |
 | C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer; so are `read whole number` and the other at-most-one builtins under `first` (G24) | GAPS G14, G24 | P2 | S | |
@@ -133,7 +132,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C3 | GAPS round 3: ledger, 32 definitions built in the editor by clicks; compiled 2 to 4× the ideal; G22 (stack), G23, G24 and eight editor frictions | this PR |
+| C19 | G22 tail recursion modulo cons: `cons(x, self(rest))` fills holes in a loop, so ledger runs 50,000 lines on the default stack | this PR |
+| C3 | GAPS round 3: ledger, 32 definitions built in the editor by clicks; compiled 2 to 4× the ideal; G22 (stack), G23, G24 and eight editor frictions | #197 |
 | C2 | G21 parts 1 and 2: lists walked whole, and accumulators, stay arrays (chapters about 3.4× → 1.9× the ideal) | #182, #188 |
 | C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
 

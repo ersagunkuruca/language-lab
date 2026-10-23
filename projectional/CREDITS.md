@@ -149,6 +149,7 @@ not only code: an influence is credited even when nothing was copied.
 | What | Label | Who and where |
 |---|---|---|
 | Stackless evaluator, self tail calls as loops | Textbook | Continuations and defunctionalization (Reynolds, "Definitional interpreters", 1972); tail calls as jumps are standard compiler practice. |
+| A recursion that builds a list (`cons(x, self(rest))`) compiled as a loop that fills the last cell's empty field | Prior art | Tail recursion modulo cons: Friedman and Wise, "Unwinding stylized recursions into iterations" (1975); OCaml 4.14's `[@tail_mod_cons]` (Bour, Clément and Scherer, 2021). `compiler/src/compile.ts`, GAPS.md G22. |
 | Steps over a list (`keep`, `map` and definitions of their shape, between `split`/`characters` and `length`/`joinAll`) compiled as one loop with no list between | Prior art | Deforestation (Wadler, 1990) and short-cut fusion (Gill, Launchbury and Peyton Jones, FPCA 1993); ours inlines known steps. `compiler/src/compile.ts`, COMPILER.md "Folds are loops". |
 | Lists that are only walked, or consed onto then walked, kept as arrays (`$arr` copies) | Prior art | Cdr-coding (Wilfred J. Hansen, "Compact list representation", CACM 1969; MIT Lisp Machine, Symbolics); ours is decided at compile time by the uses. COMPILER.md, NUMBERS.md. |
 | Compiling `Choice` with success continuations (built for JS: the `$k` copies) | Adapted | Mercury's high-level C backend (Henderson and Somogyi, "Compiling Mercury to high-level C code", CC 2002), credited in COMPILER.md and `compiler/src/compile.ts`. |

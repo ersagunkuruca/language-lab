@@ -16,9 +16,9 @@ const ms = (x: number) => `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`.padStart(
 
 console.log(`ledger: totals by account and by month of a file kept in memory (in one process, median)\n`);
 console.log(`${"file".padEnd(26)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal`);
-// Past about 5000 lines the compiled `entries` runs out of JS stack in a
-// process with the default stack (GAPS.md G22), so the sizes stop there.
-for (const n of [100, 1000, 3000, 4000]) {
+// Before G22 (C19) the compiled `entries` ran out of JS stack past about
+// 5000 lines in a process with the default stack; now it is a loop.
+for (const n of [100, 1000, 3000, 10000, 50000]) {
   const files = { "l.csv": book(n) }, args = ["l.csv"];
   const want = w.ideal(args, files);
   assert.deepEqual(w.compiled(args, files), want);

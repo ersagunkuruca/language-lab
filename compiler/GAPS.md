@@ -703,6 +703,11 @@ down, and loop. Prior art: Friedman and Wise, "Unwinding stylized
 recursions into iterations" (1975); OCaml 4.14's `[@tail_mod_cons]`
 (Bour, Clément and Scherer, 2021). With G21's arrays, a list made this way
 and only walked could be an array pushed in order, too.
+**Done** (C19, the PR after round 3): a constructor whose last field is a
+call of the definition to itself, in a tail position, makes its cell with
+that field empty, hangs it in the last hole, and jumps. Every other answer
+goes into the last hole, and the first cell is returned. ledger now runs
+10,000 and 50,000 lines in one process (2.7× and 3.9× the ideal).
 
 **G23. Folds from the end over a list built by cons walk its spine first
 (perf: four spines of every entry).** `by account`, `by month`, `smallest`

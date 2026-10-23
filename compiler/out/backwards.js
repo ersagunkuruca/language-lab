@@ -205,16 +205,28 @@ function square_roots_of_each(squares) {
 $meta(square_roots_of_each, "1b81256b");
 
 // map
-function map(list2, change) {
-  const s$34 = list2;
-  switch (s$34.tag) {
-    case "std.list.nil" /* nil */: {
-      return $nil;
-    }
-    case "std.list.cons" /* cons */: {
-      const item = s$34.fields[0];
-      const rest3 = s$34.fields[1];
-      return $cons(change(item), map(rest3, change));
+function map(list2$in, change$in) {
+  const top$34 = { fields: [undefined] };
+  let at$35 = top$34, i$36 = 0;
+  for (;;) {
+    const list2 = list2$in, change = change$in;
+    const s$37 = list2;
+    switch (s$37.tag) {
+      case "std.list.nil" /* nil */: {
+        at$35.fields[i$36] = $nil;
+        return top$34.fields[0];
+      }
+      case "std.list.cons" /* cons */: {
+        const item = s$37.fields[0];
+        const rest3 = s$37.fields[1];
+        const cell$38 = { tag: "std.list.cons" /* cons */, fields: [change(item), undefined] };
+        at$35.fields[i$36] = cell$38;
+        at$35 = cell$38;
+        i$36 = 1;
+        list2$in = rest3;
+        change$in = change;
+        continue;
+      }
     }
   }
 }
@@ -222,21 +234,21 @@ $meta(map, "@9902gjnadddgv3jrh6ir29nf4q:1");
 
 // read numbers
 function* read_numbers(text2) {
-  for (const r$36 of $fuel(10000, $meta((function* () {
-            for (const sol$35 of solve$4(text2)) {
-              const numbers2 = sol$35[0];
+  for (const r$40 of $fuel(10000, $meta((function* () {
+            for (const sol$39 of solve$4(text2)) {
+              const numbers2 = sol$39[0];
               yield numbers2;
             }
           }), "25893be1", () => [["dc158ebb", text2]]), true)) {
-    yield r$36;
+    yield r$40;
   }
 }
 $meta(read_numbers, "5f51968c");
 
 // height on the ray
 function* height_on_the_ray(angle, x2) {
-  for (const sol$37 of solve$5(x2, angle)) {
-    const y = sol$37[0];
+  for (const sol$41 of solve$5(x2, angle)) {
+    const y = sol$41[0];
     yield y;
   }
 }
