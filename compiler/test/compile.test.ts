@@ -410,6 +410,52 @@ test("a recursion that builds a list fills holes in a loop: a million cells on t
   assert.deepEqual(fromList(defs.small() as Value), fromList([...r.call(r.value(small))][0]));
 });
 
+test("a list nobody else holds is changed in place, and one held twice is not (GAPS.md G25)", async () => {
+  const k = new Lang();
+  // add one to the first item, or start the list at 1 (not `[1]`, which
+  // is constant data, built once and shared: never owned)
+  const bump = k.def("bump");
+  k.define(bump, k.fn(["list"], (list) => k.match(list, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.lit(1), list) },
+    { variant: CONS, names: ["h", "rest"], body: ([h, rest]) => k.call(CONS, k.call(B.add, h, k.lit(1)), rest) },
+  ])));
+  // a fold whose accumulator is only bumped, or consed onto
+  const counts = k.def("counts");
+  k.define(counts, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["x", "t"], results: [null, "r"], body: ([x], [, r]) => k.if(k.call(S.less, k.lit(0), x), k.call(bump, r!), k.call(CONS, k.lit(0), r!)) },
+  ])));
+  // the counts held twice: bumping one must not change the other
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["xs"], (xs) => k.let("ys", k.call(counts, xs), (ys) => k.call(CONS, k.call(bump, ys), k.call(CONS, ys, NIL)))));
+  // the list kept whole on the run that would bump its rest
+  const pieces = k.def("pieces");
+  k.define(pieces, k.fn(["list"], (list) => k.match(list, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["h", "rest"], body: ([, rest]) => k.call(CONS, k.call(bump, rest), k.call(CONS, list, NIL)) },
+  ])));
+  const input = () => k.list(k.lit(1), k.lit(1), k.lit(0), k.lit(1), k.lit(1), k.lit(1));
+  const ofCounts = k.def("of counts");
+  k.define(ofCounts, k.fn(["xs"], (xs) => k.call(pieces, k.call(counts, xs))));
+  const a = k.def("a"), b = k.def("b"), c = k.def("c");
+  k.define(a, k.thunk(() => k.call(counts, input())));
+  k.define(b, k.thunk(() => k.call(twice, input())));
+  k.define(c, k.thunk(() => k.call(ofCounts, input())));
+  const { code, info, source, defs } = await compiledDefs(k, ["a", "b", "c"], "own.js");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(fn("counts"), /bump\$own\(/);
+  assert.match(fn("bump$own"), /\.fields\[0\] = /);
+  assert.doesNotMatch(fn("twice"), /\$own/);
+  assert.match(fn("pieces$own"), /bump\(rest\d*\)/);
+  const r = makeRunner(code, info, { print: () => {} });
+  const deep = (v: unknown): unknown => (Array.isArray(v) ? v.map(deep) : v && typeof v === "object" && "tag" in v ? deep(fromList(v as Value)) : v);
+  for (const d of [a, b, c]) {
+    const name = k.names[d];
+    assert.deepEqual(deep(fromList(defs[name]() as Value)), deep(fromList([...r.call(r.value(d))][0])), name);
+  }
+  assert.deepEqual(fromList(defs.a() as Value), [2, 3]);
+});
+
 test("a fold over a deep tree compiles to a loop with its own stack, children first", async () => {
   const k = new Lang();
   const tree = k.type("tree", [], [["leaf", [["n", () => k.tref("type.number")]]], ["node", [["l", (self) => k.tref(self)], ["r", (self) => k.tref(self)]]]]);

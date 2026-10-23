@@ -202,7 +202,7 @@ function by_account(entries4) {
       case "std.list.cons" /* cons */: {
         const e = s$21.fields[0];
         const totals = rs$22;
-        return add_to(totals, e.fields[1], e.fields[2]);
+        return add_to$own(totals, e.fields[1], e.fields[2]);
       }
     }
   };
@@ -227,7 +227,7 @@ function sort(totals2, by_name) {
       case "std.list.cons" /* cons */: {
         const t = s$29.fields[0];
         const sorted = rs$30;
-        return insert(t, sorted, by_name);
+        return insert$own(t, sorted, by_name);
       }
     }
   };
@@ -269,7 +269,7 @@ function by_month(entries5) {
       case "std.list.cons" /* cons */: {
         const e2 = s$41.fields[0];
         const totals4 = rs$42;
-        return add_to(totals4, month(e2), e2.fields[2]);
+        return add_to$own(totals4, month(e2), e2.fields[2]);
       }
     }
   };
@@ -362,7 +362,7 @@ function length(list) {
 }
 
 // add to
-function add_to(totals5$in, name$in, cents2$in) {
+function add_to$own(totals5$in, name$in, cents2$in) {
   const top$72 = { fields: [undefined] };
   let at$73 = top$72, i$74 = 0;
   for (;;) {
@@ -377,12 +377,13 @@ function add_to(totals5$in, name$in, cents2$in) {
         const t2 = s$75.fields[0];
         const rest4 = s$75.fields[1];
         if ((t2.fields[0] === name)) {
-          at$73.fields[i$74] = $cons(({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, $int.add(t2.fields[1], cents2), $int.add(t2.fields[2], 1)] }), rest4);
+          const h$76 = ({ tag: "0cmru7kiupd2o5escfsqvnedu3" /* total */, fields: [name, $int.add(t2.fields[1], cents2), $int.add(t2.fields[2], 1)] });
+          s$75.fields[0] = h$76;
+          at$73.fields[i$74] = s$75;
           return top$72.fields[0];
         }
-        const cell$76 = { tag: "std.list.cons" /* cons */, fields: [t2, undefined] };
-        at$73.fields[i$74] = cell$76;
-        at$73 = cell$76;
+        if (at$73.fields[i$74] !== s$75) at$73.fields[i$74] = s$75;
+        at$73 = s$75;
         i$74 = 1;
         totals5$in = rest4;
         name$in = name;
@@ -394,7 +395,7 @@ function add_to(totals5$in, name$in, cents2$in) {
 }
 
 // insert
-function insert(item2$in, sorted2$in, by_name2$in) {
+function insert$own(item2$in, sorted2$in, by_name2$in) {
   const top$77 = { fields: [undefined] };
   let at$78 = top$77, i$79 = 0;
   for (;;) {
@@ -412,9 +413,8 @@ function insert(item2$in, sorted2$in, by_name2$in) {
           at$78.fields[i$79] = $cons(item2, sorted2);
           return top$77.fields[0];
         }
-        const cell$81 = { tag: "std.list.cons" /* cons */, fields: [top, undefined] };
-        at$78.fields[i$79] = cell$81;
-        at$78 = cell$81;
+        if (at$78.fields[i$79] !== s$80) at$78.fields[i$79] = s$80;
+        at$78 = s$80;
         i$79 = 1;
         item2$in = item2;
         sorted2$in = rest5;
@@ -437,15 +437,15 @@ function month(e6) {
 
 // zeros
 function zeros(t4, width) {
-  const nil$87 = () => {
+  const nil$86 = () => {
     return t4;
   };
-  const cons$88 = (c$89, padded) => {
+  const cons$87 = (c$88, padded) => {
     return ("0" + padded);
   };
-  let r$91 = nil$87();
-  for (let i$90 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$90 >= 0; i$90--) r$91 = cons$88(i$90, r$91);
-  return r$91;
+  let r$90 = nil$86();
+  for (let i$89 = Number($int.sub(width, $impl["builtin.text.length"](t4))) - 1; i$89 >= 0; i$89--) r$90 = cons$87(i$89, r$90);
+  return r$90;
 }
 
 // with point
@@ -463,28 +463,28 @@ function goes_before(a, b, by_name3) {
 
 // pad right
 function pad_right(t5, width2) {
-  const nil$92 = () => {
+  const nil$91 = () => {
     return t5;
   };
-  const cons$93 = (c$94, padded2) => {
+  const cons$92 = (c$93, padded2) => {
     return (padded2 + " ");
   };
-  let r$96 = nil$92();
-  for (let i$95 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$95 >= 0; i$95--) r$96 = cons$93(i$95, r$96);
-  return r$96;
+  let r$95 = nil$91();
+  for (let i$94 = Number($int.sub(width2, $impl["builtin.text.length"](t5))) - 1; i$94 >= 0; i$94--) r$95 = cons$92(i$94, r$95);
+  return r$95;
 }
 
 // pad
 function pad(t6, width3) {
-  const nil$97 = () => {
+  const nil$96 = () => {
     return t6;
   };
-  const cons$98 = (c$99, padded3) => {
+  const cons$97 = (c$98, padded3) => {
     return (" " + padded3);
   };
-  let r$101 = nil$97();
-  for (let i$100 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$100 >= 0; i$100--) r$101 = cons$98(i$100, r$101);
-  return r$101;
+  let r$100 = nil$96();
+  for (let i$99 = Number($int.sub(width3, $impl["builtin.text.length"](t6))) - 1; i$99 >= 0; i$99--) r$100 = cons$97(i$99, r$100);
+  return r$100;
 }
 
 // larger

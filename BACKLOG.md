@@ -58,7 +58,6 @@ and lists built by G22's loops), then the rest in order.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C2 | G21 lists as arrays, the part left: lists that are matched on (the array and a start), and lists built by G22's loops; ledger's G23 is the first program that needs it (four spines per run, `split` lines matched in `entries` and `parse`) | GAPS G21, G23 | P2 | M | parts 1 #182, 2 #188 done |
-| C20 | G25 a list nobody else holds is copied to change one item (`add to`, `insert`): most of ledger's distance from the ideal. Reuse cells known to be unique at compile time, design note first (credit Koka's Perceus and FBIP: Reinking, Xie, de Moura and Leijen 2021; Lorenzen, Leijen and Swierstra 2023) | GAPS G25 | P2 | L | |
 | C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test); a Bool parameter is data too (ledger's `by name`) | GAPS G3, round 3 | P2 | S | |
 | C5 | G14 again: `heading` and `code`/`fromCode` are generators though they have one answer; so are `read whole number` and the other at-most-one builtins under `first` (G24) | GAPS G14, G24 | P2 | S | |
 | C6 | G13 again: `sections` builds a `Pile` per line; single-answer functions returning several values | GAPS G13 | P2 | M | |
@@ -133,6 +132,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| C20 | G25 list cells nobody else holds changed in place (`$own` copies): ledger's `by account` 35 → 25 ms, about 10% overall | this PR |
 | C19 | G22 tail recursion modulo cons: `cons(x, self(rest))` fills holes in a loop, so ledger runs 50,000 lines on the default stack | #200 |
 | C3 | GAPS round 3: ledger, 32 definitions built in the editor by clicks; compiled 2 to 4× the ideal; G22 (stack), G23, G24 and eight editor frictions | #197 |
 | C2 | G21 parts 1 and 2: lists walked whole, and accumulators, stay arrays (chapters about 3.4× → 1.9× the ideal) | #182, #188 |

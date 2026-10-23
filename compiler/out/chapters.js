@@ -112,9 +112,9 @@ function number$arr(sections$in, n$in, taken$in) {
         const section = s$20.fields[0];
         const rest2 = s$20.fields[1];
         const name = slug(section.fields[0]);
-        const cell$21 = { tag: "std.list.cons" /* cons */, fields: [({ tag: "t9iqhjdous3r5gfajeltfunt5g" /* chapter */, fields: [n, section.fields[0], (((two_digits(n) + "-") + unique$arr(name, taken)) + ".md"), words_in(section.fields[1]), text_of(section)] }), undefined] };
-        at$18.fields[i$19] = cell$21;
-        at$18 = cell$21;
+        const cell$22 = { tag: "std.list.cons" /* cons */, fields: [({ tag: "t9iqhjdous3r5gfajeltfunt5g" /* chapter */, fields: [n, section.fields[0], (((two_digits(n) + "-") + unique$arr(name, taken)) + ".md"), words_in(section.fields[1]), text_of(section)] }), undefined] };
+        at$18.fields[i$19] = cell$22;
+        at$18 = cell$22;
         i$19 = 1;
         sections$in = rest2;
         n$in = $int.add(n, 1);
