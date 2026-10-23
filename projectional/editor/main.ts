@@ -269,6 +269,13 @@ const startTabs = () => [...new Set([startDef(), showcase()])];
 const noteOf = (d: Doc) => d.comments[PROGRAM] ?? "";
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
 
+// A touch screen is told about taps, long presses and pinches, not hover,
+// right-click and shift.
+const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+const OPENING = TOUCH
+  ? "A typed program. Tap anything to select it and see its type; tap a hole for a palette of only what fits there; long-press in the graph for a menu."
+  : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
+
 const ui: UI = {
   def: startDef(),
   pane: "graph",
@@ -279,7 +286,7 @@ const ui: UI = {
   style: "math",
   text: "blocks",
   touched: [],
-  note: "A typed program. Hover anything for its type; click a hole for a palette of only what fits there. Run lets you run any function backwards.",
+  note: `${OPENING} Run lets you run any function backwards.`,
   mode: null,
   query: "",
   refused: false,
@@ -336,7 +343,7 @@ function showProgram() {
   ui.output = null;
   ui.touched = [];
   ui.refused = false;
-  ui.note = "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
+  ui.note = OPENING;
   save();
   render();
 }
@@ -984,7 +991,9 @@ const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 const withHandles = (p: Presentation): Presentation => ({ ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } });
 const typedPres = (): Presentation => withHandles(blocksPres());
-const GRAPH_HINT = "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
+const GRAPH_HINT = TOUCH
+  ? "long-press for a menu; drag a node to move it; Pick (in the menu) several to move them together; pinch to zoom; tap a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there"
+  : "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   if (ui.mode === "new-def") return newDefinitionForm(info);
@@ -2213,7 +2222,7 @@ function render() {
     document.getElementById("app")!.replaceChildren(
       h("header", { class: "bar" }, h("div", { class: "controls" },
         seg("program", doc.program, [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])]),
-        h("div", { class: "seg" },
+        h("div", { class: "seg history" },
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program) }, "Reset")))),
       h("p", { class: "status refused", role: "status" }, `The editor failed to draw this program (${e instanceof Error ? e.message : String(e)}). It's a bug in the editor, not your program: Undo, Reset to the example, or open another program.`));
@@ -2260,7 +2269,7 @@ function draw() {
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
         seg("style", ui.style, [["math", "a · b"], ["plain", "a * b"], ["lisp", "(* a b)"]]),
-        h("div", { class: "seg" },
+        h("div", { class: "seg history" },
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
@@ -2279,7 +2288,7 @@ function draw() {
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
-            ui.text === "blocks" ? h("span", { class: "hint" }, "hover for types; click a □ to fill it; double-click a name to open it") : null),
+            ui.text === "blocks" ? h("span", { class: "hint" }, TOUCH ? "tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "hover for types; click a □ to fill it; double-click a name to open it") : null),
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
