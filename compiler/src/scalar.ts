@@ -47,8 +47,8 @@
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, IO, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -74,6 +74,16 @@ const RT: Record<Id, string> = {
 // What a partial function (`data`) may do besides answer: have no answer,
 // not finish (running out of a budget), or abort.
 const PARTIAL: Id[] = [CHOICE, DIVERGE, ABORT];
+// The world (`data`): the console and files, through the host's World
+// (wasm.ts imports them). `aborts`: it can fail, with a reason.
+export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
+  [S.print]: { op: "print", aborts: false }, [IO.printError]: { op: "printError", aborts: false },
+  [IO.readInput]: { op: "readInput", aborts: true }, [IO.readLine]: { op: "readLine", aborts: true },
+  [IO.readFile]: { op: "readFile", aborts: true }, [IO.writeFile]: { op: "writeFile", aborts: true }, [IO.appendFile]: { op: "appendFile", aborts: true },
+  [IO.fileExists]: { op: "fileExists", aborts: false }, [IO.listFolder]: { op: "listFolder", aborts: true },
+};
+// Effects a function in WebAssembly may have: the partial ones and the world's.
+const ALLOWED: Id[] = [...PARTIAL, CONSOLE, FILES];
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
@@ -106,6 +116,7 @@ export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a hea
 export function fails(e: SExpr, funcs: SFunc[]): boolean {
   switch (e.k) {
     case "fail": case "abort": return true;
+    case "world": return e.aborts || e.args.some((a) => fails(a, funcs));
     case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
     case "rt": return !!runtime(e.fn).partial || e.args.some((a) => fails(a, funcs));
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
@@ -117,7 +128,7 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
 // The expressions directly inside e.
 export function kids(e: SExpr): SExpr[] {
   switch (e.k) {
-    case "op": case "call": case "make": case "new": case "rt": return e.args;
+    case "op": case "call": case "make": case "new": case "rt": case "world": return e.args;
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     case "get": case "field": case "tag": return [e.rec];
@@ -177,6 +188,8 @@ export type SExpr =
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort).
   | { k: "abort"; reason: SExpr }
+  // An operation on the world (WORLD_OPS), with its result's type.
+  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
@@ -253,10 +266,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       // A function that may not finish, have no answer or abort is fine
       // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
-      if (effs.some((e) => !PARTIAL.includes(e))) return null;
+      if (effs.some((e) => !ALLOWED.includes(e))) return null;
       const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
       if (params.some((p) => !p) || !result) return null;
-      const partial = effs.length > 0;
+      const partial = effs.some((e) => PARTIAL.includes(e));
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
       if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
       return fns.get(key)!;
@@ -389,7 +402,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
     const partial = !!opts.data && (all.includes(CHOICE) || all.includes(ABORT) || (!constant && info.divergent.has(def)));
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && PARTIAL.includes(e)));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && PARTIAL.includes(e)) && !(opts.data && (e === CONSOLE || e === FILES)));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -493,6 +506,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === ABORT_OP && opts.data && n.args.length === 1) return { k: "abort", reason: expr(n.args[0], env, f, false) };
+        if (opts.data && WORLD_OPS[target]) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", ...WORLD_OPS[target], args: args(), t };
+        }
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (opts.data && [S.first, S.optional, S.all, S.count].includes(target) && !isBudget(n)) return attempt(n, id, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);

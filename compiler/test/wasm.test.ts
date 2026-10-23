@@ -3,10 +3,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Aborted, bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { Aborted, bool, fromList, makeRunner, runProgram, toList, type Value, type World } from "../../projectional/src/lang/run.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
-import { emitWasm, fromText, instantiate, toText } from "../src/wasm.ts";
+import { emitWasm, fromText, instantiate, runMain, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { area, choices, closures, sameLists, searches, texts } from "../src/fixtures.ts";
 import { book } from "../gaps/ledger.ts";
@@ -362,8 +362,9 @@ test("choosing one of a list in WebAssembly: a loop per choice, keep with a test
     const q = load(name);
     const l = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
     assert.deepEqual([...l.refused.entries()].filter(([, why]) => /one of|Choice/.test(why)), [], `${name}: nothing refused for its searches`);
-    const wm = await instantiate(emitWasm(l)) as unknown as Exports;
-    const rr = makeRunner(q.code, q.info, { print: () => {} });
+    // Each with a world of its own, which the same calls change the same way.
+    const wm = await instantiate(emitWasm(l), fakeWorld({}, "").rt) as unknown as Exports;
+    const rr = makeRunner(q.code, q.info, fakeWorld({}, "").rt);
     let compared = 0;
     for (const f of l.funcs) {
       const keys = f.params.map((t) => (typeof t === "string" ? t : t.key));
@@ -457,4 +458,37 @@ test("a loop that might not finish runs only under a budget, and runs out where 
   }
   assert.equal(w.capped(0, 0.25, 10), -1);
   assert.notEqual(w.capped(0, 0.25, 9), -1);
+});
+
+// A world in memory: files in a map, input from a string, everything written collected.
+function fakeWorld(files: Record<string, string>, input: string) {
+  const lines = input.split("\n");
+  const out = { printed: [] as string[], errors: [] as string[], files: { ...files } };
+  const world: Partial<World> = {
+    error: (l) => out.errors.push(l), input: () => input,
+    readLine: () => (lines.length > 1 || lines[0] ? lines.shift()! : null),
+    readFile: (p) => { if (!(p in out.files)) throw new Error(`no such file: ${p}`); return out.files[p]; },
+    writeFile: (p, t) => { out.files[p] = t; }, appendFile: (p, t) => { out.files[p] = (out.files[p] ?? "") + t; },
+    fileExists: (p) => p in out.files, listFolder: () => Object.keys(out.files).sort(),
+  };
+  return { rt: { print: (s: string) => out.printed.push(s), world }, out };
+}
+
+test("whole programs in WebAssembly: wc, ledger, chapters and calc's mains print, write files and exit as the evaluator's do", async () => {
+  const files = {
+    "a.txt": "one two\nthree\n", "book.md": "# One\nhello world\n# Two\nmore words here\n",
+    "sums.txt": "1+2\nlet x = 3\nx*x\n1 +\n", "ledger.csv": "2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n", "big.csv": book(500),
+  };
+  const argsets = [[], ["a.txt"], ["-l", "a.txt", "nope"], ["-w", "-c", "book.md"], ["book.md", "out"], ["sums.txt"], ["ledger.csv"], ["big.csv"], ["nope"]];
+  for (const name of ["wc", "ledger", "chapters", "calc"]) {
+    const p = load(name);
+    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+    assert.ok(l.funcs.some((g) => g.name === "main"), `${name}: main compiles (${l.refused.get(p.named("main"))})`);
+    const m = emitWasm(l);
+    for (const args of argsets) for (const input of ["3*4\nlet\n", ""]) {
+      const want = fakeWorld(files, input), got = fakeWorld(files, input);
+      const exit = runProgram(p.code, p.info, p.named("main"), args, { ...want.rt, names: p.pres.names });
+      assert.deepEqual([await runMain(l, m, "main", args, got.rt), got.out], [exit, want.out], `${name} ${args.join(" ")}`);
+    }
+  }
 });

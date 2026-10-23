@@ -3,11 +3,12 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2, W3a, W4a, W4b and W4c are done (W2: functions
-as values, W3a: Int and Text, W4a: searches with one answer or none,
-W4b: choosing inside a handler, W4c: Abort, below). Of wc, ledger,
-chapters and calc, everything but what reads and writes the world now
-runs in WebAssembly; that's W3b. What runs in WebAssembly is the
+**Status.** Stages W1, W2, W3a, W3b-1, W4a, W4b and W4c are done (W2:
+functions as values, W3a: Int and Text, W3b-1: the world through a
+JavaScript host, W4a: searches with one answer or none, W4b: choosing
+inside a handler, W4c: Abort, below). wc, ledger, chapters and calc run
+whole in WebAssembly, main included. Next is W3b-2, the same imports
+written for WASI, so they run under wasmtime with no JavaScript. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -17,6 +18,20 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W3b-1 came out. Console and Files are imports from a module
+`world`, one per operation used (`print`, `readFile`, `listFolder`, …),
+taking and giving the module's own texts, lists and optionals: the host
+reads a text with `Text.size` and `Text.byte` and makes one with
+`Text.new` and `Text.put`, and makes lists and optionals of texts with
+`TextList.cons` and `TextOption.some`, whatever else the module calls
+those types. One that can fail (a missing file) gives status 2 after its
+answer, and `world.reason` then gives the reason, so it's an Abort where
+it was called, as in the evaluator. `wasm.ts` `instantiate` takes the
+evaluator's own `Runtime`, and `runMain` runs a main as `runProgram`
+does: the arguments as a list of texts, the exit code from an Int, an
+Abort nothing handled to standard error with exit 1. The four programs
+print, write files and exit as the evaluator does on 72 runs.
 
 How W4c came out. Abort is a third status, 2, with its reason in a
 global, so it leaves every function between at once the way no answer
@@ -238,8 +253,8 @@ rest with the reason, so nothing breaks between stages.
 2. **W2 closures (done).** Functions as values, `map` and `keep` with a
    lambda, `call_ref`, and tail calls through `return_call_ref`.
 3. **W3 text and the world.** UTF-8 text with the std.ts text builtins,
-   `show` (W3a, done), and the `World` imports with both adapters (W3b,
-   after W4's one-answer Choice, which wc's and ledger's reading needs). Programs: wc and
+   `show` (W3a, done), and the `World` imports with both adapters (W3b-1
+   the JavaScript one, done; W3b-2 WASI). Programs: wc and
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
    installed).
 4. **W4 searches and effects.** One answer or none as a status after
