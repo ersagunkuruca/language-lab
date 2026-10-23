@@ -27,7 +27,6 @@
 
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
-import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
@@ -37,6 +36,8 @@ import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
+import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
+import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
 type K = (value: string) => string;
@@ -131,6 +132,20 @@ const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 let narrowText: (id: Id) => boolean = () => false;
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  // derivative(f) and gradient(f) of a function written right there become
+  // the code of its derivative (derive.ts), checked again, as in the scalar
+  // profile (scalar.ts): plain arithmetic, no $derivative at run time, and
+  // no node table when nothing else looks inside functions. A derivative
+  // of a function known only at run time still asks the runtime.
+  const x = expandDerivatives(code, names, (call) => {
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
+  });
+  if (x.expanded.length) {
+    code = x.code;
+    names = x.names;
+    info = infer(code, names);
+  }
   narrowText = (id) => { const n = code.nodes[id]; return n.kind === "lit" && typeof n.value === "string" && n.of === undefined && /^[\u0000-\ud7ff]*$/.test(n.value); };
   const sub = info.subst;
   // Effects a program defines: an operation is a variant of an effect, and a
@@ -235,7 +250,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // over, the same as the evaluator's (META), and the module carries its
   // own node table for the interpreter to read.
   const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
-  const reflective = Object.values(code.nodes).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
+  // Only nodes the definitions hold: an expanded derivative leaves its old
+  // `derivative` reference behind in the table.
+  const reflective = code.defs.flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
