@@ -70,7 +70,8 @@ function main() {
   $print(("to polar(0, 2), canonical = " + (($show((() => {
                 let got$0 = $no;
                 (() => {
-                    if (to_polar$k(0, 2, (r$1) => {
+                    if (to_polar$k(0, 2, (f$2, f$3) => {
+                          const r$1 = ({ tag: "std.pair.pair" /* pair */, fields: [f$2, f$3] });
                           got$0 = r$1;
                           return true;
                         })) return true;
@@ -78,14 +79,15 @@ function main() {
                 if (got$0 !== $no) return got$0;
                 return $k0;
               })().fields[0]) + ", ") + $show((() => {
-              let got$2 = $no;
+              let got$4 = $no;
               (() => {
-                  if (to_polar$k(0, 2, (r$3) => {
-                        got$2 = r$3;
+                  if (to_polar$k(0, 2, (f$6, f$7) => {
+                        const r$5 = ({ tag: "std.pair.pair" /* pair */, fields: [f$6, f$7] });
+                        got$4 = r$5;
                         return true;
                       })) return true;
                 })();
-              if (got$2 !== $no) return got$2;
+              if (got$4 !== $no) return got$4;
               return $k0;
             })().fields[1]))));
   $print(("square roots(9) = " + show_numbers(square_roots(9))));
@@ -99,8 +101,8 @@ function split(sum, difference) {
 
 // to polar
 function* to_polar(x, y) {
-  for (const sol$4 of solve$1(y, x)) {
-    const length = sol$4[0]; const angle = sol$4[1];
+  for (const sol$8 of solve$1(y, x)) {
+    const length = sol$8[0]; const angle = sol$8[1];
     yield ({ tag: "std.pair.pair" /* pair */, fields: [length, angle] });
   }
 }
@@ -108,14 +110,14 @@ function* to_polar(x, y) {
 // square roots
 function square_roots(y2) {
   return (() => {
-      const got$5 = [];
+      const got$9 = [];
       (() => {
-          for (const sol$6 of solve$2(y2)) {
-            const x2 = sol$6[0];
-            got$5.push(x2);
+          for (const sol$10 of solve$2(y2)) {
+            const x2 = sol$10[0];
+            got$9.push(x2);
           }
         })();
-      return $toList(got$5);
+      return $toList(got$9);
     })();
 }
 
@@ -126,17 +128,17 @@ function missing_addend(known, total) {
 
 // show numbers
 function show_numbers(numbers) {
-  const step$7 = (s$8, rs$9) => {
-    switch (s$8.tag) {
+  const step$11 = (s$12, rs$13) => {
+    switch (s$12.tag) {
       case "std.list.nil" /* nil */: {
         return "";
       }
       case "std.list.cons" /* cons */: {
-        const n = s$8.fields[0];
-        const rest = s$8.fields[1];
-        const rest_shown = rs$9;
-        const s$10 = rest;
-        switch (s$10.tag) {
+        const n = s$12.fields[0];
+        const rest = s$12.fields[1];
+        const rest_shown = rs$13;
+        const s$14 = rest;
+        switch (s$14.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n);
           }
@@ -147,22 +149,22 @@ function show_numbers(numbers) {
       }
     }
   };
-  const spine$13 = [];
-  let v$11 = numbers;
-  for (let k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1; k$15 >= 0; k$15 = v$11.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$13.push(v$11);
-    v$11 = v$11.fields[k$15];
+  const spine$17 = [];
+  let v$15 = numbers;
+  for (let k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1; k$19 >= 0; k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$17.push(v$15);
+    v$15 = v$15.fields[k$19];
   }
-  let r$12 = step$7(v$11);
-  for (let i$14 = spine$13.length - 1; i$14 >= 0; i$14--) r$12 = step$7(spine$13[i$14], r$12);
-  return r$12;
+  let r$16 = step$11(v$15);
+  for (let i$18 = spine$17.length - 1; i$18 >= 0; i$18--) r$16 = step$11(spine$17[i$18], r$16);
+  return r$16;
 }
 
-// to polar (the rest of the search as `k$16`)
-function to_polar$k(x, y, k$16) {
-  for (const sol$17 of solve$1(y, x)) {
-    const length = sol$17[0]; const angle = sol$17[1];
-    if (k$16(({ tag: "std.pair.pair" /* pair */, fields: [length, angle] }))) return true;
+// to polar (the rest of the search as `k$20`, given the fields of each pair)
+function to_polar$k(x, y, k$20) {
+  for (const sol$21 of solve$1(y, x)) {
+    const length = sol$21[0]; const angle = sol$21[1];
+    if (k$20(length, angle)) return true;
   }
   return false;
 }

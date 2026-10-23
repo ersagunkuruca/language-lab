@@ -358,6 +358,12 @@ What's left is mostly G13 and the closures themselves.
 remainder).** `split` returns a `halves` and `results` a `found`, and the
 caller matches on it straight away. With G11, they become two arguments to
 `k`. Without it, they're the "return two values" form of G9 from round 1.
+*DONE:* a `$k` copy whose answers are all one record passes its fields to
+`k`. The caller's closure binds them, and builds the record only if
+something keeps it whole. Countdown, biggest instance: 198 → 185 ms (median
+of alternating runs, noisy), now about 1.4× the ideal. `join`, which has one
+answer (G14), still builds its `found`; the same idea for single-answer
+functions would be returning several values.
 
 **G1 again (fuel).** `if ($spend())` before each recursive call: unmeasurable
 here (240 → 242 ms), because `$spend` is cheap when no fuel is active. The

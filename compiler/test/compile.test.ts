@@ -197,6 +197,28 @@ test("searches called by name pass the rest as a function, and first still stops
   assert.deepEqual([...r.call(r.value(def))][0], 8);
 });
 
+test("a search whose answers are one record passes its fields, and builds it only where it's kept (GAPS.md G13)", async () => {
+  const k = new Lang();
+  const cut = k.type("cut", [], [["halves", [["a", () => k.tref("type.number")], ["b", () => k.tref("type.number")]]]]);
+  const cuts = k.def("cuts");
+  k.define(cuts, k.fn(["n"], (n) => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), (x) => k.call(cut.v.halves, x, k.call(B.sub, n, x)))));
+  const products = k.def("products");
+  k.define(products, k.thunk(() => k.call(S.all, k.thunk(() => k.match(k.call(cuts, k.lit(10)), [{ variant: cut.v.halves, names: ["a", "b"], body: ([a, b]) => k.call(B.mul, a, b) }])))));
+  const kept = k.def("kept");
+  k.define(kept, k.thunk(() => k.call(S.all, k.thunk(() => k.call(cuts, k.lit(4))))));
+  const { code, info, names, source, defs } = await compiledDefs(k, ["products", "kept"], "unpacked.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("cuts$k"), /k\$\d+\(x, /);
+  assert.doesNotMatch(body("cuts$k") + body("products"), /halves \*\//);
+  assert.match(body("kept"), /halves \*\//);
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const name of ["products", "kept"]) {
+    const def = code.defs.find((d) => names[d] === name)!;
+    assert.deepEqual(defs[name](), [...r.call(r.value(def))][0]);
+  }
+  assert.deepEqual(fromList(defs.products() as Value), [9, 16, 21]);
+});
+
 test("a fold over a million items compiles to a loop", async () => {
   const k = new Lang();
   const total = k.def("total");
