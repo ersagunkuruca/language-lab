@@ -269,7 +269,12 @@ function resolves(code: Code): boolean {
 const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar", effects: "main" };
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
-const startDef = () => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === (START[doc.program] ?? "main")) ?? ownDefs()[0] ?? doc.code.defs[0];
+const defNamed = (name: string) => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === name);
+// A program opens on `main`, with the definition that shows it off in the
+// next tab.
+const showcase = () => defNamed(START[doc.program] ?? "main") ?? ownDefs()[0] ?? doc.code.defs[0];
+const startDef = () => defNamed("main") ?? showcase();
+const startTabs = () => [...new Set([startDef(), showcase()])];
 const creditsOf = (d: Doc) => (isExample(d.program) ? CREDITS[d.program] : d.credits) ?? [];
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
 
@@ -289,7 +294,7 @@ const ui: UI = {
   output: null,
   menu: null,
   newKind: "function",
-  tabs: [],
+  tabs: startTabs(),
   panel: "node",
 };
 
@@ -333,7 +338,7 @@ function showProgram() {
   redo.length = 0;
   ui.def = startDef();
   ui.back = [];
-  ui.tabs = [];
+  ui.tabs = startTabs();
   ui.selected = firstHole();
   ui.mode = null;
   ui.output = null;
@@ -2223,7 +2228,7 @@ document.addEventListener("click", (e) => {
     const a = act.dataset.act;
     if (a === "undo") return travel(undo, redo, "Undid");
     if (a === "redo") return travel(redo, undo, "Redid");
-    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
+    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.tabs = startTabs(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
     if (a === "inline") return toggleInline(act.dataset.target!);
