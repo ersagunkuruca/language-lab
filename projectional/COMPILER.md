@@ -404,7 +404,10 @@ can be compared directly. Booleans in conditions are plain JS booleans
 called directly, and a match that decides a condition sets a JS boolean in
 statements instead of building Bool data in a function called in place.
 Where such a function is used as a value (passed on, stored, exported) it's
-wrapped to give Bool data, like everywhere else. Constant data (a variant whose
+wrapped to give Bool data, like everywhere else. Bool parameters of a
+definition that is only called by name are JS booleans too, boxed only
+where they're used as data, and a test written in place for a fused `keep`
+returns one (GAPS.md G3). Constant data (a variant whose
 fields are all literals or constant data, such as a list of nullary
 variants) is built once, at module level, and shared (GAPS.md G9). The ids in `case` labels
 carry the variant's name as a comment.

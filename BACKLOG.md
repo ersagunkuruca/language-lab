@@ -56,7 +56,6 @@ and lists built by G22's loops), then the rest in order.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C2 | G21 lists as arrays, the part left: lists that are matched on (the array and a start), and lists built by G22's loops; ledger's G23 is the first program that needs it (four spines per run, `split` lines matched in `entries` and `parse`) | GAPS G21, G23 | P2 | M | parts 1 #182, 2 #188 done |
-| C4 | G3 again: a lambda whose result is Bool still boxes it (`keep`'s test); a Bool parameter is data too (ledger's `by name`) | GAPS G3, round 3 | P2 | S | |
 | C6 | G13 again: `sections` builds a `Pile` per line; single-answer functions returning several values | GAPS G13 | P2 | M | |
 | C7 | WebAssembly for full programs (WasmGC or our own GC); design note first | ROADMAP 6 | P2 | L | after the editor step and L4 |
 | C8 | `Float32` for shaders | ROADMAP 6a left | P2 | M | |
@@ -133,7 +132,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C5 | G24 and G14 again: Choice builtins are partial (`$partial`, one answer or none), and `first` over a body with one answer runs it in place (ledger's `amount`, chapters' `lower`) | this PR |
+| C4 | G3 again: Bool parameters of definitions only called by name, and tests written in place for a fused `keep`, are JS booleans (ledger's `goes before`, chapters' `slug` and `words`) | this PR |
+| C5 | G24 and G14 again: Choice builtins are partial (`$partial`, one answer or none), and `first` over a body with one answer runs it in place (ledger's `amount`, chapters' `lower`) | #204 |
 | C20 | G25 list cells nobody else holds changed in place (`$own` copies): ledger's `by account` 35 → 25 ms, about 10% overall | #202 |
 | C19 | G22 tail recursion modulo cons: `cons(x, self(rest))` fills holes in a loop, so ledger runs 50,000 lines on the default stack | #200 |
 | C3 | GAPS round 3: ledger, 32 definitions built in the editor by clicks; compiled 2 to 4× the ideal; G22 (stack), G23, G24 and eight editor frictions | #197 |
