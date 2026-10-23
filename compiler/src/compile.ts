@@ -268,7 +268,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // it as it is, or make it data where they need a value (GAPS.md G3).
   // `single`: the copy has Choice but at most one answer, so it's a plain
   // function that returns the answer or $no, not a generator (GAPS.md G14).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean }
+  // `cps`: the copy takes the rest of the search as a last argument `k`,
+  // calls it once per answer, and returns true when `k` said stop
+  // (COMPILER.md, "Searches in continuation-passing style"; GAPS.md G11).
+  // Adapted from Mercury's high-level C backend, which compiles
+  // nondeterministic code this way (Henderson and Somogyi, CC 2002).
+  // Only direct calls from compiled code use it; values stay generators.
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -321,16 +327,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set()): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}`), streams, bool, single };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps };
       specs.set(key, s);
       queue.push(s);
     }
@@ -439,6 +445,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Lambdas here that are typed Choice but never choose, and are passed
     // where the callee's copy calls them plainly.
     const plainHere = new Set<Id>();
+    // Is the code being written now somewhere a closure can stand for the
+    // rest of the search? Then direct calls of searches use their `$k` copy.
+    // True in a `$k` body and in a handler written in place; false inside
+    // any function the compiler makes that yields, or returns a value, or
+    // breaks out to a label (a closure would cut those off).
+    let cps = false;
+    const scoped = <T>(on: boolean, f: () => T): T => { const was = cps; cps = on && !reflective; try { return f(); } finally { cps = was; } };
 
     // The copy of a definition a call needs: by the effects of its
     // arguments' types, and which of its Choice-typed function parameters
@@ -617,7 +630,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
-      if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${st(n.body, (v) => `yield ${v};`)}\n})`;
+      if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
       const b = code.nodes[n.body].kind;
       if (b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda")) return `((${ps}) => {\n${ret(n.body)}\n})`;
       return `((${ps}) => ${ex(n.body)})`;
@@ -661,6 +674,20 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const thunk = (id: Id) => (code.nodes[id].kind === "lambda" && !node<"lambda">(id).params.length ? node<"lambda">(id) : null);
     function handlerEx(h: Id, n: NodeOf<"call">): string {
       const body = thunk(n.args[h === S.fuel ? 1 : 0]);
+      // The search runs inside an arrow function of its own, so that its
+      // searches can take closures for the rest (GAPS.md G11); stopping
+      // early is that arrow returning true.
+      const search = (leaf: K) => `(() => {\n${scoped(true, () => st(body!.body, leaf))}\n})();`;
+      if (!reflective && body && h !== S.fuel) {
+        const got = temp("got");
+        if (h === S.first) {
+          const g = thunk(n.args[1]);
+          return `(() => {\nlet ${got} = $no;\n${search((v) => `${got} = ${v};\nreturn true;`)}\nif (${got} !== $no) return ${got};\nreturn ${g ? ex(g.body) : `${ex(n.args[1])}()`};\n})()`;
+        }
+        if (h === S.all) return `(() => {\nconst ${got} = [];\n${search((v) => `${got}.push(${v});`)}\nreturn $toList(${got});\n})()`;
+        if (h === S.optional) return `(() => {\nlet ${got} = $no;\n${search((v) => `${got} = ${v};\nreturn true;`)}\nreturn ${got} !== $no ? { tag: ${tag(SOME)}, fields: [${got}] } : { tag: ${tag(NONE)}, fields: [] };\n})()`;
+        if (h === S.count) return `(() => {\nlet ${got} = 0;\n${search(() => `${got}++;`)}\nreturn ${got};\n})()`;
+      }
       if (h === S.first) {
         const g = thunk(n.args[1]);
         if (!body) return `$first(${ex(n.args[0])}, ${ex(n.args[1])})`;
@@ -689,7 +716,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const arms = n.arms.map((a) => node<"arm">(a));
       const fn = (a: NodeOf<"arm">, gen: boolean) => {
         const ps = a.binds.map(local).join(", ");
-        return gen ? `function* (${ps}) {\n${st(a.body, (v) => `yield ${v};`)}\n}` : `((${ps}) => {\n${ret(a.body)}\n})`;
+        return gen ? `function* (${ps}) {\n${scoped(false, () => st(a.body, (v) => `yield ${v};`))}\n}` : `((${ps}) => {\n${ret(a.body)}\n})`;
       };
       const table = (as: NodeOf<"arm">[], gen: boolean) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a, gen)}`).join(", ")} }`;
       const answers = arms.filter((a) => node<"variant">(a.variant).returns);
@@ -962,7 +989,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "match": {
           if (!handlerOf(n)) return stMatch(n, k);
           const [answers, escapes] = handlerCases(n, true), r = temp("r");
-          return `for (const ${r} of $handleS(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, function* () {\n${st(n.scrutinee, (v) => `yield ${v};`)}\n})) {\n${k(r)}\n}`;
+          return `for (const ${r} of $handleS(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, function* () {\n${scoped(false, () => st(n.scrutinee, (v) => `yield ${v};`))}\n})) {\n${k(r)}\n}`;
         }
         case "fold": return stFold(n, k);
         case "solve": {
@@ -999,7 +1026,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const probe = k("$$");
       if (probe.length < 160) return gen(k);
       const r = temp("r");
-      return `for (const ${r} of (function* () {\n${gen((v) => `yield ${v};`)}\n})()) {\n${k(r)}\n}`;
+      if (cps) {
+        // The rest, once, as a local function each branch calls.
+        const rest = temp("rest");
+        return `const ${rest} = (${r}) => {\n${k(r)}\n};\n${gen((v) => `if (${rest}(${v})) return true;`)}`;
+      }
+      return `for (const ${r} of (function* () {\n${scoped(false, () => gen((v) => `yield ${v};`))}\n})()) {\n${k(r)}\n}`;
     }
 
     function stCall(n: NodeOf<"call">, k: K): string {
@@ -1018,7 +1050,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const body = thunk(n.args[0]), g = thunk(n.args[1]);
           if (body && g) return branch(k, (y) => {
             const L = temp("first");
-            return `${L}: {\n${st(body.body, (v) => `${y(v)}\nbreak ${L};`)}\n${st(g.body, y)}\n}`;
+            if (cps) {
+              const got = temp("got");
+              return `let ${got} = $no;\n(() => {\n${st(body.body, (v) => `${got} = ${v};\nreturn true;`)}\n})();\nif (${got} !== $no) {\n${y(got)}\n} else {\n${st(g.body, y)}\n}`;
+            }
+            return `${L}: {\n${scoped(false, () => st(body.body, (v) => `${y(v)}\nbreak ${L};`))}\n${st(g.body, y)}\n}`;
           });
         }
         if (h === S.seeded && callStreams(n)) return parts(n.args, ([seed, body]) => {
@@ -1051,7 +1087,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         let out: string;
         if (callStreams(n)) {
           const r = temp("r");
-          out = callee?.single ? `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}` : `for (const ${r} of ${c}) {\n${k(r)}\n}`;
+          if (callee?.single) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
+          else if (callee && cps) {
+            const viaK = spec(callee.def, callee.rho, callee.plain, true);
+            out = `if (${viaK.name}(${[...args, `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
+          } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = k(c);
         // Out of fuel: this call has no result, the others carry on.
         return target && info.divergent.has(target) ? `if ($spend()) {\n${out}\n}` : out;
@@ -1076,9 +1116,30 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // children's results is a separate branch.
     function stFold(n: NodeOf<"fold">, k: K): string {
       const f = temp("fold"), s = temp("s");
+      const nested = n.arms.some((id) => { const a = node<"arm">(id); return a.results.some((r, i) => r && nestedShape(a, i)); });
+      if (cps && !nested) {
+        // A local search in the same style: each child's results as a
+        // closure, the fold's own answers to `kf`.
+        const kf = temp("k");
+        const cases = n.arms.map((id) => {
+          const a = node<"arm">(id);
+          let inner = st(a.body, (v) => `if (${kf}(${v})) return true;`);
+          for (let i = a.results.length - 1; i >= 0; i--) {
+            const r = a.results[i];
+            if (r) inner = `if (${f}(${s}.fields[${i}], (${local(r)}) => {\n${inner}\n})) return true;`;
+          }
+          return `case ${tag(a.variant)}: {${binds(a, s)}\n${inner}\nbreak;\n}`;
+        });
+        const r = temp("r");
+        return `const ${f} = (${s}, ${kf}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\nreturn false;\n};\n` +
+          parts([n.scrutinee], ([v]) => `if (${f}(${v}, (${r}) => {\n${k(r)}\n})) return true;`);
+      }
+      return stFoldGen(n, k, f, s);
+    }
+    function stFoldGen(n: NodeOf<"fold">, k: K, f: string, s: string): string {
       const cases = n.arms.map((id) => {
         const a = node<"arm">(id);
-        let inner = st(a.body, (v) => `yield ${v};`);
+        let inner = scoped(false, () => st(a.body, (v) => `yield ${v};`));
         for (let i = a.results.length - 1; i >= 0; i--) {
           const r = a.results[i];
           const shape = r ? nestedShape(a, i) : null;
@@ -1099,6 +1160,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ps = lam.params.map(local).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
       if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
+      if (sp.cps) {
+        const k = temp("k");
+        return `${header} (the rest of the search as \`${k}\`)\nfunction ${sp.name}(${[...lam.params.map(local), k].join(", ")}) {\n${scoped(true, () => st(lam.body, (v) => `if (${k}(${v})) return true;`))}\nreturn false;\n}`;
+      }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
       const stmts = ret(lam.body, true, sp.bool ? RETURN_BOOL : RETURN);
       // Self tail calls jump: the parameters become the loop's inputs, and
@@ -1125,7 +1190,19 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (!def) throw new Error(`no definition named ${name}`);
     exported.push(`  ${JSON.stringify(name)}: ${asValue(spec(def, new Map()))},`);
   }
-  for (let s; (s = queue.shift());) out.push(body(s));
+  const made: [Spec, string][] = [];
+  for (let s; (s = queue.shift());) made.push([s, body(s)]);
+  // Asking which copy a call needs makes that copy, so a search that is only
+  // ever called through its `$k` copy also has a generator nobody uses.
+  // Keep what the exports reach.
+  const uses = (js: string, name: string) => new RegExp(`(?<![\\p{L}\\p{N}_$])${name.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(js);
+  const keep = new Set<string>();
+  const reach = (js: string) => {
+    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "");
+    for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
+  };
+  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
+  for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",

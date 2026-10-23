@@ -27,29 +27,31 @@ function main() {
 // solutions
 function solutions(numbers, target) {
   return (() => {
-      const all$0 = [];
-      for (const r$1 of choices(numbers)) {
-        if ($spend()) {
-          for (const r$2 of results(r$1)) {
-            {
-              const s$3 = r$2;
-              switch (s$3.tag) {
-                case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
-                  const expr = s$3.fields[0];
-                  const value = s$3.fields[1];
-                  if ($sameNumber(value, target)) {
-                    all$0.push(expr);
-                  } else {
-                    /* fail */
-                  }
-                  break;
+      const got$0 = [];
+      (() => {
+          if (choices$k(numbers, (r$1) => {
+                if ($spend()) {
+                  if (results$k(r$1, (r$2) => {
+                        {
+                          const s$3 = r$2;
+                          switch (s$3.tag) {
+                            case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
+                              const expr = s$3.fields[0];
+                              const value = s$3.fields[1];
+                              if ($sameNumber(value, target)) {
+                                got$0.push(expr);
+                              } else {
+                                /* fail */
+                              }
+                              break;
+                            }
+                          }
+                        }
+                      })) return true;
                 }
-              }
-            }
-          }
-        }
-      }
-      return $toList(all$0);
+              })) return true;
+        })();
+      return $toList(got$0);
     })();
 }
 
@@ -106,82 +108,83 @@ function show_expr(e) {
   }
 }
 
-// choices
-function* choices(numbers2) {
-  for (const r$13 of subsequence(numbers2)) {
-    for (const r$14 of permutation(r$13)) {
-      yield r$14;
-    }
-  }
+// choices (the rest of the search as `k$26`)
+function choices$k(numbers2, k$26) {
+  if (subsequence$k(numbers2, (r$27) => {
+        if (permutation$k(r$27, (r$28) => {
+              if (k$26(r$28)) return true;
+            })) return true;
+      })) return true;
+  return false;
 }
 
-// results
-function* results(numbers3) {
+// results (the rest of the search as `k$29`)
+function results$k(numbers3, k$29) {
   {
-    const s$15 = numbers3;
-    switch (s$15.tag) {
+    const s$30 = numbers3;
+    switch (s$30.tag) {
       case "std.list.nil" /* nil */: {
         /* fail */
         break;
       }
       case "std.list.cons" /* cons */: {
-        const head = s$15.fields[0];
-        const tail = s$15.fields[1];
+        const head = s$30.fields[0];
+        const tail = s$30.fields[1];
         {
-          const s$16 = tail;
-          switch (s$16.tag) {
+          const s$31 = tail;
+          switch (s$31.tag) {
             case "std.list.nil" /* nil */: {
-              yield ({ tag: "8n22ghbsvkrbffe5oea0ph2dks" /* found */, fields: [({ tag: "n9sj0k5cqanfsbha7enj6li6ai" /* number */, fields: [head] }), head] });
+              if (k$29(({ tag: "8n22ghbsvkrbffe5oea0ph2dks" /* found */, fields: [({ tag: "n9sj0k5cqanfsbha7enj6li6ai" /* number */, fields: [head] }), head] }))) return true;
               break;
             }
             case "std.list.cons" /* cons */: {
-              for (const r$17 of split(numbers3)) {
-                {
-                  const s$18 = r$17;
-                  switch (s$18.tag) {
-                    case "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */: {
-                      const front = s$18.fields[0];
-                      const back = s$18.fields[1];
-                      if ($spend()) {
-                        for (const r$19 of results(front)) {
-                          {
-                            const s$20 = r$19;
-                            switch (s$20.tag) {
-                              case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
-                                const expr2 = s$20.fields[0];
-                                const value3 = s$20.fields[1];
-                                if ($spend()) {
-                                  for (const r$21 of results(back)) {
-                                    {
-                                      const s$22 = r$21;
-                                      switch (s$22.tag) {
-                                        case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
-                                          const expr3 = s$22.fields[0];
-                                          const value4 = s$22.fields[1];
-                                          for (let l$23 = $k13; l$23.tag === "std.list.cons"; l$23 = l$23.fields[1]) {
-                                            const x$24 = l$23.fields[0];
-                                            const r$25 = join(x$24, expr2, value3, expr3, value4);
-                                            if (r$25 !== $no) {
-                                              yield r$25;
-                                            }
-                                          }
-                                          break;
+              if (split$k(numbers3, (r$32) => {
+                    {
+                      const s$33 = r$32;
+                      switch (s$33.tag) {
+                        case "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */: {
+                          const front = s$33.fields[0];
+                          const back = s$33.fields[1];
+                          if ($spend()) {
+                            if (results$k(front, (r$34) => {
+                                  {
+                                    const s$35 = r$34;
+                                    switch (s$35.tag) {
+                                      case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
+                                        const expr2 = s$35.fields[0];
+                                        const value3 = s$35.fields[1];
+                                        if ($spend()) {
+                                          if (results$k(back, (r$36) => {
+                                                {
+                                                  const s$37 = r$36;
+                                                  switch (s$37.tag) {
+                                                    case "8n22ghbsvkrbffe5oea0ph2dks" /* found */: {
+                                                      const expr3 = s$37.fields[0];
+                                                      const value4 = s$37.fields[1];
+                                                      for (let l$38 = $k13; l$38.tag === "std.list.cons"; l$38 = l$38.fields[1]) {
+                                                        const x$39 = l$38.fields[0];
+                                                        const r$40 = join(x$39, expr2, value3, expr3, value4);
+                                                        if (r$40 !== $no) {
+                                                          if (k$29(r$40)) return true;
+                                                        }
+                                                      }
+                                                      break;
+                                                    }
+                                                  }
+                                                }
+                                              })) return true;
                                         }
+                                        break;
                                       }
                                     }
                                   }
-                                }
-                                break;
-                              }
-                            }
+                                })) return true;
                           }
+                          break;
                         }
                       }
-                      break;
                     }
-                  }
-                }
-              }
+                  })) return true;
               break;
             }
           }
@@ -190,12 +193,13 @@ function* results(numbers3) {
       }
     }
   }
+  return false;
 }
 
 // symbol
 function symbol(op2) {
-  const s$26 = op2;
-  switch (s$26.tag) {
+  const s$41 = op2;
+  switch (s$41.tag) {
     case "po7knn9d8k1ql4tu1t24phf6gi" /* plus */: {
       return " + ";
     }
@@ -211,109 +215,6 @@ function symbol(op2) {
   }
 }
 
-// subsequence
-function* subsequence(items) {
-  const fold$27 = function* (s$28) {
-    switch (s$28.tag) {
-      case "std.list.nil" /* nil */: {
-        yield $nil;
-        break;
-      }
-      case "std.list.cons" /* cons */: {
-        const head2 = s$28.fields[0];
-        for (const tail2 of fold$27(s$28.fields[1])) {
-          for (let l$29 = $k15; l$29.tag === "std.list.cons"; l$29 = l$29.fields[1]) {
-            const x$30 = l$29.fields[0];
-            if ((x$30.tag === "std.bool.true")) {
-              yield $cons(head2, tail2);
-            } else {
-              yield tail2;
-            }
-          }
-        }
-        break;
-      }
-    }
-  };
-  for (const r$31 of fold$27(items)) {
-    yield r$31;
-  }
-}
-
-// permutation
-function* permutation(items2) {
-  const fold$32 = function* (s$33) {
-    switch (s$33.tag) {
-      case "std.list.nil" /* nil */: {
-        yield $nil;
-        break;
-      }
-      case "std.list.cons" /* cons */: {
-        const head3 = s$33.fields[0];
-        for (const tail3 of fold$32(s$33.fields[1])) {
-          for (const r$34 of insert_anywhere(head3, tail3)) {
-            yield r$34;
-          }
-        }
-        break;
-      }
-    }
-  };
-  for (const r$35 of fold$32(items2)) {
-    yield r$35;
-  }
-}
-
-// split
-function* split(items3) {
-  {
-    const s$36 = items3;
-    switch (s$36.tag) {
-      case "std.list.nil" /* nil */: {
-        /* fail */
-        break;
-      }
-      case "std.list.cons" /* cons */: {
-        const head4 = s$36.fields[0];
-        const tail4 = s$36.fields[1];
-        {
-          const s$37 = tail4;
-          switch (s$37.tag) {
-            case "std.list.nil" /* nil */: {
-              /* fail */
-              break;
-            }
-            case "std.list.cons" /* cons */: {
-              for (let l$38 = $k15; l$38.tag === "std.list.cons"; l$38 = l$38.fields[1]) {
-                const x$39 = l$38.fields[0];
-                if ((x$39.tag === "std.bool.true")) {
-                  yield ({ tag: "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */, fields: [$cons(head4, $nil), tail4] });
-                } else {
-                  for (const r$40 of split(tail4)) {
-                    {
-                      const s$41 = r$40;
-                      switch (s$41.tag) {
-                        case "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */: {
-                          const front2 = s$41.fields[0];
-                          const back2 = s$41.fields[1];
-                          yield ({ tag: "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */, fields: [$cons(head4, front2), back2] });
-                          break;
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              break;
-            }
-          }
-        }
-        break;
-      }
-    }
-  }
-}
-
 // join
 function join(op3, left2, x2, right2, y) {
   if (valid(op3, x2, y)) {
@@ -324,25 +225,104 @@ function join(op3, left2, x2, right2, y) {
   return $no;
 }
 
-// insert anywhere
-function* insert_anywhere(x3, items4) {
-  {
-    const s$42 = items4;
-    switch (s$42.tag) {
+// subsequence (the rest of the search as `k$57`)
+function subsequence$k(items, k$57) {
+  const fold$58 = (s$59, k$60) => {
+    switch (s$59.tag) {
       case "std.list.nil" /* nil */: {
-        yield $cons(x3, $nil);
+        if (k$60($nil)) return true;
         break;
       }
       case "std.list.cons" /* cons */: {
-        const head5 = s$42.fields[0];
-        const tail5 = s$42.fields[1];
-        for (let l$43 = $k15; l$43.tag === "std.list.cons"; l$43 = l$43.fields[1]) {
-          const x$44 = l$43.fields[0];
-          if ((x$44.tag === "std.bool.true")) {
-            yield $cons(x3, items4);
-          } else {
-            for (const r$45 of insert_anywhere(x3, tail5)) {
-              yield $cons(head5, r$45);
+        const head2 = s$59.fields[0];
+        if (fold$58(s$59.fields[1], (tail2) => {
+              for (let l$61 = $k15; l$61.tag === "std.list.cons"; l$61 = l$61.fields[1]) {
+                const x$62 = l$61.fields[0];
+                if ((x$62.tag === "std.bool.true")) {
+                  if (k$60($cons(head2, tail2))) return true;
+                } else {
+                  if (k$60(tail2)) return true;
+                }
+              }
+            })) return true;
+        break;
+      }
+    }
+    return false;
+  };
+  if (fold$58(items, (r$63) => {
+        if (k$57(r$63)) return true;
+      })) return true;
+  return false;
+}
+
+// permutation (the rest of the search as `k$64`)
+function permutation$k(items2, k$64) {
+  const fold$65 = (s$66, k$67) => {
+    switch (s$66.tag) {
+      case "std.list.nil" /* nil */: {
+        if (k$67($nil)) return true;
+        break;
+      }
+      case "std.list.cons" /* cons */: {
+        const head3 = s$66.fields[0];
+        if (fold$65(s$66.fields[1], (tail3) => {
+              if (insert_anywhere$k(head3, tail3, (r$68) => {
+                    if (k$67(r$68)) return true;
+                  })) return true;
+            })) return true;
+        break;
+      }
+    }
+    return false;
+  };
+  if (fold$65(items2, (r$69) => {
+        if (k$64(r$69)) return true;
+      })) return true;
+  return false;
+}
+
+// split (the rest of the search as `k$70`)
+function split$k(items3, k$70) {
+  {
+    const s$71 = items3;
+    switch (s$71.tag) {
+      case "std.list.nil" /* nil */: {
+        /* fail */
+        break;
+      }
+      case "std.list.cons" /* cons */: {
+        const head4 = s$71.fields[0];
+        const tail4 = s$71.fields[1];
+        {
+          const s$72 = tail4;
+          switch (s$72.tag) {
+            case "std.list.nil" /* nil */: {
+              /* fail */
+              break;
+            }
+            case "std.list.cons" /* cons */: {
+              for (let l$73 = $k15; l$73.tag === "std.list.cons"; l$73 = l$73.fields[1]) {
+                const x$74 = l$73.fields[0];
+                if ((x$74.tag === "std.bool.true")) {
+                  if (k$70(({ tag: "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */, fields: [$cons(head4, $nil), tail4] }))) return true;
+                } else {
+                  if (split$k(tail4, (r$75) => {
+                        {
+                          const s$76 = r$75;
+                          switch (s$76.tag) {
+                            case "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */: {
+                              const front2 = s$76.fields[0];
+                              const back2 = s$76.fields[1];
+                              if (k$70(({ tag: "9vmk3mm6sqm967g2ig29jj7ed4" /* halves */, fields: [$cons(head4, front2), back2] }))) return true;
+                              break;
+                            }
+                          }
+                        }
+                      })) return true;
+                }
+              }
+              break;
             }
           }
         }
@@ -350,12 +330,13 @@ function* insert_anywhere(x3, items4) {
       }
     }
   }
+  return false;
 }
 
 // valid
 function valid(op4, x4, y2) {
-  const s$46 = op4;
-  switch (s$46.tag) {
+  const s$81 = op4;
+  switch (s$81.tag) {
     case "po7knn9d8k1ql4tu1t24phf6gi" /* plus */: {
       return !(y2 < x4);
     }
@@ -373,8 +354,8 @@ function valid(op4, x4, y2) {
 
 // combine
 function combine(op5, x5, y3) {
-  const s$47 = op5;
-  switch (s$47.tag) {
+  const s$82 = op5;
+  switch (s$82.tag) {
     case "po7knn9d8k1ql4tu1t24phf6gi" /* plus */: {
       return (x5 + y3);
     }
@@ -388,6 +369,35 @@ function combine(op5, x5, y3) {
       return (x5 / y3);
     }
   }
+}
+
+// insert anywhere (the rest of the search as `k$83`)
+function insert_anywhere$k(x3, items4, k$83) {
+  {
+    const s$84 = items4;
+    switch (s$84.tag) {
+      case "std.list.nil" /* nil */: {
+        if (k$83($cons(x3, $nil))) return true;
+        break;
+      }
+      case "std.list.cons" /* cons */: {
+        const head5 = s$84.fields[0];
+        const tail5 = s$84.fields[1];
+        for (let l$85 = $k15; l$85.tag === "std.list.cons"; l$85 = l$85.fields[1]) {
+          const x$86 = l$85.fields[0];
+          if ((x$86.tag === "std.bool.true")) {
+            if (k$83($cons(x3, items4))) return true;
+          } else {
+            if (insert_anywhere$k(x3, tail5, (r$87) => {
+                  if (k$83($cons(head5, r$87))) return true;
+                })) return true;
+          }
+        }
+        break;
+      }
+    }
+  }
+  return false;
 }
 
 export const defs = {
