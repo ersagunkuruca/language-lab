@@ -74,14 +74,14 @@ export const OPS = {
   add: { t: "f64" }, sub: { t: "f64" }, mul: { t: "f64" }, div: { t: "f64" }, neg: { t: "f64" },
   sqrt: { t: "f64" }, abs: { t: "f64" }, floor: { t: "f64" },
   sin: { t: "f64", host: true }, cos: { t: "f64", host: true }, tan: { t: "f64", host: true },
-  exp: { t: "f64", host: true }, log: { t: "f64", host: true }, pow: { t: "f64", host: true }, atan2: { t: "f64", host: true },
+  exp: { t: "f64", host: true }, log: { t: "f64", host: true }, pow: { t: "f64", host: true }, atan2: { t: "f64", host: true }, mod: { t: "f64", host: true },
   less: { t: "i32" }, equal: { t: "i32" }, beq: { t: "i32" }, and: { t: "i32" }, or: { t: "i32" }, not: { t: "i32" },
 } as const satisfies Record<string, { t: SType; host?: boolean }>;
 
 const BUILTIN: Record<Id, Op> = {
   [B.add]: "add", [B.sub]: "sub", [B.mul]: "mul", [B.div]: "div", [B.neg]: "neg", [B.sqrt]: "sqrt",
   [B.sin]: "sin", [B.cos]: "cos", [B.tan]: "tan", [B.exp]: "exp", [B.log]: "log", [B.pow]: "pow", [B.atan2]: "atan2",
-  [S.abs]: "abs", [S.floor]: "floor", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
+  [S.abs]: "abs", [S.floor]: "floor", [S.mod]: "mod", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
 };
 
 // `spends`: each call spends one from the budget (the checker couldn't see
