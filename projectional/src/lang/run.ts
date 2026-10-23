@@ -87,6 +87,24 @@ export const META = Symbol("node");
 const tag = <F extends Fn>(f: F, meta: { lambda: Id; readonly env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
 
 interface Fuel { left: number }
+
+// A page runs each update (a view, a text, a handler) under a step budget:
+// the same count as `with fuel` (one per call into a definition the checker
+// couldn't prove ends), outside any `with fuel`. Running out isn't a
+// failure the program can catch, as `with fuel`'s is; the update stops and
+// the page says so. The compiled runtime spends from the same budget.
+export class OutOfSteps extends Error {
+  constructor() { super("didn't finish"); }
+}
+export const PAGE_STEPS = 1_000_000;
+let page: Fuel | null = null;
+export function withSteps<T>(n: number, f: () => T): T {
+  const saved = page;
+  page = { left: n };
+  try { return f(); } finally { page = saved; }
+}
+// One step outside any `with fuel`: free, except under a page's budget.
+export const spendStep = () => { if (page && --page.left < 0) throw new OutOfSteps(); };
 // The variables in scope, as a linked list: binding one more shares the
 // rest, so a call costs one cell per parameter, not a copy of the scope.
 type Env = { b: Id; v: Value; up: Env } | null;
@@ -347,7 +365,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (FALLIBLE.has(f as Fn)) {
         let r: Iterable<Value>;
         // Not here yet isn't a failure: the page asks again later.
-        try { r = (f as Fn)(...args); } catch (e) { if (e instanceof Pending) throw e; return this.perform(ABORT_OP, [(e as Error).message]); }
+        try { r = (f as Fn)(...args); } catch (e) { if (e instanceof Pending || e instanceof OutOfSteps) throw e; return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.from(r, (x) => this.ret(x as Value));
       }
       this.from((f as Fn)(...args), (x) => this.ret(x as Value));
@@ -469,7 +487,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           const target = head.kind === "ref" ? head.target : null;
           // Each call into a possibly-divergent definition spends fuel, if a
           // `with fuel` handler is active. Out of fuel means no result.
-          if (target && info.divergent.has(target) && this.fuel && --this.fuel.left < 0) return this.fail();
+          if (target && info.divergent.has(target)) {
+            if (!this.fuel) spendStep();
+            else if (--this.fuel.left < 0) return this.fail();
+          }
           // A lambda written in place (a let, a dot) is entered, not made.
           if (head.kind === "lambda") return this.parts(n.args, 0, [], env, n);
           return this.parts([n.fn, ...n.args], 0, [], env, n);

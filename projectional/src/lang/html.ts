@@ -12,7 +12,7 @@
 
 import { Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
-import { fromList } from "./run.ts";
+import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V } from "./std.ts";
 
 export interface Node_ { textContent: string | null }
@@ -37,7 +37,13 @@ export interface Mount {
   // Each time a watcher runs again (not the first time), with its node: a
   // page can flash it.
   ran?: (el: Node_, node: CellNode) => void;
+  // The step budget of each update (run.ts, withSteps).
+  steps?: number;
 }
+
+// What a part of the page shows when its update ran out of steps: a
+// formula that never ends is typed Diverge, and this is the page handling it.
+export const STUCK = "didn't finish";
 
 // The evaluator's way of calling: the first result of the stream.
 export const evaluatorCall = (f: Value, ...args: Value[]): Value => {
@@ -55,12 +61,20 @@ const LIVE = new Set(["value", "checked"]);
 export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   const { doc, cells } = m;
   const d = v as Data;
-  const watch = (e: Node_, label: string, run: () => void) => {
+  const steps = m.steps ?? PAGE_STEPS;
+  cells.around = (update) => withSteps(steps, update);
+  const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}) => {
     let first = true;
     const node: CellNode = cells.watch(() => {
       // Something it asked for isn't here yet: it keeps what it shows, and
-      // runs again when that lands (it read the cell that says so).
-      try { run(); } catch (e) { if (!(e instanceof Pending)) throw e; return; }
+      // runs again when that lands (it read the cell that says so). One
+      // that ran out of steps says so; it runs again when a cell it read
+      // before stopping changes.
+      try { withSteps(steps, run); } catch (e) {
+        if (e instanceof OutOfSteps) { stuck(); return; }
+        if (!(e instanceof Pending)) throw e;
+        return;
+      }
       if (!first) m.ran?.(e, node);
       first = false;
     }, label);
@@ -68,7 +82,7 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   switch (d.tag) {
     case HTML_V.text: {
       const t = doc.createTextNode("");
-      watch(t, "text", () => { t.textContent = String(m.call(d.fields[0])); });
+      watch(t, "text", () => { t.textContent = String(m.call(d.fields[0])); }, () => { t.textContent = STUCK; });
       return t;
     }
     case HTML_V.part: {
@@ -76,7 +90,7 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
       // belongs to its watcher, whose next run disposes of it first.
       const e = doc.createElement("lab-part");
       e.setAttribute("style", "display: contents");
-      watch(e, "part", () => { e.replaceChildren(mountHtml(m.call(d.fields[0]), m, svg)); });
+      watch(e, "part", () => { e.replaceChildren(mountHtml(m.call(d.fields[0]), m, svg)); }, () => { e.replaceChildren(doc.createTextNode(STUCK)); });
       return e;
     }
     case HTML_V.element: {
@@ -86,6 +100,7 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
       for (const a of fromList(d.fields[1]) as Data[]) {
         const name = String(a.fields[0]);
         if (a.tag === HTML_V.property) {
+          // Out of steps, an attribute keeps its last value.
           watch(e, name, () => {
             const value = String(m.call(a.fields[1]));
             if (name === "checked") e.checked = value === "true";
@@ -105,9 +120,10 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
             // before it writes, as a Suspense render must be pure).
             const fire = () => {
               try {
-                cells.batch(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] }));
+                cells.batch(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] })));
               } catch (err) {
                 if (err instanceof Pending) err.ready.then(fire);
+                else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
                 else console.error(err);
               }
             };
