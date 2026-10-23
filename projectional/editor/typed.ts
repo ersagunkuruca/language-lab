@@ -90,7 +90,11 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const inline = (id: Id): [HTMLElement, number] => {
     const n = node(id);
     switch (n.kind) {
-      case "lit": return [x(id, "lit", typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value)), 100];
+      case "lit": {
+        const l = litLabel(n.value), el = x(id, "lit", l.short);
+        if (l.full) el.title = `${el.title ? `${el.title}\n\n` : ""}${l.full}`;
+        return [el, 100];
+      }
       case "hole": return [x(id, "hole", "□", holeType(id) ? h("span", { class: "ty" }, holeType(id)!) : null), 100];
       case "ref": {
         const t = node(n.target);
@@ -326,6 +330,20 @@ export function nextHole(code: Code, defId: Id, id: Id): Id | undefined {
   const holes = order.filter((x) => code.nodes[x].kind === "hole");
   const at = order.indexOf(id);
   return holes.find((h) => order.indexOf(h) > at) ?? holes[0];
+}
+
+// A literal as drawn in the graph and the blocks. A long or multiline text
+// (a page's CSS, say) shows its first line, clipped, and how many lines it
+// has, so it doesn't stretch its view; hovering shows all of it, and the
+// inspector edits all of it.
+const SHORT = 32;
+export function litLabel(v: string | number | boolean): { short: string; full?: string } {
+  if (typeof v !== "string") return { short: String(v) };
+  const lines = v.split("\n");
+  if (lines.length === 1 && v.length <= SHORT) return { short: JSON.stringify(v) };
+  const first = lines.find((l) => l.trim()) ?? "";
+  const clip = first.trim().length > SHORT ? `${first.trim().slice(0, SHORT - 1)}…` : `${first.trim()}${lines.length > 1 ? "…" : ""}`;
+  return { short: `${JSON.stringify(clip).slice(0, -1)}"${lines.length > 1 ? ` · ${lines.length} lines` : ""}`, full: v };
 }
 
 export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {

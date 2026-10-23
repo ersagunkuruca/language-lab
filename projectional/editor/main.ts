@@ -1042,10 +1042,14 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (hole) out.append(fillPalette(id, info, names));
 
   if (n.kind === "lit") {
-    const input = h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" }) as HTMLInputElement;
+    // A long or multiline text gets a box that keeps its lines.
+    const long = typeof n.value === "string" && (n.value.includes("\n") || n.value.length > 60);
+    const input = (long
+      ? h("textarea", { id: "f-lit", rows: String(Math.min(16, String(n.value).split("\n").length + 1)), spellcheck: "false", class: "lit-text" }, String(n.value))
+      : h("input", { id: "f-lit", type: "text", value: String(n.value), autocomplete: "off" })) as HTMLInputElement;
     input.addEventListener("change", () => { if (applyT(T.setLit(doc.code, doc.names.short, info, id, input.value))) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
     // Enter on an unchanged value (an empty text, say) moves on too.
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !long && input.value === String(n.value)) { const h = T.nextHole(doc.code, ui.def, id); if (h) select(h); } });
     out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
   }
 
