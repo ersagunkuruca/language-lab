@@ -299,7 +299,9 @@ The steps, one PR each: the builtin and represent.ts taking a builtin type
 slope of what it rounds, and a representation may have `literal`, a
 function given each literal, and `approximate`, which the chooser skips);
 the `Float32` representation with its laws tested with a tolerance against
-`Number`; js-scalar's `Math.fround`; the shaders example asking for it and
+`Number` (done: `withFloat32` in src/lang/float32.ts adds a rounded job for
+each Number builtin whose answer may not be an f32, and
+test/float32.test.ts checks each to within half a step); js-scalar's `Math.fround`; the shaders example asking for it and
 gpu.ts checking `+ − ×` exactly.
 
 ### Costs and the chooser
