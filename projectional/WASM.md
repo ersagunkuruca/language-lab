@@ -3,8 +3,9 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2, W3a and W4a are done (W2: functions as
-values, W3a: Int and Text, W4a: searches with one answer or none, below). What runs in WebAssembly is the
+**Status.** Stages W1, W2, W3a, W4a and W4b are done (W2: functions as
+values, W3a: Int and Text, W4a: searches with one answer or none, W4b:
+choosing inside a handler, below). What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -14,6 +15,23 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W4b came out. Inside `first`, `optional`, `all` and `count`, lets
+whose value is `one of` a list (keep: let item = one of list, item if
+it passes, else fail; or two choices nested) become a loop per choice: a
+function of the list and the locals the rest uses, which tries the rest
+for one item and then calls itself on the tail, a tail call, in the
+evaluator's order. `first` stops at the first answer; `all` collects
+backwards as it goes and turns the list round at the end; `count` adds
+one. This is the usual translation of list comprehensions into loops
+(Wadler, in Peyton Jones's The Implementation of Functional Programming
+Languages, chapter 7; credited). A function with Choice as a value gives
+a status too, and a generic definition is lowered per effect row as well
+as per type, so keep with a test that may have no answer is a search of
+its own. Every pure function of chapters and calc at known types
+compiles. Still
+refused: `one of` inside a function that's called (queens, Countdown's
+`split`), which needs success continuations.
 
 How W4a came out. A search with one answer or none is a function that
 gives a status after its answer, `(result T i32)`: 0 with the answer, 1
@@ -33,9 +51,7 @@ answers, so these are exactly the evaluator's. A function that spends
 from a budget is partial too: running out is no answer where it happens,
 and the nearest handler sees it, as in the evaluator (a `first` inside a
 budget gives its default when the budget runs out inside it). The
-shader profile keeps its count check. Not yet: functions with Choice as
-values (`keep` with a test that may have no answer), which W4b adds with
-Abort.
+shader profile keeps its count check.
 
 How W3a came out. An Int is an `i64`; an add, subtract, multiply or
 negate whose answer doesn't fit traps, a runtime error rather than a
@@ -214,8 +230,9 @@ rest with the reason, so nothing breaks between stages.
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
    installed).
 4. **W4 searches and effects.** One answer or none as a status after
-   the answer (W4a, done), then functions with Choice as values and
-   Abort (W4b). Success continuations for `Choice`,
+   the answer (W4a, done), choosing inside a handler and functions with
+   Choice as values (W4b, done), then Abort, then `one of` in called
+   functions. Success continuations for `Choice`,
    multi-value single-answer returns, exceptions for `Abort`, the handler
    stack. Programs: queens, Countdown, calc.
 5. **W5 Int past 64 bits** through host bignums, then specialization

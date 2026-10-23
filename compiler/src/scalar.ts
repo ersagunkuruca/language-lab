@@ -47,7 +47,7 @@
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Type } from "../../projectional/src/lang/types.ts";
+import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { BOOL, CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
@@ -81,7 +81,12 @@ export interface RType { key: string; name: string; def: Id; variant: Id; case?:
 // `inner`: made by the lowering (a fold's stack), not the program's.
 export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[]; inner?: boolean }
 // A function as a value (`data`): a closure, called through its code.
-export interface FType { key: string; params: LType[]; result: LType }
+// `partial`: it may have no answer (Choice, or a budget running out), so
+// its code gives a status after its answer, as a partial SFunc does.
+export interface FType { key: string; params: LType[]; result: LType; partial?: boolean }
+// What a generic definition's type variables stand for, and its effect
+// rows (by their tail variable: the effects added).
+type At = Map<number, Type | Row>;
 // Int and Text (`data`): an i64, and UTF-8 bytes (wasm-rt.ts).
 export type WType = "i64" | "text";
 export type LType = SType | WType | RType | DType | FType;
@@ -100,6 +105,7 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     case "fail": return true;
     case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
     case "rt": return !!runtime(e.fn).partial || e.args.some((a) => fails(a, funcs));
+    case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
     case "attempt": return fails(e.ok, funcs) || fails(e.otherwise, funcs);
     case "budget": return fails(e.otherwise, funcs);
     default: return kids(e).some((a) => fails(a, funcs));
@@ -213,10 +219,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // A generic definition (the vectors module's plus, for any record of
   // Numbers) is lowered once per set of types it's called at, the way a
   // C++ template or a Rust generic is: `at` is what its type variables
-  // stand for in the one being lowered.
-  let at = new Map<number, Type>();
-  const put = (t: Type, m: Map<number, Type>): Type =>
-    t.t === "var" ? m.get(t.v) ?? t : t.t === "con" ? { ...t, args: t.args.map((a) => put(a, m)) } : { ...t, params: t.params.map((p) => put(p, m)), ret: put(t.ret, m) };
+  // stand for in the one being lowered, and what its effect rows do (keep
+  // with a test that may have no answer is a search itself).
+  let at: At = new Map();
+  const put = (t: Type, m: At): Type => {
+    if (t.t === "var") { const x = m.get(t.v); return x && "t" in x ? x : t; }
+    if (t.t === "con") return { ...t, args: t.args.map((a) => put(a, m)) };
+    const x = t.eff.tail === null ? undefined : m.get(t.eff.tail);
+    const eff = x && "effs" in x ? { effs: [...new Set([...t.eff.effs, ...x.effs])].sort(), tail: x.tail } : t.eff;
+    return { ...t, params: t.params.map((p) => put(p, m)), ret: put(t.ret, m), eff };
+  };
   const zonk = (id: Id): Type => put(info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 }), at);
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
@@ -228,12 +240,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // The profile's type for t, or null if t isn't in it.
   function stype(t: Type, inside: Id[] = []): LType | null {
     if (t.t === "fn" && opts.data) {
-      // A function that may not finish is fine here; one with other effects isn't yet.
-      if (info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE)) return null;
+      // A function that may not finish, or have no answer, is fine here
+      // (a partial one, giving a status); one with other effects isn't yet.
+      const effs = info.subst.resolveRow(t.eff).effs;
+      if (effs.some((e) => e !== DIVERGE && e !== CHOICE)) return null;
       const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
       if (params.some((p) => !p) || !result) return null;
-      const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}`;
-      if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result });
+      const partial = effs.length > 0;
+      const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
+      if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
       return fns.get(key)!;
     }
     if (t.t !== "con") return null;
@@ -317,7 +332,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const n = code.nodes[tid];
     return n?.kind === "tref" && (n.target === target || n.args.some((a) => mentions(a, target)));
   };
-  const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret)]);
+  const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret), ...(t.eff.tail === null ? [] : [t.eff.tail])]);
   const keyOf = (t: LType): string => (typeof t === "string" ? t : t.key);
   const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}`);
 
@@ -333,12 +348,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 
   // The function index for `def` at these types, lowering it (and what it
   // calls) first.
-  function func(def: Id, types = new Map<number, Type>()): number {
+  function func(def: Id, types: At = new Map()): number {
     const raw = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
     const t = raw && put(raw, types);
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
-    const key = used.length ? `${def}|${used.map((v) => `${v}=${show(types.get(v)!)}`).join(",")}` : def;
+    const bound = (x: Type | Row) => ("t" in x ? show(x) : `{${x.effs.join(",")}}`);
+    const key = used.length ? `${def}|${used.map((v) => `${v}=${bound(types.get(v)!)}`).join(",")}` : def;
     if (index.has(key)) return index.get(key)!;
     if (refused.has(key)) throw new Refused(`calls ${nm(def)}, which ${refused.get(key)}`);
     const d = code.nodes[def] as NodeOf<"def">;
@@ -471,15 +487,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
         if (t?.kind === "def") {
-          // What the callee's type variables are here.
-          const types = new Map<number, Type>();
-          const match = (p: Type, c: Type) => {
-            if (p.t === "var") { if (c.t !== "var") types.set(p.v, c); }
-            else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && match(a, c.args[j]));
-            else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && match(a, c.params[j])); match(p.ret, c.ret); }
-          };
+          // What the callee's type variables and rows are here.
+          const types: At = new Map();
           const ct = info.typeOf.get(target) && info.subst.zonk(info.typeOf.get(target)!);
-          if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && match(p, zonk(n.args[j]))); match(ct.ret, zonk(id)); }
+          if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && bindVars(p, zonk(n.args[j]), types)); bindVars(ct.ret, zonk(id), types); }
           const fn = func(target, types);
           n.args.forEach((a, j) => {
             if (stype(zonk(a)) !== funcs[fn].params[j]) throw new Refused(`passes ${nm(target)} something other than ${nm(target)} takes there`);
@@ -612,7 +623,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (free.some((b) => inlined.has(b))) throw new Refused("makes a function inside a fold that uses the fold's result (not in WebAssembly yet)");
     const caps = free.map((b) => f.locals[env.get(b)!]);
     const shape = shapes.push({ t, caps }) - 1;
-    const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
     const gi = funcs.push(g) - 1;
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
@@ -624,17 +635,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const key = `&${def}|${t.key}`;
     if (!index.has(key)) {
       const shape = shapes.push({ t, caps: [] }) - 1;
-      const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+      const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
       index.set(key, funcs.push(g) - 1);
       // What its type variables are, from the type it's used at.
-      const types = new Map<number, Type>();
+      const types: At = new Map();
       const dt = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
-      const match = (p: Type, c: Type) => {
-        if (p.t === "var") { if (c.t !== "var") types.set(p.v, c); }
-        else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && match(a, c.args[j]));
-        else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && match(a, c.params[j])); match(p.ret, c.ret); }
-      };
-      if (dt) match(dt, zonk(id));
+      if (dt) bindVars(dt, zonk(id), types);
       g.body = { k: "call", fn: func(def, types), args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
       shapeOfNamed.set(key, shape);
     }
@@ -765,10 +771,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return di;
   }
   // What p's type variables stand for, where c is p at known types.
-  function bindVars(p: Type, c: Type, types: Map<number, Type>) {
+  function bindVars(p: Type, c: Type, types: At) {
     if (p.t === "var") { if (c.t !== "var" && !types.has(p.v)) types.set(p.v, c); }
     else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && bindVars(a, c.args[j], types));
-    else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && bindVars(a, c.params[j], types)); bindVars(p.ret, c.ret, types); }
+    else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && bindVars(a, c.params[j], types)); bindVars(p.ret, c.ret, types); bindRow(p.eff, c.eff, types); }
+  }
+  // p's row variable stands for the effects c has beyond p's own.
+  function bindRow(p: Row, c: Row, types: At) {
+    const r = info.subst.resolveRow(p);
+    if (r.tail === null || types.has(r.tail)) return;
+    const cr = info.subst.resolveRow(c);
+    const effs = cr.effs.filter((e) => !r.effs.includes(e));
+    if (effs.length) types.set(r.tail, { effs, tail: null });
   }
   // The binders a piece of the program refers to (inside its folds too, or not).
   function refsIn(id: Id, folds = true): Id[] {
@@ -812,10 +826,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (!search || (target === S.first && !dflt)) throw new Refused(`uses ${nm(target)} on a search that isn't written in place (as () => …)`);
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
-    const res = f.locals.push(bt) - 1;
-    const body = expr(search, env, f, false);
-    const answer: SExpr = { k: "local", i: res };
     const caseOf = (d: LType, v: Id) => (isData(d) ? d.cases.findIndex((c) => c.variant === v) : -1);
+    const plan = chain(search);
+    const choosing = plan.steps.some((x) => x.choose);
+    if (choosing && (target === S.all || target === S.count)) return collect(target, search, plan, t, bt, env, f);
+    const res = f.locals.push(bt) - 1;
+    const body = choosing ? firstOf(search, plan, bt, env, f) : expr(search, env, f, false);
+    const answer: SExpr = { k: "local", i: res };
     let ok: SExpr, otherwise: SExpr;
     if (target === S.first) { ok = answer; otherwise = expr(dflt!, env, f, false); }
     else if (target === S.count) { ok = { k: "num", v: 1 }; otherwise = { k: "num", v: 0 }; }
@@ -826,6 +843,132 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       otherwise = none;
     }
     return { k: "attempt", body, res, ok, otherwise, t };
+  }
+  // A search that chooses: lets, some of whose values are `one of` a
+  // list, then a body with one answer or none (keep: let item = one of
+  // list, item if it passes, else fail). Each choice is a loop of its own
+  // over its list, in the evaluator's order, a function taking the list
+  // and the locals the rest uses. A `one of` anywhere else stays refused.
+  type Plan = { steps: { p: Id; value: Id; choose: boolean }[]; leaf: Id };
+  function chain(body: Id): Plan {
+    const steps: Plan["steps"] = [];
+    for (;;) {
+      const n = code.nodes[body];
+      const head = n?.kind === "call" ? code.nodes[n.fn] : null;
+      if (n?.kind !== "call" || head?.kind !== "lambda" || head.params.length !== n.args.length) return { steps, leaf: body };
+      head.params.forEach((p, j) => {
+        const v = code.nodes[n.args[j]];
+        const choose = v?.kind === "call" && v.args.length === 1 && code.nodes[v.fn]?.kind === "ref" && (code.nodes[v.fn] as NodeOf<"ref">).target === S.oneOf;
+        steps.push({ p, value: choose ? (v as NodeOf<"call">).args[0] : n.args[j], choose });
+      });
+      body = head.body;
+    }
+  }
+  // A choice's loop: a function of the list (and, collecting, what's been
+  // collected), then the locals of e the search uses.
+  function chooser(search: Id, list: Id, e: Map<Id, number>, g: SFunc, result: LType, acc: LType | null) {
+    const lt = stype(zonk(list));
+    if (!lt || !isData(lt)) throw new Refused(`chooses one of ${whyNot(zonk(list))}`);
+    const used = new Set(refsIn(search));
+    if ([...used].some((b) => inlined.has(b))) throw new Refused("chooses inside a fold, using the fold's result (not in WebAssembly yet)");
+    const caps = [...e.keys()].filter((b) => used.has(b));
+    const capT = caps.map((b) => g.locals[e.get(b)!]);
+    const params = [lt, ...(acc ? [acc] : []), ...capT];
+    const L: SFunc = { def: list, name: `${f0(g)}.choose`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const li = funcs.push(L) - 1, at0 = acc ? 2 : 1;
+    const le = new Map(caps.map((b, j) => [b, at0 + j] as const));
+    const cons = lt.cases.findIndex((c) => c.variant === CONS);
+    const x = L.locals.push(lt.cases[cons].fields[0].t) - 1, rest = L.locals.push(lt) - 1;
+    const call = (args: SExpr[], into: number[], tail: boolean): SExpr => ({ k: "call", fn: li, args: [...args, ...into.map((i): SExpr => ({ k: "local", i }))], tail });
+    return { L, li, le, lt, cons, x, rest, call, capsIn: (genv: Map<Id, number>) => caps.map((b) => genv.get(b)!), capsHere: caps.map((b) => e.get(b)!) };
+  }
+  const f0 = (g: SFunc) => g.name.replace(/\.choose$/, "");
+  // first and optional: each choice's loop has the first answer of the
+  // rest for some item, or none.
+  function firstOf(search: Id, plan: Plan, bt: LType, env: Map<Id, number>, f: SFunc): SExpr {
+    const one = (i: number, e: Map<Id, number>, g: SFunc): SExpr => {
+      if (i === plan.steps.length) return expr(plan.leaf, e, g, false);
+      const s = plan.steps[i];
+      if (!s.choose) {
+        const t = stype(zonk(s.p));
+        if (!t) throw new Refused(`lets ${nm(s.p)} be ${OTHER}`);
+        const value = expr(s.value, e, g, false), l = g.locals.push(t) - 1;
+        return { k: "let", i: l, value, body: one(i + 1, new Map(e).set(s.p, l), g) };
+      }
+      const list = expr(s.value, e, g, false);
+      const c = chooser(search, s.value, e, g, bt, null);
+      c.L.partial = true;
+      const res = c.L.locals.push(bt) - 1;
+      const inner = one(i + 1, new Map(c.le).set(s.p, c.x), c.L);
+      const scrut: SExpr = { k: "local", i: 0 };
+      c.L.body = {
+        k: "case", scrut, s: 0, t: c.lt, result: bt,
+        arms: c.lt.cases.map((_, k): SExpr => (k !== c.cons ? { k: "fail" } : {
+          k: "let", i: c.x, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 0 },
+          body: { k: "let", i: c.rest, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 1 },
+            body: { k: "attempt", body: inner, res, ok: { k: "local", i: res }, otherwise: c.call([{ k: "local", i: c.rest }], c.capsIn(c.le), true), t: bt } },
+        })),
+      };
+      return c.call([list], c.capsHere, false);
+    };
+    return one(0, env, f);
+  }
+  // all and count: each choice's loop takes what's been collected and
+  // gives it with the rest's answers for each item added, a tail call per
+  // item; all collects backwards and turns the list round at the end.
+  function collect(target: Id, search: Id, plan: Plan, t: LType, bt: LType, env: Map<Id, number>, f: SFunc): SExpr {
+    const accT: LType = target === S.count ? "f64" : t;
+    const d = t as DType, nil = target === S.all ? d.cases.findIndex((c) => c.variant === NIL) : -1, cons = target === S.all ? d.cases.findIndex((c) => c.variant === CONS) : -1;
+    const add = (acc: number, res: number): SExpr => (target === S.count
+      ? { k: "op", op: "add", args: [{ k: "local", i: acc }, { k: "num", v: 1 }] }
+      : { k: "new", t: d, c: cons, args: [{ k: "local", i: res }, { k: "local", i: acc }] });
+    // The rest from step i, in g, with what's been collected in local acc.
+    const many = (i: number, e: Map<Id, number>, g: SFunc, acc: number): SExpr => {
+      const kept = (body: SExpr): SExpr => { const r = g.locals.push(accT) - 1; return { k: "attempt", body, res: r, ok: { k: "local", i: r }, otherwise: { k: "local", i: acc }, t: accT }; };
+      if (i === plan.steps.length) {
+        const res = g.locals.push(bt) - 1;
+        return { k: "attempt", body: expr(plan.leaf, e, g, false), res, ok: add(acc, res), otherwise: { k: "local", i: acc }, t: accT };
+      }
+      const s = plan.steps[i];
+      if (!s.choose) {
+        const lt = stype(zonk(s.p));
+        if (!lt) throw new Refused(`lets ${nm(s.p)} be ${OTHER}`);
+        const value = expr(s.value, e, g, false), l = g.locals.push(lt) - 1;
+        const body: SExpr = { k: "let", i: l, value, body: many(i + 1, new Map(e).set(s.p, l), g, acc) };
+        return fails(value, funcs) ? kept(body) : body;
+      }
+      const list = expr(s.value, e, g, false);
+      const c = chooser(search, s.value, e, g, accT, accT);
+      const scrut: SExpr = { k: "local", i: 0 };
+      c.L.body = {
+        k: "case", scrut, s: 0, t: c.lt, result: accT,
+        arms: c.lt.cases.map((_, k): SExpr => (k !== c.cons ? { k: "local", i: 1 } : {
+          k: "let", i: c.x, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 0 },
+          body: { k: "let", i: c.rest, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 1 },
+            body: c.call([{ k: "local", i: c.rest }, many(i + 1, new Map(c.le).set(s.p, c.x), c.L, 1)], c.capsIn(c.le), true) },
+        })),
+      };
+      if (fails(c.L.body, funcs)) c.L.partial = true;
+      const call = c.call([list, { k: "local", i: acc }], c.capsHere, false);
+      return fails(list, funcs) || c.L.partial ? kept(call) : call;
+    };
+    const acc = f.locals.push(accT) - 1;
+    const start: SExpr = target === S.count ? { k: "num", v: 0 } : { k: "new", t: d, c: nil, args: [] };
+    const body = many(0, env, f, acc);
+    return { k: "let", i: acc, value: start, body: target === S.count ? body : { k: "call", fn: reverse(d), args: [body, { k: "new", t: d, c: nil, args: [] }], tail: false } };
+  }
+  // A list turned round onto another, a loop.
+  function reverse(d: DType): number {
+    const key = `reverse:${d.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: d.def, name: `${d.name}.reverse`, params: [d, d], result: d, locals: [d, d], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    index.set(key, gi);
+    const cons = d.cases.findIndex((c) => c.variant === CONS), l: SExpr = { k: "local", i: 0 };
+    g.body = { k: "case", scrut: l, s: 0, t: d, result: d, arms: d.cases.map((_, k): SExpr => (k !== cons ? { k: "local", i: 1 } : {
+      k: "call", fn: gi, tail: true, args: [{ k: "field", rec: l, t: d, c: k, i: 1 }, { k: "new", t: d, c: k, args: [{ k: "field", rec: l, t: d, c: k, i: 0 }, { k: "local", i: 1 }] }],
+    })) };
+    return gi;
   }
   // value of(o): o's value if it's some, no answer if it's none.
   function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {

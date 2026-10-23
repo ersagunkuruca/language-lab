@@ -254,3 +254,34 @@ export function choices() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
 }
+
+// Searches that choose one of a list, inside first, optional, all and
+// count: one choice (keep's shape), two nested, a let between them that
+// may have no answer, and functions with Choice as values (map with read,
+// a partial function passed in and called in tail position).
+export function searches() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const txt = (x: Id) => k.call(S.concat, x, k.lit(""));
+  const choose = (xs: Id, body: (x: Id) => Id) => k.let("x", k.call(S.oneOf, xs), body);
+  const pair = (xs: Id, ys: Id) => k.let("x", k.call(S.oneOf, xs), (x) => k.let("y", k.call(S.oneOf, ys), (y) =>
+    k.if(k.call(TEXT_OPS.less, txt(x), txt(y)), k.call(S.concat, x, y), k.call(S.fail))));
+  const apply = k.def("apply");
+  k.define(apply, k.fn(["f", "t"], (f, t) => k.call(f, t)));
+  const defs = {
+    kept: d("kept", ["xs"], (xs) => k.call(lib("keep"), xs, k.fn(["t"], (t) => k.call(INT_OPS.less, k.int(2), k.call(INT_OPS.read, t))))),
+    pairs: d("pairs", ["xs", "ys"], (xs, ys) => k.call(S.all, k.thunk(() => pair(xs, ys)))),
+    many: d("how many", ["xs", "ys"], (xs, ys) => k.call(S.count, k.thunk(() => pair(xs, ys)))),
+    firstPair: d("first pair", ["xs", "ys"], (xs, ys) => k.call(S.first, k.thunk(() => pair(xs, ys)), k.thunk(() => k.lit("none")))),
+    some: d("some pair", ["xs", "ys"], (xs, ys) => k.call(S.optional, k.thunk(() => pair(xs, ys)))),
+    // A let that may have no answer between the choice and the test.
+    read: d("read ones", ["xs"], (xs) => k.call(S.all, k.thunk(() => choose(xs, (x) => k.let("n", k.call(INT_OPS.read, txt(x)), (n) => k.call(INT_OPS.add, n, k.int(1))))))),
+    readCount: d("count read", ["xs"], (xs) => k.call(S.count, k.thunk(() => choose(xs, (x) => k.call(INT_OPS.read, txt(x)))))),
+    mapped: d("mapped", ["xs"], (xs) => k.call(S.optional, k.thunk(() => k.call(lib("map"), xs, k.fn(["t"], (t) => k.call(INT_OPS.read, txt(t))))))),
+    applied: d("applied", ["t"], (t) => k.call(S.first, k.thunk(() => k.call(apply, k.fn(["s"], (s) => k.call(INT_OPS.show, k.call(INT_OPS.read, s))), t)), k.thunk(() => k.lit("no")))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
+}
