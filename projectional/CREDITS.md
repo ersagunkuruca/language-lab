@@ -117,6 +117,7 @@ not only code: an influence is credited even when nothing was copied.
 | What | Label | Who and where |
 |---|---|---|
 | Differentiating real functions written in the language (`derive.ts`) | Textbook | Symbolic differentiation. The product and quotient rules are the textbook ones. |
+| `gradient`, and slopes through records of Numbers: one forward pass per part, each seeded with that direction | Prior art | Forward-mode automatic differentiation of a function of several inputs, one pass per input (Wengert, 1964), as JAX's `jacfwd` does. `derive.ts`, LANGUAGE.md. |
 | A fold carrying (value, slope) pairs | Prior art | Forward-mode automatic differentiation (Wengert, 1964) and dual numbers (W. K. Clifford, 1873). `∂polynomial/∂x` is Horner's rule. |
 | `derivative(f)` generated before compiling, so GPU code gets exact slopes | Prior art | Differentiating a program before code generation, as [Enzyme](https://enzyme.mit.edu) (Moses and Churavy, NeurIPS 2020) does for LLVM and GPU kernels. Noted in `shade`'s comment in `examples/raymarch`. |
 
@@ -171,7 +172,7 @@ not only code: an influence is credited even when nothing was copied.
 | `map parts`, `zip parts`, `total`: one operation for every record of Numbers, typed by a constraint on type variables | Prior art | Haskell's `Functor`/`Applicative` (`fmap`, `liftA2`) over a record, and type classes as constraints (Philip Wadler and Stephen Blott, "How to make ad-hoc polymorphism less ad hoc", POPL 1989); APL's and NumPy's elementwise arithmetic. Ours has one built-in constraint, not classes. LANGUAGE.md, std.ts. |
 | The vectors module's operations and names (dot, length as magnitude, normalize as unit, mix, clamp, reflect) | Influence | GLSL's and [WGSL's](https://www.w3.org/TR/WGSL/#numeric-builtin-functions) built-in functions, which they compile to. Said in the module's comments, shown in the editor. |
 | Generic definitions copied once per type for the GPU | Prior art | Monomorphisation, as in C++ templates and Rust generics, and whole-program in MLton (Stephen Weeks, "Whole-program compilation in MLton", 2006). `compiler/src/scalar.ts`. |
-| The scene (a drop in a ring over a checker floor), the ripples, normals as the scene's derivative | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
+| The scene (a drop in a ring over a checker floor), the ripples, normals as the scene's gradient | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
 
 ## The node editor
 

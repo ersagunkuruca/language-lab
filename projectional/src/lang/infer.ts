@@ -16,7 +16,7 @@ import type { Names } from "../presentation.ts";
 import { unitProblems } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
-import { smoothDerivative as hasSmoothDerivative } from "./derive.ts";
+import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
@@ -56,6 +56,8 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
 export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id> }, opts: Options = {}): Info {
+  // gradient(f)(p): p's type, for gradient(f) (smoothGradient, below).
+  const at = new Map<Id, Type>();
   const s = new Subst();
   if (reuse) s.next = reuse.from.subst.next;
   const owner = ownerOfTypeParts(code);
@@ -385,8 +387,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         break;
       }
       case "call": {
-        const f = smoothDerivative(n) ?? expr(n.fn, env, row);
-        const args = n.args.map((a) => expr(a, env, row));
+        // gradient(f) needs f's type first: which record it's over. In
+        // gradient(f)(p), p's type says so too, when f is generic.
+        const isGradient = (c: Node | undefined) => c?.kind === "call" && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
+        const gradient = isGradient(n);
+        const applied = isGradient(code.nodes[n.fn]) ? n.args.map((a) => expr(a, env, row)) : null;
+        if (applied?.length === 1) at.set(n.fn, applied[0]);
+        const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
+        const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
+        const args = early ?? applied ?? n.args.map((a) => expr(a, env, row));
         const ret = s.fresh();
         const fr = s.resolve(f);
         if (fr.t === "fn" && fr.params.length !== args.length) {
@@ -441,6 +450,23 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (head?.kind !== "ref" || head.target !== S.derivative || n.args.length !== 1 || !hasSmoothDerivative(code, n.args[0])) return null;
     const e = s.freshRow();
     const t: Type = { t: "fn", params: [{ t: "fn", params: [num], ret: num, eff: e }], ret: { t: "fn", params: [num], ret: num, eff: e }, eff: s.freshRow() };
+    info.typeOf.set(n.fn, t);
+    return t;
+  }
+
+  // gradient(f) the same way, once f's type says which record it takes:
+  // over a record of Numbers, every part's slope must be readable; over a
+  // Number, it's derivative.
+  function smoothGradient(n: NodeOf<"call">, ft: Type): Type | null {
+    const point = at.get(n.id);
+    if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.clone().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
+    const f = s.zonk(ft);
+    if (f.t !== "fn" || f.params.length !== 1) return null;
+    const r = f.params[0];
+    if (r.t !== "con") return null;
+    if (r.id === NUMBER ? !hasSmoothDerivative(code, n.args[0]) : !hasSmoothGradient(code, n.args[0], recordVariant(code, r.id) ?? "")) return null;
+    const e = s.freshRow();
+    const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: r, eff: e }, eff: s.freshRow() };
     info.typeOf.set(n.fn, t);
     return t;
   }
