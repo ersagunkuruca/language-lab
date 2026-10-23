@@ -27,7 +27,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E2 | Statement order in an action: move a `print` step in `main` up or down | QA2 can't-edit 3, R2 §9.8 | P1 | M | |
 | E3 | Clearing a node to a hole generalizes the definition's type (`period : (a, b) -> Number`) | QA2 L3 | P1 | S | |
 | E4 | A used input can't be removed: offer remove-and-leave-holes | QA2 can't-edit 5 | P1 | S | |
 | E5 | Tabs pile up off the right edge, no overflow control | QA2 UX2 | P2 | S | |
@@ -121,6 +120,7 @@ section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E2 | Reorder an action's steps: Do it earlier / later | #184 |
 | E1 | Inner lambda parameters: add, remove, reorder | #179 |
 | | Right-click menu edits show what they selected (QA2 H1's last part) | #177 |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |

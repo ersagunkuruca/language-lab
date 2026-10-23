@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, collect, freshId, ownerOfTypeParts, replace, subtree } from "../model.ts";
+import { children, collect, freshId, ownerOfTypeParts, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
 export type Top = { ok: true; code: Code; names: Names; select: Id; note: string } | { ok: false; reason: string };
@@ -370,4 +370,60 @@ export function typeHeads(code: Code, type: Id): { target: Id; arity: number }[]
     if (b?.kind === "typedef" && !b.effect) out.push({ target: d, arity: b.params.length });
   }
   return out;
+}
+
+// ---------------------------------------------------------------- step order
+
+// An action's steps are a chain of lets: do v1, then (b1 bound to its value)
+// do v2, …, then the last step, whose value is the action's. The let of a
+// value: the call that applies a one-input function to it, if it is one.
+function letOf(code: Code, value: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
+  const at = parentOf(code, value);
+  const call = at?.slot === "args" ? code.nodes[at.parent] : null;
+  if (call?.kind !== "call" || call.args.length !== 1) return null;
+  const lam = code.nodes[call.fn];
+  return lam?.kind === "lambda" && lam.params.length === 1 ? { call, lam } : null;
+}
+// The let whose function's body is `id`: the step before it.
+function letAround(code: Code, id: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
+  const at = parentOf(code, id);
+  const lam = at?.slot === "body" ? code.nodes[at.parent] : null;
+  if (lam?.kind !== "lambda" || lam.params.length !== 1) return null;
+  const call = Object.values(code.nodes).find((c): c is NodeOf<"call"> => c.kind === "call" && c.fn === lam.id && c.args.length === 1);
+  return call ? { call, lam } : null;
+}
+const mentions = (code: Code, root: Id, b: Id) => subtree(code, root).some((id) => { const n = code.nodes[id]; return n.kind === "ref" && n.target === b; });
+
+// Move a step of an action one place earlier or later. Each value keeps its
+// name; a step can't move before the step whose value it uses, or after the
+// last one while something uses its own. Whether the action still has its
+// type (the last step's value is its value) is the type check's to say.
+export function moveStep(code: Code, names: Names, step: Id, by: -1 | 1): Top {
+  const self = letOf(code, step);
+  // The pair to swap: an outer let and what its function's body does next.
+  let outer: { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null;
+  if (by < 0) outer = self ? letAround(code, self.call.id) : letAround(code, step);
+  else outer = self;
+  if (!self && !letAround(code, step)) return { ok: false, reason: "it isn't a step of an action" };
+  if (!outer) return { ok: false, reason: by < 0 ? "it's already the first step" : "it's already the last step" };
+  const nodes = { ...code.nodes };
+  const v0 = outer.call.args[0], b0 = outer.lam.params[0];
+  const inner = code.nodes[outer.lam.body];
+  const next = inner.kind === "call" ? letOf(code, inner.args[0] ?? "") : null;
+  if (next && next.call.id === inner.id) {
+    // Two lets: swap their bindings. The later value can't use the earlier's.
+    const v1 = next.call.args[0], b1 = next.lam.params[0];
+    if (mentions(code, v1, b0)) return { ok: false, reason: `it uses ${nameOf(names, b0)}, which the step before it makes` };
+    nodes[outer.call.id] = { ...outer.call, args: [v1] };
+    nodes[outer.lam.id] = { ...outer.lam, params: [b1] };
+    nodes[next.call.id] = { ...next.call, args: [v0] };
+    nodes[next.lam.id] = { ...next.lam, params: [b0] };
+  } else {
+    // A let and the last step: the last step's value is the action's, so
+    // the let's own value becomes it; nothing may use that value by name.
+    if (refsTo(code, b0).length) return { ok: false, reason: `${nameOf(names, b0)} is used after it; the last step's value is the action's` };
+    nodes[outer.call.id] = { ...outer.call, args: [outer.lam.body] };
+    nodes[outer.lam.id] = { ...outer.lam, body: v0 };
+  }
+  return { ok: true, code: { nodes, defs: code.defs }, names, select: step, note: `Moved the step ${by < 0 ? "earlier" : "later"}.` };
 }

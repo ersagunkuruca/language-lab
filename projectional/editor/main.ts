@@ -1024,6 +1024,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
       splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
+    // A step of an action (print this, then that): its place in the order.
+    const earlier = Top.moveStep(doc.code, doc.names.short, id, -1), later = Top.moveStep(doc.code, doc.names.short, id, 1);
+    const isStep = (r: Top.Top) => r.ok || !/isn't a step/.test(r.reason);
+    const body = defBody(ui.def);
+    if (isStep(earlier) && body?.kind === "lambda" && !body.params.length) out.append(h("div", { class: "sub-head" }, "Order of steps · code.json"), h("div", { class: "acts" },
+      edit("Do it earlier", "Swap it with the step before", earlier, () => runTop(info, earlier)),
+      edit("Do it later", "Swap it with the step after", later, () => runTop(info, later))));
     if (ui.mode === "split") {
       const list = h("div", { class: "opts" });
       for (const b of splittable) {

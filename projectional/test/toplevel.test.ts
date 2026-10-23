@@ -7,6 +7,7 @@ import { fillings, infer, type Filling } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
+import { Lang } from "../src/lang/dsl.ts";
 import { S } from "../src/lang/std.ts";
 import { INT, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
@@ -184,6 +185,29 @@ test("a function written inside a body gets inputs added, moved and removed, as 
   const f = s.fill(w, (x) => x.kind === "lambda") as NodeOf<"lambda">;
   assert.match(s.refused(Top.addParameter(s.code, s.names, f.id, "extra")), /./);
   assert.match(s.refused(Top.removeParameter(s.code, s.names, f.id, f.params[0])), /./);
+});
+
+test("a step of an action moves earlier or later, unless it would leave a value it uses behind", () => {
+  const k = new Lang();
+  const main = k.def("main");
+  let a = "", b = "", c = "", greet = "";
+  k.define(main, k.thunk(() => k.seq(a = k.call(S.print, k.lit("a")), b = k.call(S.print, k.lit("b")), k.let("x", k.lit("hi"), (x) => k.seq(c = k.call(S.print, k.lit("c")), greet = k.call(S.print, x))))));
+  let code = base(k.code), names = baseNames(k.names);
+  const printed = () => { const out: string[] = []; runMain(code, infer(code, names), main, { print: (t: string) => out.push(t), names }); return out.join(" "); };
+  const move = (step: Id, by: -1 | 1) => { const r = Top.moveStep(code, names, step, by); if (!r.ok) return r.reason; code = r.code; names = r.names; return null; };
+  assert.equal(printed(), "a b c hi");
+  assert.equal(move(b, -1), null);
+  assert.equal(printed(), "b a c hi");
+  assert.match(move(b, -1)!, /already the first/);
+  assert.equal(move(greet, -1), null);
+  assert.equal(printed(), "b a hi c");
+  assert.match(move(greet, -1)!, /uses x/);
+  // Past x = "hi", a step that prints nothing, then past the greeting.
+  assert.equal(move(a, 1), null);
+  assert.equal(printed(), "b a hi c");
+  assert.equal(move(a, 1), null);
+  assert.equal(printed(), "b hi a c");
+  assert.match(move(c, 1)!, /already the last/);
 });
 
 test("a program saved to a file opens again as the same program, and a broken file says why", async () => {
