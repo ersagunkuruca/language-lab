@@ -190,6 +190,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   let ambient: Fuel | null = null;
 
   const cells = rt.cells ?? new Cells(equal);
+  // The one result of a pure function (the parts builtins take only those).
+  const only = (f: Fn, ...xs: Value[]): Value => { for (const v of f(...xs)) return v; throw new Error("a pure function gave no value"); };
   const builtins: Record<Id, Fn> = {};
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = (...a) => one(f(...(a as number[])));
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = (...a) => one(f(...a));
@@ -205,6 +207,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.exists]: (f) => one(bool(satisfiable(code, f))),
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
+    // A record of Numbers, part by part. Number is a record of one part.
+    [S.mapParts]: (f, r) => one(typeof r === "number" ? only(f as Fn, r) : { ...(r as Data), fields: (r as Data).fields.map((x) => only(f as Fn, x)) }),
+    [S.zipParts]: (f, a, b) => one(typeof a === "number" ? only(f as Fn, a, b) : { ...(a as Data), fields: (a as Data).fields.map((x, i) => only(f as Fn, x, (b as Data).fields[i])) }),
+    [S.total]: (r) => one(typeof r === "number" ? r : ((r as Data).fields as number[]).reduce((x, y) => x + y)),
     [S.print]: (s) => (rt.print(s as string), one(unit)),
     [IO.printError]: (s) => (world("error")(s as string), one(unit)),
     [IO.readInput]: () => one(world("input")()),

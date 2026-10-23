@@ -7,6 +7,7 @@ import { B } from "../../projectional/src/prelude.ts";
 import { CONS, NIL, NONE, PAIR_V, S, SECOND, SOME } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
+import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
 
 // The area under x·x·x − x − 1 from `from`, in `steps` strips of width
 // `width`: a numeric loop written as tail recursion, the way the language
@@ -117,8 +118,8 @@ export function vectors() {
   ])));
   const orZero = k.def("or zero");
   k.define(orZero, k.fn(["o"], (o) => k.match(o, [{ variant: SOME, names: ["x"], body: ([x]) => x }, { variant: NONE, names: [], body: () => n(0) }])));
-  // An input never looked at can be anything; the profile takes it as a
-  // Number, so passing it a Vec is refused.
+  // An input never looked at can be anything; the profile takes it at
+  // whatever each call passes (a Number, a Vec).
   const twice = k.def("twice ignoring");
   k.define(twice, k.fn(["x", "ignored"], (x) => k.call(B.mul, n(2), x)));
   const numbers = k.def("twice a number");
@@ -128,4 +129,34 @@ export function vectors() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs: { along, length, unit, diagonal, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
+}
+
+// The vectors module (projectional/src/lang/vectors-source.ts) on a
+// program's own point and colour types, and on plain Numbers: each module
+// definition is written once, for every record of Numbers.
+export function parts() {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const Vec = k.type("Vec", [], [["vec", [["x", num], ["y", num], ["z", num]]]]);
+  const Colour = k.type("Colour", [], [["colour", [["red", num], ["green", num], ["blue", num]]]]);
+  const lib = (name: string) => VECTORS.exports.find((d) => VECTORS.names[d] === name)!;
+  const vec = (x: Id, y: Id, z: Id) => k.call(Vec.v.vec, x, y, z);
+  const rgb = (r: Id, g: Id, b: Id) => k.call(Colour.v.colour, r, g, b);
+  const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const defs = {
+    // Points and directions.
+    along: def("along", ["ox", "oy", "oz", "t"], (ox, oy, oz, t) => k.call(lib("plus"), vec(ox, oy, oz), k.call(lib("scale"), t, vec(k.lit(0.3), k.lit(-0.5), k.lit(1))))),
+    facing: def("facing", ["x", "y", "z"], (x, y, z) => k.call(lib("dot"), k.call(lib("unit"), vec(x, y, z)), vec(k.lit(0), k.lit(1), k.lit(0)))),
+    far: def("far", ["x", "y", "z"], (x, y, z) => k.call(lib("distance"), vec(x, y, z), vec(k.lit(1), k.lit(2), k.lit(3)))),
+    bounce: def("bounce", ["x", "y", "z"], (x, y, z) => k.call(lib("reflect"), vec(x, y, z), k.call(lib("unit"), vec(k.lit(0.2), k.lit(1), k.lit(0))))),
+    // Colours.
+    fade: def("fade", ["r", "g", "b", "t"], (r, g, b, t) => k.call(lib("mix"), rgb(r, g, b), rgb(k.lit(0.55), k.lit(0.68), k.lit(0.85)), t)),
+    light: def("light", ["r", "g", "b", "by"], (r, g, b, by) => k.call(lib("clamp"), k.call(lib("times"), k.call(lib("scale"), by, rgb(r, g, b)), rgb(k.lit(1), k.lit(0.9), k.lit(0.8))), k.lit(0), k.lit(1))),
+    // A Number is a record of one part.
+    halfway: def("halfway", ["a"], (a) => k.call(lib("mix"), a, k.lit(10), k.lit(0.5))),
+    size: def("size", ["x"], (x) => k.call(lib("magnitude"), k.call(B.neg, x))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs, Vec, Colour };
 }

@@ -189,6 +189,14 @@ export const S = {
     const e = s.freshRow();
     return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
+  // Parts: a record of Numbers (Number itself, or one case whose fields are
+  // all Numbers: a point, a colour) taken part by part, so arithmetic on
+  // points and colours is written once, for all of them (the prelude's
+  // vector operations). The function must be pure: it runs once per part.
+  // On a GPU these are vector operations (compiler/src/wgsl.ts).
+  mapParts: builtin("mapParts", "map parts", (s) => { const r = s.fresh(false, true); return fn([fn([num], num, { effs: [], tail: null }), r], r, s.freshRow()); }),
+  zipParts: builtin("zipParts", "zip parts", (s) => { const r = s.fresh(false, true); return fn([fn([num, num], num, { effs: [], tail: null }), r, r], r, s.freshRow()); }),
+  total: builtin("total", "total", (s) => fn([s.fresh(false, true)], num, s.freshRow())),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.

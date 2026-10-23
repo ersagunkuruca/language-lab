@@ -57,7 +57,7 @@ import type { Names } from "../presentation.ts";
 import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
-import { impl } from "../prelude.ts";
+import { B, impl } from "../prelude.ts";
 import { close, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { CELL_OPS, CONS, FALSE, IO, NIL, NONE, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TRUE } from "./std.ts";
@@ -622,6 +622,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       case S.exists: return exists(a, out);
       case S.fail: return failG;
       case S.first: case S.all: case S.count: case S.optional: return aggregate(id, args, out);
+      case S.mapParts: case S.zipParts: case S.total: return parts(id, args, out);
       case S.seeded: throw new NotInvertible("seeded answers Random from a generator; run backwards it would have to search the seeds");
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
       // Backwards, derivative would be integration: it waits for its function.
@@ -738,6 +739,48 @@ export function interpreter(code: Code, opts: Options = {}) {
   // wait until everything their action uses is known, then run it forward.
   // An answer of the action that still has unknowns in it isn't pinned
   // down, so it doesn't count (as in the evaluator's solve).
+  // The parts builtins are their function, part by part: once any side's
+  // shape is known (Number, or which record), every side gets that shape
+  // and each part is one call, which runs backwards like any other.
+  // `total` is the parts added up.
+  function parts(id: Id, args: Term[], out: Term): Goal {
+    const sides = id === S.total ? [args[0]] : [...args.slice(1), ...(id === S.mapParts || id === S.zipParts ? [out] : [])];
+    const shapeOf = (s: State) => sides.map((t) => walk(t, s)).find((t) => typeof t === "number" || isData(t));
+    return wait({
+      k: "later", text: id === S.total ? "total" : id === S.mapParts ? "map parts" : "zip parts", ready: (s) => shapeOf(s) !== undefined, then: (s0) => {
+        const shape = shapeOf(s0)!;
+        const add: Term = { k: "prim", id: B.add };
+        if (!isData(shape)) return (id === S.total ? eq(out, args[0]) : apply(walk(args[0], s0), args.slice(1), out))(s0);
+        const n = fieldCount(shape.tag);
+        let s = s0;
+        const each: Term[][] = [];
+        const goals: Goal[] = [];
+        for (const side of sides) {
+          const [fs, s2] = freshVars(s, n);
+          s = s2;
+          each.push(fs);
+          goals.push(eq(side, dataT(shape.tag, fs)));
+        }
+        if (id === S.total) {
+          // ((p0 + p1) + p2) + …, the order the evaluator adds in.
+          let acc: Term = each[0][0];
+          for (let i = 1; i < n; i++) {
+            const [[t], s2] = i === n - 1 ? [[out as LVar], s] : freshVars(s, 1);
+            s = s2;
+            goals.push(apply(add, [acc, each[0][i]], t));
+            acc = t;
+          }
+          if (n === 1) goals.push(eq(out, acc));
+        } else {
+          const f = walk(args[0], s);
+          const ins = each.slice(0, -1), outs = each[each.length - 1];
+          for (let i = 0; i < n; i++) goals.push(apply(f, ins.map((fs) => fs[i]), outs[i]));
+        }
+        return conj(...goals)(s);
+      },
+    });
+  }
+
   function aggregate(id: Id, args: Term[], out: Term): Goal {
     return wait({
       k: "later", text: id === S.first ? "first" : id === S.all ? "all" : id === S.optional ? "optional" : "count", ready: (s) => known(args[0], s), then: (s) => {
