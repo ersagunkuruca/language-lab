@@ -139,6 +139,11 @@ recursion:
   calls saves 6 to 10 ms of the 88. *Fix:* look at the whole program. If no
   `with fuel` can be on the stack when a function runs, don't emit the
   check. Starting from `main`, that's a reachability question.
+  **Done** (Backlog C13): a definition spends only if a `with fuel`'s
+  arguments reach it, or it is used as a value; a page's step budget still
+  counts every call, so only `lab compile`'s programs drop the rest.
+  Compiled calc has none left. On a 40,000-line session the gain is within
+  noise (about 1.4 s either way).
 
 **G4. A pure test passed to `keep` becomes a generator (perf, the largest
 part of the gap: 15 to 25 ms of 88).** The prelude's `keep` has the type
@@ -376,7 +381,7 @@ functions would be returning several values.
 **G1 again (fuel).** `if ($spend())` before each recursive call: unmeasurable
 here (240 → 242 ms), because `$spend` is cheap when no fuel is active. The
 whole-program "no `with fuel` reachable" check from round 1 would still
-remove it. Low priority.
+remove it. Low priority. **Done** (C13, above).
 
 **G12. `one of([true, false])` is a list and a loop.** It builds the list
 each time (hoisting it: 240 → 234 ms) and tests the Bool it picked. The
