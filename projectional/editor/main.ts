@@ -1802,6 +1802,11 @@ function pageSection(info: T.Info | null): HTMLElement | null {
   const main = info && !info.errors.length && !info.holes.size ? pageMain(doc.code.defs, info, pres().names) : null;
   if (!main || !info) { page.now?.stop(); page.now = null; page.root = null; page.for = null; return null; }
   if (page.for !== doc.code) startPage(info, main);
+  // Chrome drops every event listener in a frame's document when the frame
+  // leaves the page, and this redraw takes the frame out and puts it back.
+  // So the page goes back to the document that outlives renders first: its
+  // buttons keep their handlers.
+  if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
   // Put back in the frame once the frame is in the page again.
   queueMicrotask(() => {
     const d = page.frame.contentDocument;

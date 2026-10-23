@@ -149,6 +149,12 @@ async function pagePreview() {
   if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
   await p.locator("[data-def]").nth(1).click();
   if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
+  // Its buttons still work after the redraw, and back on main.
+  await f.locator("#roll").click();
+  if (!(await status()).startsWith("101 rolls")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
+  await p.locator("[data-def]", { hasText: /^main$/ }).click();
+  await f.locator("#roll").click();
+  if (!(await status()).startsWith("102 rolls")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
   const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
   // Saved where its name says it's a page, or the browser shows it as text.
   const saved = join(mkdtempSync(join(tmpdir(), "smoke-")), file.suggestedFilename());
