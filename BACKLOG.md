@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
 | E15 | Keyboard editing: Tab reaches no node, port or hole | QA2 UX7 | P2 | L | |
 | E16 | "Copy into my program" and "pin" gestures for modules | ROADMAP step 5 open | P2 | M | |
 | E17 | Tidy that cuts crossings (layered, Sugiyama-style; credit as prior art) | node-editor backlog | P3 | M | |
@@ -90,6 +89,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E14 | Palette: most-used first, √ finds sqrt, typed arithmetic fills as calls | #247 |
 | E32 | Picture CPU fallback and its GPU check run in Float32 | #245 |
 | E31 | Same-label palette rows name their holes' types: show(□: Int) | #244 |
 | E30 | Add a value before this… puts a step anywhere, inside one arm of a match | #242 |

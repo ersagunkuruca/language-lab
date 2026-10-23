@@ -11,6 +11,7 @@ import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished, resolveRefs } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
@@ -283,19 +284,49 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
 
 // Fill a hole with a value written out, the way values print: 3, "text",
 // [3, 1, 2], circle(2). It becomes the code that builds it (literals and
-// constructor calls), type-checked like any other filling.
+// constructor calls), type-checked like any other filling. Arithmetic on
+// values reads too: 1 + 2 is add(1, 2).
 export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: string, defId?: Id): TEdit {
-  const r = parseValue(text, code, { ...display, ...names });
+  const r = typedOut(text, code, { ...display, ...names });
   if ("error" in r) return { ok: false, reason: r.error };
-  const plain = written(code, names, info, hole, text, r.value, false, defId);
+  const plain = written(code, names, info, hole, text, r, false, defId);
   // A whole number where an Int goes is an Int: 0 in slice's position.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  if (plain.ok || !whole(r.value)) return plain;
-  const int = written(code, names, info, hole, text, r.value, true, defId);
+  if (plain.ok || !("value" in r) || !whole(r.value)) return plain;
+  const int = written(code, names, info, hole, text, r, true, defId);
   return int.ok ? int : plain;
 }
 
-function written(code: Code, names: Names, info: Info, hole: Id, text: string, value: Value, int: boolean, defId?: Id): TEdit {
+// What's typed, as values at the leaves of + − × ÷. Split at the last
+// operator of the loosest kind outside brackets and text, so 1 − 2 − 3 is
+// (1 − 2) − 3; a − with nothing before it is a negative number's.
+type Typed = { value: Value } | { op: Id; args: Typed[] };
+const OPS: [string, Id][][] = [[["+", B.add], ["-", B.sub], ["−", B.sub]], [["*", B.mul], ["×", B.mul], ["·", B.mul], ["/", B.div], ["÷", B.div]]];
+function typedOut(text: string, code: Code, names: Names): Typed | { error: string } {
+  const r = parseValue(text, code, names);
+  if (!("error" in r)) return { value: r.value };
+  const t = text.trim();
+  for (const level of OPS) {
+    let depth = 0, quoted = false;
+    for (let i = t.length - 1; i > 0; i--) {
+      const c = t[i];
+      if (c === '"' && t[i - 1] !== "\\") quoted = !quoted;
+      if (quoted) continue;
+      if (")]".includes(c)) depth++;
+      else if ("([".includes(c)) depth--;
+      const op = depth === 0 ? level.find(([sym]) => sym === c) : undefined;
+      if (!op) continue;
+      const left = t.slice(0, i).trimEnd();
+      if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
+      const a = typedOut(left, code, names), b = typedOut(t.slice(i + 1), code, names);
+      if (!("error" in a) && !("error" in b)) return { op: op[1], args: [a, b] };
+    }
+  }
+  if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names); if (!("error" in inner)) return inner; }
+  return r;
+}
+
+function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, int: boolean, defId?: Id): TEdit {
   const nodes = { ...code.nodes };
   // Typed alone, an Int is read from the text, so one past 2⁵³ stays exact.
   const exact = /^\s*-?\d+\s*$/.test(text) ? readInt(text.trim())[0] : undefined;
@@ -312,7 +343,14 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, v
     } else throw new Error("only plain values can be written out");
     return id;
   };
-  build(value, hole);
+  const tree = (t: Typed, at?: Id): Id => {
+    if ("value" in t) return build(t.value, at);
+    const id = at ?? freshId(), fn = freshId();
+    nodes[fn] = { id: fn, kind: "ref", target: t.op };
+    nodes[id] = { id, kind: "call", fn, args: t.args.map((a) => tree(a)) };
+    return id;
+  };
+  tree(typed, hole);
   const next = { nodes, defs: code.defs };
   const after = defId ? nextHole(next, defId, hole) : undefined;
   return guardTyped(info, next, names, after ?? hole, `Filled with ${text.trim()}.`);

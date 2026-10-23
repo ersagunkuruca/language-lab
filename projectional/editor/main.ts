@@ -1145,7 +1145,7 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
 // The symbols people type for the builtins with word names.
 const SYMBOLS: Record<string, string[]> = {
   add: ["+"], subtract: ["-", "−"], negate: ["-", "−"], multiply: ["*", "·", "×"], divide: ["/", "÷"], power: ["^", "**"],
-  "square root": ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
+  "square root": ["√"], sqrt: ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
 };
 
 // What fits a hole, once per check of the code: the right-click menu and
@@ -1158,6 +1158,18 @@ function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
   return m.get(hole)!;
 }
 
+// How often each thing is referred to in the program, once per version.
+const uses = new WeakMap<Code, Map<Id, number>>();
+function usesIn(code: Code): Map<Id, number> {
+  let m = uses.get(code);
+  if (!m) {
+    m = new Map();
+    for (const n of Object.values(code.nodes)) if (n.kind === "ref" && !isPublished(n.id)) m.set(n.target, (m.get(n.target) ?? 0) + 1);
+    uses.set(code, m);
+  }
+  return m;
+}
+
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1168,7 +1180,11 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Where a function goes, writing one here is often what's meant.
   const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
   const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
-  const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]));
+  // Within a group, what the program calls most comes first: print in a
+  // new main, not for each because it's alphabetically early.
+  const used = usesIn(doc.code);
+  const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
+  const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
   // Rows that would read the same (show(□) for a Number, an Int, anything)
   // say what each of their holes takes: show(□: Int).
   const seen = new Map<string, number>();
