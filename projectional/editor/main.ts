@@ -1072,6 +1072,12 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   }
 }
 
+// The symbols people type for the builtins with word names.
+const SYMBOLS: Record<string, string[]> = {
+  add: ["+"], subtract: ["-", "−"], negate: ["-", "−"], multiply: ["*", "·", "×"], divide: ["/", "÷"], power: ["^", "**"],
+  "square root": ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
+};
+
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1086,11 +1092,13 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Searching: names that are the text, then start with it, then have a
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
+  // An operator's symbol finds it too: + is add.
+  const symbol = (l: [string, string, string]) => SYMBOLS[l[0].replace(/\(.*$/, "")]?.includes(q) ?? false;
   const rank = (l: [string, string, string]) => {
     const name = l[0].toLowerCase();
-    return name === q || name.startsWith(`${q}(`) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) ? 2 : name.includes(q) ? 3 : 4;
+    return name === q || name.startsWith(`${q}(`) || symbol(l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) ? 2 : name.includes(q) ? 3 : 4;
   };
-  const shown = !q ? all : all.filter(({ l }) => l.some((s) => s.toLowerCase().includes(q))).map((x) => ({ ...x, r: rank(x.l) })).sort((a, b) => a.r - b.r);
+  const shown = !q ? all : all.filter(({ l }) => symbol(l) || l.some((s) => s.toLowerCase().includes(q))).map((x) => ({ ...x, r: rank(x.l) })).sort((a, b) => a.r - b.r);
   // Unsearched, the first 40 (the rest are a search away); searched, all.
   const cap = q ? shown.length : 40;
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
