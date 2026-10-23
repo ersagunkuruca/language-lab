@@ -977,34 +977,37 @@ class considered, and where each one ends up:
   wasn't built by the editor.
 - **Runtime.** Can only be found by running the program.
 
-| class | status | how |
-|---|---|---|
-| syntax | impossible by construction | there is no text |
-| unknown name, typo | impossible by construction | references are ids picked from a list |
-| name clash, shadowing, capture | impossible by construction | binders are ids; equal names only get a subscript on screen |
-| field/method name collisions between libraries | impossible by construction | fields are ids |
-| wrong number of arguments | prevented by the editor | a call is created with one hole per parameter of the callee's type |
-| type mismatch | prevented by the editor | typed holes; the palette offers only fillings that type-check, and fillings that would change a definition's type for its callers are confirmed against the whole program |
-| missing case / non-exhaustive match | prevented by the editor | arms come from the type; adding a variant adds hole arms everywhere |
-| unreachable case | checked | `otherwise` when every case is covered is reported |
-| null / undefined | impossible by construction | there is no null; absence is `Choice` when computed and `Optional` (a case you match on) when stored, and an unhandled `Choice` can't reach `main` |
-| errors without a reason | checked | `Abort` carries a reason, and effects you declare carry typed ones; a `match` with their cases catches them |
-| side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") |
-| unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects |
-| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards spends a step budget, solver answers included |
-| arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add |
-| comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only |
-| a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same |
-| running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker |
-| variable out of scope | checked | can only come from moving a subtree; reported as a scope error |
-| incomplete program | allowed | holes have types and the program runs until it reaches one |
-| integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback |
-| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Number's `/` is IEEE (Infinity/NaN) |
-| other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix |
-| unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one |
-| resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) |
-| merge conflicts | mostly avoided | conflicts are per node and per side-table entry, not per line |
-| logic errors | not preventable | invertible relations provide round-trip laws (`parse(print(v)) = v`) as properties to test |
+Each row names the test that shows it. The table is generated from
+`test/errors.test.ts` (`npm run error-table`), and that test fails when
+a row's test is missing or the table here differs from the rows.
+
+| class | status | how | shown by |
+|---|---|---|---|
+| syntax | impossible by construction | there is no text | no test: the program is a tree of nodes |
+| unknown name, typo | impossible by construction | references are ids picked from a list | no test: a reference holds an id |
+| name clash, shadowing, capture | impossible by construction | binders are ids; equal names only get a subscript on screen | "two things in scope together can't share a name; cases each have their own scope" (`test/toplevel.test.ts`) |
+| field/method name collisions between libraries | impossible by construction | fields are ids | no test: a field is an id |
+| wrong number of arguments | prevented by the editor | a call is created with one hole per parameter of the callee's type | "a call made from the palette has one hole per input" (`test/errors.test.ts`) |
+| type mismatch | prevented by the editor | typed holes; the palette offers only fillings that type-check, and fillings that would change a definition's type for its callers are confirmed against the whole program | "every filling the palette offers keeps the program free of errors" (`test/lang.test.ts`) |
+| missing case / non-exhaustive match | prevented by the editor | arms come from the type; adding a variant adds hole arms everywhere | "a case analysis is created with every case, and a new case reaches every analysis" (`test/lang.test.ts`) |
+| unreachable case | checked | `otherwise` when every case is covered is reported | "otherwise when every case is covered is reported" (`test/errors.test.ts`) |
+| null / undefined | impossible by construction | there is no null; absence is `Choice` when computed and `Optional` (a case you match on) when stored, and an unhandled `Choice` can't reach `main` | "effects: a definition's value must be pure, and run refuses unhandled Choice" (`test/lang.test.ts`) |
+| errors without a reason | checked | `Abort` carries a reason, and effects you declare carry typed ones; a `match` with their cases catches them | "abort ends the computation a match handles, with its reason" (`test/effects.test.ts`) |
+| side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") | "the world isn't touched while a Choice is open" (`test/effects.test.ts`) |
+| unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects, and a program that doesn't type-check | "effects: a definition's value must be pure, and run refuses unhandled Choice" (`test/lang.test.ts`) |
+| effects hidden where a function waits | checked | a function kept in a field, a list, a cell, a formula or a page keeps its effects: they reach the type, are refused, or are the page runtime's on purpose (`test/containers.test.ts` checks 40 cases) | "a function in a field can't hide its effects" (`test/effects.test.ts`) |
+| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards spends a step budget, solver answers included | "size-change: a call that keeps every argument the same size is Diverge" (`test/guarantees.test.ts`) |
+| arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add | "adding a colour to a point, or taking the parts of text, is a type error" (`test/parts.test.ts`) |
+| comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only | "§1.3 equal on functions should be refused, not compare by identity" (`test/known-holes.test.ts`) |
+| a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same | "derivative never throws: where a slope can't be read there is none" (`test/guarantees.test.ts`) |
+| running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker | "backwards, derivative and with fuel run forward once their function is known" (`test/guarantees.test.ts`) |
+| variable out of scope | checked | can only come from moving a subtree; reported as a scope error | "scope: a variable moved out of the case that binds it is caught" (`test/lang.test.ts`) |
+| incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
+| integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |
+| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Number's `/` is IEEE (Infinity/NaN) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
+| other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix | no test: not addressed beyond IEEE |
+| unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one | "units: declared on parameters and numbers, inferred through predicates and functions" (`test/oneworld.test.ts`) |
+| resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) | no test: not addressed |
 
 There's one subtle case. Filling a hole inside a definition can make that
 definition's inferred type *more specific*, which breaks callers elsewhere.
