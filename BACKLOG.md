@@ -80,7 +80,7 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth. The drift half is guarded already: `compiler/test/builtins.test.ts` asks every job of every builtin. What's left is moving code across `compiler/` (lane C) and the editor, so it waits for a slot between lane C's items | R2 §4 | P2 | L | needs lane C between items |
-| L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: L11b types from modes, L11c `relate.ts` follows the schedule; lane C and E parts after | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a done |
+| L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: L11c `relate.ts` follows the schedule (and a `det` mode drops `Choice`); lane C and E parts after | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a, L11b done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L13 | Keyed lists in pages | ROADMAP 7, WEB.md | P2 | M | |
 | L14 | `solve` over a function value: one generic `bind` | ROADMAP 7 | P2 | M | |
@@ -133,7 +133,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L11a | `modes.ts`: a schedule, how many answers and whether it ends, for any mode; reports only, checked against relate.ts and the checker (`test/modes.test.ts`). `map` and `show numbers` backwards end, so their `Diverge` is a false alarm | this PR |
+| L11b | Types from modes: a relational `solve` is `Diverge` only when its mode may not end (says why), and a direction nothing pins down is an error at the `solve`; `mayLoop` removed | this PR |
+| L11a | `modes.ts`: a schedule, how many answers and whether it ends, for any mode; reports only, checked against relate.ts and the checker (`test/modes.test.ts`). `map` and `show numbers` backwards end, so their `Diverge` is a false alarm | #195 |
 | L11 | Design note for mode analysis: projectional/MODES.md | #193 |
 | L10 | Shader soak: `npm run smoke-shaders` lets the pictures move for 10 s each way (GPU and CPU) and fails if the page stops answering, the browser goes 500 ms without a frame, or a picture drops under 2 frames a second | #192 |
 | L9 | `examples/compose` archived (`examples/archive/`, says why); `quadratic` kept, it type-checks and the editor's numbers program uses it | #190 |

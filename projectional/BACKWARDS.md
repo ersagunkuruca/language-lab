@@ -29,10 +29,14 @@ node --test test/backwards.test.ts
 - **Does a function have to be written specially?** No. Every example
   below is an ordinary function, written forward.
 - **What does it cost in the types?** Running something backwards always
-  has `Choice` (any number of answers, including none). If the function
-  folds or recurses, it also has `Diverge`, because unfolding may never
-  end. `with fuel` turns that into `Choice`, the same as for Newton's
-  method.
+  has `Choice` (any number of answers, including none). It also has
+  `Diverge` when the search may not end: when it unfolds or recurses on
+  something that doesn't get smaller each time (MODES.md). Reading text
+  back into numbers ends, since each step reads a shorter text; a list
+  from how many items it has may not, since whole numbers don't shrink
+  towards a base case. `with fuel` turns `Diverge` into `Choice`, the same
+  as for Newton's method. A direction that can never pin down an answer
+  (a pair from its first item alone) is an error at the `solve`.
 
 ## Every node, backwards
 

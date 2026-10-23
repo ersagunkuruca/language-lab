@@ -109,11 +109,11 @@ test("§1.2 a well-typed backwards solve must not throw NotInvertible at run tim
       k.solve(g, { out: k.lit(6) }, { [x]: "x" }, (b) => b[x])))))));
     return main;
   });
-  // Either the checker refuses it, or it runs. It runs: `first` waits until
-  // what its action uses is known, and x never is, so there's no answer
-  // that's pinned down (as for floor and mod run backwards).
-  assert.deepEqual(p.info.errors, []);
-  assert.deepEqual(p.run(), ["0"]);
+  // Either the checker refuses it, or it runs. The checker refuses it now
+  // (modes.ts): `first` waits until what its action uses is known, and
+  // nothing gives x, so the search could only end with x unknown. It used
+  // to run and print 0, an answer count that said nothing about why.
+  assert.deepEqual(p.info.errors.map((e) => e.message), ["g can't be run this way: nothing gives x"]);
 });
 
 test("§1.3 equal on functions should be refused, not compare by identity", () => {

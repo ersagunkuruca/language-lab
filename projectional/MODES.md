@@ -3,10 +3,14 @@
 Design note for BACKLOG.md L11 (REVIEW-2026-10-22b.md §3, REVIEW.md §1.2,
 COMPILER.md stage 1b). Written 2026-10-23. The last section is the plan.
 
-**Status.** Step 1 is built: `src/lang/modes.ts` gives the verdict for any
-mode, and `test/modes.test.ts` checks it against what relate.ts does and
-against the checker. Nothing uses it yet. As planned, `map` and `show
-numbers` backwards end. Forward, the verdict agrees with the checker's
+**Status.** Steps 1 and 2 are built. `src/lang/modes.ts` gives the verdict
+for any mode, and `test/modes.test.ts` checks it against what relate.ts
+does and against the checker. The checker types a relational `solve` from
+it: `Diverge` only when its mode may not end, and an error when it's
+stuck. As planned, `map` and `show numbers` backwards end, so they lost
+their `Diverge`. `Choice` stays on every relational solve for now: a `det`
+mode without it needs run.ts and the compiler to hand back the one answer
+directly, which belongs with step 3. Forward, the verdict agrees with the checker's
 `Diverge` on every definition in the examples, leaving out the few that
 call a function they were passed, since there it's that function's effect
 row. Known is two levels for now (known or not). The third (the case known,
