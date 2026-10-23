@@ -39,17 +39,17 @@ function main() {
 
 // queens
 function* queens(size) {
-  const fold$6 = function* (s$7) {
-    switch (s$7.tag) {
+  const fold$7 = function* (s$8) {
+    switch (s$8.tag) {
       case "std.list.nil" /* nil */: {
         yield $nil;
         break;
       }
       case "std.list.cons" /* cons */: {
-        for (const board2 of fold$6(s$7.fields[1])) {
-          for (let l$8 = $range(size); l$8.tag === "std.list.cons"; l$8 = l$8.fields[1]) {
-            const x$9 = l$8.fields[0];
-            const column = x$9;
+        for (const board2 of fold$7(s$8.fields[1])) {
+          for (let l$9 = $range(size); l$9.tag === "std.list.cons"; l$9 = l$9.fields[1]) {
+            const x$10 = l$9.fields[0];
+            const column = x$10;
             if (safe(column, board2)) {
               yield $cons(column, board2);
             } else {
@@ -61,24 +61,24 @@ function* queens(size) {
       }
     }
   };
-  for (const r$10 of fold$6($range(size))) {
-    yield r$10;
+  for (const r$11 of fold$7($range(size))) {
+    yield r$11;
   }
 }
 
 // show numbers
 function show_numbers(numbers) {
-  const step$11 = (s$12, rs$13) => {
-    switch (s$12.tag) {
+  const step$12 = (s$13, rs$14) => {
+    switch (s$13.tag) {
       case "std.list.nil" /* nil */: {
         return "";
       }
       case "std.list.cons" /* cons */: {
-        const n2 = s$12.fields[0];
-        const rest = s$12.fields[1];
-        const rest_shown = rs$13;
-        const s$14 = rest;
-        switch (s$14.tag) {
+        const n2 = s$13.fields[0];
+        const rest = s$13.fields[1];
+        const rest_shown = rs$14;
+        const s$15 = rest;
+        switch (s$15.tag) {
           case "std.list.nil" /* nil */: {
             return $show(n2);
           }
@@ -89,29 +89,29 @@ function show_numbers(numbers) {
       }
     }
   };
-  const spine$17 = [];
-  let v$15 = numbers;
-  for (let k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1; k$19 >= 0; k$19 = v$15.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-    spine$17.push(v$15);
-    v$15 = v$15.fields[k$19];
+  const spine$18 = [];
+  let v$16 = numbers;
+  for (let k$20 = v$16.tag === "std.list.cons" /* cons */ ? 1 : -1; k$20 >= 0; k$20 = v$16.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+    spine$18.push(v$16);
+    v$16 = v$16.fields[k$20];
   }
-  let r$16 = step$11(v$15);
-  for (let i$18 = spine$17.length - 1; i$18 >= 0; i$18--) r$16 = step$11(spine$17[i$18], r$16);
-  return r$16;
+  let r$17 = step$12(v$16);
+  for (let i$19 = spine$18.length - 1; i$19 >= 0; i$19--) r$17 = step$12(spine$18[i$19], r$17);
+  return r$17;
 }
 
 // for each
 function for_each(list$in, action$in) {
   for (;;) {
     const list = list$in, action = action$in;
-    const s$20 = list;
-    switch (s$20.tag) {
+    const s$21 = list;
+    switch (s$21.tag) {
       case "std.list.nil" /* nil */: {
         return $unit;
       }
       case "std.list.cons" /* cons */: {
-        const item = s$20.fields[0];
-        const rest2 = s$20.fields[1];
+        const item = s$21.fields[0];
+        const rest2 = s$21.fields[1];
         action(item);
         list$in = rest2;
         action$in = action;
@@ -124,37 +124,37 @@ function for_each(list$in, action$in) {
 // keep
 function keep$plain(list2, test) {
   return (() => {
-      const got$21 = [];
+      const got$22 = [];
       (() => {
-          for (let l$22 = list2; l$22.tag === "std.list.cons"; l$22 = l$22.fields[1]) {
-            const x$23 = l$22.fields[0];
-            const item2 = x$23;
+          for (let l$23 = list2; l$23.tag === "std.list.cons"; l$23 = l$23.fields[1]) {
+            const x$24 = l$23.fields[0];
+            const item2 = x$24;
             if ((test(item2).tag === "std.bool.true")) {
-              got$21.push(item2);
+              got$22.push(item2);
             } else {
               /* fail */
             }
           }
         })();
-      return $toList(got$21);
+      return $toList(got$22);
     })();
 }
 
-// queens (the rest of the search as `k$24`)
-function queens$k(size, k$24) {
-  const fold$25 = (s$26, k$27) => {
-    switch (s$26.tag) {
+// queens (the rest of the search as `k$25`)
+function queens$k(size, k$25) {
+  const fold$26 = (s$27, k$28) => {
+    switch (s$27.tag) {
       case "std.list.nil" /* nil */: {
-        if (k$27($nil)) return true;
+        if (k$28($nil)) return true;
         break;
       }
       case "std.list.cons" /* cons */: {
-        if (fold$25(s$26.fields[1], (board2) => {
-              for (let l$28 = $range(size); l$28.tag === "std.list.cons"; l$28 = l$28.fields[1]) {
-                const x$29 = l$28.fields[0];
-                const column = x$29;
+        if (fold$26(s$27.fields[1], (board2) => {
+              for (let l$29 = $range(size); l$29.tag === "std.list.cons"; l$29 = l$29.fields[1]) {
+                const x$30 = l$29.fields[0];
+                const column = x$30;
                 if (safe(column, board2)) {
-                  if (k$27($cons(column, board2))) return true;
+                  if (k$28($cons(column, board2))) return true;
                 } else {
                   /* fail */
                 }
@@ -165,8 +165,8 @@ function queens$k(size, k$24) {
     }
     return false;
   };
-  if (fold$25($range(size), (r$30) => {
-        if (k$24(r$30)) return true;
+  if (fold$26($range(size), (r$31) => {
+        if (k$25(r$31)) return true;
       })) return true;
   return false;
 }
@@ -174,27 +174,27 @@ function queens$k(size, k$24) {
 // safe
 function safe(column2, placed) {
   return ((() => {
-        const step$31 = (s$32, rs$33) => {
-          switch (s$32.tag) {
+        const step$32 = (s$33, rs$34) => {
+          switch (s$33.tag) {
             case "std.list.nil" /* nil */: {
               return ((distance) => $T);
             }
             case "std.list.cons" /* cons */: {
-              const queen = s$32.fields[0];
-              const others_safe = rs$33;
+              const queen = s$33.fields[0];
+              const others_safe = rs$34;
               return ((distance2) => $bool(((!$sameNumber(queen, column2) && !$sameNumber(Math.abs((queen - column2)), distance2)) && (others_safe((distance2 + 1)).tag === "std.bool.true"))));
             }
           }
         };
-        const spine$36 = [];
-        let v$34 = placed;
-        for (let k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1; k$38 >= 0; k$38 = v$34.tag === "std.list.cons" /* cons */ ? 1 : -1) {
-          spine$36.push(v$34);
-          v$34 = v$34.fields[k$38];
+        const spine$37 = [];
+        let v$35 = placed;
+        for (let k$39 = v$35.tag === "std.list.cons" /* cons */ ? 1 : -1; k$39 >= 0; k$39 = v$35.tag === "std.list.cons" /* cons */ ? 1 : -1) {
+          spine$37.push(v$35);
+          v$35 = v$35.fields[k$39];
         }
-        let r$35 = step$31(v$34);
-        for (let i$37 = spine$36.length - 1; i$37 >= 0; i$37--) r$35 = step$31(spine$36[i$37], r$35);
-        return r$35;
+        let r$36 = step$32(v$35);
+        for (let i$38 = spine$37.length - 1; i$38 >= 0; i$38--) r$36 = step$32(spine$37[i$38], r$36);
+        return r$36;
       })()(1).tag === "std.bool.true");
 }
 

@@ -147,6 +147,7 @@ not only code: an influence is credited even when nothing was copied.
 | What | Label | Who and where |
 |---|---|---|
 | Stackless evaluator, self tail calls as loops | Textbook | Continuations and defunctionalization (Reynolds, "Definitional interpreters", 1972); tail calls as jumps are standard compiler practice. |
+| Steps over a list (`keep`, `map` and definitions of their shape, between `split`/`characters` and `length`/`joinAll`) compiled as one loop with no list between | Prior art | Deforestation (Wadler, 1990) and short-cut fusion (Gill, Launchbury and Peyton Jones, FPCA 1993); ours inlines known steps. `compiler/src/compile.ts`, COMPILER.md "Folds are loops". |
 | Compiling `Choice` with success continuations (built for JS: the `$k` copies) | Adapted | Mercury's high-level C backend (Henderson and Somogyi, "Compiling Mercury to high-level C code", CC 2002), credited in COMPILER.md and `compiler/src/compile.ts`. |
 | `Choice` functions as lazy streams of answers (the generators) | Prior art | Wadler, "How to replace failure by a list of successes" (FPCA 1985). COMPILER.md. |
 | Planned native code via C with reference counting and reuse | Influence | Koka's Perceus (Reinking, Xie, de Moura and Leijen, PLDI 2021). COMPILER.md. |

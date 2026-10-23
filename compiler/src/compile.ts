@@ -467,6 +467,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // any function the compiler makes that yields, or returns a value, or
     // breaks out to a label (a closure would cut those off).
     let cps = false;
+    // Function parameters of definitions fused into this one (G16), which
+    // are given functions that don't choose.
+    const fusePlain = new Set<Id>();
     const scoped = <T>(on: boolean, f: () => T): T => { const was = cps; cps = on && !reflective; try { return f(); } finally { cps = was; } };
 
     // The copy of a definition a call needs: by the effects of its
@@ -516,7 +519,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
         if (t.kind === "def") return defCall(n).streams;
-        if (sp.plain.has(f.target)) return false;
+        if (sp.plain.has(f.target) || fusePlain.has(f.target)) return false;
         if (t.kind === "variant" || t.kind === "field") return false;
         if (t.kind === "builtin") {
           if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel || manyOf(f.target)) return true;
@@ -674,6 +677,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function call(n: NodeOf<"call">): string {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") return block(n.id);
+      const one = f.kind === "ref" && (f.target === TEXT_OPS.joinAll || code.nodes[f.target].kind === "def") ? fused(n) : null;
+      if (one) return one;
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
         if (t.kind === "builtin") {
@@ -916,6 +921,151 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const step = shape(on.body);
       if (!step || !op || !pure(end.body) || end.binds.some((x) => referenced.has(x))) return null;
       return { on, end, at, step };
+    }
+
+
+    // ---- fusion (GAPS.md G16): a chain like `length(keep(split(t, " "),
+    // p))` or `joinAll(map(characters(t), f), "")` runs as one loop, with
+    // no list between the steps. The list comes from a builtin that makes a
+    // JS array (split, characters) or is walked as it is; each step is a
+    // definition that keeps or changes each item in order (prelude's keep
+    // and map, or any definition of the same shape), inlined; the end is a
+    // fold that runs from the front (G15, such as length), joinAll, or a list.
+    // Prior art: deforestation (Wadler, 1990) and short-cut fusion (Gill,
+    // Launchbury and Peyton Jones, 1993); this is the special case where the
+    // steps are known definitions, done by inlining.
+    type Emit = (item: string, next: K) => string;
+    const refTo = (id: Id, target: Id) => { const r = code.nodes[id]; return r.kind === "ref" && r.target === target; };
+    const uses = (id: Id, b: Id) => subtree(code, id).some((x) => refTo(x, b));
+    // No effects other than Choice: an item may be dropped, nothing else.
+    const onlyChoice = (id: Id) => subtree(code, id).every((x) => {
+      const c = code.nodes[x];
+      if (c.kind === "solve") return false;
+      if (c.kind !== "call") return true;
+      const t = ty(c.fn), f = code.nodes[c.fn];
+      if (f.kind === "ref" && info.divergent.has(f.target)) return false;
+      if (t.t !== "fn") return false;
+      return sub.resolveRow(t.eff).effs.every((e) => e === CHOICE);
+    });
+    const steps = new Map<Id, { li: number; emit: Emit } | null>();
+    function stepOf(def: Id): { li: number; emit: Emit } | null {
+      if (steps.has(def)) return steps.get(def)!;
+      let r: { li: number; emit: Emit } | null = null;
+      if (isFnDef(def) && !info.divergent.has(def)) {
+        const lam = node<"lambda">(node<"def">(def).body!);
+        const param = (id: Id) => { const x = code.nodes[id]; return x.kind === "ref" ? lam.params.indexOf(x.target) : -1; };
+        const b = code.nodes[lam.body];
+        // all(() => let x = one of(list) in E): E's answers for each item.
+        if (b.kind === "call" && refTo(b.fn, S.all) && thunk(b.args[0])) {
+          const c = code.nodes[thunk(b.args[0])!.body];
+          const v = c.kind === "call" && code.nodes[c.fn].kind === "lambda" && c.args.length === 1 ? code.nodes[c.args[0]] : null;
+          if (c.kind === "call" && v?.kind === "call" && refTo(v.fn, S.oneOf) && param(v.args[0]) >= 0) {
+            const li = param(v.args[0]), inner = node<"lambda">(c.fn);
+            if (!uses(inner.body, lam.params[li]) && onlyChoice(inner.body))
+              r = { li, emit: (item, next) => `const ${local(inner.params[0])} = ${item};\n${st(inner.body, next)}` };
+          }
+        }
+        // match list { nil → nil; cons(x, rest) → cons(E, self(rest, …)) }
+        if (b.kind === "match" && !handlerOf(b) && !b.otherwise && b.arms.length === 2 && param(b.scrutinee) >= 0) {
+          const li = param(b.scrutinee), arms = b.arms.map((a) => node<"arm">(a));
+          const nil = arms.find((a) => a.variant === NIL), cons = arms.find((a) => a.variant === CONS);
+          const body = cons && code.nodes[cons.body];
+          if (nil && cons && refTo(nil.body, NIL) && body?.kind === "call" && refTo(body.fn, CONS)) {
+            const [e, more] = body.args, again = code.nodes[more];
+            const same = again.kind === "call" && refTo(again.fn, def) && again.args.every((a, i) => refTo(a, i === li ? cons.binds[1] : lam.params[i]));
+            if (same && !uses(e, cons.binds[1]) && pure(e)) r = { li, emit: (item, next) => `const ${local(cons.binds[0])} = ${item};\n${next(ex(e))}` };
+          }
+        }
+      }
+      steps.set(def, r);
+      return r;
+    }
+    // Where the items end up: the call's list argument, what to set up
+    // before the loop, what each item does, and the value after it.
+    function sinkOf(n: NodeOf<"call">): { li: number; before: string; each: (item: string) => string; after: string } | null {
+      const f = code.nodes[n.fn];
+      if (f.kind !== "ref") return null;
+      if (f.target === TEXT_OPS.joinAll) {
+        const parts = temp("parts"), by = temp("by");
+        return { li: 0, before: `const ${by} = ${ex(n.args[1])};\nconst ${parts} = [];\n`, each: (x) => `${parts}.push(${x});`, after: `${parts}.join(${by})` };
+      }
+      if (code.nodes[f.target].kind !== "def" || !isFnDef(f.target) || info.divergent.has(f.target)) return null;
+      if (stepOf(f.target)) {
+        const out = temp("out");
+        return { li: stepOf(f.target)!.li, before: `const ${out} = [];\n`, each: (x) => `${out}.push(${x});`, after: `$toList(${out})` };
+      }
+      const lam = node<"lambda">(node<"def">(f.target).body!), b = code.nodes[lam.body];
+      if (b.kind !== "fold") return null;
+      const li = lam.params.findIndex((p) => refTo(b.scrutinee, p));
+      const arms = b.arms.map((a) => node<"arm">(a));
+      const recOf = (a: NodeOf<"arm">) => a.results.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
+      if (li < 0 || !arms.every((a) => recOf(a).length <= 1) || !arms.every((a) => a.variant === NIL || a.variant === CONS)) return null;
+      const fwd = forward(arms, recOf);
+      if (!fwd || fwd.on.variant !== CONS || fwd.at !== 1 || referenced.has(fwd.on.binds[1])) return null;
+      const acc = temp("acc");
+      return {
+        li, before: `let ${acc} = ${ex(fwd.end.body)};\n`, after: acc,
+        each: (x) => `${referenced.has(fwd.on.binds[0]) ? `const ${local(fwd.on.binds[0])} = ${x};\n` : ""}${acc} = ${fwd.step(acc)};`,
+      };
+    }
+    function fused(n: NodeOf<"call">): string | null {
+      if (reflective || streamy(n.id)) return null;
+      const top = code.nodes[n.fn];
+      if (top.kind !== "ref") return null;
+      const seen = new Set<Id>([sp.def, top.target]);
+      const chain: { call: NodeOf<"call">; def: Id; emit: Emit }[] = [];
+      const sink = sinkOf(n);
+      if (!sink) return null;
+      let at: Id | null = n.args[sink.li];
+      // Walk down through steps to the list they start from.
+      for (;;) {
+        const c = at ? code.nodes[at] : null;
+        if (!c || c.kind !== "call" || code.nodes[c.fn].kind !== "ref") break;
+        const d = node<"ref">(c.fn).target, step = code.nodes[d].kind === "def" ? stepOf(d) : null;
+        if (!step || seen.has(d)) break;
+        seen.add(d);
+        chain.unshift({ call: c, def: d, emit: step.emit });
+        at = c.args[step.li];
+      }
+      const src = at ? code.nodes[at] : null;
+      const array = src?.kind === "call" && (refTo(src.fn, TEXT_OPS.split) || refTo(src.fn, TEXT_OPS.characters));
+      if (!chain.length && !array) return null;
+      // Every other argument has no effects, and the functions given choose
+      // nothing; they're bound once, before the loop.
+      const calls = [n, ...chain.map((c) => c.call)];
+      const bindsOf: string[] = [];
+      for (const c of calls) {
+        const d = node<"ref">(c.fn).target;
+        if (code.nodes[d].kind !== "def") continue;
+        const li = c === n ? sink.li : stepOf(d)!.li;
+        const params = node<"lambda">(node<"def">(d).body!).params;
+        for (const [i, a] of c.args.entries()) {
+          if (i === li) continue;
+          // (A lambda written here may carry Choice in its type without
+          // choosing: COMPILER.md, "one known imprecision".)
+          const t = ty(a), lam = code.nodes[a];
+          const plainFn = t.t === "fn" && (!streamsFn(t, rho) || (lam.kind === "lambda" && !streamy(lam.body)));
+          if (!onlyChoice(a) || streamy(a) || (t.t === "fn" && !plainFn)) return null;
+        }
+      }
+      for (const c of calls) {
+        const d = node<"ref">(c.fn).target;
+        if (code.nodes[d].kind !== "def") continue;
+        const li = c === n ? sink.li : stepOf(d)!.li;
+        const params = node<"lambda">(node<"def">(d).body!).params;
+        c.args.forEach((a, i) => {
+          if (i === li) return;
+          if (ty(a).t === "fn") { fusePlain.add(params[i]); if (code.nodes[a].kind === "lambda") plainHere.add(a); }
+          if (referenced.has(params[i])) bindsOf.push(`const ${local(params[i])} = ${ex(a)};\n`);
+        });
+      }
+      const x = temp("x");
+      const run = (i: number, item: string): string => (i === chain.length ? sink.each(item) : `{\n${chain[i].emit(item, (v) => run(i + 1, v))}\n}`);
+      const body = scoped(true, () => run(0, x));
+      const loop = array
+        ? `for (const ${x} of $text.${refTo((src as NodeOf<"call">).fn, TEXT_OPS.split) ? "split" : "characters"}(${(src as NodeOf<"call">).args.map(ex).join(", ")})) {\n${body}\n}`
+        : (() => { const l = temp("l"); return `for (let ${l} = ${ex(at!)}; ${l}.tag === ${JSON.stringify(CONS)}; ${l} = ${l}.fields[1]) {\nconst ${x} = ${l}.fields[0];\n${body}\n}`; })();
+      return `(() => {\n${bindsOf.join("")}${sink.before}${loop}\nreturn ${sink.after};\n})()`;
     }
 
     function foldCells(n: NodeOf<"fold">, input: string): string {
