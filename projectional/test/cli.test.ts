@@ -88,3 +88,17 @@ test("compiled, output and errors come in the order they happen, as when run", (
   assert.equal(merged([lab, "run", calc]), want);
   assert.equal(merged([compiled]), want);
 });
+
+test("conjugate, run and compiled: each edit done in another space and brought back", () => {
+  // examples/conjugate (BACKLOG.md L23): f⁻¹ ∘ g ∘ f, with f⁻¹ from f run backwards.
+  const conj = join(import.meta.dirname, "../examples/conjugate");
+  const compiled = join(dir, "conjugate.mjs");
+  assert.equal(node([lab, "compile", conj, "-o", compiled]).code, 0);
+  const want = [
+    "brighter(0.5) = 0.685175492; doubling the stored 0.5 gives 1, too bright",
+    "quarter turn about (2, 1) of (3, 1) = 2, 2",
+    "multiband([4, 2, 5, 5, 1, 3]) = 3.5 2.5 5 5 1.5 2.5",
+  ].join("\n") + "\n";
+  assert.deepEqual(node([lab, "run", conj]), { code: 0, err: "", out: want });
+  assert.deepEqual(node([compiled]), { code: 0, err: "", out: want });
+});

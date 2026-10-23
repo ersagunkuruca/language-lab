@@ -1109,6 +1109,90 @@
           "@8ilsm74pnh52dq99esfelgj2nh:3"
         ],
         "body": "@8ilsm74pnh52dq99esfelgj2nh:4"
+      },
+      "@1o1ntpj94prddgephhcst03fsh": {
+        "id": "@1o1ntpj94prddgephhcst03fsh",
+        "kind": "def",
+        "body": "@1o1ntpj94prddgephhcst03fsh:1"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:2": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:2",
+        "kind": "binder"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:3": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:3",
+        "kind": "binder"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:5": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:5",
+        "kind": "binder"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:12": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:12",
+        "kind": "ref",
+        "target": "@1o1ntpj94prddgephhcst03fsh:2"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:13": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:13",
+        "kind": "ref",
+        "target": "@1o1ntpj94prddgephhcst03fsh:5"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:11": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:11",
+        "kind": "call",
+        "fn": "@1o1ntpj94prddgephhcst03fsh:12",
+        "args": [
+          "@1o1ntpj94prddgephhcst03fsh:13"
+        ]
+      },
+      "@1o1ntpj94prddgephhcst03fsh:10": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:10",
+        "kind": "ref",
+        "target": "@1o1ntpj94prddgephhcst03fsh:3"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:9": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:9",
+        "kind": "call",
+        "fn": "@1o1ntpj94prddgephhcst03fsh:10",
+        "args": [
+          "@1o1ntpj94prddgephhcst03fsh:11"
+        ]
+      },
+      "@1o1ntpj94prddgephhcst03fsh:7": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:7",
+        "kind": "ref",
+        "target": "@8ilsm74pnh52dq99esfelgj2nh"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:8": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:8",
+        "kind": "ref",
+        "target": "@1o1ntpj94prddgephhcst03fsh:2"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:6": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:6",
+        "kind": "call",
+        "fn": "@1o1ntpj94prddgephhcst03fsh:7",
+        "args": [
+          "@1o1ntpj94prddgephhcst03fsh:8",
+          "@1o1ntpj94prddgephhcst03fsh:9"
+        ]
+      },
+      "@1o1ntpj94prddgephhcst03fsh:4": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:4",
+        "kind": "lambda",
+        "params": [
+          "@1o1ntpj94prddgephhcst03fsh:5"
+        ],
+        "body": "@1o1ntpj94prddgephhcst03fsh:6"
+      },
+      "@1o1ntpj94prddgephhcst03fsh:1": {
+        "id": "@1o1ntpj94prddgephhcst03fsh:1",
+        "kind": "lambda",
+        "params": [
+          "@1o1ntpj94prddgephhcst03fsh:2",
+          "@1o1ntpj94prddgephhcst03fsh:3"
+        ],
+        "body": "@1o1ntpj94prddgephhcst03fsh:4"
       }
     },
     "defs": [
@@ -1122,7 +1206,8 @@
       "@9q8d7m9gld6fvdr2gj63v34sgq",
       "@egedg16di7hp3kq2u7ghqi8dbd",
       "@evvkvacd5ecmvnt8jl3v6s9n64",
-      "@8ilsm74pnh52dq99esfelgj2nh"
+      "@8ilsm74pnh52dq99esfelgj2nh",
+      "@1o1ntpj94prddgephhcst03fsh"
     ]
   },
   "pins": {
@@ -1614,6 +1699,88 @@
       "plain": [
         0
       ]
+    },
+    "@1o1ntpj94prddgephhcst03fsh": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2,
+        3
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 1
+            },
+            "eff": {
+              "effs": [
+                "effect.choice",
+                "effect.diverge"
+              ],
+              "tail": 2
+            }
+          },
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 1
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 1
+            },
+            "eff": {
+              "effs": [
+                "effect.choice",
+                "effect.diverge"
+              ],
+              "tail": 2
+            }
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ],
+          "ret": {
+            "t": "var",
+            "v": 0
+          },
+          "eff": {
+            "effs": [
+              "effect.choice",
+              "effect.diverge"
+            ],
+            "tail": 2
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 3
+        }
+      },
+      "plain": [
+        0
+      ]
     }
   },
   "names": {
@@ -1666,13 +1833,18 @@
     "@8ilsm74pnh52dq99esfelgj2nh": "inverse",
     "@8ilsm74pnh52dq99esfelgj2nh:2": "f",
     "@8ilsm74pnh52dq99esfelgj2nh:3": "y",
-    "@8ilsm74pnh52dq99esfelgj2nh:7": "x"
+    "@8ilsm74pnh52dq99esfelgj2nh:7": "x",
+    "@1o1ntpj94prddgephhcst03fsh": "conjugate",
+    "@1o1ntpj94prddgephhcst03fsh:2": "f",
+    "@1o1ntpj94prddgephhcst03fsh:3": "g",
+    "@1o1ntpj94prddgephhcst03fsh:5": "x"
   },
   "comments": {
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     "@su0m8djlkg5cq4b68i0klesqia": "A fold that prints. Run backwards it unfolds, so it parses.",
     "@9q8d7m9gld6fvdr2gj63v34sgq": "A helper of reverse. Published with the module, not offered in the palette.",
     "@8ilsm74pnh52dq99esfelgj2nh": "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    "@1o1ntpj94prddgephhcst03fsh": "g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.",
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [
@@ -1684,6 +1856,7 @@
     "@cci1a6fll2qmphm2sgtabs53qo",
     "@c9sa21p6t34r9bf9cjcm8h2101",
     "@egedg16di7hp3kq2u7ghqi8dbd",
-    "@8ilsm74pnh52dq99esfelgj2nh"
+    "@8ilsm74pnh52dq99esfelgj2nh",
+    "@1o1ntpj94prddgephhcst03fsh"
   ]
 }

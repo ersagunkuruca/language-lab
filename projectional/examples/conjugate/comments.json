@@ -1,0 +1,12 @@
+{
+  "6pesp5tqvai6ie2if7455pqj08": "A stored colour channel (0 to 1, gamma encoded) as the light it stands for: a power of 2.2, the simple form of sRGB's curve.",
+  "pb86rpfmhs44p3mgs3m3rmi8r0": "Twice as much light: the edit, done where light adds.",
+  "up8epn1s6he94foepp50vg2v9k": "Twice the light, for a stored value: into linear light, double, and back. The way back is `linear light` run backwards, written nowhere.",
+  "gjbfn9gkpsc3stdqb4vevhv2ni": "A point as seen from `centre`: the move that puts `centre` at the origin.",
+  "gjberemg2tp7c1l7qviv5b4mrg": "A quarter turn about the origin, anticlockwise.",
+  "qnvkqo06nhh5ftbjc41dvvnjhj": "A quarter turn about any point: the turn about the origin, done in the point's own frame (object space against world space).",
+  "h5fradvq8oqdt1t6d19hk06uvk": "Haar's split: each pair of samples as their average (the slow band) and half their difference (the fast band). Run backwards it joins them again.",
+  "bc3492eg05kckkm4ml9pet06ro": "Halve the fast band and keep the slow one: a treble cut that leaves the low end alone.",
+  "pc02eo6vkt4vdvp1j6lhddt9c7": "The signal with its highs softened: split, soften, join. A pedal's multiband compressor is this with a crossover for the split and a compressor for the change.",
+  "bm3m8tetgroatk1rb6u1tk39p9": "Each edit done in another space and brought back, beside the same edit done in place."
+}

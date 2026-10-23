@@ -983,10 +983,12 @@ refused with both types named. Data type upgrades (where constructors and
 fields move too) need a migration, which is a next step.
 
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
-numbers`, `length`, `sum`, `append`, `reverse`, `inverse` and the helpers
-`reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
+numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate` and the
+helpers `reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
 any function value run backwards, through `applied(f, x) = f(x)`, since
-`solve` names a definition. It is written once with the DSL in
+`solve` names a definition. `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
+f's space, the way back being f run backwards (`examples/conjugate`: an
+edit in linear light, a turn about a point, one band of a signal). It is written once with the DSL in
 `src/lang/prelude-source.ts` and
 published by `node library/build.ts`, which also moves the examples onto it.
 Every program is loaded with it (`src/lang/library.ts`): the editor, the
