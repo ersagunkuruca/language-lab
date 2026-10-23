@@ -176,10 +176,26 @@ async function phone() {
   // A touch held still is a right-click: the graph's menu opens.
   const bb = (await p.locator(".p-graph svg.canvas").boundingBox())!;
   const cdp = await p.context().newCDPSession(p);
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: bb.x + bb.width - 20, y: bb.y + 20 }] });
-  await p.waitForTimeout(700);
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const hold = async (x: number, y: number) => {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    await p.waitForTimeout(700);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await p.waitForTimeout(100);
+  };
+  await hold(bb.x + bb.width - 20, bb.y + 20);
   if ((await p.locator(".ctx-menu").count()) !== 1) errors.push(`${where}: a long press opened ${await p.locator(".ctx-menu").count()} menus`);
+  await p.keyboard.press("Escape");
+  // Pick two nodes by touch: both stay picked.
+  const nodes = await p.locator(".p-graph .items [data-move]").evaluateAll((els) => els.flatMap((e) => {
+    const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+    return document.elementFromPoint(x, y) === e ? [[x, y]] : [];
+  }).slice(0, 2));
+  for (const [x, y] of nodes) {
+    await hold(x, y);
+    await p.locator('.ctx-menu [data-menu="pick"]').tap({ timeout: 1000 }).catch(() => {});
+  }
+  const picked = await p.locator(".p-graph svg.canvas rect.picked").count();
+  if (nodes.length === 2 && picked !== 2) errors.push(`${where}: two nodes picked by touch, ${picked} stay picked`);
   await p.close();
 }
 
