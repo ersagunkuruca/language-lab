@@ -172,6 +172,13 @@ async function phone() {
   await p.goto(page);
   const size = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
   if (size[0] > 390 || size[1] > 844) errors.push(`${where}: the page is ${size[0]} by ${size[1]} px, not one screen`);
+  // Sideways, and a tablet: one screen too.
+  for (const [w, hgt] of [[844, 390], [768, 1024]]) {
+    await p.setViewportSize({ width: w, height: hgt });
+    const [sw, sh] = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
+    if (sw > w || sh > hgt) errors.push(`${where}: at ${w} by ${hgt} the page is ${sw} by ${sh} px, not one screen`);
+  }
+  await p.setViewportSize({ width: 390, height: 844 });
   for (const [pane, shows] of [["nav", ".p-nav"], ["text", ".p-text"], ["side", ".side"], ["graph", ".p-graph"]]) {
     await p.locator(`.panes [data-pane="${pane}"]`).tap();
     if (!(await p.locator(shows).isVisible())) errors.push(`${where}: the ${pane} pane shows nothing`);
