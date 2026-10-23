@@ -789,6 +789,13 @@ it is given `split`'s array or such a rest. `entries` and calc's `run
 lines` walk their lines this way, a loop with no cells. Ledger at 50,000
 lines: about 159 → 148 ms (noisy). Left: the four folds from the end over
 the entries, which `entries` builds with holes.
+*Measured, and left as it is* (Backlog C22): the compiled ledger patched by
+hand so that `entries` also pushes each entry to an array and three of
+the folds from the end walk that array instead of a spine of cells ran
+50,000 lines in 146 ms against 138 ms unpatched, within the noise. A
+spine walk is one load and one push per cell; each step's `add to` is
+the cost. So the arrays aren't worth the analysis that would pass them
+through `show ledger` and `report` to the folds.
 
 **G24. A Choice builtin with at most one answer is a generator under
 `first` (perf: once per entry).** `first(() => read whole number(field), …)`
