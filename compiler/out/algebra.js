@@ -26,46 +26,46 @@ const $k20 = ({ tag: "6bce4e58" /* number */, fields: [0] });
 // main
 function main() {
   return for_each(samples(), ((f) => {
-        $print(("f(x)  = " + display(f)));
-        $print(("f′(x) = " + display(simplify(derivative(f)))));
-        $print(("f(2)  = " + (() => {
-                const r$1 = evaluate(f, 2);
-                if (r$1 !== $no) {
-                  let v$2;
-                  try {
-                    v$2 = $show(r$1);
-                  } catch (e) {
-                    if (!$outOfFuel(e)) throw e;
-                    v$2 = $no;
-                  }
-                  if (v$2 !== $no) {
-                    return v$2;
-                  }
-                }
-                return "undefined";
-              })()));
-        $print(("root near 1: " + (() => {
-                let got$3 = $no;
-                (() => {
-                    if (root_near$k(f, 1, (r$4) => {
-                          let v$5;
-                          try {
-                            v$5 = $show(r$4);
-                          } catch (e) {
-                            if (!$outOfFuel(e)) throw e;
-                            v$5 = $no;
-                          }
-                          if (v$5 !== $no) {
-                            got$3 = v$5;
-                            return true;
-                          }
-                        })) return true;
-                  })();
-                if (got$3 !== $no) return got$3;
-                return "none found";
-              })()));
-        return $print("");
-      }));
+    $print(("f(x)  = " + display(f)));
+    $print(("f′(x) = " + display(simplify(derivative(f)))));
+    $print(("f(2)  = " + (() => {
+      const r$1 = evaluate(f, 2);
+      if (r$1 !== $no) {
+        let v$2;
+        try {
+          v$2 = $show(r$1);
+        } catch (e) {
+          if (!$outOfFuel(e)) throw e;
+          v$2 = $no;
+        }
+        if (v$2 !== $no) {
+          return v$2;
+        }
+      }
+      return "undefined";
+    })()));
+    $print(("root near 1: " + (() => {
+      let got$3 = $no;
+      (() => {
+        if (root_near$k(f, 1, (r$4) => {
+          let v$5;
+          try {
+            v$5 = $show(r$4);
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            v$5 = $no;
+          }
+          if (v$5 !== $no) {
+            got$3 = v$5;
+            return true;
+          }
+        })) return true;
+      })();
+      if (got$3 !== $no) return got$3;
+      return "none found";
+    })()));
+    return $print("");
+  }));
 }
 
 // for each
@@ -98,67 +98,67 @@ function samples() {
 // display
 function display(expression) {
   return (() => {
-      const step$8 = (s$9, rs$10) => {
-        switch (s$9.tag) {
-          case "6bce4e58" /* number */: {
-            const value = s$9.fields[0];
-            if ((value < 0)) {
-              return ({ tag: "std.pair.pair" /* pair */, fields: [("−" + $show((-value))), 3] });
-            }
-            return ({ tag: "std.pair.pair" /* pair */, fields: [$show(value), 9] });
+    const step$8 = (s$9, rs$10) => {
+      switch (s$9.tag) {
+        case "6bce4e58" /* number */: {
+          const value = s$9.fields[0];
+          if ((value < 0)) {
+            return ({ tag: "std.pair.pair" /* pair */, fields: [("−" + $show((-value))), 3] });
           }
-          case "2de4e5d2" /* x */: {
-            return $k19;
-          }
-          case "b50d2f46" /* sum */: {
-            const l = rs$10[0];
-            const r = rs$10[1];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l, 1) + " + ") + parenthesize(r, 1)), 1] });
-          }
-          case "f2da4c50" /* difference */: {
-            const l2 = rs$10[0];
-            const r2 = rs$10[1];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l2, 1) + " − ") + parenthesize(r2, 2)), 1] });
-          }
-          case "24d4c71f" /* product */: {
-            const l3 = rs$10[0];
-            const r3 = rs$10[1];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l3, 2) + "·") + parenthesize(r3, 3)), 2] });
-          }
-          case "af14d535" /* negative */: {
-            const a = rs$10[0];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [("−" + parenthesize(a, 3)), 3] });
-          }
-          case "563662e0" /* quotient */: {
-            const t = rs$10[0];
-            const b = rs$10[1];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(t, 2) + " / ") + parenthesize(b, 3)), 2] });
-          }
-          case "a9186a8d" /* sine */: {
-            const a2 = rs$10[0];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [(("sin(" + a2.fields[0]) + ")"), 9] });
-          }
-          case "9a6512de" /* cosine */: {
-            const a3 = rs$10[0];
-            return ({ tag: "std.pair.pair" /* pair */, fields: [(("cos(" + a3.fields[0]) + ")"), 9] });
-          }
+          return ({ tag: "std.pair.pair" /* pair */, fields: [$show(value), 9] });
         }
-      };
-      const ix$15 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
-      const todo$13 = [{ v: expression, i: 0, rs: [] }];
-      for (;;) {
-        const top$14 = todo$13[todo$13.length - 1];
-        const v$11 = ix$15[top$14.v.tag];
-        if (v$11 && top$14.i < v$11.length) {
-          todo$13.push({ v: top$14.v.fields[v$11[top$14.i++]], i: 0, rs: [] });
-          continue;
+        case "2de4e5d2" /* x */: {
+          return $k19;
         }
-        const r$12 = step$8(top$14.v, top$14.rs);
-        todo$13.pop();
-        if (!todo$13.length) return r$12;
-        todo$13[todo$13.length - 1].rs.push(r$12);
+        case "b50d2f46" /* sum */: {
+          const l = rs$10[0];
+          const r = rs$10[1];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l, 1) + " + ") + parenthesize(r, 1)), 1] });
+        }
+        case "f2da4c50" /* difference */: {
+          const l2 = rs$10[0];
+          const r2 = rs$10[1];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l2, 1) + " − ") + parenthesize(r2, 2)), 1] });
+        }
+        case "24d4c71f" /* product */: {
+          const l3 = rs$10[0];
+          const r3 = rs$10[1];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(l3, 2) + "·") + parenthesize(r3, 3)), 2] });
+        }
+        case "af14d535" /* negative */: {
+          const a = rs$10[0];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [("−" + parenthesize(a, 3)), 3] });
+        }
+        case "563662e0" /* quotient */: {
+          const t = rs$10[0];
+          const b = rs$10[1];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [((parenthesize(t, 2) + " / ") + parenthesize(b, 3)), 2] });
+        }
+        case "a9186a8d" /* sine */: {
+          const a2 = rs$10[0];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [(("sin(" + a2.fields[0]) + ")"), 9] });
+        }
+        case "9a6512de" /* cosine */: {
+          const a3 = rs$10[0];
+          return ({ tag: "std.pair.pair" /* pair */, fields: [(("cos(" + a3.fields[0]) + ")"), 9] });
+        }
       }
-    })().fields[0];
+    };
+    const ix$15 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
+    const todo$13 = [{ v: expression, i: 0, rs: [] }];
+    for (;;) {
+      const top$14 = todo$13[todo$13.length - 1];
+      const v$11 = ix$15[top$14.v.tag];
+      if (v$11 && top$14.i < v$11.length) {
+        todo$13.push({ v: top$14.v.fields[v$11[top$14.i++]], i: 0, rs: [] });
+        continue;
+      }
+      const r$12 = step$8(top$14.v, top$14.rs);
+      todo$13.pop();
+      if (!todo$13.length) return r$12;
+      todo$13[todo$13.length - 1].rs.push(r$12);
+    }
+  })().fields[0];
 }
 
 // derivative
@@ -242,136 +242,136 @@ function simplify(expression3) {
         const l4 = rs$26[0];
         const r4 = rs$26[1];
         return (() => {
-            const r$28 = constant(l4);
-            if (r$28 !== $no) {
-              const r$29 = constant(r4);
-              if (r$29 !== $no) {
-                let v$30;
+          const r$28 = constant(l4);
+          if (r$28 !== $no) {
+            const r$29 = constant(r4);
+            if (r$29 !== $no) {
+              let v$30;
+              try {
+                v$30 = (r$28 + r$29);
+              } catch (e) {
+                if (!$outOfFuel(e)) throw e;
+                v$30 = $no;
+              }
+              if (v$30 !== $no) {
+                let v$31;
                 try {
-                  v$30 = (r$28 + r$29);
+                  v$31 = ({ tag: "6bce4e58" /* number */, fields: [v$30] });
                 } catch (e) {
                   if (!$outOfFuel(e)) throw e;
-                  v$30 = $no;
+                  v$31 = $no;
                 }
-                if (v$30 !== $no) {
-                  let v$31;
-                  try {
-                    v$31 = ({ tag: "6bce4e58" /* number */, fields: [v$30] });
-                  } catch (e) {
-                    if (!$outOfFuel(e)) throw e;
-                    v$31 = $no;
-                  }
-                  if (v$31 !== $no) {
-                    return v$31;
-                  }
+                if (v$31 !== $no) {
+                  return v$31;
                 }
               }
             }
-            return ((l4.tag === "6bce4e58" /* number */ && $sameNumber(l4.fields[0], 0)) ? r4 : ((r4.tag === "6bce4e58" /* number */ && $sameNumber(r4.fields[0], 0)) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
-          })();
+          }
+          return ((l4.tag === "6bce4e58" /* number */ && $sameNumber(l4.fields[0], 0)) ? r4 : ((r4.tag === "6bce4e58" /* number */ && $sameNumber(r4.fields[0], 0)) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
+        })();
       }
       case "f2da4c50" /* difference */: {
         const l5 = rs$26[0];
         const r5 = rs$26[1];
         return (() => {
-            const r$33 = constant(l5);
-            if (r$33 !== $no) {
-              const r$34 = constant(r5);
-              if (r$34 !== $no) {
-                let v$35;
+          const r$33 = constant(l5);
+          if (r$33 !== $no) {
+            const r$34 = constant(r5);
+            if (r$34 !== $no) {
+              let v$35;
+              try {
+                v$35 = (r$33 - r$34);
+              } catch (e) {
+                if (!$outOfFuel(e)) throw e;
+                v$35 = $no;
+              }
+              if (v$35 !== $no) {
+                let v$36;
                 try {
-                  v$35 = (r$33 - r$34);
+                  v$36 = ({ tag: "6bce4e58" /* number */, fields: [v$35] });
                 } catch (e) {
                   if (!$outOfFuel(e)) throw e;
-                  v$35 = $no;
+                  v$36 = $no;
                 }
-                if (v$35 !== $no) {
-                  let v$36;
-                  try {
-                    v$36 = ({ tag: "6bce4e58" /* number */, fields: [v$35] });
-                  } catch (e) {
-                    if (!$outOfFuel(e)) throw e;
-                    v$36 = $no;
-                  }
-                  if (v$36 !== $no) {
-                    return v$36;
-                  }
+                if (v$36 !== $no) {
+                  return v$36;
                 }
               }
             }
-            return ((r5.tag === "6bce4e58" /* number */ && $sameNumber(r5.fields[0], 0)) ? l5 : ((l5.tag === "6bce4e58" /* number */ && $sameNumber(l5.fields[0], 0)) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
-          })();
+          }
+          return ((r5.tag === "6bce4e58" /* number */ && $sameNumber(r5.fields[0], 0)) ? l5 : ((l5.tag === "6bce4e58" /* number */ && $sameNumber(l5.fields[0], 0)) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
+        })();
       }
       case "24d4c71f" /* product */: {
         const l6 = rs$26[0];
         const r6 = rs$26[1];
         return (() => {
-            const r$38 = constant(l6);
-            if (r$38 !== $no) {
-              const r$39 = constant(r6);
-              if (r$39 !== $no) {
-                let v$40;
+          const r$38 = constant(l6);
+          if (r$38 !== $no) {
+            const r$39 = constant(r6);
+            if (r$39 !== $no) {
+              let v$40;
+              try {
+                v$40 = (r$38 * r$39);
+              } catch (e) {
+                if (!$outOfFuel(e)) throw e;
+                v$40 = $no;
+              }
+              if (v$40 !== $no) {
+                let v$41;
                 try {
-                  v$40 = (r$38 * r$39);
+                  v$41 = ({ tag: "6bce4e58" /* number */, fields: [v$40] });
                 } catch (e) {
                   if (!$outOfFuel(e)) throw e;
-                  v$40 = $no;
+                  v$41 = $no;
                 }
-                if (v$40 !== $no) {
-                  let v$41;
-                  try {
-                    v$41 = ({ tag: "6bce4e58" /* number */, fields: [v$40] });
-                  } catch (e) {
-                    if (!$outOfFuel(e)) throw e;
-                    v$41 = $no;
-                  }
-                  if (v$41 !== $no) {
-                    return v$41;
-                  }
+                if (v$41 !== $no) {
+                  return v$41;
                 }
               }
             }
-            return (((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 0)) || (r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 0))) ? $k20 : ((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 1)) ? r6 : ((r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 1)) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
-          })();
+          }
+          return (((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 0)) || (r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 0))) ? $k20 : ((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 1)) ? r6 : ((r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 1)) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
+        })();
       }
       case "af14d535" /* negative */: {
         const a4 = rs$26[0];
         return (() => {
-            const r$43 = constant(a4);
-            if (r$43 !== $no) {
-              let v$44;
+          const r$43 = constant(a4);
+          if (r$43 !== $no) {
+            let v$44;
+            try {
+              v$44 = (-r$43);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              v$44 = $no;
+            }
+            if (v$44 !== $no) {
+              let v$45;
               try {
-                v$44 = (-r$43);
+                v$45 = ({ tag: "6bce4e58" /* number */, fields: [v$44] });
               } catch (e) {
                 if (!$outOfFuel(e)) throw e;
-                v$44 = $no;
+                v$45 = $no;
               }
-              if (v$44 !== $no) {
-                let v$45;
-                try {
-                  v$45 = ({ tag: "6bce4e58" /* number */, fields: [v$44] });
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  v$45 = $no;
-                }
-                if (v$45 !== $no) {
-                  return v$45;
-                }
+              if (v$45 !== $no) {
+                return v$45;
               }
             }
-            return (() => {
-                const s$46 = a4;
-                switch (s$46.tag) {
-                  case "af14d535" /* negative */: {
-                    const inner = s$46.fields[0];
-                    return inner;
-                  }
-                  default: {
-                    return ({ tag: "af14d535" /* negative */, fields: [a4] });
-                  }
-                }
-              })();
+          }
+          return (() => {
+            const s$46 = a4;
+            switch (s$46.tag) {
+              case "af14d535" /* negative */: {
+                const inner = s$46.fields[0];
+                return inner;
+              }
+              default: {
+                return ({ tag: "af14d535" /* negative */, fields: [a4] });
+              }
+            }
           })();
+        })();
       }
       case "563662e0" /* quotient */: {
         const t2 = rs$26[0];
@@ -548,13 +548,13 @@ function evaluate(expression4, at) {
 // root near (the rest of the search as `k$64`)
 function root_near$k(f2, guess, k$64) {
   for (const r$66 of $fuel(100, (function* () {
-          if ($spend()) {
-            const r$65 = newton(f2, simplify(derivative(f2)), guess);
-            if (r$65 !== $no) {
-              yield r$65;
-            }
-          }
-        }), true)) {
+    if ($spend()) {
+      const r$65 = newton(f2, simplify(derivative(f2)), guess);
+      if (r$65 !== $no) {
+        yield r$65;
+      }
+    }
+  }), true)) {
     if (k$64(r$66)) return true;
   }
   return false;

@@ -37,51 +37,51 @@ const $k2 = $cons((-2), $k1);
 // main
 function main() {
   for_each(samples(), $meta(((sample) => {
-          const f = sample.fields[1];
-          return $print(((((((sample.fields[0] + ": f(2) = ") + (() => {
-                          for (const r$0 of f(2)) {
-                            let v$1;
-                            try {
-                              v$1 = $show(r$0);
-                            } catch (e) {
-                              if (!$outOfFuel(e)) throw e;
-                              v$1 = $no;
-                            }
-                            if (v$1 !== $no) {
-                              return v$1;
-                            }
-                          }
-                          return "none";
-                        })()) + ", f′(2) = ") + (() => {
-                      for (const r$2 of $derivative($program, f, true)(2)) {
-                        let v$3;
-                        try {
-                          v$3 = $show(r$2);
-                        } catch (e) {
-                          if (!$outOfFuel(e)) throw e;
-                          v$3 = $no;
-                        }
-                        if (v$3 !== $no) {
-                          return v$3;
-                        }
-                      }
-                      return "none";
-                    })()) + ", root near 1: ") + (() => {
-                  for (const r$4 of root_near(f, 1)) {
-                    let v$5;
-                    try {
-                      v$5 = $show(r$4);
-                    } catch (e) {
-                      if (!$outOfFuel(e)) throw e;
-                      v$5 = $no;
-                    }
-                    if (v$5 !== $no) {
-                      return v$5;
-                    }
-                  }
-                  return "none found";
-                })()));
-        }), "f5c8d15c"));
+    const f = sample.fields[1];
+    return $print(((((((sample.fields[0] + ": f(2) = ") + (() => {
+      for (const r$0 of f(2)) {
+        let v$1;
+        try {
+          v$1 = $show(r$0);
+        } catch (e) {
+          if (!$outOfFuel(e)) throw e;
+          v$1 = $no;
+        }
+        if (v$1 !== $no) {
+          return v$1;
+        }
+      }
+      return "none";
+    })()) + ", f′(2) = ") + (() => {
+        for (const r$2 of $derivative($program, f, true)(2)) {
+          let v$3;
+          try {
+            v$3 = $show(r$2);
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            v$3 = $no;
+          }
+          if (v$3 !== $no) {
+            return v$3;
+          }
+        }
+        return "none";
+      })()) + ", root near 1: ") + (() => {
+        for (const r$4 of root_near(f, 1)) {
+          let v$5;
+          try {
+            v$5 = $show(r$4);
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            v$5 = $no;
+          }
+          if (v$5 !== $no) {
+            return v$5;
+          }
+        }
+        return "none found";
+      })()));
+  }), "f5c8d15c"));
   $print(("zeros of cubic: " + show_numbers(zeros_of_cubic())));
   return $print(("zeros of x² − 2: " + show_numbers(zeros_of_x_2())));
 }
@@ -153,12 +153,12 @@ function samples() {
 // root near
 function* root_near(f2, guess) {
   for (const r$18 of $fuel(100, $meta((function* () {
-            if ($spend()) {
-              for (const r$17 of newton$choice(f2, $derivative($program, f2, true), guess)) {
-                yield r$17;
-              }
-            }
-          }), "27d057a4", () => [["62b005d3", $toEval(f2, true)], ["d8b7c0d2", guess]]), true)) {
+    if ($spend()) {
+      for (const r$17 of newton$choice(f2, $derivative($program, f2, true), guess)) {
+        yield r$17;
+      }
+    }
+  }), "27d057a4", () => [["62b005d3", $toEval(f2, true)], ["d8b7c0d2", guess]]), true)) {
     yield r$18;
   }
 }
@@ -168,26 +168,26 @@ $meta(root_near, "2fde7dc8");
 let value$19;
 function zeros_of_cubic() {
   return value$19 ??= (() => {
-      const all$20 = [];
-      for (const sol$21 of solve$0(0)) {
-        const x = sol$21[0];
-        all$20.push(x);
-      }
-      return $toList(all$20);
-    })();
+    const all$20 = [];
+    for (const sol$21 of solve$0(0)) {
+      const x = sol$21[0];
+      all$20.push(x);
+    }
+    return $toList(all$20);
+  })();
 }
 
 // zeros of x² − 2
 let value$22;
 function zeros_of_x_2() {
   return value$22 ??= (() => {
-      const all$23 = [];
-      for (const sol$24 of solve$1(0)) {
-        const x2 = sol$24[0];
-        all$23.push(x2);
-      }
-      return $toList(all$23);
-    })();
+    const all$23 = [];
+    for (const sol$24 of solve$1(0)) {
+      const x2 = sol$24[0];
+      all$23.push(x2);
+    }
+    return $toList(all$23);
+  })();
 }
 
 // cubic

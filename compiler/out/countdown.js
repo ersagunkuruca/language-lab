@@ -21,26 +21,26 @@ function main() {
 // solutions
 function solutions(numbers, target) {
   return (() => {
-      const got$0 = [];
-      (() => {
-          if (choices$k(numbers, (r$1) => {
-                if ($spend()) {
-                  if (results$k(r$1, (f$3, f$4) => {
-                        {
-                          const expr = f$3;
-                          const value = f$4;
-                          if ($sameNumber(value, target)) {
-                            got$0.push(expr);
-                          } else {
-                            /* fail */
-                          }
-                        }
-                      })) return true;
-                }
-              })) return true;
-        })();
-      return $toList(got$0);
+    const got$0 = [];
+    (() => {
+      if (choices$k(numbers, (r$1) => {
+        if ($spend()) {
+          if (results$k(r$1, (f$3, f$4) => {
+            {
+              const expr = f$3;
+              const value = f$4;
+              if ($sameNumber(value, target)) {
+                got$0.push(expr);
+              } else {
+                /* fail */
+              }
+            }
+          })) return true;
+        }
+      })) return true;
     })();
+    return $toList(got$0);
+  })();
 }
 
 // for each
@@ -99,10 +99,10 @@ function show_expr(e) {
 // choices (the rest of the search as `k$29`)
 function choices$k(numbers2, k$29) {
   if (subsequence$k(numbers2, (r$30) => {
-        if (permutation$k(r$30, (r$31) => {
-              if (k$29(r$31)) return true;
-            })) return true;
-      })) return true;
+    if (permutation$k(r$30, (r$31) => {
+      if (k$29(r$31)) return true;
+    })) return true;
+  })) return true;
   return false;
 }
 
@@ -127,55 +127,55 @@ function results$k(numbers3, k$32) {
             }
             case "std.list.cons" /* cons */: {
               if (split$k(numbers3, (f$38, f$39) => {
-                    {
-                      const front = f$38;
-                      const back = f$39;
-                      if ($spend()) {
-                        if (results$k(front, (f$41, f$42) => {
+                {
+                  const front = f$38;
+                  const back = f$39;
+                  if ($spend()) {
+                    if (results$k(front, (f$41, f$42) => {
+                      {
+                        const expr2 = f$41;
+                        const value3 = f$42;
+                        if ($spend()) {
+                          if (results$k(back, (f$44, f$45) => {
+                            {
+                              const expr3 = f$44;
+                              const value4 = f$45;
                               {
-                                const expr2 = f$41;
-                                const value3 = f$42;
-                                if ($spend()) {
-                                  if (results$k(back, (f$44, f$45) => {
-                                        {
-                                          const expr3 = f$44;
-                                          const value4 = f$45;
-                                          {
-                                            const r$48 = join($k6, expr2, value3, expr3, value4);
-                                            if (r$48 !== $no) {
-                                              const t$49 = r$48;
-                                              if (k$32(t$49.fields[0], t$49.fields[1])) return true;
-                                            }
-                                          }
-                                          {
-                                            const r$50 = join($k7, expr2, value3, expr3, value4);
-                                            if (r$50 !== $no) {
-                                              const t$51 = r$50;
-                                              if (k$32(t$51.fields[0], t$51.fields[1])) return true;
-                                            }
-                                          }
-                                          {
-                                            const r$52 = join($k8, expr2, value3, expr3, value4);
-                                            if (r$52 !== $no) {
-                                              const t$53 = r$52;
-                                              if (k$32(t$53.fields[0], t$53.fields[1])) return true;
-                                            }
-                                          }
-                                          {
-                                            const r$54 = join($k9, expr2, value3, expr3, value4);
-                                            if (r$54 !== $no) {
-                                              const t$55 = r$54;
-                                              if (k$32(t$55.fields[0], t$55.fields[1])) return true;
-                                            }
-                                          }
-                                        }
-                                      })) return true;
+                                const r$48 = join($k6, expr2, value3, expr3, value4);
+                                if (r$48 !== $no) {
+                                  const t$49 = r$48;
+                                  if (k$32(t$49.fields[0], t$49.fields[1])) return true;
                                 }
                               }
-                            })) return true;
+                              {
+                                const r$50 = join($k7, expr2, value3, expr3, value4);
+                                if (r$50 !== $no) {
+                                  const t$51 = r$50;
+                                  if (k$32(t$51.fields[0], t$51.fields[1])) return true;
+                                }
+                              }
+                              {
+                                const r$52 = join($k8, expr2, value3, expr3, value4);
+                                if (r$52 !== $no) {
+                                  const t$53 = r$52;
+                                  if (k$32(t$53.fields[0], t$53.fields[1])) return true;
+                                }
+                              }
+                              {
+                                const r$54 = join($k9, expr2, value3, expr3, value4);
+                                if (r$54 !== $no) {
+                                  const t$55 = r$54;
+                                  if (k$32(t$55.fields[0], t$55.fields[1])) return true;
+                                }
+                              }
+                            }
+                          })) return true;
+                        }
                       }
-                    }
-                  })) return true;
+                    })) return true;
+                  }
+                }
+              })) return true;
               break;
             }
           }
@@ -227,29 +227,29 @@ function subsequence$k(items, k$71) {
       case "std.list.cons" /* cons */: {
         const head2 = s$73.fields[0];
         if (fold$72(s$73.fields[1], (tail2) => {
-              {
-                if (($T.tag === "std.bool.true")) {
-                  if (k$74($cons(head2, tail2))) return true;
-                } else {
-                  if (k$74(tail2)) return true;
-                }
-              }
-              {
-                if (($F.tag === "std.bool.true")) {
-                  if (k$74($cons(head2, tail2))) return true;
-                } else {
-                  if (k$74(tail2)) return true;
-                }
-              }
-            })) return true;
+          {
+            if (($T.tag === "std.bool.true")) {
+              if (k$74($cons(head2, tail2))) return true;
+            } else {
+              if (k$74(tail2)) return true;
+            }
+          }
+          {
+            if (($F.tag === "std.bool.true")) {
+              if (k$74($cons(head2, tail2))) return true;
+            } else {
+              if (k$74(tail2)) return true;
+            }
+          }
+        })) return true;
         break;
       }
     }
     return false;
   };
   if (fold$72(items, (r$75) => {
-        if (k$71(r$75)) return true;
-      })) return true;
+    if (k$71(r$75)) return true;
+  })) return true;
   return false;
 }
 
@@ -264,18 +264,18 @@ function permutation$k(items2, k$76) {
       case "std.list.cons" /* cons */: {
         const head3 = s$78.fields[0];
         if (fold$77(s$78.fields[1], (tail3) => {
-              if (insert_anywhere$k(head3, tail3, (r$80) => {
-                    if (k$79(r$80)) return true;
-                  })) return true;
-            })) return true;
+          if (insert_anywhere$k(head3, tail3, (r$80) => {
+            if (k$79(r$80)) return true;
+          })) return true;
+        })) return true;
         break;
       }
     }
     return false;
   };
   if (fold$77(items2, (r$81) => {
-        if (k$76(r$81)) return true;
-      })) return true;
+    if (k$76(r$81)) return true;
+  })) return true;
   return false;
 }
 
@@ -304,12 +304,12 @@ function split$k(items3, k$82) {
                   if (k$82($cons(head4, $nil), tail4)) return true;
                 } else {
                   if (split$k(tail4, (f$95, f$96) => {
-                        {
-                          const front2 = f$95;
-                          const back2 = f$96;
-                          if (k$82($cons(head4, front2), back2)) return true;
-                        }
-                      })) return true;
+                    {
+                      const front2 = f$95;
+                      const back2 = f$96;
+                      if (k$82($cons(head4, front2), back2)) return true;
+                    }
+                  })) return true;
                 }
               };
               {
@@ -384,8 +384,8 @@ function insert_anywhere$k(x3, items4, k$103) {
             if (k$103($cons(x3, items4))) return true;
           } else {
             if (insert_anywhere$k(x3, tail5, (r$108) => {
-                  if (k$103($cons(head5, r$108))) return true;
-                })) return true;
+              if (k$103($cons(head5, r$108))) return true;
+            })) return true;
           }
         };
         {

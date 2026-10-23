@@ -68,28 +68,28 @@ function main() {
   $print(("split(10, 4) = " + (($show(split(10, 4).fields[0]) + ", ") + $show(split(10, 4).fields[1]))));
   $print(("missing addend(3, 10) = " + $show(missing_addend(3, 10))));
   $print(("to polar(0, 2), canonical = " + (($show((() => {
-                let got$0 = $no;
-                (() => {
-                    if (to_polar$k(0, 2, (f$2, f$3) => {
-                          const r$1 = ({ tag: "std.pair.pair" /* pair */, fields: [f$2, f$3] });
-                          got$0 = r$1;
-                          return true;
-                        })) return true;
-                  })();
-                if (got$0 !== $no) return got$0;
-                return $k0;
-              })().fields[0]) + ", ") + $show((() => {
-              let got$4 = $no;
-              (() => {
-                  if (to_polar$k(0, 2, (f$6, f$7) => {
-                        const r$5 = ({ tag: "std.pair.pair" /* pair */, fields: [f$6, f$7] });
-                        got$4 = r$5;
-                        return true;
-                      })) return true;
-                })();
-              if (got$4 !== $no) return got$4;
-              return $k0;
-            })().fields[1]))));
+    let got$0 = $no;
+    (() => {
+      if (to_polar$k(0, 2, (f$2, f$3) => {
+        const r$1 = ({ tag: "std.pair.pair" /* pair */, fields: [f$2, f$3] });
+        got$0 = r$1;
+        return true;
+      })) return true;
+    })();
+    if (got$0 !== $no) return got$0;
+    return $k0;
+  })().fields[0]) + ", ") + $show((() => {
+      let got$4 = $no;
+      (() => {
+        if (to_polar$k(0, 2, (f$6, f$7) => {
+          const r$5 = ({ tag: "std.pair.pair" /* pair */, fields: [f$6, f$7] });
+          got$4 = r$5;
+          return true;
+        })) return true;
+      })();
+      if (got$4 !== $no) return got$4;
+      return $k0;
+    })().fields[1]))));
   $print(("square roots(9) = " + show_numbers(square_roots(9))));
   return $print((("square roots(−1) = [" + show_numbers(square_roots((-1)))) + "]"));
 }
@@ -110,15 +110,15 @@ function* to_polar(x, y) {
 // square roots
 function square_roots(y2) {
   return (() => {
-      const got$9 = [];
-      (() => {
-          for (const sol$10 of solve$2(y2)) {
-            const x2 = sol$10[0];
-            got$9.push(x2);
-          }
-        })();
-      return $toList(got$9);
+    const got$9 = [];
+    (() => {
+      for (const sol$10 of solve$2(y2)) {
+        const x2 = sol$10[0];
+        got$9.push(x2);
+      }
     })();
+    return $toList(got$9);
+  })();
 }
 
 // missing addend

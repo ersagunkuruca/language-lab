@@ -17,20 +17,20 @@ function main(arguments2) {
       switch (s$1.tag) {
         case "std.list.nil" /* nil */: {
           return (() => {
-              const h$2 = $enter("std.abort");
-              try {
-                return run(path);
-              } catch (e$3$) {
-                const e$3 = $caught(e$3$, h$2);
-                if (e$3.op === "std.abort.abort" /* abort */) {
-                  const reason = e$3.args[0];
-                  return failed(reason);
-                }
-                throw new Error("unhandled escape");
-              } finally {
-                $leave(h$2);
+            const h$2 = $enter("std.abort");
+            try {
+              return run(path);
+            } catch (e$3$) {
+              const e$3 = $caught(e$3$, h$2);
+              if (e$3.op === "std.abort.abort" /* abort */) {
+                const reason = e$3.args[0];
+                return failed(reason);
               }
-            })();
+              throw new Error("unhandled escape");
+            } finally {
+              $leave(h$2);
+            }
+          })();
         }
         case "std.list.cons" /* cons */: {
           return usage();
@@ -107,12 +107,12 @@ function show_ledger(entries2, path3) {
 let value$10;
 function newline() {
   return value$10 ??= (() => {
-      const r$12 = $partial["builtin.text.fromCode"](10);
-      if (r$12 !== $no) {
-        return r$12;
-      }
-      return "";
-    })();
+    const r$12 = $partial["builtin.text.fromCode"](10);
+    if (r$12 !== $no) {
+      return r$12;
+    }
+    return "";
+  })();
 }
 
 // blank
@@ -167,12 +167,12 @@ function bad_line(n3) {
 // amount
 function amount(field, n4) {
   return (() => {
-      const r$22 = $partial["builtin.int.read"](field);
-      if (r$22 !== $no) {
-        return r$22;
-      }
-      return $perform("std.abort", "std.abort.abort" /* abort */, [(("line " + String(n4)) + ": the amount isn't a whole number of cents")]);
-    })();
+    const r$22 = $partial["builtin.int.read"](field);
+    if (r$22 !== $no) {
+      return r$22;
+    }
+    return $perform("std.abort", "std.abort.abort" /* abort */, [(("line " + String(n4)) + ": the amount isn't a whole number of cents")]);
+  })();
 }
 
 // by account
@@ -228,18 +228,18 @@ function sort(totals2, by_name) {
 // table
 function table(title, totals3) {
   return ((title + newline()) + (() => {
-        const change = row;
-        const by$40 = newline();
-        const parts$39 = [];
-        for (let l$42 = totals3; l$42.tag === "std.list.cons"; l$42 = l$42.fields[1]) {
-          const x$41 = l$42.fields[0];
-          {
-            const item = x$41;
-            parts$39.push(change(item));
-          }
-        }
-        return parts$39.join(by$40);
-      })());
+    const change = row;
+    const by$40 = newline();
+    const parts$39 = [];
+    for (let l$42 = totals3; l$42.tag === "std.list.cons"; l$42 = l$42.fields[1]) {
+      const x$41 = l$42.fields[0];
+      {
+        const item = x$41;
+        parts$39.push(change(item));
+      }
+    }
+    return parts$39.join(by$40);
+  })());
 }
 
 // by month

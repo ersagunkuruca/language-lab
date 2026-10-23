@@ -39,21 +39,21 @@ function run_lines(lines$in, number$in, session$in) {
             lines$in = rest;
             number$in = $int.add(number, 1);
             session$in = (() => {
-                const h$3 = $enter("std.abort");
-                try {
-                  return ({ tag: "sp3nhthm2f80ipu3diun4hkjbs" /* session */, fields: [run_line(line, bindings), errors2] });
-                } catch (e$4$) {
-                  const e$4 = $caught(e$4$, h$3);
-                  if (e$4.op === "std.abort.abort" /* abort */) {
-                    const why = e$4.args[0];
-                    $io.printError(((("calc: line " + String(number)) + ": ") + why));
-                    return ({ tag: "sp3nhthm2f80ipu3diun4hkjbs" /* session */, fields: [bindings, $int.add(errors2, 1)] });
-                  }
-                  throw new Error("unhandled escape");
-                } finally {
-                  $leave(h$3);
+              const h$3 = $enter("std.abort");
+              try {
+                return ({ tag: "sp3nhthm2f80ipu3diun4hkjbs" /* session */, fields: [run_line(line, bindings), errors2] });
+              } catch (e$4$) {
+                const e$4 = $caught(e$4$, h$3);
+                if (e$4.op === "std.abort.abort" /* abort */) {
+                  const why = e$4.args[0];
+                  $io.printError(((("calc: line " + String(number)) + ": ") + why));
+                  return ({ tag: "sp3nhthm2f80ipu3diun4hkjbs" /* session */, fields: [bindings, $int.add(errors2, 1)] });
                 }
-              })();
+                throw new Error("unhandled escape");
+              } finally {
+                $leave(h$3);
+              }
+            })();
             continue;
           }
         }
@@ -110,84 +110,84 @@ function run_line(line2, bindings2) {
 // tokens
 function tokens(line3) {
   return keep$plain((() => {
-        const nil$9 = () => {
-          return $nil;
-        };
-        const cons$10 = (c, after2) => {
-          if (blank(c)) {
-            return $cons($k1, after2);
-          }
-          if (digit(c)) {
-            const s$12 = after2;
-            switch (s$12.tag) {
-              case "std.list.cons" /* cons */: {
-                const next = s$12.fields[0];
-                const more2 = s$12.fields[1];
-                const s$13 = next;
-                switch (s$13.tag) {
-                  case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-                    const d = s$13.fields[0];
-                    const h$14 = ({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [(c + d)] });
-                    s$12.fields[0] = h$14;
-                    return s$12;
-                  }
-                  case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
-                    return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
-                  }
-                  case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                    return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
-                  }
-                  case "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */: {
-                    return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
-                  }
-                }
+    const nil$9 = () => {
+      return $nil;
+    };
+    const cons$10 = (c, after2) => {
+      if (blank(c)) {
+        return $cons($k1, after2);
+      }
+      if (digit(c)) {
+        const s$12 = after2;
+        switch (s$12.tag) {
+          case "std.list.cons" /* cons */: {
+            const next = s$12.fields[0];
+            const more2 = s$12.fields[1];
+            const s$13 = next;
+            switch (s$13.tag) {
+              case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
+                const d = s$13.fields[0];
+                const h$14 = ({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [(c + d)] });
+                s$12.fields[0] = h$14;
+                return s$12;
               }
-              default: {
+              case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
+                return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
+              }
+              case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
+                return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
+              }
+              case "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */: {
                 return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
               }
             }
           }
-          if (letter(c)) {
-            const s$15 = after2;
-            switch (s$15.tag) {
-              case "std.list.cons" /* cons */: {
-                const next2 = s$15.fields[0];
-                const more3 = s$15.fields[1];
-                const s$16 = next2;
-                switch (s$16.tag) {
-                  case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
-                    const w = s$16.fields[0];
-                    const h$17 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + w)] });
-                    s$15.fields[0] = h$17;
-                    return s$15;
-                  }
-                  case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-                    const d2 = s$16.fields[0];
-                    const h$18 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + d2)] });
-                    s$15.fields[0] = h$18;
-                    return s$15;
-                  }
-                  default: {
-                    return $cons(({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [c] }), after2);
-                  }
-                }
+          default: {
+            return $cons(({ tag: "7ooirerkrpa7v4m513os3u35u2" /* number */, fields: [c] }), after2);
+          }
+        }
+      }
+      if (letter(c)) {
+        const s$15 = after2;
+        switch (s$15.tag) {
+          case "std.list.cons" /* cons */: {
+            const next2 = s$15.fields[0];
+            const more3 = s$15.fields[1];
+            const s$16 = next2;
+            switch (s$16.tag) {
+              case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
+                const w = s$16.fields[0];
+                const h$17 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + w)] });
+                s$15.fields[0] = h$17;
+                return s$15;
+              }
+              case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
+                const d2 = s$16.fields[0];
+                const h$18 = ({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [(c + d2)] });
+                s$15.fields[0] = h$18;
+                return s$15;
               }
               default: {
                 return $cons(({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [c] }), after2);
               }
             }
           }
-          return $cons(({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [c] }), after2);
-        };
-        const t$20 = line3;
-        let r$11 = nil$9();
-        for (let i$19 = t$20.length, j$21; i$19 > 0; i$19 = j$21) {
-          j$21 = i$19 - 1;
-          if (j$21 > 0 && (t$20.charCodeAt(j$21) & 0xfc00) === 0xdc00 && (t$20.charCodeAt(j$21 - 1) & 0xfc00) === 0xd800) j$21--;
-          r$11 = cons$10(t$20.slice(j$21, i$19), r$11);
+          default: {
+            return $cons(({ tag: "sob4uovkjgvtl08hmomq2g7s9j" /* word */, fields: [c] }), after2);
+          }
         }
-        return r$11;
-      })(), ((t2) => $bool(!(t2.tag === "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */))));
+      }
+      return $cons(({ tag: "heiprc4fnbobd3nei81ji3c5lj" /* symbol */, fields: [c] }), after2);
+    };
+    const t$20 = line3;
+    let r$11 = nil$9();
+    for (let i$19 = t$20.length, j$21; i$19 > 0; i$19 = j$21) {
+      j$21 = i$19 - 1;
+      if (j$21 > 0 && (t$20.charCodeAt(j$21) & 0xfc00) === 0xdc00 && (t$20.charCodeAt(j$21 - 1) & 0xfc00) === 0xd800) j$21--;
+      r$11 = cons$10(t$20.slice(j$21, i$19), r$11);
+    }
+    return r$11;
+  })(), ((t2) => $bool(!(t2.tag === "b3oi8ad6i9snrm47e6s1e9o39j" /* gap */))));
 }
 
 // expect
@@ -351,20 +351,20 @@ function letter(c4) {
 // keep
 function keep$plain(list, test) {
   return (() => {
-      const got$42 = [];
-      (() => {
-          for (let l$43 = list; l$43.tag === "std.list.cons"; l$43 = l$43.fields[1]) {
-            const x$44 = l$43.fields[0];
-            const item = x$44;
-            if ((test(item).tag === "std.bool.true")) {
-              got$42.push(item);
-            } else {
-              /* fail */
-            }
-          }
-        })();
-      return $toList(got$42);
+    const got$42 = [];
+    (() => {
+      for (let l$43 = list; l$43.tag === "std.list.cons"; l$43 = l$43.fields[1]) {
+        const x$44 = l$43.fields[0];
+        const item = x$44;
+        if ((test(item).tag === "std.bool.true")) {
+          got$42.push(item);
+        } else {
+          /* fail */
+        }
+      }
     })();
+    return $toList(got$42);
+  })();
 }
 
 // expression
@@ -415,30 +415,30 @@ function apply(operator, a3, b4) {
   }
   if ((operator === "/")) {
     return (() => {
-        const r$48 = $partial["builtin.int.quotient"](a3, b4);
-        if (r$48 !== $no) {
-          return r$48;
-        }
-        return $perform("std.abort", "std.abort.abort" /* abort */, ["division by zero"]);
-      })();
+      const r$48 = $partial["builtin.int.quotient"](a3, b4);
+      if (r$48 !== $no) {
+        return r$48;
+      }
+      return $perform("std.abort", "std.abort.abort" /* abort */, ["division by zero"]);
+    })();
   }
   if ((operator === "%")) {
     return (() => {
-        const r$50 = $partial["builtin.int.remainder"](a3, b4);
-        if (r$50 !== $no) {
-          return r$50;
-        }
-        return $perform("std.abort", "std.abort.abort" /* abort */, ["remainder of division by zero"]);
-      })();
+      const r$50 = $partial["builtin.int.remainder"](a3, b4);
+      if (r$50 !== $no) {
+        return r$50;
+      }
+      return $perform("std.abort", "std.abort.abort" /* abort */, ["remainder of division by zero"]);
+    })();
   }
   if ((operator === "^")) {
     return (() => {
-        const r$52 = $partial["builtin.int.power"](a3, b4);
-        if (r$52 !== $no) {
-          return r$52;
-        }
-        return $perform("std.abort", "std.abort.abort" /* abort */, ["negative power"]);
-      })();
+      const r$52 = $partial["builtin.int.power"](a3, b4);
+      if (r$52 !== $no) {
+        return r$52;
+      }
+      return $perform("std.abort", "std.abort.abort" /* abort */, ["negative power"]);
+    })();
   }
   return $perform("std.abort", "std.abort.abort" /* abort */, [("unknown operator " + operator)]);
 }
@@ -483,17 +483,17 @@ function sum_rest(left$in, tokens8$in) {
           const right = ($spendOrThrow(), product(more5));
           $spendOrThrow();
           left$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-                    const s$57 = t5;
-                    switch (s$57.tag) {
-                      case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                        const m3 = s$57.fields[0];
-                        return m3;
-                      }
-                      default: {
-                        return "";
-                      }
-                    }
-                  })(), left, right.fields[0]] });
+            const s$57 = t5;
+            switch (s$57.tag) {
+              case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
+                const m3 = s$57.fields[0];
+                return m3;
+              }
+              default: {
+                return "";
+              }
+            }
+          })(), left, right.fields[0]] });
           tokens8$in = right.fields[1];
           continue;
         }
@@ -568,17 +568,17 @@ function product_rest(left2$in, tokens10$in) {
           const right2 = ($spendOrThrow(), unary(more7));
           $spendOrThrow();
           left2$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-                    const s$66 = t7;
-                    switch (s$66.tag) {
-                      case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                        const m6 = s$66.fields[0];
-                        return m6;
-                      }
-                      default: {
-                        return "";
-                      }
-                    }
-                  })(), left2, right2.fields[0]] });
+            const s$66 = t7;
+            switch (s$66.tag) {
+              case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
+                const m6 = s$66.fields[0];
+                return m6;
+              }
+              default: {
+                return "";
+              }
+            }
+          })(), left2, right2.fields[0]] });
           tokens10$in = right2.fields[1];
           continue;
         }
@@ -638,12 +638,12 @@ function atom(tokens12) {
         case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
           const d4 = s$72.fields[0];
           return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "c8qnc3q04fv6qolvnrj06fkj6q" /* literal */, fields: [(() => {
-                          const r$74 = $partial["builtin.int.read"](d4);
-                          if (r$74 !== $no) {
-                            return r$74;
-                          }
-                          return $perform("std.abort", "std.abort.abort" /* abort */, [("not a number: " + d4)]);
-                        })()] }), more9] });
+            const r$74 = $partial["builtin.int.read"](d4);
+            if (r$74 !== $no) {
+              return r$74;
+            }
+            return $perform("std.abort", "std.abort.abort" /* abort */, [("not a number: " + d4)]);
+          })()] }), more9] });
         }
         case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
           const w3 = s$72.fields[0];
@@ -652,22 +652,22 @@ function atom(tokens12) {
         case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
           const m8 = s$72.fields[0];
           if ((m8 === "(")) {
-              const inside = ($spendOrThrow(), expression(more9));
-              return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [inside.fields[0], expect(")", inside.fields[1])] });
+            const inside = ($spendOrThrow(), expression(more9));
+            return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [inside.fields[0], expect(")", inside.fields[1])] });
           }
           return $perform("std.abort", "std.abort.abort" /* abort */, [("expected a number, a name or “(”, got " + describe(tokens12))]);
-          }
-          default: {
-            return $perform("std.abort", "std.abort.abort" /* abort */, [("expected a number, a name or “(”, got " + describe(tokens12))]);
-            }
-          }
         }
         default: {
           return $perform("std.abort", "std.abort.abort" /* abort */, [("expected a number, a name or “(”, got " + describe(tokens12))]);
-          }
         }
       }
+    }
+    default: {
+      return $perform("std.abort", "std.abort.abort" /* abort */, [("expected a number, a name or “(”, got " + describe(tokens12))]);
+    }
+  }
+}
 
-      export const defs = {
-        "main": main,
-      };
+export const defs = {
+  "main": main,
+};
