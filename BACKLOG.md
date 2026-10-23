@@ -145,7 +145,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| P4 | CI on a pull request is only the type check (under a minute); unit and browser tests run once per merge before the deploy | this PR |
+| P4 | CI on a pull request is only the type check (under a minute); unit and browser tests run once per merge before the deploy | #187 |
 
 ### Before the backlog
 
