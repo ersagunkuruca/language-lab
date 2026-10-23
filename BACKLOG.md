@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E17 | Tidy that cuts crossings (layered, Sugiyama-style; credit as prior art) | node-editor backlog | P3 | M | |
 | E18 | Wires routed around nodes | node-editor backlog | P3 | M | |
 | E19 | Minimap / "there's more" cue, and collapsible frames | node-editor backlog, QA2 UX4 | P3 | M | |
 | E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
@@ -82,6 +81,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E17 | Tidy reorders columns to cut crossings (Sugiyama barycenter + swaps) and stops pushing nodes across wires: examples 410 to 375 crossings after tidy (was 522) | #256 |
 | E21 | Int literals in the palette ("an integer"): already there since 79f95d0; closed on review | none |
 | E16 | Copy into my program and Pin this type: already in the Definition tab since 0ca7b27 (Oct 22); closed on review | none |
 | E34 | Programs have a comment like definitions; each example's credits became that comment, credits.json is gone (Ersagun 19:34) | #253 |

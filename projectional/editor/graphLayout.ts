@@ -3,9 +3,11 @@
 // like the rest of the language (test/graphLayout.test.ts). The why is in
 // NODE-EDITOR.md.
 //
-//   tidy         space out nodes (all of them, or only some): no overlaps,
-//                a frame's contents stay together, nodes move off wires that
-//                run through them, inputs stay left of what they feed
+//   tidy         space out nodes (all of them, or only some): reorder each
+//                column to cut crossings, no overlaps, a frame's contents
+//                stay together, nodes move off wires that run through them
+//                (unless that crosses others), inputs stay left of what
+//                they feed
 //   crossings    where one wire passes over another (drawn as a bridge, a
 //                small hop, as in Visio's line jumps) or under a node (a
 //                tunnel)
@@ -207,7 +209,11 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
   const containers = [null, ...frames.map((f) => f.id)];
   const shift = (ids: TNode[], dx: number, dy: number) => { for (const n of ids) if (free(n)) { n.x += dx; n.y += dy; } };
 
-  for (let iter = 0; iter < 80; iter++) {
+  uncross(ns, frames, wires, free);
+  // Node and wire pairs where moving off the wire would cross others.
+  const stay = new Set<string>();
+
+  const settle = () => { for (let iter = 0; iter < 80; iter++) {
     let moved = 0;
     const fb = frameBoxes(ns, frames);
     // 1. Overlaps between units in the same container.
@@ -241,20 +247,25 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
       }
     }
     // 2. Nodes off wires that run through them.
-    for (const w of wires) {
+    for (const [wi, w] of wires.entries()) {
       const a = byId.get(w.from), b = byId.get(w.to);
       const fa = a ?? (fb.has(w.from) ? fb.get(w.from)! : null), tb = b ?? (fb.has(w.to) ? fb.get(w.to)! : null);
       if (!fa || !tb) continue;
       const pts = curvePoints(fa.x + w.fx, fa.y + w.fy, tb.x + w.tx, tb.y + w.ty, 16);
       for (const n of ns) {
-        if (n === a || n === b || !free(n)) continue;
+        if (n === a || n === b || !free(n) || stay.has(`${n.id} ${wi}`)) continue;
         const box = { x: n.x - 4, y: n.y - 4, w: n.w + 8, h: n.h + 8 };
         const hit = pts.filter((p) => p.x > box.x && p.x < box.x + box.w && p.y > box.y && p.y < box.y + box.h);
         if (!hit.length) continue;
         const wy = hit.reduce((s, p) => s + p.y, 0) / hit.length;
         const up = wy - box.y, down = box.y + box.h - wy;
         const dy = up < down ? Math.min(up, 30) + 1 : -(Math.min(down, 30) + 1);
+        // Off one wire but across others is worse: the tunnel shows the
+        // wire behind the node anyway.
+        const own = wires.filter((v) => v.from === n.id || v.to === n.id);
+        const before = own.length ? crossingCount(ns, frames, wires, own) : 0;
         n.y += dy;
+        if (own.length && crossingCount(ns, frames, wires, own) > before) { n.y -= dy; stay.add(`${n.id} ${wi}`); continue; }
         moved++;
       }
     }
@@ -272,7 +283,10 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
       moved++;
     }
     if (!moved) break;
-  }
+  } };
+  settle();
+  // Spacing out can cross wires again: one more reordering, and space out what it moved.
+  if (uncross(ns, frames, wires, free)) settle();
   const out = new Map<string, Pos>();
   for (const n of ns) {
     const o = nodes.find((m) => m.id === n.id)!;
@@ -280,4 +294,96 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
     if (x !== Math.round(o.x) || y !== Math.round(o.y)) out.set(n.id, { x, y });
   }
   return out;
+}
+
+// Cut crossings by reordering columns: the barycenter step of Sugiyama,
+// Tagawa and Toda's layered layout (1981). Nodes whose spans overlap
+// sideways, in the same frame, are a column; each is sorted by the mean
+// height of what its wires reach, and takes the old column's places in that
+// order; then neighbours trade places where that alone helps. A change is
+// kept only if fewer wires cross, and the spacing pass after it fixes up
+// any squeeze.
+function uncross(ns: TNode[], frames: TFrame[], wires: TWire[], free: (n: TNode) => boolean): boolean {
+  const crossings = (some: TWire[]) => crossingCount(ns, frames, wires, some);
+  const columns: TNode[][] = [];
+  for (const c of [null, ...frames.map((f) => f.id)]) {
+    const here = ns.filter((n) => n.frame === c && free(n)).sort((a, b) => a.x - b.x);
+    let col: TNode[] = [], right = -Infinity;
+    for (const n of here) {
+      if (n.x >= right - 8) { if (col.length > 1) columns.push(col); col = []; right = -Infinity; }
+      col.push(n);
+      right = Math.max(right, n.x + n.w);
+    }
+    if (col.length > 1) columns.push(col);
+  }
+  if (!columns.length) return false;
+  let changed = false;
+  const ends = (n: TNode) => wires.filter((w) => w.from === n.id || w.to === n.id);
+  for (let sweep = 0; sweep < 4; sweep++) {
+    let better = false;
+    for (const col of columns) {
+      const touching = [...new Set(col.flatMap(ends))];
+      if (touching.length < 2) continue;
+      const fb = frameBoxes(ns, frames);
+      const box = (id: string): Box | undefined => ns.find((m) => m.id === id) ?? fb.get(id);
+      const mean = (n: TNode) => {
+        const ys = ends(n).map((w) => {
+          const [id, dy] = w.from === n.id ? [w.to, w.ty] : [w.from, w.fy];
+          const b = box(id);
+          return b ? b.y + dy : null;
+        }).filter((y): y is number => y !== null);
+        return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : n.y + n.h / 2;
+      };
+      const was = [...col].sort((a, b) => a.y - b.y);
+      const order = was.map((n, i) => ({ n, k: mean(n), i })).sort((a, b) => a.k - b.k || a.i - b.i).map((e) => e.n);
+      if (order.every((n, i) => n === was[i])) continue;
+      const before = crossings(touching);
+      const old = was.map((n) => n.y);
+      // The same top and the same gaps, the nodes in the new order.
+      const gaps = was.slice(1).map((n, i) => n.y - (was[i].y + was[i].h));
+      let y = was[0].y;
+      order.forEach((n, i) => { n.y = y; y += n.h + (gaps[i] ?? 0); });
+      if (crossings(touching) < before) { better = changed = true; col.sort((a, b) => a.y - b.y); continue; }
+      was.forEach((n, i) => { n.y = old[i]; });
+    }
+    // Then neighbours in a column trade places where that alone helps.
+    for (const col of columns) {
+      col.sort((a, b) => a.y - b.y);
+      for (let i = 0; i + 1 < col.length; i++) {
+        const [a, b] = [col[i], col[i + 1]];
+        const touching = [...ends(a), ...ends(b)];
+        if (!touching.length) continue;
+        const before = crossings(touching);
+        const [ay, by] = [a.y, b.y];
+        b.y = ay; a.y = ay + b.h + (by - (ay + a.h));
+        if (crossings(touching) < before) { better = changed = true; col[i] = b; col[i + 1] = a; continue; }
+        a.y = ay; b.y = by;
+      }
+    }
+    if (!better) break;
+  }
+  return changed;
+}
+
+// How many times the wires in `some` cross any wire, as the graph draws
+// them (not where wires meet at a port): what tidy weighs a move by.
+function crossingCount(ns: TNode[], frames: TFrame[], wires: TWire[], some: TWire[]): number {
+  const byId = new Map(ns.map((n) => [n.id, n]));
+  const fb = frameBoxes(ns, frames);
+  const line = (w: TWire): Pos[] | null => {
+    const a = byId.get(w.from) ?? fb.get(w.from), b = byId.get(w.to) ?? fb.get(w.to);
+    return a && b ? curvePoints(a.x + w.fx, a.y + w.fy, b.x + w.tx, b.y + w.ty, 28) : null;
+  };
+  const lines = new Map(wires.map((w) => [w, line(w)]));
+  let n = 0;
+  for (const w of some) {
+    const p = lines.get(w);
+    if (!p) continue;
+    for (const v of wires) {
+      const q = lines.get(v);
+      if (v === w || !q) continue;
+      n += crossingsOf(p, [q]).length;
+    }
+  }
+  return n;
 }

@@ -66,3 +66,30 @@ test("tidy keeps a frame's contents together and the frame clear of its neighbou
   assert.ok(!overlaps(fb, after[2]), "the outside node overlaps the frame");
   assert.equal(after[1].y - after[0].y, 40, "the frame's contents moved together");
 });
+
+test("tidy reorders a column to cut crossings, and leaves an order with none alone", () => {
+  // a feeds d and b feeds c: the wires cross until c and d swap places.
+  const nodes: TNode[] = [
+    { id: "a", x: 0, y: 0, w: 60, h: 30, frame: null },
+    { id: "b", x: 0, y: 80, w: 60, h: 30, frame: null },
+    { id: "c", x: 200, y: 0, w: 60, h: 50, frame: null },
+    { id: "d", x: 200, y: 90, w: 60, h: 30, frame: null },
+  ];
+  const wires = [
+    { from: "a", fx: 60, fy: 15, to: "d", tx: 0, ty: 15, flow: true },
+    { from: "b", fx: 60, fy: 15, to: "c", tx: 0, ty: 15, flow: true },
+  ];
+  const line = (w: (typeof wires)[number], at: (id: string) => TNode) =>
+    curvePoints(at(w.from).x + w.fx, at(w.from).y + w.fy, at(w.to).x + w.tx, at(w.to).y + w.ty);
+  const cross = (at: (id: string) => TNode) => crossingsOf(line(wires[0], at), [line(wires[1], at)], 0).length;
+  const was = (id: string) => nodes.find((n) => n.id === id)!;
+  assert.ok(cross(was) > 0);
+  const moved = tidy(nodes, [], wires);
+  const now = (id: string) => ({ ...was(id), ...(moved.get(id) ?? {}) });
+  assert.equal(cross(now), 0, "the wires still cross");
+  const after = nodes.map((n) => now(n.id));
+  for (let i = 0; i < after.length; i++) for (let j = i + 1; j < after.length; j++) assert.ok(!overlaps(after[i], after[j]), `${after[i].id} and ${after[j].id} overlap`);
+  // Already uncrossed: nothing moves.
+  const settled = after.map((n) => ({ ...n }));
+  assert.equal(tidy(settled, [], wires).size, 0);
+});
