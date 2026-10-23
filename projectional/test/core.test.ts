@@ -32,7 +32,7 @@ const discriminant = (names: string[]) => {
 };
 
 test("the compose example renders both ways from the same tree", () => {
-  const dir = join(root, "examples/compose");
+  const dir = join(root, "examples/archive/compose");
   const code = loadCode(dir);
   const a = code.defs.at(-1)!;
   assert.equal(renderNested(code, loadPresentation(dir, { names: ["default"], style: "math" }), a),
