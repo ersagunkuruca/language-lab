@@ -476,10 +476,11 @@ function applyT(e: T.TEdit, then?: () => void): boolean {
     return false;
   }
   if (e.select) ui.selected = e.select;
+  const note = holdType(e.code);
   then?.();
   // A node an edit removed takes its names with it, in every layer.
   const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
-  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) } }, ["code.json", "names.short.json"], e.note);
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) } }, ["code.json", "names.short.json"], e.note + note);
   return true;
 }
 
@@ -503,12 +504,43 @@ function travel(from: Doc[], to: Doc[], label: string) {
 
 const node = (id: Id) => doc.code.nodes[id];
 
+// A definition's type doesn't loosen while a hole is open in it. Clearing
+// the √ in period would leave its inputs unused, so its type would become
+// (a, b) -> Number. Until its holes are filled, the type it had stays, as a
+// pin the editor holds for the session (not signatures.json); "Let it
+// loosen" in its Type section drops it.
+let held: Pins = {};
+const hasHole = (code: Code, d: Id) => !!code.nodes[d] && subtree(code, d).some((x) => code.nodes[x].kind === "hole");
+function holdType(next: Code): string {
+  const d = ui.def, info = typesOf();
+  if (!info || doc.signatures?.[d] || held[d] || hasHole(doc.code, d) || !hasHole(next, d)) return "";
+  // An edit to its inputs changes its type on purpose.
+  const inputs = (c: Code) => { const n = c.nodes[d], b = n?.kind === "def" && n.body ? c.nodes[n.body] : null; return b?.kind === "lambda" ? b.params.join() : ""; };
+  if (inputs(doc.code) !== inputs(next)) return "";
+  const p = T.pin(doc.code, info, {}, d, "");
+  if (!p.ok || !p.pins[d]) return "";
+  T.setProgramPins(doc.signatures ?? NO_PINS);
+  let loose: string | null = null;
+  try { loose = T.typeOf(T.infer(next, pres().names), d, pres().names); } catch { return ""; }
+  const was = T.typeOf(info, d, pres().names);
+  if (loose === was) return "";
+  held = { ...held, [d]: p.pins[d] };
+  return ` ${pres().names[d] ?? "It"} keeps its type, ${was}, while the hole is open.`;
+}
+
 // Type inference for typed programs, once per version of the code.
 // Pins take part, so a pin or unpin with the same code checks again.
 const NO_PINS: Pins = {};
 const typedInfo = new WeakMap<Code, { pins: Pins; info: T.Info }>();
+let heldPins: { sigs: Pins; held: Pins; all: Pins } | null = null;
 function typesOf(): T.Info | null {
-  const pins = doc.signatures ?? NO_PINS;
+  // A held type lasts until its definition has no holes (filled, or undone).
+  const done = Object.keys(held).filter((d) => !hasHole(doc.code, d));
+  if (done.length) { held = { ...held }; for (const d of done) delete held[d]; }
+  const sigs = doc.signatures ?? NO_PINS;
+  if (!Object.keys(held).length) heldPins = null;
+  else if (heldPins?.sigs !== sigs || heldPins.held !== held) heldPins = { sigs, held, all: { ...held, ...sigs } };
+  const pins = heldPins?.all ?? sigs;
   T.setProgramPins(pins);
   const hit = typedInfo.get(doc.code);
   if (hit?.pins === pins) return hit.info;
@@ -1163,6 +1195,14 @@ const topT = (info: T.Info, r: Top.Top): T.TEdit => (r.ok ? T.guardTyped(info, r
 function pinRow(info: T.Info, dname: string) {
   const pins = doc.signatures ?? {};
   const pinned = pins[ui.def];
+  if (!pinned && held[ui.def]) {
+    const loosen = h("button", { class: "btn", type: "button" }, "Let it loosen");
+    loosen.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; render(); });
+    return h("div", { class: "pin-row" },
+      h("div", { class: "sub-head" }, `Type of ${dname}`),
+      h("p", { class: "hint" }, `Kept at ${showPin(held[ui.def], pres().names)} while it has a hole, so clearing a node doesn't loosen it. Fills must keep it.`),
+      h("div", { class: "acts" }, loosen));
+  }
   const r = pinned ? T.unpin(pins, ui.def, dname) : T.pin(doc.code, info, pins, ui.def, dname);
   const run = () => { if (r.ok) commit({ signatures: r.pins }, ["signatures.json"], r.note); };
   return h("div", { class: "pin-row" },

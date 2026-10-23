@@ -27,7 +27,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E3 | Clearing a node to a hole generalizes the definition's type (`period : (a, b) -> Number`) | QA2 L3 | P1 | S | |
 | E4 | A used input can't be removed: offer remove-and-leave-holes | QA2 can't-edit 5 | P1 | S | |
 | E5 | Tabs pile up off the right edge, no overflow control | QA2 UX2 | P2 | S | |
 | E6 | Show inline overflows the graph with no refit; its labels sit on wires | QA2 UX3 | P2 | S | |
@@ -119,6 +118,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E3 | Clearing a node keeps its definition's type while the hole is open | #191 |
 | E2 | Reorder an action's steps: Do it earlier / later | #184 |
 | E1 | Inner lambda parameters: add, remove, reorder | #179 |
 | | Right-click menu edits show what they selected (QA2 H1's last part) | #177 |
