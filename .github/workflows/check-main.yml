@@ -1,0 +1,55 @@
+# Every test suite, once per merge to main, beside the deploy instead of
+# before it (projectional/TESTING.md, T1): the unit tests, then the browser
+# tests (the editor, every example, shaders.html, WGSL on a GPU) on a fresh
+# build. A red run doesn't stop the site; it is main's to fix, by the next
+# pull request. A pull request itself only type-checks (test.yml).
+name: Check main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - "!**.md"
+      - "!**.png"
+      - "!**.jpg"
+      - "!**.gif"
+  workflow_dispatch:
+
+# Merges that land during a run wait, and only the newest of them runs
+# next: it tests everything, so the ones skipped lose nothing.
+concurrency:
+  group: check-main
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: projectional/package-lock.json
+      - name: Build the pages
+        working-directory: projectional
+        run: |
+          npm ci
+          npm run build-editor
+      # Node runs (cores - 1) test files at a time, which is one on the
+      # runner's two cores; two at a time is much faster.
+      - name: Unit tests
+        run: |
+          (cd projectional && node --test --test-concurrency=2 test/*.test.ts)
+          (cd invertible && npm test)
+          (cd compiler && npm test)
+      - name: The editor in a browser
+        working-directory: projectional
+        run: |
+          npm run smoke
+          npm run smoke-shaders
+      - name: compiler's WGSL on a GPU (WebGPU in headless Chrome)
+        working-directory: compiler
+        run: npm run gpu

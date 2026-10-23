@@ -18,9 +18,9 @@ concurrency:
   cancel-in-progress: true
 
 # Every test suite (unit, the editor in a browser, shaders, WGSL on a GPU)
-# runs once per merge in pages.yml, before it publishes: a failure there
-# stops the deploy, so the live site keeps its last good build, and the
-# next pull request fixes main. Run the suites locally before pushing.
+# runs once per merge in check-main.yml, beside the deploy: a failure there
+# is reported, and the next pull request fixes main. Run the suites locally
+# before pushing.
 jobs:
   typecheck:
     runs-on: ubuntu-latest
