@@ -88,7 +88,8 @@ const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fue
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
-export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[] }
+// `mutable`: a box the lowering makes (W4d), whose one field a search sets.
+export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true }
 // A data type with several cases, or one that contains itself (`data`).
 // A case's fields are in the order written.
 // `inner`: made by the lowering (a fold's stack), not the program's.
@@ -139,8 +140,63 @@ export function kids(e: SExpr): SExpr[] {
     case "attempt": return [e.body, e.ok, e.otherwise];
     case "abort": return [e.reason];
     case "handle": return [e.body, e.arm];
+    case "choose": return [e.list];
+    case "search": return [e.body, ...(e.dflt ? [e.dflt] : [])];
+    case "set": return [e.rec, e.value, e.then];
     default: return [];
   }
+}
+// e with its kids (in kids' order) replaced by f's.
+export function mapKids(e: SExpr, f: (x: SExpr) => SExpr): SExpr {
+  switch (e.k) {
+    case "op": case "call": case "make": case "new": case "rt": case "world": return { ...e, args: e.args.map(f) } as SExpr;
+    case "if": return { ...e, cond: f(e.cond), then: f(e.then), else: f(e.else) };
+    case "let": return { ...e, value: f(e.value), body: f(e.body) };
+    case "get": case "field": case "tag": return { ...e, rec: f(e.rec) } as SExpr;
+    case "case": { const scrut = f(e.scrut); return { ...e, scrut, arms: e.arms.map((a) => a && f(a)) }; }
+    case "budget": return { ...e, body: f(e.body), otherwise: f(e.otherwise) };
+    case "closure": return { ...e, caps: e.caps.map(f) };
+    case "apply": { const fn = f(e.fn); return { ...e, fn, args: e.args.map(f) }; }
+    case "attempt": return { ...e, body: f(e.body), ok: f(e.ok), otherwise: f(e.otherwise) };
+    case "abort": return { ...e, reason: f(e.reason) };
+    case "handle": return { ...e, body: f(e.body), arm: f(e.arm) };
+    case "choose": return { ...e, list: f(e.list) };
+    case "search": { const body = f(e.body); return { ...e, body, ...(e.dflt ? { dflt: f(e.dflt) } : {}) }; }
+    case "set": { const rec = f(e.rec), value = f(e.value); return { ...e, rec, value, then: f(e.then) }; }
+    default: return e;
+  }
+}
+// e with every local it reads or sets renumbered by m.
+export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
+  const r = mapKids(e, (x) => mapLocals(x, m));
+  switch (r.k) {
+    case "local": return { k: "local", i: m(r.i) };
+    case "let": return { ...r, i: m(r.i) };
+    case "case": return { ...r, s: m(r.s) };
+    case "attempt": case "search": return { ...r, res: m(r.res) };
+    case "apply": return { ...r, tmp: m(r.tmp) };
+    case "handle": return { ...r, reason: m(r.reason), save: m(r.save) };
+    case "budget": return { ...r, save: m(r.save), res: m(r.res) };
+    default: return r;
+  }
+}
+// The locals e reads that it doesn't set itself, in the order first read.
+function freeLocals(e: SExpr): number[] {
+  const read: number[] = [], set = new Set<number>();
+  const walk = (x: SExpr) => {
+    switch (x.k) {
+      case "local": if (!read.includes(x.i)) read.push(x.i); break;
+      case "let": set.add(x.i); break;
+      case "case": set.add(x.s); break;
+      case "attempt": case "search": set.add(x.res); break;
+      case "apply": set.add(x.tmp); break;
+      case "handle": set.add(x.reason); set.add(x.save); break;
+      case "budget": set.add(x.save); set.add(x.res); break;
+    }
+    kids(x).forEach(walk);
+  };
+  walk(e);
+  return read.filter((i) => !set.has(i));
 }
 
 export type SExpr =
@@ -154,7 +210,9 @@ export type SExpr =
   | { k: "op"; op: Op; args: SExpr[] }
   | { k: "if"; cond: SExpr; then: SExpr; else: SExpr; t: LType }
   | { k: "let"; i: number; value: SExpr; body: SExpr }
-  | { k: "call"; fn: number; args: SExpr[]; tail: boolean }
+  // `cps`: a call of a function with several answers (W4d), the rest of
+  // the search passed as its last input.
+  | { k: "call"; fn: number; args: SExpr[]; tail: boolean; cps?: true }
   | { k: "make"; t: RType; args: SExpr[] }
   | { k: "get"; rec: SExpr; t: RType; i: number }
   // A value of case c of t, and field i of one (it is that case: the
@@ -190,7 +248,16 @@ export type SExpr =
   | { k: "abort"; reason: SExpr }
   // An operation on the world (WORLD_OPS), with its result's type.
   | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType }
-  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number };
+  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number }
+  // W4d, gone after lowering: `one of` a list (t), anywhere, and a
+  // handler's search (first, optional, all, count) to be made into code
+  // once it's known whether it has several answers.
+  | { k: "choose"; list: SExpr; t: DType }
+  | { k: "search"; kind: "first" | "optional" | "all" | "count"; body: SExpr; res: number; t: LType; bt: LType; dflt?: SExpr }
+  // Field i of the box rec set to value, then `then`; and the zero of t
+  // (what a box starts as, before a search sets it).
+  | { k: "set"; rec: SExpr; t: RType; i: number; value: SExpr; then: SExpr }
+  | { k: "zero"; t: LType };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
 // WebAssembly instructions; a WASM module imports them, a shader has them
@@ -211,7 +278,10 @@ export const OPS = {
 // is a function of its own), so not something to call from outside either.
 // `partial`: it has one answer or none (Choice, `data`), so it gives a
 // status with its answer (wasm.ts).
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean }
+// `multi`: it has several answers (W4d): it takes the rest of the search
+// as its last input and gives what that gives; `answer` is the type of
+// its answers.
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info }
@@ -512,6 +582,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "world", ...WORLD_OPS[target], args: args(), t };
         }
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
+        if (target === S.oneOf && opts.data && n.args.length === 1) {
+          const lt = stype(zonk(n.args[0]));
+          if (!lt || !isData(lt) || !lt.cases.some((c) => c.variant === CONS)) throw new Refused(`chooses one of ${whyNot(zonk(n.args[0]))}`);
+          return { k: "choose", list: expr(n.args[0], env, f, false), t: lt };
+        }
         if (opts.data && [S.first, S.optional, S.all, S.count].includes(target) && !isBudget(n)) return attempt(n, id, env, f);
         if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
@@ -663,6 +738,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const shape = shapes.push({ t, caps }) - 1;
     const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
     const gi = funcs.push(g) - 1;
+    closureCode.add(gi);
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
@@ -675,6 +751,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const shape = shapes.push({ t, caps: [] }) - 1;
       const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
       index.set(key, funcs.push(g) - 1);
+      closureCode.add(index.get(key)!);
       // What its type variables are, from the type it's used at.
       const types: At = new Map();
       const dt = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
@@ -853,10 +930,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const body = a?.kind === "lambda" && !a.params.length ? code.nodes[a.body] : null;
     return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && body?.kind === "call" && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
   }
-  // first, optional, all and count of a search written in place. With no
-  // `one of` in the profile, a search has one answer or none, so each is
-  // that answer, or what they give for none: first's default, none, an
-  // empty list, 0.
+  // first, optional, all and count of a search written in place: the
+  // search, lowered with `one of` where it chooses, and what the handler
+  // makes of its answers. Once everything it calls is lowered, the pass
+  // below (several) makes it code.
   function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
@@ -864,136 +941,237 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (!search || (target === S.first && !dflt)) throw new Refused(`uses ${nm(target)} on a search that isn't written in place (as () => …)`);
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
+    const kind = target === S.first ? "first" : target === S.optional ? "optional" : target === S.all ? "all" : "count";
+    const body = expr(search, env, f, false);
+    return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt ? { dflt: expr(dflt, env, f, false) } : {}) };
+  }
+
+  // ---- searches with several answers (projectional/WASM.md, W4d)
+  //
+  // A function that chooses (`one of`), or calls one that does, outside
+  // a handler, has several answers. It's lowered as the JS backend's `$k`
+  // copies are (COMPILER.md, "Searches in continuation-passing style"),
+  // which is how Mercury's high-level C backend compiles nondeterministic
+  // code (Henderson and Somogyi, CC 2002): it takes the rest of the search,
+  // k, as one more input, and calls it on each answer in turn. k gives
+  // "stop" as an answer, or "go on" as no answer (status 1), so a choice
+  // is a loop that tries k on each item until one stops, and `fail` is
+  // just going on. A handler's k puts each answer in a box it made: first
+  // stops at the first, all keeps going and adds each one.
+  //
+  // The rest of a search (Cont.gen) is code, made where the answer is,
+  // into the function at hand; when it has to go into a loop, a closure
+  // or a join of its own, it's moved there (its locals renumbered), taking
+  // the locals it reads as inputs or captures.
+  type Cont = { gen: (v: SExpr, tail: boolean) => SExpr; direct?: SExpr };
+  const closureCode = new Set<number>();
+  const kOf = (t: LType): FType => {
+    const key = `fn(${keyOf(t)})>i32!`;
+    if (!fns.has(key)) fns.set(key, { key, params: [t], result: "i32", partial: true });
+    return fns.get(key)!;
+  };
+  const boxOf = (t: LType): RType => {
+    const key = `box:${keyOf(t)}`;
+    if (!records.has(key)) records.set(key, { key, name: "Box", def: key, variant: key, fields: [{ name: "value", t }], mutable: true });
+    return records.get(key)!;
+  };
+  const local = (i: number): SExpr => ({ k: "local", i });
+  // Whether e has several answers: it chooses, or calls a function that
+  // does, outside a handler (whose search, and its default, are its own).
+  function several(e: SExpr): boolean {
+    if (e.k === "choose") return true;
+    if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
+    if (e.k === "search") return !!e.dflt && several(e.dflt);
+    if (e.k === "budget" && several(e.body)) throw new Refused("chooses among several answers under a budget (not in WebAssembly yet)");
+    if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
+    return kids(e).some(several);
+  }
+  // A tail call inside e isn't one once e is a value in the rest of a search.
+  const untail = (e: SExpr): SExpr => { const r = mapKids(e, untail); return r.k === "call" || r.k === "apply" ? { ...r, tail: false } : r; };
+  const trivial = (e: SExpr) => ["local", "num", "int", "bool", "text"].includes(e.k);
+  // The type of e's value, in g.
+  function typeIn(e: SExpr, g: SFunc): LType {
+    switch (e.k) {
+      case "local": return g.locals[e.i];
+      case "num": return "f64";
+      case "int": return "i64";
+      case "bool": case "tag": return "i32";
+      case "text": return "text";
+      case "op": return OPS[e.op].t;
+      case "call": return funcs[e.fn].multi ? "i32" : funcs[e.fn].result;
+      case "make": case "new": case "closure": case "world": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
+      case "get": return e.t.fields[e.i].t;
+      case "field": return e.t.cases[e.c].fields[e.i].t;
+      case "apply": return e.t.result;
+      case "case": return e.result;
+      case "let": return typeIn(e.body, g);
+      case "set": return typeIn(e.then, g);
+      case "rt": { const r = runtime(e.fn).result; if (r === "i32" || r === "i64" || r === "f64" || r === "text") return r; break; }
+    }
+    throw new Refused("chooses after a value it can't keep (not in WebAssembly yet)");
+  }
+  // code, made in g, moved into h: `fixed` says where the locals it reads
+  // from g are in h; the ones it sets get new locals there.
+  function move(e: SExpr, g: SFunc, h: SFunc, fixed: Map<number, number>): SExpr {
+    const m = new Map(fixed);
+    return mapLocals(e, (i) => { if (!m.has(i)) m.set(i, h.locals.push(g.locals[i]) - 1); return m.get(i)!; });
+  }
+  // A function of its own for the rest of a search, given what it reads:
+  // `first` its first inputs, then those locals.
+  function apart(g: SFunc, name: string, first: LType[], code: SExpr, bound: number[]) {
+    const free = freeLocals(code).filter((i) => !bound.includes(i));
+    const params = [...first, ...free.map((i) => g.locals[i])];
+    const h: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.${name}`, params, result: "i32", locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+    const hi = funcs.push(h) - 1;
+    return { h, hi, free, fixed: new Map(free.map((i, j) => [i, first.length + j] as const)), passed: free.map(local) };
+  }
+  // The rest of the search for v of type t: k itself, or a join that
+  // takes v, made once, for the arms of a match or an if.
+  function join(k: Cont, t: LType, g: SFunc, uses: number): Cont {
+    if (k.direct || uses <= 1) return k;
+    const v = g.locals.push(t) - 1;
+    const code = k.gen(local(v), true);
+    const j = apart(g, "join", [t], code, [v]);
+    j.fixed.set(v, 0);
+    j.h.body = move(code, g, j.h, j.fixed);
+    return { gen: (x, tail) => ({ k: "call", fn: j.hi, args: [x, ...j.passed], tail }) };
+  }
+  // `one of` list: a loop over it that tries the rest of the search on
+  // each item until that stops.
+  function choose(list: SExpr, lt: DType, k: Cont, tail: boolean, g: SFunc): SExpr {
+    const cons = lt.cases.findIndex((c) => c.variant === CONS), et = lt.cases[cons].fields[0].t;
+    const x = g.locals.push(et) - 1;
+    const code = k.gen(local(x), false);
+    const l = apart(g, "choose", [lt], code, [x]);
+    const head = l.h.locals.push(et) - 1, rest = l.h.locals.push(lt) - 1, res = l.h.locals.push("i32") - 1;
+    l.fixed.set(x, head);
+    const moved = move(code, g, l.h, l.fixed);
+    const scrut = local(0);
+    const again: SExpr = { k: "call", fn: l.hi, args: [local(rest), ...l.free.map((_, j) => local(1 + j))], tail: true };
+    l.h.body = {
+      k: "case", scrut, s: 0, t: lt, result: "i32",
+      arms: lt.cases.map((_, c): SExpr => (c !== cons ? { k: "fail" } : {
+        k: "let", i: head, value: { k: "field", rec: scrut, t: lt, c, i: 0 },
+        body: { k: "let", i: rest, value: { k: "field", rec: scrut, t: lt, c, i: 1 }, body: { k: "attempt", body: moved, res, ok: local(res), otherwise: again, t: "i32" } },
+      })),
+    };
+    return { k: "call", fn: l.hi, args: [list, ...l.passed], tail };
+  }
+  // A call of a function with several answers: the rest of the search as
+  // a closure (or the caller's own k, when the call is all that's left).
+  function callSeveral(fn: number, args: SExpr[], k: Cont, tail: boolean, g: SFunc): SExpr {
+    const t = funcs[fn].answer!, kt = kOf(t);
+    let kv = k.direct;
+    if (!kv) {
+      const v = g.locals.push(t) - 1;
+      const code = k.gen(local(v), true);
+      const free = freeLocals(code).filter((i) => i !== v);
+      const shape = shapes.push({ t: kt, caps: free.map((i) => g.locals[i]) }) - 1;
+      const c: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.k`, params: [kt, t], result: "i32", locals: [kt, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+      const ci = funcs.push(c) - 1;
+      const fixed = new Map([[v, 1]]);
+      const lets = free.map((i, j) => { const l = c.locals.push(g.locals[i]) - 1; fixed.set(i, l); return { i: l, value: { k: "cap", t: kt, shape, i: j } as SExpr }; });
+      c.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), move(code, g, c, fixed));
+      kv = { k: "closure", t: kt, fn: ci, shape, caps: free.map(local) };
+    }
+    return { k: "call", fn, args: [...args, kv], tail, cps: true };
+  }
+  // es in order, then done with their values: those before one with
+  // several answers go into locals first, so they're computed once, first.
+  function inOrder(es: SExpr[], done: (vs: SExpr[], tail: boolean) => SExpr, tail: boolean, g: SFunc): SExpr {
+    const m = es.findIndex(several);
+    if (m < 0) return done(es.map(untail), tail);
+    const lets: { i: number; value: SExpr }[] = [];
+    const before = es.slice(0, m).map((e) => {
+      if (trivial(e)) return e;
+      const i = g.locals.push(typeIn(e, g)) - 1;
+      lets.push({ i, value: untail(e) });
+      return local(i);
+    });
+    const rest = cps(es[m], { gen: (v, tl) => inOrder(es.slice(m + 1), (ws, tl2) => done([...before, v, ...ws], tl2), tl, g) }, tail, g);
+    return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), rest);
+  }
+  // e, with k on each of its answers: code giving what k gives.
+  function cps(e: SExpr, k: Cont, tail: boolean, g: SFunc): SExpr {
+    if (!several(e)) return k.gen(untail(e), tail);
+    const arms = (xs: (SExpr | null)[]) => xs.filter((x) => x && x.k !== "fail").length;
+    switch (e.k) {
+      case "choose": return inOrder([e.list], ([l], tl) => choose(l, e.t, k, tl, g), tail, g);
+      case "call": if (funcs[e.fn].multi && !e.cps) return inOrder(e.args, (vs, tl) => callSeveral(e.fn, vs, k, tl, g), tail, g); break;
+      case "let":
+        if (several(e.value)) return cps(e.value, { gen: (v, tl) => ({ k: "let", i: e.i, value: v, body: cps(e.body, k, tl, g) }) }, tail, g);
+        return { k: "let", i: e.i, value: untail(e.value), body: cps(e.body, k, tail, g) };
+      case "if": {
+        if (several(e.cond)) return cps(e.cond, { gen: (c, tl) => cps({ ...e, cond: c }, k, tl, g) }, tail, g);
+        const j = join(k, e.t, g, arms([e.then, e.else]));
+        return { k: "if", cond: e.cond, then: cps(e.then, j, tail, g), else: cps(e.else, j, tail, g), t: "i32" };
+      }
+      case "case": {
+        if (several(e.scrut)) return cps(e.scrut, { gen: (v, tl) => cps({ ...e, scrut: v }, k, tl, g) }, tail, g);
+        const j = join(k, e.result, g, arms(e.arms));
+        return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
+      }
+      case "attempt": {
+        if (several(e.body)) break;
+        const j = join(k, e.t, g, arms([e.ok, e.otherwise]));
+        return { ...e, ok: cps(e.ok, j, tail, g), otherwise: cps(e.otherwise, j, tail, g), t: "i32" };
+      }
+    }
+    if (["op", "call", "make", "new", "rt", "world", "get", "field", "tag", "apply", "abort"].includes(e.k)) {
+      return inOrder(kids(e), (vs, tl) => { let j = 0; return k.gen(untail(mapKids(e, () => vs[j++])), tl); }, tail, g);
+    }
+    throw new Refused("chooses among several answers where WebAssembly can't yet");
+  }
+  // A handler's search, now that it's known whether it has several answers.
+  function handled(e: Extract<SExpr, { k: "search" }>, g: SFunc): SExpr {
     const caseOf = (d: LType, v: Id) => (isData(d) ? d.cases.findIndex((c) => c.variant === v) : -1);
-    const plan = chain(search);
-    const choosing = plan.steps.some((x) => x.choose);
-    if (choosing && (target === S.all || target === S.count)) return collect(target, search, plan, t, bt, env, f);
-    const res = f.locals.push(bt) - 1;
-    const body = choosing ? firstOf(search, plan, bt, env, f) : expr(search, env, f, false);
-    const answer: SExpr = { k: "local", i: res };
-    let ok: SExpr, otherwise: SExpr;
-    if (target === S.first) { ok = answer; otherwise = expr(dflt!, env, f, false); }
-    else if (target === S.count) { ok = { k: "num", v: 1 }; otherwise = { k: "num", v: 0 }; }
-    else {
-      const d = t as DType, [yes, no] = target === S.optional ? [SOME, NONE] : [CONS, NIL];
-      const none: SExpr = { k: "new", t: d, c: caseOf(d, no), args: [] };
-      ok = { k: "new", t: d, c: caseOf(d, yes), args: target === S.optional ? [answer] : [answer, none] };
-      otherwise = none;
+    const d = e.t as DType;
+    const made = (v: Id, args: SExpr[]): SExpr => ({ k: "new", t: d, c: caseOf(d, v), args });
+    const dflt = (): SExpr => e.dflt ?? { k: "fail" };
+    if (!several(e.body)) {
+      // One answer or none.
+      const answer = local(e.res);
+      const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [answer, dflt()] : e.kind === "count" ? [{ k: "num", v: 1 }, { k: "num", v: 0 }]
+        : e.kind === "optional" ? [made(SOME, [answer]), made(NONE, [])] : [made(CONS, [answer, made(NIL, [])]), made(NIL, [])];
+      return { k: "attempt", body: e.body, res: e.res, ok, otherwise, t: e.t };
     }
-    return { k: "attempt", body, res, ok, otherwise, t };
+    const acc: LType = e.kind === "count" ? "f64" : e.kind === "all" ? e.t : e.bt, box = boxOf(acc);
+    const b = g.locals.push(box) - 1, got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
+    const set = (value: SExpr, then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value, then });
+    const keep: Cont["gen"] = e.kind === "first" || e.kind === "optional" ? (v) => set(v, { k: "bool", v: true })
+      : e.kind === "all" ? (v) => set(made(CONS, [v, got]), { k: "fail" })
+      // count: the answer is still computed, since it may turn out to be none.
+      : (v) => ({ k: "let", i: g.locals.push(e.bt) - 1, value: v, body: set({ k: "op", op: "add", args: [got, { k: "num", v: 1 }] }, { k: "fail" }) });
+    const start: SExpr = e.kind === "count" ? { k: "num", v: 0 } : e.kind === "all" ? made(NIL, []) : { k: "zero", t: acc };
+    const run = cps(e.body, { gen: keep }, false, g), r = g.locals.push("i32") - 1;
+    const back: SExpr = { k: "call", fn: e.kind === "all" ? reverse(d) : -1, args: [got, made(NIL, [])], tail: false };
+    const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [got, dflt()] : e.kind === "optional" ? [made(SOME, [got]), made(NONE, [])] : e.kind === "all" ? [back, back] : [got, got];
+    return { k: "let", i: b, value: { k: "make", t: box, args: [start] }, body: { k: "attempt", body: run, res: r, ok, otherwise, t: e.t } };
   }
-  // A search that chooses: lets, some of whose values are `one of` a
-  // list, then a body with one answer or none (keep: let item = one of
-  // list, item if it passes, else fail). Each choice is a loop of its own
-  // over its list, in the evaluator's order, a function taking the list
-  // and the locals the rest uses. A `one of` anywhere else stays refused.
-  type Plan = { steps: { p: Id; value: Id; choose: boolean }[]; leaf: Id };
-  function chain(body: Id): Plan {
-    const steps: Plan["steps"] = [];
-    for (;;) {
-      const n = code.nodes[body];
-      const head = n?.kind === "call" ? code.nodes[n.fn] : null;
-      if (n?.kind !== "call" || head?.kind !== "lambda" || head.params.length !== n.args.length) return { steps, leaf: body };
-      head.params.forEach((p, j) => {
-        const v = code.nodes[n.args[j]];
-        const choose = v?.kind === "call" && v.args.length === 1 && code.nodes[v.fn]?.kind === "ref" && (code.nodes[v.fn] as NodeOf<"ref">).target === S.oneOf;
-        steps.push({ p, value: choose ? (v as NodeOf<"call">).args[0] : n.args[j], choose });
-      });
-      body = head.body;
+  // The handlers' searches in e made code, innermost first.
+  const handle = (e: SExpr, g: SFunc): SExpr => { const r = mapKids(e, (x) => handle(x, g)); return r.k === "search" ? handled(r, g) : r; };
+  // After a root and what it calls are lowered: which have several
+  // answers, then their code, and every handler's.
+  function several_(from: number) {
+    const end = funcs.length;
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let i = from; i < end; i++) if (!funcs[i].multi && several(funcs[i].body)) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
     }
-  }
-  // A choice's loop: a function of the list (and, collecting, what's been
-  // collected), then the locals of e the search uses.
-  function chooser(search: Id, list: Id, e: Map<Id, number>, g: SFunc, result: LType, acc: LType | null) {
-    const lt = stype(zonk(list));
-    if (!lt || !isData(lt)) throw new Refused(`chooses one of ${whyNot(zonk(list))}`);
-    const used = new Set(refsIn(search));
-    if ([...used].some((b) => inlined.has(b))) throw new Refused("chooses inside a fold, using the fold's result (not in WebAssembly yet)");
-    const caps = [...e.keys()].filter((b) => used.has(b));
-    const capT = caps.map((b) => g.locals[e.get(b)!]);
-    const params = [lt, ...(acc ? [acc] : []), ...capT];
-    const L: SFunc = { def: list, name: `${f0(g)}.choose`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const li = funcs.push(L) - 1, at0 = acc ? 2 : 1;
-    const le = new Map(caps.map((b, j) => [b, at0 + j] as const));
-    const cons = lt.cases.findIndex((c) => c.variant === CONS);
-    const x = L.locals.push(lt.cases[cons].fields[0].t) - 1, rest = L.locals.push(lt) - 1;
-    const call = (args: SExpr[], into: number[], tail: boolean): SExpr => ({ k: "call", fn: li, args: [...args, ...into.map((i): SExpr => ({ k: "local", i }))], tail });
-    return { L, li, le, lt, cons, x, rest, call, capsIn: (genv: Map<Id, number>) => caps.map((b) => genv.get(b)!), capsHere: caps.map((b) => e.get(b)!) };
-  }
-  const f0 = (g: SFunc) => g.name.replace(/\.choose$/, "");
-  // first and optional: each choice's loop has the first answer of the
-  // rest for some item, or none.
-  function firstOf(search: Id, plan: Plan, bt: LType, env: Map<Id, number>, f: SFunc): SExpr {
-    const one = (i: number, e: Map<Id, number>, g: SFunc): SExpr => {
-      if (i === plan.steps.length) return expr(plan.leaf, e, g, false);
-      const s = plan.steps[i];
-      if (!s.choose) {
-        const t = stype(zonk(s.p));
-        if (!t) throw new Refused(`lets ${nm(s.p)} be ${OTHER}`);
-        const value = expr(s.value, e, g, false), l = g.locals.push(t) - 1;
-        return { k: "let", i: l, value, body: one(i + 1, new Map(e).set(s.p, l), g) };
-      }
-      const list = expr(s.value, e, g, false);
-      const c = chooser(search, s.value, e, g, bt, null);
-      c.L.partial = true;
-      const res = c.L.locals.push(bt) - 1;
-      const inner = one(i + 1, new Map(c.le).set(s.p, c.x), c.L);
-      const scrut: SExpr = { k: "local", i: 0 };
-      c.L.body = {
-        k: "case", scrut, s: 0, t: c.lt, result: bt,
-        arms: c.lt.cases.map((_, k): SExpr => (k !== c.cons ? { k: "fail" } : {
-          k: "let", i: c.x, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 0 },
-          body: { k: "let", i: c.rest, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 1 },
-            body: { k: "attempt", body: inner, res, ok: { k: "local", i: res }, otherwise: c.call([{ k: "local", i: c.rest }], c.capsIn(c.le), true), t: bt } },
-        })),
-      };
-      return c.call([list], c.capsHere, false);
-    };
-    return one(0, env, f);
-  }
-  // all and count: each choice's loop takes what's been collected and
-  // gives it with the rest's answers for each item added, a tail call per
-  // item; all collects backwards and turns the list round at the end.
-  function collect(target: Id, search: Id, plan: Plan, t: LType, bt: LType, env: Map<Id, number>, f: SFunc): SExpr {
-    const accT: LType = target === S.count ? "f64" : t;
-    const d = t as DType, nil = target === S.all ? d.cases.findIndex((c) => c.variant === NIL) : -1, cons = target === S.all ? d.cases.findIndex((c) => c.variant === CONS) : -1;
-    const add = (acc: number, res: number): SExpr => (target === S.count
-      ? { k: "op", op: "add", args: [{ k: "local", i: acc }, { k: "num", v: 1 }] }
-      : { k: "new", t: d, c: cons, args: [{ k: "local", i: res }, { k: "local", i: acc }] });
-    // The rest from step i, in g, with what's been collected in local acc.
-    const many = (i: number, e: Map<Id, number>, g: SFunc, acc: number): SExpr => {
-      const kept = (body: SExpr): SExpr => { const r = g.locals.push(accT) - 1; return { k: "attempt", body, res: r, ok: { k: "local", i: r }, otherwise: { k: "local", i: acc }, t: accT }; };
-      if (i === plan.steps.length) {
-        const res = g.locals.push(bt) - 1;
-        return { k: "attempt", body: expr(plan.leaf, e, g, false), res, ok: add(acc, res), otherwise: { k: "local", i: acc }, t: accT };
-      }
-      const s = plan.steps[i];
-      if (!s.choose) {
-        const lt = stype(zonk(s.p));
-        if (!lt) throw new Refused(`lets ${nm(s.p)} be ${OTHER}`);
-        const value = expr(s.value, e, g, false), l = g.locals.push(lt) - 1;
-        const body: SExpr = { k: "let", i: l, value, body: many(i + 1, new Map(e).set(s.p, l), g, acc) };
-        return fails(value, funcs) ? kept(body) : body;
-      }
-      const list = expr(s.value, e, g, false);
-      const c = chooser(search, s.value, e, g, accT, accT);
-      const scrut: SExpr = { k: "local", i: 0 };
-      c.L.body = {
-        k: "case", scrut, s: 0, t: c.lt, result: accT,
-        arms: c.lt.cases.map((_, k): SExpr => (k !== c.cons ? { k: "local", i: 1 } : {
-          k: "let", i: c.x, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 0 },
-          body: { k: "let", i: c.rest, value: { k: "field", rec: scrut, t: c.lt, c: k, i: 1 },
-            body: c.call([{ k: "local", i: c.rest }, many(i + 1, new Map(c.le).set(s.p, c.x), c.L, 1)], c.capsIn(c.le), true) },
-        })),
-      };
-      if (fails(c.L.body, funcs)) c.L.partial = true;
-      const call = c.call([list, { k: "local", i: acc }], c.capsHere, false);
-      return fails(list, funcs) || c.L.partial ? kept(call) : call;
-    };
-    const acc = f.locals.push(accT) - 1;
-    const start: SExpr = target === S.count ? { k: "num", v: 0 } : { k: "new", t: d, c: nil, args: [] };
-    const body = many(0, env, f, acc);
-    return { k: "let", i: acc, value: start, body: target === S.count ? body : { k: "call", fn: reverse(d), args: [body, { k: "new", t: d, c: nil, args: [] }], tail: false } };
+    for (let i = from; i < end; i++) {
+      const g = funcs[i];
+      if (!g.multi) { g.body = handle(g.body, g); continue; }
+      if (closureCode.has(i)) throw new Refused("makes a function that chooses among several answers (not in WebAssembly yet)");
+      const p = g.params.length, kt = kOf(g.answer!);
+      const body = mapLocals(g.body, (j) => (j < p ? j : j + 1));
+      g.locals = [...g.locals.slice(0, p), kt, ...g.locals.slice(p)];
+      g.params = [...g.params, kt];
+      g.result = "i32";
+      g.partial = true;
+      g.inner = true;
+      const k: Cont = { direct: local(p), gen: (v, tail) => ({ k: "apply", fn: local(p), t: kt, args: [v], tail, tmp: g.locals.push(kt) - 1 }) };
+      g.body = cps(handle(body, g), k, true, g);
+    }
   }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {
@@ -1090,7 +1268,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 
   for (const r of roots) {
-    try { func(r); } catch (e) { if (!(e instanceof Refused)) throw e; if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, "")); }
+    const from = funcs.length, shaped = shapes.length;
+    try { func(r); several_(from); } catch (e) {
+      if (!(e instanceof Refused)) throw e;
+      if (funcs.length > from && index.get(r) !== undefined && index.get(r)! >= from) {
+        // Refused making its searches: undo it, and what was lowered with it.
+        funcs.splice(from);
+        shapes.splice(shaped);
+        for (const [d2, j] of index) if (j >= from) index.delete(d2);
+        for (const j of closureCode) if (j >= from) closureCode.delete(j);
+        refused.set(r, e.message);
+      } else if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, ""));
+    }
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.

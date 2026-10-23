@@ -3,13 +3,15 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1, W2, W3, W4a, W4b and W4c are done (W2: functions
-as values, W3a: Int and Text, W3b: the world, through a JavaScript host
-or as a WASI command, W4a: searches with one answer or none, W4b:
-choosing inside a handler, W4c: Abort, below). wc, ledger, chapters and
-calc run whole in WebAssembly, main included, and as WASI commands they
-run under wasmtime with no JavaScript (`npm run wasi -- wc` in compiler/).
-Next is `one of` inside called functions (queens, Countdown). What runs in WebAssembly is the
+**Status.** Stages W1 to W4 are done (W2: functions as values, W3a: Int
+and Text, W3b: the world, through a JavaScript host or as a WASI command,
+W4a: searches with one answer or none, W4b: choosing inside a handler,
+W4c: Abort, W4d: searches with several answers anywhere, below). wc,
+ledger, chapters, calc, queens and Countdown run whole in WebAssembly,
+main included, and as WASI commands they run under wasmtime with no
+JavaScript (`npm run wasi -- wc` in compiler/). Countdown's search runs
+as fast as the hand-written ideal JavaScript. Left: W5 (big Int), and
+from W1 nested folds and one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -19,6 +21,31 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W4d came out. A function that chooses (`one of`), or calls one that
+does outside a handler, has several answers. It's compiled the way the
+JS backend's `$k` copies are, after Mercury's high-level C backend: it
+takes the rest of the search as one more input, a closure k, and calls
+it on each answer in turn. k gives "stop" as an answer and "go on" as no
+answer (status 1, W4a's), so `one of` is a loop that tries k on each item
+until one stops, `fail` is going on, and an abort (status 2) still goes
+straight out. A handler's k puts each answer in a box (a struct with a
+mutable field): `first` and `optional` stop at the first, `all` and
+`count` keep going. This is a pass over the lowered code, run once a
+root and everything it calls is lowered, so it knows which functions
+choose, mutual recursion included. The rest of a search is made as code
+where the answer is and moved, its locals renumbered, into the loop, the
+closure or a join (for the arms of a match) that runs it. A call that's
+the last thing left passes the caller's own k on, with no closure, so a
+fold that chooses on the way up (queens' rows) costs one closure per
+level, not per answer. The order of answers is the evaluator's:
+arguments left to right, each choice's items in order. A function value
+that chooses, and a search with several answers under a budget or
+inside a match on Abort, are refused with a reason. On Countdown's four
+instances WebAssembly takes 1.0 to 1.1× the hand-written ideal
+JavaScript, against 1.2 to 1.5× for the compiled JavaScript
+(`node gaps/bench-countdown.ts`); Hutton's example takes 88 ms, the
+evaluator 22 s. queens' main and the fixtures match the evaluator.
 
 How W3b-2 came out. `emitWasm(lowered, { wasi: true })` gives a WASI
 command: the same world operations, written in WebAssembly over
@@ -279,9 +306,8 @@ rest with the reason, so nothing breaks between stages.
 4. **W4 searches and effects.** One answer or none as a status after
    the answer (W4a, done), choosing inside a handler and functions with
    Choice as values (W4b, done), Abort as a third status (W4c, done),
-   then `one of` in called functions. Success continuations for `Choice`,
-   multi-value single-answer returns, exceptions for `Abort`, the handler
-   stack. Programs: queens, Countdown, calc.
+   and `one of` anywhere through success continuations (W4d, done).
+   Programs: queens, Countdown, calc.
 5. **W5 Int past 64 bits** through host bignums, then specialization
    measured against the JS backend on each GAPS round.
 

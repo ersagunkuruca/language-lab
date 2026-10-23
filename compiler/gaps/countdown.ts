@@ -10,19 +10,36 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { makeRunner, fromList, toList, type Value } from "../../projectional/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
+import { lowerScalar, type DType } from "../src/scalar.ts";
+import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { solutions as idealSolutions, showExpr } from "./countdown.ideal.js";
 
 export type Way = (numbers: number[], target: number) => string[];
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal" | "wasm", Way>> {
   const p = load("countdown");
   const path = join(mkdtempSync(join(tmpdir(), "countdown-")), "countdown.js");
   writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["solutions", "show expr"] }));
   const c = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const one = (vs: Iterable<Value>) => { for (const v of vs) return v; throw new Error("no value"); };
+  // WebAssembly (projectional/WASM.md, W4d): lists in and out through the
+  // module's makers and readers, by their type's key where several lists share a name.
+  const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  const ex = (await instantiate(emitWasm(l))) as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const sol = l.funcs.find((f) => f.name === "solutions")!;
+  const [inT, outT] = [sol.params[0], sol.result] as DType[];
+  const h = (name: string, t: DType) => ex[`${name}(${t.key})`] ?? ex[name];
+  const wasm: Way = (numbers, target) => {
+    let xs = h("List.nil", inT)();
+    for (let i = numbers.length - 1; i >= 0; i--) xs = h("List.cons", inT)(numbers[i], xs);
+    const out: string[] = [];
+    for (let r = ex.solutions(xs, target); h("List.case", outT)(r) === 1; r = h("List.cons.tail", outT)(r)) out.push(fromText(ex, ex["show expr"](h("List.cons.head", outT)(r))));
+    return out;
+  };
   return {
+    wasm,
     evaluator: (numbers, target) => {
       const found = one(r.call(r.value(p.named("solutions")), toList(numbers), target));
       return fromList(found).map((e) => one(r.call(r.value(p.named("show expr")), e)) as string);

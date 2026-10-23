@@ -134,12 +134,12 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A type in the group: a struct, or (`func`) a closure's code's type.
   // A field with `code` holds a closure's code, a (ref $code) of that index.
   // `bytes`: Text's array.
-  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true }[] = [];
+  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; mutable?: true }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   const bytesIndex = 0;
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
-  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true }); }
+  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
   const CASE = { name: "case", t: "i32" as const };
   for (const d of datas) {
     const b = structs.length, name = `${ident(d.name)}${b}`;
@@ -287,7 +287,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
-    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), 0x00]))];
+    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
   const typeSec = vec([
@@ -418,6 +418,10 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         const failed = !e.aborts ? [] : fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x21, ...u(st), 0x20, ...u(st), 0x04, 0x40, 0x10, ...u(reasonIndex()), 0x24, ...u(reasonG), 0x41, 0x02, 0x0c, ...to(d + 1, fl), 0x0b];
         return [...call, ...failed, ...(isUnit(e.t) ? [0xfb, 0x00, ...u(recIndex.get((e.t as RType).key)!)] : [])];
       }
+      // A box's field set (W4d), then what comes after.
+      case "set": return [...code1(e.rec), ...code1(e.value), 0xfb, 0x05, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...code1(e.then)];
+      case "zero": return zero(e.t);
+      case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
       case "op": {
         const args = e.args.flatMap(code1);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
@@ -539,6 +543,9 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         ...(!e.aborts ? [] : fl < 0 ? [`${d}(if (then unreachable)) ;; failed, nowhere to go`] : [`${d}local.set ${st}`, `${d}local.get ${st}`, `${d}(if (then call $${wasi ? "wasi" : "world"}.reason global.set $reason i32.const 2 br ${to(ld + 1)})) ;; failed`]),
         ...(isUnit(e.t) ? [`${d}struct.new ${recName(e.t as RType)}`] : []),
       ].join("\n");
+      case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
+      case "zero": return `${d}${zeroText(e.t)}`;
+      case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
       case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
     }
   }
@@ -548,7 +555,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...structs.map((x) => {
       if (x.bytes) return "    (type $bytes (array (mut i8)))";
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
-      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : ty(y.t)})`).join("")})`;
+      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${ty(y.t)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),
