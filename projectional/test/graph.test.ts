@@ -37,9 +37,9 @@ const { typedGraph } = await import("../editor/typedGraph.ts");
 const p = loadProgram(join(root, "examples", "queens"));
 const info = infer(p.code, p.pres.names);
 const def = p.named("queens");
-const draw = (at: Record<Id, { x: number; y: number }>, named: Id[] = []) => typedGraph(p.code, p.pres, info, def, {
+const draw = (at: Record<Id, { x: number; y: number }>, named: Id[] = [], folded: Id[] = []) => typedGraph(p.code, p.pres, info, def, {
   selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
-  canShare: () => () => null, share() {}, at, moved() {}, named: new Set(named),
+  canShare: () => () => null, share() {}, at, moved() {}, named: new Set(named), folded: new Set(folded),
 }).root as unknown as El;
 
 // Top-left corner of an element in the picture's coordinates.
@@ -124,4 +124,26 @@ test("wires leave from the outputs they belong to, after any move", () => {
     const same = starts.filter((p) => Math.abs(p.y - o.y) < 0.5 && p.x >= o.x - 0.5);
     if (same.length) assert.ok(same.some((p) => near(p, o)), `a wire near the output at (${o.x}, ${o.y}) doesn't start on it`);
   }
+});
+
+test("a folded frame is one box where the frame was, with its wires in on the left and out on the right", () => {
+  const open = draw({});
+  // The biggest frame around safe, other than the definition's.
+  const around = Object.values(calls).filter((n) => (n.kind === "lambda" || n.kind === "arm") && contains(n.id, safe) && frameOf(open, n.id));
+  const f = around.map((n) => n.id).sort((a, b) => box(open, frameOf(open, b)).w - box(open, frameOf(open, a)).w)[0];
+  const was = box(open, frameOf(open, f));
+  const svg = draw({}, [], [f]);
+  assert.equal(grabbed(svg, safe), undefined, "what it holds is hidden");
+  const folded = frameOf(svg, f);
+  assert.match(folded.getAttribute("class")!, /\bfolded\b/);
+  const b = box(svg, folded);
+  assert.deepEqual({ x: b.x, y: b.y }, { x: was.x, y: was.y });
+  const ends = svg.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "")).map((w) => {
+    const n = w.getAttribute("d")!.match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
+    return { from: { x: n[0], y: n[1] }, to: { x: n.at(-2)!, y: n.at(-1)! } };
+  });
+  const on = (q: { x: number; y: number }, x: number) => Math.abs(q.x - x) < 0.5 && Math.abs(q.y - (b.y + b.h / 2)) < 0.5;
+  assert.ok(ends.some((e) => on(e.to, b.x)), "a wire comes in on the left");
+  assert.ok(ends.some((e) => on(e.from, b.x + b.w)), "a wire goes out on the right");
+  assert.ok(ends.length < open.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "")).length, "wires inside are not drawn");
 });

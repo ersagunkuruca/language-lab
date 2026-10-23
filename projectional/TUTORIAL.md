@@ -667,6 +667,9 @@ left shows in `rotate`:
   tunnels, for 28 more bridges (438 from 410). The rest still pass under
   nodes, and wires still pass over input names: in `insert`, `tail` and
   `tail′` are hidden under wires.
+- A frame you aren't reading folds into one box (▾ in its corner): in
+  `queens`, folding the `(row, rows, board) =>` frame leaves four nodes on
+  the canvas instead of ten. ▸ unfolds it where it was.
 
 **Proposal.** Names drawn with a background so a wire can't cover them, and
 wires routed around nodes.

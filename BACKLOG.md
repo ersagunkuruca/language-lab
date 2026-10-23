@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E35 | Collapsible frames (split from E19, whose map is done) | node-editor backlog | P3 | M | |
 | E20 | Phone width (390 px): panes stack into a 3,100 px page | QA2 UX8 | P3 | L | |
 
 ## C: Compiler and targets
@@ -89,6 +88,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E35 | Frames fold into one box (▾, or right-click): wires in end on its left, values out leave on its right; it sits where its contents put the frame, so dragging or tidying it moves them. A view in layout.json | #275 |
 | T4 | A quicker smoke: each program's first definition, main and an eighth of the rest per change (all nightly), and graph clicks only where a click reaches (402 half-second timeouts a run were frames under their contents): 5 min 40 s to 1 min 22 s | #274 |
 | I1 | Without a GPU the ray marcher's colour record runs as WebAssembly (WasmGC struct, read by the module's field readers), not JavaScript: 244 to 144 ms a frame at 160x160 | #272 |
 | E19 | A map in the graph's corner while part of it is out of view (the 'there's more' cue); click or drag to look there. Collapsible frames split to E35 | #270 |

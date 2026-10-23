@@ -91,6 +91,13 @@ async function visit(saved: string | null, only?: string) {
           await click(".p-graph .reroute:not(.silent)");
           await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
           await click('.ctx-item[data-menu="named"]');
+          // A frame folded into one box, and unfolded.
+          if (await p.locator(".p-graph [data-fold]").count()) {
+            await p.locator(".p-graph [data-fold]").first().dispatchEvent("click");
+            if (!(await p.locator(".p-graph .rg.folded").count())) errors.push(`${where}: folding a frame drew no folded box`);
+            await p.locator(".p-graph .items [data-fold]").first().dispatchEvent("click", {}, { timeout: 500 }).catch(() => {});
+            if (await p.locator(".p-graph .rg.folded").count()) errors.push(`${where}: unfolding left a folded box`);
+          }
           await stopped(p);
         }
       }

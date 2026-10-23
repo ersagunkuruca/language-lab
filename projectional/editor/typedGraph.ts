@@ -64,6 +64,9 @@ export interface GraphHooks {
   moved: (to: Record<Id, Pos>, note?: string) => void;
   // Bindings shown as a let node with get nodes instead of wires.
   named: Set<Id>;
+  // Frames drawn folded into one box, and folding or unfolding one.
+  folded?: Set<Id>;
+  fold?: (frame: Id) => void;
   // Right-click: what was under the pointer, where (screen and world).
   menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
@@ -92,7 +95,8 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   pickedBy.set(key, picked);
   const scene = build(code, pres, info, defId, hooks);
   for (const p of [...picked]) if (!scene.items.has(p)) picked.delete(p);
-  const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(scene, hooks, at, picked));
+  const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
+  const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
   interact(canvas, scene, hooks, picked, draw);
   return {
@@ -100,7 +104,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     picked: () => [...picked],
     expand: (ids) => [...expand(scene, ids)],
     tidy: (only) => {
-      const moved = tidyScene(scene, hooks.at, only ? expand(scene, only) : null);
+      const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
       const n = Object.keys(moved).length;
       hooks.moved(moved, n ? `Tidied ${only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : "Already tidy: nothing overlaps.");
     },
@@ -345,7 +349,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const at = new Map<Id, Pos>();
     shift(at, b, bx, by);
     const w = Math.max(bx + b.w + 22, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
-    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), out: b.out, pad: [bx, HEAD, 22, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 20 });
+    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), out: b.out, pad: [bx, HEAD, 22, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
     return { w, h, outX: w, outY: by + b.outY, out: { frameOut: id }, at };
   };
 
@@ -568,6 +572,87 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   return { items, frames, wires: all, sources, result: body?.kind === "typedef" ? null : top.out, defId, lit };
 }
 
+// ---------------------------------------------------------------- folding
+//
+// A folded frame is drawn as one box where the frame was: what it holds
+// is hidden, a wire between the inside and the outside starts at the
+// box's right edge (a value leaving) or ends at its left edge (a value
+// coming in), and wires wholly inside are not drawn. It has no place of
+// its own: it sits where its contents put the frame, so moving it moves
+// them, and unfolding finds them where they were. A view: layout.json.
+// (Influence: Houdini's minimized network boxes.)
+
+const FOLDH = 44;
+function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
+  const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
+  // The outermost folded frame among f and the frames around it.
+  const hider = (f: Id | null): Id | null => {
+    let out: Id | null = null;
+    for (let p = f; p; p = parent(p)) if (folded?.has(p) && p !== scene.defId) out = p;
+    return out;
+  };
+  if (![...scene.frames.keys()].some((f) => hider(f))) return scene;
+  const { boxes } = placeAll(scene, at);
+  const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44), h: FOLDH });
+  const items = new Map<Id, Item>();
+  for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
+  const frames = new Map<Id, Frame>();
+  for (const f of scene.frames.values()) {
+    const by = hider(f.id);
+    if (!by) { frames.set(f.id, f); continue; }
+    if (by !== f.id) continue;
+    const b = boxes.get(f.id)!, { w, h } = size(f);
+    const count = [...scene.items.values()].filter((it) => hider(it.frame) === f.id).length;
+    items.set(f.id, {
+      key: f.id, frame: f.parent, w, h, auto: { x: b.x, y: b.y }, solid: true,
+      draw: (g) => g.append(
+        s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id }),
+        s("text", { x: 10, y: 16, class: "rt" }, f.title),
+        s("text", { x: 10, y: 34, class: "fold-n" }, `${count} node${count === 1 ? "" : "s"} inside`),
+        foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
+      ),
+    });
+  }
+  // Where an end is drawn now, and the folded box it is inside, if any.
+  const edge = (f: Id, from: boolean): End => ({ item: f, dx: from ? items.get(f)!.w : 0, dy: FOLDH / 2 });
+  const map = (e: End, from: boolean): { e: End; in: Id | null } => {
+    if ("item" in e) { const f = hider(scene.items.get(e.item)?.frame ?? null); return f ? { e: edge(f, from), in: f } : { e, in: null }; }
+    if ("frame" in e) { const f = hider(e.frame); return f ? { e: edge(f, from), in: f } : { e, in: null }; }
+    const f = hider(parent(e.frameOut));
+    if (f) return { e: edge(f, from), in: f };
+    return hider(e.frameOut) ? { e: edge(e.frameOut, true), in: null } : { e, in: null };
+  };
+  const wires: Wire[] = [];
+  for (const w of scene.wires) {
+    const a = map(w.from, true), b = map(w.to, false);
+    if (a.in && a.in === b.in) continue;
+    wires.push({ ...w, from: a.e, to: b.e });
+  }
+  for (const f of frames.values()) if (f.out) { const o = map(f.out, true); if (o.in) frames.set(f.id, { ...f, out: o.e }); }
+  const sources = new Map<Id, End>();
+  for (const [k, e] of scene.sources) { const m = map(e, true); if (!m.in) sources.set(k, m.e); }
+  return { ...scene, items, frames, wires, sources, result: scene.result && map(scene.result, true).e };
+}
+
+function foldToggle(x: number, y: number, f: Id, glyph: string, title: string): SVGElement {
+  const t = s("text", { x, y, class: "fold-t", "data-fold": f }, glyph);
+  t.append(s("title", {}, title));
+  return t;
+}
+
+// What tidy says of a folded box, said of what it holds: they move with it.
+function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>): Record<Id, Pos> {
+  const out: Record<Id, Pos> = {};
+  const { pos, boxes } = placeAll(scene, at);
+  for (const [k, p] of Object.entries(moved)) {
+    if (scene.items.has(k)) { out[k] = p; continue; }
+    const b = boxes.get(k);
+    if (!b) continue;
+    for (const c of expand(scene, [k])) { const q = pos.get(c)!; out[c] = { x: Math.round(q.x + p.x - b.x), y: Math.round(q.y + p.y - b.y) }; }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- drawing
 
 const HEADH = 20;
@@ -602,6 +687,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const r = s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 9, class: `rg ${f.cls}${sel(f.id)}${picked.has(f.id) ? " picked" : ""}`, "data-id": f.id, "data-frame": f.id });
     if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
     frameG.append(r, s("text", { x: b.x + 10, y: b.y + 14, class: "rt" }, f.title));
+    if (f.id !== scene.defId && hooks.fold) frameG.append(foldToggle(b.x + b.w - 16, b.y + 14, f.id, "▾", "Fold into one box"));
     f.binders.forEach((bd, i) => {
       const p = point({ frame: f.id, port: i });
       portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
@@ -749,6 +835,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   let down = { x: 0, y: 0 };
   root.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
   root.addEventListener("click", (e) => {
+    const folding = (e.target as Element).closest("[data-fold]")?.getAttribute("data-fold");
+    if (folding) return hooks.fold?.(folding);
     const edge = (e.target as Element).closest("[data-edge]");
     if (edge && !e.shiftKey) return hooks.addDot(edge.getAttribute("data-edge")!);
     const t = (e.target as Element).closest("[data-move], [data-id]");

@@ -33,7 +33,7 @@ Sources this draws on, credited per the project's attribution rule:
 | 7 | **The window is the wrong size.** | Every tool lets you resize panels. | The graph fills its pane, and the gutters between panes resize it (the redesign's dock). **Fit** centers the graph horizontally and vertically. |
 | 8 | **No multi-select, so no bulk moves.** | Box select and shift-click everywhere. | Shift-click adds to the selection, shift-drag on empty space draws a box. Dragging any selected node moves them all. Tidy works on the selection. |
 | 9 | **Lists, sequences and curried functions drawn nested.** `cons(1, cons(2, cons(3, nil)))` becomes a staircase; `print; print; print` nests. | Most tools have a "make array" node with N inputs. | A list is one node with one input per item, and a run of steps is a column (done in the "Writing programs" thread; this layout keeps both). `(y) => (angle) => …` is one frame with both parameters, and an `if` always shows *then* above *else*. |
-| 10 | **Scale: can't see the whole and the part at once.** (Burnett's "screen real estate".) | Collapsing to subgraphs, minimaps, zoom. | Functions are the subgraphs: double-click opens one, **Show inline** draws it in place as a view. Zoom and pan are on the infinite canvas. While part of the graph is out of the window, a **map** in its corner shows the whole graph with the window on it; click or drag there to look elsewhere. |
+| 10 | **Scale: can't see the whole and the part at once.** (Burnett's "screen real estate".) | Collapsing to subgraphs, minimaps, zoom. | Functions are the subgraphs: double-click opens one, **Show inline** draws it in place as a view. Zoom and pan are on the infinite canvas. While part of the graph is out of the window, a **map** in its corner shows the whole graph with the window on it; click or drag there to look elsewhere. Any frame inside a definition **folds** into one box (▾ in its corner, or right-click it): what it holds is hidden, a wire coming in ends on the box's left, a value going out leaves on its right. The box sits where its contents put the frame, so dragging it moves them and unfolding (▸) finds them where they were. Saved in layout.json as a view. |
 | 11 | **Breaking the program by accident.** | Most editors let you wire anything and complain at run time. | Every gesture is a typed edit and is refused, with the reason, if it would add an error. While you drag, inputs that can't take the wire are dimmed and say why. (Already true; listed so it stays true.) |
 
 ## Decisions
@@ -56,6 +56,5 @@ Sources this draws on, credited per the project's attribution rule:
 - Full wire routing (a search for each wire's path among all the nodes).
   A wire now bends over or under a node in its way when that is a short
   detour that crosses no more wires; the rest keep their tunnels.
-- Frames you can collapse.
 - Comment boxes. Comments live in comments.json and show in the inspector;
   drawing them on the canvas is a small step once someone wants it.
