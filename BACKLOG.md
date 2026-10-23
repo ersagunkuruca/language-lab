@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E25 | Bug: Text view drops brackets around an `if` inside `++` | GAPS round 3, editor 7 | P1 | S | |
 | E26 | Bug: a definition with `Console` runs (and prints) while it's being written | GAPS round 3, editor 8 | P1 | S | |
 | E27 | Typing `0` in an Int hole offers nothing (with E21) | GAPS round 3, editor 4 | P1 | S | |
 | E28 | A function parameter can't be called until its type is known (no `f(□, □)` for an untyped `f`) | GAPS round 3, editor 1 | P1 | M | |
@@ -104,6 +103,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E25 | Text view brackets a one-line if inside ++ | #234 |
 | E24 | Graph keeps the spaces in a text literal (SVG collapsed them) | #231 |
 | E13 | Navigator search finds definitions in every program | #227 |
 | E12 | Unit refusals name the units on both sides | #223 |

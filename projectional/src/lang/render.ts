@@ -191,7 +191,14 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       const ops = chainOperands(code, id) ?? n.args;
       if (nota?.fixity === "infix" && ops.length >= 2) {
         const p = nota.prec ?? 5;
-        const one = (a: Id, lead: string) => (tall(a) ? block(a, ind, lead) : [`${ind}${lead}${paren(inline(a), inline(a).prec > p)}`]);
+        const one = (a: Id, lead: string) => {
+          if (!tall(a)) return [`${ind}${lead}${paren(inline(a), inline(a).prec > p)}`];
+          const lines = block(a, ind, "");
+          // An if on one line takes in everything after its else, so as an
+          // operand it is bracketed: (if c < 0 then "-" else "") ++ …
+          const an = node(a);
+          return lines.length === 1 && an.kind === "match" && isBool(an) ? [`${ind}${lead}(${lines[0].slice(ind.length)})`] : block(a, ind, lead);
+        };
         return ops.flatMap((a, i) => one(a, i ? `${nota.glyph} ` : lead));
       }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return [...block(n.fn, ind, `${lead}apply `), `${ind}  to (${n.args.map((a) => inline(a).text).join(", ")})`];
