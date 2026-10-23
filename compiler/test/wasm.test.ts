@@ -8,7 +8,12 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, runMain, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, sameLists, searches, texts } from "../src/fixtures.ts";
+import { area, choices, closures, sameLists, searches, texts, worldly } from "../src/fixtures.ts";
+import { nodeWorld } from "../../projectional/src/lang/world.ts";
+import { WASI } from "node:wasi";
+import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { book } from "../gaps/ledger.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
@@ -491,4 +496,59 @@ test("whole programs in WebAssembly: wc, ledger, chapters and calc's mains print
       assert.deepEqual([await runMain(l, m, "main", args, got.rt), got.out], [exit, want.out], `${name} ${args.join(" ")}`);
     }
   }
+});
+
+// The same programs as WASI commands (wasm-rt.ts's world over
+// wasi_snapshot_preview1), under node:wasi in a folder of their own,
+// against the evaluator with Node's world in another folder with the same files.
+test("whole programs as WASI commands: files, console, arguments and exit codes as the evaluator's with Node's world", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "wasi-"));
+  const files: Record<string, string> = {
+    "a.txt": "one two\nthree\n", "book.md": "# One\nhello world\n# Two\nmore words here\n", "sums.txt": "1+2\nlet x = 3\nx*x\n1 +\n",
+    "ledger.csv": "2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n", "big.csv": book(500), "out/.keep": "", "Ünï 🎉.txt": "é\n",
+  };
+  let runs = 0;
+  const folder = () => {
+    const dir = mkdtempSync(join(scratch, "d-"));
+    for (const [p, t] of Object.entries(files)) { mkdirSync(join(dir, dirname(p)), { recursive: true }); writeFileSync(join(dir, p), t); }
+    return dir;
+  };
+  const contents = (dir: string): Record<string, string> => Object.fromEntries((readdirSync(dir, { recursive: true }) as string[]).sort()
+    .map((p) => [p, statSync(join(dir, p)).isDirectory() ? "(folder)" : readFileSync(join(dir, p), "utf8")]));
+  const w = worldly();
+  const programs = [
+    ...["wc", "ledger", "chapters", "calc"].map((name) => { const p = load(name); return { name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs, main: p.named("main") }; }),
+    { name: "worldly", code: w.code, info: w.info, names: w.names, roots: [w.main], main: w.main },
+  ];
+  const argsets = [[], ["a.txt", "Ünï 🎉.txt"], ["-l", "a.txt", "nope", "out"], ["book.md", "out"], ["book.md", "gone"], ["ledger.csv"], ["big.csv"], ["out", "a.txt"], ["."]];
+  for (const p of programs) {
+    const m = emitWasm(lowerScalar(p.code, p.info, p.names, p.roots, { data: true }), { wasi: true });
+    const module = await WebAssembly.compile(m.bytes);
+    for (const args of argsets) for (const input of ["3*4\nlet\n", "a\r\nb"]) {
+      const want = folder(), got = folder();
+      const printed: string[] = [], errors: string[] = [], lines = input.split("\n");
+      const cwd = process.cwd();
+      process.chdir(want);
+      let exit: number;
+      try {
+        exit = runProgram(p.code, p.info, p.main, args, { print: (l) => printed.push(l), names: p.names, world: {
+          ...nodeWorld(), error: (l) => errors.push(l), input: () => lines.splice(0).join("\n"),
+          readLine: () => (lines.length > 1 || lines[0] ? lines.shift()!.replace(/\r$/, "") : null),
+        } });
+      } finally { process.chdir(cwd); }
+      const io = join(scratch, `io-${runs++}`);
+      writeFileSync(`${io}.in`, input);
+      const [stdin, stdout, stderr] = [openSync(`${io}.in`, "r"), openSync(`${io}.out`, "w"), openSync(`${io}.err`, "w")];
+      const wasi = new WASI({ version: "preview1", args: [p.name, ...args], preopens: { ".": got }, stdin, stdout, stderr, returnOnExit: true });
+      const code = wasi.start(await WebAssembly.instantiate(module, wasi.getImportObject() as WebAssembly.Imports));
+      [stdin, stdout, stderr].forEach((fd) => closeSync(fd));
+      const lined = (xs: string[]) => xs.map((l) => `${l}\n`).join("");
+      assert.deepEqual(
+        { code, out: readFileSync(`${io}.out`, "utf8"), err: readFileSync(`${io}.err`, "utf8"), files: contents(got) },
+        { code: exit, out: lined(printed), err: lined(errors), files: contents(want) },
+        `${p.name} ${args.join(" ")} < ${JSON.stringify(input)}`);
+    }
+  }
+  rmSync(scratch, { recursive: true });
+  assert.equal(runs, programs.length * argsets.length * 2);
 });

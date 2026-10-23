@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, CONS, INT_OPS, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CONS, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -293,4 +293,37 @@ export function searches() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
+}
+
+// A program using every operation on the console and files that wc,
+// ledger, chapters and calc don't: it lists its folder, asks whether
+// files exist, copies its input's lines to a file a line at a time, and
+// lists each folder it's given (aborting on one that isn't).
+export function worldly() {
+  const k = new Lang();
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const each = k.def("each");
+  k.define(each, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.seq(k.call(S.print, x), k.call(each, rest)) },
+  ])));
+  const echo = k.def("echo");
+  k.define(echo, k.fn(["n"], (n) => k.match(k.call(IO.readLine), [
+    { variant: NONE, names: [], body: () => n },
+    { variant: SOME, names: ["line"], body: ([l]) => k.seq(k.call(IO.appendFile, k.lit("lines.txt"), k.call(S.concat, l, k.lit("\n"))), k.call(echo, k.call(INT_OPS.add, n, k.int(1)))) },
+  ])));
+  const go = k.def("go");
+  k.define(go, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.seq(k.call(each, k.call(IO.listFolder, x)), k.call(go, rest)) },
+  ])));
+  const exists = (path: string) => k.call(S.print, k.if(k.call(IO.fileExists, k.lit(path)), k.lit(`${path}: yes`), k.lit(`${path}: no`)));
+  const main = d("main", ["args"], (args) => k.seq(
+    k.call(each, k.call(IO.listFolder, k.lit("."))), exists("a.txt"), exists("nope"), exists("out"),
+    k.call(IO.writeFile, k.lit("w.txt"), k.lit("written")), k.call(IO.printError, k.call(IO.readFile, k.lit("w.txt"))),
+    k.call(S.print, k.call(INT_OPS.show, k.call(echo, k.int(0)))),
+    k.call(go, args), k.int(3)));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), main };
 }

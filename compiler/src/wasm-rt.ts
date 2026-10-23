@@ -17,7 +17,8 @@
 
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
-export type VT = "i32" | "i64" | "f64" | "text" | "list";
+// `option` an Optional Text, and `void` a result of nothing.
+export type VT = "i32" | "i64" | "f64" | "text" | "list" | "option" | "void";
 
 export interface RtFn {
   name: string;
@@ -36,7 +37,7 @@ export interface RtFn {
 }
 
 // Immediates each instruction takes.
-type Imm = "local" | "func" | "type" | "label" | "i32" | "i64" | "f64" | "bt" | "u";
+type Imm = "local" | "func" | "type" | "label" | "i32" | "i64" | "f64" | "bt" | "u" | "global";
 const OPS: Record<string, [number[], Imm[]]> = {
   "unreachable": [[0x00], []], "block": [[0x02], ["bt"]], "loop": [[0x03], ["bt"]], "if": [[0x04], ["bt"]], "else": [[0x05], []], "end": [[0x0b], []],
   "br": [[0x0c], ["label"]], "br_if": [[0x0d], ["label"]], "return": [[0x0f], []], "call": [[0x10], ["func"]], "drop": [[0x1a], []], "select": [[0x1b], []],
@@ -52,6 +53,10 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i32.shl": [[0x74], []], "i32.shr_u": [[0x76], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
+  // Linear memory (WASI's buffers), aligned naturally, at offset 0.
+  "i32.load": [[0x28, 0x02, 0x00], []], "i64.load": [[0x29, 0x03, 0x00], []], "i32.load8_u": [[0x2d, 0x00, 0x00], []],
+  "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
+  "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
   "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]],
@@ -62,6 +67,8 @@ export interface Resolve {
   // A type by name ($bytes, $list, $list.cons …), as an index.
   type(name: string): number;
   func(name: string): number;
+  // A global by name (`reason`).
+  global(name: string): number;
   // A block type or local type: bytes and text.
   valtype(t: VT): { bytes: number[]; text: string };
 }
@@ -88,6 +95,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
       switch (kind) {
         case "local": { const j = names.indexOf(a.slice(1)); if (j < 0) throw new Error(`${f.name}: no local ${a}`); out.push(...u(j)); break; }
         case "func": out.push(...u(r.func(a.slice(1)))); break;
+        case "global": out.push(...u(r.global(a.slice(1)))); break;
         case "type": { const t = r.type(a.slice(1)); out.push(...(op === "ref.cast" || op === "ref.null" ? sLeb(BigInt(t)) : u(t))); break; }
         case "label": case "u": out.push(...u(Number(a))); break;
         case "i32": case "i64": out.push(...sLeb(BigInt(a))); break;
@@ -106,7 +114,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
   }
   const code = [...u(groups.length), ...groups.flat(), ...out, 0x0b];
   const wat = [
-    `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
+    `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} ${f.result === "void" ? (f.partial ? " (result i32)" : "") : ` (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})`}${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
     ...lines.map((l) => {
       const [op, ...args] = l.split(/\s+/);
       return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z]+$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : a)).filter(Boolean).join(" ") : ""}`;
@@ -1580,8 +1588,815 @@ const R: Record<string, Omit<RtFn, "name">> = {
 };
 
 export const runtime = (name: string): RtFn => {
-  const f = R[name];
+  const f = R[name] ?? WASI[name];
   if (!f) throw new Error(`no runtime function ${name}`);
   return { name, ...f };
 };
 export const RUNTIME = Object.keys(R);
+
+// ---- the world over WASI (projectional/WASM.md, W3b-2)
+//
+// For a module run as a WASI command (wasmtime, node:wasi): the world's
+// operations written over wasi_snapshot_preview1, as wasm.ts's "world"
+// imports are over JavaScript. They give and fail the same way: an
+// operation that fails sets the module's `reason` global, worded as Node's
+// world (projectional/src/lang/world.ts) words it, and gives status 2.
+// WASI hands bytes over through linear memory: 0 to 127 is for its small
+// results, and 128 on the buffer, grown to fit. Paths are relative to the
+// first folder the host gives the program (fd 3), WASI's sandbox.
+
+// The imports used, by WASI's names, with their types.
+export const WASI_IMPORTS: Record<string, { params: ("i32" | "i64")[]; result: "i32" | null }> = {
+  fd_write: { params: ["i32", "i32", "i32", "i32"], result: "i32" },
+  fd_read: { params: ["i32", "i32", "i32", "i32"], result: "i32" },
+  fd_close: { params: ["i32"], result: "i32" },
+  fd_readdir: { params: ["i32", "i32", "i32", "i64", "i32"], result: "i32" },
+  path_open: { params: ["i32", "i32", "i32", "i32", "i32", "i64", "i64", "i32", "i32"], result: "i32" },
+  path_filestat_get: { params: ["i32", "i32", "i32", "i32", "i32"], result: "i32" },
+  args_sizes_get: { params: ["i32", "i32"], result: "i32" },
+  args_get: { params: ["i32", "i32"], result: "i32" },
+  proc_exit: { params: ["i32"], result: null },
+};
+// A text constant, as instructions.
+const lit = (v: string) => { const b = textBytes(v); return [...b.map((x) => `i32.const ${x}`), `array.new_fixed $bytes ${b.length}`].join("\n"); };
+// WASI's errors (wasi_snapshot_preview1 errno) and rights.
+const E = { ACCES: 2, ISDIR: 31, NOENT: 44, NOTDIR: 54, PERM: 63, NOTCAPABLE: 76 };
+const RIGHT = { READ: 0x2, SEEK: 0x4, WRITE: 0x40, READDIR: 0x4000, FILESTAT: 0x200000 };
+// Status 2 after a failed open: the result's zero, then the reason.
+const failed = (zero: string, path = "local.get $path") => `
+  ${zero}
+  i32.const 0
+  local.get $fd
+  i32.sub
+  ${path}
+  call $wasi.fail
+  return`;
+// A file opened as a folder or the other way is told apart first, since
+// WASI hosts differ in what they say then: Node's world's words.
+const open = (oflags: number, rights: number, fdflags: number, zero: string) => `
+  local.get $path
+  call $wasi.kind
+  i32.const ${oflags & 2 ? 1 : 2}
+  i32.eq
+  if void
+    ${zero}
+    i32.const ${oflags & 2 ? E.NOTDIR : E.ISDIR}
+    local.get $path
+    call $wasi.fail
+    return
+  end
+  local.get $path
+  i32.const ${oflags}
+  i64.const ${rights}
+  i32.const ${fdflags}
+  call $wasi.open
+  local.tee $fd
+  i32.const 0
+  i32.lt_s
+  if void
+    ${failed(zero)}
+  end`;
+const loopTo = (cond: string, body: string) => `
+  block void
+    loop void
+      ${cond}
+      br_if 1
+      ${body}
+      br 0
+    end
+  end`;
+
+const WASI: Record<string, Omit<RtFn, "name">> = {
+  // Memory for n bytes of buffer.
+  "wasi.room": {
+    params: [["n", "i32"]], result: "void", locals: [["want", "i32"]], uses: [],
+    body: `
+      local.get $n
+      i32.const 128
+      i32.add
+      local.tee $want
+      memory.size
+      i32.const 16
+      i32.shl
+      i32.gt_u
+      if void
+        local.get $want
+        memory.size
+        i32.const 16
+        i32.shl
+        i32.sub
+        i32.const 65535
+        i32.add
+        i32.const 16
+        i32.shr_u
+        memory.grow
+        drop
+      end`,
+  },
+  // t's bytes into the buffer; how many.
+  "wasi.put": {
+    params: [["t", "text"]], result: "i32", locals: [["n", "i32"], ["i", "i32"]], uses: ["wasi.room"],
+    body: `
+      local.get $t
+      array.len
+      local.tee $n
+      call $wasi.room
+      ${loopTo("local.get $i\nlocal.get $n\ni32.ge_u", `
+      local.get $i
+      i32.const 128
+      i32.add
+      local.get $t
+      local.get $i
+      array.get_u $bytes
+      i32.store8
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i`)}
+      local.get $n`,
+  },
+  // The n bytes at p as a text.
+  "wasi.take": {
+    params: [["p", "i32"], ["n", "i32"]], result: "text", locals: [["r", "text"], ["i", "i32"]], uses: [],
+    body: `
+      local.get $n
+      array.new_default $bytes
+      local.set $r
+      ${loopTo("local.get $i\nlocal.get $n\ni32.ge_u", `
+      local.get $r
+      local.get $i
+      local.get $p
+      local.get $i
+      i32.add
+      i32.load8_u
+      array.set $bytes
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i`)}
+      local.get $r`,
+  },
+  // All of t to fd; WASI's error, or 0.
+  "wasi.write": {
+    params: [["fd", "i32"], ["t", "text"]], result: "i32", locals: [["left", "i32"], ["p", "i32"], ["e", "i32"], ["w", "i32"]], uses: ["wasi.put", "wasi_fd_write"],
+    body: `
+      local.get $t
+      call $wasi.put
+      local.set $left
+      i32.const 128
+      local.set $p
+      ${loopTo("local.get $left\ni32.eqz", `
+      i32.const 0
+      local.get $p
+      i32.store
+      i32.const 4
+      local.get $left
+      i32.store
+      local.get $fd
+      i32.const 0
+      i32.const 1
+      i32.const 8
+      call $wasi_fd_write
+      local.tee $e
+      if void
+        local.get $e
+        return
+      end
+      i32.const 8
+      i32.load
+      local.set $w
+      local.get $p
+      local.get $w
+      i32.add
+      local.set $p
+      local.get $left
+      local.get $w
+      i32.sub
+      local.set $left`)}
+      i32.const 0`,
+  },
+  // t and a newline to fd.
+  "wasi.line": {
+    params: [["fd", "i32"], ["t", "text"]], result: "void", locals: [], uses: ["wasi.write", "text.concat"],
+    body: `
+      local.get $fd
+      local.get $t
+      ${lit("\n")}
+      call $text.concat
+      call $wasi.write
+      drop`,
+  },
+  "wasi.print": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 1\nlocal.get $t\ncall $wasi.line" },
+  "wasi.printError": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
+  // Error e on path: its reason, as Node's world gives it, and status 2.
+  "wasi.fail": {
+    params: [["e", "i32"], ["path", "text"]], result: "i32", locals: [], uses: ["text.concat"],
+    body: `
+      local.get $e
+      i32.const ${E.NOENT}
+      i32.eq
+      if text
+        ${lit("no such file or folder: ")}
+        local.get $path
+        call $text.concat
+      else
+        local.get $e
+        i32.const ${E.ISDIR}
+        i32.eq
+        if text
+          local.get $path
+          ${lit(" is a folder, not a file")}
+          call $text.concat
+        else
+          local.get $e
+          i32.const ${E.NOTDIR}
+          i32.eq
+          if text
+            local.get $path
+            ${lit(" is not a folder")}
+            call $text.concat
+          else
+            local.get $e
+            i32.const ${E.ACCES}
+            i32.eq
+            local.get $e
+            i32.const ${E.PERM}
+            i32.eq
+            i32.or
+            local.get $e
+            i32.const ${E.NOTCAPABLE}
+            i32.eq
+            i32.or
+            if text
+              ${lit("not allowed to use ")}
+              local.get $path
+              call $text.concat
+            else
+              ${lit("could not use ")}
+              local.get $path
+              call $text.concat
+            end
+          end
+        end
+      end
+      global.set $reason
+      i32.const 2`,
+  },
+  "wasi.reason": { params: [], result: "text", locals: [], uses: [], body: "global.get $reason" },
+  // What's at path: 0 nothing, 1 a file (or anything but a folder), 2 a folder.
+  "wasi.kind": {
+    params: [["path", "text"]], result: "i32", locals: [["n", "i32"]], uses: ["wasi.put", "wasi_path_filestat_get"],
+    body: `
+      local.get $path
+      call $wasi.put
+      local.set $n
+      i32.const 3
+      i32.const 1
+      i32.const 128
+      local.get $n
+      i32.const 8
+      call $wasi_path_filestat_get
+      if i32
+        i32.const 0
+      else
+        i32.const 1
+        i32.const 24
+        i32.load8_u
+        i32.const 3
+        i32.eq
+        i32.add
+      end`,
+  },
+  // path opened from the program's folder: its fd, or minus WASI's error.
+  "wasi.open": {
+    params: [["path", "text"], ["oflags", "i32"], ["rights", "i64"], ["fdflags", "i32"]], result: "i32", locals: [["n", "i32"], ["e", "i32"]], uses: ["wasi.put", "wasi_path_open"],
+    body: `
+      local.get $path
+      call $wasi.put
+      local.set $n
+      i32.const 3
+      i32.const 1
+      i32.const 128
+      local.get $n
+      local.get $oflags
+      local.get $rights
+      i64.const 0
+      local.get $fdflags
+      i32.const 8
+      call $wasi_path_open
+      local.tee $e
+      if i32
+        i32.const 0
+        local.get $e
+        i32.sub
+      else
+        i32.const 8
+        i32.load
+      end`,
+  },
+  // Everything left on fd into the buffer: how many bytes; WASI's error at 16.
+  "wasi.readAll": {
+    params: [["fd", "i32"]], result: "i32", locals: [["got", "i32"], ["e", "i32"], ["r", "i32"]], uses: ["wasi.room", "wasi_fd_read"],
+    body: `
+      i32.const 16
+      i32.const 0
+      i32.store
+      block void
+        loop void
+          local.get $got
+          i32.const 65536
+          i32.add
+          call $wasi.room
+          i32.const 0
+          local.get $got
+          i32.const 128
+          i32.add
+          i32.store
+          i32.const 4
+          i32.const 65536
+          i32.store
+          local.get $fd
+          i32.const 0
+          i32.const 1
+          i32.const 8
+          call $wasi_fd_read
+          local.tee $e
+          if void
+            i32.const 16
+            local.get $e
+            i32.store
+            br 2
+          end
+          i32.const 8
+          i32.load
+          local.tee $r
+          i32.eqz
+          br_if 1
+          local.get $got
+          local.get $r
+          i32.add
+          local.set $got
+          br 0
+        end
+      end
+      local.get $got`,
+  },
+  "wasi.readFile": {
+    params: [["path", "text"]], result: "text", partial: true, locals: [["fd", "i32"], ["n", "i32"], ["e", "i32"]], uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.readAll", "wasi.take", "wasi_fd_close"],
+    body: `
+      ${open(0, RIGHT.READ | RIGHT.SEEK | RIGHT.FILESTAT, 0, "ref.null $bytes")}
+      local.get $fd
+      call $wasi.readAll
+      local.set $n
+      local.get $fd
+      call $wasi_fd_close
+      drop
+      i32.const 16
+      i32.load
+      local.tee $e
+      if void
+        ref.null $bytes
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      i32.const 128
+      local.get $n
+      call $wasi.take
+      i32.const 0`,
+  },
+  "wasi.readInput": {
+    params: [], result: "text", partial: true, locals: [["n", "i32"], ["e", "i32"]], uses: ["wasi.readAll", "wasi.fail", "wasi.take"],
+    body: `
+      i32.const 0
+      call $wasi.readAll
+      local.set $n
+      i32.const 16
+      i32.load
+      local.tee $e
+      if void
+        ref.null $bytes
+        local.get $e
+        ${lit("standard input")}
+        call $wasi.fail
+        return
+      end
+      i32.const 128
+      local.get $n
+      call $wasi.take
+      i32.const 0`,
+  },
+  // A byte at a time, so what's after the line stays for the next read.
+  // None at the end of the input; a line's \r\n is its end, as Node's world has it.
+  "wasi.readLine": {
+    params: [], result: "option", partial: true, locals: [["got", "i32"], ["e", "i32"]], uses: ["wasi.room", "wasi.fail", "wasi.take", "wasi_fd_read", "TextOption.none", "TextOption.some"],
+    body: `
+      block void
+        loop void
+          local.get $got
+          i32.const 1
+          i32.add
+          call $wasi.room
+          i32.const 0
+          local.get $got
+          i32.const 128
+          i32.add
+          i32.store
+          i32.const 4
+          i32.const 1
+          i32.store
+          i32.const 0
+          i32.const 0
+          i32.const 1
+          i32.const 8
+          call $wasi_fd_read
+          local.tee $e
+          if void
+            ref.null $option
+            local.get $e
+            ${lit("standard input")}
+            call $wasi.fail
+            return
+          end
+          i32.const 8
+          i32.load
+          i32.eqz
+          if void
+            local.get $got
+            i32.eqz
+            if void
+              call $TextOption.none
+              i32.const 0
+              return
+            end
+            br 2
+          end
+          local.get $got
+          i32.const 128
+          i32.add
+          i32.load8_u
+          i32.const 10
+          i32.eq
+          br_if 1
+          local.get $got
+          i32.const 1
+          i32.add
+          local.set $got
+          br 0
+        end
+      end
+      local.get $got
+      if void
+        local.get $got
+        i32.const 127
+        i32.add
+        i32.load8_u
+        i32.const 13
+        i32.eq
+        if void
+          local.get $got
+          i32.const 1
+          i32.sub
+          local.set $got
+        end
+      end
+      i32.const 128
+      local.get $got
+      call $wasi.take
+      call $TextOption.some
+      i32.const 0`,
+  },
+  "wasi.writeFile": {
+    params: [["path", "text"], ["t", "text"]], result: "i32", locals: [["fd", "i32"], ["e", "i32"]], uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.write", "wasi_fd_close"],
+    body: `
+      ${open(1 | 8, RIGHT.WRITE | RIGHT.SEEK, 0, "")}
+      local.get $fd
+      local.get $t
+      call $wasi.write
+      local.set $e
+      local.get $fd
+      call $wasi_fd_close
+      drop
+      local.get $e
+      if void
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      i32.const 0`,
+  },
+  "wasi.appendFile": {
+    params: [["path", "text"], ["t", "text"]], result: "i32", locals: [["fd", "i32"], ["e", "i32"]], uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.write", "wasi_fd_close"],
+    body: `
+      ${open(1, RIGHT.WRITE, 1, "")}
+      local.get $fd
+      local.get $t
+      call $wasi.write
+      local.set $e
+      local.get $fd
+      call $wasi_fd_close
+      drop
+      local.get $e
+      if void
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      i32.const 0`,
+  },
+  "wasi.fileExists": {
+    params: [["path", "text"]], result: "i32", locals: [["n", "i32"]], uses: ["wasi.put", "wasi_path_filestat_get"],
+    body: `
+      local.get $path
+      call $wasi.put
+      local.set $n
+      i32.const 3
+      i32.const 1
+      i32.const 128
+      local.get $n
+      i32.const 8
+      call $wasi_path_filestat_get
+      i32.eqz`,
+  },
+  // Which of the bytes at a (an of them) and at b comes first: -1, 0 or 1.
+  "wasi.compare": {
+    params: [["a", "i32"], ["an", "i32"], ["b", "i32"], ["bn", "i32"]], result: "i32", locals: [["i", "i32"], ["x", "i32"], ["y", "i32"]], uses: [],
+    body: `
+      block void
+        loop void
+          local.get $i
+          local.get $an
+          i32.ge_u
+          local.get $i
+          local.get $bn
+          i32.ge_u
+          i32.or
+          br_if 1
+          local.get $a
+          local.get $i
+          i32.add
+          i32.load8_u
+          local.set $x
+          local.get $b
+          local.get $i
+          i32.add
+          i32.load8_u
+          local.set $y
+          local.get $x
+          local.get $y
+          i32.ne
+          if void
+            i32.const 1
+            i32.const -1
+            local.get $x
+            local.get $y
+            i32.gt_u
+            select
+            return
+          end
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $an
+      local.get $bn
+      i32.gt_u
+      local.get $an
+      local.get $bn
+      i32.lt_u
+      i32.sub`,
+  },
+  // A folder's names but . and .., sorted (as Node's world sorts them,
+  // which for UTF-8 is byte order). WASI gives them in no order: the list
+  // is built from its end, each time the greatest name before the last one taken.
+  "wasi.listFolder": {
+    params: [["path", "text"]], result: "list", partial: true,
+    locals: [["fd", "i32"], ["e", "i32"], ["size", "i32"], ["used", "i32"], ["p", "i32"], ["n", "i32"], ["best", "i32"], ["bn", "i32"], ["last", "i32"], ["ln", "i32"], ["l", "list"]],
+    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.room", "wasi.compare", "wasi.take", "wasi_fd_readdir", "wasi_fd_close", "TextList.nil", "TextList.cons"],
+    body: `
+      ${open(2, RIGHT.READDIR, 0, "ref.null $list")}
+      i32.const 4096
+      local.set $size
+      block void
+        loop void
+          local.get $size
+          call $wasi.room
+          local.get $fd
+          i32.const 128
+          local.get $size
+          i64.const 0
+          i32.const 8
+          call $wasi_fd_readdir
+          local.tee $e
+          if void
+            local.get $fd
+            call $wasi_fd_close
+            drop
+            ref.null $list
+            local.get $e
+            local.get $path
+            call $wasi.fail
+            return
+          end
+          i32.const 8
+          i32.load
+          local.tee $used
+          local.get $size
+          i32.lt_u
+          br_if 1
+          local.get $size
+          i32.const 2
+          i32.mul
+          local.set $size
+          br 0
+        end
+      end
+      local.get $fd
+      call $wasi_fd_close
+      drop
+      call $TextList.nil
+      local.set $l
+      i32.const -1
+      local.set $last
+      block void
+        loop void
+          i32.const -1
+          local.set $best
+          i32.const 0
+          local.set $p
+          block void
+            loop void
+              local.get $p
+              i32.const 24
+              i32.add
+              local.get $used
+              i32.gt_u
+              br_if 1
+              local.get $p
+              i32.const 144
+              i32.add
+              i32.load
+              local.set $n
+              ;; skip . and ..
+              local.get $p
+              i32.const 152
+              i32.add
+              i32.load8_u
+              i32.const 46
+              i32.eq
+              local.get $n
+              i32.const 1
+              i32.eq
+              local.get $n
+              i32.const 2
+              i32.eq
+              local.get $p
+              i32.const 153
+              i32.add
+              i32.load8_u
+              i32.const 46
+              i32.eq
+              i32.and
+              i32.or
+              i32.and
+              i32.eqz
+              if void
+                ;; before the last taken, and after the best so far
+                local.get $last
+                i32.const 0
+                i32.lt_s
+                if i32
+                  i32.const 1
+                else
+                  local.get $p
+                  i32.const 152
+                  i32.add
+                  local.get $n
+                  local.get $last
+                  i32.const 152
+                  i32.add
+                  local.get $ln
+                  call $wasi.compare
+                  i32.const 0
+                  i32.lt_s
+                end
+                if void
+                  local.get $best
+                  i32.const 0
+                  i32.lt_s
+                  if i32
+                    i32.const 1
+                  else
+                    local.get $p
+                    i32.const 152
+                    i32.add
+                    local.get $n
+                    local.get $best
+                    i32.const 152
+                    i32.add
+                    local.get $bn
+                    call $wasi.compare
+                    i32.const 0
+                    i32.gt_s
+                  end
+                  if void
+                    local.get $p
+                    local.set $best
+                    local.get $n
+                    local.set $bn
+                  end
+                end
+              end
+              local.get $p
+              i32.const 24
+              i32.add
+              local.get $n
+              i32.add
+              local.set $p
+              br 0
+            end
+          end
+          local.get $best
+          i32.const 0
+          i32.lt_s
+          br_if 1
+          local.get $best
+          i32.const 152
+          i32.add
+          local.get $bn
+          call $wasi.take
+          local.get $l
+          call $TextList.cons
+          local.set $l
+          local.get $best
+          local.set $last
+          local.get $bn
+          local.set $ln
+          br 0
+        end
+      end
+      local.get $l
+      i32.const 0`,
+  },
+  // The program's arguments after its own name, as a List Text.
+  "wasi.args": {
+    params: [], result: "list", locals: [["argc", "i32"], ["i", "i32"], ["p", "i32"], ["n", "i32"], ["l", "list"]], uses: ["wasi.room", "wasi.take", "wasi_args_sizes_get", "wasi_args_get", "TextList.nil", "TextList.cons"],
+    body: `
+      i32.const 0
+      i32.const 4
+      call $wasi_args_sizes_get
+      drop
+      i32.const 0
+      i32.load
+      local.tee $argc
+      i32.const 4
+      i32.mul
+      i32.const 4
+      i32.load
+      i32.add
+      call $wasi.room
+      i32.const 128
+      i32.const 128
+      local.get $argc
+      i32.const 4
+      i32.mul
+      i32.add
+      call $wasi_args_get
+      drop
+      call $TextList.nil
+      local.set $l
+      local.get $argc
+      local.set $i
+      ${loopTo("local.get $i\ni32.const 1\ni32.le_u", `
+      local.get $i
+      i32.const 1
+      i32.sub
+      local.tee $i
+      i32.const 4
+      i32.mul
+      i32.const 128
+      i32.add
+      i32.load
+      local.set $p
+      i32.const 0
+      local.set $n
+      ${loopTo("local.get $p\nlocal.get $n\ni32.add\ni32.load8_u\ni32.eqz", `
+      local.get $n
+      i32.const 1
+      i32.add
+      local.set $n`)}
+      local.get $p
+      local.get $n
+      call $wasi.take
+      local.get $l
+      call $TextList.cons
+      local.set $l`)}
+      local.get $l`,
+  },
+};

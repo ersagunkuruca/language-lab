@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.ts",
     "bench": "node bench.ts",
     "gpu": "node gpu.ts",
+    "wasi": "node wasi.ts",
     "gaps": "node gaps/bench.ts && node gaps/bench-countdown.ts && node gaps/bench-chapters.ts && node gaps/bench-ledger.ts"
   },
   "engines": {
