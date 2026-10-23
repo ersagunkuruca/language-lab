@@ -66,6 +66,8 @@ export interface Options {
 const implOf = (id: Id) => (jsKind(id) === "impl" ? `$impl[${JSON.stringify(id)}]` : null);
 const manyOf = (id: Id) => (jsKind(id) === "partial" ? `$many[${JSON.stringify(id)}]` : null);
 const oneOf = (id: Id) => (jsKind(id) === "partial" ? `$partial[${JSON.stringify(id)}]` : null);
+// Where a `$fields` copy leaves its answer's fields.
+const GOT = "const $got = [];";
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
@@ -305,7 +307,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // G21, `walkable`).
   // `own`: the `$own` copy, which may change its own parameters' cells
   // (GAPS.md G25).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean }
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -379,16 +381,20 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return r;
   }
 
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false): Spec {
+  // `out`: a single-answer copy whose answers are all one record, which
+  // puts the record's fields in `$got` and returns whether it has one
+  // (GAPS.md G13 again): its caller takes them apart straight away.
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}`), streams, bool, single, cps, arr, own };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}`), streams, bool, single, cps, arr, own, out };
+      if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
       queue.push(s);
     }
@@ -1129,6 +1135,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const rest = k(r);
       const whole = new RegExp(`(?<![\\p{L}\\p{N}_$])${r.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(rest);
       return `(${fs.join(", ")}) => {\n${whole ? `const ${r} = ({ tag: ${tag(variant)}, fields: [${fs.join(", ")}] });\n` : ""}${rest}\n}`;
+    }
+    // The fields a `$fields` copy left in `$got`, in locals at once (the
+    // next such call writes over them); the record is built only if the
+    // rest uses it as a whole.
+    function fromGot(variant: Id, r: string, k: K): string {
+      const fs = node<"variant">(variant).fields.map(() => temp("f"));
+      pieces.set(r, { variant, fields: fs });
+      const rest = k(r);
+      const whole = new RegExp(`(?<![\\p{L}\\p{N}_$])${r.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(rest);
+      return `const ${fs.map((f, i) => `${f} = $got[${i}]`).join(", ")};\n${whole ? `const ${r} = ({ tag: ${tag(variant)}, fields: [${fs.join(", ")}] });\n` : ""}${rest}`;
     }
     // A field of a record, read from its pieces when it was just built
     // from locals (anything else might have effects to run).
@@ -1970,7 +1986,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         let out: string;
         if (callStreams(n)) {
           const r = temp("r");
-          if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
+          const rec = callee?.single ? unpackOf(callee) : null;
+          if (callee && rec) {
+            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true);
+            out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
+          } else if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
             const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
@@ -2052,6 +2072,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const lam = node<"lambda">(b);
       const ps = paramNames(sp).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
+      if (sp.out) {
+        const rec = unpackOf(sp)!;
+        const leaf = (v: string) => {
+          const { pre, fields } = fieldsFor(rec, v);
+          const gs = fields.map(() => temp("g"));
+          return `${pre}const ${gs.map((g, i) => `${g} = ${fields[i]}`).join(", ")};\n${gs.map((g, i) => `$got[${i}] = ${g};`).join("\n")}\nreturn true;`;
+        };
+        return `${header} (its ${names[rec] ?? "answer"}'s fields in \`$got\`)\nfunction ${sp.name}(${ps}) {\n${st(lam.body, leaf)}\nreturn false;\n}`;
+      }
       if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
       if (sp.cps) {
         const k = temp("k");
