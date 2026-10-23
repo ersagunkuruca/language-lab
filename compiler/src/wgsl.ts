@@ -90,8 +90,23 @@ const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
   return a - b * floor(a / b);
 }`;
 
+// Rounding to Float32 is what every f32 operation does already, so a
+// shader drops it, and the patterns below (dot, mix, clamp) see the
+// arithmetic as written.
+function unrounded(e: SExpr): SExpr {
+  switch (e.k) {
+    case "num": case "bool": case "local": return e;
+    case "op": return e.op === "float32" ? unrounded(e.args[0]) : { ...e, args: e.args.map(unrounded) };
+    case "if": return { ...e, cond: unrounded(e.cond), then: unrounded(e.then), else: unrounded(e.else) };
+    case "let": return { ...e, value: unrounded(e.value), body: unrounded(e.body) };
+    case "call": case "make": return { ...e, args: e.args.map(unrounded) };
+    case "get": return { ...e, rec: unrounded(e.rec) };
+    case "budget": return { ...e, body: unrounded(e.body), otherwise: unrounded(e.otherwise) };
+  }
+}
+
 export function emitWgsl(lowered: Lowered): Shader {
-  const { funcs } = lowered;
+  const funcs = lowered.funcs.map((f) => ({ ...f, body: unrounded(f.body) }));
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
 

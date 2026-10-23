@@ -316,6 +316,10 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           // floor and mod jump (at whole numbers, at multiples of b), so
           // there they have no slope, and a slope that's 0 between jumps
           // would hide that: they aren't differentiated.
+          // Rounding to Float32 stands for the number itself (the job of
+          // every operation in the Float32 representation, NUMBERS.md), so
+          // its slope is the slope of what it rounds.
+          if (head.target === S.float32) return D(n.args[0], ctx);
           if (head.target === S.floor || head.target === S.mod) return cant(`${names[head.target] ?? head.target} jumps, so it has no slope where it does`);
           if (head.target === S.mapParts || head.target === S.zipParts || head.target === S.total) return partsD(n, head.target, ctx);
           if (t.kind === "variant") {

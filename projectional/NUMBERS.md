@@ -294,7 +294,10 @@ can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
   prints now, and its comment that "Number is f32" becomes a fact of the
   program instead of the target's choice.
 
-The steps, one PR each: the builtin and represent.ts taking a builtin type;
+The steps, one PR each: the builtin and represent.ts taking a builtin type
+(done: `round to Float32` is in every number table, its slope is the
+slope of what it rounds, and a representation may have `literal`, a
+function given each literal, and `approximate`, which the chooser skips);
 the `Float32` representation with its laws tested with a tolerance against
 `Number`; js-scalar's `Math.fround`; the shaders example asking for it and
 gpu.ts checking `+ − ×` exactly.

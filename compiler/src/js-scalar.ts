@@ -15,7 +15,7 @@ const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||",
 };
 const MATH: Partial<Record<Op, string>> = {
-  sqrt: "sqrt", abs: "abs", floor: "floor", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2",
+  sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2",
 };
 
 // The source of a function returning every function of the profile, by

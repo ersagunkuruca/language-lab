@@ -72,6 +72,7 @@ const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> 
   [B.atan2]: { js: ([a, b]) => `Math.atan2(${a}, ${b})` },
   [S.abs]: { js: ([a]) => `Math.abs(${a})` },
   [S.floor]: { js: ([a]) => `Math.floor(${a})` },
+  [S.float32]: { js: ([a]) => `Math.fround(${a})` },
   [S.mod]: { js: ([a, b]) => `$mod(${a}, ${b})` },
   // Part by part; the function is pure, so a plain JS function.
   [S.mapParts]: { js: ([f, r]) => `$mapParts(${f}, ${r})` },
