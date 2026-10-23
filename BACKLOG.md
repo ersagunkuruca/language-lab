@@ -119,6 +119,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E22 | Long and multiline text literals render compactly (first line + "· N lines", full text on hover, multiline edit box) | #206 |
 | E7 | Add a value here: palette 7.5 s → 1.7 s on solved functions | #203 |
 | E6 | Show inline refits the graph; canvas labels get a halo | #199 |
 | E5 | Tabs: six at most, shrink to fit the pane | #196 |

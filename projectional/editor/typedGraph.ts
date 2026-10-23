@@ -38,6 +38,7 @@ import type { Info } from "../src/lang/infer.ts";
 import { chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
+import { litLabel } from "./typed.ts";
 import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
@@ -192,10 +193,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { does, handles };
   };
 
-  const pill = (id: Id, text: string, cls: string, src?: Id): Sub => {
+  const pill = (id: Id, text: string, cls: string, src?: Id, more?: string): Sub => {
     const w = Math.max(28, tw(text) + 18), h = 24;
     return item(id, w, h, (g) => {
-      const r = titled(s("rect", { width: w, height: h, rx: 12, class: `pill ${cls}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), typeOf(id));
+      const r = titled(s("rect", { width: w, height: h, rx: 12, class: `pill ${cls}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), [typeOf(id), more].filter(Boolean).join("\n\n"));
       g.append(r, s("text", { x: w / 2, y: 16, class: "pl", "text-anchor": "middle" }, text));
       if (src) r.setAttribute("data-src", src);
       if (cls.includes("hole")) r.setAttribute("data-slot", id);
@@ -240,7 +241,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const d = dotOf(id);
     if (d) return useNode(id, d);
     switch (n.kind) {
-      case "lit": return pill(id, typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value), "lit");
+      case "lit": { const l = litLabel(n.value); return pill(id, l.short, "lit", undefined, l.full); }
       case "hole": {
         const hi = info?.holes.get(id);
         return pill(id, `□ ${hi ? showType(info!.subst.zonk(hi.expected), names) : ""}`.trim(), "hole");
