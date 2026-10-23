@@ -60,8 +60,13 @@ let device: Promise<GPUDevice | string> | null = null;
 async function gpu(): Promise<GPUDevice | string> {
   if (!navigator.gpu) return "this browser has no WebGPU";
   const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) return "WebGPU found no GPU adapter";
-  return adapter.requestDevice();
+  // Browsers also turn WebGPU off for a while for a page whose shader
+  // stalled the GPU, and then this is what the page sees.
+  if (!adapter) return "WebGPU found no GPU adapter; a browser also turns WebGPU off for a while for a page that froze the GPU, and restarting the browser brings it back";
+  const d = await adapter.requestDevice();
+  // A lost device is asked for again by the next picture.
+  void d.lost.then(() => { device = null; });
+  return d;
 }
 
 // Throws, with the compiler's reason, when the entries can't be drawn.
@@ -168,6 +173,12 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
     else if (took < 10 && scale < 1) { scale = Math.min(1, scale * 1.2); took = 0; }
   };
   let frames = 0, since = performance.now();
+  // The GPU can be lost while drawing (a driver reset, say): stop and say so.
+  void d.lost.then((info) => {
+    if (stopped) return;
+    stop();
+    status.textContent = `The GPU stopped drawing (${(info.message || info.reason).replace(/\.$/, "")}). Reload the page to draw it again.`;
+  });
   const draw = () => {
     if (stopped) return;
     fit();
@@ -252,7 +263,9 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
     const wasm = keys.length === 3 && !plain.refused.size ? await instantiate(emitWasm(plain)) : null;
     const size = wasm ? 160 : 64;
     canvas.width = canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
+    // A canvas the GPU drew on can't be drawn on any other way.
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
     const img = ctx.createImageData(size, size);
     const row = (py: number, t: number) => {
       for (let px = 0; px < size; px++) {
