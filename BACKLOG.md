@@ -123,7 +123,7 @@ section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L1 | Run refuses a program that doesn't type-check, naming the definition | #PR |
+| L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 | | Countdown in the program list (Hutton credited) | #174 |
 | | QA2 H1, H2, M1 to M4 | #137, #139, #159, #160, #158, #156 |
 | | Can't-edit: change a call's function keeping its inputs; field types | #151, #147 |
