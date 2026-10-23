@@ -190,6 +190,24 @@ free once WGSL works. Full programs need WasmGC or our own GC, so they come
 later. Native goes through WASM or LLVM after that. COMPILER.md's "not WASM"
 was about the whole language and still holds for it (ROADMAP item 6).
 
+## Vector operations in shaders (2026-10-23)
+
+*The idea.* The ray marcher does colour and vector maths channel by
+channel and axis by axis. Do those become vector operations in the
+compiled shader?
+
+*Current answer.* They didn't: every part was its own `f32`, and `Vec` and
+`Colour` were structs. Now (COMPILER.md "Vectors") a record of two to four
+Numbers is stored as `vec2f`–`vec4f`, and parts that each do the same thing
+are printed as one vector operation, with `dot`, `length`, `normalize`,
+`mix`, `clamp`, `min` and `max` recognised. On modern GPUs that is mostly
+for the GPU's built-ins and for readability, since each thread is scalar
+anyway. The real fix is in the source, one PR each: elementwise operations
+over any record of Numbers as ordinary built-ins, a prelude vector module
+written once on them (usable on `Vec` and on `Colour`, while adding a
+colour to a position stays a type error), and the ray marcher rewritten to
+use them.
+
 ## The node editor (2026-10-22)
 
 *The idea.* Overlapping previews and edges, no automatic spacing, nodes

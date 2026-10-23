@@ -347,7 +347,9 @@ A shader is `colour(x, y, time)`, which gives a record of three Numbers,
 or `red`, `green` and `blue`. The parts map like this:
 
 - Number is `f32` and Bool is `bool`. A record of them (a data type with
-  one case, such as a `Vec` or a `Colour`) is a `struct`. The lowering takes
+  one case, such as a `Ray`) is a `struct`; a record of two to four Numbers
+  (a `Vec`, a `Colour`, a `Pair` of Numbers) is a vector, `vec2f` to
+  `vec4f`, fields in order as `.x .y .z .w` (see "Vectors" below). The lowering takes
   records only with `{ records: true }`, because WebAssembly would need
   multiple results for them, so it still refuses them.
 - A let is a `let`. An `if` is an if statement. An `if` in the middle of
@@ -403,8 +405,43 @@ GPU gets exact derivatives instead of six extra scene evaluations. The
 its result may fail (`Choice`). Its distance formulas and soft shadow are
 Inigo Quilez's, credited where they are used.
 
-Still to do for shaders: vector and matrix types the GPU has natively
-(`vec3f` arithmetic instead of records of three Numbers), a `Float32`
+**Vectors.** The language has no vector type and doesn't need one for
+this: a record of two to four Numbers is *stored* as a WGSL vector, the way
+`examples/numbers` stores Peano naturals as Ints (NUMBERS.md). The program
+keeps saying `colour(red(a) + t · (red(b) − red(a)), …)`; the printer
+notices when the parts of a record being built each do the same thing to the
+same part of other vectors (or to one Number shared by all) and prints one
+vector expression instead. That is superword-level parallelism (Larsen and
+Amarasinghe, PLDI 2000), done on the expression tree. On top of it, the
+GPU's built-ins are recognised from what they mean:
+
+| written field by field | printed |
+|---|---|
+| `vec(x(o) + t · x(d), …)` | `o + t * d` |
+| `colour(red(a) + t · (red(b) − red(a)), …)` | `mix(a, b, t)` |
+| `x(a) · x(b) + y(a) · y(b) + z(a) · z(b)` | `dot(a, b)` |
+| `√(x(v) · x(v) + …)` | `length(v)` |
+| `vec(x(v) / length(v), …)` | `normalize(v)` |
+| `if a < b then a else b` (and `b, a`) | `min(a, b)`, `max(a, b)` |
+| `colour(clamp(red(c) · k), …)`, clamp = smaller(larger(x, 0), 1) | `clamp(c * k, vec3f(0.0), vec3f(1.0))` |
+
+A call to the same function on each part (`clamp` above) is looked into
+when its body is one expression that uses each input once. Parts that
+don't line up stay parts: `vec3f(p.x + s, p.y, p.z)`. `npm run gpu` checks
+every function against the evaluator as before.
+
+Honestly, about speed: today's desktop and phone GPUs run each thread as a
+scalar processor, and their drivers split `vec3f` arithmetic into three
+operations again, so most of this is about reading the shader, not running
+it faster. What the GPU does gain is its built-ins (`dot`, `normalize`,
+`mix`, `clamp`, `min`, `max`). Two small differences from the evaluator:
+`mix` is computed as `a·(1−t) + b·t`, and `min`/`max` of a NaN may give
+either side. The bigger cost was in the source, which had to spell out
+each channel; the language side of that (elementwise operations over any
+record of Numbers, written once in the prelude) is the next step.
+
+Still to do for shaders: matrix types, elementwise operations in the
+source (above), a `Float32`
 number type so f32 is in the types rather than a target's choice,
 `derivative` applied in the source when the compiler can show the slope
 exists (which removes the `Choice`), and a live preview in the editor.
