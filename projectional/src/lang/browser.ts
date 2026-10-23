@@ -94,11 +94,11 @@ export function browserWorld(store: Store, program: string, console_ = console, 
       const { cells } = clock;
       let f = fetched.get(url);
       if (!f) {
-        const landed = cells.cell(false, "fetched");
+        const landed = cells.cell(0, "fetched");
         const ready = (clock.fetch ?? browserFetch)(url).then(
           (text) => { f!.text = text; },
           (e) => { f!.error = `could not fetch ${url}: ${(e as Error).message}`; },
-        ).then(() => cells.write(landed, true));
+        ).then(() => cells.write(landed, 1));
         fetched.set(url, (f = { landed, ready }));
       }
       if (f.text !== undefined) return f.text;

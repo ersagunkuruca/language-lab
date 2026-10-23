@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": false,
-    "types": ["node"]
+    "types": ["node", "@webgpu/types"]
   },
   "include": ["src", "test", "examples", "editor/*.ts"]
 }

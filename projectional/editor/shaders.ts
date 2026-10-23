@@ -36,7 +36,7 @@ async function show(where: string, p: Program) {
   const code = merge(LIBRARY.code, own), names = layer<Names>(LIBRARY.names, p.names as Names);
   const info = infer(code, names, undefined, { pins: LIBRARY.pins, hidden: LIBRARY.hidden });
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("\n"));
-  const pres: Presentation = { names, comments: p.comments as Record<Id, string>, hints: {}, style: blocksStyle as Style };
+  const pres: Presentation = { names, comments: p.comments as Record<Id, string>, hints: {}, style: blocksStyle as unknown as Style };
   const entries = pictureEntries(own.defs, names);
   if (!entries) throw new Error("a picture is a colour, or a red, green and blue, of (x, y, time)");
   $("program").textContent = own.defs.map((d) => renderBlocks(code, pres, info, d)).join("\n\n");

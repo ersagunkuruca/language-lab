@@ -41,6 +41,7 @@ jobs:
         working-directory: projectional
         run: |
           npm ci
+          npm run typecheck
           node --test --test-concurrency=2 test/*.test.ts
       - name: invertible
         working-directory: invertible

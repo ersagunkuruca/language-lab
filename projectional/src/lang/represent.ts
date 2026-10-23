@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
 import { CONS, INT_OPS, LIST, S, TEXT_OPS } from "./std.ts";
 
 export interface Representation {
@@ -110,7 +110,7 @@ export function represent(code: Code, entries: Id[], rep: Representation): Code 
   const t = rep.of;
   const variants = new Set(variantsOf(code, t));
   const nodes: Record<Id, Node> = { ...code.nodes };
-  const add = (n: Omit<Node, "id"> & { kind: Node["kind"] }): Id => {
+  const add = (n: NodeData): Id => {
     const id = freshId();
     nodes[id] = { ...n, id } as Node;
     return id;

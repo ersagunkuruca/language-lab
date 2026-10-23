@@ -13,9 +13,12 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
-import { OPS, type Lowered, type Op, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { OPS, type LType, type Lowered, type Op, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType, number> = { f64: 0x7c, i32: 0x7f };
+// WebAssembly takes no records yet: the scalar profile's records are refused
+// before anything is printed, so every type here is a scalar one.
+const scalar = (t: LType) => t as SType;
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -55,7 +58,7 @@ export function emitWasm(lowered: Lowered): Module {
     return sigs.indexOf(key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
-  const funcSig = funcs.map((f) => sig(f.params, f.result));
+  const funcSig = funcs.map((f) => sig(f.params.map(scalar), scalar(f.result)));
   const typeSec = vec(sigs.map((k) => {
     const [ps, r] = k.split(">");
     return [0x60, ...vec(ps ? ps.split(",").map((p) => [VAL[p as SType]]) : []), ...vec([[VAL[r as SType]]])];
@@ -70,7 +73,7 @@ export function emitWasm(lowered: Lowered): Module {
   const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(0), 0x0b]]);
   const zero = (t: SType) => (t === "f64" ? [0x44, ...f64(0)] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero
-  const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), 0x0f, 0x0b] : []);
+  const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(scalar(f.result)), 0x0f, 0x0b] : []);
 
   function code(e: SExpr): number[] {
     switch (e.k) {
@@ -78,8 +81,9 @@ export function emitWasm(lowered: Lowered): Module {
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
       case "let": return [...code(e.value), 0x21, ...u(e.i), ...code(e.body)];
-      case "if": return [...code(e.cond), 0x04, VAL[e.t], ...code(e.then), 0x05, ...code(e.else), 0x0b];
+      case "if": return [...code(e.cond), 0x04, VAL[scalar(e.t)], ...code(e.then), 0x05, ...code(e.else), 0x0b];
       case "call": return [...e.args.flatMap(code), e.tail ? 0x12 : 0x10, ...u(fnIndex(e.fn))];
+      case "make": case "get": throw new Error("WebAssembly takes no records yet");
       case "budget": {
         // save = fuel; fuel = n; res = body; (if fuel < 0 then otherwise else res); fuel = save
         return [
@@ -102,7 +106,7 @@ export function emitWasm(lowered: Lowered): Module {
     for (let i = 0; i < extra.length;) {
       let j = i;
       while (j < extra.length && extra[j] === extra[i]) j++;
-      groups.push([...u(j - i), VAL[extra[i]]]);
+      groups.push([...u(j - i), VAL[scalar(extra[i])]]);
       i = j;
     }
     const body = [...vec(groups), ...spend(f), ...code(f.body), 0x0b];
@@ -126,6 +130,7 @@ export function emitWasm(lowered: Lowered): Module {
       case "let": return `${wat(e.value, f, d)}\n${d}local.set ${local(f, e.i)}\n${wat(e.body, f, d)}`;
       case "if": return `${wat(e.cond, f, d)}\n${d}(if (result ${e.t})\n${d}  (then\n${wat(e.then, f, d + "    ")})\n${d}  (else\n${wat(e.else, f, d + "    ")}))`;
       case "call": return [...e.args.map((a) => wat(a, f, d)), `${d}${e.tail ? "return_call" : "call"} ${id(funcs[e.fn])}`].join("\n");
+      case "make": case "get": throw new Error("WebAssembly takes no records yet");
       case "budget": return [
         `${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`, wat(e.body, f, d), `${d}local.set ${local(f, e.res)}`,
         `${d}global.get $fuel`, `${d}f64.const 0`, `${d}f64.lt`, `${d}(if (result ${e.t})`, `${d}  (then`, wat(e.otherwise, f, d + "    ") + ")", `${d}  (else`, `${d}    local.get ${local(f, e.res)}))`,

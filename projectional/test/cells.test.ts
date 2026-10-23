@@ -55,12 +55,12 @@ test("watchers run once per batch, in a diamond each only once, and a formula wh
 
 test("dependencies are dynamic: a branch not taken isn't tracked", () => {
   const c = new Cells(equal);
-  const on = c.cell(true), x = c.cell(1);
+  const on = c.cell(1), x = c.cell(1);
   let runs = 0;
   c.watch(() => { runs++; if (c.read(on)) c.read(x); });
   c.write(x, 2);
   assert.equal(runs, 2);
-  c.write(on, false);
+  c.write(on, 0);
   assert.equal(runs, 3);
   c.write(x, 3);
   assert.equal(runs, 3, "x isn't read any more");
