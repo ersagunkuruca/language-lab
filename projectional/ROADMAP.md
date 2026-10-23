@@ -150,5 +150,5 @@ run in parallel because they touch different files.
 
 Small examples that show the language's ideas, picked up when a thread has
 room: `conjugate(f, g)` (f⁻¹ ∘ g ∘ f) with a colour-space edit, an
-object-vs-world transform and a multiband guitar effect (NOTES.md); the
+object-vs-world transform and a multiband effect (done: examples/conjugate); the
 SDF ray marcher (item 6).

@@ -179,7 +179,11 @@ function, with three examples: an edit in a perceptual colour space, a
 transform in a parent's frame, and multiband processing, where the
 invertible filter is a band split (a crossover or an STFT) and the
 per-band compression or overdrive is g. Standard DSP; credit the sources
-the demo follows. Waiting for a slot (ROADMAP, showcases).
+the demo follows. Done (BACKLOG.md L23): the prelude's `conjugate(f, g)`
+is three lines over `inverse`, and `examples/conjugate` brightens a colour
+in linear light, turns a point about another, and softens the fast band
+of a Haar split. A crossover and a real compressor, on audio, would make
+the pedal; that waits for audio as a target.
 
 ## Shaders, WebAssembly, native (2026-10-22)
 

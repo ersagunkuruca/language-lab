@@ -213,4 +213,4 @@ not only code: an influence is credited even when nothing was copied.
 | `examples/shaders` (ripples) | Our own | Written for this project. |
 | `examples/quadratic`, `physics`, `calculus`, `algebra` | Textbook | The quadratic formula, projectile motion, Newton's method, polar coordinates. The programs around them are ours. |
 | `examples/numbers` | Textbook | Peano arithmetic (Giuseppe Peano, 1889). |
-| Planned: conjugation `f⁻¹ ∘ g ∘ f` | Ersagun's idea | Conjugation and commutators are standard group theory (familiar from Rubik's cube methods); multiband processing is standard DSP, whose sources the demo will credit. |
+| `conjugate(f, g)` and `examples/conjugate` (f⁻¹ ∘ g ∘ f) | Ersagun's idea; textbook | Conjugation and commutators are standard group theory (familiar from Rubik's cube methods). The example's 2.2 power is the simple form of the sRGB curve (IEC 61966-2-1), and its band split is the Haar wavelet (Alfréd Haar, 1910); a multiband compressor splits with a crossover instead. |

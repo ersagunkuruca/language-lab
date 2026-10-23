@@ -51,12 +51,18 @@ export function buildPrelude(): Module {
   const inverse = k.def("inverse");
   k.define(inverse, k.fn(["f", "y"], (f, y) => k.solve(applied, { [fPort]: f, out: y }, { [xPort]: "x" }, ({ [xPort]: x }) => x)));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse];
+  // Go to another space, act there, come back: f⁻¹ ∘ g ∘ f, the f⁻¹ from
+  // running f backwards (NOTES.md, conjugation; examples/conjugate).
+  const conjugate = k.def("conjugate");
+  k.define(conjugate, k.fn(["f", "g"], (f, g) => k.fn(["x"], (x) => k.call(inverse, f, k.call(g, k.call(f, x))))));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",
     [inverse]: "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    [conjugate]: "g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.",
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied], merge(prelude, std));
