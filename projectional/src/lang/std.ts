@@ -3,6 +3,7 @@
 // with their type signatures. Everything has a stable id so programs can
 // refer to it, exactly like prelude.ts.
 
+import { discharge } from "./ledger.ts";
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
@@ -95,8 +96,10 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // later, after `main` has returned, so no handler in the program is around
 // them: an effect of the program's own is handled inside the view or the
 // handler. Adding a runtime effect to pages is a change to these two lines.
-export const PAGE_VIEW: readonly Id[] = [CELLS, DIVERGE, TIME, NETWORK];
-export const PAGE_HANDLER: readonly Id[] = [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM];
+export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK],
+  "the page runtime runs a view in a watcher, under a step budget, after main has returned");
+export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM],
+  "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort");
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
@@ -278,6 +281,16 @@ export const CELL_OPS = {
   read: builtin("cells.read", "read", (s) => { const a = s.fresh(); return fn([cellOf(a)], a, s.freshRow([CELLS, DIVERGE])); }),
   write: builtin("cells.write", "write", (s) => { const a = s.fresh(); return fn([cellOf(a), a], unit, s.freshRow([UPDATE])); }),
 };
+
+// The builtins that run a function they're given and keep one of its
+// effects inside (the ledger, ledger.ts). Their types say so; the test
+// checks each type drops exactly what its row here says.
+discharge("all, count", [CHOICE], "every answer, collected into a list or counted", [S.all, S.count]);
+discharge("first", [CHOICE], "the first answer, or the default when there's none", [S.first]);
+discharge("optional", [CHOICE], "the first answer as some(answer), or none", [S.optional]);
+discharge("with fuel", [DIVERGE], "at most n calls that may not end, then no answer: Diverge becomes Choice", [S.fuel]);
+discharge("seeded", [RANDOM], "the same numbers for the same seed, from a generator in the program", [S.seeded]);
+discharge("formula", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula]);
 
 // Int: whole numbers that never overflow. Same names as Number's, because
 // names are presentation (NUMBERS.md stage 2): the palette offers the one

@@ -12,6 +12,7 @@
     "build-editor": "node editor/build.ts",
     "smoke": "node editor/smoke.ts",
     "error-table": "node test/errors.test.ts --write",
+    "ledger-table": "node test/ledger.test.ts --write",
     "smoke-shaders": "node editor/shaders-smoke.ts",
     "lang": "node src/lang/demo.ts",
     "numbers": "node src/lang/numbers-demo.ts",

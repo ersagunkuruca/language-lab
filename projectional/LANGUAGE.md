@@ -563,6 +563,30 @@ What is deliberately not there, and why:
   in its runtime (cells.ts), so a compiled program updates and remembers
   exactly as the evaluator does.
 
+### Where effects go
+
+A function's effects show in the type of whatever calls it, all the way up
+to `main`. A few places take some away on purpose, and these are all of
+them. Each calls one function, `discharge` (`src/lang/ledger.ts`), and this
+table is generated from those calls (`npm run ledger-table`), so a new
+place (a profile, a runtime handler, a builtin that runs what it's given)
+is a new row, added on purpose. `test/ledger.test.ts` checks that each
+builtin's type takes away exactly what its row says.
+
+| where | takes away | why |
+|---|---|---|
+| a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
+| a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort |
+| a page's text, part or attribute value | Cells, Diverge, Time, Network | the page runtime runs a view in a watcher, under a step budget, after main has returned |
+| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait | the runtime handles them around main: the world, cells, the clock and the web; an Abort ends the program with its reason |
+| a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
+| all, count | Choice | every answer, collected into a list or counted |
+| first | Choice | the first answer, or the default when there's none |
+| formula | Diverge | a formula runs when it's read, so read has Diverge instead |
+| optional | Choice | the first answer as some(answer), or none |
+| seeded | Random | the same numbers for the same seed, from a generator in the program |
+| with fuel | Diverge | at most n calls that may not end, then no answer: Diverge becomes Choice |
+
 ### How it runs: no stack limit
 
 The evaluator (`src/lang/run.ts`) is a small machine, not a recursive

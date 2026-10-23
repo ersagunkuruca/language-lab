@@ -25,6 +25,9 @@ import {
   BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
+import { DECLARED, discharge } from "./ledger.ts";
+
+discharge("a match on an effect's operations", [DECLARED], "a case for each operation says what it does: the handler");
 
 export interface Problem { id: Id; message: string }
 // group: the definitions being checked together with the hole's own. Inside
@@ -601,6 +604,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // gives the answer, and the computation carries on with it; a case for
   // one that never returns gives the value of the whole match. Cases run
   // outside the handler, so their own effects are the match's.
+  // A match on an effect's operations: the computation it handles may do
+  // the effect, and the match doesn't (the ledger, ledger.ts).
   function handle(n: NodeOf<"match"> | NodeOf<"fold">, effect: Id, arms: NodeOf<"arm">[], env: Map<Id, Type>, row: Row, result: Type): Type {
     if (n.kind === "fold") err(n.id, `${nm(effect)} is an effect; its operations are handled with a match, not folded`);
     const rest = s.next++;
