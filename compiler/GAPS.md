@@ -99,7 +99,7 @@ compiler change. **Done**: the checker records how numbers compare at each
 `equal` (exact where there are only Ints, near where there are only
 Numbers, and where a type variable could be either, whole numbers exactly),
 and the evaluator and the compiler both use it. No example's output
-changed. The inline form (G2) is still open. *Later* (second review):
+changed. The inline form (G2) is done too (C15). *Later* (second review):
 that made a generic `equal` answer differently from a direct one, so it
 is now one rule for every type, whole numbers exactly and others near
 (NOTES.md, "Equality: one rule").
@@ -184,7 +184,11 @@ word("let")` compiles to `$eq(t, { tag: …, fields: ["let"] })`. That
 allocates a token, then compares it through a general loop with its own
 stack. The ideal is `t.tag === WORD && t.fields[0] === "let"`. *Fix:*
 when the type is known, inline equality: a tag test, then field by field,
-and `===` for Text and Int. This is the compiled half of G0.
+and `===` for Text and Int. This is the compiled half of G0. **Done** (Backlog C15):
+a name compared with a value built in place, of literals, names and such
+values again, is a tag test and then each field by its type (`===`,
+`$sameNumber`, or `$eq` where a field's type is generic). calc's three
+`$eq`s and algebra's simplifier's `= number(0)` tests are gone.
 
 **G3. Bool is an object (perf, not measured on its own).** Every function
 that returns `Bool` returns `$T` or `$F`, and callers test `.tag ===

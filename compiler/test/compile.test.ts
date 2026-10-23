@@ -226,6 +226,26 @@ test("running out of fuel in plain code inside a search fails that branch only, 
   assert.deepEqual(fromList(defs.main() as Value), want);
 });
 
+test("equality with a value built in place is a tag test and its fields, with nothing built (GAPS.md G2)", async () => {
+  const k = new Lang();
+  const tok = k.type("tok", [], [["word", [["w", () => k.tref("type.string")]]], ["num", [["n", () => k.tref("type.number")]]], ["pair", [["a", (self) => k.tref(self)], ["b", (self) => k.tref(self)]]], ["gap", []]]);
+  const { word, num, pair, gap } = tok.v;
+  // how many of the tokens are each of four built values
+  const hits = k.def("hits");
+  k.define(hits, k.fn(["t", "x"], (t, x) => k.list(
+    k.equal(t, k.call(word, k.lit("let"))), k.equal(k.call(num, k.lit(0.1)), t), k.equal(t, k.x(gap)),
+    k.equal(t, k.call(pair, k.call(word, x), k.x(gap))))));
+  const main = k.def("main");
+  const toks = [k.call(word, k.lit("let")), k.call(word, k.lit("in")), k.call(num, k.call(B.add, k.lit(0.05), k.lit(0.05))), k.x(gap), k.call(pair, k.call(word, k.lit("a")), k.x(gap)), k.call(pair, k.call(word, k.lit("a")), k.call(word, k.lit("a")))];
+  k.define(main, k.thunk(() => k.list(...toks.map((t) => k.call(hits, t, k.lit("a"))))));
+  const { code, info, defs, source } = await compiledDefs(k, ["main"], "eq-built.js");
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(main))][0]).map((l) => fromList(l as Value));
+  assert.deepEqual(fromList(defs.main() as Value).map((l) => fromList(l as Value)), want);
+  assert.deepEqual(want.map((l) => l.map((b) => (b as { tag: string }).tag === TRUE)), [[true, false, false, false], [false, false, false, false], [false, true, false, false], [false, false, true, false], [false, false, false, true], [false, false, false, false]]);
+  assert.doesNotMatch(source, /\$eq\(/);
+});
+
 test("one of a few constants written in place runs each in turn, with no list (GAPS.md G12)", async () => {
   const k = new Lang();
   const main = k.def("main");

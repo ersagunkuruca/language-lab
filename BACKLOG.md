@@ -51,7 +51,6 @@ and lists built by G22's loops), then the rest in order.
 | C22 | G21/G23 again: a list matched and handed to itself (ledger's `entries`) as an array and an index (`$arr` copies taking both), and lists built by G22's holes kept as arrays, so the folds from the end need no spine | GAPS G23 | P3 | M | |
 | C21 | Recursion that isn't a tail call on the heap (the evaluator's continuations) for definitions the checker finds recursive, so web pages and imported modules go past about 1,500 levels as `lab compile` does | GAPS G1, C10 | P3 | L | |
 | C11 | G17 a copy per type for generics used at several types | GAPS G17 | P3 | M | |
-| C15 | G2 equality with a constructed constant, inline form | GAPS G2 | P3 | S | |
 | C16 | G10 readability of the output (indentation) | GAPS G10 | P3 | S | |
 | C17 | Native binaries through WASM (wasm2c) or C with reference counting | ROADMAP 6 | P3 | L | after C7 |
 | C18 | Mobile as a packaged web app (PWA or Capacitor) | ROADMAP 7 | P3 | M | |
@@ -122,7 +121,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| C14 | G12: `one of` a few constants written in place runs each in turn, with no list | this PR |
+| C15 | G2: equality with a value built in place is a tag test and its fields, with nothing built | this PR |
+| C14 | G12: `one of` a few constants written in place runs each in turn, with no list | #238 |
 | C12 | G18: a handler whose cases all escape is an inline try/catch (calc enters one per line; gain within noise) | #233 |
 | C13 | G1 again: a program `lab compile` writes spends fuel only in calls that can be under a `with fuel` (calc has no checks left; the gain is within noise) | #230 |
 | C2 | G21 part 3: a list from `split` taken apart by matches is an index into the array (ledger's `parse` makes no cells, about 5 to 10%); the rest is C22 | #228 |
