@@ -97,6 +97,9 @@ export function vectors() {
   // v over its length, field by field: normalize(v) on a GPU.
   const unit = k.def("unit");
   k.define(unit, k.fn(["v"], (v) => k.call(vec, k.call(B.div, k.call(X, v), k.call(length, v)), k.call(B.div, k.call(Y, v), k.call(length, v)), k.call(B.div, k.call(Z, v), k.call(length, v)))));
+  // The same Number in every part: vec3f(x).
+  const diagonal = k.def("diagonal");
+  k.define(diagonal, k.fn(["x"], (x) => k.call(vec, x, x, x)));
   const farther = k.def("farther");
   k.define(farther, k.fn(["a", "b"], (a, b) => k.if(k.call(S.less, k.call(length, a), k.call(length, b)), b, a)));
   // Walk along the ray until 4 away from the start: a loop whose state is a Vec.
@@ -124,5 +127,5 @@ export function vectors() {
   k.define(vecs, k.fn(["x"], (x) => k.call(twice, x, k.call(vec, x, x, x))));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), defs: { along, length, unit, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
+  return { code, names, info: infer(code, names), defs: { along, length, unit, diagonal, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
 }

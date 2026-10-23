@@ -292,7 +292,8 @@ export function emitWgsl(lowered: Lowered): Shader {
         }
         case "make": {
           const v = vectorWidth(e.t) ? lift(e.args) : null;
-          if (v) return vtext(v, e.args.length, pre, d);
+          // wide: a record whose parts are all one Number is that Number spread.
+          if (v) return vtext(v, e.args.length, pre, d, true);
           return `${tname(e.t)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
         case "get": {

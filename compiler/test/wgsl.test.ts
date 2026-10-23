@@ -163,6 +163,7 @@ test("records are structs (or vectors): built by their case, read by fields or a
   assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
   assert.match(s.wgsl, /fn length_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
   assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}return normalize\(p0\);/);
+  assert.match(s.wgsl, /fn diagonal_\d+\(p0: f32\) -> vec3f \{\n {2}return vec3f\(p0\);/);
   // Parts that don't do the same thing stay parts.
   assert.match(s.wgsl, /fn walk_(\d+)\(a0: vec3f, a1: f32, a2: f32\) -> vec2f \{\n {2}var p0 = a0;[\s\S]*let t0 = vec3f\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
   // Under a budget whose fallback is a record too.
