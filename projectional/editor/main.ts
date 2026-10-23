@@ -77,7 +77,8 @@ import { Namer } from "../src/render/namer.ts";
 import { BOOL, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { needsHandling, runMain, showValue, type Value } from "../src/lang/run.ts";
+import { needsHandling, showValue, type Value } from "../src/lang/run.ts";
+import type { RunAsk, RunSays } from "./runWorker.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
 import * as T from "./typed.ts";
@@ -165,7 +166,7 @@ interface UI {
   newKind: "function" | "value" | "type" | "effect";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   menu: { target: MenuTarget; x: number; y: number; world: Pos } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
@@ -340,6 +341,8 @@ function showProgram() {
   ui.tabs = startTabs();
   ui.selected = firstHole();
   ui.mode = null;
+  running?.terminate();
+  running = null;
   ui.output = null;
   ui.touched = [];
   ui.refused = false;
@@ -1774,9 +1777,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
   } else if (action) {
-    box.append(h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
+    const going = ui.output?.def === ui.def && ui.output.running;
+    box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
+      : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
     if (ui.output?.def === ui.def) {
-      box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || "(no output)"));
+      box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
     }
   } else if (z?.t === "fn") box.append(backwardsPanel(namer, info));
@@ -1971,15 +1976,36 @@ function traced(info: T.Info): Trace | null {
   return m.get(key)!;
 }
 
-function runTyped(info: T.Info) {
-  const lines: string[] = [];
-  let error: string | undefined;
-  try {
-    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line), names: pres().names, world: editorWorld() });
-    const shown = showValue(v, doc.code, pres().names);
-    if (shown !== "unit") lines.push(`→ ${shown}`);
-  } catch (e) { error = (e as Error).message; }
-  ui.output = { def: ui.def, lines, error };
+// Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
+// printing shows as it comes, and Stop ends it.
+declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by editor/build.ts
+let running: Worker | null = null;
+function stopRun(why?: string) {
+  running?.terminate();
+  running = null;
+  if (ui.output?.running) { ui.output = { ...ui.output, running: false, error: why ?? ui.output.error }; render(); }
+}
+function runTyped() {
+  stopRun();
+  const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
+  const files: [string, string][] = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(prefix)) files.push([k, localStorage.getItem(k)!]); } } catch { /* no storage */ }
+  const w = (running = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const ask: RunAsk = { code: doc.code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files };
+  ui.output = { def, lines: [], running: true };
+  w.onmessage = (e: MessageEvent<RunSays>) => {
+    if (running !== w || !ui.output) return;
+    const m = e.data;
+    if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
+    try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
+    const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
+    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false };
+    running = null;
+    w.terminate();
+    render();
+  };
+  w.onerror = (e) => { e.preventDefault(); stopRun(e.message || "the run failed"); };
+  w.postMessage(ask);
   render();
 }
 
@@ -2370,7 +2396,8 @@ document.addEventListener("click", (e) => {
     if (a === "delete-program") return deleteProgram();
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
-    if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
+    if (a === "t-run" && typesOf()) return runTyped();
+    if (a === "t-stop") return stopRun("Stopped.");
     if (a === "page-restart") { page.for = null; return render(); }
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));

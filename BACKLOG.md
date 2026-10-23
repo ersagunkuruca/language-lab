@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E44 | A long run freezes the page (Countdown main, 10 s with no repaint): run off the main thread or in slices, with a Stop | QA3 M8 | P2 | M | |
 | E45 | Folding polish: unfolding after a drag lands on other nodes; tidy with a folded box keeps the frame's empty space; a folded box names what it holds | QA3 L1, L2 | P3 | S | |
 | E46 | CPU picture blocky (ray marcher 51×51 stretched to 306 px): sharpen while still; shorter no-GPU status | QA3 L3 | P3 | S | |
 | E47 | First view of a big `main` lopsided (left 40% empty, Fit pill and minimap over nodes); `colour₁` name clash in ray marcher; dice page "1 rolls" and resets on program switch | QA3 L4, L5, L6 | P3 | S | |
@@ -91,6 +90,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E44 | Run main in a worker with Stop; Countdown's run keeps frames under 60 ms | #294 |
 | E43 | Palette arithmetic reads names in scope: x * 2 in double(x) | #292 |
 | E42 | Undo first in the phone top bar; hints say tap and long-press on touch | #291 |
 | E41 | Pinch to zoom in the graph: two fingers zoom about their middle and pan with it; the one-finger pan and the long press step aside for the second finger | #290 |
