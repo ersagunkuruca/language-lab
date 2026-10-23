@@ -50,7 +50,10 @@ test("map run backwards with its function known enumerates every preimage", () =
   const map = p.named("map");
   const [list, change] = params(p.code, map);
   const answers = [...relate(p.code, map, { [change]: r.value(p.named("square")), out: toList([4, 9]) })];
-  assert.deepEqual(answers.map((a) => shown(a, list)), ["[2, 3]", "[2, -3]", "[-2, 3]", "[-2, -3]"]);
+  // The schedule (MODES.md) runs the recursive call, which only takes the
+  // known result apart, before square's two roots: so the first item's
+  // root changes fastest.
+  assert.deepEqual(answers.map((a) => shown(a, list)), ["[2, 3]", "[-2, 3]", "[2, -3]", "[-2, -3]"]);
 });
 
 test("an if run backwards is a choice over its arms, each checked against the condition", () => {
@@ -183,7 +186,7 @@ test("backwards: main prints what each function run backwards gives", () => {
     "cuts(\"abc\") = |abc a|bc ab|c abc|",
     "read numbers(\"10 20 30\") = [10 20 30]",
     "read numbers(\"10  20\") = unreadable",
-    "square roots of each([4, 9]) = [2 3] [2 -3] [-2 3] [-2 -3]",
+    "square roots of each([4, 9]) = [2 3] [-2 3] [2 -3] [-2 -3]",
     "height on the ray(3π/4, −2) = 2",
     "height on the ray(3π/4, 2) = none",
   ]);

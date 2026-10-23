@@ -79,15 +79,16 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L28 | Html that reads well in the editor: each tag an ordinary function (a prelude `html` module), attributes and children as compact data, styles as records or their own definitions instead of one long text. Rewrite the dice and converter pages with it. (Multiline text drawn on one line in the node view is lane E) | Ersagun 2026-10-23 15:32 | P1 | M | next |
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth. The drift half is guarded already: `compiler/test/builtins.test.ts` asks every job of every builtin. What's left is moving code across `compiler/` (lane C) and the editor, so it waits for a slot between lane C's items | R2 §4 | P2 | L | needs lane C between items |
-| L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: L11c `relate.ts` follows the schedule (and a `det` mode drops `Choice`); lane C and E parts after | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a, L11b done |
+| L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: L11d a `det` mode drops `Choice` (needs run.ts and the compiler to hand back the one answer); lane C and E parts after | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a, L11b, L11c done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L13 | Keyed lists in pages | ROADMAP 7, WEB.md | P2 | M | |
 | L14 | `solve` over a function value: one generic `bind` | ROADMAP 7 | P2 | M | |
 | L15 | Static output from `lab run` for pages | ROADMAP 7 | P3 | S | |
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells | ROADMAP 4 open | P3 | L | |
 | L17 | Data-type upgrades and path namespaces for modules | ROADMAP 5 open | P3 | L | |
-| L18 | Relational reads past about 1,300 items; a stackless `relate.ts` | ROADMAP 1-5 open, real-sized data | P3 | M | |
+| L18 | Relational reads past about 1,300 items; a stackless `relate.ts` | ROADMAP 1-5 open, real-sized data | P3 | M | show numbers reads back 3,000 numbers since L11c (each level of a fold run backwards starts on a fresh stack); plain recursion still uses the stack |
 | L19 | Numbers stage 1: Int as data (match/fold view), Rational; stage 2: overloading by name | NUMBERS.md | P3 | L | |
 | L20 | `set` with general functions through relations | real-sized data follow-up | P3 | M | |
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
@@ -142,7 +143,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L11b | Types from modes: a relational `solve` is `Diverge` only when its mode may not end (says why), and a direction nothing pins down is an error at the `solve`; `mayLoop` removed | this PR |
+| L11c | `relate.ts` follows the schedule: each function in each mode runs its goals in the order modes.ts planned. The ordering rules (`cheap`, `computable`, `waitsOnly`, `hence` reversed, match and fold and solve orders) are gone; goals a stuck direction never reaches wait for what they need | this PR |
+| L11b | Types from modes: a relational `solve` is `Diverge` only when its mode may not end (says why), and a direction nothing pins down is an error at the `solve`; `mayLoop` removed | #198 |
 | L11a | `modes.ts`: a schedule, how many answers and whether it ends, for any mode; reports only, checked against relate.ts and the checker (`test/modes.test.ts`). `map` and `show numbers` backwards end, so their `Diverge` is a false alarm | #195 |
 | L11 | Design note for mode analysis: projectional/MODES.md | #193 |
 | L10 | Shader soak: `npm run smoke-shaders` lets the pictures move for 10 s each way (GPU and CPU) and fails if the page stops answering, the browser goes 500 ms without a frame, or a picture drops under 2 frames a second | #192 |
