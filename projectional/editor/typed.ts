@@ -366,7 +366,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
 // The next hole after `id` in reading order, or the first one.
 // Reading order is the order the views show: the tree's, except that a
 // match on a Bool reads as if/then/else, so its true case comes first.
-function readingOrder(code: Code, root: Id): Id[] {
+export function readingOrder(code: Code, root: Id): Id[] {
   const out: Id[] = [];
   const walk = (id: Id) => {
     const n = code.nodes[id];

@@ -2218,7 +2218,7 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
     : h("pre", { class: "text" }, textPanel(info));
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
@@ -2366,6 +2366,31 @@ document.addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (k === "c" || k === "x") { if (copyable(ui.selected)) { e.preventDefault(); copySelected(k === "x"); } return; }
     if (k === "v" && clip && ui.selected) { e.preventDefault(); return pasteIntoSelected(); }
+  }
+  // The keyboard reaches the program: Tab and Shift+Tab step through its
+  // parts in reading order (holes included), Enter goes to what edits the
+  // part (the palette on a hole, the value of a literal). Past the last
+  // part, Tab leaves the program as usual.
+  const inProgram = !typing && (document.activeElement === document.body || !!(e.target as HTMLElement).closest(".blocks-wrap, .p-graph"));
+  if (e.key === "Tab" && inProgram && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // The order the blocks read in, or without them the tree's. An
+    // operator's glyph stands for the function it calls, not a part here.
+    const blocks = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id]:not(.op)")].map((el) => el.dataset.id!);
+    const shown = [...new Set(blocks.length ? blocks : T.readingOrder(doc.code, ui.def).filter((id) => document.querySelector(`.p-graph [data-id="${id}"]`)))].filter((id) => id !== ui.def);
+    const at = ui.selected ? shown.indexOf(ui.selected) : -1;
+    const next = e.shiftKey ? (at < 0 ? shown.length - 1 : at - 1) : at + 1;
+    if (next >= 0 && next < shown.length) {
+      e.preventDefault();
+      select(shown[next]);
+      document.querySelector<HTMLElement>(".blocks-wrap")?.focus({ preventScroll: true });
+      document.querySelector(".blocks-wrap .sel")?.scrollIntoView({ block: "nearest" });
+    }
+    return;
+  }
+  if (e.key === "Enter" && inProgram && ui.selected) {
+    const edit = document.querySelector<HTMLElement>("#f-query, #f-lit");
+    if (edit) { e.preventDefault(); edit.focus(); }
+    return;
   }
   if (!typing && (e.key === "Delete" || e.key === "Backspace") && ui.selected) {
     e.preventDefault();
