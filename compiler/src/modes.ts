@@ -1,0 +1,249 @@
+// A relational solve whose mode is det or semidet, compiled (MODES.md, plan
+// step 5; COMPILER.md stage 1b).
+//
+// modes.ts plans each function in each mode once: its goals in the order
+// they can run, and a choice of arms. relate.ts runs the plan with logic
+// variables. Here the plan is written out as JavaScript instead, once per
+// function and mode: the order is fixed, so at each goal the compiler knows
+// which slots hold a value, and each goal becomes a computation, a test, or
+// a value taken apart. A mode function takes its known ports and returns
+// the others in an array, or $no when there is no answer. Since the mode
+// has at most one answer, the first arm that gives one is the answer.
+//
+// What isn't written out (a goal waiting at run time, a function only known
+// then, a fold run one level down, numbers solved by equations, a mode that
+// may have several answers) throws Unsupported, and that solve stays with
+// relate.ts.
+
+import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
+import { analyzer, determinism, type Exec, type Plan } from "../../projectional/src/lang/modes.ts";
+import { INT_OPS, S } from "../../projectional/src/lang/std.ts";
+
+export class Unsupported extends Error {}
+
+export interface ModeEmit {
+  // A literal, or a reference to something defined, as a value; null when
+  // it can't be written at the top of the module.
+  value(id: Id): string | null;
+  // A call whose arguments are all known, run forward; null when it can't
+  // be. `partial`: the answer may be $no (a builtin with Choice).
+  forward(call: NodeOf<"call">, args: string[]): { js: string; partial?: boolean } | null;
+  tag(variant: Id): string;
+}
+
+export function modeCompiler(code: Code, names: Record<Id, string>) {
+  const nodes = code.nodes;
+  const an = analyzer(code, names);
+  // Mode functions by def and known ports, with their names and code.
+  const made = new Map<string, string>();
+  const out: string[] = [];
+  let temps = 0;
+
+  const portNode = (lam: NodeOf<"lambda">, p: string) => (p === "out" ? lam.body : lam.params[Number(p)]);
+  const portsOf = (lam: NodeOf<"lambda">) => [...lam.params.map((_, i) => String(i)), "out"];
+  const order = (ps: string[]) => [...ps].sort((a, b) => (a === "out" ? 1 : b === "out" ? -1 : Number(a) - Number(b)));
+
+  // The function for `def` with these ports known: its name.
+  function modeFn(def: Id, known: string[], emit: ModeEmit): string {
+    const key = `${def}|${order(known).join(",")}`;
+    if (made.has(key)) return made.get(key)!;
+    const lam = nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+    if (lam?.kind !== "lambda") throw new Unsupported("not a function");
+    const name = `${(names[def] ?? def).replace(/[^\p{ID_Continue}$]+/gu, "_")}$mode${made.size}`;
+    made.set(key, name);
+    try {
+      const ins = order(known), outs = portsOf(lam).filter((p) => !ins.includes(p));
+      const env = new Map<Id, string>();
+      const params = ins.map((p) => { const v = `p$${temps++}`; env.set(an.slot(portNode(lam, p)), v); return v; });
+      const plan = an.planOf({ k: "def", id: def }, { known: ins, spec: [] });
+      const done = (env: Map<Id, string>) => {
+        const vs = outs.map((p) => env.get(an.slot(portNode(lam, p))));
+        if (vs.some((v) => v === undefined)) throw new Unsupported("a port is never found");
+        return `return [${vs.join(", ")}];`;
+      };
+      const body = writePlan(plan, env, done, emit);
+      out.push(`// ${names[def] ?? def}, run with ${ins.length ? ins.map((p) => (p === "out" ? "its result" : names[lam.params[Number(p)]] ?? p)).join(", ") : "nothing"} known\nfunction ${name}(${params.join(", ")}) {\n${body}\n}`);
+    } catch (e) {
+      made.delete(key);
+      throw e;
+    }
+    return name;
+  }
+
+  // What the statements of a plan see: the slots that hold a value, and
+  // the statements so far, in order.
+  interface Scope { env: Map<Id, string>; lines: string[]; emit: ModeEmit }
+  const get = (sc: Scope, s: Id) => sc.env.get(an.slot(s));
+  const fresh = (sc: Scope, js: string) => { const t = `m$${temps++}`; sc.lines.push(`const ${t} = ${js};`); return t; };
+  // A slot gets a value: if it has one, they must be equal.
+  const bind = (sc: Scope, s: Id, js: string) => {
+    const k = an.slot(s), was = sc.env.get(k);
+    if (was !== undefined) sc.lines.push(`if (!$eq(${was}, ${js})) return $no;`);
+    else sc.env.set(k, /^[\p{L}\p{N}_$]+$/u.test(js) ? js : fresh(sc, js));
+  };
+
+  // The statements of a plan: each goal, then the choice, then `done`.
+  function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit): string {
+    const sc: Scope = { env: new Map(env0), lines: [], emit };
+    for (const e of plan.steps) exec(e, sc);
+    sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit) : done(sc.env));
+    return sc.lines.join("\n");
+  }
+
+  function exec(e: Exec, sc: Scope) {
+    if (e.waits) throw new Unsupported("a goal waits");
+    switch (e.k) {
+      case "given": {
+        const js = sc.emit.value(e.node);
+        if (js === null) throw new Unsupported("a value only known in its scope");
+        bind(sc, e.node, js);
+        break;
+      }
+      case "same": {
+        if (an.slot(e.a) === an.slot(e.b)) break;
+        const a = get(sc, e.a), b = get(sc, e.b);
+        if (a !== undefined) bind(sc, e.b, a);
+        else if (b !== undefined) bind(sc, e.a, b);
+        else throw new Unsupported("two unknowns made one");
+        break;
+      }
+      case "case": {
+        const val = get(sc, e.value);
+        if (val !== undefined) {
+          sc.lines.push(`if (${val}.tag !== ${sc.emit.tag(e.variant)}) return $no;`);
+          e.binds.forEach((b, i) => bind(sc, b, `${val}.fields[${i}]`));
+        } else {
+          const fs = e.binds.map((b) => get(sc, b));
+          if (fs.some((f) => f === undefined)) throw new Unsupported("a value built from unknowns");
+          bind(sc, e.value, `{ tag: ${sc.emit.tag(e.variant)}, fields: [${fs.join(", ")}] }`);
+        }
+        break;
+      }
+      case "call": call(nodes[e.node] as NodeOf<"call">, e.callee?.known ?? null, e.callee?.spec.length ?? 0, sc); break;
+      default: throw new Unsupported(`a ${e.k} goal`);
+    }
+  }
+
+  function call(n: NodeOf<"call">, callee: string[] | null, specs: number, sc: Scope) {
+    const head = nodes[n.fn];
+    if (head.kind !== "ref" || nodes[head.target]?.kind === "binder") throw new Unsupported("a function known only when it runs");
+    const t = nodes[head.target];
+    const args = n.args.map((a) => get(sc, a)), res = get(sc, n.id);
+    const check = (r: string) => sc.lines.push(`if (${r} === $no) return $no;`);
+    if (args.every((a) => a !== undefined)) {
+      const f = sc.emit.forward(n, args as string[]);
+      if (!f) throw new Unsupported("a call that can't run forward");
+      if (!f.partial) return bind(sc, n.id, f.js);
+      const r = fresh(sc, f.js);
+      check(r);
+      return bind(sc, n.id, r);
+    }
+    if (t.kind === "def") {
+      if (!callee || specs) throw new Unsupported("a call in a mode not planned");
+      const lam = nodes[t.body!] as NodeOf<"lambda">;
+      const ins = order(callee), outs = portsOf(lam).filter((p) => !ins.includes(p));
+      const port = (p: string) => (p === "out" ? n.id : n.args[Number(p)]);
+      const vals = ins.map((p) => get(sc, port(p)));
+      if (vals.some((x) => x === undefined)) throw new Unsupported("a mode's input not known");
+      const r = fresh(sc, `${modeFn(head.target, ins, sc.emit)}(${vals.join(", ")})`);
+      check(r);
+      return outs.forEach((p, i) => bind(sc, port(p), `${r}[${i}]`));
+    }
+    if (t.kind === "variant" && res !== undefined) {
+      sc.lines.push(`if (${res}.tag !== ${sc.emit.tag(head.target)}) return $no;`);
+      return n.args.forEach((a, i) => bind(sc, a, `${res}.fields[${i}]`));
+    }
+    if (t.kind === "builtin" && res !== undefined) {
+      const id = head.target, [a, b] = args;
+      // Text joined: one side known, the other is what's left.
+      if (id === S.concat && a !== undefined) {
+        sc.lines.push(`if (!${res}.startsWith(${a})) return $no;`);
+        return bind(sc, n.args[1], `${res}.slice(${a}.length)`);
+      }
+      if (id === S.concat && b !== undefined) {
+        sc.lines.push(`if (!${res}.endsWith(${b})) return $no;`);
+        return bind(sc, n.args[0], `${res}.slice(0, ${res}.length - ${b}.length)`);
+      }
+      // Whole numbers: any two sides give the third (relate.ts does the same).
+      if (id === INT_OPS.add && a !== undefined) return bind(sc, n.args[1], `$int.sub(${res}, ${a})`);
+      if (id === INT_OPS.add && b !== undefined) return bind(sc, n.args[0], `$int.sub(${res}, ${b})`);
+      if (id === INT_OPS.sub && a !== undefined) return bind(sc, n.args[1], `$int.sub(${a}, ${res})`);
+      if (id === INT_OPS.sub && b !== undefined) return bind(sc, n.args[0], `$int.add(${res}, ${b})`);
+      if (id === INT_OPS.neg) return bind(sc, n.args[0], `$int.neg(${res})`);
+    }
+    throw new Unsupported("a call with no backwards reading here");
+  }
+
+  // A choice of arms. The value known: its arm. Else each arm in turn,
+  // until one gives the answer.
+  function choose(c: NonNullable<Plan["branch"]>, env: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit): string {
+    const val = env.get(an.slot(c.value));
+    if (val !== undefined) {
+      const written = c.arms.filter((a) => a.variant !== null);
+      const other = c.arms.find((a) => a.variant === null);
+      const parts = written.map((a) => {
+        const inner = new Map(env);
+        const pre = a.binds.map((b, i) => {
+          const k = an.slot(b), was = inner.get(k);
+          if (was !== undefined) return `if (!$eq(${was}, ${val}.fields[${i}])) return $no;`;
+          const t = `m$${temps++}`;
+          inner.set(k, t);
+          return `const ${t} = ${val}.fields[${i}];`;
+        });
+        return `if (${val}.tag === ${emit.tag(a.variant!)}) {\n${[...pre, writePlan(a.plan, inner, done, emit)].join("\n")}\n}`;
+      });
+      return [...parts, other ? `{\n${writePlan(other.plan, new Map(env), done, emit)}\n}` : "return $no;"].join("\n");
+    }
+    if (c.arms.some((a) => a.variant === null)) throw new Unsupported("otherwise, for a value not known");
+    // The arms' plans build the value themselves (a case goal).
+    const tries = c.arms.map((a) => {
+      const r = `r$${temps++}`;
+      return `const ${r} = (() => {\n${writePlan(a.plan, new Map(env), done, emit)}\n})();\nif (${r} !== $no) return ${r};`;
+    });
+    return [...tries, "return $no;"].join("\n");
+  }
+
+  // The function for a solve node, or null when it stays with relate.ts:
+  // `solve(given…)` gives its one answer, or none, in the list of answers
+  // the interpreter's solver gives.
+  function solver(n: NodeOf<"solve">, name: string, emit: ModeEmit): string | null {
+    const v = an.ofSolve(n);
+    if (!v || !v.ends || v.stuck.length || v.dynamic.length) return null;
+    const d = determinism(v.answers);
+    if (d !== "det" && d !== "semidet") return null;
+    const def = nodes[n.fn];
+    if (def.kind !== "def") return null;
+    const lam = nodes[def.body!] as NodeOf<"lambda">;
+    const portOf = (k: string) => (k === "out" ? "out" : String(lam.params.indexOf(k)));
+    const given = Object.keys(n.given).map(portOf);
+    if (given.includes("-1")) return null;
+    const mark = out.length, size = made.size;
+    try {
+      const f = modeFn(n.fn, given, emit);
+      const ins = order(given), outs = portsOf(lam).filter((p) => !ins.includes(p));
+      const gs = Object.keys(n.given).map((_, i) => `g${i}`);
+      const at = (p: string) => gs[given.indexOf(p)];
+      const pick = Object.keys(n.binds).map((k) => `r[${outs.indexOf(portOf(k))}]`);
+      out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}`);
+      return name;
+    } catch (e) {
+      if (!(e instanceof Unsupported)) throw e;
+      out.length = mark;
+      for (const k of [...made.keys()].slice(size)) made.delete(k);
+      return null;
+    }
+  }
+
+  // Can this solve be written out? The same walk with an emit that writes
+  // nothing, keeping nothing.
+  function compilable(n: NodeOf<"solve">, dry: ModeEmit): boolean {
+    const mark = out.length, size = made.size, t = temps;
+    const ok = solver(n, "dry", dry) !== null;
+    out.length = mark;
+    for (const k of [...made.keys()].slice(size)) made.delete(k);
+    temps = t;
+    return ok;
+  }
+
+  return { solver, compilable, code: out };
+}

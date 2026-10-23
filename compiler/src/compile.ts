@@ -35,6 +35,7 @@ import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
+import { modeCompiler, type ModeEmit } from "./modes.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
@@ -275,6 +276,46 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // over, the same as the evaluator's (META), and the module carries its
   // own node table for the interpreter to read.
   const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
+  // A relational solve whose mode has one answer or none is its plan
+  // written out as a function (modes.ts here, MODES.md step 5): a call it
+  // runs forward is a call of a compiled function or a builtin, and the
+  // program needs no interpreter for it. `real` false: only whether each
+  // piece can be written, before any copy of a definition is asked for.
+  const modes = modeCompiler(code, names);
+  const modeEmit = (real: boolean): ModeEmit => ({
+    value(id) {
+      const n = code.nodes[id];
+      if (n.kind === "lit") return n.of === INT && typeof n.value === "string" ? `${n.value}n` : typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
+      if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "variant" || effectOf(n.target) || node<"variant">(n.target).fields.length) return null;
+      return n.target === TRUE ? "$T" : n.target === FALSE ? "$F" : n.target === NIL ? "$nil" : n.target === UNIT_V ? "$unit" : `({ tag: ${tag(n.target)}, fields: [] })`;
+    },
+    forward(c, args) {
+      const f = code.nodes[c.fn];
+      if (f.kind !== "ref") return null;
+      const t = code.nodes[f.target], id = f.target;
+      if (t.kind === "builtin") {
+        if (OPS[id] && !BOOL_ARGS.has(id)) { const js = OPS[id].js(args, c.args); return { js: OPS[id].bool ? `$bool(${js})` : js }; }
+        if (id === S.equal) return { js: `$bool($eq(${args.join(", ")}))` };
+        if (implOf(id)) return { js: `${implOf(id)}(${args.join(", ")})` };
+        if (oneOf(id)) return { js: `${oneOf(id)}(${args.join(", ")})`, partial: true };
+        return null;
+      }
+      if (t.kind === "variant") return effectOf(id) ? null : { js: id === CONS ? `$cons(${args.join(", ")})` : `({ tag: ${tag(id)}, fields: [${args.join(", ")}] })` };
+      if (t.kind === "field") {
+        const v = node<"typedef">(node<"def">(info.owner.get(id)!).body!).variants[0];
+        return { js: `${args[0]}.fields[${node<"variant">(v).fields.indexOf(id)}]` };
+      }
+      const st = info.schemes.get(id)?.type;
+      if (t.kind !== "def" || code.nodes[t.body!]?.kind !== "lambda" || st?.t !== "fn" || sub.resolveRow(st.eff).effs.includes(CHOICE)) return null;
+      if (!real) return { js: "x" };
+      const sp = spec(id, new Map());
+      const call = `${sp.name}(${args.join(", ")})`;
+      const v = sp.bool ? `$bool(${call})` : call;
+      return { js: spends(id) ? `($spendOrThrow(), ${v})` : v };
+    },
+    tag,
+  });
+  const dryEmit = modeEmit(false);
   // Only nodes the definitions hold: an expanded derivative leaves its old
   // `derivative` reference behind in the table. And only definitions the
   // exports reach: the prelude's inverse is in every program.
@@ -285,7 +326,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") reachFrom(n.target); }
   };
   for (const x of opts.exports) reachFrom(code.defs.findLast((d) => names[d] === x));
-  const reflective = code.defs.filter((d) => exportsReach.has(d)).flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
+  const reflective = code.defs.filter((d) => exportsReach.has(d)).flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n) && !modes.compilable(n, dryEmit)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
@@ -781,9 +822,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
       const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
+      if (relational(n) && modes.solver(n, name, modeEmit(true))) {
+        solverCode.push(...modes.code.splice(0));
+        return name;
+      }
       if (relational(n)) {
-        // Through cases, folds and text: the relational interpreter runs it.
-        // A static mode analysis that compiles these too is the next stage.
+        // A mode with several answers, or a goal that waits: the relational
+        // interpreter runs it.
         const given = Object.keys(n.given), ps = given.map((_, i) => `g${i}`);
         solverCode.push(`// ${names[n.fn] ?? n.fn}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
           `solve for ${Object.keys(n.binds).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +

@@ -3,7 +3,7 @@
 Design note for BACKLOG.md L11 (REVIEW-2026-10-22b.md §3, REVIEW.md §1.2,
 COMPILER.md stage 1b). Written 2026-10-23. The last section is the plan.
 
-**Status.** Steps 1 to 3 are built. `src/lang/modes.ts` gives the verdict
+**Status.** Steps 1 to 5 are built. `src/lang/modes.ts` gives the verdict
 for any mode, and `test/modes.test.ts` checks it against what relate.ts
 does and against the checker. The checker types a relational `solve` from
 it: `Diverge` only when its mode may not end, and an error when it's
@@ -20,7 +20,14 @@ checker's `Diverge` on every definition in the examples, leaving out the
 few that call a function they were passed, since there it's that
 function's effect row. Known is two levels for now (known or not). The
 third (the case known, not the fields) waits for a program that needs it:
-today a projection run backwards waits for its record.
+today a projection run backwards waits for its record. The compiler
+writes a `det` or `semidet` mode out as a function of its own (step 5,
+`compiler/src/modes.ts`): the plan's goals in their order, each a
+computation, a test or a value taken apart, and an arm tried after
+another until one gives the answer. Modes with several answers, and
+goals that wait until run time, stay with relate.ts. In the examples
+that is `greet` backwards; a program whose solves are all like it needs
+no interpreter and no node table in its module.
 
 ## The problem
 
@@ -197,6 +204,7 @@ One PR each, in this order:
 4. **L11d a `det` mode drops `Choice`**, once run.ts and the compiler
    hand back its one answer directly. (Built.)
 5. **Lane C: compile `det` and `semidet` modes** as plain functions.
+   (Built.)
 6. **Lane E: the `solve` node says its mode** in the editor.
 
 ## How relate.ts runs a plan

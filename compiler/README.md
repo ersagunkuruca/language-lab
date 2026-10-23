@@ -4,7 +4,9 @@ Compiles the typed core of `projectional/` to JavaScript. The effect types
 decide the shape of the code: functions without `Choice` become plain
 functions, and `Choice` becomes nested loops inside generators. `solve`
 nodes are planned by the relation solver at compile time and written out as
-straight-line arithmetic. Why it's built this way, and what comes next, is
+straight-line arithmetic; a relational one whose mode has at most one
+answer is its mode plan written out (`src/modes.ts`), and the rest run
+in the relational interpreter. Why it's built this way, and what comes next, is
 in [`projectional/COMPILER.md`](../projectional/COMPILER.md).
 
 The scalar profile (Number and Bool functions: arithmetic, `if`, lets,
