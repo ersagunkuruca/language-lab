@@ -112,6 +112,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E23 | Bug: the live page's buttons went dead after opening another definition (Chrome drops listeners when the frame is redrawn) | #221 |
 | E11 | The zoom button shows the zoom; Fit keeps clear of the pill | #215 |
 | E10 | A program opens on `main`, its showcase definition in the next tab | #212 |
 | E9 | Solver output writes powers as superscripts (`time²`) | #211 |
