@@ -153,6 +153,24 @@ async function newAndDeleteDefinition() {
   await p.close();
 }
 
+// A phone: the editor is one screen, not a long page, and each pane is a
+// tap away from the bar at the bottom.
+async function phone() {
+  where = "phone width";
+  const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
+  await p.goto(page);
+  const size = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
+  if (size[0] > 390 || size[1] > 844) errors.push(`${where}: the page is ${size[0]} by ${size[1]} px, not one screen`);
+  for (const [pane, shows] of [["nav", ".p-nav"], ["text", ".p-text"], ["side", ".side"], ["graph", ".p-graph"]]) {
+    await p.locator(`.panes [data-pane="${pane}"]`).tap();
+    if (!(await p.locator(shows).isVisible())) errors.push(`${where}: the ${pane} pane shows nothing`);
+    if (await p.locator(".p-graph").isVisible() !== (pane === "graph")) errors.push(`${where}: the graph shows with the ${pane} pane`);
+  }
+  await p.close();
+}
+
 // reactive.html, next to the editor: both Cells programs run, and a click
 // and a slider change what they should.
 async function cellsPage() {
@@ -214,6 +232,7 @@ await deleteAndUndo();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
+await phone();
 await browser.close();
 console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor${process.env.SWEEP === "all" ? "" : " (a slice: SWEEP=all for every one)"}`);
 if (errors.length) {

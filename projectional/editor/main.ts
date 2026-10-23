@@ -150,6 +150,8 @@ interface Doc {
 
 interface UI {
   def: Id;
+  // On a phone, the one pane shown (the others are a tap away).
+  pane: "nav" | "graph" | "text" | "side";
   back: Id[];
   selected: Id | null;
   layer: Layer;
@@ -269,6 +271,7 @@ const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.
 
 const ui: UI = {
   def: startDef(),
+  pane: "graph",
   back: [],
   selected: null,
   layer: "descriptive",
@@ -2234,7 +2237,7 @@ function draw() {
         h("a", { class: "btn", href: "tutorial.html" }, "Tutorial"),
         h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
         h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
-    h("main", { class: "grid is-typed", style: dockStyle() },
+    h("main", { class: "grid is-typed", style: dockStyle(), "data-pane": ui.pane },
       navigator(p),
       graphMenu(info),
       h("div", { class: "gutter", "data-gutter": "nav-w", style: "grid-area: g1", "aria-hidden": "true" }),
@@ -2256,6 +2259,9 @@ function draw() {
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
           ...shown[2]()))),
     h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
+    // At phone width one pane at a time, picked here (page.html).
+    h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run"]] as const).map(([k, label]) =>
+      h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
   document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });
   if (focused) document.getElementById(focused)?.focus();
@@ -2287,7 +2293,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   const def = t.closest<HTMLElement>("[data-def]");
-  if (def) { openDef(def.dataset.def!); ui.back = []; return render(); }
+  if (def) { openDef(def.dataset.def!); ui.back = []; ui.pane = "graph"; return render(); }
   const tb = t.closest<HTMLElement>("[data-tab]");
   if (tb) { if (tb.dataset.tab !== ui.def) { openDef(tb.dataset.tab!); ui.back = []; render(); } return; }
   const close = t.closest<HTMLElement>("[data-close-tab]");
@@ -2297,6 +2303,8 @@ document.addEventListener("click", (e) => {
     if (d === ui.def) { openDef(ui.tabs[Math.max(0, i - 1)]); ui.back = []; }
     return render();
   }
+  const pane = t.closest<HTMLElement>(".panes [data-pane]");
+  if (pane) { ui.pane = pane.dataset.pane as UI["pane"]; return render(); }
   const panel = t.closest<HTMLElement>("[data-panel]");
   if (panel) { ui.panel = panel.dataset.panel as UI["panel"]; return render(); }
   const act = t.closest<HTMLElement>("[data-act]");
