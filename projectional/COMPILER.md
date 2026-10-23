@@ -293,6 +293,13 @@ variants) is built once, at module level, and shared: data is never
 changed in place (GAPS.md G9). The ids in `case` labels
 carry the variant's name as a comment.
 
+`equal` compiles by the type of what it compares: `===` for Text and Int,
+`$sameNumber` for Number, the runtime's `$eq` for anything else. A generic
+definition that the whole program uses at one type only, and doesn't
+export, compares as that type, so `times in` on Text uses `===` (GAPS.md
+G17). Specializing a generic function once for each type it's used at, as
+MLton does, would cover the rest.
+
 `and` and `or` short-circuit in compiled code. The evaluator evaluates both
 sides, which only differs in how much fuel gets spent. Short-circuiting
 should become the language's rule, and the evaluator should follow.

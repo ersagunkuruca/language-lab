@@ -531,7 +531,12 @@ when it's called at one type only. Then `equalityAt` (round 1's G0) picks
 `===`.
 *Partly DONE:* `$eq` answers plain values (text, numbers) at once, before
 it sets up its stack of pairs: about 610 → 570 ms on 3000 chapters, compiled.
-Specializing by type is still open; it would turn the call into `===`.
+*DONE for one type:* a generic definition that the program uses at one type
+only, and doesn't export, now compares as that type, so `times in` uses
+`===`. Uses are followed through generic callers. On top of the faster `$eq`
+that change is within the noise on chapters (about 545 ms either way); the
+win is smaller code and a compare V8 can inline. A copy per type,
+for generics used at several types, is still open.
 
 **G14 again. `heading` is a generator (perf: 51 → 48 ms).** It has one
 answer or none, and `sections` wraps it in `optional`, which drains it with

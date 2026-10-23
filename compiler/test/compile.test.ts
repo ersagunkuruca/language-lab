@@ -13,7 +13,7 @@ import type { Id } from "../../projectional/src/model.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { CONS, NIL, S, SHOW_ANY, TRUE } from "../../projectional/src/lang/std.ts";
+import { CONS, FALSE, NIL, S, SHOW_ANY, TRUE } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram, load } from "../src/program.ts";
@@ -216,6 +216,25 @@ test("a fold that only adds Int items runs from the front, with no spine (GAPS.m
   assert.equal(defs.big(), 3);
   assert.equal(defs.small(toList([5, 1, 2, 9, 0])), 3);
   assert.equal(defs.sum(toList([0.1, 0.2, 0.3])), 0.1 + (0.2 + (0.3 + 0)));
+});
+
+test("a generic function used at one type only compares as that type (GAPS.md G17)", async () => {
+  // same(x, y) = x = y, generic. `texts` uses it on Text only; `either` is
+  // used on Text and on Number, so it keeps the general $eq.
+  const k = new Lang();
+  const same = k.def("same"), either = k.def("either");
+  k.define(same, k.fn(["x", "y"], (x, y) => k.call(S.equal, x, y)));
+  k.define(either, k.fn(["x", "y"], (x, y) => k.call(S.equal, x, y)));
+  const texts = k.def("texts");
+  k.define(texts, k.thunk(() => k.call(S.and, k.call(same, k.lit("a"), k.lit("a")), k.call(either, k.lit("b"), k.lit("c")))));
+  const numbers = k.def("numbers");
+  k.define(numbers, k.thunk(() => k.call(either, k.lit(0.1 + 0.2), k.lit(0.3))));
+  const { source, defs } = await compiledDefs(k, ["texts", "numbers"], "mono.js");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.match(body("same"), /x === y/);
+  assert.match(body("either"), /\$eq\(/);
+  assert.equal(defs.texts().tag, FALSE);
+  assert.equal(defs.numbers().tag, TRUE);
 });
 
 test("a self tail call compiles to a loop: a million steps, and each step's closures keep their own values", async () => {
