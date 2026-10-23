@@ -124,13 +124,16 @@ type View = { x: number; y: number; z: number };
 const views = new Map<string, View>();
 // The smallest zoom a graph first opens at: labels still legible.
 const READABLE = 0.6;
+// The height the Fit / zoom pill takes at the bottom of the window.
+const PILL = 36;
 
 export function infiniteCanvas(key: string, cls: string): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
   const world = s("g", { class: "world" }) as SVGGElement;
   root.append(world);
   let view = views.get(key);
-  const apply = () => { if (view) world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); };
+  let shown = (_z: number) => {};
+  const apply = () => { if (view) { world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.z})`); shown(view.z); } };
   const set = (v: View) => { view = v; views.set(key, v); apply(); };
   // Fit: the whole picture, centered both ways. Readable: never smaller than
   // READABLE, and a side that doesn't fit then starts at its top or left
@@ -138,10 +141,12 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   const fit = (readable = false) => {
     const b = world.getBBox(), r = root.getBoundingClientRect();
     if (!b.width || !r.width) return;
-    let z = Math.min(1, (r.width - 32) / b.width, (r.height - 32) / b.height);
+    // The bottom strip is the Fit / zoom pill's, so nothing is fitted under it.
+    const high = r.height - PILL;
+    let z = Math.min(1, (r.width - 32) / b.width, (high - 32) / b.height);
     if (readable) z = Math.max(z, READABLE);
     const place = (room: number, size: number, at: number) => (size * z <= room - 32 ? (room - size * z) / 2 : 16) - at * z;
-    set({ z, x: place(r.width, b.width, b.x), y: place(r.height, b.height, b.y) });
+    set({ z, x: place(r.width, b.width, b.x), y: place(high, b.height, b.y) });
   };
   // Reveal: pan the least that brings these on screen. Bigger than the
   // window (a call shown inline grows by its callee's body), zoom out first,
@@ -202,10 +207,15 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   };
   const tools = document.createElement("div");
   tools.className = "canvas-tools";
-  tools.append(
-    btn("Fit", "Show the whole graph, centered", () => fit()),
-    btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); }),
-  );
+  // The zoom button shows the zoom; clicking it goes back to actual size.
+  const zoom = btn("100%", "Actual size", () => { const v = view ?? { x: 16, y: 16, z: 1 }; const r = root.getBoundingClientRect(); const c = { x: r.width / 2, y: r.height / 2 }; set({ z: 1, x: c.x - ((c.x - v.x) * 1) / v.z, y: c.y - ((c.y - v.y) * 1) / v.z }); });
+  shown = (z) => {
+    const pc = Math.round(z * 100);
+    zoom.textContent = `${pc}%`;
+    zoom.title = pc === 100 ? "Actual size" : `Zoomed to ${pc}%: click for actual size (100%)`;
+  };
+  shown(view?.z ?? 1);
+  tools.append(btn("Fit", "Show the whole graph, centered", () => fit()), zoom);
   el.append(root, tools);
   return { el, root, world, zoom: () => view?.z ?? 1, fit, reveal };
 }
