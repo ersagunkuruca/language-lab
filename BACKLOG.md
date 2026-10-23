@@ -26,7 +26,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E42 | Phone: Undo in reach (top bar scrolls sideways, Undo off-screen) and touch wording (hints say right-click, hover, shift-click) | QA3 M3, M4 | P2 | S | |
 | E43 | Palette: typed arithmetic with names in scope (`x * 2` in `double(x)` finds nothing; only `1 + 2` works) | QA3 M7 | P2 | M | |
 | E44 | A long run freezes the page (Countdown main, 10 s with no repaint): run off the main thread or in slices, with a Stop | QA3 M8 | P2 | M | |
 | E45 | Folding polish: unfolding after a drag lands on other nodes; tidy with a folded box keeps the frame's empty space; a folded box names what it holds | QA3 L1, L2 | P3 | S | |
@@ -93,6 +92,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E42 | Undo first in the phone top bar; hints say tap and long-press on touch | #291 |
 | E41 | Pinch to zoom in the graph: two fingers zoom about their middle and pan with it; the one-finger pan and the long press step aside for the second finger | #290 |
 | E40 | One pane at a time below 900 px wide or 500 px high (phones either way up, tablets); the stacked layout is gone; the smoke checks 844x390 and 768x1024 | #288 |
 | E39 | Keyboard: Enter in a literal's or name's field saves and returns to the program; Enter on a call opens its menu on Change the function; Shift+F10 / Menu key opens the menu, arrows move, Escape returns | #287 |
