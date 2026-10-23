@@ -819,9 +819,12 @@ function unitSection(info: T.Info, id: Id): HTMLElement | null {
   const chips = h("div", { class: "chips" });
   for (const [label, unit] of UNIT_CHIPS) {
     const on = unit === null ? !declared : !!declared && formatUnit(declared) === formatUnit(unit);
-    const r = on ? { ok: true as const } : unitEdit(info, id, unit);
-    const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", disabled: !r.ok, title: r.ok ? `Declare ${label}` : `Can't: ${(r as { reason: string }).reason}` }, label);
-    if (r.ok && !on) b.addEventListener("click", () => applyT(unitEdit(info, id, unit)));
+    // Checked when clicked, not when drawn: each check infers the whole
+    // program again, and a chip row in a big program took seconds to show
+    // every time a number was selected. A unit that doesn't fit is refused
+    // with the reason, like any edit.
+    const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", title: `Declare ${label}` }, label);
+    if (!on) b.addEventListener("click", () => applyT(unitEdit(info, id, unit)));
     chips.append(b);
   }
   box.append(chips);
