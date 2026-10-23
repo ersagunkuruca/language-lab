@@ -208,13 +208,15 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
     note: `Added the input ${name}.${places ? ` ${places} ${places === 1 ? "use" : "uses"} got a hole for it, so none is missing an argument.` : ""}` };
 }
 
-export function removeParameter(code: Code, names: Names, def: Id, param: Id): Top {
+// With `leaveHoles`, a used input goes too: each use becomes a hole.
+export function removeParameter(code: Code, names: Names, def: Id, param: Id, leaveHoles = false): Top {
   const lam = lambdaOf(code, def);
   const i = lam ? lam.params.indexOf(param) : -1;
   if (!lam || i < 0) return { ok: false, reason: `that isn't one of ${ownerName(code, names, def)}'s inputs` };
-  const uses = refsTo(code, param).length;
-  if (uses) return { ok: false, reason: `${nameOf(names, param)} is used ${uses === 1 ? "once" : `${uses} times`} in the body; clear those first` };
+  const uses = refsTo(code, param);
+  if (uses.length && !leaveHoles) return { ok: false, reason: `${nameOf(names, param)} is used ${uses.length === 1 ? "once" : `${uses.length} times`} in the body; clear those first` };
   const nodes = { ...code.nodes };
+  for (const r of uses) nodes[r.id] = { id: r.id, kind: "hole" };
   nodes[lam.id] = { ...lam, params: lam.params.filter((p) => p !== param) };
   const calls = callsOf(code, def);
   for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
@@ -226,8 +228,8 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id): T
   const next = collect({ nodes, defs: code.defs });
   const nn = { ...names };
   delete nn[param];
-  return { ok: true, code: next, names: nn, select: def,
-    note: `Removed the input ${nameOf(names, param)}.${calls.length ? ` Its argument was dropped from ${calls.length} call${calls.length === 1 ? "" : "s"}.` : ""}` };
+  return { ok: true, code: next, names: nn, select: uses[0]?.id ?? def,
+    note: `Removed the input ${nameOf(names, param)}.${uses.length ? ` ${uses.length === 1 ? "Its use is a hole now" : `Its ${uses.length} uses are holes now`}.` : ""}${calls.length ? ` Its argument was dropped from ${calls.length} call${calls.length === 1 ? "" : "s"}.` : ""}` };
 }
 
 export function moveParameter(code: Code, names: Names, def: Id, param: Id, by: -1 | 1): Top {

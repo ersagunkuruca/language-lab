@@ -27,7 +27,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E4 | A used input can't be removed: offer remove-and-leave-holes | QA2 can't-edit 5 | P1 | S | |
 | E5 | Tabs pile up off the right edge, no overflow control | QA2 UX2 | P2 | S | |
 | E6 | Show inline overflows the graph with no refit; its labels sit on wires | QA2 UX3 | P2 | S | |
 | E7 | Add a value here: the palette takes 2 to 4.5 s on solved functions (a whole-program check per candidate) | QA 2026-10-22 | P2 | M | |
@@ -118,6 +117,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E4 | Remove a used input: its uses become holes | #194 |
 | E3 | Clearing a node keeps its definition's type while the hole is open | #191 |
 | E2 | Reorder an action's steps: Do it earlier / later | #184 |
 | E1 | Inner lambda parameters: add, remove, reorder | #179 |

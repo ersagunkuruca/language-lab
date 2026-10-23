@@ -122,6 +122,18 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // Refusals say why.
   assert.match(s.refused(Top.deleteDefinition(s.code, s.names, area)), /used by main/);
   assert.match(s.refused(Top.removeParameter(s.code, s.names, area, (s.code.nodes[(s.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0])), /used/);
+  // …unless its uses may become holes: then the input goes, every call drops
+  // its argument, and the program is still well-typed, with holes to fill.
+  {
+    const lam = () => s.code.nodes[(s.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+    const t = new Session();
+    t.code = s.code; t.names = s.names;
+    const p = lam().params[0], used = Object.values(s.code.nodes).filter((n) => n.kind === "ref" && n.target === p).map((n) => n.id);
+    t.ok(Top.removeParameter(t.code, t.names, area, p, true));
+    assert.equal((t.code.nodes[(t.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.length, 0);
+    for (const u of used) assert.equal(t.code.nodes[u].kind, "hole");
+    assert.equal((t.code.nodes[areaCall.id] as NodeOf<"call">).args.length, 0);
+  }
   assert.match(s.refused(Top.removeCase(s.code, s.names, shape, circle)), /made in 1 place/);
   assert.match(s.refused(Top.newDefinition(s.code, s.names, "area", { kind: "value" })), /already/);
   // A case nothing makes can go; its arm goes with it.

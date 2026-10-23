@@ -1398,10 +1398,12 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
 function paramRow(info: T.Info, names: Names, p: Id, of: Id = ui.def) {
   const code = doc.code, sh = doc.names.short;
   const mv = (by: -1 | 1) => Top.moveParameter(code, sh, of, p, by);
+  const rm = Top.removeParameter(code, sh, of, p, true);
   return row(pick(p, names[p] ?? "input"),
     edit("↑", "Move earlier", mv(-1), () => runTop(info, mv(-1)), "btn mini"),
     edit("↓", "Move later", mv(1), () => runTop(info, mv(1)), "btn mini"),
-    edit("×", "Remove this input", Top.removeParameter(code, sh, of, p), () => runTop(info, Top.removeParameter(code, sh, of, p), () => { ui.selected = of === ui.def ? null : of; }), "btn mini"));
+    // A used input can go too: its uses become holes, to fill or clear.
+    edit("×", T.usesOf(code, p).length ? "Remove this input: where it's used becomes a hole" : "Remove this input", rm, () => runTop(info, rm, (r) => { ui.selected = r.select !== of ? r.select : of === ui.def ? null : of; }), "btn mini"));
 }
 
 // A function written inside a body, (x) => …, passed to map or keep say:
