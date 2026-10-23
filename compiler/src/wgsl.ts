@@ -16,8 +16,14 @@
 // What isn't exactly the evaluator's, besides f32: WGSL's `pow` is
 // undefined for a negative base, so `pow` goes through a small function
 // that gives what JavaScript gives for whole exponents; and a GPU may
-// treat NaN and infinities loosely. A loop that never ends (Diverge) can
-// make the browser reset the GPU instead of hanging.
+// treat NaN and infinities loosely.
+//
+// Nothing that might not finish gets here (scalar.ts refuses Diverge
+// outside a budget). A budget is one private f32, `lab_fuel`: a function
+// the checker couldn't see end takes one from it on each call and each
+// round of its loop, and once it's below 0 returns at once with a zero
+// value, so everything under the budget unwinds quickly. The budget then
+// gives its fallback.
 //
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
@@ -120,15 +126,18 @@ export function emitWgsl(lowered: Lowered): Shader {
 
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
+  const needsFuel = kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
+    ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
     ...structText,
     ...text,
   ].join("\n\n") + "\n";
   return {
     wgsl,
-    funcs: kept.map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params, result: funcs[i].result })),
+    // Only what can be called from outside a budget is a place to start.
+    funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params, result: funcs[i].result })),
     refused,
     structs,
   };
@@ -161,6 +170,12 @@ export function emitWgsl(lowered: Lowered): Shader {
           return `${r}.${structs.get(e.t.key)!.fields[e.i]}`;
         }
         case "call": return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+        case "budget": {
+          const s = temp(), t = temp();
+          pre.push(`${d}let ${s} = lab_fuel;`, `${d}lab_fuel = ${num(e.n)};`, `${d}var ${t}: ${tname(e.t)};`, ...block(e.body, { set: t }, d));
+          pre.push(`${d}if (lab_fuel < 0.0) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`, `${d}lab_fuel = ${s};`);
+          return t;
+        }
         case "op": {
           const xs = e.args.map((a) => ex(a, pre, d));
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
@@ -201,10 +216,12 @@ export function emitWgsl(lowered: Lowered): Shader {
       return [...out, to === "return" ? `${d}return ${bare(x)};` : `${d}${to.set} = ${bare(x)};`];
     }
 
+    // One from the budget per call, and per round of the loop.
+    const spend = (d: string) => (f.spends ? [`${d}lab_fuel = lab_fuel - 1.0;`, `${d}if (lab_fuel < 0.0) { return ${tname(f.result)}(); }`] : []);
     const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t)}`).join(", ")}) -> ${tname(f.result)}`;
     const body = loops
-      ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...block(f.body, "return", "    "), "  }"]
-      : block(f.body, "return", "  ");
+      ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...spend("    "), ...block(f.body, "return", "    "), "  }"]
+      : [...spend("  "), ...block(f.body, "return", "  ")];
     return [`// ${f.name}`, `${sig} {`, ...body, "}"].join("\n");
   }
 }
@@ -233,6 +250,9 @@ function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
 function numbers(e: SExpr): number[] {
   return [...(e.k === "num" ? [e.v] : []), ...kids(e).flatMap(numbers)];
 }
+function budgets(e: SExpr): boolean {
+  return e.k === "budget" || kids(e).some(budgets);
+}
 function usesOp(e: SExpr, op: Op): boolean {
   return (e.k === "op" && e.op === op) || kids(e).some((k) => usesOp(k, op));
 }
@@ -242,6 +262,7 @@ function kids(e: SExpr): SExpr[] {
     case "get": return [e.rec];
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
+    case "budget": return [e.body, e.otherwise];
     default: return [];
   }
 }

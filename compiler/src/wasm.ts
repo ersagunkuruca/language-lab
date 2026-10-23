@@ -5,6 +5,10 @@
 // pow, …) are imported from `Math`, so the results are bit-for-bit the
 // evaluator's.
 //
+// A budget (scalar.ts) is a mutable f64 global, what's left of it: a
+// function the checker couldn't see end takes one on each call, and
+// returns 0 at once when it's below 0; the budget then gives its fallback.
+//
 // No dependencies: the binary format is small enough to write directly
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
@@ -58,7 +62,15 @@ export function emitWasm(lowered: Lowered): Module {
   }));
   const importSec = vec(hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]));
   const funcSec = vec(funcSig.map((t) => u(t)));
-  const exportSec = vec(funcs.map((f, i) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]));
+  // Only what can be called from outside a budget is exported.
+  const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted);
+  const exportSec = vec(entries.map(([f, i]) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]));
+  const fuel = funcs.some((f) => f.spends || budgets(f.body));
+  // global 0: the fuel left, an f64 starting at 0.
+  const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(0), 0x0b]]);
+  const zero = (t: SType) => (t === "f64" ? [0x44, ...f64(0)] : [0x41, 0x00]);
+  // fuel = fuel - 1; if fuel < 0, return zero
+  const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), 0x0f, 0x0b] : []);
 
   function code(e: SExpr): number[] {
     switch (e.k) {
@@ -68,6 +80,14 @@ export function emitWasm(lowered: Lowered): Module {
       case "let": return [...code(e.value), 0x21, ...u(e.i), ...code(e.body)];
       case "if": return [...code(e.cond), 0x04, VAL[e.t], ...code(e.then), 0x05, ...code(e.else), 0x0b];
       case "call": return [...e.args.flatMap(code), e.tail ? 0x12 : 0x10, ...u(fnIndex(e.fn))];
+      case "budget": {
+        // save = fuel; fuel = n; res = body; (if fuel < 0 then otherwise else res); fuel = save
+        return [
+          0x23, 0x00, 0x21, ...u(e.save), 0x44, ...f64(e.n), 0x24, 0x00, ...code(e.body), 0x21, ...u(e.res),
+          0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, VAL[e.t as SType], ...code(e.otherwise), 0x05, 0x20, ...u(e.res), 0x0b,
+          0x20, ...u(e.save), 0x24, 0x00,
+        ];
+      }
       case "op": {
         const args = e.args.flatMap(code);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
@@ -85,14 +105,14 @@ export function emitWasm(lowered: Lowered): Module {
       groups.push([...u(j - i), VAL[extra[i]]]);
       i = j;
     }
-    const body = [...vec(groups), ...code(f.body), 0x0b];
+    const body = [...vec(groups), ...spend(f), ...code(f.body), 0x0b];
     return [...u(body.length), ...body];
   }));
 
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(hosts.length ? section(2, importSec) : []), ...section(3, funcSec),
-    ...section(7, exportSec), ...section(10, codeSec),
+    ...(fuel ? section(6, globalSec) : []), ...section(7, exportSec), ...section(10, codeSec),
   ]);
 
   // ---- text, for reading
@@ -106,21 +126,28 @@ export function emitWasm(lowered: Lowered): Module {
       case "let": return `${wat(e.value, f, d)}\n${d}local.set ${local(f, e.i)}\n${wat(e.body, f, d)}`;
       case "if": return `${wat(e.cond, f, d)}\n${d}(if (result ${e.t})\n${d}  (then\n${wat(e.then, f, d + "    ")})\n${d}  (else\n${wat(e.else, f, d + "    ")}))`;
       case "call": return [...e.args.map((a) => wat(a, f, d)), `${d}${e.tail ? "return_call" : "call"} ${id(funcs[e.fn])}`].join("\n");
+      case "budget": return [
+        `${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`, `${d}f64.const ${e.n}`, `${d}global.set $fuel`, wat(e.body, f, d), `${d}local.set ${local(f, e.res)}`,
+        `${d}global.get $fuel`, `${d}f64.const 0`, `${d}f64.lt`, `${d}(if (result ${e.t})`, `${d}  (then`, wat(e.otherwise, f, d + "    ") + ")", `${d}  (else`, `${d}    local.get ${local(f, e.res)}))`,
+        `${d}local.get ${local(f, e.save)}`, `${d}global.set $fuel`,
+      ].join("\n");
       case "op": return [...e.args.map((a) => wat(a, f, d)), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
     "(module",
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
+    ...(fuel ? ["  (global $fuel (mut f64) (f64.const 0))"] : []),
     ...funcs.map((f) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${t})`).join("");
       const ls = f.locals.slice(f.params.length).map((t, j) => ` (local ${local(f, f.params.length + j)} ${t})`).join("");
-      return `  ;; ${f.name}\n  (func ${id(f)} (export "${exportName(f)}")${ps} (result ${f.result})${ls}\n${wat(f.body, f, "    ")})`;
+      const spends = f.spends ? `    global.get $fuel\n    f64.const 1\n    f64.sub\n    global.set $fuel\n    global.get $fuel\n    f64.const 0\n    f64.lt\n    (if (then ${f.result}.const 0 return))\n` : "";
+      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted ? "" : ` (export "${exportName(f)}")`}${ps} (result ${f.result})${ls}\n${spends}${wat(f.body, f, "    ")})`;
     }),
     ")",
   ].join("\n");
 
-  return { bytes, wat: text + "\n", exports: funcs.map(exportName) };
+  return { bytes, wat: text + "\n", exports: entries.map(([f]) => exportName(f)) };
 }
 
 function uses(e: SExpr, op: Op): boolean {
@@ -129,6 +156,16 @@ function uses(e: SExpr, op: Op): boolean {
     case "if": return uses(e.cond, op) || uses(e.then, op) || uses(e.else, op);
     case "let": return uses(e.value, op) || uses(e.body, op);
     case "call": return e.args.some((a) => uses(a, op));
+    case "budget": return uses(e.body, op) || uses(e.otherwise, op);
+    default: return false;
+  }
+}
+function budgets(e: SExpr): boolean {
+  switch (e.k) {
+    case "budget": return true;
+    case "op": case "call": return e.args.some(budgets);
+    case "if": return budgets(e.cond) || budgets(e.then) || budgets(e.else);
+    case "let": return budgets(e.value) || budgets(e.body);
     default: return false;
   }
 }
