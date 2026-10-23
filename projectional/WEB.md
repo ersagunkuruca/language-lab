@@ -111,13 +111,23 @@ page costs one call per text. The types tell the two apart only at run
 time (a function's row says it *may* read cells), which is the same as
 Solid, and costs nothing because an unread watcher is never woken.
 
-**Lists.** `part(() => column(map(read(todos), row of)))` redraws every row
-when the list changes. That is correct and fine for tens of items; it is
-the one place Solid does better (`<For>` keeps rows by identity). A keyed
-`for each(items: Cell (List a), row: (a) -[Cells]-> Html)` that reuses rows
-whose item is still there is the follow-up, and it needs `Html` only to
-gain no variant: it is a prelude function over a `part` per row once
-formulas can be made per item. It is noted, not built, in this step.
+**Lists.** `part(() => ul(map(read(todos), row)))` redraws every row when
+the list changes: correct, and fine for tens of items. `for each(todos,
+row, ul)` keeps rows the way Solid's `<For>` does (prior art). It is an
+html-module function, so `Html` gained no variant:
+
+```
+for each(items, row, inside) = let rows = each(items, row) in part(() => inside(read(rows)))
+```
+
+`each` (cells.ts) is Solid's `mapArray`: a formula over the list that
+keeps what `row` made of an item still there (by equality) and calls `row`
+only for new items, each in an owner of its own, so a cell the row makes
+lives as long as its item. The part still runs again when the list
+changes, but the rows it gets back are the same values, and the mount
+(html.ts) draws a value it has drawn before as the same nodes, moved, with
+their watchers. So a row keeps its count, its focus and what's typed in
+it. Two equal items get a row each.
 
 ### The widgets are functions
 

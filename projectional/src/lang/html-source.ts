@@ -26,7 +26,7 @@ import { prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { PRELUDE } from "./library.ts";
-import { CONS, HTML_V, NIL, SHOW_ANY, std } from "./std.ts";
+import { CELL_OPS, CONS, HTML_V, NIL, SHOW_ANY, std } from "./std.ts";
 
 export function buildHtml(): Module {
   // Built on the prelude (its append), so the prelude is what it's
@@ -87,10 +87,17 @@ export function buildHtml(): Module {
   const stylesheet = k.def("style sheet");
   k.define(stylesheet, k.fn(["rules"], (rules) => el(k.lit("style"), NIL, k.list(k.call(words, k.call(joined, rules, k.lit("\n")))))));
 
+  // A list on the page that keeps its rows: an item still in the list keeps
+  // the row drawn for it, with whatever it holds (a cell, focus, what's
+  // typed), and only new items get a row. Solid's <For> (prior art).
+  const forEach = k.def("for each");
+  k.define(forEach, k.fn(["items", "row", "inside"], (items, row, inside) =>
+    k.let("rows", k.call(CELL_OPS.each, items, row), (rows) => k.call(HTML_V.part, k.thunk(() => k.call(inside, k.call(CELL_OPS.read, rows)))))));
+
   const px = k.def("px");
   k.define(px, k.fn(["n"], (n) => join(k.call(SHOW_ANY, n), k.lit("px"))));
 
-  const offered: Id[] = [tag, ...tags, input, words, button, attribute, withAttributes, styled, named, classed, rule, media, stylesheet, px, joined];
+  const offered: Id[] = [tag, ...tags, input, words, button, attribute, withAttributes, styled, named, classed, forEach, rule, media, stylesheet, px, joined];
   const comments: Record<Id, string> = {
     [tag]: "An element with these children, for a tag that has no function of its own here (main, nav, table, …). Each tag a function, as in Elm's Html module (prior art).",
     [tags[0]]: "A div with these children. To give it attributes, wrap it: styled, classed, with.",
@@ -102,6 +109,7 @@ export function buildHtml(): Module {
     [styled]: "The same element with this inline style (CSS declarations, such as color: #777; margin: 0).",
     [named]: "The same element with this id.",
     [classed]: "The same element in this class, for a style sheet's rules to select.",
+    [forEach]: "The items of a cell's list, each drawn by row and all put inside (ul, div, …). An item still there when the list changes keeps its row as it was; only new items get one. Solid's <For> (prior art).",
     [rule]: "A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.",
     [media]: "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
     [stylesheet]: "A style element holding these rules.",

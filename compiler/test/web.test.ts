@@ -21,6 +21,7 @@ import { browserWorld } from "../../projectional/src/lang/browser.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { ABORT_OP, CELL_OPS, HTML_V, IO, NOW_OP, S } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
+import { HTML_MODULE } from "../../projectional/src/lang/library.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const dir = mkdtempSync(join(tmpdir(), "web-"));
@@ -214,4 +215,44 @@ test("a formula that never ends: its part says it didn't finish, and comes back 
   const e = draw("evaluator"), c = draw("compiled");
   assert.deepEqual(c, e);
   assert.deepEqual(e, ["<p>0", "<p>didn't finish", "<p>0"]);
+});
+
+test("for each keeps an item's row when the list changes, compiled the same", async () => {
+  const k = new Lang(base({ nodes: {}, defs: [] }));
+  const lib = (name: string) => HTML_MODULE.exports.find((d) => HTML_MODULE.names[d] === name)!;
+  const C = CELL_OPS;
+  const row = k.def("row");
+  k.define(row, k.fn(["x"], (x) => k.let("n", k.call(C.cell, k.lit(0)), (n) => k.call(lib("li"), k.list(
+    k.call(lib("words"), x),
+    k.call(lib("named"), k.text(k.lit("+"), x), k.call(lib("button"), k.lit("+"), k.fn(["e"], () => k.call(C.write, n, k.call(B.add, k.call(C.read, n), k.lit(1)))))),
+    k.call(HTML_V.text, k.thunk(() => k.call(S.show, k.call(C.read, n)))),
+  )))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("items", k.call(C.cell, k.list(k.lit("a"), k.lit("b"))), (items) => k.call(lib("div"), k.list(
+    k.call(lib("for each"), items, k.x(row), k.x(lib("ul"))),
+    k.call(lib("named"), k.lit("add"), k.call(lib("button"), k.lit("c first"), k.fn(["e"], () => k.call(C.write, items, k.call("std.list.cons", k.lit("c"), k.call(C.read, items)))))),
+  )))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const path = join(dir, "each.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const draw = (way: "evaluator" | "compiled") => {
+    if (way === "evaluator") {
+      const cells = new Cells(equal);
+      return mountHtml(runMain(code, info, main, { print: () => {}, names, cells }), { cells, doc: fakeDoc(), call: evaluatorCall }) as FakeEl;
+    }
+    const cells = new Cells($eq);
+    $setCells(cells);
+    return mountHtml(compiled.main() as never, { cells, doc: fakeDoc(), call: compiledCall }) as FakeEl;
+  };
+  for (const way of ["evaluator", "compiled"] as const) {
+    const root = draw(way);
+    root.find("+a").fire("click");
+    const a = root.find("+a");
+    root.find("add").fire("click");
+    assert.equal(root.find("+a"), a, `${way}: a's row is kept`);
+    assert.match(root.html(), /<ul><li>c<button id="\+c">\+<\/button>0<\/li><li>a<button id="\+a">\+<\/button>1<\/li><li>b<button id="\+b">\+<\/button>0<\/li><\/ul>/, way);
+  }
 });

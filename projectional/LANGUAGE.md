@@ -281,7 +281,7 @@ The effects:
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
-| `Cells` | `cell(x)`, `formula(action)`, `read(c)` | the runtime (see "Cells" below) |
+| `Cells` | `cell(x)`, `formula(action)`, `each(items, f)`, `read(c)` | the runtime (see "Cells" below) |
 | `Update` | `write(c, x)` | the runtime; a world effect, like `Console` |
 | yours | the operations you declare | a match on them |
 
@@ -501,6 +501,11 @@ What the types add over Solid:
 - **A formula can't write.** Its action's row is closed, `[Cells,
   Diverge]`, so `formula(() => write(…))` is a type error. Solid warns
   about writes in memos at run time; here they can't be written.
+- **A list mapped item by item.** `each(items, f)` is a formula over a
+  cell's list that keeps what `f` made of an item still in the list, and
+  maps only new ones; each item's `f` runs in an owner of its own, so a
+  cell it makes lives as long as the item. It is Solid's `mapArray`, which
+  `<For>` is built on (prior art), and the html module's `for each` is it.
 - **No writes on abandoned paths.** `Update` is a world effect, so a write
   under an open `Choice` is the same error as printing there. Reading isn't
   world, so a search may read cells.
@@ -582,7 +587,7 @@ builtin's type takes away exactly what its row says.
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | all, count | Choice | every answer, collected into a list or counted |
 | first | Choice | the first answer, or the default when there's none |
-| formula | Diverge | a formula runs when it's read, so read has Diverge instead |
+| formula, each | Diverge | a formula runs when it's read, so read has Diverge instead |
 | optional | Choice | the first answer as some(answer), or none |
 | seeded | Random | the same numbers for the same seed, from a generator in the program |
 | with fuel | Diverge | at most n calls that may not end, then no answer: Diverge becomes Choice |
@@ -671,7 +676,10 @@ values. Each tag is a function of its children (`p([words("Hello")])`,
 doesn't change is `words(t)`; attributes are added by wrapping:
 `styled("color: #777", p(…))`, `classed("lead", …)`, `named("roll", …)`,
 `with([attribute(name, value), on(…)], …)`. `button(label, then)` is a
-button with a click handler. A style sheet is a list of rules,
+button with a click handler. `for each(items, row, ul)` draws a cell's
+list and keeps the row of an item that's still there when the list
+changes, with whatever the row holds, as Solid's `<For>` does (prior art).
+A style sheet is a list of rules,
 `style sheet([rule("h1", "font-size: 28px"), media("(prefers-color-scheme:
 dark)", […])])`, which a program keeps as a definition of its own. Each
 tag a function is Elm's Html module (prior art), markup as plain data is

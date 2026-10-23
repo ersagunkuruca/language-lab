@@ -96,6 +96,7 @@ const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> 
   // throws, which ends whatever formula is reading it, as in the evaluator.
   [CELL_OPS.cell]: { js: ([a]) => `$cells().cell(${a})` },
   [CELL_OPS.formula]: { js: ([f]) => `$cells().formula(${f})` },
+  [CELL_OPS.each]: { js: ([c, f]) => `$cells().each(${c}, ${f}, $listArrays)` },
   [CELL_OPS.read]: { js: ([c]) => `$cells().read(${c})` },
   [CELL_OPS.write]: { js: ([c, v]) => `($cells().write(${c}, ${v}), $unit)` },
   [S.less]: { js: ([a, b]) => `(${a} < ${b})`, bool: true },
@@ -1945,7 +1946,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];

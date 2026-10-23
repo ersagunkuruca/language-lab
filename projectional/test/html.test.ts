@@ -7,8 +7,14 @@ import { HTML_MODULE, LIBRARY } from "../src/lang/library.ts";
 import { buildHtml } from "../src/lang/html-source.ts";
 import { verify } from "../src/lang/modules.ts";
 import { infer } from "../src/lang/infer.ts";
-import { fromList, makeRunner, toList, type Data, type Value } from "../src/lang/run.ts";
-import { HTML_V } from "../src/lang/std.ts";
+import { equal, fromList, makeRunner, runMain, toList, type Data, type Value } from "../src/lang/run.ts";
+import { CELL_OPS, CONS, HTML_V, S } from "../src/lang/std.ts";
+import { Cells } from "../src/lang/cells.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
+import { merge } from "../src/model.ts";
+import { B } from "../src/prelude.ts";
+import { fakeDoc, FakeEl } from "./fakedom.ts";
 
 const lib = (name: string) => HTML_MODULE.exports.find((d) => HTML_MODULE.names[d] === name)!;
 const r = makeRunner(LIBRARY.code, infer(LIBRARY.code, LIBRARY.names), { print: () => {} });
@@ -51,4 +57,47 @@ test("a style sheet is a list of rules", () => {
   assert.equal(draw(sheet), "<style>h1 { font-size: 28px }\n@media (prefers-color-scheme: dark) { :root { --bg: #161615 } }</style>");
   assert.equal([...r.call(r.value(lib("px")), 12)][0], "12px");
   assert.equal([...r.call(r.value(lib("joined")), toList(["a", "b", "c"]), ", ")][0], "a, b, c");
+});
+
+test("for each keeps the row of an item that's still there, cells and all; new items get a row", () => {
+  const k = new Lang(LIBRARY.code);
+  const C = CELL_OPS;
+  // A row with a count of its own: a cell made when the row is.
+  const row = k.def("row");
+  k.define(row, k.fn(["x"], (x) => k.let("n", k.call(C.cell, k.lit(0)), (n) => k.call(lib("li"), k.list(
+    k.call(lib("words"), x),
+    k.call(lib("button"), k.lit("+"), k.fn(["e"], () => k.call(C.write, n, k.call(B.add, k.call(C.read, n), k.lit(1))))),
+    k.call(HTML_V.text, k.thunk(() => k.call(S.show, k.call(C.read, n)))),
+  )))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("items", k.call(C.cell, k.list(k.lit("a"), k.lit("b"))), (items) => k.call(lib("div"), k.list(
+    k.call(lib("for each"), items, k.x(row), k.x(lib("ul"))),
+    k.call(lib("button"), k.lit("c first"), k.fn(["e"], () => k.call(C.write, items, k.call(CONS, k.lit("c"), k.call(C.read, items))))),
+    k.call(lib("button"), k.lit("drop a"), k.fn(["e"], () => k.call(C.write, items, k.list(k.lit("c"), k.lit("b"))))),
+  )))));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const cells = new Cells(equal);
+  const root = mountHtml(runMain(code, info, main, { print: () => {}, names, cells }), { cells, doc: fakeDoc(), call: evaluatorCall }) as FakeEl;
+  const all = (e: FakeEl): FakeEl[] => [e, ...e.kids.flatMap((c) => (c instanceof FakeEl ? all(c) : []))];
+  const rows = () => all(root).filter((e) => e.tag === "li");
+  const shown = (e: FakeEl): string => e.kids.map((c) => (c instanceof FakeEl ? (c.tag === "button" ? "" : shown(c)) : c.textContent)).join("");
+  const click = (label: string, inside: FakeEl = root) => all(inside).find((e) => e.tag === "button" && e.textContent === label)!.fire("click");
+  assert.deepEqual(rows().map(shown), ["a0", "b0"]);
+  const [a, b] = rows();
+  click("+", a);
+  click("+", a);
+  click("+", b);
+  assert.deepEqual(rows().map(shown), ["a2", "b1"]);
+  click("c first");
+  assert.deepEqual(rows().map(shown), ["c0", "a2", "b1"]);
+  assert.equal(rows()[1], a, "a's row is the same row, moved");
+  assert.equal(rows()[2], b);
+  click("drop a");
+  assert.deepEqual(rows().map(shown), ["c0", "b1"]);
+  assert.equal(rows()[1], b);
+  // a's row is gone, and its watchers with it: its button does nothing now.
+  click("+", a);
+  assert.deepEqual(rows().map(shown), ["c0", "b1"]);
 });

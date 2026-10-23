@@ -278,6 +278,12 @@ const cellOf = (a: Type): Type => ({ t: "con", id: CELL, args: [a] });
 export const CELL_OPS = {
   cell: builtin("cells.cell", "cell", (s) => { const a = s.fresh(); return fn([a], cellOf(a), s.freshRow([CELLS])); }),
   formula: builtin("cells.formula", "formula", (s) => { const a = s.fresh(); return fn([fn([], a, { effs: [CELLS, DIVERGE], tail: null })], cellOf(a), s.freshRow([CELLS])); }),
+  // A list's items mapped one by one, as a formula: an item still there
+  // keeps what f made of it (cells.ts each; a page keeps its row).
+  each: builtin("cells.each", "each", (s) => {
+    const a = s.fresh(), b = s.fresh();
+    return fn([cellOf(list(a)), fn([a], b, { effs: [CELLS, DIVERGE], tail: null })], cellOf(list(b)), s.freshRow([CELLS]));
+  }),
   read: builtin("cells.read", "read", (s) => { const a = s.fresh(); return fn([cellOf(a)], a, s.freshRow([CELLS, DIVERGE])); }),
   write: builtin("cells.write", "write", (s) => { const a = s.fresh(); return fn([cellOf(a), a], unit, s.freshRow([UPDATE])); }),
 };
@@ -290,7 +296,7 @@ discharge("first", [CHOICE], "the first answer, or the default when there's none
 discharge("optional", [CHOICE], "the first answer as some(answer), or none", [S.optional]);
 discharge("with fuel", [DIVERGE], "at most n calls that may not end, then no answer: Diverge becomes Choice", [S.fuel]);
 discharge("seeded", [RANDOM], "the same numbers for the same seed, from a generator in the program", [S.seeded]);
-discharge("formula", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula]);
+discharge("formula, each", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula, CELL_OPS.each]);
 
 // Int: whole numbers that never overflow. Same names as Number's, because
 // names are presentation (NUMBERS.md stage 2): the palette offers the one

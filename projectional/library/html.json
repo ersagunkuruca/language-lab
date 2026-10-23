@@ -1753,6 +1753,127 @@
         ],
         "body": "@kqt1urhtm6cmqd4qaoc0i5mk6v:3"
       },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc",
+        "kind": "def",
+        "body": "@avb4p9rnl6c9i2taqmt2ni2bqc:1"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:2": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:2",
+        "kind": "binder"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:3": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:3",
+        "kind": "binder"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:4": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:4",
+        "kind": "binder"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:17": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:17",
+        "kind": "ref",
+        "target": "builtin.cells.each"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:18": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:18",
+        "kind": "ref",
+        "target": "@avb4p9rnl6c9i2taqmt2ni2bqc:2"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:19": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:19",
+        "kind": "ref",
+        "target": "@avb4p9rnl6c9i2taqmt2ni2bqc:3"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:16": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:16",
+        "kind": "call",
+        "fn": "@avb4p9rnl6c9i2taqmt2ni2bqc:17",
+        "args": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:18",
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:19"
+        ]
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:7": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:7",
+        "kind": "binder"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:14": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:14",
+        "kind": "ref",
+        "target": "builtin.cells.read"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:15": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:15",
+        "kind": "ref",
+        "target": "@avb4p9rnl6c9i2taqmt2ni2bqc:7"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:13": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:13",
+        "kind": "call",
+        "fn": "@avb4p9rnl6c9i2taqmt2ni2bqc:14",
+        "args": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:15"
+        ]
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:12": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:12",
+        "kind": "ref",
+        "target": "@avb4p9rnl6c9i2taqmt2ni2bqc:4"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:11": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:11",
+        "kind": "call",
+        "fn": "@avb4p9rnl6c9i2taqmt2ni2bqc:12",
+        "args": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:13"
+        ]
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:10": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:10",
+        "kind": "lambda",
+        "params": [],
+        "body": "@avb4p9rnl6c9i2taqmt2ni2bqc:11"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:9": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:9",
+        "kind": "ref",
+        "target": "std.html.part"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:8": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:8",
+        "kind": "call",
+        "fn": "@avb4p9rnl6c9i2taqmt2ni2bqc:9",
+        "args": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:10"
+        ]
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:6": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:6",
+        "kind": "lambda",
+        "params": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:7"
+        ],
+        "body": "@avb4p9rnl6c9i2taqmt2ni2bqc:8"
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:5": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:5",
+        "kind": "call",
+        "fn": "@avb4p9rnl6c9i2taqmt2ni2bqc:6",
+        "args": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:16"
+        ]
+      },
+      "@avb4p9rnl6c9i2taqmt2ni2bqc:1": {
+        "id": "@avb4p9rnl6c9i2taqmt2ni2bqc:1",
+        "kind": "lambda",
+        "params": [
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:2",
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:3",
+          "@avb4p9rnl6c9i2taqmt2ni2bqc:4"
+        ],
+        "body": "@avb4p9rnl6c9i2taqmt2ni2bqc:5"
+      },
       "@v4m3u10hkehjb5097mejohqi5p": {
         "id": "@v4m3u10hkehjb5097mejohqi5p",
         "kind": "def",
@@ -1830,6 +1951,7 @@
       "@jqfker1rf23o18a64i51o7v2b7",
       "@uhi6hgln1jnsq4hqbvrmdv4nso",
       "@9j9u3tvdcohnvq58pmvu1a3kng",
+      "@avb4p9rnl6c9i2taqmt2ni2bqc",
       "@l1ibnd69fhv5j8j3reredg1ar1",
       "@htgmkjadvd8b5m17uvfn9s7hc0",
       "@sv3q3ae9pssb720vsoff6784sc",
@@ -2549,6 +2671,97 @@
       },
       "plain": []
     },
+    "@avb4p9rnl6c9i2taqmt2ni2bqc": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.cell",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.list",
+                "args": [
+                  {
+                    "t": "var",
+                    "v": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 1
+            },
+            "eff": {
+              "effs": [
+                "effect.cells",
+                "effect.diverge"
+              ],
+              "tail": null
+            }
+          },
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "con",
+                "id": "std.list",
+                "args": [
+                  {
+                    "t": "var",
+                    "v": 1
+                  }
+                ]
+              }
+            ],
+            "ret": {
+              "t": "con",
+              "id": "std.html",
+              "args": []
+            },
+            "eff": {
+              "effs": [
+                "effect.cells",
+                "effect.diverge",
+                "effect.network",
+                "std.time"
+              ],
+              "tail": null
+            }
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.html",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "effect.cells"
+          ],
+          "tail": 2
+        }
+      },
+      "plain": []
+    },
     "@l1ibnd69fhv5j8j3reredg1ar1": {
       "vars": [],
       "rows": [
@@ -2781,6 +2994,11 @@
     "@sv3q3ae9pssb720vsoff6784sc:3": "rules",
     "@kqt1urhtm6cmqd4qaoc0i5mk6v": "style sheet",
     "@kqt1urhtm6cmqd4qaoc0i5mk6v:2": "rules",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc": "for each",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc:2": "items",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc:3": "row",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc:4": "inside",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc:7": "rows",
     "@v4m3u10hkehjb5097mejohqi5p": "px",
     "@v4m3u10hkehjb5097mejohqi5p:2": "n"
   },
@@ -2795,6 +3013,7 @@
     "@jqfker1rf23o18a64i51o7v2b7": "The same element with this inline style (CSS declarations, such as color: #777; margin: 0).",
     "@uhi6hgln1jnsq4hqbvrmdv4nso": "The same element with this id.",
     "@9j9u3tvdcohnvq58pmvu1a3kng": "The same element in this class, for a style sheet's rules to select.",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc": "The items of a cell's list, each drawn by row and all put inside (ul, div, …). An item still there when the list changes keeps its row as it was; only new items get one. Solid's <For> (prior art).",
     "@l1ibnd69fhv5j8j3reredg1ar1": "A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.",
     "@sv3q3ae9pssb720vsoff6784sc": "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
     "@kqt1urhtm6cmqd4qaoc0i5mk6v": "A style element holding these rules.",
@@ -2822,6 +3041,7 @@
     "@jqfker1rf23o18a64i51o7v2b7",
     "@uhi6hgln1jnsq4hqbvrmdv4nso",
     "@9j9u3tvdcohnvq58pmvu1a3kng",
+    "@avb4p9rnl6c9i2taqmt2ni2bqc",
     "@l1ibnd69fhv5j8j3reredg1ar1",
     "@sv3q3ae9pssb720vsoff6784sc",
     "@kqt1urhtm6cmqd4qaoc0i5mk6v",
