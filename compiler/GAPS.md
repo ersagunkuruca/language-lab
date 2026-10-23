@@ -126,6 +126,14 @@ recursion:
   20,000 and 100,000 nested parentheses work. It costs about 130 ms of
   start-up for now, because the module, with its heavy runtime, loads
   twice. G8's lazy runtime brings that down.
+  *Checked again (2026-10-23, Backlog C10):* a `lab compile` calc takes
+  1,000,000 nested parentheses (10k: 0.3 s, 100k: 1.2 s, 300k: 5.8 s,
+  1M: 25 s; the time grows faster than the depth, likely the collector
+  walking a deep stack). On the default stack, where a web page or an
+  imported module runs, compiled calc and the hand-written ideal both stop
+  between 1,000 and 2,000 levels, so there is no gap with the ideal. What's
+  left is the full fix, heap continuations for recursion that isn't a tail
+  call, for pages and modules (Backlog C21).
 - *Fuel*: every call into a `Diverge` definition does `$spendOrThrow()`,
   even though nothing in calc ever installs `with fuel`. Removing those
   calls saves 6 to 10 ms of the 88. *Fix:* look at the whole program. If no
