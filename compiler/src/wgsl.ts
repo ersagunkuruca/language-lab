@@ -166,6 +166,7 @@ export function emitWgsl(lowered: Lowered): Shader {
   // other vectors (or to one Number shared by all), as one vector
   // expression; null if they don't.
   function lift(cs: SExpr[], depth = 0): V | null {
+    cs = cs.map(unlet);
     const n = cs.length, c = cs[0];
     if (cs.every((x, j) => x.k === "get" && vectorWidth(x.t) === n && x.i === j && same(x.rec, (c as typeof x).rec))) return { k: "whole", e: (c as Extract<SExpr, { k: "get" }>).rec };
     if (cs.every((x) => same(x, c))) return { k: "splat", e: c };
@@ -195,7 +196,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           uses.set(e.i, (uses.get(e.i) ?? 0) + 1);
           return c.args[e.i];
         case "num": case "bool": return e;
-        case "let": return null;
+        case "let": case "budget": return null;
         case "if": {
           const m = minmax(e);
           if (m) {
@@ -217,13 +218,6 @@ export function emitWgsl(lowered: Lowered): Shader {
     return body && [...uses].every(([j, k]) => k === 1 || atom(c.args[j])) ? body : null;
   }
   // smaller and larger, written as `if a < b then a else b` (or b, a).
-  function minmax(e: SExpr): { op: "min" | "max"; args: SExpr[] } | null {
-    if (e.k !== "if" || e.t !== "f64" || e.cond.k !== "op" || e.cond.op !== "less") return null;
-    const [a, b] = e.cond.args;
-    if (same(e.then, a) && same(e.else, b)) return { op: "min", args: [a, b] };
-    if (same(e.then, b) && same(e.else, a)) return { op: "max", args: [a, b] };
-    return null;
-  }
   // A sum of one term per part of a vector, each the same thing on that
   // part: dot(a, b) for a sum of products, dot(v, 1) for a plain sum.
   function dotOf(e: SExpr): { n: number; dot: V[]; length?: undefined } | null {
@@ -236,6 +230,7 @@ export function emitWgsl(lowered: Lowered): Shader {
       const ps = new Set(gets(x).filter((g) => vectorWidth(g.t) === n).map((g) => g.i));
       return ps.size === 1 ? [...ps][0] : -1;
     };
+    terms.splice(0, n, ...terms.map(unlet));
     const ordered: SExpr[] = [];
     for (const t of terms) { const j = part(t); if (j < 0 || ordered[j]) return null; ordered[j] = t; }
     const v = lift(ordered);
@@ -245,7 +240,8 @@ export function emitWgsl(lowered: Lowered): Shader {
   // √(x · x + y · y + z · z) of a vector is its length.
   function lengthOf(e: SExpr | null): { n: number; length: V; dot?: undefined } | null {
     if (e?.k !== "op" || e.op !== "sqrt") return null;
-    const p = dotOf(e.args[0]);
+    const a = e.args[0];
+    const p = dotOf((a.k === "call" && inline(a)) || a);
     return p && same(p.dot[0], p.dot[1]) ? { n: p.n, length: p.dot[0] } : null;
   }
 
@@ -420,6 +416,39 @@ function budgets(e: SExpr): boolean {
 }
 function usesOp(e: SExpr, op: Op): boolean {
   return (e.k === "op" && e.op === op) || kids(e).some((k) => usesOp(k, op));
+}
+// smaller and larger, written as `if a < b then a else b` (or b, a).
+function minmax(e: SExpr): { op: "min" | "max"; args: SExpr[] } | null {
+  if (e.k !== "if" || e.t !== "f64" || e.cond.k !== "op" || e.cond.op !== "less") return null;
+  const [a, b] = e.cond.args;
+  if (same(e.then, a) && same(e.else, b)) return { op: "min", args: [a, b] };
+  if (same(e.then, b) && same(e.else, a)) return { op: "max", args: [a, b] };
+  return null;
+}
+// e without its lets of something cheap (a variable, a number, a part of
+// a variable), of something used once, or of what a min or max then uses
+// once: what a part looks like when written by hand, so the parts
+// `map parts` writes line up for lift.
+function unlet(e: SExpr): SExpr {
+  if (e.k !== "let") return e;
+  const v = e.value;
+  const cheap = v.k === "local" || v.k === "num" || v.k === "bool" || (v.k === "get" && v.rec.k === "local");
+  return cheap || uses(e.body, e.i) <= 1 || minmax(e.body) ? unlet(put(e.body, e.i, v)) : e;
+}
+function uses(e: SExpr, i: number): number {
+  return (e.k === "local" && e.i === i ? 1 : 0) + kids(e).reduce((n, k) => n + uses(k, i), 0);
+}
+// e with local i replaced by v.
+function put(e: SExpr, i: number, v: SExpr): SExpr {
+  switch (e.k) {
+    case "local": return e.i === i ? v : e;
+    case "num": case "bool": return e;
+    case "op": case "call": case "make": return { ...e, args: e.args.map((a) => put(a, i, v)) };
+    case "get": return { ...e, rec: put(e.rec, i, v) };
+    case "if": return { ...e, cond: put(e.cond, i, v), then: put(e.then, i, v), else: put(e.else, i, v) };
+    case "let": return { ...e, value: put(e.value, i, v), body: put(e.body, i, v) };
+    case "budget": return { ...e, body: put(e.body, i, v), otherwise: put(e.otherwise, i, v) };
+  }
 }
 function gets(e: SExpr): Extract<SExpr, { k: "get" }>[] {
   return [...(e.k === "get" ? [e] : []), ...kids(e).flatMap(gets)];

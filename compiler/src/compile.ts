@@ -67,6 +67,10 @@ const OPS: Record<Id, { js: (a: string[], ids?: Id[]) => string; bool?: true }> 
   [S.abs]: { js: ([a]) => `Math.abs(${a})` },
   [S.floor]: { js: ([a]) => `Math.floor(${a})` },
   [S.mod]: { js: ([a, b]) => `$mod(${a}, ${b})` },
+  // Part by part; the function is pure, so a plain JS function.
+  [S.mapParts]: { js: ([f, r]) => `$mapParts(${f}, ${r})` },
+  [S.zipParts]: { js: ([f, a, b]) => `$zipParts(${f}, ${a}, ${b})` },
+  [S.total]: { js: ([r]) => `$total(${r})` },
   [S.concat]: { js: ([a, b]) => `(${a} + ${b})` },
   [S.show]: { js: ([a]) => `$show(${a})` },
   [S.range]: { js: ([a]) => `$range(${a})` },
@@ -930,13 +934,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const out: string[] = [];
   const exported: string[] = [];
   for (const name of opts.exports) {
-    const def = code.defs.find((d) => names[d] === name);
+    // The program's own first: it comes after the modules (load.ts base),
+    // and may use a name a module also uses (plus, minus).
+    const def = code.defs.findLast((d) => names[d] === name);
     if (!def) throw new Error(`no definition named ${name}`);
     exported.push(`  ${JSON.stringify(name)}: ${asValue(spec(def, new Map()))},`);
   }
   for (let s; (s = queue.shift());) out.push(body(s));
 
-  const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$first", "$firstS",
+  const helpers = ["$showAny", "$int", "$text", "$impl", "$many", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$spend", "$spendOrThrow", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$spread", "$self", "$foldNested",
     ...(reflective ? ["$loadProgram", "$meta", "$toEval", "$relate", "$derivative", "$exists"] : [])];

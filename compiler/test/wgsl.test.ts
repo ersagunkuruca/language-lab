@@ -186,10 +186,12 @@ test("records are structs (or vectors): built by their case, read by fields or a
   assert.match(s.wgsl, /t\d+ = walk_\d+\(vec3f\(p0, 1\.0, 0\.0\), p1, 0\.0\);\n {2}if \(lab_fuel < 0\.0\) \{\n {4}t\d+ = vec2f\(0\.0, -1\.0\);\n {2}\}\n {2}lab_fuel = t\d+;\n {2}return t\d+\.y;/);
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
-  // An input that's never used is a Number, and only a Number may be passed.
+  // An input that can be anything is lowered at what each call passes:
+  // one copy of twice ignoring takes a Number there, one a Vec.
   assert.match(s.wgsl, /fn twice_ignoring_\d+\(p0: f32, p1: f32\) -> f32/);
+  assert.match(s.wgsl, /fn twice_ignoring_\d+\(p0: f32, p1: vec3f\) -> f32/);
   assert.ok(!s.refused.has(v.defs.numbers));
-  assert.match(why(s.refused, v.defs.vecs), /^passes twice ignoring something other than/);
+  assert.ok(!s.refused.has(v.defs.vecs));
   // Without records (what WebAssembly takes), they're refused as before.
   const plain = lowerScalar(v.code, v.info, v.names, roots);
   assert.match(why(plain.refused, v.defs.length), /other than Number or Bool/);

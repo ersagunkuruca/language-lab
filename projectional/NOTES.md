@@ -208,6 +208,17 @@ written once on them (usable on `Vec` and on `Colour`, while adding a
 colour to a position stays a type error), and the ray marcher rewritten to
 use them.
 
+Built so far: the printer (PR #121), then `map parts`, `zip parts` and
+`total`, typed by a "record of Numbers" constraint that type variables carry
+the way `equal`'s plain data does, and the vectors module (`plus`, `scale`,
+`dot`, `magnitude`, `unit`, `mix`, `clamp`, `reflect`, …) written on them.
+Considered and not taken: a `Vec3` type in std (Colour and Vec would have to
+be the same type, and adding them would type-check), operation records
+passed by the editor (NUMBERS.md's plan for rings; heavier here, and a GPU
+can't take a record of functions), and a derive step that writes each
+record's operations field by field (the per-channel code would still be
+there, just generated).
+
 ## The node editor (2026-10-22)
 
 *The idea.* Overlapping previews and edges, no automatic spacing, nodes

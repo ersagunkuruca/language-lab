@@ -435,6 +435,20 @@ when its body is one expression that uses each input once. Parts that
 don't line up stay parts: `vec3f(p.x + s, p.y, p.z)`. `npm run gpu` checks
 every function against the evaluator as before.
 
+**Written once, in the source.** The language side is three builtins,
+`map parts`, `zip parts` and `total` (LANGUAGE.md, "Records of Numbers,
+part by part"), and the vectors module written on them. The lowering
+writes `map parts(f, v)` out as one call of `f` per field, which is the
+field-by-field code above, so the same recognition turns it back into one
+vector operation: `plus` is `p0 + p1`, `scale` is `p0 * p1`, `dot` is
+`dot(p0, p1)`, `magnitude` is `length(p0)`, `mix` is `mix(p0, p1, p2)`,
+`clamp` is `clamp(p0, vec3f(p1), vec3f(p2))`. The module's definitions are
+generic (any record of Numbers), and a GPU has no generic functions, so the
+lowering makes one copy of a definition per set of types it is called at
+(monomorphisation, as C++ templates and Rust generics do): `scale` at `Vec`
+and at `Colour`, `mix` at `Colour` and at `Number`. The JavaScript compiler
+needs no copies: `$mapParts` maps over the fields.
+
 Honestly, about speed: today's desktop and phone GPUs run each thread as a
 scalar processor, and their drivers split `vec3f` arithmetic into three
 operations again, so most of this is about reading the shader, not running
@@ -443,10 +457,9 @@ it faster. What the GPU does gain is its built-ins (`dot`, `normalize`,
 `mix` is computed as `a·(1−t) + b·t`, and `min`/`max` of a NaN may give
 either side. The bigger cost was in the source, which had to spell out
 each channel; the language side of that (elementwise operations over any
-record of Numbers, written once in the prelude) is the next step.
+record of Numbers, written once in a module) is described just above.
 
-Still to do for shaders: matrix types, elementwise operations in the
-source (above), a `Float32`
+Still to do for shaders: matrix types, a `Float32`
 number type so f32 is in the types rather than a target's choice, and a
 live preview in the editor.
 

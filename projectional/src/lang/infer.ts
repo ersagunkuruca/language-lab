@@ -21,7 +21,7 @@ import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, PlainError, showType as showT, STRING, Subst, TypeError,
+  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 
@@ -70,6 +70,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       s.unify(want, got);
     } catch (e) {
       if (e instanceof EffectError) err(id, `${what || "this"} performs ${effName(e)}, which nothing here handles`);
+      else if (e instanceof NumbersError) err(id, `${what ? what + ": " : ""}${show(got)} isn't a record of Numbers (Number, or one case whose fields are all Numbers)`);
       else if (e instanceof PlainError) err(id, `${what ? what + ": " : ""}${show(got)} has functions in it, and only plain data can be used here`);
       else if (e instanceof TypeError) err(id, `${what ? what + ": " : ""}expected ${show(want)}, got ${show(got)}`);
       else throw e;
@@ -167,6 +168,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return ok ? need : null;
   };
   s.plainArgs = (id, args) => { const need = plainShape(id); return need && args.filter((_, i) => need.has(i)); };
+  // The fields of a one-case data type at these args, for "a record of
+  // Numbers". A pin's rigid record-of-Numbers variable is one already.
+  s.recordFields = (id, args) => {
+    if (id.startsWith(`${RIGID}numbers.`)) return [{ t: "con", id: NUMBER, args: [] }];
+    const td = typedefOf(id);
+    if (!td || td.effect || td.variants.length !== 1) return null;
+    const params = new Map(td.params.map((p, i) => [p, args[i] ?? s.fresh()] as const));
+    return (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
+  };
 
   // --- strict positivity
   // A data type may not take itself as an input in its own fields, directly
@@ -277,13 +287,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       for (const d of group) {
         info.divergent.add(d);
         const t = s.resolve(mono.get(d)!);
-        if (t.t === "fn") s.unifyRow(t.eff, { effs: [DIVERGE], tail: s.next++ });
+        // Its type may already be closed without Diverge: it was passed
+        // where only a pure function fits (map parts' function, say).
+        try { if (t.t === "fn") s.unifyRow(t.eff, { effs: [DIVERGE], tail: s.next++ }); }
+        catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
       }
     }
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
-      let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)) };
+      let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)), numbers: [...fv.vars].filter((v) => s.numbers.has(v)) };
       // A pinned definition must keep its pin, and its callers see the pin
       // whatever the body says, so a change that breaks it is an error here
       // and nowhere else.
@@ -385,6 +398,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           s.unify(f, { t: "fn", params: args, ret, eff: row });
         } catch (e) {
           if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
+          else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Numbers (Number, or one case whose fields are all Numbers)`);
           else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
           else if (e instanceof TypeError) {
             // Find the argument that's wrong, for a useful message.
