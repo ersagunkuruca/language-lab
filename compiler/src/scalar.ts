@@ -66,9 +66,14 @@ export interface RType { key: string; name: string; def: Id; variant: Id; fields
 // A case's fields are in the order written.
 // `inner`: made by the lowering (a fold's stack), not the program's.
 export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[]; inner?: boolean }
-export type LType = SType | RType | DType;
+// A function as a value (`data`): a closure, called through its code.
+export interface FType { key: string; params: LType[]; result: LType }
+export type LType = SType | RType | DType | FType;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
-export const isRecord = (t: LType): t is RType => typeof t === "object" && !("cases" in t);
+export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
+export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
+// A closure's own struct: the function type it has and what it captured.
+export interface Shape { t: FType; caps: LType[] }
 // For a printer of a target without a heap (WGSL, the JS fallback for
 // shaders), which is never given data.
 export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a heap: lower without \`data\``); };
@@ -89,6 +94,13 @@ export type SExpr =
   | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
   // The number of a value's case, from 0 in the order written.
   | { k: "tag"; rec: SExpr; t: DType }
+  // A function as a value: `fn` takes the closure, then t's inputs, and
+  // reads what it captured (in shapes[shape]) with cap.
+  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[] }
+  | { k: "cap"; t: FType; shape: number; i: number }
+  // Calling a closure: it goes into local tmp, then its code is called
+  // with it and the inputs.
+  | { k: "apply"; fn: SExpr; t: FType; args: SExpr[]; tail: boolean; tmp: number }
   // A match on t: scrut goes into local s, then the arm for its case
   // runs (null: no arm, which the checker rules out).
   | { k: "case"; scrut: SExpr; s: number; t: DType; arms: (SExpr | null)[]; result: LType }
@@ -117,7 +129,7 @@ export const OPS = {
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; code: Code; info: Info }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info }
 
 class Refused extends Error {}
 
@@ -153,10 +165,21 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
   const datas = new Map<string, DType>();
+  const fns = new Map<string, FType>();
+  const shapes: Shape[] = [];
   const OTHER = opts.data ? "something other than Number, Bool or data of them" : opts.records ? "something other than Number, Bool or a record of them" : "something other than Number or Bool";
 
   // The profile's type for t, or null if t isn't in it.
   function stype(t: Type, inside: Id[] = []): LType | null {
+    if (t.t === "fn" && opts.data) {
+      // A function that may not finish is fine here; one with other effects isn't yet.
+      if (info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE)) return null;
+      const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
+      if (params.some((p) => !p) || !result) return null;
+      const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}`;
+      if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result });
+      return fns.get(key)!;
+    }
     if (t.t !== "con") return null;
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
@@ -213,7 +236,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   // Why t isn't in the profile, when records are: the first reason found.
   function whyNot(t: Type, inside: Id[] = []): string {
-    if (t.t === "fn") return "a function (that needs closures)";
+    if (t.t === "fn") {
+      if (!opts.data) return "a function (that needs closures)";
+      const bad = [...t.params, t.ret].find((p) => !stype(p, inside));
+      return bad ? `a function of ${whyNot(bad, inside)}` : `a function with effects (${info.subst.resolveRow(t.eff).effs.filter((e) => e !== DIVERGE).map(nm).join(", ")})`;
+    }
     if (t.t === "var") return "a value of any type";
     const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
     if (td?.kind !== "typedef" || td.effect) return nm(t.id);
@@ -233,7 +260,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return n?.kind === "tref" && (n.target === target || n.args.some((a) => mentions(a, target)));
   };
   const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret)]);
-  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : "fn");
+  const keyOf = (t: LType): string => (typeof t === "string" ? t : t.key);
+  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}`);
 
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
@@ -258,8 +286,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const d = code.nodes[def] as NodeOf<"def">;
     const lam = d?.body ? code.nodes[d.body] : null;
     const fail = (why: string): never => { refused.set(key, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
-    if (!t || t.t !== "fn" || lam?.kind !== "lambda") fail("is not a function written in the program");
-    const ft = t as Extract<Type, { t: "fn" }>;
+    // A constant (`data`): a function of no inputs, computed where it's used.
+    const constant = !!opts.data && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
+    if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
+    const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
     // An input that can be anything is one the body never looks at (∂f/∂x
     // of a function that has an input the slope doesn't depend on, say).
     // It's taken as a Number, and calls must pass one.
@@ -269,9 +299,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const bad = [...ft.params, ft.ret][[...params, result].findIndex((x) => !x)];
       fail(opts.records ? `takes or gives ${whyNot(info.subst.zonk(bad))}` : `takes or gives ${OTHER}`);
     }
-    const effs = info.subst.resolveRow(ft.eff).effs.filter((e) => !BUDGETED.includes(e));
+    const effs = constant ? [] : info.subst.resolveRow(ft.eff).effs.filter((e) => !BUDGETED.includes(e));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
-    const budgeted = !opts.data && diverges(ft);
+    const budgeted = !constant && !opts.data && diverges(ft);
 
     // Reserve the index now, so recursion finds it.
     const i = funcs.length;
@@ -279,18 +309,19 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     inProgress.add(def);
     const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted };
     funcs.push(f);
-    const outer = underBudget, outerAt = at;
+    const outer = underBudget, outerAt = at, shaped = shapes.length;
     try {
       const l = lam as NodeOf<"lambda">;
-      const env = new Map(l.params.map((p, j) => [p, j]));
+      const env = new Map(constant ? [] : l.params.map((p, j) => [p, j]));
       underBudget = budgeted;
       at = types;
-      f.body = expr(l.body, env, f, true);
+      f.body = expr(constant ? d.body! : l.body, env, f, true);
     } catch (e) {
       underBudget = outer;
       at = outerAt;
       // Undo: this definition and anything lowered after it.
       funcs.splice(i);
+      shapes.splice(shaped);
       for (const [d2, j] of index) if (j >= i) index.delete(d2);
       inProgress.delete(def);
       if (e instanceof Refused) { refused.set(key, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
@@ -315,6 +346,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (later) return { ...later, tail };
         // A case with no fields (empty, nothing) written alone.
         if (opts.data && code.nodes[n.target]?.kind === "variant") return build(n.target, zonk(id), []);
+        if (opts.data && code.nodes[n.target]?.kind === "def") {
+          const t = stype(zonk(id));
+          if (t && isFn(t)) return named(n.target, id, t);
+          return { k: "call", fn: func(n.target), args: [], tail };
+        }
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
@@ -333,6 +369,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
             lets.push({ i, value });
           });
           return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(head.body, inner, f, tail));
+        }
+        // A function computed or passed in: called through its closure.
+        if (opts.data && (head.kind !== "ref" || env.has(head.target) || inlined.has(head.target) || (code.nodes[head.target]?.kind === "def" && (code.nodes[(code.nodes[head.target] as NodeOf<"def">).body ?? ""]?.kind !== "lambda")))) {
+          const t = stype(zonk(n.fn));
+          if (!t || !isFn(t)) throw new Refused(`calls a function of ${whyNot(zonk(n.fn))}`);
+          return { k: "apply", fn: expr(n.fn, env, f, false), t, args: n.args.map((a) => expr(a, env, f, false)), tail, tmp: f.locals.push(t) - 1 };
         }
         if (head.kind !== "ref") throw new Refused("calls a computed function (that needs closures)");
         const args = () => n.args.map((a) => expr(a, env, f, false));
@@ -423,6 +465,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         return fold(n, id, env, f, tail);
       }
       case "solve": throw new Refused("solves a relation (not in this profile yet)");
+      case "lambda": {
+        if (!opts.data) throw new Refused("makes a function (that needs closures)");
+        const t = stype(zonk(id));
+        if (!t || !isFn(t)) throw new Refused(`makes a function of ${whyNot(zonk(id))}`);
+        return lambda(n, t, env, f);
+      }
       case "hole": throw new Refused("has a hole");
       default: throw new Refused(`has a ${n.kind}`);
     }
@@ -431,6 +479,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // equal on values of type t, by the evaluator's rule (run.ts equal).
   function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
+    if (isFn(t)) throw new Refused("compares functions");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two whole numbers exactly, any other pair within 1e-9 relative to
     // their size (run.ts sameNumber). Each side once: a local if it isn't
@@ -471,6 +520,44 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     return index.get(key)!;
   }
+
+  // A function written in place, as a closure: its code is a function of
+  // its own taking the closure and then the inputs, which starts by
+  // reading what it captured into locals.
+  function lambda(n: NodeOf<"lambda">, t: FType, env: Map<Id, number>, f: SFunc): SExpr {
+    const free = [...new Set(refsIn(n.body))].filter((b) => env.has(b) || inlined.has(b));
+    if (free.some((b) => inlined.has(b))) throw new Refused("makes a function inside a fold that uses the fold's result (not in WebAssembly yet)");
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const shape = shapes.push({ t, caps }) - 1;
+    const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(n.params.map((p, j) => [p, j + 1]));
+    const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
+    g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
+    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
+  }
+  // A definition used as a value: a closure that calls it, made once.
+  function named(def: Id, id: Id, t: FType): SExpr {
+    const key = `&${def}|${t.key}`;
+    if (!index.has(key)) {
+      const shape = shapes.push({ t, caps: [] }) - 1;
+      const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+      index.set(key, funcs.push(g) - 1);
+      // What its type variables are, from the type it's used at.
+      const types = new Map<number, Type>();
+      const dt = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+      const match = (p: Type, c: Type) => {
+        if (p.t === "var") { if (c.t !== "var") types.set(p.v, c); }
+        else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && match(a, c.args[j]));
+        else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && match(a, c.params[j])); match(p.ret, c.ret); }
+      };
+      if (dt) match(dt, zonk(id));
+      g.body = { k: "call", fn: func(def, types), args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
+      shapeOfNamed.set(key, shape);
+    }
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+  }
+  const shapeOfNamed = new Map<string, number>();
 
   // A fold's result binder used once, by the call that computes it.
   const inlined = new Map<Id, Extract<SExpr, { k: "call" }>>();
@@ -695,5 +782,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], code, info };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info };
 }

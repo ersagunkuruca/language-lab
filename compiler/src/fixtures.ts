@@ -172,3 +172,19 @@ export function sameLists() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), same };
 }
+
+// Functions as values: `twice` calls the function it's given twice,
+// `shifted` gives it a function that captured d, `squared twice` a
+// definition by name, and `ten` is a constant.
+export function closures() {
+  const k = new Lang();
+  const twice = k.def("twice"), square = k.def("square"), shifted = k.def("shifted"), squaredTwice = k.def("squared twice"), ten = k.def("ten");
+  k.define(twice, k.fn(["f", "x"], (f, x) => k.call(f, k.call(f, x))));
+  k.define(square, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+  k.define(ten, k.lit(10));
+  k.define(shifted, k.fn(["d", "x"], (d, x) => k.call(twice, k.fn(["y"], (y) => k.call(B.add, k.call(B.mul, y, d), ten)), x)));
+  k.define(squaredTwice, k.fn(["x"], (x) => k.call(twice, square, x)));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), shifted, squaredTwice };
+}

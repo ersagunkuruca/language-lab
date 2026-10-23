@@ -8,7 +8,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, sameLists } from "../src/fixtures.ts";
+import { area, closures, sameLists } from "../src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -142,6 +142,38 @@ test("equal on data in WebAssembly: the evaluator's rule on each number, two lon
   let a = w["List.nil"](), b = w["List.nil"]();
   for (let i = 0; i < 1e6; i++) { a = w["List.cons"](i, a); b = w["List.cons"](i, b); }
   assert.equal(w.same(a, b), 1);
+});
+
+test("functions as values in WebAssembly: closures, call_ref, a definition by name, constants", async () => {
+  const p = closures();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.shifted, p.squaredTwice], { data: true });
+  assert.deepEqual([...lowered.refused.keys()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  assert.match(m.wat, /return_call_ref/);
+  assert.match(m.wat, /ref\.func/);
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const [d, x] of [[2, 3], [-0.5, 7], [0, 1e3]]) assert.ok(Object.is(w.shifted(d, x), first(r.call(r.value(p.shifted), d, x))), `shifted(${d}, ${x})`);
+  for (const x of [3, -1.5]) assert.ok(Object.is(w["squared twice"](x), first(r.call(r.value(p.squaredTwice), x))));
+  // Programs: queens' safe folds a list into a function; numbers' factorial uses a constant.
+  for (const [name, fn, inputs] of [
+    ["queens", "safe", [[3, toList([1, 4, 2])], [2, toList([1, 4])], [5, toList([])], [1, toList([3, 1])]]],
+    ["numbers", "factorial", [0, 1, 4].map((n) => [Array.from({ length: n }).reduce<Value>((x) => ({ tag: "", fields: [x] }), { tag: "", fields: [] })])],
+  ] as const) {
+    const q = load(name);
+    const l = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
+    const f = l.funcs.find((g) => g.name === fn && !g.inner)!;
+    assert.ok(f, `${name}: ${fn} compiles`);
+    const wm = await instantiate(emitWasm(l)) as unknown as Exports;
+    const rr = makeRunner(q.code, q.info, { print: () => {} });
+    for (let xs of inputs as unknown as Value[][]) {
+      // Nat's cases by position: zero, then succ.
+      if (name === "numbers") { const nat = f.params[0] as { cases: { variant: string }[] }; const fix = (v: Data): Data => (v.fields.length ? { tag: nat.cases[1].variant, fields: [fix(v.fields[0] as Data)] } : { tag: nat.cases[0].variant, fields: [] }); xs = [fix(xs[0] as Data)]; }
+      const want = first(rr.call(rr.value(f.def), ...xs));
+      assert.deepStrictEqual(fromWasm(wm, wm[fn](...xs.map((x, i) => toWasm(wm, x, f.params[i]))), f.result), want, `${name}: ${fn}`);
+    }
+  }
 });
 
 test("what isn't in the profile is refused, with the reason", () => {

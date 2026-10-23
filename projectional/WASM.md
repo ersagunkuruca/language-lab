@@ -3,7 +3,7 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stage W1 is mostly done. What runs in WebAssembly is the
+**Status.** Stages W1 and W2 are done (W2: functions as values, below). What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -13,6 +13,19 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W2 came out. A function type is two types in the recursion group: a
+closure struct holding its code as a `(ref $code)`, and the code's type,
+which takes the closure and then the inputs. A function written in place
+is a function of its own and a subtype of the closure struct that adds
+what it captured; its code reads them back with a cast. A definition used
+by name is a closure made once that calls it. Calling a function value is
+`call_ref` on the closure's code, `return_call_ref` in tail position, so a
+loop through a function passed in stays in constant stack. A constant is
+a function of no inputs. Queens' `safe` (a fold whose result is a
+function), numbers' `factorial` and calculus `newton` run. A function type
+with effects other than Diverge waits for W4, and a function written
+inside a fold arm that uses the fold's result inlined there is refused.
 
 How W1b came out. A data type is a base struct holding the case's number
 as an `i32` and one final subtype per case, all the structs in one
@@ -153,8 +166,8 @@ rest with the reason, so nothing breaks between stages.
    section's recursion groups, struct and array types and reference
    types. Programs: calculus and physics without text, and Countdown's
    `solutions` count.
-2. **W2 closures.** Functions as values, `map` and `keep` with a lambda,
-   `call_ref`, and tail calls through `return_call_ref`.
+2. **W2 closures (done).** Functions as values, `map` and `keep` with a
+   lambda, `call_ref`, and tail calls through `return_call_ref`.
 3. **W3 text and the world.** UTF-8 text with the std.ts text builtins,
    `show`, and the `World` imports with both adapters. Programs: wc and
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
