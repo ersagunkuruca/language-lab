@@ -43,7 +43,7 @@ import { DIVERGE, NUMBER, type Type } from "../../projectional/src/lang/types.ts
 import { B } from "../../projectional/src/prelude.ts";
 import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
-import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
+import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
@@ -104,7 +104,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // its derivative (derive.ts), checked again, so the GPU gets exact
   // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
   // definitions like any other.
-  const x = expandDerivatives(code, names);
+  // gradient(f) too, over the record f's type says it takes.
+  const x = expandDerivatives(code, names, (call) => {
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
+  });
   if (x.expanded.length) {
     code = x.code;
     names = x.names;

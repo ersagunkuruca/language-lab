@@ -190,6 +190,14 @@ export const S = {
     const e = s.freshRow();
     return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
+  // A function of a point's (or any record of Numbers') gradient: the
+  // record of its derivatives along each part, so the normal of a surface
+  // f(p) = 0 is unit(gradient(f)(p)). Choice as for derivative, and
+  // dropped the same way when the checker can read every slope.
+  gradient: builtin("gradient", "gradient", (s) => {
+    const r = s.fresh(false, true), e = s.freshRow();
+    return fn([fn([r], num, e)], fn([r], r, { effs: [CHOICE], tail: e.tail }), s.freshRow());
+  }),
   // Parts: a record of Numbers (Number itself, or one case whose fields are
   // all Numbers: a point, a colour) taken part by part, so arithmetic on
   // points and colours is written once, for all of them (the prelude's

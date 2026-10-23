@@ -11,7 +11,8 @@ import { relate } from "../src/lang/relate.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY, VECTORS } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
-import { NUMBER, STRING } from "../src/lang/types.ts";
+import { B } from "../src/prelude.ts";
+import { NUMBER, STRING, showType } from "../src/lang/types.ts";
 import { verify } from "../src/lang/modules.ts";
 import { buildVectors } from "../src/lang/vectors-source.ts";
 import { subtree, type Id, type NodeOf } from "../src/model.ts";
@@ -88,4 +89,47 @@ test("part by part runs backwards: which point, shifted by (1, 1, 1), is (5, 0, 
   const sl = p.code.nodes[(p.code.nodes[scale] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   const [by] = [...relate(p.code, scale, { [sl.params[1]]: { tag: p.Vec.v.vec, fields: [1, 2, 3] }, out: { tag: p.Vec.v.vec, fields: [3, 6, 9] } })];
   assert.equal(by.values[sl.params[0]], 3);
+});
+
+// gradient: a function of a record of Numbers differentiated along each
+// part (derive.ts), and derivative through records on the way.
+function gradients() {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const Vec = k.type("Vec", [], [["vec", [["x", num], ["y", num], ["z", num]]]]);
+  const vec = (...xs: Id[]) => k.call(Vec.v.vec, ...xs);
+  const lits = (...xs: number[]) => vec(...xs.map((x) => k.lit(x)));
+  const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const square = fn("square", ["p"], (p) => k.call(lib("dot"), p, p));
+  const grad = (f: Id, at: Id) => k.call(k.call(S.gradient, f), at);
+  const defs = {
+    // square is generic (any record of Numbers): the point says which.
+    ofSquare: def("of square", () => grad(k.x(square), lits(1, 2, 3))),
+    ofProduct: def("of product", () => grad(k.fn(["q"], (q) => k.call(B.mul, k.call(Vec.f["vec.x"], q), k.call(Vec.f["vec.y"], q))), lits(3, 5, 7))),
+    ofDistance: def("of distance", () => grad(k.fn(["q"], (q) => k.call(lib("distance"), q, lits(1, 0, 0))), lits(1, 2, 2))),
+    ofNumber: def("of a number", () => grad(k.x(square), k.lit(3))),
+    // derivative through a record: |(t, 3, 4)|′ = t / |(t, 3, 4)|
+    through: def("through a record", () => k.call(k.call(S.derivative, k.fn(["t"], (t) => k.call(lib("magnitude"), vec(t, k.lit(3), k.lit(4))))), k.lit(3))),
+    // floor has no slope: Choice stays
+    rough: fn("rough", ["p"], (p) => grad(k.fn(["q"], (q) => k.call(S.floor, k.call(Vec.f["vec.x"], q))), p)),
+  };
+  const code = base(k.code), names = baseNames(k.names);
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+
+test("gradient: a function of a point, differentiated along each part", () => {
+  const g = gradients();
+  const errorsIn = (d: Id) => errorAt(g as unknown as ReturnType<typeof program>, d);
+  for (const d of [g.defs.ofSquare, g.defs.ofProduct, g.defs.ofDistance, g.defs.ofNumber, g.defs.through]) assert.deepEqual(errorsIn(d), [], g.names[d]);
+  const typeOf = (d: Id) => showType(g.info.subst.zonk(g.info.typeOf.get((g.code.nodes[d] as NodeOf<"def">).body!)!), g.names);
+  assert.match(typeOf(g.defs.rough), /-\[Choice\]->/);
+  assert.doesNotMatch(typeOf(g.defs.ofProduct), /Choice/);
+  const r = makeRunner(g.code, g.info, { print: () => {} });
+  const fields = (v: Value) => (v as { fields: number[] }).fields.map((x) => +x.toFixed(9));
+  assert.deepEqual(fields(r.value(g.defs.ofSquare)), [2, 4, 6]);
+  assert.deepEqual(fields(r.value(g.defs.ofProduct)), [5, 3, 0]);
+  assert.deepEqual(fields(r.value(g.defs.ofDistance)), [0, +Math.SQRT1_2.toFixed(9), +Math.SQRT1_2.toFixed(9)]);
+  assert.equal(r.value(g.defs.ofNumber), 6);
+  assert.equal(+(r.value(g.defs.through) as number).toFixed(9), +(3 / Math.sqrt(34)).toFixed(9));
 });

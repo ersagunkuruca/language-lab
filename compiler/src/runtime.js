@@ -349,8 +349,9 @@ export function* $relate(program, fn, known, binds) {
 // searches, as it does for the evaluator.
 export const $exists = (program, f) => $bool(satisfiable(program.code, f));
 
-export function $derivative(program, f, streams) {
-  const derivative = program.runner().value('builtin.derivative');
+// derivative(f), or gradient(f) with which = 'builtin.gradient'.
+export function $derivative(program, f, streams, which = 'builtin.derivative') {
+  const derivative = program.runner().value(which);
   for (const g of derivative(f)) return fromEval(g, streams);
   throw new Error('no derivative');
 }

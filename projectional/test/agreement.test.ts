@@ -14,7 +14,8 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, type Id } from "../src/model.ts";
+import { get, type Code, type Id } from "../src/model.ts";
+import { recordVariant } from "../src/lang/derive.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { NotInvertible, relate, showTerm, toValue } from "../src/lang/relate.ts";
@@ -22,9 +23,19 @@ import { bool, makeRunner, toList, type Value } from "../src/lang/run.ts";
 import { BOOL, LIST } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Type } from "../src/lang/types.ts";
 
-// A few inputs of each plain type: zero, one, a fraction, a negative.
-const samples = (t: Type): Value[] | null => {
+// A few inputs of each plain type: zero, one, a fraction, a negative. A
+// record (one case) gets a few, its fields' samples taken in turn.
+const samples = (t: Type, code?: Code): Value[] | null => {
   if (t.t !== "con") return null;
+  const variant = code && t.args.length === 0 ? recordVariant(code, t.id) : null;
+  if (variant) {
+    const fields = get(code!, variant, "variant").fields.map((f) => {
+      const ft = code!.nodes[get(code!, f, "field").type];
+      return ft.kind === "tref" && !ft.args.length ? samples({ t: "con", id: ft.target, args: [] }) : null;
+    });
+    if (fields.some((f) => !f)) return null;
+    return [0, 1, 2].map((i) => ({ tag: variant, fields: fields.map((f, j) => f![(i + j) % f!.length]) }));
+  }
   if (t.id === NUMBER) return [0, 1, 2.5, -3];
   if (t.id === INT) return [0, 1, 4];
   if (t.id === STRING) return ["", "ab"];
@@ -54,8 +65,8 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
     // Pure functions only (Choice is a set of answers, fine both ways), and
     // none whose recursion isn't known to end: forward could hang.
     if (t.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) || info.divergent.has(def)) continue;
-    const inputs = t.params.map(samples);
-    if (inputs.some((s) => !s) || !samples(t.ret)) continue;
+    const inputs = t.params.map((x) => samples(x, p.code));
+    if (inputs.some((s) => !s) || !samples(t.ret, p.code)) continue;
     const name = p.pres.names[def];
     checked.push(name);
     const params = get(p.code, get(p.code, def, "def").body!, "lambda").params;

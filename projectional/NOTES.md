@@ -219,6 +219,17 @@ can't take a record of functions), and a derive step that writes each
 record's operations field by field (the per-channel code would still be
 there, just generated).
 
+Then the ray marcher itself (step 3): its normals were three
+`derivative((x) ↦ scene(x, y, z, time))(x)`, one per axis. Now `gradient(f)`
+gives the three as one Vec, and derive.ts reads slopes through records of
+Numbers: a record's derivative is a record, part by part (forward mode
+with a record of tangents), and a definition that takes or returns a
+record is differentiated where it's called. Considered and not taken: a
+gradient written in the vectors module (it would need "this record with
+part j replaced", which map parts can't say), and partial derivative
+definitions per part (∂scene/∂p.x …) for generic definitions like `minus`,
+which have no one record to have parts of.
+
 ## The node editor (2026-10-22)
 
 *The idea.* Overlapping previews and edges, no automatic spacing, nodes
