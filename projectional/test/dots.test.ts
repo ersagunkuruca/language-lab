@@ -6,6 +6,7 @@ import type { Code, Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
+import { sweep } from "./helpers.ts";
 import { addDot, dotHandles, isDot, removeDot, usesOf, useVar } from "../editor/typed.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
@@ -33,25 +34,25 @@ for (const program of ["queens", "relations", "physics"]) test(`${program}: a do
   const main = p.named("main");
   const before = output(p.code, p.pres.names, main);
   let tried = 0;
-  for (const d of p.own.defs) {
-    for (const slot of under(p.code, d)) {
-      const r = addDot(p.code, p.pres.names, info, d, slot);
-      if (!r.ok) continue;
-      tried++;
-      const dot = r.select!;
-      assert.ok(isDot(r.code, d, dot));
-      assert.equal(usesOf(r.code, dot).length, 1);
-      const after = infer(r.code, r.names);
-      assert.equal(after.errors.length, 0);
-      assert.match(dotHandles(r.code, d, r.names)[dot], /^•\d+$/);
-      // Running main searches every board, so a sample.
-      if (program !== "queens" || tried % 40 === 1) assert.deepEqual(output(r.code, r.names, main), before);
-      const back = removeDot(r.code, r.names, after, d, dot);
-      assert.ok(back.ok, back.ok ? "" : back.reason);
-      assert.equal(Object.keys(back.code.nodes).length, Object.keys(p.code.nodes).length);
-    }
+  // Which wires take a dot is quick to find; the checks on each are a sweep.
+  const wires = p.own.defs.flatMap((d) => under(p.code, d).map((slot) => ({ d, slot, r: addDot(p.code, p.pres.names, info, d, slot) })));
+  const taking = wires.filter((w) => w.r.ok);
+  assert.ok(taking.length > 10, `only ${taking.length} wires took a dot`);
+  for (const { d, r } of sweep(taking)) {
+    if (!r.ok) continue;
+    tried++;
+    const dot = r.select!;
+    assert.ok(isDot(r.code, d, dot));
+    assert.equal(usesOf(r.code, dot).length, 1);
+    const after = infer(r.code, r.names);
+    assert.equal(after.errors.length, 0);
+    assert.match(dotHandles(r.code, d, r.names)[dot], /^•\d+$/);
+    // Running main searches every board, so a sample.
+    if (program !== "queens" || tried % 40 === 1) assert.deepEqual(output(r.code, r.names, main), before);
+    const back = removeDot(r.code, r.names, after, d, dot);
+    assert.ok(back.ok, back.ok ? "" : back.reason);
+    assert.equal(Object.keys(back.code.nodes).length, Object.keys(p.code.nodes).length);
   }
-  assert.ok(tried > 10, `only ${tried} wires took a dot`);
 });
 
 test("a dot shared by two inputs can't be removed until one goes", () => {

@@ -40,7 +40,11 @@ jobs:
           npm run build-editor
       # Node runs (cores - 1) test files at a time, which is one on the
       # runner's two cores; two at a time is much faster.
+      # The big sweeps check one eighth of their cases, a different eighth
+      # each run (test/helpers.ts sweep, TESTING.md T3).
       - name: Unit tests
+        env:
+          SWEEP_AT: ${{ github.run_number }}
         run: |
           (cd projectional && node --test --test-concurrency=2 test/*.test.ts)
           (cd invertible && npm test)

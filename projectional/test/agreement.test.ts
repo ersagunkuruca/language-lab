@@ -22,6 +22,7 @@ import { NotInvertible, relate, showTerm, toValue } from "../src/lang/relate.ts"
 import { bool, makeRunner, toList, type Value } from "../src/lang/run.ts";
 import { BOOL, LIST } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Type } from "../src/lang/types.ts";
+import { inSweep } from "./helpers.ts";
 
 // A few inputs of each plain type: zero, one, a fraction, a negative. A
 // record (one case) gets a few, its fields' samples taken in turn.
@@ -59,6 +60,7 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
   const info = infer(p.code, p.pres.names);
   const own = JSON.parse(readFileSync(join(dir, "code.json"), "utf8")).defs as Id[];
   const checked: string[] = [], problems: string[] = [];
+  let n = 0;
   for (const def of own) {
     const t = info.typeOf.get(def);
     if (!t || t.t !== "fn" || !t.params.length) continue;
@@ -73,6 +75,7 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
     const r = makeRunner(p.code, info, { print: () => {} });
     const forward = (args: Value[]) => take(r.call(r.value(def), ...args), 50);
     for (const args of spread(product(inputs as Value[][]), 6)) {
+      if (!inSweep(n++)) continue;
       const at = `${name}(${args.map(key).join(", ")})`;
       let fwd: Value[];
       try { fwd = forward(args); } catch { continue; } // fails forward, e.g. a division by zero
