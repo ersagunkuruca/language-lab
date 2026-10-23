@@ -35,7 +35,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E12 | Unit refusals name the units ("speed is m/s, gravity is m/s²") | QA2 UX9 | P2 | S | |
 | E13 | Navigator search covers only the open program | QA2 L2 | P2 | S | |
 | E14 | Palette on an `a` hole: 211 entries starting with `for each`; a new `main` has no "print first"; check whether `√` and `1 + 2` find anything after #168 | QA2 can't-edit 6 | P2 | S | |
 | E15 | Keyboard editing: Tab reaches no node, port or hole | QA2 UX7 | P2 | L | |
@@ -110,6 +109,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E12 | Unit refusals name the units on both sides | #223 |
 | E23 | Bug: the live page's buttons went dead after opening another definition (Chrome drops listeners when the frame is redrawn) | #221 |
 | E11 | The zoom button shows the zoom; Fit keeps clear of the pill | #215 |
 | E10 | A program opens on `main`, its showcase definition in the next tab | #212 |

@@ -636,7 +636,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // Units are part of a number's type: a conflict is a type error.
-  for (const u of unitProblems(code)) err(u.id, u.message);
+  for (const u of unitProblems(code, names)) err(u.id, u.message);
 
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.typeOf) {
