@@ -864,9 +864,11 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   });
   // A touch held still for half a second is a right-click: iOS has none.
   // Where the browser has its own (Android), the first of the two wins.
-  let letGo = () => {};
+  let letGo = () => {}, waiting = false;
   root.addEventListener("pointerdown", (ev) => {
     if (ev.pointerType !== "touch") return;
+    // A second finger is a pinch, not a long press.
+    if (waiting) return letGo();
     const at = { x: ev.clientX, y: ev.clientY }, t = ev.target as Element;
     const mv = (e: PointerEvent) => { if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) letGo(); };
     const timer = setTimeout(() => {
@@ -874,7 +876,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
       held = Date.now();
       t.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y }));
     }, 500);
-    letGo = () => { clearTimeout(timer); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", letGo); window.removeEventListener("pointercancel", letGo); };
+    waiting = true;
+    letGo = () => { waiting = false; clearTimeout(timer); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", letGo); window.removeEventListener("pointercancel", letGo); };
     window.addEventListener("pointermove", mv);
     window.addEventListener("pointerup", letGo);
     window.addEventListener("pointercancel", letGo);

@@ -182,14 +182,36 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   // wire). Listening on the window around the svg means every handler on
   // the svg and inside it has already had its turn.
   el.addEventListener("pointerdown", (ev) => {
-    if (ev.defaultPrevented || ev.button !== 0 || ev.shiftKey || !root.contains(ev.target as Node)) return;
-    const v0 = view ?? { x: 0, y: 0, z: 1 };
+    if (ev.defaultPrevented || ev.button !== 0 || ev.shiftKey || !root.contains(ev.target as Node) || fingers.size > 1) return;
+    const v0 = view ?? { x: 0, y: 0, z: 1 }, began = pinches;
     root.classList.add("panning");
-    const mv = (e: PointerEvent) => set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY });
+    // A second finger makes it a pinch, which takes over from here.
+    const mv = (e: PointerEvent) => { if (pinches === began && e.pointerId === ev.pointerId) set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY }); };
     const up = () => { root.classList.remove("panning"); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", mv);
     window.addEventListener("pointerup", up);
   });
+  // Pinch: two fingers zoom about the point between them, and pan with it.
+  const fingers = new Map<number, { clientX: number; clientY: number }>();
+  let pinch: { d: number; at: Pos; v: View } | null = null, pinches = 0;
+  const two = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), at: svgPoint(root, { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 }) }; };
+  root.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    fingers.set(e.pointerId, e);
+    if (fingers.size === 2) { pinches++; pinch = { ...two(), v: view ?? { x: 0, y: 0, z: 1 } }; }
+  });
+  // A touch's events stay with the element it began on, inside the svg.
+  root.addEventListener("pointermove", (e) => {
+    if (!fingers.has(e.pointerId)) return;
+    fingers.set(e.pointerId, e);
+    if (!pinch || fingers.size !== 2) return;
+    const now = two(), v = pinch.v;
+    const z = Math.min(3, Math.max(0.15, v.z * now.d / Math.max(1, pinch.d)));
+    set({ z, x: now.at.x - ((pinch.at.x - v.x) * z) / v.z, y: now.at.y - ((pinch.at.y - v.y) * z) / v.z });
+  });
+  const lift = (e: PointerEvent) => { fingers.delete(e.pointerId); if (fingers.size < 2) pinch = null; };
+  root.addEventListener("pointerup", lift);
+  root.addEventListener("pointercancel", lift);
   // Zoom about the pointer.
   root.addEventListener("wheel", (e) => {
     e.preventDefault();
