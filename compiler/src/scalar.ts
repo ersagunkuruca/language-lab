@@ -43,6 +43,8 @@ import { DIVERGE, NUMBER, type Type } from "../../projectional/src/lang/types.ts
 import { B } from "../../projectional/src/prelude.ts";
 import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
+import { expandDerivatives } from "../../projectional/src/lang/derive.ts";
+import { infer } from "../../projectional/src/lang/infer.ts";
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
@@ -86,7 +88,9 @@ const BUILTIN: Record<Id, Op> = {
 // it end). `budgeted`: its type has Diverge, so it may only be called under
 // a budget, never from outside.
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean }
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[] }
+// `code` and `info` are the program that was lowered: the one given, or
+// a copy with its derivatives generated, where funcs[i].def lives.
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; code: Code; info: Info }
 
 class Refused extends Error {}
 
@@ -96,6 +100,16 @@ const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean } = {}): Lowered {
+  // derivative(f) of a function written right there becomes the code of
+  // its derivative (derive.ts), checked again, so the GPU gets exact
+  // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
+  // definitions like any other.
+  const x = expandDerivatives(code, names);
+  if (x.expanded.length) {
+    code = x.code;
+    names = x.names;
+    info = infer(code, names);
+  }
   // A generic definition (the vectors module's plus, for any record of
   // Numbers) is lowered once per set of types it's called at, the way a
   // C++ template or a Rust generic is: `at` is what its type variables
@@ -412,5 +426,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()] };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], code, info };
 }
