@@ -12,8 +12,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { runMain, sameNumber } from "../src/lang/run.ts";
-import { S, SHOW_ANY } from "../src/lang/std.ts";
-import type { Id } from "../src/model.ts";
+import { S, SHOW_ANY, STD_IMPL } from "../src/lang/std.ts";
+import { get, type Id } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { PAIRS } from "./helpers.ts";
 
@@ -55,5 +55,23 @@ test("whole numbers compare exactly, so equal is an equivalence on Ints", () => 
     assert.equal(sameNumber(a, a), true);
     assert.equal(sameNumber(a, b), sameNumber(b, a));
     if (sameNumber(a, b) && sameNumber(b, c)) assert.ok(sameNumber(a, c), `${a} ${b} ${c}`);
+  }
+});
+
+// show rounds to 9 decimals, so show(0.1 + 0.2) is "0.3" (Ersagun's call,
+// 2026-10-23: kept, rather than "0.30000000000000004" in every output). It
+// is off by at most 5·10^-10, inside equal's 10^-9, so the text read back
+// is always a number equal to the one shown: forward, and run backwards.
+test("show then read gives back an equal number", () => {
+  const k = new Lang();
+  const shown = k.def("shown");
+  k.define(shown, k.fn(["x"], (x) => k.call(S.show, x)));
+  const code = base(k.code);
+  for (const x of [0.1 + 0.2, 1 / 3, -2 / 3, 1e6 / 7, 123456.789012345, 4e-10, -6e-10, 1e-9, 0.5, 2 ** 53, 1e15 + 0.3, 1e21, -0]) {
+    const text = (STD_IMPL[S.show] as (x: number) => string)(x);
+    assert.ok(sameNumber(Number(text), x), `show(${x}) = "${text}" reads back as ${Number(text)}`);
+    const [x0] = get(code, get(code, shown, "def").body!, "lambda").params;
+    const back = [...relate(code, shown, { out: text })].map((a) => a.values[x0]);
+    assert.ok(back.length === 1 && typeof back[0] === "number" && sameNumber(back[0], x), `show(x) = "${text}" backwards gives ${back}, not ${x}`);
   }
 });

@@ -68,9 +68,12 @@ is), so it isn't an equivalence there. And two Numbers that both happen to
 be whole compare exactly: 10^12 and 10^12 + 1 are different, while 10^12
 and 10^12 + 0.5 are within the tolerance. Doubles near 10^12 are spaced
 1.2·10^-4 apart, so whole numbers that differ really are different
-numbers. Still open: `show(0.1 + 0.2)` prints "0.3", so `show` isn't one to
-one on Numbers (the converter's "show run backwards is the parser" accepts
-only rounded spellings).
+numbers. `show(0.1 + 0.2)` prints "0.3", so `show` isn't one to one on
+Numbers (the converter's "show run backwards is the parser" accepts only
+rounded spellings). Settled (Ersagun, 2026-10-23): it stays. Rounding to 9
+decimals is off by at most 5·10^-10, inside the 10^-9, so reading the text
+back always gives an equal number, forward and backwards (test/equality.test.ts),
+and outputs don't show "0.30000000000000004".
 
 ## Peano naturals, linked lists, and the stack (2026-10-22)
 
