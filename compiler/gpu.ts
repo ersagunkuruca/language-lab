@@ -12,6 +12,11 @@
 // within 2⁻¹¹ (https://www.w3.org/TR/WGSL/#floating-point-accuracy), so
 // the check is "close", not "equal": within 2e-3 of the evaluator,
 // relative to the size of the answer, and Bool results exactly.
+// A function made only of + − × (and negate, abs, floor, comparisons,
+// choices, calls of such functions), which WGSL rounds correctly, is
+// checked exactly against the evaluator running the program in Float32
+// (projectional/src/lang/float32.ts): f32 in the program, not just on the
+// GPU (NUMBERS.md).
 
 import { chromium } from "../projectional/node_modules/playwright-core/index.mjs";
 import { makeRunner, type Value } from "../projectional/src/lang/run.ts";
@@ -19,7 +24,10 @@ import type { Code } from "../projectional/src/model.ts";
 import type { Info } from "../projectional/src/lang/infer.ts";
 import type { Names } from "../projectional/src/presentation.ts";
 import type { Id } from "../projectional/src/model.ts";
-import { lowerScalar, type LType, type SType } from "./src/scalar.ts";
+import { lowerScalar, type LType, type SExpr, type SFunc, type SType } from "./src/scalar.ts";
+import { withFloat32 } from "../projectional/src/lang/float32.ts";
+import { represent } from "../projectional/src/lang/represent.ts";
+import { infer } from "../projectional/src/lang/infer.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
 import { area, corners, parts, vectors } from "./src/fixtures.ts";
@@ -72,13 +80,40 @@ const page = await browser.newPage();
 await page.goto(new URL("./README.md", import.meta.url).href);
 if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser has no WebGPU");
 
-let failures = 0, compared = 0;
+// Operations WGSL does exactly as binary32 does: correctly rounded.
+const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not"]);
+function exact(funcs: SFunc[], i: number, seen = new Set<number>()): boolean {
+  if (seen.has(i)) return true;
+  seen.add(i);
+  const ok = (e: SExpr): boolean => {
+    switch (e.k) {
+      case "num": case "bool": case "local": return true;
+      case "op": return EXACT.has(e.op) && e.args.every(ok);
+      case "if": return ok(e.cond) && ok(e.then) && ok(e.else);
+      case "let": return ok(e.value) && ok(e.body);
+      case "call": return e.args.every(ok) && exact(funcs, e.fn, seen);
+      case "make": return e.args.every(ok);
+      case "get": return ok(e.rec);
+      // A budget counts its calls in f32 on the GPU: whole numbers, exact.
+      case "budget": return ok(e.body) && ok(e.otherwise);
+    }
+  };
+  return ok(funcs[i].body);
+}
+
+let failures = 0, compared = 0, exactly = 0;
 for (const c of cases) {
   const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true });
   const shader = emitWgsl(lowered);
   // The lowered program: generated derivatives (∂blend/∂a …) are in it.
   const r = makeRunner(lowered.code, lowered.info, { print: () => {} });
+  // The same program in Float32.
+  const w = withFloat32(lowered.code, c.names);
+  const in32 = represent(w.code, lowered.funcs.map((f) => f.def), w.rep);
+  const r32 = makeRunner(in32, infer(in32, w.names), { print: () => {} });
   for (const f of shader.funcs) {
+    const i = lowered.funcs.findIndex((g) => g.def === f.def);
+    const isExact = exact(lowered.funcs, i);
     // Records go in and out as their numbers, in field order.
     const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);
     const inputs = c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));
@@ -115,26 +150,31 @@ ${outs.map((x, j) => `  outp[i * ${outWidth}u + ${j}u] = ${x};`).join("\n")}
     let bad = 0;
     inputs.forEach((xs, k) => {
       let j = 0;
-      const value = (t: LType): Value => {
+      // The GPU is given f32 inputs, so Float32 is too.
+      const value = (t: LType, round: boolean): Value => {
         if (t === "i32") return { tag: xs[j++] ? TRUE : FALSE, fields: [] };
-        if (t === "f64") return xs[j++];
-        return { tag: t.variant, fields: t.fields.map((x) => value(x.t)) };
+        if (t === "f64") return round ? Math.fround(xs[j++]) : xs[j++];
+        return { tag: t.variant, fields: t.fields.map((x) => value(x.t, round)) };
       };
-      const want = flatten(f.result, first(r.call(r.value(f.def), ...f.params.map(value)))!);
+      const runner = isExact ? r32 : r;
+      const want = flatten(f.result, first(runner.call(runner.value(f.def), ...f.params.map((t) => value(t, isExact))))!);
       const ok = want.every((w, o) => {
         const g = got[k * outWidth + o];
-        return typeof w === "boolean" ? (g === 1) === w : Number.isNaN(w) ? Number.isNaN(g) : Math.abs(g - w) <= 2e-3 * Math.max(1, Math.abs(w));
+        if (typeof w === "boolean") return (g === 1) === w;
+        if (Number.isNaN(w)) return Number.isNaN(g);
+        return isExact ? g === w : Math.abs(g - w) <= 2e-3 * Math.max(1, Math.abs(w));
       });
       compared++;
+      if (isExact) exactly++;
       if (!ok) { bad++; console.log(`✗ ${c.label}: ${f.name}(${xs.join(", ")}) = ${got.slice(k * outWidth, (k + 1) * outWidth).join(", ")} on the GPU, ${want.join(", ")} in the evaluator`); }
     });
     failures += bad;
-    if (!bad) console.log(`✓ ${c.label}: ${f.name} (${inputs.length} inputs)`);
+    if (!bad) console.log(`✓ ${c.label}: ${f.name} (${inputs.length} inputs${isExact ? ", exactly, in Float32" : ""})`);
   }
   for (const [def, why] of shader.refused) console.log(`  ${c.label}: ${c.names[def] ?? def} is refused: it ${why}`);
 }
 await browser.close();
-console.log(`${compared} values compared, ${failures} wrong`);
+console.log(`${compared} values compared (${exactly} exactly, in Float32), ${failures} wrong`);
 if (failures || !compared) process.exit(1);
 
 // In the page: compile the kernel, run it once per input, read the results.

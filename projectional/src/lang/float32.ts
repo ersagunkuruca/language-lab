@@ -28,8 +28,6 @@ export const ROUNDED: [Id, number][] = [
 // them (give it to `represent`).
 export function withFloat32(code: Code, names: Names): { code: Code; names: Names; rep: Representation } {
   const k = new Lang();
-  const round = k.def("round to Float32′");
-  k.define(round, k.fn(["x"], (x) => k.call(S.float32, x)));
   const impl: Record<Id, Id> = {};
   for (const [op, n] of ROUNDED) {
     const d = k.def(`${names[op] ?? op} in Float32`);
@@ -40,6 +38,6 @@ export function withFloat32(code: Code, names: Names): { code: Code; names: Name
   return {
     code: merge(code, k.code),
     names: { ...names, ...k.names },
-    rep: { name: "Float32", of: NUMBER, type: NUMBER, meaning: null, canonical: true, approximate: true, literal: round, impl, cost },
+    rep: { name: "Float32", of: NUMBER, type: NUMBER, meaning: null, canonical: true, approximate: true, literal: S.float32, impl, cost },
   };
 }
