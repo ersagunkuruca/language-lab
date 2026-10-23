@@ -6,10 +6,14 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { CONS, NIL, NONE, PAIR_V, S, SECOND, SOME } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
+import type { Id } from "../../projectional/src/model.ts";
 
 // The area under x·x·x − x − 1 from `from`, in `steps` strips of width
 // `width`: a numeric loop written as tail recursion, the way the language
-// writes loops. Nothing gets smaller, so its type carries Diverge.
+// writes loops. Nothing gets smaller, so its type carries Diverge, and the
+// GPU and WASM take it only under a budget: `integral` allows two million
+// calls, `capped` only ten, so it runs out for more than nine strips and
+// gives -1.
 export function area() {
   const k = new Lang();
   const f = k.def("f");
@@ -18,9 +22,21 @@ export function area() {
   k.define(area, k.fn(["x", "width", "steps", "total"], (x, w, n, acc) =>
     k.if(k.call(S.less, n, k.lit(1)), acc,
       k.call(area, k.call(B.add, x, w), w, k.call(B.sub, n, k.lit(1)), k.call(B.add, acc, k.call(B.mul, k.call(f, x), w))))));
+  const budget = (name: string, fuel: number) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x", "width", "steps"], (x, w, n) => within(k, fuel, () => k.call(area, x, w, n, k.lit(0)), () => k.lit(-1))));
+    return d;
+  };
+  const integral = budget("integral", 2_000_000), capped = budget("capped", 10);
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), area, f };
+  return { code, names, info: infer(code, names), area, f, integral, capped };
+}
+
+// first(() => with fuel(n, () => body), () => otherwise): the budget the
+// scalar profile takes something that might not finish under.
+export function within(k: Lang, n: number, body: () => Id, otherwise: () => Id): Id {
+  return k.call(S.first, k.thunk(() => k.call(S.fuel, k.lit(n), k.thunk(body))), k.thunk(otherwise));
 }
 
 // The corners of the shader printer (wgsl.ts): an `if` in the middle of an
@@ -50,9 +66,15 @@ export function corners() {
   k.define(odd, k.fn(["n"], (m) => k.if(k.call(S.less, m, n(1)), k.equal(m, n(1)), k.call(even, k.call(B.sub, m, n(1))))));
   const twice = k.def("fact twice");
   k.define(twice, k.fn(["n"], (m) => k.call(B.add, k.call(fact, m), k.call(fact, m))));
+  // The same, under budgets: allowed to start, so what's left is whether a
+  // GPU can run them.
+  const fuelled = (name: string, body: (m: Id) => Id) => { const w = k.def(name); k.define(w, k.fn(["n"], (m) => within(k, 1000, () => body(m), () => k.lit(0)))); return w; };
+  const gcdOf = k.def("gcd of");
+  k.define(gcdOf, k.fn(["a", "b"], (a, b) => within(k, 1000, () => k.call(gcd, a, b), () => k.lit(0))));
+  const factOf = fuelled("fact of", (m) => k.call(fact, m)), isEven = fuelled("is even", (m) => k.if(k.call(even, m), k.lit(1), k.lit(-1)));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), defs: { clampish, pick, near, cube, powers, gcd, fact, even, odd, twice } };
+  return { code, names, info: infer(code, names), defs: { clampish, pick, near, cube, powers, gcd, fact, even, odd, twice, gcdOf, factOf, isEven } };
 }
 
 // Records in the shader profile: a 3D vector, a ray made of two of them,
@@ -84,7 +106,7 @@ export function vectors() {
   const shoot = k.def("shoot");
   k.define(shoot, k.fn(["x", "y", "t"], (x, y, t) => k.call(along, k.call(Ray.v.ray, k.call(vec, x, y, n(-2)), k.call(vec, k.call(B.neg, x), n(0.5), n(1))), t)));
   const steps = k.def("steps");
-  k.define(steps, k.fn(["x", "step"], (x, step) => k.call(SECOND, k.call(walk, k.call(vec, x, n(1), n(0)), step, n(0)))));
+  k.define(steps, k.fn(["x", "step"], (x, step) => k.call(SECOND, within(k, 1000, () => k.call(walk, k.call(vec, x, n(1), n(0)), step, n(0)), () => k.call(PAIR_V, n(0), n(-1))))));
   const sum = k.def("sum");
   k.define(sum, k.fn(["xs"], (xs) => k.fold(xs, [
     { variant: NIL, names: [], body: () => n(0) },

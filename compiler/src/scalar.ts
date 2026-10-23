@@ -3,7 +3,7 @@
 // A definition is in it when its inputs and result are Number or Bool, and
 // its body uses only arithmetic, comparisons, `if`, lets, and calls to other
 // definitions in the profile. No data, no closures, no Choice, no world
-// effects (Diverge is allowed: it just runs). That's exactly what a GPU or
+// effects, and nothing that might not finish. That's exactly what a GPU or
 // plain WebAssembly can run without a garbage collector, so this one
 // lowering feeds both: wasm.ts prints it as a WebAssembly module, and a
 // shader backend would print it as WGSL (see projectional/COMPILER.md).
@@ -19,6 +19,22 @@
 // definition outside the profile is refused with the reason, the way a
 // type error is reported, so "can this run on the GPU / in WASM" is a
 // question with an answer you can show in the editor.
+//
+// Diverge, like every other effect, has to be handled before it gets here.
+// On a GPU a loop that never ends doesn't throw: it hangs the tab or
+// resets the device. So a definition whose type says it might not finish
+// is refused, unless it runs under a budget, the language's own handler
+// for Diverge written the way a shader needs it:
+//
+//   first(() => with fuel(1000, () => trace(x, y, time)), () => fallback)
+//
+// `with fuel(n, …)` allows n calls to possibly-divergent definitions and
+// then fails; `first` turns the failure into the fallback. The result has
+// no Diverge in its type, and the lowering keeps the same count the
+// evaluator keeps (one per call into a definition the checker couldn't
+// see end, a loop's rounds included), so the GPU gives the evaluator's
+// answer, fallback and all. n is a number written down, so the bound is
+// known when the shader is built.
 
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
@@ -42,7 +58,11 @@ export type SExpr =
   | { k: "let"; i: number; value: SExpr; body: SExpr }
   | { k: "call"; fn: number; args: SExpr[]; tail: boolean }
   | { k: "make"; t: RType; args: SExpr[] }
-  | { k: "get"; rec: SExpr; t: RType; i: number };
+  | { k: "get"; rec: SExpr; t: RType; i: number }
+  // first(() => with fuel(n, () => body), () => otherwise): body with n
+  // calls to spend, or otherwise if it ran out. `save` is a Number local
+  // for the budget around this one, `res` one for body's value.
+  | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
 // WebAssembly instructions; a WASM module imports them, a shader has them
@@ -62,10 +82,18 @@ const BUILTIN: Record<Id, Op> = {
   [S.abs]: "abs", [S.floor]: "floor", [S.less]: "less", [S.and]: "and", [S.or]: "or", [S.not]: "not",
 };
 
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr }
+// `spends`: each call spends one from the budget (the checker couldn't see
+// it end). `budgeted`: its type has Diverge, so it may only be called under
+// a budget, never from outside.
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean }
 export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[] }
 
 class Refused extends Error {}
+
+// The largest budget: counts are kept in f32 on a GPU, whole up to 2^24.
+export const MAX_FUEL = 2 ** 24;
+const BUDGET = "first(() => with fuel(n, () => …), () => …)";
+const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean } = {}): Lowered {
   const zonk = (id: Id): Type => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
@@ -124,12 +152,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const index = new Map<Id, number>();
   const refused = new Map<Id, string>();
   const inProgress = new Set<Id>();
+  // Whether what's being lowered runs under a budget, so a call to
+  // something that might not finish is allowed: inside a budget's body, or
+  // inside a definition that itself may only be called under one.
+  let underBudget = false;
+  const diverges = (t: Type | undefined) => !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(DIVERGE);
 
   // The function index for `def`, lowering it (and what it calls) first.
   function func(def: Id): number {
+    const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    if (!underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     if (index.has(def)) return index.get(def)!;
     if (refused.has(def)) throw new Refused(`calls ${nm(def)}, which ${refused.get(def)}`);
-    const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
     const d = code.nodes[def] as NodeOf<"def">;
     const lam = d?.body ? code.nodes[d.body] : null;
     const fail = (why: string): never => { refused.set(def, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
@@ -146,18 +180,22 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     const effs = info.subst.resolveRow(ft.eff).effs.filter((e) => e !== DIVERGE);
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
+    const budgeted = diverges(ft);
 
     // Reserve the index now, so recursion finds it.
     const i = funcs.length;
     index.set(def, i);
     inProgress.add(def);
-    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 } };
+    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted };
     funcs.push(f);
+    const outer = underBudget;
     try {
       const l = lam as NodeOf<"lambda">;
       const env = new Map(l.params.map((p, j) => [p, j]));
+      underBudget = budgeted;
       f.body = expr(l.body, env, f, true);
     } catch (e) {
+      underBudget = outer;
       // Undo: this definition and anything lowered after it.
       funcs.splice(i);
       for (const [d2, j] of index) if (j >= i) index.delete(d2);
@@ -165,6 +203,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       if (e instanceof Refused) { refused.set(def, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
       throw e;
     }
+    underBudget = outer;
     inProgress.delete(def);
     return i;
   }
@@ -206,6 +245,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "op", op: t === "f64" ? "equal" : "beq", args: args() };
         }
         if (BUILTIN[target]) return { k: "op", op: BUILTIN[target], args: args() };
+        if (target === S.first || target === S.fuel) return budget(n, id, env, f);
         const t = code.nodes[target];
         if (t?.kind === "def") {
           const fn = func(target);
@@ -257,8 +297,37 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
   }
 
-  for (const r of roots) {
-    try { func(r); } catch (e) { if (!(e instanceof Refused)) throw e; }
+  // first(() => with fuel(n, () => body), () => otherwise), and nothing
+  // else made of those two.
+  function budget(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
+    const action = thunk(n.args[0]), otherwise = thunk(n.args[1]);
+    const inner = action ? code.nodes[action] : null;
+    const head = inner?.kind === "call" ? code.nodes[inner.fn] : null;
+    const shape = `only as a budget, ${BUDGET}`;
+    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || inner?.kind !== "call" || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
+      throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
+    const amount = code.nodes[inner.args[0]], body = thunk(inner.args[1]);
+    if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
+    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
+    const v = amount.value;
+    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (a shader's is a number from 0 to ${MAX_FUEL})`);
+    const t = stype(zonk(id));
+    if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);
+    const save = f.locals.push("f64") - 1, res = f.locals.push(t) - 1;
+    const outer = underBudget;
+    underBudget = true;
+    let inside: SExpr;
+    try { inside = expr(body, env, f, false); } finally { underBudget = outer; }
+    return { k: "budget", n: v, body: inside, otherwise: expr(otherwise, env, f, false), t, save, res };
   }
+
+  // A root that may not finish is refused as a place to start, even when
+  // it was lowered to be called from under a budget.
+  const unstarted = new Map<Id, string>();
+  for (const r of roots) {
+    try { func(r); } catch (e) { if (!(e instanceof Refused)) throw e; if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, "")); }
+  }
+  for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   return { funcs, refused, records: [...records.values()] };
 }

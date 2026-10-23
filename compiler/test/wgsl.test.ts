@@ -6,9 +6,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
-import { load } from "../src/program.ts";
+import { examples, load } from "../src/program.ts";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { DIVERGE } from "../../projectional/src/lang/types.ts";
 import { makeRunner } from "../../projectional/src/lang/run.ts";
-import { area, corners, vectors } from "../src/fixtures.ts";
+import { area, corners, vectors, within } from "../src/fixtures.ts";
+import { Lang } from "../../projectional/src/lang/dsl.ts";
+import { base, baseNames } from "../../projectional/src/lang/load.ts";
+import { infer } from "../../projectional/src/lang/infer.ts";
+import { B } from "../../projectional/src/prelude.ts";
+import { S } from "../../projectional/src/lang/std.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");
@@ -31,15 +39,20 @@ test("examples/shaders: red, green and blue, and everything they call, go to the
 
 test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all", () => {
   const p = load("raymarch");
-  const s = emitWgsl(lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true }));
+  const lowered = lowerScalar(p.code, p.info, p.pres.names, [p.named("colour")], { records: true });
+  const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.keys()], []);
-  const names = s.funcs.map((f) => f.name);
+  const names = lowered.funcs.map((f) => f.name);
   // The normals are the generated partial derivatives, not finite differences.
-  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "march", "shadow", "shade"]) assert.ok(names.includes(d), d);
-  // march and shadow call themselves last: loops.
-  for (const f of s.funcs.filter((f) => f.name === "march" || f.name === "shadow")) {
-    const body = s.wgsl.slice(s.wgsl.indexOf(`fn ${f.wgsl}(`));
-    assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{[\s\S]*continue;/);
+  for (const d of ["∂scene/∂x", "∂scene/∂y", "∂scene/∂z", "march", "shadow", "shade", "trace"]) assert.ok(names.includes(d), d);
+  // Only colour is a place to start: the rest may not finish, so they run
+  // under its budget.
+  assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour"]);
+  assert.match(s.wgsl, /lab_fuel = 1000\.0;/);
+  // march and shadow call themselves last: loops, each round spending one.
+  for (const name of ["march", "shadow"]) {
+    const body = s.wgsl.slice(s.wgsl.indexOf(`// ${name}\nfn `));
+    assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{\n {4}lab_fuel = lab_fuel - 1\.0;[\s\S]*continue;/);
   }
   // Colours and points are vectors, and arithmetic written field by field
   // is vector arithmetic.
@@ -66,25 +79,63 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
 
 test("a call to itself as the last step is a loop; the GPU never sees recursion", () => {
   const a = area();
-  const s = emitWgsl(lowerScalar(a.code, a.info, a.names, [a.area]));
-  const body = s.wgsl.slice(s.wgsl.indexOf("fn area_0"));
+  const s = emitWgsl(lowerScalar(a.code, a.info, a.names, [a.integral]));
+  const body = s.wgsl.slice(s.wgsl.indexOf("fn area_1"));
   const fn = body.slice(0, body.indexOf("\n}\n"));
   assert.match(fn, /var p0 = a0;[\s\S]*loop \{[\s\S]*continue;/);
-  assert.equal(fn.split("area_0(").length, 2, "area_0 is named once, in its signature");
+  assert.equal(fn.split("area_1(").length, 2, "area_1 is named once, in its signature");
   // Every new value is computed before any parameter changes.
-  assert.match(fn, /let t0 = p0 \+ p1;\n\s*let t1 = p2 - 1\.0;\n\s*let t2 = p3 \+ \(f_1\(p0\) \* p1\);\n\s*p0 = t0;/);
+  assert.match(fn, /let t0 = p0 \+ p1;\n\s*let t1 = p2 - 1\.0;\n\s*let t2 = p3 \+ \(f_2\(p0\) \* p1\);\n\s*p0 = t0;/);
   assert.equal(s.refused.size, 0);
+});
+
+test("Diverge is refused outside a budget; under one, each round of the loop spends from it", () => {
+  const a = area();
+  const s = emitWgsl(lowerScalar(a.code, a.info, a.names, [a.area, a.integral]));
+  assert.match(why(s.refused, a.area), /^may not finish \(its type has Diverge\): on a GPU that hangs the page, so run it under a budget/);
+  // The loop is printed, for integral, but isn't a place to start.
+  assert.deepEqual(s.funcs.map((f) => f.name), ["integral", "f"]);
+  assert.match(s.wgsl, /var<private> lab_fuel: f32;/);
+  const loop = s.wgsl.slice(s.wgsl.indexOf("fn area_1"));
+  assert.match(loop, /loop \{\n {4}lab_fuel = lab_fuel - 1\.0;\n {4}if \(lab_fuel < 0\.0\) \{ return f32\(\); \}/);
+  // The budget: the old count kept, a new one set, and the fallback if it ran out.
+  assert.match(s.wgsl, /let t0 = lab_fuel;\n {2}lab_fuel = 2000000\.0;\n {2}var t1: f32;\n {2}t1 = area_1\(p0, p1, p2, 0\.0\);\n {2}if \(lab_fuel < 0\.0\) \{\n {4}t1 = -1\.0;\n {2}\}\n {2}lab_fuel = t0;\n {2}return t1;/);
+});
+
+test("a budget is first(() => with fuel(n, …), …) with n written down; nothing else made of them", () => {
+  const k = new Lang();
+  const spin = k.def("spin");
+  k.define(spin, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), x, k.call(spin, k.call(B.add, x, k.lit(1))))));
+  const computed = k.def("computed budget");
+  k.define(computed, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(S.fuel, x, k.thunk(() => k.call(spin, x)))), k.thunk(() => x))));
+  const huge = k.def("huge budget");
+  k.define(huge, k.fn(["x"], (x) => within(k, 1e9, () => k.call(spin, x), () => x)));
+  const bare = k.def("first alone");
+  k.define(bare, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(spin, x)), k.thunk(() => x))));
+  const ok = k.def("fine");
+  k.define(ok, k.fn(["x"], (x) => within(k, 0, () => k.call(spin, x), () => x)));
+  const code = base(k.code), names = { ...baseNames(), ...k.names };
+  const s = emitWgsl(lowerScalar(code, infer(code, names), names, [computed, huge, bare, ok]));
+  assert.match(why(s.refused, computed), /a budget that isn't a number written down/);
+  assert.match(why(s.refused, huge), /a budget of 1000000000/);
+  // first alone doesn't handle Diverge, so spin's reaches the caller.
+  assert.match(why(s.refused, bare), /^may not finish/);
+  assert.deepEqual(s.funcs.map((f) => f.name), ["fine"]);
 });
 
 test("recursion that isn't a loop is refused with the reason, and so is what calls it", () => {
   const c = corners();
   const s = emitWgsl(lowerScalar(c.code, c.info, c.names, Object.values(c.defs)));
-  const { fact, even, odd, twice, gcd } = c.defs;
+  const { fact, even, odd, twice, gcd, gcdOf, factOf, isEven } = c.defs;
   assert.match(why(s.refused, fact), /recursive in a way that isn't a loop/);
   assert.match(why(s.refused, even), /recursive/);
   assert.match(why(s.refused, odd), /recursive/);
-  assert.match(why(s.refused, twice), /^calls fact, which is recursive/);
-  assert.ok(!s.refused.has(gcd));
+  assert.match(why(s.refused, factOf), /^calls fact, which is recursive/);
+  assert.match(why(s.refused, isEven), /^calls even, which is recursive/);
+  // Outside a budget, the first reason is that it may not finish.
+  assert.match(why(s.refused, twice), /^may not finish/);
+  assert.match(why(s.refused, gcd), /^may not finish/);
+  assert.ok(!s.refused.has(gcdOf));
   assert.ok(!/fact|even|odd/.test(s.wgsl), "nothing refused is printed");
 });
 
@@ -113,8 +164,9 @@ test("records are structs (or vectors): built by their case, read by fields or a
   assert.match(s.wgsl, /fn length_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
   assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}return normalize\(p0\);/);
   // Parts that don't do the same thing stay parts.
-  assert.match(s.wgsl, /fn walk_\d+\(a0: vec3f, a1: f32, a2: f32\) -> vec2f \{\n {2}var p0 = a0;[\s\S]*let t0 = vec3f\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
-  assert.match(s.wgsl, /return walk_\d+\(vec3f\(p0, 1\.0, 0\.0\), p1, 0\.0\)\.y;/);
+  assert.match(s.wgsl, /fn walk_(\d+)\(a0: vec3f, a1: f32, a2: f32\) -> vec2f \{\n {2}var p0 = a0;[\s\S]*let t0 = vec3f\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
+  // Under a budget whose fallback is a record too.
+  assert.match(s.wgsl, /t\d+ = walk_\d+\(vec3f\(p0, 1\.0, 0\.0\), p1, 0\.0\);\n {2}if \(lab_fuel < 0\.0\) \{\n {4}t\d+ = vec2f\(0\.0, -1\.0\);\n {2}\}\n {2}lab_fuel = t\d+;\n {2}return t\d+\.y;/);
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
   // An input that's never used is a Number, and only a Number may be passed.
@@ -124,6 +176,29 @@ test("records are structs (or vectors): built by their case, read by fields or a
   // Without records (what WebAssembly takes), they're refused as before.
   const plain = lowerScalar(v.code, v.info, v.names, roots);
   assert.match(why(plain.refused, v.defs.length), /other than Number or Bool/);
+});
+
+test("every example: what a shader can start from has no Diverge, and every loop under a budget spends from it", () => {
+  // compose has externs (no bodies), so it isn't a whole program to check.
+  for (const name of readdirSync(examples).filter((n) => existsSync(join(examples, n, "code.json")) && n !== "compose")) {
+    const p = load(name);
+    const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
+    const s = emitWgsl(lowered);
+    for (const f of s.funcs) {
+      const t = p.info.subst.zonk(p.info.typeOf.get(f.def)!);
+      assert.ok(t.t === "fn" && !p.info.subst.resolveRow(t.eff).effs.includes(DIVERGE), `${name}: ${f.name} starts a shader and may not finish`);
+    }
+    for (const f of lowered.funcs) {
+      // Something the checker couldn't see end may only be called under a budget,
+      // and its WGSL takes one from it before anything else.
+      if (p.info.divergent.has(f.def)) assert.ok(f.spends && f.budgeted, `${name}: ${f.name}`);
+      if (!f.spends) continue;
+      const at = s.wgsl.indexOf(`// ${f.name}\nfn `);
+      if (at < 0) continue; // refused by the printer, with its reason
+      const body = s.wgsl.slice(at, s.wgsl.indexOf("\n}\n", at));
+      assert.match(body, /\{\n(?: {2}var p\d+ = a\d+;\n)*(?: {2}loop \{\n)? +lab_fuel = lab_fuel - 1\.0;/, `${name}: ${f.name} spends first`);
+    }
+  }
 });
 
 function why(refused: Map<string, string>, def: string): string {
