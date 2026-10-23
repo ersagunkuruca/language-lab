@@ -107,7 +107,8 @@ model, then WebAssembly. Update this line when the step changes.
   commit it passed, and reports without stopping it. After merging, look
   at Check main for your commit: if it is red, whoever broke main fixes it
   next. `npm run affected -- --all` runs everything with every sweep in
-  full.
+  full, as the Nightly workflow does at 03:00 UTC; the coordinator checks
+  its result at the daily triage, and a red nightly is a P0.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 
