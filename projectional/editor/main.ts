@@ -2043,6 +2043,9 @@ const dock: Record<string, number> = (() => { try { return JSON.parse(localStora
 const dockStyle = () => Object.entries(dock).map(([k, v]) => `--${k}: ${v}px`).join("; ");
 // The shown definition's tab: a newly opened one goes right after it.
 let openAt = -1;
+const MAX_TABS = 6;
+// Open tabs, most recently shown first.
+let seen: Id[] = [];
 
 document.addEventListener("pointerdown", (e) => {
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-gutter]");
@@ -2099,12 +2102,16 @@ function draw() {
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
 
-  // Open definitions are tabs; the one shown is always among them.
+  // Open definitions are tabs; the one shown is always among them. Past
+  // MAX_TABS, opening one closes the one looked at longest ago, so the strip
+  // fits its pane instead of running off it.
   ui.tabs = ui.tabs.filter((d) => defBody(d));
   if (!ui.tabs.includes(ui.def)) ui.tabs.splice(Math.min(ui.tabs.length, openAt + 1), 0, ui.def);
+  seen = [ui.def, ...seen.filter((d) => d !== ui.def && ui.tabs.includes(d))];
+  if (ui.tabs.length > MAX_TABS) { const keep = new Set(seen.slice(0, MAX_TABS)); ui.tabs = ui.tabs.filter((d) => keep.has(d)); }
   openAt = ui.tabs.indexOf(ui.def);
   const tab = (d: Id) => h("div", { class: `tab${d === ui.def ? " on" : ""}` },
-    h("button", { type: "button", class: "t-open", "data-tab": d, "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
+    h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
     ? h("div", { class: "blocks-wrap" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
