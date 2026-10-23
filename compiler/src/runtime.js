@@ -32,18 +32,13 @@ export function $range(n) {
 // Numbers are equal to the precision floats carry, as in the evaluator.
 export const $near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
-// How numbers compare depends on the type compared, as in the evaluator
-// (run.ts `Equality`): "exact" (only Ints in it), "near" (only Numbers), or
-// "mixed" (both, or not known: whole numbers exactly, others near).
-const $same = {
-  exact: (a, b) => a === b,
-  near: $near,
-  mixed: (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : $near(a, b)),
-};
+// `equal` on two numbers, one rule on every type, as in the evaluator
+// (run.ts `sameNumber`): whole numbers exactly, others near.
+export const $sameNumber = (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : $near(a, b));
 
 // With its own stack, so two long lists can be compared.
-export function $eq(a, b, how = 'mixed') {
-  const same = $same[how];
+export function $eq(a, b) {
+  const same = $sameNumber;
   const todo = [a, b];
   while (todo.length) {
     const y = todo.pop(), x = todo.pop();
@@ -261,7 +256,11 @@ const fallible = (k) => (...args) => {
   try {
     if (!f) throw new Error(`this runtime can't ${k}`);
     v = f.apply(world, args);
-  } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
+  } catch (e) {
+    // Not here yet isn't a failure: the page asks again later.
+    if (e instanceof Pending) throw e;
+    return $perform(ABORT, ABORT_OP, [e.message]);
+  }
   return v;
 };
 const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
@@ -274,11 +273,12 @@ export const $io = {
   appendFile: (p, t) => (fallible('appendFile')(p, t), $unit),
   fileExists: (p) => $bool(!!world.fileExists?.(p)),
   listFolder: (p) => $toList(fallible('listFolder')(p)),
+  fetchText: fallible('fetchText'),
 };
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells } from '../../projectional/src/lang/cells.ts';
+import { Cells, Pending } from '../../projectional/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }

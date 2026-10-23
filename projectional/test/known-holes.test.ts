@@ -144,7 +144,7 @@ test("R2 §1.1 reading a formula that never ends is typed as if it ends (Cells h
   assert.ok(p.effects(p.main).includes(DIVERGE), "main reads a formula that never ends, and its type says it's total");
 });
 
-test("R2 §1.2 equal gives the same answer whether or not it goes through a generic function", { todo: "Number equality is near, a type variable's is exact on whole numbers" }, () => {
+test("R2 §1.2 equal gives the same answer whether or not it goes through a generic function", () => {
   const p = program((k) => {
     const same = k.def("same");
     k.define(same, k.fn(["x", "y"], (x, y) => k.equal(x, y)));
@@ -161,7 +161,7 @@ test("R2 §1.2 equal gives the same answer whether or not it goes through a gene
   assert.equal(direct, generic);
 });
 
-test("R2 §1.2 run backwards, Ints still compare to within 1e-9", { todo: "relate.ts unify uses close for every number" }, () => {
+test("R2 §1.2 run backwards, Ints still compare to within 1e-9", () => {
   const k = new Lang();
   const f = k.def("f");
   k.define(f, k.thunk(() => k.call(S.oneOf, k.list(k.int(1000000000001)))));
@@ -172,7 +172,7 @@ test("R2 §1.2 run backwards, Ints still compare to within 1e-9", { todo: "relat
   assert.equal(answers.length, 0, "f() = 1000000000000 has an answer backwards");
 });
 
-test("R2 §2.1 running a one-item `one of` backwards ends", { todo: "member runs before its list is built, so it enumerates lists" }, () => {
+test("R2 §2.1 running a one-item `one of` backwards ends", () => {
   const k = new Lang();
   const f = k.def("f");
   k.define(f, k.thunk(() => k.call(S.oneOf, k.list(k.lit(3)))));

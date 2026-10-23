@@ -392,6 +392,30 @@ sets what really changed). This is a time-varying value, the idea of Fran
 the cells a page already has. A page can't `wait`: `Wait` isn't in its
 rows, so a part that waits is a type error.
 
+### The web
+
+`fetch text(url)` is the body of an HTTP GET, as Text. It has the
+`Network` effect and aborts with the reason when there is no body to be
+had (no connection, a status that isn't 2xx), so a `match … | abort(why)
+→ …` around it is how a program says what to do then.
+
+`Network` isn't a world effect, so a search may fetch. A GET reads and
+doesn't change anything (RFC 9110 calls it *safe*), and the runtime
+fetches each address once per run and remembers the answer, failures
+included. So a search that backtracks never asks a server twice, and an
+address read twice in one run gives the same text both times.
+
+On the command line the program waits for the reply (Node's world hands
+the request to a child process and blocks on it). A page can't wait, so
+in a page `fetch text` asks and, until the reply lands, *suspends*: a view
+that fetched keeps what it shows and runs again when the reply comes, and
+an event handler runs again from the start with the same event (so a
+handler should fetch before it writes, the way a Suspense render must be
+pure). This is Solid's `createResource` and React's Suspense, built from
+the cells a page already has (`Pending` in `src/lang/cells.ts`). A view's
+row has no `Abort`, so a view that fetches has to catch it and show
+something; a handler may let it go (the page logs it).
+
 ### Cells: reactivity and values on demand
 
 Is this effect system the same thing as Solid.js's reactivity? In one
@@ -552,10 +576,10 @@ an ordinary data type in std (WEB.md has the design and the reasons):
 
 ```
 type Html      = element(tag: Text, attributes: List Attribute, children: List Html)
-               | text(shows: () -[Cells, Diverge, Time]-> Text)
-               | part(view: () -[Cells, Diverge, Time]-> Html)
-type Attribute = property(name: Text, value: () -[Cells, Diverge, Time]-> Text)
-               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time]-> Unit)
+               | text(shows: () -[Cells, Diverge, Time, Network]-> Text)
+               | part(view: () -[Cells, Diverge, Time, Network]-> Html)
+type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
+               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Time, Network]-> Unit)
 type Event     = event(value: Text, key: Text)
 ```
 
@@ -565,7 +589,8 @@ that read that cell (Solid.js's model, no virtual DOM). The rows are the
 guarantees: a view can't write or print, a handler can't leave a search
 open around a write. In the browser, `print` goes to the console and
 files are `localStorage` entries named after the program. A view that
-reads `now()` runs again every animation frame ("Time" above).
+reads `now()` runs again every animation frame ("Time" above), and one
+that fetches shows its reply when it lands ("The web").
 
 ```
 node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
@@ -663,11 +688,11 @@ Those are `examples/physics`. The pieces:
   `0.1 + 0.2` should be the same quantity as `0.3`. The cost is that `equal`
   on numbers isn't transitive at the 1e-9 scale. Bit-exact comparison is a
   different question and should get its own name when something needs it.
-  This is for `Number` only: an `Int` is a count, so two Ints are equal
-  only when they're the same integer. The checker records the type at each
-  `equal`, and that type decides how numbers inside it compare (run.ts,
-  `Equality`). Where a type variable could stand for either, two whole
-  numbers compare exactly and other numbers to within the tolerance.
+  Two whole numbers are the exception: they're equal only when they're the
+  same number, so an `Int`, which is a count, is always compared exactly.
+  That is one rule for every type (`sameNumber` in run.ts), so it doesn't
+  matter whether the checker knew the type or a generic function compared
+  a type variable (NOTES.md, "Equality: one rule").
 - **A let is a dot on a wire.** `drift` names a sub-expression. Lets of
   non-numbers (a `Bool`, a function) are read where they're used, so a dot
   anywhere leaves the equations as they were.

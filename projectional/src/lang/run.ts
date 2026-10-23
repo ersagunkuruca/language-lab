@@ -25,10 +25,10 @@ import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
-import { Cells, NoValue, nodeOf } from "./cells.ts";
+import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator } from "./random.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
-import { CELLS, CHOICE, DIVERGE, INT, WORLD, type Type } from "./types.ts";
+import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -47,30 +47,28 @@ export function fromList(v: Value): Value[] {
 // Numbers stand for reals and floats only approximate them, so two numbers
 // are equal when they agree to the precision floats carry. Otherwise a
 // predicate like distance = speed·time + ½·g·time² would be false for the
-// very values the solver found for it.
+// very values the solver found for it. `sameNumber` below says where.
 export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 
-// An Int is a JS number too while it's a safe integer, so a value can't say
-// which of the two it is, and two Ints must not get the tolerance (10^12
-// and 10^12 + 1 are different counts). The checker knows the type at each
-// `equal` and picks how numbers in it compare (infer.ts, `equality`):
-// - "exact": there's no Number in the type, so every number is an Int;
-// - "near": there are Numbers in it and no Ints;
-// - "mixed": both, or a type variable that could be either. Two whole
-//   numbers compare exactly and anything else to within `close`. That's
-//   right for every Int, and for a Number only differs where both are
-//   whole and far beyond 10^9.
-export type Equality = "exact" | "near" | "mixed";
-
-const numbersEqual: Record<Equality, (a: number, b: number) => boolean> = {
-  exact: (a, b) => a === b,
-  near: close,
-  mixed: (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b)),
-};
+// How two numbers compare, one rule for every type, whichever way a
+// program runs: the evaluator, backwards (relate.ts unify) and compiled
+// (runtime.js $sameNumber, and scalar.ts for WASM and the GPU). Two whole
+// numbers are equal only when they're the same number, so every Int is
+// exact (an Int is a JS number while it's a safe integer, so a value can't
+// say which it is, and 10^12 and 10^12 + 1 are different counts). Any
+// other pair is equal within `close`, which is what solving equations
+// over floats needs: √2 squared is 2.0000000000000004.
+//
+// It used to be type-directed (near on Numbers, exact on Ints, this rule on
+// a type variable), so inlining a generic function changed answers, and
+// backwards every number was near (REVIEW-2026-10-22b.md §2). The price of
+// one rule: it isn't transitive (no tolerance is), so it isn't an
+// equivalence on fractional Numbers. NOTES.md "Equality".
+export const sameNumber = (a: number, b: number) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b));
 
 // With its own stack, so two long lists can be compared.
-export function equal(a: Value, b: Value, how: Equality = "mixed"): boolean {
-  const same = numbersEqual[how];
+export function equal(a: Value, b: Value): boolean {
+  const same = sameNumber;
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -166,6 +164,8 @@ export interface World {
   // Time's and Wait's: milliseconds since 1970, and pausing.
   now(): number;
   wait(ms: number): void;
+  // Network's: the body of a GET, once per address (the world remembers).
+  fetchText(url: string): string;
 }
 
 // An Abort that nothing in the program handled.
@@ -214,6 +214,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.appendFile]: (p, t) => (world("appendFile")(p as string, t as string), one(unit)),
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
+    [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
     [CELL_OPS.cell]: (v) => one(cells.cell(v)),
     [CELL_OPS.formula]: (f) => one(cells.formula(() => {
       for (const v of (f as Fn)()) return v;
@@ -253,16 +254,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     },
   } satisfies Record<Id, Fn>);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
-  // `equal` as the checker typed it at each use.
-  const equals: Record<Equality, Fn> = {
-    exact: tag((a, b) => one(bool(equal(a, b, "exact"))), { prim: S.equal }),
-    near: tag((a, b) => one(bool(equal(a, b, "near"))), { prim: S.equal }),
-    mixed: builtins[S.equal],
-  };
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel, S.seeded].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
-  const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
@@ -335,7 +330,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       ambient = this.fuel;
       if (FALLIBLE.has(f as Fn)) {
         let r: Iterable<Value>;
-        try { r = (f as Fn)(...args); } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        // Not here yet isn't a failure: the page asks again later.
+        try { r = (f as Fn)(...args); } catch (e) { if (e instanceof Pending) throw e; return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.from(r, (x) => this.ret(x as Value));
       }
       this.from((f as Fn)(...args), (x) => this.ret(x as Value));
@@ -442,7 +438,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     atom(id: Id, env: Env): Value | undefined {
       const n = code.nodes[id];
       if (n.kind === "lit") return n.of === INT ? intLit(n.value) : n.value;
-      if (n.kind === "ref") return n.target === S.equal ? equals[info.equality?.get(id) ?? "mixed"] : refValue(n.target, env);
+      if (n.kind === "ref") return refValue(n.target, env);
       if (n.kind === "lambda") return closure(n, env);
       return undefined;
     }
@@ -698,7 +694,7 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
 }
-const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, LOG, ABORT, RANDOM, TIME, WAIT];
+const RUNTIME_HANDLES = [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT];
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
 export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));

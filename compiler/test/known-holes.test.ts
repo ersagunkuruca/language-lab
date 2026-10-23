@@ -17,7 +17,7 @@ import { emitWgsl } from "../src/wgsl.ts";
 // no step limit, typed Diverge, and the scalar profile lets Diverge through
 // ("it just runs"). On a GPU a loop that doesn't end hangs the page or
 // resets the device. The type already knew; the profile didn't ask.
-test("R2 §1.1 the shader profile refuses a loop it can't see end", { todo: "scalar.ts filters Diverge out of the row" }, () => {
+test("R2 §1.1 the shader profile refuses a loop it can't see end", () => {
   const k = new Lang();
   const spin = k.def("spin");
   // spin(x) = if x < 0 then x else spin(x + 1): never ends for x ≥ 0
@@ -27,5 +27,5 @@ test("R2 §1.1 the shader profile refuses a loop it can't see end", { todo: "sca
   const t = info.typeOf.get(spin);
   assert.ok(t?.t === "fn" && t.eff.effs.includes(DIVERGE));
   const s = emitWgsl(lowerScalar(code, info, names, [spin]));
-  assert.ok(s.refused.has(spin), "a loop typed Diverge is printed as a WGSL loop with no bound");
+  assert.match(s.refused.get(spin) ?? "", /^may not finish \(its type has Diverge\)/, "a loop typed Diverge is printed as a WGSL loop with no bound");
 });

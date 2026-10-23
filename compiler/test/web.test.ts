@@ -19,7 +19,7 @@ import { compile } from "../src/compile.ts";
 import { $eq, $setCells, $setWorld } from "../src/runtime.js";
 import { browserWorld } from "../../projectional/src/lang/browser.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { HTML_V, NOW_OP, S } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, HTML_V, IO, NOW_OP, S } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
@@ -109,4 +109,67 @@ test("a clock: a part that reads now() runs again each frame, and only it, both 
   assert.deepEqual(e.seen, ["<p>5 seconds</p>", "<p>5 seconds</p>", "<p>6 seconds</p>", "<p>7 seconds</p>"]);
   // Only the part reading the clock ran again, once per frame.
   assert.equal(e.ran.length, 3);
+});
+
+test("fetching in a page: a view keeps what it shows until the reply, a handler runs again then, both ways", async () => {
+  const k = new Lang();
+  const fetch = (u: string) => k.call(IO.fetchText, k.lit(u));
+  const caught = (x: string) => k.handle(x, [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }]);
+  const attr = (name: string, v: string) => k.call(HTML_V.property, k.lit(name), k.thunk(() => k.lit(v)));
+  const el = (tag: string, attrs: string[], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const text = (f: () => string) => k.call(HTML_V.text, k.thunk(f));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("got", k.call(CELL_OPS.cell, k.lit("nothing yet")), (got) => el("div", [], [
+    el("p", [], [text(() => caught(fetch("/greeting")))]),
+    el("p", [], [text(() => caught(fetch("/missing")))]),
+    el("button", [attr("id", "go"), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(CELL_OPS.write, got, fetch("/later"))))], []),
+    el("p", [], [text(() => k.call(CELL_OPS.read, got))]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(pageProblem(info, main, names), null);
+  const path = join(dir, "fetching.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+
+  const draw = async (way: "evaluator" | "compiled") => {
+    const replies = new Map<string, (r: { text?: string; error?: string }) => void>();
+    const asked: string[] = [];
+    const cells = new Cells(way === "evaluator" ? equal : $eq);
+    const store = { getItem: () => null, setItem() {}, length: 0, key: () => null };
+    const world = browserWorld(store, "fetching", console, { cells, frame() {}, fetch: (url) => {
+      asked.push(url);
+      return new Promise((ok, no) => replies.set(url, (r) => (r.text !== undefined ? ok(r.text) : no(new Error(r.error)))));
+    } });
+    let v;
+    if (way === "evaluator") v = runMain(code, info, main, { print: () => {}, names, cells, world });
+    else { $setCells(cells); $setWorld(world); v = compiled.main() as never; }
+    const root = mountHtml(v, { cells, doc: fakeDoc(), call: way === "evaluator" ? evaluatorCall : compiledCall }) as FakeEl;
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    const seen = [root.html()];
+    replies.get("/greeting")!({ text: "hello" });
+    await settle(); seen.push(root.html());
+    replies.get("/missing")!({ error: "404 Not Found" });
+    await settle(); seen.push(root.html());
+    root.find("go").fire("click");
+    seen.push(root.html());
+    replies.get("/later")!({ text: "later" });
+    await settle(); seen.push(root.html());
+    root.find("go").fire("click");
+    seen.push(root.html());
+    return { seen, asked };
+  };
+  const e = await draw("evaluator"), c = await draw("compiled");
+  assert.deepEqual(c, e);
+  assert.deepEqual(e.seen.map((h) => [...h.matchAll(/<p>(.*?)<\/p>/g)].map((m) => m[1]).join(" | ")), [
+    " |  | nothing yet",
+    "hello |  | nothing yet",
+    "hello | could not fetch /missing: 404 Not Found | nothing yet",
+    "hello | could not fetch /missing: 404 Not Found | nothing yet",
+    "hello | could not fetch /missing: 404 Not Found | later",
+    "hello | could not fetch /missing: 404 Not Found | later",
+  ]);
+  // Each address asked once, however often it was read.
+  assert.deepEqual(e.asked, ["/greeting", "/missing", "/later"]);
 });

@@ -36,6 +36,42 @@ others to within 1e-9). The evaluator and the compiler both follow it. The
 test "equal compares Ints exactly…" in compiler/test/compile.test.ts checks
 every case both ways. No example's output changed.
 
+*Superseded (second review, REVIEW-2026-10-22b.md §2).* Type-directed made
+three meanings, and the third caught people out: `equal(10^12, 10^12 + 1)`
+on Numbers was `true`, and the same comparison through a generic
+`same(x, y) = equal(x, y)` was `false`, so inlining a definition changed a
+program's output. Backwards, relate.ts still compared every number near,
+Ints too.
+
+## Equality: one rule (2026-10-22)
+
+*The question.* Both reviews asked for `equal` to be exact everywhere, with
+a separate `near` for tolerance. Trying it showed why it can't be: running
+backwards solves equations over floats, and their answers are approximate
+(√2 squared is 2.0000000000000004, and 2·cos(π/2) is 1.2e-16, not 0). So
+exact equality would reject the solver's own answers, and the same
+predicate would be true backwards and false forward.
+
+*Current answer.* One rule for every type, whichever way the program runs
+(`sameNumber` in run.ts, relate.ts's unify, `$sameNumber` in runtime.js,
+and scalar.ts for WebAssembly and the GPU). Two whole numbers are equal
+only when they are the same number, so every Int is exact (an Int is a JS
+number while it's small, and a value can't say which type it has). Any
+other pair is equal when it's within 1e-9 relative. The type no longer
+matters, so a generic function, a list or a backwards run gives the same
+answer as a direct comparison. `test/equality.test.ts` and
+`compiler/test/equality.test.ts` check that on boundary values (10^12 and
+10^12 + 1, 2^53, 0.1 + 0.2, −0, NaN, ∞).
+
+*What it costs.* It isn't transitive on fractional numbers (no tolerance
+is), so it isn't an equivalence there. And two Numbers that both happen to
+be whole compare exactly: 10^12 and 10^12 + 1 are different, while 10^12
+and 10^12 + 0.5 are within the tolerance. Doubles near 10^12 are spaced
+1.2·10^-4 apart, so whole numbers that differ really are different
+numbers. Still open: `show(0.1 + 0.2)` prints "0.3", so `show` isn't one to
+one on Numbers (the converter's "show run backwards is the parser" accepts
+only rounded spellings).
+
 ## Peano naturals, linked lists, and the stack (2026-10-22)
 
 *The idea.* `zero | succ(Nat)` and `nil | cons(List)` are the mathematical
@@ -153,6 +189,24 @@ garbage collector, so the same programs compile to plain WASM almost for
 free once WGSL works. Full programs need WasmGC or our own GC, so they come
 later. Native goes through WASM or LLVM after that. COMPILER.md's "not WASM"
 was about the whole language and still holds for it (ROADMAP item 6).
+
+## Vector operations in shaders (2026-10-23)
+
+*The idea.* The ray marcher does colour and vector maths channel by
+channel and axis by axis. Do those become vector operations in the
+compiled shader?
+
+*Current answer.* They didn't: every part was its own `f32`, and `Vec` and
+`Colour` were structs. Now (COMPILER.md "Vectors") a record of two to four
+Numbers is stored as `vec2f`–`vec4f`, and parts that each do the same thing
+are printed as one vector operation, with `dot`, `length`, `normalize`,
+`mix`, `clamp`, `min` and `max` recognised. On modern GPUs that is mostly
+for the GPU's built-ins and for readability, since each thread is scalar
+anyway. The real fix is in the source, one PR each: elementwise operations
+over any record of Numbers as ordinary built-ins, a prelude vector module
+written once on them (usable on `Vec` and on `Colour`, while adding a
+colour to a position stays a type error), and the ray marcher rewritten to
+use them.
 
 ## The node editor (2026-10-22)
 

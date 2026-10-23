@@ -91,6 +91,8 @@ not only code: an influence is credited even when nothing was copied.
 | Randomness as an effect whose handler chooses the numbers (a seeded one for tests, the world's otherwise) | Prior art | Koka's `ndet` effect for random numbers; the Eff papers' examples of handlers for nondeterminism and randomness (Bauer and Pretnar). LANGUAGE.md "Random". |
 | The seeded generator, xoshiro128** seeded by SplitMix32 | Adapted | xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain, [prng.di.unimi.it](https://prng.di.unimi.it/xoshiro128starstar.c)); SplitMix by Guy Steele, Doug Lea and Christine Flood ("Fast splittable pseudorandom number generators", OOPSLA 2014). Translated in `src/lang/random.ts`. |
 | The time as a cell written each animation frame, so a part reading `now()` re-runs per frame; no timer operation | Prior art | Fran's time-varying behaviours (Conal Elliott and Paul Hudak, "Functional reactive animation", ICFP 1997); Elm's `Time.every` subscriptions (Evan Czaplicki). `src/lang/browser.ts`, LANGUAGE.md "Time". |
+| A page's fetch suspends: the view keeps what it shows and runs again when the reply lands; a handler runs again | Prior art | Solid's `createResource` (Ryan Carniato, [solidjs.com](https://www.solidjs.com)) and React's Suspense (the React team at Meta). `src/lang/browser.ts`, `src/lang/html.ts`, LANGUAGE.md "The web". |
+| GET as a read that may run under `Choice`, fetched once per address per run | Our own | Leans on HTTP's definition of safe methods (RFC 9110, §9.2.1). LANGUAGE.md "The web". |
 
 ## Choice: failure and many answers
 
@@ -163,6 +165,8 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | Sphere tracing | Adapted | John C. Hart, "Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces", The Visual Computer, 1996. |
 | The ring's (torus's) distance, the smooth minimum, the soft shadow | Adapted | Inigo Quilez's formulas, from his [distance functions](https://iquilezles.org/articles/distfunctions/), [smooth minimum](https://iquilezles.org/articles/smin/) and [soft shadows](https://iquilezles.org/articles/rmshadows/) articles. Credited in each definition's comment in `examples/raymarch` (shown in the editor), on `shaders.html` and in COMPILER.md. |
+| Records of Numbers printed as WGSL vector operations (parts doing the same thing become one `vec3f` operation; `dot`, `mix`, `normalize`, … recognised) | Prior art | Superword-level parallelism: Samuel Larsen and Saman Amarasinghe, "Exploiting superword level parallelism with multimedia instruction sets", PLDI 2000. Ours works on the expression tree. Credited in `compiler/src/wgsl.ts` and COMPILER.md "Vectors". |
+| A shader runs something that might not finish only under a budget, `first(() => with fuel(n, …), …)`, counted as the evaluator counts | Prior art | Fuel as a bound on recursion is an old technique: the "fuel" argument in Coq and Agda developments, gas in the Ethereum virtual machine (Gavin Wood, the Ethereum yellow paper, 2014), fuel in [Wasmtime](https://docs.wasmtime.dev/api/wasmtime/struct.Config.html#method.consume_fuel). GPU drivers' watchdogs (Windows TDR) are the runtime's blunter version. `compiler/src/scalar.ts`, COMPILER.md, the comment on `colour` in `examples/raymarch` (shown in the editor). |
 | The scene (a drop in a ring over a checker floor), the ripples, normals as saved derivatives | Our own | Written for this project; computing normals as the gradient of the distance is standard practice. |
 
 ## The node editor

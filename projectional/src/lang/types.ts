@@ -27,12 +27,17 @@ export const FILES = "effect.files";
 // world effect; reading isn't, so a search may read cells.
 export const CELLS = "effect.cells";
 export const UPDATE = "effect.update";
+// Network: reading from the web (`fetch text`). A GET reads; it doesn't
+// change the world (RFC 9110 calls it safe), and the runtime fetches each
+// address once per run, so a search that backtracks never asks twice. So
+// it isn't a world effect, and it may run under Choice.
+export const NETWORK = "effect.network";
 // The world effects: what they do can't be taken back. They may not happen
 // while a Choice is still open (LANGUAGE.md, "The world and Choice"), and
 // only the runtime handles them.
 export const WORLD: readonly Id[] = [CONSOLE, FILES, UPDATE];
 // The effects that are builtins rather than typedefs a program declares.
-export const BUILTIN_EFFECTS: readonly Id[] = [CHOICE, CONSOLE, DIVERGE, FILES, CELLS, UPDATE];
+export const BUILTIN_EFFECTS: readonly Id[] = [CHOICE, CONSOLE, DIVERGE, FILES, CELLS, UPDATE, NETWORK];
 
 export const NUMBER = "type.number";
 export const STRING = "type.string";
