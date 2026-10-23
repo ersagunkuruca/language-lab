@@ -10,9 +10,12 @@ it: `Diverge` only when its mode may not end, and an error when it's
 stuck. As planned, `map` and `show numbers` backwards end, so they lost
 their `Diverge`. `relate.ts` now runs each function in each mode by the
 schedule modes.ts plans for it (step 3, below), and the ordering rules in
-the first table are gone. `Choice` stays on every relational solve for
-now: a `det` mode without it needs run.ts and the compiler to hand back
-the one answer directly (L11d). Forward, the verdict agrees with the
+the first table are gone. A relational solve whose mode is `det` and ends
+has no `Choice` (step 4): `oneAnswer` in modes.ts says so for the checker,
+run.ts takes the first answer without leaving a choice point, and the
+compiler calls it as a plain function. A constructor of a one-case type
+(a pair, a record) taken apart always matches, which is what makes most
+`det` directions backwards. Forward, the verdict agrees with the
 checker's `Diverge` on every definition in the examples, leaving out the
 few that call a function they were passed, since there it's that
 function's effect row. Known is two levels for now (known or not). The
@@ -192,7 +195,7 @@ One PR each, in this order:
    answers. Where the order of answers changes, the test lists it.
    (Built; see "How relate.ts runs a plan" below.)
 4. **L11d a `det` mode drops `Choice`**, once run.ts and the compiler
-   hand back its one answer directly.
+   hand back its one answer directly. (Built.)
 5. **Lane C: compile `det` and `semidet` modes** as plain functions.
 6. **Lane E: the `solve` node says its mode** in the editor.
 

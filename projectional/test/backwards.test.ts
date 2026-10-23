@@ -175,6 +175,30 @@ test("backwards: types say Choice, Diverge when the search may not end, and prin
   assert.ok(q.info.errors.some((e) => /performs Console, and a function that acts can't be run backwards/.test(e.message)), JSON.stringify(q.info.errors));
 });
 
+test("a direction with exactly one answer has no Choice, and gives its answer", () => {
+  // A Pair taken apart: a Pair is always a Pair, so each value given has
+  // exactly one pair of fields (modes.ts: det, and it ends).
+  const c = program((k) => {
+    const make = k.def("make");
+    k.define(make, k.fn(["a", "b"], (a, b) => k.call(PAIR_V, a, b)));
+    const [a, b] = (k.code.nodes[(k.code.nodes[make] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+    const sum = k.def("sum of");
+    k.define(sum, k.fn(["p"], (p) => k.solve(make, { out: p }, { [a]: "a", [b]: "b" }, ({ [a]: x, [b]: y }) => k.call(INT_OPS.add, x, y))));
+    // Text with a prefix taken off may not have it: at most one answer.
+    const greet = k.def("greet");
+    k.define(greet, k.fn(["who"], (who) => k.text(k.lit("hello, "), who)));
+    const [who] = (k.code.nodes[(k.code.nodes[greet] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+    const name = k.def("name in");
+    k.define(name, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.solve(greet, { out: t }, { [who]: "who" }, ({ [who]: w }) => w)), k.thunk(() => k.lit("nobody")))));
+  });
+  assert.deepEqual(c.info.errors, []);
+  assert.equal(showType(c.info.typeOf.get(c.named("sum of"))!, c.names), "(Pair Int Int) -> Int");
+  const r = makeRunner(c.code, c.info, { print: () => {} });
+  assert.deepEqual([...r.call(r.value(c.named("sum of")), [...r.call(r.value(PAIR_V), 1, 2)][0])], [3]);
+  assert.equal(showType(c.info.typeOf.get(c.named("name in"))!, c.names), "(Text) -> Text");
+  assert.deepEqual([...r.call(r.value(c.named("name in")), "goodbye")], ["nobody"]);
+});
+
 test("backwards: main prints what each function run backwards gives", () => {
   const p = load("backwards");
   const out: string[] = [];
