@@ -26,9 +26,14 @@
 // printed alongside it for reading.
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
+import { assemble, runtime, textBytes, type RtFn, type VT } from "./wasm-rt.ts";
 import { isData, isFn, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
-const VAL: Record<SType, number> = { f64: 0x7c, i32: 0x7f };
+const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
+// The evaluator's show of a Number, which the runtime asks the host for
+// outside the plain decimals it writes itself (wasm-rt.ts number.show).
+const SHOW = STD_IMPL[S.show] as (x: number) => string;
+const LIST_TEXT = "std.list<type.string<>>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -51,13 +56,28 @@ export function emitWasm(lowered: Lowered): Module {
   // Host functions used, in a fixed order: they take the first indices.
   const hosts = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
-  const fnIndex = (i: number) => hosts.length + i;
+  // The runtime functions used, with the ones they use; `host.show` is an import.
+  const rtNames: string[] = [];
+  const need = (name: string) => {
+    if (rtNames.includes(name)) return;
+    rtNames.push(name);
+    if (name !== "host.show") runtime(name).uses.forEach(need);
+  };
+  const rtCalls = (e: SExpr): void => { if (e.k === "rt") need(e.fn); kids(e).forEach(rtCalls); };
+  funcs.forEach((f) => rtCalls(f.body));
+  const texty = rtNames.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
+  // The host makes and reads texts through these.
+  if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
+  const hostShow = rtNames.includes("host.show");
+  const rts: RtFn[] = rtNames.filter((n) => n !== "host.show").map(runtime);
+  const imports = hosts.length + (hostShow ? 1 : 0);
+  const fnIndex = (i: number) => imports + i;
   // A generic definition lowered at several types (plus on Vec and on
   // Colour) is exported under its name once, then with the types it's at.
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : isFn(t) ? "Function" : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : t === "i64" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
   };
 
   // ---- binary
@@ -70,6 +90,10 @@ export function emitWasm(lowered: Lowered): Module {
   const vec = (items: number[][]) => [...u(items.length), ...items.flat()];
   const section = (id: number, body: number[]) => [id, ...u(body.length), ...body];
   const f64 = (v: number) => [...new Uint8Array(new Float64Array([v]).buffer)];
+  const sBig = (n: bigint): number[] => {
+    const out: number[] = [];
+    for (;;) { const b = Number(n & 0x7fn); n >>= 7n; if ((n === 0n && !(b & 0x40)) || (n === -1n && b & 0x40)) { out.push(b); return out; } out.push(b | 0x80); }
+  };
 
   // Types: the structs first, as one recursion group: each record's, and
   // for each data type its base and then its cases'. Then one function
@@ -78,7 +102,10 @@ export function emitWasm(lowered: Lowered): Module {
   const recs = lowered.records, datas = lowered.data;
   // A type in the group: a struct, or (`func`) a closure's code's type.
   // A field with `code` holds a closure's code, a (ref $code) of that index.
-  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType }[] = [];
+  // `bytes`: Text's array.
+  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true }[] = [];
+  if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
+  const bytesIndex = 0;
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true }); }
@@ -106,8 +133,25 @@ export function emitWasm(lowered: Lowered): Module {
   });
   const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
   const isRec = (t: LType): t is RType | DType | FType => typeof t !== "string";
+  // The runtime's names for types and functions.
+  // `list` in a runtime function is the list type it names (List Text if none).
+  const listOf = (f?: RtFn) => {
+    const key = f?.list ?? LIST_TEXT, d = datas.find((x) => x.key === key);
+    if (!d) throw new Error(`the runtime's ${key} isn't one of the module's types`);
+    return d;
+  };
+  const resolver = (f?: RtFn) => ({
+    type: (n: string) => (n === "bytes" ? bytesIndex : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    func: (n: string) => (n === "host.show" ? hosts.length : rtIndex(n)),
+    valtype: (t: VT) => {
+      if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
+      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t };
+    },
+  });
+  const resolve = resolver();
+  const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
   const refIndex = (t: RType | DType | FType) => (isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
-  const typeOf = (t: LType): number[] => (isRec(t) ? [0x63, ...s(refIndex(t))] : [VAL[t]]);
+  const typeOf = (t: LType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : [VAL[t]]);
   const keyOf = (t: LType) => (isRec(t) ? t.key : t);
   const sigs: { key: string; params: LType[]; result: LType }[] = [];
   const sig = (params: LType[], result: LType) => {
@@ -116,6 +160,7 @@ export function emitWasm(lowered: Lowered): Module {
     return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
+  const showSig = hostShow ? sig(["f64"], "text") : 0;
   // A closure's code has its function type's code type, so call_ref takes it.
   const codeOf = new Map<number, FType>();
   const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
@@ -126,6 +171,10 @@ export function emitWasm(lowered: Lowered): Module {
   // `List.case`, the number of a value's case, and for each case a maker
   // (`List.cons`) and its fields' readers (`List.cons.head`).
   const helpers: { name: string; key: string; params: LType[]; result: LType; code: number[]; wat: string[] }[] = [];
+  for (const r of recs) {
+    const k = recIndex.get(r.key)!;
+    helpers.push({ name: `${r.name}.${r.case ?? "make"}`, key: r.key, params: r.fields.map((x) => x.t), result: r, code: [...r.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)], wat: [...r.fields.map((_, j) => `local.get ${j}`), `struct.new $${structs[k].name}`] });
+  }
   for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j)], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`] }));
   for (const d of datas) {
     if (d.inner) continue;
@@ -147,7 +196,11 @@ export function emitWasm(lowered: Lowered): Module {
   }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
+  const rtType = (f: RtFn, t: VT): LType => (t === "list" ? listOf(f) : t);
+  const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)), rtType(f, f.result)));
+  const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
+    if (x.bytes) return [0x5e, 0x78, 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result)])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
@@ -156,25 +209,35 @@ export function emitWasm(lowered: Lowered): Module {
     ...(structs.length ? [[0x4e, ...vec(structs.map(struct))]] : []),
     ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([typeOf(x.result)])]),
   ]);
-  const importSec = vec(hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]));
-  const funcSec = vec([...funcSig, ...helperSig].map((t) => u(t)));
+  const importSec = vec([
+    ...hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]),
+    ...(hostShow ? [[...str("host"), ...str("show"), 0x00, ...u(showSig)]] : []),
+  ]);
+  const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
+  // The runtime functions the host uses, by these names.
+  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte" };
+  const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
   const exportSec = vec([
     ...entries.map(([f, i]) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]),
     ...helpers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
+    ...rtExports.map((f) => [...str(RT_EXPORTS[f.name]), 0x00, ...u(rtIndex(f.name))]),
   ]);
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
   // global 0: the fuel left, an f64. Outside any budget it's infinite, so
   // what the checker couldn't see end just runs (only `data` calls it there).
   const globalSec = vec([[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]]);
-  const zero = (t: LType) => (isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : [0x41, 0x00]);
+  const zero = (t: LType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), 0x0f, 0x0b] : []);
 
   function code(e: SExpr): number[] {
     switch (e.k) {
       case "num": return [0x44, ...f64(e.v)];
+      case "int": return [0x42, ...sBig(e.v)];
+      case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
+      case "rt": return [...e.args.flatMap(code), 0x10, ...u(resolve.func(e.fn))];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
       case "let": return [...code(e.value), 0x21, ...u(e.i), ...code(e.body)];
@@ -232,11 +295,11 @@ export function emitWasm(lowered: Lowered): Module {
     }
     const body = [...vec(groups), ...spend(f), ...code(f.body), 0x0b];
     return [...u(body.length), ...body];
-  }), ...helperCode]);
+  }), ...helperCode, ...rtCode.map((c) => [...u(c.code.length), ...c.code])]);
 
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-    ...section(1, typeSec), ...(hosts.length ? section(2, importSec) : []), ...section(3, funcSec),
+    ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     ...(fuel ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
@@ -248,10 +311,13 @@ export function emitWasm(lowered: Lowered): Module {
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType) => sname(refIndex(r));
-  const ty = (t: LType) => (isRec(t) ? `(ref null ${recName(t)})` : t);
+  const ty = (t: LType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t);
   function wat(e: SExpr, f: SFunc, d: string): string {
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
+      case "int": return `${d}i64.const ${e.v}`;
+      case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
+      case "rt": return [...e.args.map((a) => wat(a, f, d)), `${d}call $${e.fn}`].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
       case "let": return `${wat(e.value, f, d)}\n${d}local.set ${local(f, e.i)}\n${wat(e.body, f, d)}`;
@@ -293,12 +359,14 @@ export function emitWasm(lowered: Lowered): Module {
     "(module",
     ...(structs.length ? ["  (rec"] : []),
     ...structs.map((x) => {
+      if (x.bytes) return "    (type $bytes (array (mut i8)))";
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)})))`;
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
+    ...(hostShow ? [`  (import "host" "show" (func $host.show (param f64) (result (ref null $bytes))))`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
@@ -309,10 +377,11 @@ export function emitWasm(lowered: Lowered): Module {
       return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : ""}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
     }),
     ...helpers.map((x) => `  (func (export "${x.name}")${x.params.map((t) => ` (param ${ty(t)})`).join("")} (result ${ty(x.result)})\n${x.wat.map((l) => `    ${l}`).join("\n")})`),
+    ...rtCode.map((c, k) => c.wat.replace(`(func $${rts[k].name}`, `(func $${rts[k].name}${RT_EXPORTS[rts[k].name] ? ` (export "${RT_EXPORTS[rts[k].name]}")` : ""}`)),
     ")",
   ].join("\n");
 
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name)] };
+  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])] };
 }
 
 // The expressions directly inside e.
@@ -326,16 +395,34 @@ function kids(e: SExpr): SExpr[] {
     case "budget": return [e.body, e.otherwise];
     case "closure": return e.caps;
     case "apply": return [e.fn, ...e.args];
+    case "rt": return e.args;
     default: return [];
   }
 }
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
+const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);
 const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
+// `host.show` builds its text through the module's own Text.new and Text.put.
 export async function instantiate(m: Module): Promise<Record<string, (...xs: number[]) => number>> {
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD } });
+  let ex: Record<string, (...xs: unknown[]) => unknown> = {};
+  const host = { show: (x: number) => toText(ex, SHOW(x)) };
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD }, host });
+  ex = instance.exports as unknown as typeof ex;
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
+}
+
+// Text across the boundary: a JS string into the module's UTF-8 array, and back.
+export function toText(ex: Record<string, (...xs: never[]) => unknown>, v: string): unknown {
+  const b = new TextEncoder().encode(v), t = (ex["Text.new"] as (n: number) => unknown)(b.length);
+  const put = ex["Text.put"] as (t: unknown, i: number, x: number) => void;
+  b.forEach((x, i) => put(t, i, x));
+  return t;
+}
+export function fromText(ex: Record<string, (...xs: never[]) => unknown>, t: unknown): string {
+  const n = (ex["Text.size"] as (t: unknown) => number)(t), byte = ex["Text.byte"] as (t: unknown, i: number) => number;
+  return new TextDecoder().decode(Uint8Array.from({ length: n }, (_, i) => byte(t, i)));
 }
 
 export { OPS };

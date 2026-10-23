@@ -47,8 +47,8 @@
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { DIVERGE, NUMBER, type Type } from "../../projectional/src/lang/types.ts";
-import { BOOL, FALSE, S, TRUE } from "../../projectional/src/lang/std.ts";
+import { DIVERGE, INT, NUMBER, STRING, type Type } from "../../projectional/src/lang/types.ts";
+import { BOOL, FALSE, INT_OPS, S, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -57,18 +57,29 @@ import { scalarOp, TARGETS } from "./builtins.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
+// Builtins on Int and Text that are runtime functions (`data`).
+const RT: Record<Id, string> = {
+  [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
+  [INT_OPS.less]: "int.less", [INT_OPS.show]: "int.show", [INT_OPS.toNumber]: "int.toNumber",
+  [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range",
+  [TEXT_OPS.length]: "text.length", [TEXT_OPS.slice]: "text.slice", [TEXT_OPS.characters]: "text.characters",
+  [TEXT_OPS.split]: "text.split", [TEXT_OPS.joinAll]: "text.joinAll", [TEXT_OPS.less]: "text.less",
+};
+
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
-export interface RType { key: string; name: string; def: Id; variant: Id; fields: { name: string; t: LType }[] }
+export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[] }
 // A data type with several cases, or one that contains itself (`data`).
 // A case's fields are in the order written.
 // `inner`: made by the lowering (a fold's stack), not the program's.
 export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[]; inner?: boolean }
 // A function as a value (`data`): a closure, called through its code.
 export interface FType { key: string; params: LType[]; result: LType }
-export type LType = SType | RType | DType | FType;
+// Int and Text (`data`): an i64, and UTF-8 bytes (wasm-rt.ts).
+export type WType = "i64" | "text";
+export type LType = SType | WType | RType | DType | FType;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -80,6 +91,10 @@ export const noData = (e: SExpr): never => { throw new Error(`${e.k} needs a hea
 
 export type SExpr =
   | { k: "num"; v: number }
+  | { k: "int"; v: bigint }
+  | { k: "text"; v: string }
+  // A function of the runtime (wasm-rt.ts) by name.
+  | { k: "rt"; fn: string; args: SExpr[] }
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }
@@ -183,6 +198,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.t !== "con") return null;
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
+    if (opts.data && t.id === INT) return "i64";
+    if (opts.data && t.id === STRING) return "text";
     if (!opts.records) return null;
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
     if (records.has(key)) return records.get(key)!;
@@ -230,7 +247,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     const fields = fieldsOf(td.variants[0]);
     if (!fields || (!fields.length && !opts.data)) return null;
-    const r: RType = { key, name: nm(t.id), def: t.id, variant: td.variants[0], fields };
+    const r: RType = { key, name: nm(t.id), def: t.id, variant: td.variants[0], case: nm(td.variants[0]), fields };
     records.set(key, r);
     return r;
   }
@@ -314,7 +331,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       const l = lam as NodeOf<"lambda">;
       const env = new Map(constant ? [] : l.params.map((p, j) => [p, j]));
       underBudget = budgeted;
-      at = types;
+      // The body's own type variables can differ from the definition's
+      // (a library definition is a copy of its module's): what they are
+      // here, from the body's type against the one being lowered.
+      at = new Map(types);
+      const bt = info.typeOf.get(d.body!) && info.subst.zonk(info.typeOf.get(d.body!)!);
+      if (bt && t) bindVars(bt, t, at);
       f.body = expr(constant ? d.body! : l.body, env, f, true);
     } catch (e) {
       underBudget = outer;
@@ -336,9 +358,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function expr(id: Id, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
     const n = code.nodes[id];
     switch (n.kind) {
-      case "lit":
-        if (typeof n.value !== "number" || stype(zonk(id)) !== "f64") throw new Refused("uses a value that isn't a Number");
+      case "lit": {
+        const t = stype(zonk(id));
+        if (t === "i64") return { k: "int", v: BigInt(n.value) };
+        if (t === "text" && typeof n.value === "string") return { k: "text", v: n.value };
+        if (typeof n.value !== "number" || t !== "f64") throw new Refused(opts.data ? "uses a value that isn't a Number, Int or Text" : "uses a value that isn't a Number");
         return { k: "num", v: n.value };
+      }
       case "ref": {
         if (n.target === TRUE || n.target === FALSE) return { k: "bool", v: n.target === TRUE };
         if (env.has(n.target)) return { k: "local", i: env.get(n.target)! };
@@ -384,6 +410,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Numbers or Bools");
           const [x, y] = args();
           return same(x, y, t, f, tail);
+        }
+        if (opts.data && RT[target]) {
+          // What it takes and gives in, so List Text is one of the module's types.
+          for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
+          return { k: "rt", fn: RT[target], args: args() };
         }
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
@@ -480,6 +511,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
     if (isFn(t)) throw new Refused("compares functions");
+    if (t === "i64") return { k: "rt", fn: "int.equal", args: [x, y] };
+    if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two whole numbers exactly, any other pair within 1e-9 relative to
     // their size (run.ts sameNumber). Each side once: a local if it isn't
@@ -678,6 +711,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       ],
     };
     return di;
+  }
+  // What p's type variables stand for, where c is p at known types.
+  function bindVars(p: Type, c: Type, types: Map<number, Type>) {
+    if (p.t === "var") { if (c.t !== "var" && !types.has(p.v)) types.set(p.v, c); }
+    else if (p.t === "con" && c.t === "con") p.args.forEach((a, j) => c.args[j] && bindVars(a, c.args[j], types));
+    else if (p.t === "fn" && c.t === "fn") { p.params.forEach((a, j) => c.params[j] && bindVars(a, c.params[j], types)); bindVars(p.ret, c.ret, types); }
   }
   // The binders a piece of the program refers to (inside its folds too, or not).
   function refsIn(id: Id, folds = true): Id[] {

@@ -3,7 +3,8 @@
 Design note for BACKLOG.md C7 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript"). Written 2026-10-23. The last section is the plan.
 
-**Status.** Stages W1 and W2 are done (W2: functions as values, below). What runs in WebAssembly is the
+**Status.** Stages W1, W2 and W3a are done (W2: functions as values, W3a:
+Int and Text, below). What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -13,6 +14,23 @@ readers (`List.cons`, `List.case`, `List.cons.head`, `Colour.red`). Sort,
 the calculus example's polynomials, Countdown's `valid` and `combine` and
 the algebra example's `derivative` give exactly the evaluator's answers.
 Everything else is refused with a reason, which the editor shows.
+
+How W3a came out. An Int is an `i64`; an add, subtract, multiply or
+negate whose answer doesn't fit traps, a runtime error rather than a
+wrong answer, until big Ints (W5). Text is an `(array (mut i8))` of UTF-8,
+mutable only while it's filled; positions count characters, so slice and
+length walk the bytes (the "all ASCII" flag that would make them O(1) is
+left for when a profile asks). The text builtins are a small runtime,
+`compiler/src/wasm-rt.ts`, written in WebAssembly's own text format one
+instruction per line, which a few lines of assembler there turn into
+bytes; a module prints exactly the runtime it carries. `show` of a Number
+writes plain decimals of up to 15 digits itself, which is then exactly
+what JavaScript writes, and asks the host for the rest (1e21, 1.5e-7,
+more than 15 digits), an import a WASI build will have to replace with
+its own shortest-digits printer. The host makes and reads text through
+exported `Text.new`, `Text.put`, `Text.size`, `Text.byte`. wc's, chapters'
+and ledger's text functions (pad, money, two digits, with point) give the
+evaluator's answers.
 
 How W2 came out. A function type is two types in the recursion group: a
 closure struct holding its code as a `(ref $code)`, and the code's type,
@@ -169,7 +187,8 @@ rest with the reason, so nothing breaks between stages.
 2. **W2 closures (done).** Functions as values, `map` and `keep` with a
    lambda, `call_ref`, and tail calls through `return_call_ref`.
 3. **W3 text and the world.** UTF-8 text with the std.ts text builtins,
-   `show`, and the `World` imports with both adapters. Programs: wc and
+   `show` (W3a, done), and the `World` imports with both adapters (W3b,
+   after W4's one-answer Choice, which wc's and ledger's reading needs). Programs: wc and
    ledger as WASI commands (`node:wasi` in the test; wasmtime when it's
    installed).
 4. **W4 searches and effects.** Success continuations for `Choice`,

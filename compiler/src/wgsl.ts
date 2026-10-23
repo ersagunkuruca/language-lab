@@ -45,10 +45,10 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../projectional/src/model.ts";
-import { isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType } from "./scalar.ts";
+import { isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
-type GType = Exclude<LType, DType | FType>;
+type GType = Exclude<LType, DType | FType | WType>;
 export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType[]; result: GType }
 // structs: the WGSL name of each record type and of its fields.
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }> }
