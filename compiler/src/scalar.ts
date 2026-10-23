@@ -370,10 +370,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const shape = `only as a budget, ${BUDGET}`;
     if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || inner?.kind !== "call" || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
       throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
-    const amount = code.nodes[inner.args[0]], body = thunk(inner.args[1]);
+    // A number written down, rounded to Float32 maybe (NUMBERS.md).
+    const rounded = code.nodes[inner.args[0]];
+    const under = rounded?.kind === "call" && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
+    const amount = under ? code.nodes[(rounded as NodeOf<"call">).args[0]] : rounded, body = thunk(inner.args[1]);
     if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
     if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
-    const v = amount.value;
+    const v = under ? Math.fround(amount.value) : amount.value;
     if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (a shader's is a number from 0 to ${MAX_FUEL})`);
     const t = stype(zonk(id));
     if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);

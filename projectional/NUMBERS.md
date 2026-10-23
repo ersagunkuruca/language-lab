@@ -301,8 +301,13 @@ function given each literal, and `approximate`, which the chooser skips);
 the `Float32` representation with its laws tested with a tolerance against
 `Number` (done: `withFloat32` in src/lang/float32.ts adds a rounded job for
 each Number builtin whose answer may not be an f32, and
-test/float32.test.ts checks each to within half a step); js-scalar's `Math.fround`; the shaders example asking for it and
-gpu.ts checking `+ − ×` exactly.
+test/float32.test.ts checks each to within half a step); js-scalar's
+`Math.fround` and gpu.ts checking `+ − ×` exactly (done: a function made
+only of those, negate, abs, floor and comparisons is checked exactly
+against the evaluator running the program in Float32, 578 of the 1001
+values; the raymarch picture's JavaScript in Float32 equals the
+evaluator's in Float32). The editor's picture fallback running in
+Float32 is a backlog item for the editor.
 
 ### Costs and the chooser
 
