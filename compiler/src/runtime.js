@@ -38,6 +38,9 @@ export const $sameNumber = (a, b) => (Number.isInteger(a) && Number.isInteger(b)
 
 // With its own stack, so two long lists can be compared.
 export function $eq(a, b) {
+  // Text, numbers and other plain values answer at once, with no stack of
+  // pairs to compare (GAPS.md G17).
+  if (typeof a !== 'object') return typeof a === 'number' && typeof b === 'number' ? $sameNumber(a, b) : a === b;
   const same = $sameNumber;
   const todo = [a, b];
   while (todo.length) {

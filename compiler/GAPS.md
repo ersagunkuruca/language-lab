@@ -529,6 +529,9 @@ grows with the book.
 the types are closed (a copy per type, like Rust or MLton), or at least
 when it's called at one type only. Then `equalityAt` (round 1's G0) picks
 `===`.
+*Partly DONE:* `$eq` answers plain values (text, numbers) at once, before
+it sets up its stack of pairs: about 610 → 570 ms on 3000 chapters, compiled.
+Specializing by type is still open; it would turn the call into `===`.
 
 **G14 again. `heading` is a generator (perf: 51 → 48 ms).** It has one
 answer or none, and `sections` wraps it in `optional`, which drains it with
