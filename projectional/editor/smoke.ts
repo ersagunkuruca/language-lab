@@ -79,6 +79,10 @@ async function visit(saved: string | null, only?: string) {
           await p.locator(".blocks-wrap").first().focus();
           await p.keyboard.press(at && at === ids.at(-1) ? "Shift+Tab" : "Tab");
           if (!(await p.locator(".blocks-wrap .sel").count())) errors.push(`${where}: Tab in the blocks selected nothing`);
+          // Shift+F10 opens the selected part's menu, and Escape closes it.
+          await p.keyboard.press("Shift+F10");
+          if (!(await p.locator(".ctx-menu").count())) errors.push(`${where}: Shift+F10 opened no menu`);
+          await p.keyboard.press("Escape");
           await p.keyboard.press("Escape");
         }
         const svg = p.locator(".p-graph svg.canvas");
