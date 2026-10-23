@@ -84,7 +84,7 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, TRUE } from "../src/lang/std.ts";
-import { CHOICE, NUMBER } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, NUMBER } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { needsHandling, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -1884,6 +1884,8 @@ function hideValues() {
 // localStorage under the program's name, the clock, randomness, fetching
 // that waits for nothing), so Run and values work on a page's definitions.
 const editorWorld = () => browserWorld(localStorage, titleOf(doc));
+// Values on the wires leave printing out, as the button says.
+const quietWorld = () => browserWorld(localStorage, titleOf(doc), { log: () => {}, error: () => {} } as unknown as Console);
 
 // The run on the examples, once per version of the code and examples.
 const traces = new WeakMap<Code, Map<string, Trace>>();
@@ -1905,13 +1907,16 @@ function traced(info: T.Info): Trace | null {
   const t = info.typeOf.get(ui.def);
   const z = t ? info.subst.zonk(t) : null;
   if (z?.t === "fn" && needsHandling(z).some((e) => e !== CHOICE)) return null;
+  // One that reaches the world (prints, writes a file, fetches) runs only
+  // when asked (Show values), never just because it's finished being written.
+  if (z?.t === "fn" && z.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !doc.examples?.[ui.def]) return null;
   const key = `${ui.def}\u0000${texts.join("\u0000")}`;
   let m = traces.get(doc.code);
   if (!m) traces.set(doc.code, (m = new Map()));
   if (!m.has(key)) {
     const args = texts.map((t) => parseValue(t, doc.code, pres().names));
     m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
-      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value), editorWorld()));
+      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value), quietWorld()));
   }
   return m.get(key)!;
 }
