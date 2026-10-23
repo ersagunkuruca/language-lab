@@ -81,7 +81,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L7 | One record per builtin instead of up to eleven tables; before WASM adds a twelfth. The drift half is guarded already: `compiler/test/builtins.test.ts` asks every job of every builtin. What's left is moving code across `compiler/` (lane C) and the editor, so it waits for a slot between lane C's items | R2 §4 | P2 | L | needs lane C between items |
-| L10 | Shader soak test (10 s) | R2 §9.6 | P2 | S | |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order) | R2 §3, ROADMAP step 4 open | P2 | L | |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L13 | Keyed lists in pages | ROADMAP 7, WEB.md | P2 | M | |
@@ -134,7 +133,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L9 | `examples/compose` archived (`examples/archive/`, says why); `quadratic` kept, it type-checks and the editor's numbers program uses it | this PR |
+| L10 | Shader soak: `npm run smoke-shaders` lets the pictures move for 10 s each way (GPU and CPU) and fails if the page stops answering, the browser goes 500 ms without a frame, or a picture drops under 2 frames a second | this PR |
+| L9 | `examples/compose` archived (`examples/archive/`, says why); `quadratic` kept, it type-checks and the editor's numbers program uses it | #190 |
 | L8 | The error table names its tests: generated from `test/errors.test.ts`, which fails if a test is missing or the table was edited by hand; new row for effects hidden where a function waits | #189 |
 | L6 | A page's rows named once (`PAGE_VIEW`, `PAGE_HANDLER`), checked against the runtime; closed on purpose, WEB.md says why | #186 |
 | L5 | Container matrix: 10 places a function can wait × 4 effects, each reaches the type, is refused, or is the runtime's on purpose; no holes found | #185 |
