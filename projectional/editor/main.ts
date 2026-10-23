@@ -44,6 +44,12 @@ import shadersComments from "../examples/shaders/comments.json" with { type: "js
 import raymarchCode from "../examples/raymarch/code.json" with { type: "json" };
 import raymarchNames from "../examples/raymarch/names.default.json" with { type: "json" };
 import raymarchComments from "../examples/raymarch/comments.json" with { type: "json" };
+import diceCode from "../examples/dice/code.json" with { type: "json" };
+import diceNames from "../examples/dice/names.default.json" with { type: "json" };
+import diceComments from "../examples/dice/comments.json" with { type: "json" };
+import converterCode from "../examples/converter/code.json" with { type: "json" };
+import converterNames from "../examples/converter/names.default.json" with { type: "json" };
+import converterComments from "../examples/converter/comments.json" with { type: "json" };
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
@@ -75,6 +81,9 @@ import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
+import { pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
+import { browserWorld } from "../src/lang/browser.ts";
+import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -101,7 +110,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 
@@ -179,6 +188,8 @@ const initialFor = (program: Program): Doc =>
   : program === "effects" ? typedDoc("effects", effectsCode as Code, effectsNames, effectsComments, { examples: effectsExamples })
   : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
   : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
+  : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
+  : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : initial();
 
 // The quadratic and the physics: plain arithmetic, and predicates with
@@ -1496,6 +1507,95 @@ function pictureSection(info: T.Info | null): HTMLElement | null {
   return picBox;
 }
 
+// A program whose main takes nothing and returns an Html is a page
+// (WEB.md): shown live above Run, run by the evaluator, and run again from
+// the start after every edit. Its own <style> and its body rules need a
+// document of their own, so it's drawn in a frame. The editor redraws
+// everything on each change, which empties a frame put back in the page, so
+// the page's elements are made in a document that outlives renders and are
+// put back into the frame each time; their listeners and watchers go with
+// them, and what you typed into the page stays.
+declare const PAGE_RUNTIME: string; // cli/web.ts pageRuntime, put in by editor/build.ts
+const page = {
+  frame: h("iframe", { class: "page", title: "The page main returns, running" }) as HTMLIFrameElement,
+  status: h("p", { class: "hint" }),
+  // Where the page's elements are made (adopted into the frame's document).
+  maker: document.implementation.createHTMLDocument("page"),
+  for: null as Code | null, root: null as Node | null, now: null as Preview | null,
+  flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
+};
+const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
+  h("div", { class: "acts" },
+    h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
+    h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Show what runs again"),
+    h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
+    h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
+function pageSection(info: T.Info | null): HTMLElement | null {
+  const main = info && !info.errors.length && !info.holes.size ? pageMain(doc.code.defs, info, pres().names) : null;
+  if (!main || !info) { page.now?.stop(); page.now = null; page.root = null; page.for = null; return null; }
+  if (page.for !== doc.code) startPage(info, main);
+  // Put back in the frame once the frame is in the page again.
+  queueMicrotask(() => {
+    const d = page.frame.contentDocument;
+    if (!d || !page.root || d.body.contains(page.root)) return;
+    d.body.style.margin = "0";
+    d.body.replaceChildren(page.root);
+  });
+  return pageBox;
+}
+
+function startPage(info: T.Info, main: Id) {
+  page.now?.stop();
+  page.now = null;
+  page.root = null;
+  page.for = doc.code;
+  page.status.textContent = "";
+  try {
+    page.now = showPage({
+      code: doc.code, info, names: pres().names, main, program: titleOf(doc),
+      doc: page.maker as unknown as PageDoc, store: localStorage,
+      frame: (f) => requestAnimationFrame(f),
+      ran: (n: Node_) => {
+        if (!page.flashBox.checked) return;
+        const e = (n as Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as Node).parentElement;
+        // A part's own element takes no space (display: contents): its children flash.
+        for (const x of e?.tagName === "LAB-PART" ? [...e.children] as HTMLElement[] : e ? [e] : []) {
+          x.style.outline = "2px solid #e8a33d";
+          setTimeout(() => { x.style.outline = ""; }, 400);
+        }
+      },
+    });
+    page.root = page.now.root as unknown as Node;
+  } catch (e) {
+    page.status.textContent = `The page stopped: ${e instanceof Error ? e.message : String(e)}.`;
+  }
+}
+
+// The page compiled (page.ts pageFile): saved, or opened in a tab.
+function pageHtml(): { html: string; name: string } | null {
+  const info = typesOf();
+  const main = info && pageMain(doc.code.defs, info, pres().names);
+  if (!info || !main) return null;
+  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, doc.code, info, pres().names, main), name: `${slug(titleOf(doc))}.html` };
+}
+
+function savePage(open: boolean) {
+  let made;
+  try { made = pageHtml(); } catch (e) { ui.note = `The page couldn't be compiled: ${(e as Error).message}.`; ui.refused = true; render(); return; }
+  if (!made) return;
+  const url = URL.createObjectURL(new Blob([made.html], { type: "text/html" }));
+  if (open) window.open(url, "_blank");
+  else {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = made.name;
+    a.click();
+    ui.note = `Saved the page as ${made.name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
+    render();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // An action's values come from running it, so they're asked for.
 function showValues() {
   commit({ examples: { ...(doc.examples ?? {}), [ui.def]: [] } }, ["examples.json"], "Values on the wires: each node shows what it made. Printing is left out.");
@@ -1506,6 +1606,11 @@ function hideValues() {
   delete examples[ui.def];
   commit({ examples }, ["examples.json"], "Values hidden.");
 }
+
+// The world a run here sees: the browser's, as a page has (files in
+// localStorage under the program's name, the clock, randomness, fetching
+// that waits for nothing), so Run and values work on a page's definitions.
+const editorWorld = () => browserWorld(localStorage, titleOf(doc));
 
 // The run on the examples, once per version of the code and examples.
 const traces = new WeakMap<Code, Map<string, Trace>>();
@@ -1533,7 +1638,7 @@ function traced(info: T.Info): Trace | null {
   if (!m.has(key)) {
     const args = texts.map((t) => parseValue(t, doc.code, pres().names));
     m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
-      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value)));
+      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value), editorWorld()));
   }
   return m.get(key)!;
 }
@@ -1542,7 +1647,7 @@ function runTyped(info: T.Info) {
   const lines: string[] = [];
   let error: string | undefined;
   try {
-    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line), names: pres().names });
+    const v = runMain(doc.code, info, ui.def, { print: (line) => lines.push(line), names: pres().names, world: editorWorld() });
     const shown = showValue(v, doc.code, pres().names);
     if (shown !== "unit") lines.push(`→ ${shown}`);
   } catch (e) { error = (e as Error).message; }
@@ -1795,7 +1900,7 @@ function draw() {
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), typedRunPanel(namer, info)),
+        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
         h("section", { class: "panel", "aria-label": shown[1] },
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
@@ -1862,6 +1967,8 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped(typesOf()!);
+    if (a === "page-restart") { page.for = null; return render(); }
+    if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }

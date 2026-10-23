@@ -14,15 +14,17 @@
 
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { makeRunner, type Data, type Value } from "./run.ts";
+import { makeRunner, type Data, type Runtime, type Value } from "./run.ts";
 
 export interface Trace { values: Map<Id, Value>; result?: Value; error?: { id: Id; message: string } }
 
-export function trace(code: Code, info: Info, def: Id, args: Value[]): Trace {
+// `world` is what the world effects do (run.ts Runtime); without one they
+// abort saying so.
+export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"]): Trace {
   const values = new Map<Id, Value>();
   const out: Trace = { values };
   if (info.divergent.has(def)) { out.error = { id: def, message: "it might not finish, so it isn't run here" }; return out; }
-  const r = makeRunner(code, info, { print: () => {} });
+  const r = makeRunner(code, info, { print: () => {}, world });
   const first = (xs: Iterable<Value>, id: Id): Value => {
     for (const x of xs) return x;
     throw Object.assign(new Error("no answer (a Choice with none)"), { id });
