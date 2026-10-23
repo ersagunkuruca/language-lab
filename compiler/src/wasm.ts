@@ -26,7 +26,7 @@
 // printed alongside it for reading.
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
-import { isData, isRecord, OPS, type DType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { isData, isFn, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType, number> = { f64: 0x7c, i32: 0x7f };
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
@@ -57,7 +57,7 @@ export function emitWasm(lowered: Lowered): Module {
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : isFn(t) ? "Function" : t.name)).join(", ")})`;
   };
 
   // ---- binary
@@ -76,7 +76,9 @@ export function emitWasm(lowered: Lowered): Module {
   // type per distinct signature. A value of either is a nullable
   // reference, so a local of one starts as null and `ref.null` is its zero.
   const recs = lowered.records, datas = lowered.data;
-  const structs: { name: string; fields: { name: string; t: LType }[]; sup?: number; final: boolean }[] = [];
+  // A type in the group: a struct, or (`func`) a closure's code's type.
+  // A field with `code` holds a closure's code, a (ref $code) of that index.
+  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType }[] = [];
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true }); }
@@ -87,9 +89,24 @@ export function emitWasm(lowered: Lowered): Module {
     structs.push({ name, fields: [CASE], final: false });
     for (const c of d.cases) structs.push({ name: `${name}.${ident(c.name)}`, fields: [CASE, ...c.fields], sup: b, final: true });
   }
+  // A function type: its closure's struct, holding the code, then the
+  // code's type, taking the closure and the inputs; each closure's own
+  // struct (a shape) adds what it captured.
+  const cloIndex = new Map<string, number>();
+  for (const t of lowered.fns) {
+    const c = structs.length;
+    cloIndex.set(t.key, c);
+    structs.push({ name: `fn${c}`, fields: [{ name: "code", t: "i32", code: c + 1 }], final: false });
+    structs.push({ name: `fn${c}.code`, fields: [], final: true, func: t });
+  }
+  const shapeIndex = lowered.shapes.map((sh, i) => {
+    const c = cloIndex.get(sh.t.key)!;
+    structs.push({ name: `fn${c}.closure${i}`, fields: [{ name: "code", t: "i32", code: c + 1 }, ...sh.caps.map((t, j) => ({ name: `c${j}`, t }))], sup: c, final: true });
+    return structs.length - 1;
+  });
   const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
-  const isRec = (t: LType): t is RType | DType => typeof t !== "string";
-  const refIndex = (t: RType | DType) => (isData(t) ? baseIndex.get(t.key)! : recIndex.get(t.key)!);
+  const isRec = (t: LType): t is RType | DType | FType => typeof t !== "string";
+  const refIndex = (t: RType | DType | FType) => (isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
   const typeOf = (t: LType): number[] => (isRec(t) ? [0x63, ...s(refIndex(t))] : [VAL[t]]);
   const keyOf = (t: LType) => (isRec(t) ? t.key : t);
   const sigs: { key: string; params: LType[]; result: LType }[] = [];
@@ -99,7 +116,11 @@ export function emitWasm(lowered: Lowered): Module {
     return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
-  const funcSig = funcs.map((f) => sig(f.params, f.result));
+  // A closure's code has its function type's code type, so call_ref takes it.
+  const codeOf = new Map<number, FType>();
+  const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
+  funcs.forEach((f) => closures(f.body));
+  const funcSig = funcs.map((f, i) => (codeOf.has(i) ? cloIndex.get(codeOf.get(i)!.key)! + 1 : sig(f.params, f.result)));
   // For the host, which can't look inside a struct: a reader for each
   // field of each record, exported as `Colour.red`; for each data type
   // `List.case`, the number of a value's case, and for each case a maker
@@ -127,7 +148,8 @@ export function emitWasm(lowered: Lowered): Module {
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   const struct = (x: (typeof structs)[number]) => {
-    const body = [0x5f, ...vec(x.fields.map((y) => [...typeOf(y.t), 0x00]))];
+    if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result)])];
+    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
   const typeSec = vec([
@@ -164,6 +186,13 @@ export function emitWasm(lowered: Lowered): Module {
       // ref.cast to the case, then its field (after the case's number).
       case "field": { const k = caseIndex(e.t, e.c); return [...code(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
       case "tag": return [...code(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
+      case "closure": return [0xd2, ...u(fnIndex(e.fn)), ...e.caps.flatMap(code), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
+      // What a closure captured: the closure is the code's first input.
+      case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + 1)];
+      case "apply": {
+        const c = cloIndex.get(e.t.key)!;
+        return [...code(e.fn), 0x21, ...u(e.tmp), 0x20, ...u(e.tmp), ...e.args.flatMap(code), 0x20, ...u(e.tmp), 0xfb, 0x02, ...u(c), 0x00, e.tail ? 0x15 : 0x14, ...u(c + 1)];
+      }
       case "case": {
         // block $done; n blocks, innermost first jumped to by br_table on the
         // case's number; after the end of block j, arm j, then br $done.
@@ -208,14 +237,17 @@ export function emitWasm(lowered: Lowered): Module {
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(hosts.length ? section(2, importSec) : []), ...section(3, funcSec),
-    ...(fuel ? section(6, globalSec) : []), ...section(7, exportSec), ...section(10, codeSec),
+    ...(fuel ? section(6, globalSec) : []), ...section(7, exportSec),
+    // ref.func needs the functions declared: one declarative segment.
+    ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
+    ...section(10, codeSec),
   ]);
 
   // ---- text, for reading
   const id = (f: SFunc) => `$${f.name.replace(/[^\w]+/g, "_")}${funcs.indexOf(f)}`;
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
-  const recName = (r: RType | DType) => sname(refIndex(r));
+  const recName = (r: RType | DType | FType) => sname(refIndex(r));
   const ty = (t: LType) => (isRec(t) ? `(ref null ${recName(t)})` : t);
   function wat(e: SExpr, f: SFunc, d: string): string {
     switch (e.k) {
@@ -230,6 +262,12 @@ export function emitWasm(lowered: Lowered): Module {
       case "new": return [`${d}i32.const ${e.c}`, ...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
       case "field": { const k = sname(caseIndex(e.t, e.c)); return `${wat(e.rec, f, d)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
       case "tag": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} 0`;
+      case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map((a) => wat(a, f, d)), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
+      case "cap": return [`${d}local.get ${local(f, 0)}`, `${d}ref.cast (ref ${sname(shapeIndex[e.shape])})`, `${d}struct.get ${sname(shapeIndex[e.shape])} ${e.i + 1}`].join("\n");
+      case "apply": {
+        const c = cloIndex.get(e.t.key)!, t = local(f, e.tmp);
+        return [wat(e.fn, f, d), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map((a) => wat(a, f, d)), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${e.tail ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`].join("\n");
+      }
       case "case": {
         const there = e.scrut.k === "local" && e.scrut.i === e.s;
         const n = e.arms.length, lines = [...(there ? [] : [wat(e.scrut, f, d), `${d}local.set ${local(f, e.s)}`]), `${d}(block (result ${ty(e.result)})`];
@@ -255,18 +293,20 @@ export function emitWasm(lowered: Lowered): Module {
     "(module",
     ...(structs.length ? ["  (rec"] : []),
     ...structs.map((x) => {
-      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${ty(y.t)})`).join("")})`;
+      if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)})))`;
+      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
-    ...funcs.map((f) => {
+    ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
+    ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
       const ls = f.locals.slice(f.params.length).map((t, j) => ` (local ${local(f, f.params.length + j)} ${ty(t)})`).join("");
       const none = isRec(f.result) ? `ref.null ${recName(f.result)}` : `${f.result}.const 0`;
       const spends = f.spends ? `    global.get $fuel\n    f64.const 1\n    f64.sub\n    global.set $fuel\n    global.get $fuel\n    f64.const 0\n    f64.lt\n    (if (then ${none} return))\n` : "";
-      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
+      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : ""}${ps} (result ${ty(f.result)})${ls}\n${spends}${wat(f.body, f, "    ")})`;
     }),
     ...helpers.map((x) => `  (func (export "${x.name}")${x.params.map((t) => ` (param ${ty(t)})`).join("")} (result ${ty(x.result)})\n${x.wat.map((l) => `    ${l}`).join("\n")})`),
     ")",
@@ -275,29 +315,22 @@ export function emitWasm(lowered: Lowered): Module {
   return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name)] };
 }
 
-function uses(e: SExpr, op: Op): boolean {
+// The expressions directly inside e.
+function kids(e: SExpr): SExpr[] {
   switch (e.k) {
-    case "op": return e.op === op || e.args.some((a) => uses(a, op));
-    case "if": return uses(e.cond, op) || uses(e.then, op) || uses(e.else, op);
-    case "let": return uses(e.value, op) || uses(e.body, op);
-    case "call": case "make": case "new": return e.args.some((a) => uses(a, op));
-    case "get": case "field": case "tag": return uses(e.rec, op);
-    case "case": return uses(e.scrut, op) || e.arms.some((a) => a && uses(a, op));
-    case "budget": return uses(e.body, op) || uses(e.otherwise, op);
-    default: return false;
+    case "op": case "call": case "make": case "new": return e.args;
+    case "if": return [e.cond, e.then, e.else];
+    case "let": return [e.value, e.body];
+    case "get": case "field": case "tag": return [e.rec];
+    case "case": return [e.scrut, ...e.arms.filter((a): a is SExpr => !!a)];
+    case "budget": return [e.body, e.otherwise];
+    case "closure": return e.caps;
+    case "apply": return [e.fn, ...e.args];
+    default: return [];
   }
 }
-function budgets(e: SExpr): boolean {
-  switch (e.k) {
-    case "budget": return true;
-    case "op": case "call": case "make": case "new": return e.args.some(budgets);
-    case "get": case "field": case "tag": return budgets(e.rec);
-    case "case": return budgets(e.scrut) || e.arms.some((a) => a && budgets(a));
-    case "if": return budgets(e.cond) || budgets(e.then) || budgets(e.else);
-    case "let": return budgets(e.value) || budgets(e.body);
-    default: return false;
-  }
-}
+const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
+const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
 export async function instantiate(m: Module): Promise<Record<string, (...xs: number[]) => number>> {
