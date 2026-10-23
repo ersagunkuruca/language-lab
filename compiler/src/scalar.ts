@@ -64,7 +64,8 @@ export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
 export interface RType { key: string; name: string; def: Id; variant: Id; fields: { name: string; t: LType }[] }
 // A data type with several cases, or one that contains itself (`data`).
 // A case's fields are in the order written.
-export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[] }
+// `inner`: made by the lowering (a fold's stack), not the program's.
+export interface DType { key: string; name: string; def: Id; cases: { variant: Id; name: string; fields: { name: string; t: LType }[] }[]; inner?: boolean }
 export type LType = SType | RType | DType;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && !("cases" in t);
@@ -86,6 +87,8 @@ export type SExpr =
   // checker says so, or the match just looked).
   | { k: "new"; t: DType; c: number; args: SExpr[] }
   | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
+  // The number of a value's case, from 0 in the order written.
+  | { k: "tag"; rec: SExpr; t: DType }
   // A match on t: scrut goes into local s, then the arm for its case
   // runs (null: no arm, which the checker rules out).
   | { k: "case"; scrut: SExpr; s: number; t: DType; arms: (SExpr | null)[]; result: LType }
@@ -336,24 +339,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const target = head.target;
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
-          if (t !== "f64" && t !== "i32") throw new Refused(opts.data ? "compares data (structural equal isn't in WebAssembly yet)" : "compares values that aren't Numbers or Bools");
-          if (t === "i32") return { k: "op", op: "beq", args: args() };
-          // The evaluator's rule (run.ts sameNumber): two whole numbers
-          // exactly, any other pair within 1e-9 relative to their size.
-          // Each side once: a local if it isn't one already.
-          const lets: { i: number; value: SExpr }[] = [];
-          const [x, y] = args().map((value): SExpr => {
-            if (value.k === "local" || value.k === "num") return value;
-            const i = f.locals.push("f64") - 1;
-            lets.push({ i, value });
-            return { k: "local", i };
-          });
-          const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
-          const num = (v: number): SExpr => ({ k: "num", v });
-          const whole = (e: SExpr) => op("equal", op("floor", e), e);
-          const diff = op("abs", op("sub", x, y)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", x)), op("abs", y)));
-          const same = op("or", op("equal", x, y), op("and", op("not", op("and", whole(x), whole(y))), op("or", op("less", diff, tol), op("equal", diff, tol))));
-          return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), same);
+          if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Numbers or Bools");
+          const [x, y] = args();
+          return same(x, y, t, f, tail);
         }
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
@@ -440,6 +428,50 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
   }
 
+  // equal on values of type t, by the evaluator's rule (run.ts equal).
+  function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
+    if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
+    if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
+    // Two whole numbers exactly, any other pair within 1e-9 relative to
+    // their size (run.ts sameNumber). Each side once: a local if it isn't
+    // one already.
+    const lets: { i: number; value: SExpr }[] = [];
+    const [a, b] = [x, y].map((value): SExpr => {
+      if (value.k === "local" || value.k === "num") return value;
+      const i = f.locals.push("f64") - 1;
+      lets.push({ i, value });
+      return { k: "local", i };
+    });
+    const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
+    const num = (v: number): SExpr => ({ k: "num", v });
+    const whole = (e: SExpr) => op("equal", op("floor", e), e);
+    const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
+    const near = op("or", op("equal", a, b), op("and", op("not", op("and", whole(a), whole(b))), op("or", op("less", diff, tol), op("equal", diff, tol))));
+    return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
+  }
+  // Structural equality on a record or data type, a function of its own
+  // (recursive for a type that contains itself): the same case, then each
+  // field in order, stopping at the first that differs, the last a tail
+  // call, so two long lists compare in constant stack.
+  function equality(t: RType | DType): number {
+    const key = `=${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: t.def, name: `${t.name}.equal`, params: [t, t], result: "i32", locals: [t, t], body: { k: "bool", v: true }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const a: SExpr = { k: "local", i: 0 }, b: SExpr = { k: "local", i: 1 };
+    const all = (pairs: [SExpr, SExpr, LType][]): SExpr => {
+      if (!pairs.length) return { k: "bool", v: true };
+      const [x, y, ft] = pairs[pairs.length - 1];
+      return pairs.slice(0, -1).reduceRight<SExpr>((rest, [x2, y2, t2]) => ({ k: "if", cond: same(x2, y2, t2, g, false), then: rest, else: { k: "bool", v: false }, t: "i32" }), same(x, y, ft, g, true));
+    };
+    if (isRecord(t)) g.body = all(t.fields.map((x, j) => [{ k: "get", rec: a, t, i: j }, { k: "get", rec: b, t, i: j }, x.t]));
+    else {
+      const arms = t.cases.map((c, ci) => all(c.fields.map((x, j) => [{ k: "field", rec: a, t, c: ci, i: j }, { k: "field", rec: b, t, c: ci, i: j }, x.t])));
+      g.body = { k: "if", cond: { k: "op", op: "beq", args: [{ k: "tag", rec: a, t }, { k: "tag", rec: b, t }] }, then: { k: "case", scrut: a, s: 0, t, arms, result: "i32" }, else: { k: "bool", v: false }, t: "i32" };
+    }
+    return index.get(key)!;
+  }
+
   // A fold's result binder used once, by the call that computes it.
   const inlined = new Map<Id, Extract<SExpr, { k: "call" }>>();
   // A fold is a recursive function of its own: the value folded is its
@@ -452,6 +484,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (!result) throw new Refused(`has a fold whose value is ${OTHER}`);
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
+    for (const a of arms) a.results.forEach((r, j) => {
+      const c = st.cases.find((x) => x.variant === a.variant)!;
+      if (r && c.fields[j].t !== st) throw new Refused("folds over data inside other data (a nested fold isn't in WebAssembly yet)");
+    });
+    const outside = free.map((b): SExpr => ({ k: "local", i: env.get(b)! }));
+    if (arms.every((a) => a.results.filter((r) => r).length <= 1)) return { k: "call", fn: loop(st, result, arms, free, env, f), args: [expr(n.scrutinee, env, f, false), { k: "new", t: framesOf(st), c: 0, args: [] }, ...outside], tail };
     const params = [st, ...free.map((b) => f.locals[env.get(b)!])];
     const g: SFunc = { def: id, name: `${f.name}.fold`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const gi = funcs.push(g) - 1;
@@ -467,7 +505,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       a.binds.forEach((b, j) => bind(b, c.fields[j].t, { k: "field", rec: scrut, t: st, c: ci, i: j }));
       a.results.forEach((r, j) => {
         if (!r) return;
-        if (c.fields[j].t !== st) throw new Refused("folds over data inside other data (a nested fold isn't in WebAssembly yet)");
         const call: Extract<SExpr, { k: "call" }> = { k: "call", fn: gi, args: [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured], tail: false };
         // A result used once is computed where it's used, so an arm that
         // doesn't need it (insert, once it found the place) stops there.
@@ -481,7 +518,79 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
     });
     g.body = { k: "case", scrut, s: 0, t: st, arms: bodies, result };
-    return { k: "call", fn: gi, args: [expr(n.scrutinee, env, f, false), ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail };
+    return { k: "call", fn: gi, args: [expr(n.scrutinee, env, f, false), ...outside], tail };
+  }
+  // The stack of a fold run as a loop: the values on the way down, newest
+  // first. A data type of the lowering's own, which the host never sees.
+  function framesOf(st: DType): DType {
+    const key = `${st.key}.frames`;
+    if (datas.has(key)) return datas.get(key)!;
+    const d: DType = { key, name: `${st.name}.frames`, def: st.def, cases: [], inner: true };
+    d.cases.push({ variant: `${key}.done`, name: "done", fields: [] }, { variant: `${key}.frame`, name: "frame", fields: [{ name: "value", t: st }, { name: "next", t: d }] });
+    datas.set(key, d);
+    return d;
+  }
+  // A fold whose arms each fold at most one child (a list, a chain) as a
+  // loop, the evaluator's own order: `down` walks to the end, keeping
+  // each value it passes on a stack, and computes the arm that folds
+  // nothing; `up` takes the stack back, giving each value's arm the
+  // result so far. Both are tail calls, so a list of any length folds in
+  // constant stack, as in the evaluator and the JS backend.
+  function loop(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc): number {
+    const frames = framesOf(st);
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const mk = (suffix: string, params: LType[]): [SFunc, number] => {
+      const g: SFunc = { def: arms[0]?.id ?? st.def, name: `${f.name}.fold.${suffix}`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+      return [g, funcs.push(g) - 1];
+    };
+    const [down, di] = mk("down", [st, frames, ...caps]), [up, ui] = mk("up", [frames, result, ...caps]);
+    const capsIn = (at: number): SExpr[] => free.map((_, j) => ({ k: "local", i: at + j }));
+    // An arm's body for the value in local v of g, with the result so far
+    // in local acc (when it folds a child).
+    const arm = (g: SFunc, a: NodeOf<"arm">, ci: number, v: number, acc: number | null): SExpr => {
+      let inner = new Map(free.map((b, j) => [b, 2 + j]));
+      const lets: { i: number; value: SExpr }[] = [];
+      a.binds.forEach((b, j) => {
+        const i = g.locals.push(st.cases[ci].fields[j].t) - 1;
+        inner = new Map(inner).set(b, i);
+        lets.push({ i, value: { k: "field", rec: { k: "local", i: v }, t: st, c: ci, i: j } });
+      });
+      const r = a.results.find((x) => x);
+      if (r && acc !== null) inner = new Map(inner).set(r, acc);
+      return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, false));
+    };
+    const armOf = (ci: number) => arms.find((x) => x.variant === st.cases[ci].variant);
+    down.body = {
+      k: "case", scrut: { k: "local", i: 0 }, s: 0, t: st, result,
+      arms: st.cases.map((_, ci): SExpr | null => {
+        const a = armOf(ci);
+        if (!a) return null;
+        const j = a.results.findIndex((x) => x);
+        if (j < 0) return { k: "call", fn: ui, args: [{ k: "local", i: 1 }, arm(down, a, ci, 0, null), ...capsIn(2)], tail: true };
+        const deeper: SExpr = { k: "field", rec: { k: "local", i: 0 }, t: st, c: ci, i: j };
+        return { k: "call", fn: di, args: [deeper, { k: "new", t: frames, c: 1, args: [{ k: "local", i: 0 }, { k: "local", i: 1 }] }, ...capsIn(2)], tail: true };
+      }),
+    };
+    // up: the stack's top value, then its arm with the result so far.
+    const v = up.locals.push(st) - 1;
+    up.body = {
+      k: "case", scrut: { k: "local", i: 0 }, s: 0, t: frames, result,
+      arms: [
+        { k: "local", i: 1 },
+        {
+          k: "let", i: v, value: { k: "field", rec: { k: "local", i: 0 }, t: frames, c: 1, i: 0 },
+          body: {
+            k: "call", fn: ui, tail: true,
+            args: [
+              { k: "field", rec: { k: "local", i: 0 }, t: frames, c: 1, i: 1 },
+              { k: "case", scrut: { k: "local", i: v }, s: v, t: st, result, arms: st.cases.map((_, ci) => { const a = armOf(ci); return a && a.results.some((x) => x) ? arm(up, a, ci, v, 1) : null; }) },
+              ...capsIn(2),
+            ],
+          },
+        },
+      ],
+    };
+    return di;
   }
   // The binders a piece of the program refers to (inside its folds too, or not).
   function refsIn(id: Id, folds = true): Id[] {

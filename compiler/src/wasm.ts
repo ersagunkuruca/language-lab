@@ -107,6 +107,7 @@ export function emitWasm(lowered: Lowered): Module {
   const helpers: { name: string; key: string; params: LType[]; result: LType; code: number[]; wat: string[] }[] = [];
   for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j)], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`] }));
   for (const d of datas) {
+    if (d.inner) continue;
     const b = baseIndex.get(d.key)!;
     helpers.push({ name: `${d.name}.case`, key: d.key, params: [d], result: "i32", code: [0x20, 0x00, 0xfb, 0x02, ...u(b), 0x00], wat: ["local.get 0", `struct.get $${structs[b].name} 0`] });
     d.cases.forEach((c, ci) => {
@@ -162,6 +163,7 @@ export function emitWasm(lowered: Lowered): Module {
       case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
       // ref.cast to the case, then its field (after the case's number).
       case "field": { const k = caseIndex(e.t, e.c); return [...code(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
+      case "tag": return [...code(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
       case "case": {
         // block $done; n blocks, innermost first jumped to by br_table on the
         // case's number; after the end of block j, arm j, then br $done.
@@ -227,6 +229,7 @@ export function emitWasm(lowered: Lowered): Module {
       case "get": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
       case "new": return [`${d}i32.const ${e.c}`, ...e.args.map((a) => wat(a, f, d)), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
       case "field": { const k = sname(caseIndex(e.t, e.c)); return `${wat(e.rec, f, d)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
+      case "tag": return `${wat(e.rec, f, d)}\n${d}struct.get ${recName(e.t)} 0`;
       case "case": {
         const there = e.scrut.k === "local" && e.scrut.i === e.s;
         const n = e.arms.length, lines = [...(there ? [] : [wat(e.scrut, f, d), `${d}local.set ${local(f, e.s)}`]), `${d}(block (result ${ty(e.result)})`];
@@ -278,7 +281,7 @@ function uses(e: SExpr, op: Op): boolean {
     case "if": return uses(e.cond, op) || uses(e.then, op) || uses(e.else, op);
     case "let": return uses(e.value, op) || uses(e.body, op);
     case "call": case "make": case "new": return e.args.some((a) => uses(a, op));
-    case "get": case "field": return uses(e.rec, op);
+    case "get": case "field": case "tag": return uses(e.rec, op);
     case "case": return uses(e.scrut, op) || e.arms.some((a) => a && uses(a, op));
     case "budget": return uses(e.body, op) || uses(e.otherwise, op);
     default: return false;
@@ -288,7 +291,7 @@ function budgets(e: SExpr): boolean {
   switch (e.k) {
     case "budget": return true;
     case "op": case "call": case "make": case "new": return e.args.some(budgets);
-    case "get": case "field": return budgets(e.rec);
+    case "get": case "field": case "tag": return budgets(e.rec);
     case "case": return budgets(e.scrut) || e.arms.some((a) => a && budgets(a));
     case "if": return budgets(e.cond) || budgets(e.then) || budgets(e.else);
     case "let": return budgets(e.value) || budgets(e.body);

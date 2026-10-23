@@ -8,7 +8,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area } from "../src/fixtures.ts";
+import { area, sameLists } from "../src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -68,8 +68,20 @@ function toWasm(w: Exports, v: Value, t: LType): unknown {
   if (t === "f64") return v;
   if (t === "i32") return (v as Data).tag === TRUE ? 1 : 0;
   if (!isData(t)) throw new Error("no makers for records");
-  const d = v as Data, c = t.cases.find((x) => x.variant === d.tag)!;
-  return helper(w, `${t.name}.${c.name}`, t.key)(...c.fields.map((x, j) => toWasm(w, d.fields[j], x.t)));
+  // Down a list's tails first, then built from the end, so a long one needs no stack.
+  const spine: Data[] = [];
+  let d = v as Data;
+  for (;;) {
+    const c = t.cases.find((x) => x.variant === d.tag)!, last = c.fields.length - 1;
+    if (last < 0 || c.fields[last].t !== t) break;
+    spine.push(d);
+    d = d.fields[last] as Data;
+  }
+  const make = (d: Data, rest: unknown[]) => {
+    const c = t.cases.find((x) => x.variant === d.tag)!;
+    return helper(w, `${t.name}.${c.name}`, t.key)(...c.fields.slice(0, c.fields.length - rest.length).map((x, j) => toWasm(w, d.fields[j], x.t)), ...rest);
+  };
+  return spine.reduceRight((acc, x) => make(x, [acc]), make(d, []));
 }
 function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "f64") return x as number;
@@ -83,7 +95,8 @@ test("data in WebAssembly: lists, expression trees, matches and folds give the e
   const cases: [string, string, () => Value[][]][] = [
     ["sort", "sort", () => [[toList([3, 1, 2, 5, -0.5, 4, 1])], [toList([])], [toList(Array.from({ length: 200 }, (_, i) => (i * 37) % 101))]]],
     ["sort", "insert", () => [[2.5, toList([1, 2, 3, 4])], [0, toList([])]]],
-    ["calculus", "polynomial", () => [[toList([1, -2, 0.5]), 3], [toList([]), 1], [toList([2, 0, 0, 1]), -1.5]]],
+    // A hundred thousand coefficients: the fold is a loop, in constant stack.
+    ["calculus", "polynomial", () => [[toList([1, -2, 0.5]), 3], [toList([]), 1], [toList([2, 0, 0, 1]), -1.5], [toList(Array.from({ length: 1e5 }, (_, i) => (i % 7) / 1e3)), 0.999]]],
     ["calculus", "∂polynomial/∂x", () => [[toList([1, -2, 0.5]), 3], [toList([2, 0, 0, 1]), -1.5]]],
     ["countdown", "valid", () => [0, 1, 2, 3].flatMap((k) => [[k, 6, 3], [k, 2, 4]])],
     ["countdown", "combine", () => [0, 1, 2, 3].map((k) => [k, 6, 3])],
@@ -110,6 +123,25 @@ test("data in WebAssembly: lists, expression trees, matches and folds give the e
       assert.deepStrictEqual(got, want, `${name}: ${fn}`);
     }
   }
+});
+
+test("equal on data in WebAssembly: the evaluator's rule on each number, two long lists in constant stack", async () => {
+  const p = sameLists();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.same], { data: true });
+  assert.deepEqual([...lowered.refused.keys()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const t = lowered.funcs.find((f) => f.name === "same")!.params[0];
+  for (const [xs, ys] of [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]]]) {
+    const want = first(r.call(r.value(p.same), toList(xs), toList(ys)));
+    assert.deepStrictEqual(fromWasm(w, w.same(toWasm(w, toList(xs), t), toWasm(w, toList(ys), t)), "i32"), want, `${xs} = ${ys}`);
+  }
+  // A million numbers each: the tail is a return_call.
+  let a = w["List.nil"](), b = w["List.nil"]();
+  for (let i = 0; i < 1e6; i++) { a = w["List.cons"](i, a); b = w["List.cons"](i, b); }
+  assert.equal(w.same(a, b), 1);
 });
 
 test("what isn't in the profile is refused, with the reason", () => {
