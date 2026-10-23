@@ -24,7 +24,7 @@ Sources this draws on, credited per the project's attribution rule:
 
 | # | Pitfall | What others do | What we do |
 |---|---|---|---|
-| 1 | **Spaghetti.** Long wires cross each other and run behind nodes; you can't tell where a wire goes. | Reroute dots (Blender, Unreal, Houdini), wire portals / named reroutes (Unreal, World Machine), send/receive (Max), line hops (Visio). | Crossings that remain are drawn: a **bridge** (a small hop) where a wire passes over another, and a **tunnel** (the wire fades out at the node's edge and back in on the other side) where it passes under a node. Any value can be shown as a **named let node with get nodes** instead of wires (pitfall 4). Tidy (pitfall 3) moves nodes off wires. |
+| 1 | **Spaghetti.** Long wires cross each other and run behind nodes; you can't tell where a wire goes. | Reroute dots (Blender, Unreal, Houdini), wire portals / named reroutes (Unreal, World Machine), send/receive (Max), line hops (Visio). | Crossings that remain are drawn: a **bridge** (a small hop) where a wire passes over another, and a **tunnel** (the wire fades out at the node's edge and back in on the other side) where it passes under a node. A wire that would pass under a node bends over or under it instead, when that's a short detour that crosses no more of the wires drawn before it. Any value can be shown as a **named let node with get nodes** instead of wires (pitfall 4). Tidy (pitfall 3) moves nodes off wires. |
 | 2 | **Clutter from previews.** Inline values and labels pile on top of each other. | Blender and Houdini show previews in a node's body, which makes nodes big; most others hide them. | Values are small chips placed by a label placer: each tries a few spots near its output (above, below, along the wire) and takes the first that doesn't cover a node or another chip. A chip with no free spot shrinks to a dot; hovering shows it. Chips never move nodes. |
 | 3 | **Manual layout is busywork, automatic layout throws your work away.** | Auto-arrange add-ons (Blueprint Assist, Blender's Node Arrange), Houdini's layout tool. They lay out everything, often ignoring wires. | Positions are **free and absolute**: a node is where you put it, not an offset from what it feeds, so moving one never drags others along. Unmoved nodes take the automatic place. **Tidy** spaces out all nodes or just the selected ones: it reorders each column so fewer wires cross (Sugiyama's barycenter step, kept only where it helps), removes overlaps, keeps each frame's contents together, pushes nodes off wires that run through them unless that crosses other wires, and keeps inputs to the left of what they feed. It starts from where things are, so it only moves what it has to. **Reset layout** goes back to the automatic one. |
 | 4 | **Variables as wires don't scale.** A value used in ten places is ten long wires. | Unreal local variables (Set/Get nodes), Max send/receive, named reroutes. | Same binding, two looks, your choice per binding: a **dot** with wires to every use (the default), or a **let node** plus a small **get node** next to every use, with no long wires. It's a view (layout.json), not code; switching back and forth changes nothing in the program. Selecting either highlights the other. Function inputs can be shown as get nodes too. |
@@ -53,8 +53,9 @@ Sources this draws on, credited per the project's attribution rule:
 
 ## Left for later
 
-- Orthogonal wire routing (wires bend around nodes instead of tunnelling).
-  Tidy plus tunnels covers most of it; real routing is a bigger job.
+- Full wire routing (a search for each wire's path among all the nodes).
+  A wire now bends over or under a node in its way when that is a short
+  detour that crosses no more wires; the rest keep their tunnels.
 - A minimap, and frames you can collapse.
 - Comment boxes. Comments live in comments.json and show in the inspector;
   drawing them on the canvas is a small step once someone wants it.

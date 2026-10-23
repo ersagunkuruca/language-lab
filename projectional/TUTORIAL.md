@@ -662,8 +662,11 @@ left shows in `rotate`:
   across others: over the examples, a tidy leaves about 9% fewer crossings
   than before it, where it used to add about 27%. Wires that fan out from
   one frame's inputs to nodes far apart still weave.
-- Wires don't route around nodes; they pass under them (as tunnels) or
-  over input names. In `insert`, `tail` and `tail′` are hidden under wires.
+- A wire bends over or under a node in its way when that's a short detour
+  that crosses no more wires; across the examples that leaves 136 of the 333
+  tunnels, for 28 more bridges (438 from 410). The rest still pass under
+  nodes, and wires still pass over input names: in `insert`, `tail` and
+  `tail′` are hidden under wires.
 
 **Proposal.** Names drawn with a background so a wire can't cover them, and
 wires routed around nodes.

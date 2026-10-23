@@ -11,6 +11,7 @@
 //   crossings    where one wire passes over another (drawn as a bridge, a
 //                small hop, as in Visio's line jumps) or under a node (a
 //                tunnel)
+//   route        a wire bent over or under the nodes in its way
 //   labels       spots for value chips that cover no node and no other chip
 
 export type Pos = { x: number; y: number };
@@ -118,6 +119,42 @@ export function hopPath(p: Pos[], at: number[], r = 5): string {
     if (!spans.some(([a, b]) => L[i] > a && L[i] < b)) d += ` L${f(p[i].x)},${f(p[i].y)}`;
   }
   return d;
+}
+
+// A wire that would run under a node bends around it instead: over it or
+// under it, whichever crosses fewer of the wires in `drawn` and strays
+// less, as a chain of the same curves through a waypoint at each corner.
+// Only a wire that runs left to right past the node bends, and only by a
+// little (`reach`); otherwise it keeps its tunnel. `boxes` are the nodes it
+// may not cross (not its own ends); a bend also keeps off `text` (titles).
+// Returns the points to draw, and whether it bent.
+export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: Box[] = [], n = 28, clear = 8, reach = 40): { pts: Pos[]; bent: boolean } {
+  const inside = (q: Pos, box: Box) => q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h;
+  const chain = (ps: Pos[]) => ps.slice(1).flatMap((q, i) => curvePoints(ps[i].x, ps[i].y, q.x, q.y, i === 0 ? n : Math.max(8, n >> 1)).slice(i === 0 ? 0 : 1));
+  const under = (pts: Pos[]) => boxes.filter((box) => pts.some((q) => inside(q, box)));
+  const crossings = (pts: Pos[]) => crossingsOf(pts, drawn).length;
+  const straight = curvePoints(a.x, a.y, b.x, b.y, n);
+  let pts = straight, way: Pos[] = [];
+  for (let k = 0; k < 6; k++) {
+    const hit = under(pts).find((box) => box.x - clear > a.x && box.x + box.w + clear < b.x);
+    if (!hit) break;
+    const ys = pts.filter((q) => inside(q, hit)).map((q) => q.y);
+    const wy = ys.reduce((s, y) => s + y, 0) / ys.length;
+    const tries = [hit.y - clear, hit.y + hit.h + clear].filter((y) => Math.abs(y - wy) <= reach).flatMap((y) => {
+      // Corners in order along the wire; one that would fold back is no way.
+      const next = [...way, { x: hit.x - clear, y }, { x: hit.x + hit.w + clear, y }].sort((p, q) => p.x - q.x);
+      if (next.some((q, i) => i > 0 && q.x - next[i - 1].x < 0.5)) return [];
+      const p = chain([a, ...next, b]);
+      const onText = text.filter((box) => p.some((q) => inside(q, box))).length;
+      return [{ next, p, score: (under(p).length + onText) * 1000 + crossings(p) * 20 + Math.abs(y - wy) }];
+    }).sort((x, z) => x.score - z.score);
+    if (!tries.length) break;
+    way = tries[0].next;
+    pts = tries[0].p;
+  }
+  // Bent only if it hides under fewer nodes and crosses no more wires.
+  if (!way.length || under(pts).length >= under(straight).length || crossings(pts) > crossings(straight)) return { pts: straight, bent: false };
+  return { pts, bent: true };
 }
 
 // The stretches of a wire that run under a box: pairs of points where it
