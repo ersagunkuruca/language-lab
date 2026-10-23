@@ -34,7 +34,7 @@ const test = (f: Inline, boolArgs?: true): Target["js"] => ({ op: f, bool: true,
 const written = (where: string) => ({ written: where });
 const no = (why: string) => ({ no: why });
 const DATA = no("works on text, lists or other data: the scalar profile is Numbers, Bools and records of them");
-const WORLD = no("acts on the world: a shader has none, and a WASM function here is pure");
+const WORLD = no("acts on the world: a shader has none (WebAssembly imports it from the host)");
 const CHOOSES = no("has Choice: the scalar profile has one answer per call");
 const LOOKS = no("looks inside a function at run time; `derivative` written in place is expanded before lowering");
 const CELLS = no("cells are a runtime handler: the scalar profile has none");

@@ -21,11 +21,16 @@
 // to the case first. Since such types may contain themselves, all the
 // structs are written as one recursion group.
 //
+// The console and files (lowered with `data`) are imports from "world",
+// which `instantiate` gives from the evaluator's own Runtime; `runMain`
+// runs a program's main as the evaluator's runProgram does.
+//
 // No dependencies: the binary format is small enough to write directly
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
 import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
+import type { Runtime, World } from "../../projectional/src/lang/run.ts";
 import { assemble, runtime, textBytes, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
@@ -33,7 +38,7 @@ const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
 // The evaluator's show of a Number, which the runtime asks the host for
 // outside the plain decimals it writes itself (wasm-rt.ts number.show).
 const SHOW = STD_IMPL[S.show] as (x: number) => string;
-const LIST_TEXT = "std.list<type.string<>>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -65,12 +70,21 @@ export function emitWasm(lowered: Lowered): Module {
   };
   const rtCalls = (e: SExpr): void => { if (e.k === "rt") need(e.fn); kids(e).forEach(rtCalls); };
   funcs.forEach((f) => rtCalls(f.body));
-  const texty = rtNames.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
+  // The world's operations used, imported from "world" in the order first
+  // used, then "reason" (the last failure's) when one can fail.
+  const worldOps: Extract<SExpr, { k: "world" }>[] = [];
+  const worldCalls = (e: SExpr): void => { if (e.k === "world" && !worldOps.some((x) => x.op === e.op)) worldOps.push(e); kids(e).forEach(worldCalls); };
+  funcs.forEach((f) => worldCalls(f.body));
+  const texty = rtNames.length > 0 || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
   const hostShow = rtNames.includes("host.show");
   const rts: RtFn[] = rtNames.filter((n) => n !== "host.show").map(runtime);
-  const imports = hosts.length + (hostShow ? 1 : 0);
+  const worldReason = worldOps.some((x) => x.aborts);
+  const worldBase = hosts.length + (hostShow ? 1 : 0);
+  const worldIndex = (op: string) => worldBase + worldOps.findIndex((x) => x.op === op);
+  const reasonIndex = worldBase + worldOps.length;
+  const imports = worldBase + worldOps.length + (worldReason ? 1 : 0);
   const fnIndex = (i: number) => imports + i;
   // A generic definition lowered at several types (plus on Vec and on
   // Colour) is exported under its name once, then with the types it's at.
@@ -155,14 +169,20 @@ export function emitWasm(lowered: Lowered): Module {
   const keyOf = (t: LType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
   // answer: 0 for an answer, 1 for none.
-  const sigs: { key: string; params: LType[]; result: LType; partial?: boolean }[] = [];
-  const sig = (params: LType[], result: LType, partial?: boolean) => {
-    const key = `${params.map(keyOf).join(",")}>${keyOf(result)}${partial ? "!" : ""}`;
+  // A null result: nothing (a world operation that gives the unit).
+  const sigs: { key: string; params: LType[]; result: LType | null; partial?: boolean }[] = [];
+  const sig = (params: LType[], result: LType | null, partial?: boolean) => {
+    const key = `${params.map(keyOf).join(",")}>${result === null ? "" : keyOf(result)}${partial ? "!" : ""}`;
     if (!sigs.some((x) => x.key === key)) sigs.push({ key, params, result, partial });
     return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
   const showSig = hostShow ? sig(["f64"], "text") : 0;
+  // A world operation giving the unit gives nothing (the module makes it);
+  // one that can fail gives a status after.
+  const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && t.fields.length === 0;
+  const worldSig = worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
+  const reasonSig = worldReason ? sig([], "text") : 0;
   // A closure's code has its function type's code type, so call_ref takes it.
   const codeOf = new Map<number, FType>();
   const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
@@ -200,9 +220,19 @@ export function emitWasm(lowered: Lowered): Module {
   // the last abort: the host reads it with Abort.reason when a function
   // gives status 2.
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
-  const aborts = funcs.some((f) => mentions(f.body, "abort"));
+  const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
   const reasonG = fuel ? 1 : 0;
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
+  // For the world's host: lists and optionals of texts, by fixed names
+  // (TextList.cons, TextOption.some), whatever else the module has.
+  for (const [key, as] of [[LIST_TEXT, "TextList"], [OPTION_TEXT, "TextOption"]] as const) {
+    const d = datas.find((x) => x.key === key);
+    if (!d) continue;
+    d.cases.forEach((c, ci) => {
+      const k = caseIndex(d, ci);
+      helpers.push({ name: `${as}.${c.name}`, key: d.key, params: c.fields.map((x) => x.t), result: d, code: [0x41, ...s(ci), ...c.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)], wat: [`i32.const ${ci}`, ...c.fields.map((_, j) => `local.get ${j}`), `struct.new $${structs[k].name}`] });
+    });
+  }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   const rtType = (f: RtFn, t: VT): LType => (t === "list" ? listOf(f) : t);
@@ -216,11 +246,13 @@ export function emitWasm(lowered: Lowered): Module {
   };
   const typeSec = vec([
     ...(structs.length ? [[0x4e, ...vec(structs.map(struct))]] : []),
-    ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([typeOf(x.result), ...(x.partial ? [[0x7f]] : [])])]),
+    ...sigs.map((x) => [0x60, ...vec(x.params.map(typeOf)), ...vec([...(x.result === null ? [] : [typeOf(x.result)]), ...(x.partial ? [[0x7f]] : [])])]),
   ]);
   const importSec = vec([
     ...hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]),
     ...(hostShow ? [[...str("host"), ...str("show"), 0x00, ...u(showSig)]] : []),
+    ...worldOps.map((x, i) => [...str("world"), ...str(x.op), 0x00, ...u(worldSig[i])]),
+    ...(worldReason ? [[...str("world"), ...str("reason"), 0x00, ...u(reasonSig)]] : []),
   ]);
   const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
   // The runtime functions the host uses, by these names.
@@ -242,7 +274,7 @@ export function emitWasm(lowered: Lowered): Module {
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
   // Whether f needs a local for a status: it's partial, or has no answer
   // somewhere, or tries something that may have none.
-  const failing = (e: SExpr): boolean => e.k === "fail" || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
+  const failing = (e: SExpr): boolean => e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
 
   // f's code. `d` is how many blocks are open around e, and `fl` the
@@ -331,6 +363,12 @@ export function emitWasm(lowered: Lowered): Module {
           0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x0c, 0x01, 0x0b, ...on(2, d + 1, fl),
           ...fuelBack, 0x23, ...u(reasonG), 0x21, ...u(e.reason), ...code(e.arm, d + 1, fl), 0x0b,
         ];
+      }
+      case "world": {
+        // A failure (status 2): its reason from the world, then on out as an abort.
+        const call = [...e.args.flatMap(code1), 0x10, ...u(worldIndex(e.op))];
+        const failed = !e.aborts ? [] : fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x21, ...u(st), 0x20, ...u(st), 0x04, 0x40, 0x10, ...u(reasonIndex), 0x24, ...u(reasonG), 0x41, 0x02, 0x0c, ...to(d + 1, fl), 0x0b];
+        return [...call, ...failed, ...(isUnit(e.t) ? [0xfb, 0x00, ...u(recIndex.get((e.t as RType).key)!)] : [])];
       }
       case "op": {
         const args = e.args.flatMap(code1);
@@ -447,6 +485,11 @@ export function emitWasm(lowered: Lowered): Module {
         `${d}  global.get $reason`, `${d}  local.set ${local(f, e.reason)}`,
         wat(e.arm, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
+      case "world": return [
+        ...e.args.map(w), `${d}call $world.${e.op}`,
+        ...(!e.aborts ? [] : fl < 0 ? [`${d}(if (then unreachable)) ;; failed, nowhere to go`] : [`${d}local.set ${st}`, `${d}local.get ${st}`, `${d}(if (then call $world.reason global.set $reason i32.const 2 br ${to(ld + 1)})) ;; failed`]),
+        ...(isUnit(e.t) ? [`${d}struct.new ${recName(e.t as RType)}`] : []),
+      ].join("\n");
       case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
     }
   }
@@ -462,6 +505,8 @@ export function emitWasm(lowered: Lowered): Module {
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
     ...(hostShow ? [`  (import "host" "show" (func $host.show (param f64) (result (ref null $bytes))))`] : []),
+    ...worldOps.map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${" (ref null $bytes)".repeat(x.args.length)})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
+    ...(worldReason ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
@@ -491,12 +536,63 @@ const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
 // `host.show` builds its text through the module's own Text.new and Text.put.
-export async function instantiate(m: Module): Promise<Record<string, (...xs: number[]) => number>> {
+// `rt`: the console and files, as for the evaluator (run.ts Runtime); an
+// operation the world doesn't have fails saying so, as there.
+export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
   const host = { show: (x: number) => toText(ex, SHOW(x)) };
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD }, host });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD }, host, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
+}
+
+// The imports from "world": texts in and out through the module's own
+// makers. One that fails gives status 2 after its answer, and the reason
+// the module then asks for.
+function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) => unknown>) {
+  let reason = "";
+  const w = <K extends keyof World>(k: K): World[K] => {
+    const f = rt.world?.[k];
+    if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
+    return f.bind(rt.world) as World[K];
+  };
+  const text = (t: unknown) => fromText(exports(), t), make = (v: string) => toText(exports(), v);
+  const tried = <T>(f: () => T): [T | null, number] => { try { return [f(), 0]; } catch (e) { reason = (e as Error).message; return [null, 2]; } };
+  const unit = (f: () => void) => tried(f)[1];
+  return {
+    print: (t: unknown) => rt.print(text(t)),
+    printError: (t: unknown) => w("error")(text(t)),
+    readInput: () => tried(() => make(w("input")())),
+    readLine: () => tried(() => { const l = w("readLine")(), ex = exports(); return l === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(l)); }),
+    readFile: (p: unknown) => tried(() => make(w("readFile")(text(p)))),
+    writeFile: (p: unknown, t: unknown) => unit(() => w("writeFile")(text(p), text(t))),
+    appendFile: (p: unknown, t: unknown) => unit(() => w("appendFile")(text(p), text(t))),
+    fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
+    listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
+    reason: () => make(reason),
+  };
+}
+
+// A list of texts, built from its end with TextList.nil and TextList.cons.
+export function textList(ex: Record<string, (...xs: never[]) => unknown>, xs: string[]): unknown {
+  let l = (ex["TextList.nil"] as () => unknown)();
+  for (let i = xs.length - 1; i >= 0; i--) l = (ex["TextList.cons"] as (h: unknown, t: unknown) => unknown)(toText(ex, xs[i]), l);
+  return l;
+}
+
+// A program's main in WebAssembly, as run.ts runProgram runs it: given
+// the arguments (a list of texts) or nothing, it gives the exit code (an
+// Int or a Number), or anything else for 0; an Abort nothing handled
+// writes its reason to standard error and exits with 1.
+export async function runMain(lowered: Lowered, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
+  const f = lowered.funcs.find((g) => g.name === name && !g.inner && !g.budgeted);
+  if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
+  const ex = (await instantiate(m, rt)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
+  const got = ex[name](...(f.params.length ? [textList(ex, args)] : []));
+  const [v, st] = f.partial ? (got as [unknown, number]) : [got, 0];
+  if (st === 2) { (rt.world?.error ?? rt.print)(fromText(ex, ex["Abort.reason"]())); return 1; }
+  if (st !== 0) throw new Error(`${name} had no answer`);
+  return f.result === "f64" || f.result === "i64" ? Number(v) : 0;
 }
 
 // Text across the boundary: a JS string into the module's UTF-8 array, and back.
