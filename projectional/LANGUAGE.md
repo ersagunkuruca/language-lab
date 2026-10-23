@@ -688,11 +688,11 @@ Those are `examples/physics`. The pieces:
   `0.1 + 0.2` should be the same quantity as `0.3`. The cost is that `equal`
   on numbers isn't transitive at the 1e-9 scale. Bit-exact comparison is a
   different question and should get its own name when something needs it.
-  This is for `Number` only: an `Int` is a count, so two Ints are equal
-  only when they're the same integer. The checker records the type at each
-  `equal`, and that type decides how numbers inside it compare (run.ts,
-  `Equality`). Where a type variable could stand for either, two whole
-  numbers compare exactly and other numbers to within the tolerance.
+  Two whole numbers are the exception: they're equal only when they're the
+  same number, so an `Int`, which is a count, is always compared exactly.
+  That is one rule for every type (`sameNumber` in run.ts), so it doesn't
+  matter whether the checker knew the type or a generic function compared
+  a type variable (NOTES.md, "Equality: one rule").
 - **A let is a dot on a wire.** `drift` names a sub-expression. Lets of
   non-numbers (a `Bool`, a function) are read where they're used, so a dot
   anywhere leaves the equations as they were.
