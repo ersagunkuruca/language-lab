@@ -365,6 +365,31 @@ async function looseParts() {
   await p.close();
 }
 
+// A drop on an input that has a value swaps it in, and the old value lies
+// loose (NODE-EDITOR.md "Loose parts", rule 5; BACKLOG E117): in two dice's
+// main, the words output onto another input that takes it.
+async function swapDrop() {
+  where = "an output dropped on a filled input";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  const words = p.locator(".p-graph g.items > g", { has: p.locator("text.cl", { hasText: /^words$/ }) }).locator("circle.outp[data-out]").first();
+  const from = (await words.boundingBox())!;
+  await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await p.mouse.down();
+  await p.mouse.move(from.x + 40, from.y + 40, { steps: 3 });
+  // While dragging, the inputs it fits are marked; pick a filled one.
+  const to = await p.locator(".p-graph circle.inp.can:not(.use)").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  if (!to.length) { await p.mouse.up(); errors.push(`${where}: no filled input takes the words`); return p.close(); }
+  await p.mouse.move(to[0].x, to[0].y, { steps: 8 }); await p.mouse.up();
+  const status = await p.locator(".status").innerText();
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/lies loose/.test(status) || !text.includes("-- loose, not used yet")) errors.push(`${where}: the old value wasn't kept loose: ${status}`);
+  await p.close();
+}
+
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -666,6 +691,7 @@ await textKeepsPlace();
 await foldedFrame();
 await plusDrop();
 await looseParts();
+await swapDrop();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

@@ -1899,13 +1899,19 @@ function toggleInline(call: Id) {
     on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
 }
 
+// A drop on an input wires it, and a value already there is set loose.
+const useOver = (info: T.Info, b: Id, slot: Id) =>
+  T.over(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot, b, (c, n, i) => T.useVar(c, n, i, ui.def, b, slot));
+const shareOver = (info: T.Info, from: Id, slot: Id) =>
+  T.over(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot, from, (c, n, i) => T.share(c, n, i, ui.def, from, slot));
+
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
     select: (id: Id | null) => select(id),
     open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
-    canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
-    use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
+    canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
+    use: (b: Id, slot: Id) => void applyT(useOver(info, b, slot)),
     clear: (slot: Id) => void applyT(T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot)),
     addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
     canShare: (from: Id) => {
@@ -1913,11 +1919,16 @@ function graphHooks(info: T.Info) {
       if (doc.loose?.[from]) return (slot: Id) => (node(slot)?.kind === "hole" ? null : "drop it on an empty input");
       const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
       if ("reason" in p) return () => p.reason;
-      return (slot: Id) => { if (slot === from) return "that's where it already goes"; const r = T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot); return r.ok ? null : r.reason; };
+      return (slot: Id) => {
+        if (slot === from) return "that's where it already goes";
+        // A filled input: the check is the same drop on the hole it leaves.
+        const r = node(slot)?.kind === "hole" ? T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot) : shareOver(info, from, slot);
+        return r.ok ? null : r.reason;
+      };
     },
     share: (from: Id, slot: Id) => void applyT(doc.loose?.[from]
       ? T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose, doc.home ?? {}, from, slot)
-      : T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
+      : shareOver(info, from, slot)),
     values: (() => {
       const tr = traced(info);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;

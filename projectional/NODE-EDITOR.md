@@ -92,7 +92,7 @@ checked on the built page (fall, two dice), not just read from the code.
 
 *Agreed with Ersagun on 2026-10-24, after his report from editing two dice `main` in the
 graph. Built so far: steps 2 and 3 below (drafts.json, the Blocks section, Delete and unwiring
-leave parts loose, a loose part wires back in from its output), except a drop on a filled input.
+leave parts loose, a loose part wires back in from its output, a drop on a filled input swaps).
 The rest follows in the order below.*
 
 **The problem.** Every gesture in the graph has to leave a whole, typed
@@ -172,7 +172,7 @@ open question below for now.
 1. Holes drawn as empty inputs; the `+` and filled-input drops (view and
    gesture only, no new file).
 2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section. ✓
-3. Delete and unwiring leave loose parts (rules 4 and 5). ✓ but the swap on a filled input.
+3. Delete and unwiring leave loose parts (rules 4 and 5). ✓
 4. New values on the canvas are loose (rule 7); faded drawing (rule 9).
 5. Pitfall 11 rewritten to say what's refused now: wiring that doesn't fit,
    never removing.

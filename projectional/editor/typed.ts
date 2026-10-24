@@ -423,6 +423,21 @@ export function wireLoose(code: Code, names: Names, info: Info, def: Id, of: Rec
   return e.ok ? { ...e, of: x.of, home: x.home } : e;
 }
 
+// Wire into an input that already has a value (rule 5): the value there is
+// taken off first and lies loose, so a drop swaps and nothing is lost.
+// `wire` is the drop itself (useVar, share), on the code with the hole.
+export function over(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, slot: Id, from: Id, wire: (code: Code, names: Names, info: Info) => TEdit): LooseEdit {
+  const cur = code.nodes[slot];
+  if (cur?.kind === "ref" && cur.target === from) return { ok: false, reason: "already that" };
+  // A variable alone is nothing to keep: it's just replaced.
+  if (!cur || cur.kind === "hole" || cur.kind === "ref") return wire(code, names, info);
+  if (subtree(code, slot).includes(from)) return { ok: false, reason: "that's part of what's there now" };
+  const u = unwire(code, names, info, def, of, home, slot);
+  if (!u.ok) return u;
+  const w = wire(u.code, u.names, infer(u.code, { ...display, ...u.names }));
+  return w.ok ? { ...w, of: u.of, home: u.home, note: `${w.note} What was there lies loose at the end of the text.` } : w;
+}
+
 export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string): TEdit {
   const old = code.nodes[id] as NodeOf<"lit">;
   if (old.of === INT) {
