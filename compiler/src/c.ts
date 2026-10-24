@@ -76,7 +76,7 @@ const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.st
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
-const CELLS = `typedef struct lab_cell { uint32_t rc; uint16_t type, tag; } lab_cell;
+const CELLS = `typedef struct lab_cell { uint32_t rc; uint16_t type; uint8_t tag, size; } lab_cell;
 typedef struct { lab_cell h; void (*code)(void); } lab_closure;
 static int lab_st = 0; // 1: no answer, 2: aborted, with lab_reason
 static lab_cell *lab_reason = 0;
@@ -84,12 +84,44 @@ static int64_t lab_live = 0;
 static lab_cell **lab_dead = 0;
 static size_t lab_dead_n = 0, lab_dead_cap = 0;
 static void lab_oom(void) { fputs("out of memory\\n", stderr); exit(3); }
-static void *lab_new(size_t size, uint16_t type, uint16_t tag) {
-  lab_cell *c = malloc(size);
+// Cells up to 256 bytes come in sizes 8 bytes apart, each with a list of
+// the free ones, cut from blocks that are never given back (as Lean's and
+// Koka's runtimes keep small objects); a cell's size (in 8s, 0 for a
+// bigger one from malloc) sits in its header. Under a sanitizer each is
+// malloc's, so it sees every cell.
+#if defined(__SANITIZE_ADDRESS__) || defined(LAB_MALLOC)
+#define LAB_SIZES 0
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LAB_SIZES 0
+#endif
+#endif
+#ifndef LAB_SIZES
+#define LAB_SIZES 32
+#endif
+static void *lab_unused[LAB_SIZES + 1];
+static char *lab_block = 0, *lab_block_end = 0;
+static void *lab_new(size_t size, uint16_t type, uint8_t tag) {
+  size_t k = (size + 7) >> 3;
+  lab_cell *c;
+  if (k > LAB_SIZES) { c = malloc(size); k = 0; }
+  else if (lab_unused[k]) { c = lab_unused[k]; lab_unused[k] = *(void **)c; }
+  else {
+    if (lab_block_end - lab_block < (ptrdiff_t)(8 * k)) { lab_block = malloc(1 << 18); lab_block_end = lab_block ? lab_block + (1 << 18) : 0; }
+    c = (lab_cell *)lab_block; lab_block += 8 * k;
+  }
   if (!c) lab_oom();
-  c->rc = 1; c->type = type; c->tag = tag;
+  c->rc = 1; c->type = type; c->tag = tag; c->size = (uint8_t)k;
   lab_live++;
   return c;
+}
+static inline void lab_free(lab_cell *c) {
+  lab_live--;
+#if LAB_SIZES
+  uint8_t k = c->size;
+  if (k) { *(void **)c = lab_unused[k]; lab_unused[k] = c; return; }
+#endif
+  free(c);
 }
 static inline lab_cell *lab_dup(lab_cell *c) { if (c && c->rc) c->rc++; return c; }
 // One count fewer; a cell that has none left waits on lab_dead.
@@ -104,8 +136,8 @@ static void lab_drop(lab_cell *c) {
   if (!c || !c->rc || --c->rc) return;
   size_t base = lab_dead_n;
   lab_fields(c);
-  free(c); lab_live--;
-  while (lab_dead_n > base) { lab_cell *d = lab_dead[--lab_dead_n]; lab_fields(d); free(d); lab_live--; }
+  lab_free(c);
+  while (lab_dead_n > base) { lab_cell *d = lab_dead[--lab_dead_n]; lab_fields(d); lab_free(d); }
 }`;
 
 export interface CProgram { c: string; names: Map<number, string>; refused: Map<number, string> }
@@ -138,7 +170,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, body: settle(f.body) }));
-  const used = new Set<string>(["new", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -269,6 +301,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
       : `typedef struct { ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ") || "char none;"} } ${n}; // ${r.name}: ${r.fields.map((x) => x.name).join(", ")}`);
   }
   for (const d of data.values()) {
+    if (d.cases.length > 256) throw new Error(`${d.name} has ${d.cases.length} cases; a cell's tag in C holds 256`);
     d.cases.forEach((c, j) => {
       const n = cname(d, j);
       types.push(c.fields.length
@@ -314,6 +347,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     "// Build with -ffp-contract=off (and -msse2 -mfpmath=sse on 32-bit x86):",
     "// the numbers are then the evaluator's, bit for bit.",
     "#pragma STDC FP_CONTRACT OFF",
+    "#include <stddef.h>",
     "#include <stdint.h>",
     "#include <stdio.h>",
     "#include <stdlib.h>",
