@@ -11,15 +11,16 @@ function greet$mode0(p$0) {
   const m$1 = "hello, ";
   if (!p$0.startsWith(m$1)) return $no;
   const m$2 = p$0.slice(m$1.length);
-  return [m$2];
+  return m$2;
 }
 // greet, run backwards (semidet): its plan written out
 function solve$1(g0) {
   const r = greet$mode0(g0);
-  return r === $no ? [] : [[r[0]]];
+  return r === $no ? [] : [[r]];
 }
 function solve$1$one(g0) {
-  return greet$mode0(g0);
+  const r = greet$mode0(g0);
+  return r === $no ? $no : [r];
 }
 // join text, run backwards by the relational interpreter: given out, solve for 0, 1
 function solve$2(g0) {

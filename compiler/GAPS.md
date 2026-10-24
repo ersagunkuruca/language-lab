@@ -941,6 +941,9 @@ closure.
 *Fix:* when the arms build the result with different cases, test the
 tag, write the arms as blocks, and return the value itself. Drop an arm
 whose plan only fails.
+**Done** (C29): arms are labelled blocks, nil is a tag test, the arm
+that only fails is gone, and one output comes back as itself: 4.6× to
+3.6×.
 
 **P4. A block is a linked list, made again at every step.** One block
 allocates:
