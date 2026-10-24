@@ -2,8 +2,8 @@
 // built editor (npm run build-editor) served from the site's root, the
 // guitar pedal opened, and its recording played through the preview. What
 // reaches the speakers is tapped with an analyser, as test/sound-browser.ts
-// does for the built page: it must be sound, driven louder than what came
-// in, and Softer must reach the audio thread. Fails on any error or
+// does for the built page: it must be sound, driven (as loud as what came in, its
+// peaks squashed), and Clean must reach the audio thread. Fails on any error or
 // warning logged.
 //
 //   node editor/sound-smoke.ts
@@ -78,7 +78,7 @@ try {
   for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector('[data-set="program"]')`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
   await run(`[...document.querySelectorAll('[data-set="program"]')].find((b) => b.textContent.includes("guitar pedal")).click()`);
   const frame = `document.querySelector("iframe.page").contentDocument`;
-  for (let i = 0; i < 100 && !(await run<boolean>(`${frame}?.querySelectorAll("button").length === 4`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; i < 100 && !(await run<boolean>(`${frame}?.querySelectorAll("button").length === 5`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
   const click = (label: string) => run(`[...${frame}.querySelectorAll("button")].find((b) => b.textContent === ${JSON.stringify(label)}).click()`);
   const playing = async (label: string) => {
     for (let i = 0; i < 100; i++) {
@@ -87,28 +87,34 @@ try {
     }
     throw new Error(`${label} didn't start playing`);
   };
-  // The loudest sample in and out over a second of playing.
-  const peaks = (tap: number) => run<{ into: number; out: number }>(`(async () => {
+  // The loudest sample and the loudness (RMS) in and out over a second of
+  // playing; loud over peak is the crest, which falls as the drive clips.
+  const levels = (tap: number) => run<{ into: number; out: number; intoRms: number; outRms: number }>(`(async () => {
     const t = window.taps[${tap}], buf = new Float32Array(2048);
-    let into = 0, out = 0;
+    let into = 0, out = 0, inSq = 0, outSq = 0, n = 0;
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      t.into.getFloatTimeDomainData(buf); for (const x of buf) into = Math.max(into, Math.abs(x));
-      t.out.getFloatTimeDomainData(buf); for (const x of buf) out = Math.max(out, Math.abs(x));
+      t.into.getFloatTimeDomainData(buf); for (const x of buf) { into = Math.max(into, Math.abs(x)); inSq += x * x; }
+      t.out.getFloatTimeDomainData(buf); for (const x of buf) { out = Math.max(out, Math.abs(x)); outSq += x * x; }
+      n += buf.length;
     }
-    return { into, out };
+    return { into, out, intoRms: Math.sqrt(inSq / n), outRms: Math.sqrt(outSq / n) };
   })()`);
+  // Driven: about as loud as what came in, under the speakers' limit, its
+  // peaks squashed towards its loudness.
+  const driven = (l: { into: number; out: number; intoRms: number; outRms: number }) =>
+    l.intoRms > 0.005 && l.out < 1 && l.outRms < 1.6 * l.intoRms && l.outRms > l.intoRms / 1.6 && l.out / l.outRms < 0.8 * (l.into / l.intoRms);
   const check = (what: string, ok: boolean, detail: object) => { if (ok) console.log(`ok  ${what} ${JSON.stringify(detail)}`); else errors.push(`${what}: ${JSON.stringify(detail)}`); };
 
-  // The strum is quieter: driven louder, then Softer turns it down.
+  // The strum, driven; then Clean gives it back as it came in.
   await click("A strum");
   await playing("A strum");
-  const strum = await peaks(0);
-  check("the recording, driven", strum.into > 0.01 && strum.out > 1.5 * strum.into, strum);
-  await click("Softer");
-  await click("Softer");
-  const softer = await peaks(0);
-  check("Softer reaches the audio thread", softer.out < strum.out * 0.9, { before: strum.out, after: softer.out });
+  const strum = await levels(0);
+  check("the recording, driven", driven(strum), strum);
+  await click("Driven");
+  await new Promise((r) => setTimeout(r, 300));
+  const clean = await levels(0);
+  check("Clean reaches the audio thread: what came in", clean.intoRms > 0.005 && Math.abs(clean.out - clean.into) < 0.05 * clean.into, clean);
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

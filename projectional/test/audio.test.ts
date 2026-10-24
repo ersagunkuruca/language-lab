@@ -29,6 +29,7 @@ import { readWav, writeWav } from "../cli/wav.ts";
 const lab = join(import.meta.dirname, "../cli/lab.ts");
 const dir = mkdtempSync(join(tmpdir(), "audio-"));
 const peak = (xs: ArrayLike<number>) => Math.max(...Array.from(xs, Math.abs));
+const rms = (xs: ArrayLike<number>) => Math.sqrt(Array.from(xs, (x) => x * x).reduce((a, b) => a + b, 0) / xs.length);
 const sine = (n: number, amp: number) => Array.from({ length: n }, (_, i) => amp * Math.sin((2 * Math.PI * 220 * i) / 48000));
 // The page main returns, from the evaluator.
 const evaluatorPage = (p: ReturnType<typeof pedal>["p"], page: Id) => runMain(p.code, p.info, page, { print: () => {}, names: p.names });
@@ -49,9 +50,12 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   assert.deepEqual(ways[1].out, ways[0].out);
   assert.deepEqual(ways[3].out, ways[2].out);
   ways[0].out.forEach((x, i) => assert.ok(sameNumber(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
-  // It drives and then compresses: a quiet note comes out louder, but not
-  // much over the compressor's threshold (0.5), and silence stays silent.
-  assert.ok(peak(ways[0].out) > 1.5 * peak(input) && peak(ways[0].out) < 0.7, `peak ${peak(ways[0].out)}`);
+  // It drives, compresses and comes back as loud as it went in: once the
+  // loudnesses have followed it in (a few hundredths of a second), a sine
+  // comes out as loud, its peaks squashed towards it; silence stays silent.
+  const after = ways[0].out.slice(128), dry = input.slice(128);
+  assert.ok(Math.abs(rms(after) / rms(dry) - 1) < 0.2, `loudness ${rms(after)} against ${rms(dry)}`);
+  assert.ok(peak(after) / rms(after) < 0.85 * (peak(dry) / rms(dry)), `crest ${peak(after) / rms(after)}`);
   assert.deepEqual([...playBlocks(await soundOf(p, main, "compiled"), new Float64Array(256)).out], new Array(256).fill(0));
 });
 
@@ -117,7 +121,7 @@ test("lab render: the pedal over a WAV file, written as one; a program whose mai
 
 // The audio thread's side of the pedal page (audio-worklet.ts), in a
 // stand-in for an AudioWorkletGlobalScope: its processor plays what the
-// pedal plays offline, and a write the page sends over the port (Softer)
+// pedal plays offline, and a write the page sends over the port (Clean)
 // reaches the cell the block function reads.
 test("the pedal page's worklet plays the pedal, and the page's cell writes reach it", async () => {
   const { p, main, page } = pedal();
@@ -138,11 +142,12 @@ test("the pedal page's worklet plays the pedal, and the page's cell writes reach
   const [left, right] = play(0);
   assert.deepEqual([...left], [...Float32Array.from(offline.slice(0, 128))]);
   assert.deepEqual([...right], [...left]);
-  // The page's first cell is the drive: turned down to 1 (drive is the
-  // sample itself), the next block is quieter than the pedal at 8 plays it.
-  node.port.onmessage!({ data: { cell: 0, value: 1 } });
-  const [quiet] = play(128);
-  assert.ok(peak(quiet) < 0.8 * peak(offline.slice(128)), `${peak(quiet)} against ${peak(offline.slice(128))}`);
+  // The page's second cell is Clean or Driven: at 0 the next block is the
+  // input as it came, which the pedal's isn't.
+  node.port.onmessage!({ data: { cell: 1, value: 0 } });
+  const [clean] = play(128);
+  assert.deepEqual([...clean], input.slice(128));
+  assert.notDeepEqual([...Float32Array.from(offline.slice(128))], input.slice(128));
   assert.deepEqual(said, []);
   assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
 });
