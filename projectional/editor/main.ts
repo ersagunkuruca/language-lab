@@ -1125,6 +1125,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
+      n.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
       splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
     // A step of an action (print this, then that): its place in the order.
     const earlier = Top.moveStep(doc.code, doc.names.short, id, -1), later = Top.moveStep(doc.code, doc.names.short, id, 1);
@@ -1743,6 +1744,8 @@ function menuAction(act: string, target: Id | undefined) {
       if (!applyT(r.ok ? { ...r, note: "The function is a hole now and its inputs stayed: pick another from the palette." } : r)) return;
       swapped = { hole: fn, at: undo.length };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
+      // From the call's panel: the hole is selected, so the panel is its palette.
+      else { ui.selected = fn; render(); document.getElementById("f-query")?.focus(); }
       return;
     }
     case "pick": { graph?.pick(target!); ui.menu = null; return render(); }
@@ -2206,7 +2209,7 @@ const blocksKind = (id: Id): MenuTarget["kind"] => {
 function blocksHit(t: EventTarget | null): Id | null {
   const hit = (t as HTMLElement | null)?.closest?.<HTMLElement>(".blocks-wrap [data-id]");
   if (!hit) return null;
-  const call = hit.classList.contains("op") ? hit.parentElement?.closest<HTMLElement>("[data-id]") : null;
+  const call = hit.classList.contains("op") || hit.classList.contains("head") ? hit.parentElement?.closest<HTMLElement>("[data-id]") : null;
   return (call ?? hit).dataset.id!;
 }
 
@@ -2538,6 +2541,7 @@ document.addEventListener("click", (e) => {
     if (a === "open-file") return openFile();
     if (a === "save-file") return saveFile();
     if (a === "delete-program") return deleteProgram();
+    if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped();
@@ -2608,7 +2612,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Tab" && inProgram && !e.ctrlKey && !e.metaKey && !e.altKey) {
     // The order the blocks read in, or without them the tree's. An
     // operator's glyph stands for the function it calls, not a part here.
-    const blocks = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id]:not(.op)")].map((el) => el.dataset.id!);
+    const blocks = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id]:not(.op):not(.head)")].map((el) => el.dataset.id!);
     const shown = [...new Set(blocks.length ? blocks : T.readingOrder(doc.code, ui.def).filter((id) => document.querySelector(`.p-graph [data-id="${id}"]`)))].filter((id) => id !== ui.def);
     const at = ui.selected ? shown.indexOf(ui.selected) : -1;
     const next = e.shiftKey ? (at < 0 ? shown.length - 1 : at - 1) : at + 1;

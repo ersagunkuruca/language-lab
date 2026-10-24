@@ -167,6 +167,15 @@ async function swapAndUndo() {
   await p.locator('.ctx-menu [data-menu="swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Change the function in its menu`));
   await p.locator("button", { hasText: /^subtract/ }).first().click({ timeout: 2000 }).catch(() => {});
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
+  // A function's name picks its whole call, whose panel changes the
+  // function (BACKLOG E92).
+  where = "a function's name in the blocks";
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator(".blocks-wrap .head", { hasText: /^print$/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: main shows no print by name`));
+  const head = (await p.locator(".insp-head").first().innerText()).trim();
+  if (head !== "Step (call)") errors.push(`${where}: clicking it selects a ${JSON.stringify(head)}, not the call`);
+  await p.locator('[data-act="t-swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the call's panel has no Change the function`));
+  if (!(await p.locator("#f-query").count())) errors.push(`${where}: Change the function doesn't open the palette`);
   await p.close();
 }
 
