@@ -466,9 +466,13 @@ On the command line the program waits for the reply (Node's world hands
 the request to a child process and blocks on it). A page can't wait, so
 in a page `fetch text` asks and, until the reply lands, *suspends*: a view
 that fetched keeps what it shows and runs again when the reply comes, and
-an event handler runs again from the start with the same event (so a
-handler should fetch before it writes, the way a Suspense render must be
-pure). This is Solid's `createResource` and React's Suspense, built from
+an event handler runs again from the start with the same event. The run
+that stopped at the fetch is taken back first: its writes to cells and
+files are undone and its printing never happens (`attempt` in
+`src/lang/cells.ts`, software transactional memory's retry), so a handler
+may write before it fetches and each write still happens once, as a path a
+search abandons leaves nothing behind. Resuming the handler where it
+stopped, instead of running it again, is L59. This is Solid's `createResource` and React's Suspense, built from
 the cells a page already has (`Pending` in `src/lang/cells.ts`). A view's
 row has no `Abort`, so a view that fetches has to catch it and show
 something; a handler may let it go (the page logs it).

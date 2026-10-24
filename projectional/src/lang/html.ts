@@ -136,12 +136,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             const target = (ev.target ?? e) as El & { type?: string };
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
             // One batch per event: the page updates once, after every write.
-            // A handler that fetched what hasn't come runs again from the
-            // start when it lands, with the same event (so it should fetch
-            // before it writes, as a Suspense render must be pure).
+            // A handler that fetched what hasn't come is taken back (its
+            // writes undone, its printing never done: cells.ts attempt) and
+            // runs again from the start when the reply lands, with the same
+            // event, so what it did before the fetch happens once.
             const fire = () => {
               try {
-                cells.batch(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] })));
+                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] })), (e) => e instanceof Pending);
               } catch (err) {
                 if (err instanceof Pending) err.ready.then(fire);
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
