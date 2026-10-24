@@ -392,6 +392,22 @@ functions cross between them: `optional(action)`, the at-most-one sibling of
 which is `Choice` again. There is still no null: `none` is a case you
 match on.
 
+### `Outcome`: the data form of Abort
+
+`Abort` has a reason but, on its own, can't be stored either: a batch
+import that should keep going past a bad line, or a form with several
+fields, wants "this one failed, and why" in a list. `Outcome a = done(value:
+a) | refused(reason: Text)` is how it's stored, and the same two crossings:
+`attempt(action)` runs the action and gives `done(answer)`, or
+`refused(reason)` if it aborted (its type takes `Abort` out of the row,
+`(() -[Abort, e]-> a) -[e]-> Outcome a`), and `value or abort(o)` is the
+`Abort` again. Both are prelude definitions over an ordinary match with an
+`abort(reason)` case. So the whole error story is: `Choice` for no answer,
+`Abort` for a reason, an effect you declare for a typed error, and each
+with a data form. Rust's `Result` and `?` are the influence; the
+difference is that here the effect is the default and the data the
+exception. (`test/outcome.test.ts`.)
+
 ### The world and Choice
 
 `count(() => x = one of([1, 2, 3]); print("trying " ++ show(x)); fail())`

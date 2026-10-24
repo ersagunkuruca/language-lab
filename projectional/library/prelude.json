@@ -6383,6 +6383,177 @@
           "@ffvjl4eq3ftk38cuspridvto96:2"
         ],
         "body": "@ffvjl4eq3ftk38cuspridvto96:3"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60",
+        "kind": "def",
+        "body": "@87lq2ohol2h5smo6ubhrk68p60:1"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:2": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:2",
+        "kind": "binder"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:7": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:7",
+        "kind": "ref",
+        "target": "@87lq2ohol2h5smo6ubhrk68p60:2"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:6": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:6",
+        "kind": "call",
+        "fn": "@87lq2ohol2h5smo6ubhrk68p60:7",
+        "args": []
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:5": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:5",
+        "kind": "ref",
+        "target": "std.outcome.done"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:4": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:4",
+        "kind": "call",
+        "fn": "@87lq2ohol2h5smo6ubhrk68p60:5",
+        "args": [
+          "@87lq2ohol2h5smo6ubhrk68p60:6"
+        ]
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:9": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:9",
+        "kind": "binder"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:11": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:11",
+        "kind": "ref",
+        "target": "std.outcome.refused"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:12": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:12",
+        "kind": "ref",
+        "target": "@87lq2ohol2h5smo6ubhrk68p60:9"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:10": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:10",
+        "kind": "call",
+        "fn": "@87lq2ohol2h5smo6ubhrk68p60:11",
+        "args": [
+          "@87lq2ohol2h5smo6ubhrk68p60:12"
+        ]
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:8": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:8",
+        "kind": "arm",
+        "variant": "std.abort.abort",
+        "binds": [
+          "@87lq2ohol2h5smo6ubhrk68p60:9"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@87lq2ohol2h5smo6ubhrk68p60:10"
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:3": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:3",
+        "kind": "match",
+        "scrutinee": "@87lq2ohol2h5smo6ubhrk68p60:4",
+        "arms": [
+          "@87lq2ohol2h5smo6ubhrk68p60:8"
+        ],
+        "otherwise": null
+      },
+      "@87lq2ohol2h5smo6ubhrk68p60:1": {
+        "id": "@87lq2ohol2h5smo6ubhrk68p60:1",
+        "kind": "lambda",
+        "params": [
+          "@87lq2ohol2h5smo6ubhrk68p60:2"
+        ],
+        "body": "@87lq2ohol2h5smo6ubhrk68p60:3"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru",
+        "kind": "def",
+        "body": "@4ufmuo5v7qnbsfq638ej7h0jru:1"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:2": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:2",
+        "kind": "binder"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:4": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:4",
+        "kind": "ref",
+        "target": "@4ufmuo5v7qnbsfq638ej7h0jru:2"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:6": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:6",
+        "kind": "binder"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:7": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:7",
+        "kind": "ref",
+        "target": "@4ufmuo5v7qnbsfq638ej7h0jru:6"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:5": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:5",
+        "kind": "arm",
+        "variant": "std.outcome.done",
+        "binds": [
+          "@4ufmuo5v7qnbsfq638ej7h0jru:6"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@4ufmuo5v7qnbsfq638ej7h0jru:7"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:9": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:9",
+        "kind": "binder"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:11": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:11",
+        "kind": "ref",
+        "target": "std.abort.abort"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:12": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:12",
+        "kind": "ref",
+        "target": "@4ufmuo5v7qnbsfq638ej7h0jru:9"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:10": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:10",
+        "kind": "call",
+        "fn": "@4ufmuo5v7qnbsfq638ej7h0jru:11",
+        "args": [
+          "@4ufmuo5v7qnbsfq638ej7h0jru:12"
+        ]
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:8": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:8",
+        "kind": "arm",
+        "variant": "std.outcome.refused",
+        "binds": [
+          "@4ufmuo5v7qnbsfq638ej7h0jru:9"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@4ufmuo5v7qnbsfq638ej7h0jru:10"
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:3": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:3",
+        "kind": "match",
+        "scrutinee": "@4ufmuo5v7qnbsfq638ej7h0jru:4",
+        "arms": [
+          "@4ufmuo5v7qnbsfq638ej7h0jru:5",
+          "@4ufmuo5v7qnbsfq638ej7h0jru:8"
+        ],
+        "otherwise": null
+      },
+      "@4ufmuo5v7qnbsfq638ej7h0jru:1": {
+        "id": "@4ufmuo5v7qnbsfq638ej7h0jru:1",
+        "kind": "lambda",
+        "params": [
+          "@4ufmuo5v7qnbsfq638ej7h0jru:2"
+        ],
+        "body": "@4ufmuo5v7qnbsfq638ej7h0jru:3"
       }
     },
     "defs": [
@@ -6423,6 +6594,8 @@
       "@v53dcuo5olrbvtgve59t594n5r",
       "@8lv70ktegk2fi32oir2900hcan",
       "@ffvjl4eq3ftk38cuspridvto96",
+      "@87lq2ohol2h5smo6ubhrk68p60",
+      "@4ufmuo5v7qnbsfq638ej7h0jru",
       "@fbbi4qvo7d58s98tv0etifnllv",
       "@g68h67scr0eirikv8og762j6u3",
       "@qvk73gc0r0qv7a38j4oc5nrsjc",
@@ -7830,6 +8003,82 @@
         0
       ]
     },
+    "@87lq2ohol2h5smo6ubhrk68p60": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [],
+            "ret": {
+              "t": "var",
+              "v": 0
+            },
+            "eff": {
+              "effs": [
+                "std.abort"
+              ],
+              "tail": 1
+            }
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.outcome",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@4ufmuo5v7qnbsfq638ej7h0jru": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.outcome",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [
+            "std.abort"
+          ],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
     "@fbbi4qvo7d58s98tv0etifnllv": {
       "vars": [],
       "rows": [
@@ -8492,7 +8741,14 @@
     "@ffvjl4eq3ftk38cuspridvto96:22": "slot",
     "@ffvjl4eq3ftk38cuspridvto96:23": "higher",
     "@ffvjl4eq3ftk38cuspridvto96:24": "merged",
-    "@ffvjl4eq3ftk38cuspridvto96:30": "run"
+    "@ffvjl4eq3ftk38cuspridvto96:30": "run",
+    "@87lq2ohol2h5smo6ubhrk68p60": "attempt",
+    "@87lq2ohol2h5smo6ubhrk68p60:2": "action",
+    "@87lq2ohol2h5smo6ubhrk68p60:9": "reason",
+    "@4ufmuo5v7qnbsfq638ej7h0jru": "value or abort",
+    "@4ufmuo5v7qnbsfq638ej7h0jru:2": "outcome",
+    "@4ufmuo5v7qnbsfq638ej7h0jru:6": "value",
+    "@4ufmuo5v7qnbsfq638ej7h0jru:9": "reason"
   },
   "comments": {
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
@@ -8519,6 +8775,8 @@
     "@idiaof7f0r6jhar1phf6uup59c": "What −x is at Rational. Not offered on its own: − is.",
     "@becso7bpuoumte8afa0eurkp1r": "What < is at Rational. Not offered on its own: < is.",
     "@ffvjl4eq3ftk38cuspridvto96": "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    "@87lq2ohol2h5smo6ubhrk68p60": "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
+    "@4ufmuo5v7qnbsfq638ej7h0jru": "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
     "@v53dcuo5olrbvtgve59t594n5r": "Two sorted lists as one. A helper of sort, not offered.",
     "@8lv70ktegk2fi32oir2900hcan": "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     "@8o6ptf0efocthvugd6capvcf2l": "The Number x as a complex number, x + 0i.",
@@ -8574,6 +8832,8 @@
     "@itrutcjuml4ip1t1nbb8dkfhrh",
     "@3sc5994e0iegdsc875vjlqvv5m",
     "@tu0hmqf815cglqlbjfk0np3l0f",
-    "@ffvjl4eq3ftk38cuspridvto96"
+    "@ffvjl4eq3ftk38cuspridvto96",
+    "@87lq2ohol2h5smo6ubhrk68p60",
+    "@4ufmuo5v7qnbsfq638ej7h0jru"
   ]
 }
