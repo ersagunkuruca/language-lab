@@ -54,8 +54,12 @@ const errorAt = (p: ReturnType<typeof program>, d: Id) => {
 test("the vectors module is published as built: rebuilding gives the same ids", () => {
   assert.deepEqual(buildVectors(), VECTORS);
   assert.equal(verify(VECTORS, LIBRARY.code, true), null);
-  // Every definition is generic over a record of Numbers, and its pin says so.
-  for (const d of VECTORS.exports) assert.deepEqual(VECTORS.pins[d].numbers, [0], VECTORS.names[d]);
+  // Every definition is generic over a record of Numbers, and its pin says
+  // so; plus, minus and times are the one + − ·, so over any number type.
+  for (const d of VECTORS.exports) {
+    const old = ["plus", "minus", "times"].includes(VECTORS.names[d]);
+    assert.deepEqual(old ? VECTORS.pins[d].arith : VECTORS.pins[d].numbers, [0], VECTORS.names[d]);
+  }
 });
 
 test("one definition for points, colours and Numbers", () => {

@@ -64,7 +64,7 @@ test("records are WasmGC structs: the ray marcher's colours in WebAssembly, exac
     fields.forEach((name, i) => assert.ok(Object.is(w[`Colour.${name}`](got), want.fields[i]), `colour(${x}, ${y}, ${t}).${name}: ${w[`Colour.${name}`](got)} ≠ ${want.fields[i]}`));
   }
   // A generic definition at two types is exported once by its name, then by its types.
-  assert.ok(m.exports.includes("plus") && m.exports.some((e) => /^plus\(/.test(e)), m.exports.join(" "));
+  assert.ok(m.exports.includes("scale") && m.exports.some((e) => /^scale\(/.test(e)), m.exports.join(" "));
 });
 
 // Values across the boundary, through the module's own makers and readers.

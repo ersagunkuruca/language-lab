@@ -42,10 +42,12 @@ test("vectors module: on a GPU, each definition is the vector operation it descr
   const p = parts();
   const s = emitWgsl(lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { records: true }));
   assert.deepEqual([...s.refused.keys()], []);
-  const body = (name: string, params: string) => new RegExp(`fn ${name}_\\d+\\(${params.replace(/[()]/g, "\\$&")}\\) -> [a-z0-9]+ \\{\\n {2}`);
+  // plus, minus and times are the one + − ·, so their copies are named by type: plus at Vec.
+  const body = (name: string, params: string) => new RegExp(`fn ${name}(?:_at_[A-Za-z]+)?_\\d+\\(${params.replace(/[()]/g, "\\$&")}\\) -> [a-z0-9]+ \\{\\n {2}`);
   const one = (name: string, params: string, ret: string) => assert.match(s.wgsl, new RegExp(body(name, params).source + ret.replace(/[()*+./]/g, "\\$&") + ";"), name);
   one("plus", "p0: vec3f, p1: vec3f", "return p0 + p1");
-  one("minus", "p0: vec3f, p1: vec3f", "return p0 - p1");
+  // − on two points, inside distance, is the GPU's − on vec3f.
+  assert.match(s.wgsl, /fn distance(?:_at_Vec)?_\d+\(p0: vec3f, p1: vec3f\) -> f32 \{\n {2}return magnitude_\d+\(p0 - p1\);/);
   one("times", "p0: vec3f, p1: vec3f", "return p0 * p1");
   one("scale", "p0: f32, p1: vec3f", "return p0 * p1");
   one("dot", "p0: vec3f, p1: vec3f", "return dot(p0, p1)");

@@ -48,7 +48,7 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.keys()], []);
   const funcs = lowered.funcs.map((f) => f.name);
-  for (const d of ["march", "shadow", "shade", "trace", "scene", "plus", "scale", "unit"]) assert.ok(funcs.includes(d), d);
+  for (const d of ["march", "shadow", "shade", "trace", "scene", "scale", "unit"]) assert.ok(funcs.includes(d), d);
   // Only colour is a place to start: the rest may not finish, so they run
   // under its budget.
   assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour"]);
@@ -65,7 +65,8 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.match(s.wgsl, /fn mix_\d+\(p0: vec3f, p1: vec3f, p2: f32\) -> vec3f \{\n {2}return mix\(p0, p1, p2\);/);
   assert.match(s.wgsl, /fn dot_\d+\(p0: vec3f, p1: vec3f\) -> f32 \{\n {2}return dot\(p0, p1\);/);
   assert.match(s.wgsl, /fn magnitude_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
-  assert.match(s.wgsl, /fn minus_\d+\(p0: vec3f, p1: vec3f\) -> vec3f \{\n {2}return p0 - p1;/);
+  // The one + on two points is the GPU's + on vec3f.
+  assert.match(s.wgsl, /shade_\d+\(l\d+ \+ l\d+, p\d\)/);
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And the normal is the gradient: close to central differences, away
   // from the blend's seams, both from the code the shader gets and from
