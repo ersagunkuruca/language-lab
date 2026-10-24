@@ -8,6 +8,8 @@
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
+//   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
+//                                        play a sound over a WAV file (AUDIO.md)
 //
 // A program is a file saved by the editor (Save file), or a folder of side
 // tables like projectional/examples/sort. `main` gets the arguments as a list
@@ -41,6 +43,9 @@ import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { execFileSync } from "node:child_process";
 import { webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
+import { soundOf } from "./sound.ts";
+import { readWav, writeWav } from "./wav.ts";
+import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
@@ -49,6 +54,8 @@ const USAGE = `usage:
   lab check <program>                   type-check, and list the definitions and their types
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
+  lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
+                                        play the sound main makes over a WAV file, n samples a block (default 128)
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore representations.json and run the definitions as written
@@ -242,6 +249,23 @@ switch (command) {
       writeFileSync(join(out, file), x);
     }
     process.stderr.write(`lab: wrote ${out}/; put ${out}/www on an HTTPS host to install it, or see ${out}/README.md for Android and iOS\n`);
+    break;
+  }
+  case "render": {
+    const def = p.own.find((d) => p.names[d] === mainName) ?? fail(`${p.title} has no definition named ${mainName}`);
+    const problem = audioProblem(p.info, def, p.names);
+    if (problem) fail(`${mainName} can't be a sound: ${problem}`);
+    const option = (flag: string) => { const at = rest.indexOf(flag); if (at < 0) return undefined; const v = rest[at + 1] ?? fail(`${flag} needs a value`); rest.splice(at, 2); return v; };
+    const out = option("-o"), size = Number(option("--block") ?? BLOCK), compiled = rest.includes("--compiled");
+    const input = rest.find((a) => !a.startsWith("--")) ?? fail("render needs a WAV file to play the sound over");
+    if (!Number.isInteger(size) || size < 2 || size % 2) fail("--block takes an even number of samples, 2 or more");
+    let wav;
+    try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
+    const played = playBlocks(await soundOf(p, def, compiled ? "compiled" : "evaluator"), wav.samples, size);
+    const to = out ?? input.replace(/(\.wav)?$/i, ".out.wav");
+    writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
+    if (played.silent.length) process.stderr.write(`lab: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);
+    process.stderr.write(`lab: wrote ${to}, ${(wav.samples.length / wav.rate).toFixed(2)} s at ${wav.rate} Hz\n`);
     break;
   }
   case "check": {

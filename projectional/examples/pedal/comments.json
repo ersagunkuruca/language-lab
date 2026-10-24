@@ -1,0 +1,8 @@
+{
+  "1civ7ingvhqusc01os699km38j": "A sample as a point of saturation space: atanh, written as log(2 / (1 − x) − 1) / 2 so x appears once and running it backwards is one answer (tanh).",
+  "7eouno0bhqkmcmt13rhnh4i76a": "Overdrive: scale the sample in saturation space and come back, tanh(amount · atanh(x)). It keeps −1 to 1, is the sample itself at amount 1, and pushes towards ±1 as amount grows, a soft clipper whose way back nobody wrote.",
+  "0ing829ao0cblr2g2f7mtri9e1": "Haar's split: each pair of samples as their average (the slow band) and half their difference (the fast band). Run backwards it joins them again.",
+  "ntd5han76lg2isrdh3rl4689j1": "Overdrive the slow band and leave the fast one: the low strings break up, the pick attack stays clean.",
+  "sc7mm812bcbvavsmvohj669di6": "The pedal: a block of samples split into bands, the slow one driven, joined again. The amount is a cell, so a knob can turn it (AUDIO.md).",
+  "program": "A guitar pedal by conjugation, twice: drive is a scaling done in saturation space (atanh, there and back), and it is done to one band of Haar's split (split, drive, join). Each way back is the way there run backwards.\nPrior art: Haar's wavelet (Alfréd Haar, 1910); tanh soft clipping is textbook distortion; a multiband pedal splits with a crossover where this uses Haar. Conjugation is Ersagun's idea from Rubik's cube commutators."
+}

@@ -1,5 +1,11 @@
 # Audio: a sound is a function on blocks, the speaker is a world
 
+**Status.** A1 is done: `lab render` plays a sound over a WAV file, and
+`examples/pedal` makes sound, the evaluator and compiled to the same bits.
+Compiled, it plays 17 blocks a second of the 375 real time needs: both ways
+back (atanh's, Haar's) run in the relational interpreter for each call.
+A1b and A1c write them out.
+
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
 that runs a guitar pedal live: no new node kinds, no new kind of program. A
@@ -14,7 +20,7 @@ real program.
 - **What is a sound program?** A function
 
   ```
-  pedal : (List Number) -[Cells, Random]-> List Number
+  pedal : (List Number) -[Cells, Update, Random]-> List Number
   ```
 
   that takes a block of samples (mono, each in -1 to 1, 128 of them) and
@@ -47,8 +53,8 @@ real program.
   writes them; nothing else can. That is Faust's `~` (a feedback loop with a
   one-sample delay) made explicit and by block.
 - **What can a block function do?** Its row is closed, named once in std.ts
-  as `AUDIO_BLOCK`, like `PAGE_VIEW` and `PAGE_HANDLER`: `Cells` (its
-  state), `Random` (noise; the runtime seeds it, so a render repeats) and
+  as `AUDIO_BLOCK`, like `PAGE_VIEW` and `PAGE_HANDLER`: `Cells` and
+  `Update` (its state, read and written), `Random` (noise; the runtime seeds it, so a render repeats) and
   `Diverge` under a step budget. No `Console`, `Files`, `Time` or `Log`:
   the audio thread can't wait, and 375 blocks a second must not print. A
   block that runs out of steps, aborts or gives a block of the wrong length
