@@ -259,6 +259,9 @@ async function pagePreview() {
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const f = p.frameLocator("iframe.page");
+  // The page has the base look (page.ts PAGE_BASE), not the browser's serif.
+  const font = await f.locator("body").evaluate((e) => getComputedStyle(e).fontFamily);
+  if (!font.includes("system-ui")) errors.push(`${where}: the page is in the browser's default font (${font})`);
   await f.locator("#hundred").click();
   const status = () => f.locator("#status").innerText({ timeout: 2000 }).catch(() => "(no status)");
   if (!(await status()).startsWith("Rolls: 100;")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
