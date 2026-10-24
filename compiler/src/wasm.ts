@@ -42,10 +42,10 @@ const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.st
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
-  mod: { name: "mod", params: 2 },
 };
-// The evaluator's own mod (std.ts), imported like Math's, so WASM agrees with it.
-const MOD = STD_IMPL[S.mod] as (a: number, b: number) => number;
+// Number arithmetic the runtime writes itself (mod, from musl's fmod): it
+// alone doesn't make a module need texts.
+const NUMERIC = new Set(["number.mod", "number.fmod"]);
 // float32: to f32 and back, which rounds to the nearest binary32 value.
 const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   add: [0xa0, "f64.add"], sub: [0xa1, "f64.sub"], mul: [0xa2, "f64.mul"], div: [0xa3, "f64.div"],
@@ -64,6 +64,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const { funcs } = lowered;
   // Host functions used, in a fixed order: they take the first indices.
   const hosts = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
+  // A WASI host has no Math: sin and the rest aren't written in WebAssembly yet.
+  if (wasi && hosts.length) throw new Error(`a WASI command can't use ${hosts.join(", ")} yet: only a JavaScript host has them`);
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
   // The runtime functions used, with the ones they use; `host.show` is an import.
   // WASI's functions it uses (wasi_fd_write …) are imports, and the
@@ -74,9 +76,13 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
     if (/^Text(List|Option)\./.test(name)) return;
     rtNames.push(name);
-    if (name !== "host.show") runtime(name).uses.forEach(need);
+    if (name !== "host.show" || wasi) runtime(name).uses.forEach(need);
   };
-  const rtCalls = (e: SExpr): void => { if (e.k === "rt") need(e.fn); kids(e).forEach(rtCalls); };
+  const rtCalls = (e: SExpr): void => {
+    if (e.k === "rt") need(e.fn);
+    if (e.k === "op" && e.op === "mod") need("number.mod");
+    kids(e).forEach(rtCalls);
+  };
   funcs.forEach((f) => rtCalls(f.body));
   // The world's operations used, imported from "world" in the order first
   // used, then "reason" (the last failure's) when one can fail.
@@ -92,11 +98,12 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     need("wasi.line");
     need("wasi_proc_exit");
   }
-  const texty = rtNames.length > 0 || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
+  const texty = rtNames.some((n) => !NUMERIC.has(n)) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
-  const hostShow = rtNames.includes("host.show");
-  const rts: RtFn[] = rtNames.filter((n) => n !== "host.show").map(runtime);
+  // With no JavaScript, host.show is the runtime's own, which traps (wasm-rt.ts).
+  const hostShow = !wasi && rtNames.includes("host.show");
+  const rts: RtFn[] = rtNames.filter((n) => n !== "host.show" || wasi).map(runtime);
   const worldReason = worldOps.some((x) => x.aborts);
   const worldBase = hosts.length + (hostShow ? 1 : 0);
   const worldIndex = (op: string) => (wasi ? rtIndex(`wasi.${op}`) : worldBase + worldOps.findIndex((x) => x.op === op));
@@ -179,7 +186,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const resolver = (f?: RtFn) => ({
     type: (n: string) => (n === "bytes" ? bytesIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
-      if (n === "host.show") return hosts.length;
+      if (n === "host.show") return wasi ? rtIndex(n) : hosts.length;
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
       const h = helpers.findIndex((x) => x.name === n);
@@ -425,6 +432,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "op": {
         const args = e.args.flatMap(code1);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
+        if (e.op === "mod") return [...args, 0x10, ...u(rtIndex("number.mod"))];
         return [...args, ...[INSTR[e.op]![0]].flat()];
       }
     }
@@ -546,7 +554,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
       case "zero": return `${d}${zeroText(e.t)}`;
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
-      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : INSTR[e.op]![1]}`].join("\n");
+      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
@@ -599,7 +607,7 @@ const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some
 export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
   const host = { show: (x: number) => toText(ex, SHOW(x)) };
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, mod: MOD }, host, world: worldOf(rt, () => ex) });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 }, host, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
 }

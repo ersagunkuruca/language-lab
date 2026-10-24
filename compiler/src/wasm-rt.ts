@@ -50,7 +50,8 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.add": [[0x6a], []], "i32.sub": [[0x6b], []], "i32.mul": [[0x6c], []], "i32.div_u": [[0x6e], []], "i32.rem_u": [[0x70], []], "i32.and": [[0x71], []], "i32.or": [[0x72], []], "i32.xor": [[0x73], []],
   "i64.add": [[0x7c], []], "i64.sub": [[0x7d], []], "i64.mul": [[0x7e], []], "i64.div_s": [[0x7f], []], "i64.div_u": [[0x80], []], "i64.rem_s": [[0x81], []], "i64.rem_u": [[0x82], []],
   "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []], "i64.shl": [[0x86], []], "i64.shr_s": [[0x87], []], "i64.shr_u": [[0x88], []],
-  "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i32.shl": [[0x74], []], "i32.shr_u": [[0x76], []],
+  "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i64.le_u": [[0x58], []], "i64.ge_u": [[0x5a], []],
+  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.shr_u": [[0x76], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
   // Linear memory (WASI's buffers), aligned naturally, at offset 0.
@@ -569,7 +570,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   // JavaScript writes), and by the host's `show` otherwise.
   "number.show": {
     params: [["x", "f64"]], result: "text", locals: [["y", "f64"], ["r", "f64"], ["n", "i64"], ["m", "i64"], ["f", "i64"], ["buf", "text"], ["i", "i32"], ["out", "text"], ["y_text", "text"]],
-    uses: ["int.show", "text.concat", "host.show"],
+    uses: ["int.show", "text.concat", "host.show", "number.tiny"],
     body: `
       local.get $x
       f64.floor
@@ -578,7 +579,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
       if void
         local.get $x
         f64.abs
-        f64.const 9.2e18
+        f64.const 9007199254740992
         f64.lt
         if void
           local.get $x
@@ -618,8 +619,14 @@ const R: Record<string, Omit<RtFn, "name">> = {
       end
       local.get $r
       f64.abs
-      f64.const 1e15
+      f64.const 9.2e18
       f64.ge
+      if void
+        local.get $x
+        call $host.show
+        return
+      end
+      ;; below 1e-6 (and not 0), JavaScript writes 5.5e-7
       local.get $r
       f64.abs
       f64.const 1000
@@ -628,7 +635,44 @@ const R: Record<string, Omit<RtFn, "name">> = {
       f64.const 0
       f64.ne
       i32.and
-      i32.or
+      if void
+        local.get $r
+        call $number.tiny
+        return
+      end
+      ;; rounded to 0 (x below 5e-10)
+      local.get $r
+      f64.const 0
+      f64.eq
+      if void
+        i64.const 0
+        call $int.show
+        return
+      end
+      ;; more than 15 digits after the zeros at the end go: JavaScript's
+      ;; shortest form may have fewer
+      local.get $r
+      f64.abs
+      i64.trunc_f64_s
+      local.set $m
+      block void
+        loop void
+          local.get $m
+          i64.const 10
+          i64.rem_u
+          i64.const 0
+          i64.ne
+          br_if 1
+          local.get $m
+          i64.const 10
+          i64.div_u
+          local.set $m
+          br 0
+        end
+      end
+      local.get $m
+      i64.const 1000000000000000
+      i64.ge_u
       if void
         local.get $x
         call $host.show
@@ -737,6 +781,346 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $out
       local.get $y_text
       call $text.concat`,
+  },
+  // r·10⁻⁹ for a whole r of 1 to 999 (and its sign), as JavaScript writes
+  // it: r's digits without the zeros at the end, a point after the first,
+  // then e-7, e-8 or e-9.
+  "number.tiny": {
+    params: [["r", "f64"]], result: "text", locals: [["d", "text"], ["n", "i32"], ["out", "text"], ["part", "text"]], uses: ["int.show", "text.concat"],
+    body: `
+      local.get $r
+      f64.abs
+      i64.trunc_f64_s
+      call $int.show
+      local.tee $d
+      array.len
+      local.set $n
+      block void
+        loop void
+          local.get $d
+          local.get $n
+          i32.const 1
+          i32.sub
+          array.get_u $bytes
+          i32.const 48
+          i32.ne
+          br_if 1
+          local.get $n
+          i32.const 1
+          i32.sub
+          local.set $n
+          br 0
+        end
+      end
+      local.get $r
+      f64.const 0
+      f64.lt
+      if text
+        i32.const 45
+        array.new_fixed $bytes 1
+      else
+        i32.const 0
+        array.new_default $bytes
+      end
+      local.get $d
+      i32.const 0
+      array.get_u $bytes
+      array.new_fixed $bytes 1
+      call $text.concat
+      local.set $out
+      local.get $n
+      i32.const 1
+      i32.gt_u
+      if void
+        local.get $n
+        array.new_default $bytes
+        local.tee $part
+        i32.const 0
+        i32.const 46
+        array.set $bytes
+        local.get $part
+        i32.const 1
+        local.get $d
+        i32.const 1
+        local.get $n
+        i32.const 1
+        i32.sub
+        array.copy $bytes $bytes
+        local.get $out
+        local.get $part
+        call $text.concat
+        local.set $out
+      end
+      local.get $out
+      i32.const 101
+      i32.const 45
+      i32.const 58
+      local.get $d
+      array.len
+      i32.sub
+      array.new_fixed $bytes 3
+      call $text.concat`,
+  },
+  // IEEE remainder of x by y with x's sign, which is JavaScript's x % y
+  // and WebAssembly lacks: adapted from musl's fmod (src/math/fmod.c, MIT
+  // licence), shifting y's significand along x's, so it's exact.
+  "number.fmod": {
+    params: [["x", "f64"], ["y", "f64"]], result: "f64", locals: [["ux", "i64"], ["uy", "i64"], ["ex", "i64"], ["ey", "i64"], ["sx", "i64"], ["i", "i64"]], uses: [],
+    body: `
+      local.get $x
+      i64.reinterpret_f64
+      local.tee $ux
+      i64.const 52
+      i64.shr_u
+      i64.const 2047
+      i64.and
+      local.set $ex
+      local.get $y
+      i64.reinterpret_f64
+      local.tee $uy
+      i64.const 52
+      i64.shr_u
+      i64.const 2047
+      i64.and
+      local.set $ey
+      local.get $ux
+      i64.const 63
+      i64.shr_u
+      local.set $sx
+      ;; y zero or NaN, or x infinite or NaN: NaN
+      local.get $uy
+      i64.const 1
+      i64.shl
+      i64.eqz
+      local.get $y
+      local.get $y
+      f64.ne
+      i32.or
+      local.get $ex
+      i64.const 2047
+      i64.eq
+      i32.or
+      if void
+        local.get $x
+        local.get $y
+        f64.mul
+        local.get $x
+        local.get $y
+        f64.mul
+        f64.div
+        return
+      end
+      ;; |x| <= |y|
+      local.get $ux
+      i64.const 1
+      i64.shl
+      local.get $uy
+      i64.const 1
+      i64.shl
+      i64.le_u
+      if void
+        local.get $ux
+        i64.const 1
+        i64.shl
+        local.get $uy
+        i64.const 1
+        i64.shl
+        i64.eq
+        if void
+          f64.const 0
+          local.get $x
+          f64.mul
+          return
+        end
+        local.get $x
+        return
+      end
+      ;; the significands, normalized
+      local.get $ex
+      i64.eqz
+      if void
+        local.get $ux
+        i64.const 12
+        i64.shl
+        local.set $i
+        block void
+          loop void
+            local.get $i
+            i64.const 63
+            i64.shr_u
+            i64.eqz
+            i32.eqz
+            br_if 1
+            local.get $ex
+            i64.const 1
+            i64.sub
+            local.set $ex
+            local.get $i
+            i64.const 1
+            i64.shl
+            local.set $i
+            br 0
+          end
+        end
+        local.get $ux
+        i64.const 1
+        local.get $ex
+        i64.sub
+        i64.shl
+        local.set $ux
+      else
+        local.get $ux
+        i64.const 4503599627370495
+        i64.and
+        i64.const 4503599627370496
+        i64.or
+        local.set $ux
+      end
+      local.get $ey
+      i64.eqz
+      if void
+        local.get $uy
+        i64.const 12
+        i64.shl
+        local.set $i
+        block void
+          loop void
+            local.get $i
+            i64.const 63
+            i64.shr_u
+            i64.eqz
+            i32.eqz
+            br_if 1
+            local.get $ey
+            i64.const 1
+            i64.sub
+            local.set $ey
+            local.get $i
+            i64.const 1
+            i64.shl
+            local.set $i
+            br 0
+          end
+        end
+        local.get $uy
+        i64.const 1
+        local.get $ey
+        i64.sub
+        i64.shl
+        local.set $uy
+      else
+        local.get $uy
+        i64.const 4503599627370495
+        i64.and
+        i64.const 4503599627370496
+        i64.or
+        local.set $uy
+      end
+      ;; x mod y, a bit at a time
+      block void
+        loop void
+          local.get $ex
+          local.get $ey
+          i64.gt_s
+          i32.eqz
+          br_if 1
+          local.get $ux
+          local.get $uy
+          i64.sub
+          local.tee $i
+          i64.const 63
+          i64.shr_u
+          i64.eqz
+          if void
+            local.get $i
+            i64.eqz
+            if void
+              f64.const 0
+              local.get $x
+              f64.mul
+              return
+            end
+            local.get $i
+            local.set $ux
+          end
+          local.get $ux
+          i64.const 1
+          i64.shl
+          local.set $ux
+          local.get $ex
+          i64.const 1
+          i64.sub
+          local.set $ex
+          br 0
+        end
+      end
+      local.get $ux
+      local.get $uy
+      i64.sub
+      local.tee $i
+      i64.const 63
+      i64.shr_u
+      i64.eqz
+      if void
+        local.get $i
+        i64.eqz
+        if void
+          f64.const 0
+          local.get $x
+          f64.mul
+          return
+        end
+        local.get $i
+        local.set $ux
+      end
+      block void
+        loop void
+          local.get $ux
+          i64.const 52
+          i64.shr_u
+          i64.eqz
+          i32.eqz
+          br_if 1
+          local.get $ux
+          i64.const 1
+          i64.shl
+          local.set $ux
+          local.get $ex
+          i64.const 1
+          i64.sub
+          local.set $ex
+          br 0
+        end
+      end
+      ;; scaled back, with x's sign
+      local.get $ex
+      i64.const 0
+      i64.gt_s
+      if i64
+        local.get $ux
+        i64.const 4503599627370496
+        i64.sub
+        local.get $ex
+        i64.const 52
+        i64.shl
+        i64.or
+      else
+        local.get $ux
+        i64.const 1
+        local.get $ex
+        i64.sub
+        i64.shr_u
+      end
+      local.get $sx
+      i64.const 63
+      i64.shl
+      i64.or
+      f64.reinterpret_i64`,
+  },
+  // std.ts's mod: ((a % b) + b) % b, the remainder with b's sign.
+  "number.mod": {
+    params: [["a", "f64"], ["b", "f64"]], result: "f64", locals: [], uses: ["number.fmod"],
+    body: "local.get $a\nlocal.get $b\ncall $number.fmod\nlocal.get $b\nf64.add\nlocal.get $b\ncall $number.fmod",
   },
   // For the host, which can't make or read an array itself: a text of n
   // bytes to fill, filling one, and reading one back.
@@ -1667,6 +2051,9 @@ const loopTo = (cond: string, body: string) => `
   end`;
 
 const WASI: Record<string, Omit<RtFn, "name">> = {
+  // The show of a Number number.show leaves to the host (one needing 15
+  // or more digits, or past 2^53): with no JavaScript it traps for now.
+  "host.show": { params: [["x", "f64"]], result: "text", locals: [], uses: [], body: "unreachable" },
   // Memory for n bytes of buffer.
   "wasi.room": {
     params: [["n", "i32"]], result: "void", locals: [["want", "i32"]], uses: [],

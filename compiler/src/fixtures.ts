@@ -205,6 +205,7 @@ export function texts() {
     shown: d("shown", ["x"], (x) => k.call(S.show, k.call(B.add, x, k.lit(0)))),
     arith: d("arith", ["a", "b"], (a, b) => k.call(INT_OPS.show, k.call(INT_OPS.add, k.call(INT_OPS.sub, k.call(INT_OPS.mul, a, b), a), k.call(INT_OPS.neg, k.call(INT_OPS.abs, b))))),
     smaller: d("smaller", ["a", "b"], (a, b) => k.if(k.call(INT_OPS.less, a, b), k.call(INT_OPS.toNumber, a), k.call(INT_OPS.toNumber, b))),
+    remainder: d("remainder", ["a", "b"], (a, b) => k.call(S.mod, k.call(B.add, a, k.lit(0)), b)),
   };
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
