@@ -11,13 +11,16 @@
 // that module can say which one is missing. `signatures`: the program's
 // own pins (src/lang/signatures.ts). Version 1 files open unchanged.
 // A program's own comment is comments.json's "program"; a file with the
-// separate `credits` list of before opens with them in it.
+// separate `credits` list of before opens with them in it. `drafts`: the
+// loose parts (editor/drafts.ts), kept apart from the code; a file without
+// them opens with none.
 
 import { isPublished, type Code, type Id, type Node } from "../src/model.ts";
 import type { Comments, Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { needs, pointsAt } from "../src/lang/modules.ts";
 import type { Pins } from "../src/lang/signatures.ts";
+import type { Drafts } from "./drafts.ts";
 
 export const FORMAT = "projectional-program";
 
@@ -38,6 +41,7 @@ export interface ProgramFile {
   examples: Record<Id, string[]>;
   needs?: Record<Id, string>;
   signatures?: Pins;
+  drafts?: Drafts;
 }
 
 // The program's own nodes: everything not in `base`.
@@ -84,10 +88,20 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     if (missing) return { error: `node ${n.id} points at ${missing}, which isn't in the file` };
   }
   const l = isObj(x.layout) ? x.layout : {};
+  // Loose parts whose nodes all point at something that's there; any
+  // other is dropped, as it couldn't be shown.
+  const dr = isObj(x.drafts) && isObj(x.drafts.nodes) && strings(x.drafts.of) ? x.drafts : null;
+  let drafts: Drafts | undefined;
+  if (dr) {
+    const nodes = dr.nodes as Record<Id, Node>;
+    const ok = Object.values(nodes).every((n) => isObj(n) && typeof n.kind === "string" && pointsAt(n).every((t) => !t || code.nodes[t] || nodes[t]));
+    if (ok) drafts = { of: dr.of as Record<Id, Id>, home: strings(dr.home) ? (dr.home as Record<Id, Id>) : {}, nodes };
+  }
   const file: ProgramFile = {
     format: FORMAT, version: 2, typed,
     needs: needed,
     signatures: isObj(x.signatures) ? (x.signatures as Pins) : {},
+    ...(drafts ? { drafts } : {}),
     title: typeof x.title === "string" && x.title.trim() ? x.title : "Opened program",
     code: c as unknown as Code,
     names: x.names as Names,

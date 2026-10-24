@@ -72,6 +72,9 @@ export interface GraphHooks {
   addItem?: (row: Id) => void;
   // A value (a binding, or a node's output) dropped on a row's +.
   addFrom?: (row: Id, from: Id, binding: boolean) => void;
+  // The definition's loose parts (drafts.ts), drawn beside it, each in a
+  // dashed frame whose output can be wired into an empty input.
+  loose?: Id[];
   // An input of a list or a chain dropped on another of its inputs: it
   // moves there.
   reorder?: (item: Id, onto: Id) => void;
@@ -112,6 +115,12 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
   const scene = build(code, pres, info, defId, hooks);
+  for (const l of hooks.loose ?? []) {
+    const part = build(code, pres, info, l, hooks, true);
+    for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
+    scene.wires.push(...part.wires);
+    for (const id of part.lit) scene.lit.add(id);
+  }
   autoArrange(scene);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
@@ -172,7 +181,7 @@ interface Scene {
 interface Sub { w: number; h: number; outX: number; outY: number; out: End; at: Map<Id, Pos> }
 const shift = (into: Map<Id, Pos>, sub: Sub, x: number, y: number) => { for (const [k, p] of sub.at) into.set(k, { x: p.x + x, y: p.y + y }); };
 
-function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks): Scene {
+function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, loose = false): Scene {
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
@@ -590,7 +599,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   let top: Sub;
-  if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
+  if (loose && body) top = region(defId, `${name(defId)} : ${typeOf(defId)} · loose, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
+  else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);
   else top = pill(defId, `${name(defId)}: nothing yet`, "lit");
@@ -784,7 +794,9 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     });
     if (f.out) {
       const o = point({ frameOut: f.id });
-      portG.append(s("circle", { cx: o.x, cy: o.y, r: 4, class: "outp" }));
+      portG.append(f.cls === "loose"
+        ? (() => { const c = s("circle", { cx: o.x, cy: o.y, r: 5, class: "outp", "data-out": f.id }); c.append(s("title", {}, "Drag onto an empty input to wire this part in")); return c; })()
+        : s("circle", { cx: o.x, cy: o.y, r: 4, class: "outp" }));
     }
   }
 
