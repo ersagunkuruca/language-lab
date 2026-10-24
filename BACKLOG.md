@@ -34,6 +34,7 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E49 | **Numbers first (L38 step 2, editor side).** The palette offers the one generic `+ − · −x <` (std.ts `ARITH`: `builtin.arith.add`, `.sub`, `.mul`, `.neg`, `.less`; glyphs already in styles) wherever both sides are one number type, and stops offering the per-type ones (`builtin.add`…, `builtin.int.add`…) for new code; stored programs keep theirs. Today src/lang/infer.ts holes() skips `builtin.arith.*` (one line, near "The generic arithmetic isn't offered yet"); flipping it to skip the per-type arithmetic instead is the core change, then the editor's palette labels and tests. Lane L does showType's constraint and derive.ts | coordinator 2026-10-24 07:09, NUMBERS.md "One `+`" step 2 | P1 | M | |
 
 ## C: Compiler and targets
 
