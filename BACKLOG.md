@@ -6,7 +6,7 @@ priority order: a lane takes its top item that isn't running.
 
 First gathered 2026-10-23 from projectional/ROADMAP.md, NOTES.md, WEB.md,
 NUMBERS.md, COMPILER.md, REVIEW.md, REVIEW-2026-10-22b.md (R2), QA-2026-10-22.md,
-QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), compiler/GAPS.md, the editor and compiler threads'
+QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), QA-2026-10-24.md (QA4), compiler/GAPS.md, the editor and compiler threads'
 queues, and Ersagun's messages in the project chat.
 
 **Status:** ▶ running (don't disturb) · ⏸ parked · blank = waiting.
@@ -18,6 +18,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I3 | Run main on a page prints the raw Html tree (`element(…, <function>)`) under the live page: hide it or say the page is the run | QA4 M1 | 2026-10-24 |
+| I4 | The minimap and the Fit pill cover nodes (first visit at 1280×720; a quarter of the graph on a phone): smaller, collapsible, or only while panning | QA4 M2 | 2026-10-24 |
+| I5 | Pages mounted in the Run panel are unstyled (pedal: default serif, picture cut off): a base stylesheet, or CSS in the examples | QA4 L1 | 2026-10-24 |
+| I6 | Landscape phone gives the graph ~210 of 390 px; at 768 px the top bar hides Credits and Cells | QA4 L2 | 2026-10-24 |
+| I7 | Change the function takes two undos (hole, then fill) | QA4 L3 | 2026-10-24 |
+| I8 | The palette doesn't read typed calls (`sqrt(x)`), only arithmetic | QA4 L4 | 2026-10-24 |
+| I9 | The status bar says nothing after page actions (A strum, Stop sound) | QA4 L5 | 2026-10-24 |
+| I10 | Dice example before any roll: "Rolls: 0; the last 2 s ago" | QA4 L6 | 2026-10-24 |
 
 ## E: Editor
 
