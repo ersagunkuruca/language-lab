@@ -42,6 +42,7 @@ import { litLabel } from "./typed.ts";
 import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
+import { takenApart } from "../src/lang/render.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
@@ -493,14 +494,17 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // "Effects you define"), and says so, as the blocks and text do.
     const typeBody = type && (node(type) as NodeOf<"def">)?.body ? node((node(type) as NodeOf<"def">).body!) : null;
     const handles = n.kind === "match" && typeBody?.kind === "typedef" && !!typeBody.effect;
-    const title = isIf ? "if" : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
+    // One case on a one-case type only takes the value apart, as the text's
+    // halves(front, back) = split(tail) does; its function runs next.
+    const apart = n.kind === "match" && takenApart(code, info, n);
+    const title = isIf ? "if" : apart ? `${name(armNodes[0].variant)}(${armNodes[0].binds.map(name).join(", ")}) =` : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
     for (const arm of armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
       const params = [...arm.binds, ...results];
-      labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : name(arm.variant));
+      labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : name(arm.variant));
       inputs.push(arm.id);
       kids.push(region(arm.id, `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm"));
     }

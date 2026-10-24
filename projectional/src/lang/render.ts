@@ -21,6 +21,17 @@ import { showType } from "./types.ts";
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
 
+// A match with one case, on a type with one case, that names the fields:
+// it always matches, so it only takes the value apart (an effect's one
+// operation is handled, not taken apart).
+export function takenApart(code: Code, info: Info | null, n: NodeOf<"match">): boolean {
+  if (n.arms.length !== 1 || n.otherwise) return false;
+  const arm = code.nodes[n.arms[0]] as NodeOf<"arm">;
+  const owner = info?.owner.get(arm.variant);
+  const td = owner ? code.nodes[(code.nodes[owner] as NodeOf<"def">).body!] : null;
+  return arm.binds.length > 0 && arm.results.every((r) => r === null) && td?.kind === "typedef" && td.variants.length === 1 && !td.effect;
+}
+
 export function renderBlocks(code: Code, pres: Presentation, info: Info | null, defId: Id): string {
   const names = pres.names;
   // A binder nobody named is called for its type (items, x, event), as the
@@ -51,6 +62,11 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     const d = owner ? node(owner) : null;
     return d?.kind === "def" && !!d.body && !!(node(d.body) as { effect?: true }).effect;
   };
+
+  const takesApart = (n: NodeOf<"match">) => takenApart(code, info, n);
+
+  // Steps before a value: lets, and values taken apart.
+  const hasSteps = (id: Id) => { const n = node(id); return isLet(n) || (n.kind === "match" && takesApart(n)); };
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -162,13 +178,26 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       //       otherwise → false
       //     then …
       // A let would read as a comparison after the if, so it starts below.
-      const below = isLet(node(n.scrutinee));
+      const below = hasSteps(n.scrutinee);
       const cond = block(n.scrutinee, ind + (below ? "    " : "  "), "");
       const head = below ? [`${ind}${lead}if`, ...cond] : [`${ind}${lead}if ${cond[0].trimStart()}`, ...cond.slice(1)];
       // A branch with steps before its value gets then/else on a line of
       // its own, so the steps are inside the branch, not before the word.
-      const branch = (b: Id, word: string) => (isLet(node(b)) ? [`${ind}  ${word}`, ...block(b, ind + "    ", "")] : block(b, ind + "  ", `${word} `));
+      const branch = (b: Id, word: string) => (hasSteps(b) ? [`${ind}  ${word}`, ...block(b, ind + "    ", "")] : block(b, ind + "  ", `${word} `));
       return [...head, ...branch(t, "then"), ...branch(f, "else")];
+    }
+    // A match with one case on a type with one case always matches: it is
+    // taking the value apart, drawn as a let, pair(x, y) = centre.
+    if (n.kind === "match" && takesApart(n)) {
+      const arm = node(n.arms[0]) as NodeOf<"arm">;
+      enter(arm.binds);
+      const pat = `${base(arm.variant)}(${arm.binds.map(nameOf).join(", ")}) = `;
+      leave(arm.binds);
+      const lines = block(n.scrutinee, ind, pat);
+      enter(arm.binds);
+      const rest = block(arm.body, ind, lead);
+      leave(arm.binds);
+      return [...lines, ...rest];
     }
     if (n.kind === "match" || n.kind === "fold") {
       const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];

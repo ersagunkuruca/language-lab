@@ -33,7 +33,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E59 | A one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre`; drawing only, in the text and the graph | L35, LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | |
 | E60 | Action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2); drawing only, in the text and the graph | L36, LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | |
 | E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | |
 | E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | |
@@ -136,6 +135,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E59 | A value of a one-case type taken apart is drawn as a let of its fields, found(expr, value) = results(front), in the text and the graph (was L35) | #367 |
 | E58 | A field read is drawn as p.x in the text and .x in the graph (was L34) | #366 |
 | E55 | The palette reads a typed call, sqrt(x + 1), as one fill; a shared name is tried as each of its meanings | #365 |
 | E53 | Landscape phone: graph 208 to 234 px (one-line status, slimmer panes); tablet top bar fits (names and notation cycle) | #364 |
