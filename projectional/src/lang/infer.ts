@@ -75,7 +75,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const at = new Map<Id, Type>();
   const s = new Subst();
   if (reuse) s.next = reuse.from.subst.next;
-  const owner = ownerOfTypeParts(code);
+  // A filling tried by the palette adds no types, so their parts' owners
+  // are the earlier check's.
+  const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []) };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
@@ -750,7 +752,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // Units are part of a number's type: a conflict is a type error.
-  for (const u of unitProblems(code, names)) err(u.id, u.message);
+  for (const u of unitProblems(code, names, reuse?.only)) err(u.id, u.message);
 
   settle();
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));

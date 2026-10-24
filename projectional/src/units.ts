@@ -263,13 +263,15 @@ export function compatible(code: Code, defId: Id, a: string, b: string): { ok: b
   };
 }
 
-// Unit conflicts in every function of a program, as messages. Only programs
-// that declare a unit somewhere are checked: without one, every unit is
-// free and nothing can conflict.
-export function unitProblems(code: Code, names: Record<Id, string> = {}): { id: Id; message: string }[] {
+// Unit conflicts in every function of a program, as messages, or in the
+// ones in `only` (the palette trying a filling rechecks just the
+// definitions it can affect). Only programs that declare a unit somewhere
+// are checked: without one, every unit is free and nothing can conflict.
+export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>): { id: Id; message: string }[] {
   if (!Object.values(code.nodes).some((n) => unitOf(n))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
+    if (only && !only.has(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
     for (const c of infer(code, d).conflicts) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
