@@ -1363,7 +1363,7 @@
     "n4357371173bt500cpl6jabd0k": {
       "id": "n4357371173bt500cpl6jabd0k",
       "kind": "lit",
-      "value": " rolls; the last "
+      "value": "; the last "
     },
     "csej4re3ceijuj4rfhjbu6nirh": {
       "id": "csej4re3ceijuj4rfhjbu6nirh",
@@ -1468,7 +1468,7 @@
       "kind": "call",
       "fn": "re905aq8kqj1uvi56ik4vufstd",
       "args": [
-        "aosq0r2lu8b0eeo5v8ra1p5eqd",
+        "1sqlj914vljfb3dh5kdir9dp6d",
         "n4357371173bt500cpl6jabd0k"
       ]
     },
@@ -2392,6 +2392,25 @@
       "args": [
         "itbhbsk43pntmgluni9ec9io3e",
         "s533o7qc5rdja425b862ohigjv"
+      ]
+    },
+    "r5hrmqdtr8maptu7jvskafqb6o": {
+      "id": "r5hrmqdtr8maptu7jvskafqb6o",
+      "kind": "ref",
+      "target": "builtin.concat"
+    },
+    "8o698bkdj6hquemc36hjlgbo4f": {
+      "id": "8o698bkdj6hquemc36hjlgbo4f",
+      "kind": "lit",
+      "value": "Rolls: "
+    },
+    "1sqlj914vljfb3dh5kdir9dp6d": {
+      "id": "1sqlj914vljfb3dh5kdir9dp6d",
+      "kind": "call",
+      "fn": "r5hrmqdtr8maptu7jvskafqb6o",
+      "args": [
+        "8o698bkdj6hquemc36hjlgbo4f",
+        "aosq0r2lu8b0eeo5v8ra1p5eqd"
       ]
     }
   },

@@ -18,6 +18,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I2 | A big `main` first opens lopsided (Numbers & physics at 1280×720: the top rows sit right, wide frames below reach left). The view fits correctly; the shape comes from the automatic layout, which lines each step's tree up with the column of prints on the right. Worth a layout look (left-flush steps?), not a view fix | QA3 L4 via E47 | 2026-10-24 |
 
 ## E: Editor
 
@@ -26,7 +27,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E47 | First view of a big `main` lopsided (left 40% empty, Fit pill and minimap over nodes); `colour₁` name clash in ray marcher; dice page "1 rolls" and resets on program switch | QA3 L4, L5, L6 | P3 | S | |
 
 ## C: Compiler and targets
 
@@ -88,6 +88,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E47 | Pages keep running across program switches; dice says Rolls: 1; ray marcher constructor is rgb (no colour₁). L4 lopsided first view is the layout's shape: Inbox I2 | #298 |
 | E46 | CPU picture: still or paused (click) pictures redraw sharp at canvas size; one-line status | #296 |
 | E45 | Folded box names its calls; unfolding moves contents to the nearest clear place (tidy keeps a folded frame's space on purpose) | #295 |
 | E44 | Run main in a worker with Stop; Countdown's run keeps frames under 60 ms | #294 |

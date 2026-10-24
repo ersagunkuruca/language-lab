@@ -137,7 +137,7 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   const root = body.kids[0] as FakeEl;
   const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
   const bars = () => [...root.html().matchAll(/px"><\/span>(\d+)/g)].map((m) => Number(m[1]));
-  assert.equal(root.find("status").textContent, "0 rolls; the last 0 s ago");
+  assert.equal(root.find("status").textContent, "Rolls: 0; the last 0 s ago");
   root.find("hundred").fire("click");
   const once = bars();
   assert.equal(once.length, 11);
@@ -146,9 +146,9 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   assert.deepEqual(bars(), once.map((n) => 2 * n));
   root.find("roll").fire("click");
   assert.match(root.find("said").textContent!, /^You rolled [1-6] and [1-6]: \d+\.$/);
-  assert.equal(root.find("status").textContent, "201 rolls; the last 0 s ago");
+  assert.equal(root.find("status").textContent, "Rolls: 201; the last 0 s ago");
   frame(1_002_500);
-  assert.equal(root.find("status").textContent, "201 rolls; the last 2 s ago");
+  assert.equal(root.find("status").textContent, "Rolls: 201; the last 2 s ago");
 });
 
 test("what a page's views and handlers may do is named once, and the runtime handles all of it", () => {

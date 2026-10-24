@@ -253,15 +253,21 @@ async function pagePreview() {
   const f = p.frameLocator("iframe.page");
   await f.locator("#hundred").click();
   const status = () => f.locator("#status").innerText({ timeout: 2000 }).catch(() => "(no status)");
-  if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
+  if (!(await status()).startsWith("Rolls: 100;")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
   await p.locator("[data-def]").nth(1).click();
-  if (!(await status()).startsWith("100 rolls")) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
+  if (!(await status()).startsWith("Rolls: 100;")) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
   // Its buttons still work after the redraw, and back on main.
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("101 rolls")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
+  if (!(await status()).startsWith("Rolls: 101;")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
   await p.locator("[data-def]", { hasText: /^main$/ }).click();
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("102 rolls")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
+  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
+  // Another program and back: the page is as it was, and still answers.
+  await p.locator('[data-set="program"]', { hasText: "Calculus" }).click();
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: after another program and back the page says ${await status()}`);
+  await f.locator("#roll").click();
+  if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after another program and back: the page says ${await status()}`);
   const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
   // Saved where its name says it's a page, or the browser shows it as text.
   const saved = join(mkdtempSync(join(tmpdir(), "smoke-")), file.suggestedFilename());
@@ -270,7 +276,7 @@ async function pagePreview() {
   q.on("pageerror", (e) => errors.push(`${where}, saved page: ${e.stack ?? e.message}`));
   await q.goto(pathToFileURL(saved).href);
   await q.locator("#hundred").click();
-  if (!(await q.locator("#status").innerText()).startsWith("100 rolls")) errors.push(`${where}: the saved page didn't roll`);
+  if (!(await q.locator("#status").innerText()).startsWith("Rolls: 100;")) errors.push(`${where}: the saved page didn't roll`);
   await ctx.close();
 }
 

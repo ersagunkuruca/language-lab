@@ -1848,7 +1848,7 @@ const page = {
   status: h("p", { class: "hint" }),
   // Where the page's elements are made (adopted into the frame's document).
   maker: document.implementation.createHTMLDocument("page"),
-  for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null,
+  for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
   flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
 };
 const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
@@ -1859,8 +1859,14 @@ const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
     h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
 function pageSection(info: T.Info | null): HTMLElement | null {
   const main = info && !info.errors.length && !info.holes.size ? pageMain(doc.code.defs, info, pres().names) : null;
-  if (!main || !info) { page.now?.stop(); page.now = null; page.root = null; page.for = null; return null; }
-  if (page.for !== doc.code) startPage(info, main);
+  if (!main || !info) { leavePage(); return null; }
+  if (page.for !== doc.code) {
+    leavePage();
+    const kept = keptPages.get(doc.program);
+    keptPages.delete(doc.program);
+    if (kept?.for === doc.code) Object.assign(page, kept, { program: doc.program });
+    else { kept?.now?.stop(); startPage(info, main); }
+  }
   // Chrome drops every event listener in a frame's document when the frame
   // leaves the page, and this redraw takes the frame out and puts it back.
   // So the page goes back to the document that outlives renders first: its
@@ -1876,11 +1882,28 @@ function pageSection(info: T.Info | null): HTMLElement | null {
   return pageBox;
 }
 
+// A page goes on while another program is shown, so coming back finds it
+// as it was: its cells, what was typed. An edit to its program starts it
+// again, as before.
+const keptPages = new Map<Program, { for: Code; root: globalThis.Node | null; now: Preview | null }>();
+function leavePage() {
+  if (page.for && page.program && page.program !== doc.program) {
+    // Out of the frame before the frame goes, so its buttons keep their handlers.
+    if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
+    keptPages.get(page.program)?.now?.stop();
+    keptPages.set(page.program, { for: page.for, root: page.root, now: page.now });
+  } else page.now?.stop();
+  page.now = null;
+  page.root = null;
+  page.for = null;
+}
+
 function startPage(info: T.Info, main: Id) {
   page.now?.stop();
   page.now = null;
   page.root = null;
   page.for = doc.code;
+  page.program = doc.program;
   page.status.textContent = "";
   try {
     page.now = showPage({
