@@ -101,8 +101,9 @@ export interface FType { key: string; params: LType[]; result: LType; partial?: 
 // What a generic definition's type variables stand for, and its effect
 // rows (by their tail variable: the effects added).
 type At = Map<number, Type | Row>;
-// Int and Text (`data`): an i64, and UTF-8 bytes (wasm-rt.ts).
-export type WType = "i64" | "text";
+// Int and Text (`data`): an i31 or a $big (W5), and UTF-8 bytes
+// (wasm-rt.ts).
+export type WType = "int" | "text";
 export type LType = SType | WType | RType | DType | FType;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
@@ -347,7 +348,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.t !== "con") return null;
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
-    if (opts.data && t.id === INT) return "i64";
+    if (opts.data && t.id === INT) return "int";
     if (opts.data && t.id === STRING) return "text";
     if (!opts.records) return null;
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
@@ -516,7 +517,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     switch (n.kind) {
       case "lit": {
         const t = stype(zonk(id));
-        if (t === "i64") return { k: "int", v: BigInt(n.value) };
+        if (t === "int") return { k: "int", v: BigInt(n.value) };
         if (t === "text" && typeof n.value === "string") return { k: "text", v: n.value };
         if (typeof n.value !== "number" || t !== "f64") throw new Refused(opts.data ? "uses a value that isn't a Number, Int or Text" : "uses a value that isn't a Number");
         return { k: "num", v: n.value };
@@ -685,7 +686,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
     if (isFn(t)) throw new Refused("compares functions");
-    if (t === "i64") return { k: "rt", fn: "int.equal", args: [x, y] };
+    if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two whole numbers exactly, any other pair within 1e-9 relative to
@@ -994,7 +995,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     switch (e.k) {
       case "local": return g.locals[e.i];
       case "num": return "f64";
-      case "int": return "i64";
+      case "int": return "int";
       case "bool": case "tag": return "i32";
       case "text": return "text";
       case "op": return OPS[e.op].t;
@@ -1006,7 +1007,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "case": return e.result;
       case "let": return typeIn(e.body, g);
       case "set": return typeIn(e.then, g);
-      case "rt": { const r = runtime(e.fn).result; if (r === "i32" || r === "i64" || r === "f64" || r === "text") return r; break; }
+      case "rt": { const r = runtime(e.fn).result; if (r === "i32" || r === "int" || r === "f64" || r === "text") return r; break; }
     }
     throw new Refused("chooses after a value it can't keep (not in WebAssembly yet)");
   }

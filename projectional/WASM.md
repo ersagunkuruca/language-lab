@@ -243,7 +243,7 @@ as they are needed, one at a time, each with a measurement.
 |---|---|
 | Number | `f64` (boxed `(struct f64)` where polymorphic) |
 | Bool | `i32`; `i31ref` where polymorphic |
-| Int | `i64` while it fits, a host bignum past that (see Int below) |
+| Int | an `i31ref` while it fits in 31 bits, else a `$big` struct (W5, see Int below) |
 | a type's cases | one struct type per variant, all subtypes of the type's base struct, which holds the tag as an `i32` field; a match is a `br_table` on the tag |
 | a record (one case) | its struct, no tag test |
 | List | cons cells as structs; arrays from `split` as `(array anyref)` |
@@ -267,13 +267,18 @@ Multilingual Plane. Text crosses to a JS page through `TextDecoder` at
 the boundary. If a profile shows text crossing a lot, imported strings
 become a JS-host-only fast path, not the first design.
 
-**Int.** "Whole numbers that never overflow". An `i64` add with an
-overflow check, and a bignum past it. Bignums in WebAssembly are a
-library of their own, so the first version imports them from the host in
-a JS host and refuses a program that overflows in WASI with a clear
-message ("this Int grew past 2⁶³; WASI builds don't have big integers
-yet"), which is a runtime error, not a wrong answer. The ledger and the
-examples stay far below.
+**Int.** "Whole numbers that never overflow". An `i64` can't hold a big
+one, and a JS host's BigInt isn't there in WASI, so (decided in W5a) an
+Int is an `eqref`: an `i31ref` while it fits in 31 bits, with no
+allocation, else a `$big` struct. That is how Hoot (Guile Scheme on
+WasmGC) keeps fixnums and wasm_of_ocaml keeps OCaml's ints. W5a holds an
+i64 in `$big`, so past 2⁶³ it still traps; W5b makes it a sign and
+32-bit limbs, written in WebAssembly, so it grows as the evaluator's
+does. The runtime's Int functions are written on i64s and called through
+wrappers that convert (`int.small`, `int.of`, wasm-rt.ts `runtime`), so
+only add, subtract, multiply and the rest need a big path. Measured: the
+ledger (5,000 lines) and wc in WebAssembly take the same time as with
+i64.
 
 **What stays refused.** A relational solve the mode compiler (MODES step
 5, `compiler/src/modes.ts`) can't write out needs relate.ts, a search

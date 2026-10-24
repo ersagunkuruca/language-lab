@@ -18,7 +18,9 @@
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
 // `option` an Optional Text, and `void` a result of nothing.
-export type VT = "i32" | "i64" | "f64" | "text" | "list" | "option" | "void";
+// `int` an Int (W5): an i31 while it fits in 31 bits, else a $big;
+// `i64` a plain machine word, which the functions below compute with.
+export type VT = "i32" | "i64" | "int" | "f64" | "text" | "list" | "option" | "void";
 
 export interface RtFn {
   name: string;
@@ -34,6 +36,9 @@ export interface RtFn {
   // status, 0 for an answer and 1 for none, as the module's own
   // one-answer functions do (wasm.ts).
   partial?: true;
+  // Takes and gives its Ints as they are (int.of …); any other function
+  // with an Int is written on i64s and called through a wrapper.
+  native?: true;
 }
 
 // Immediates each instruction takes.
@@ -59,6 +64,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
   "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
+  "ref.test": [[0xfb, 0x14], ["type"]], "ref.i31": [[0xfb, 0x1c], []], "i31.get_s": [[0xfb, 0x1d], []],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
   "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]], "array.get": [[0xfb, 0x0b], ["type"]], "array.new": [[0xfb, 0x06], ["type"]],
   "array.set": [[0xfb, 0x0e], ["type"]], "array.len": [[0xfb, 0x0f], []], "array.copy": [[0xfb, 0x11], ["type", "type"]],
@@ -74,6 +80,7 @@ export interface Resolve {
   valtype(t: VT): { bytes: number[]; text: string };
 }
 
+const ABSTRACT: Record<string, number> = { i31: -20, eq: -19 };
 const u = (n: number): number[] => { const out: number[] = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; out.push(b); } while (n); return out; };
 const sLeb = (n: bigint): number[] => {
   const out: number[] = [];
@@ -97,7 +104,13 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
         case "local": { const j = names.indexOf(a.slice(1)); if (j < 0) throw new Error(`${f.name}: no local ${a}`); out.push(...u(j)); break; }
         case "func": out.push(...u(r.func(a.slice(1)))); break;
         case "global": out.push(...u(r.global(a.slice(1)))); break;
-        case "type": { const t = r.type(a.slice(1)); out.push(...(op === "ref.cast" || op === "ref.null" ? sLeb(BigInt(t)) : u(t))); break; }
+        case "type": {
+          // An abstract heap type (i31, eq) is written without a $.
+          const t = a.startsWith("$") ? r.type(a.slice(1)) : ABSTRACT[a];
+          if (t === undefined) throw new Error(`${f.name}: no type ${a}`);
+          out.push(...(op === "ref.cast" || op === "ref.null" || op === "ref.test" ? sLeb(BigInt(t)) : u(t)));
+          break;
+        }
         case "label": case "u": out.push(...u(Number(a))); break;
         case "i32": case "i64": out.push(...sLeb(BigInt(a))); break;
         case "f64": out.push(...new Uint8Array(new Float64Array([Number(a)]).buffer)); break;
@@ -179,7 +192,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   },
   // The number of characters: the bytes that start one.
   "text.length": {
-    params: [["t", "text"]], result: "i64", locals: [["i", "i32"], ["n", "i32"]], uses: [],
+    params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["n", "i32"]], uses: [],
     body: `
       block void
       loop void
@@ -269,7 +282,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   },
   // The characters from `from` up to, not including, `to`, clamped (text.ts slice).
   "text.slice": {
-    params: [["t", "text"], ["from", "i64"], ["to", "i64"]], result: "text", locals: [["a", "i32"], ["b", "i32"], ["r", "text"]], uses: ["text.clamp", "text.offset"],
+    params: [["t", "text"], ["from", "int"], ["to", "int"]], result: "text", locals: [["a", "i32"], ["b", "i32"], ["r", "text"]], uses: ["text.clamp", "text.offset"],
     body: `
       local.get $from
       local.get $t
@@ -406,7 +419,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   // Decimal digits, as std.ts's show of an Int. Kept at or below zero
   // while dividing, so the smallest i64 has its digits too.
   "int.show": {
-    params: [["n", "i64"]], result: "text", locals: [["m", "i64"], ["buf", "text"], ["i", "i32"], ["r", "text"]], uses: [],
+    params: [["n", "int"]], result: "text", locals: [["m", "i64"], ["buf", "text"], ["i", "i32"], ["r", "text"]], uses: [],
     body: `
       i32.const 20
       array.new_default $bytes
@@ -478,7 +491,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   },
   // Overflow is a trap: the answer would need a big Int (W5).
   "int.add": {
-    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -499,7 +512,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $r`,
   },
   "int.sub": {
-    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -521,7 +534,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
   },
   // a·b, checked by dividing back (and the one case that division can't see).
   "int.mul": {
-    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -554,7 +567,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $r`,
   },
   "int.neg": {
-    params: [["a", "i64"]], result: "i64", locals: [], uses: [],
+    params: [["a", "int"]], result: "int", locals: [], uses: [],
     body: `
       local.get $a
       i64.const -9223372036854775808
@@ -566,11 +579,11 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $a
       i64.sub`,
   },
-  "int.less": { params: [["a", "i64"], ["b", "i64"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.lt_s" },
-  "int.equal": { params: [["a", "i64"], ["b", "i64"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.eq" },
-  "int.toNumber": { params: [["a", "i64"]], result: "f64", locals: [], uses: [], body: "local.get $a\nf64.convert_i64_s" },
+  "int.less": { params: [["a", "int"], ["b", "int"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.lt_s" },
+  "int.equal": { params: [["a", "int"], ["b", "int"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.eq" },
+  "int.toNumber": { params: [["a", "int"]], result: "f64", locals: [], uses: [], body: "local.get $a\nf64.convert_i64_s" },
   "int.abs": {
-    params: [["a", "i64"]], result: "i64", locals: [], uses: ["int.neg"],
+    params: [["a", "int"]], result: "int", locals: [], uses: ["int.neg"],
     body: `
       local.get $a
       i64.const 0
@@ -1229,6 +1242,41 @@ ${drop}
       array.copy $bytes $bytes
       local.get $r`,
   },
+  // An Int from an i64, and back: an i31 while it fits in 31 bits, else a
+  // $big (for now holding the i64, W5a).
+  "int.of": {
+    params: [["v", "i64"]], result: "int", locals: [], uses: [], native: true,
+    body: `
+      local.get $v
+      i64.const 1073741824
+      i64.add
+      i64.const 2147483648
+      i64.lt_u
+      if int
+        local.get $v
+        i32.wrap_i64
+        ref.i31
+      else
+        local.get $v
+        struct.new $big
+      end`,
+  },
+  "int.small": {
+    params: [["x", "int"]], result: "i64", locals: [], uses: [], native: true,
+    body: `
+      local.get $x
+      ref.test i31
+      if i64
+        local.get $x
+        ref.cast i31
+        i31.get_s
+        i64.extend_i32_s
+      else
+        local.get $x
+        ref.cast $big
+        struct.get $big 0
+      end`,
+  },
   // std.ts's show of a Number: a whole number as its digits, any other
   // rounded to 9 places, written as JavaScript writes it: plain decimals
   // of at most 15 digits directly (which is then exactly what JavaScript
@@ -1799,7 +1847,7 @@ ${drop}
   "text.byte": { params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nlocal.get $i\narray.get_u $bytes" },
   // range(n): 0, 1, …, n − 1 (std.ts, run.ts), built from the end. Int's and Number's.
   "int.range": {
-    params: [["n", "i64"]], result: "list", locals: [["acc", "list"]], uses: [], list: "std.list<type.int<>>",
+    params: [["n", "int"]], result: "list", locals: [["acc", "list"]], uses: ["int.of"], list: "std.list<type.int<>>",
     body: `
       i32.const 0
       struct.new $list.nil
@@ -1816,6 +1864,7 @@ ${drop}
         local.set $n
         i32.const 1
         local.get $n
+        call $int.of
         local.get $acc
         struct.new $list.cons
         local.set $acc
@@ -2140,7 +2189,7 @@ ${drop}
   // zero and 1. A Choice builtin's status is what wasm.ts branches on.
   // Rounding down, the remainder with the divisor's sign (int.ts).
   "int.quotient": {
-    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["q", "i64"], ["r", "i64"]], uses: [], partial: true,
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["q", "i64"], ["r", "i64"]], uses: [], partial: true,
     body: `
       local.get $b
       i64.eqz
@@ -2175,7 +2224,7 @@ ${drop}
       i32.const 0`,
   },
   "int.remainder": {
-    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [], partial: true,
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [], partial: true,
     body: `
       local.get $b
       i64.eqz
@@ -2208,7 +2257,7 @@ ${drop}
   // By squaring, each product checked; a is squared only when a higher
   // power is still to come, so it overflows only when the answer would.
   "int.power": {
-    params: [["a", "i64"], ["n", "i64"]], result: "i64", locals: [["r", "i64"]], uses: ["int.mul"], partial: true,
+    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["r", "i64"]], uses: ["int.mul"], partial: true,
     body: `
       local.get $n
       i64.const 0
@@ -2254,7 +2303,7 @@ ${drop}
   },
   // Rounds down; Infinity and NaN have no answer (x − x isn't 0).
   "int.wholePart": {
-    params: [["x", "f64"]], result: "i64", locals: [], uses: [], partial: true,
+    params: [["x", "f64"]], result: "int", locals: [], uses: [], partial: true,
     body: `
       local.get $x
       local.get $x
@@ -2274,7 +2323,7 @@ ${drop}
   // Only what show writes: -?(0|[1-9][0-9]*), not -0. Kept at or below
   // zero while reading, so the smallest i64 reads too.
   "int.read": {
-    params: [["t", "text"]], result: "i64", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "i64"]], uses: ["int.mul", "int.sub", "int.neg"], partial: true,
+    params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "i64"]], uses: ["int.mul", "int.sub", "int.neg"], partial: true,
     body: `
       local.get $t
       array.len
@@ -2365,7 +2414,7 @@ ${drop}
   // The first byte where part's bytes start, as characters before it.
   // UTF-8 can't match inside a character, so bytes find what characters do.
   "text.find": {
-    params: [["t", "text"], ["p", "text"]], result: "i64", locals: [["i", "i32"], ["j", "i32"], ["last", "i32"], ["k", "i32"]], uses: [], partial: true,
+    params: [["t", "text"], ["p", "text"]], result: "int", locals: [["i", "i32"], ["j", "i32"], ["last", "i32"], ["k", "i32"]], uses: [], partial: true,
     body: `
       local.get $t
       array.len
@@ -2448,7 +2497,7 @@ ${drop}
   // A one-character text's code point: its first byte says how many bytes
   // the character has, which must be all of them.
   "text.code": {
-    params: [["t", "text"]], result: "i64", locals: [["n", "i32"], ["c", "i32"], ["k", "i32"], ["i", "i32"]], uses: [], partial: true,
+    params: [["t", "text"]], result: "int", locals: [["n", "i32"], ["c", "i32"], ["k", "i32"], ["i", "i32"]], uses: [], partial: true,
     body: `
       local.get $t
       array.len
@@ -2540,7 +2589,7 @@ ${drop}
   // A code point's character in UTF-8; past U+10FFFF, below 0 and the
   // surrogates have none.
   "text.fromCode": {
-    params: [["n", "i64"]], result: "text", locals: [["c", "i32"]], uses: [], partial: true,
+    params: [["n", "int"]], result: "text", locals: [["c", "i32"]], uses: [], partial: true,
     body: `
       local.get $n
       i64.const 1114111
@@ -2640,10 +2689,32 @@ ${drop}
   },
 };
 
+// A function with an Int that isn't native is two: `name.i64`, its body
+// on i64s, and `name`, which takes and gives Ints and converts (int.small,
+// int.of) around a call to it. Inside the bodies every call is to the i64
+// one.
+const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
+const raw = (n: string) => { const f = R[n] ?? WASI[n]; return f && hasInt(f) ? `${n}.i64` : n; };
 export const runtime = (name: string): RtFn => {
-  const f = R[name] ?? WASI[name];
-  if (!f) throw new Error(`no runtime function ${name}`);
-  return { name, ...f };
+  const base = name.endsWith(".i64") ? name.slice(0, -4) : name;
+  const f = R[base] ?? WASI[base];
+  if (!f || (base !== name && !hasInt(f))) throw new Error(`no runtime function ${name}`);
+  const body = f.body.replace(/call \$([\w.]+)/g, (_, n: string) => `call $${raw(n)}`), uses = f.uses.map(raw);
+  if (base !== name) {
+    const i64 = (t: VT): VT => (t === "int" ? "i64" : t);
+    return { ...f, name, params: f.params.map(([n, t]) => [n, i64(t)]), result: i64(f.result), body, uses };
+  }
+  if (!hasInt(f)) return { ...f, name, body, uses };
+  return {
+    name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.small", "int.of"], list: f.list, partial: f.partial,
+    body: [
+      ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.small"] : [])]),
+      `call $${name}.i64`,
+      ...(f.partial ? ["local.set $st"] : []),
+      ...(f.result === "int" ? ["call $int.of"] : []),
+      ...(f.partial ? ["local.get $st"] : []),
+    ].join("\n"),
+  };
 };
 export const RUNTIME = Object.keys(R);
 

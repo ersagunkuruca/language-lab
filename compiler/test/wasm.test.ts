@@ -73,7 +73,7 @@ const helper = (w: Exports, name: string, key: string) => w[`${name}(${key})`] ?
 function toWasm(w: Exports, v: Value, t: LType): unknown {
   if (t === "f64") return v;
   if (t === "text") return toText(w, v as string);
-  if (t === "i64") return BigInt(v as number | bigint);
+  if (t === "int") return w["Int.of"](BigInt(v as number | bigint));
   if (isRecord(t)) return helper(w, `${t.name}.${t.case}`, t.key)(...t.fields.map((f, j) => toWasm(w, (v as Data).fields[j], f.t)));
   if (t === "i32") return (v as Data).tag === TRUE ? 1 : 0;
   if (!isData(t)) throw new Error("no makers for functions");
@@ -96,7 +96,7 @@ function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "f64") return x as number;
   if (t === "text") return fromText(w, x);
   // An Int is a JS number while it's safe, as in the evaluator (int.ts).
-  if (t === "i64") { const n = x as bigint; return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
+  if (t === "int") { const n = w["Int.get"](x) as bigint; return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
   if (t === "i32") return bool(x === 1);
   if (isFn(t)) throw new Error("no readers for functions");
   if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
@@ -238,7 +238,7 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
   const alone = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.remainder], { data: true }));
   assert.ok(!alone.wat.includes("(import") && !alone.wat.includes("$bytes"), "mod needs no host");
   // Past 2⁶³ an Int traps, a runtime error rather than a wrong answer (big Ints are W5).
-  assert.throws(() => w.arith(2n ** 62n, 4n), WebAssembly.RuntimeError);
+  assert.throws(() => w.arith(w["Int.of"](2n ** 62n), w["Int.of"](4n)), WebAssembly.RuntimeError);
   // Programs: wc's and chapters' text functions, the evaluator's answers.
   for (const [name, fn, inputs] of [
     ["wc", "blank", [[""], ["  "], ["a b"], ["\t x"]]],
@@ -328,7 +328,7 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   assert.ok(lowered.funcs.find((g) => g.def === p.defs.plusOne)!.partial);
   // Past 2⁶³ an Int traps (big Ints are W5): reading one, or the smallest over -1.
   assert.throws(() => w["reread"](toText(w, "9223372036854775808")), WebAssembly.RuntimeError);
-  assert.throws(() => w["quotient of"](-(2n ** 63n), -1n), WebAssembly.RuntimeError);
+  assert.throws(() => w["quotient of"](w["Int.of"](-(2n ** 63n)), w["Int.of"](-1n)), WebAssembly.RuntimeError);
 });
 
 // A value as text without recursion, to compare long lists.
@@ -389,7 +389,7 @@ test("choosing one of a list in WebAssembly: a loop per choice, keep with a test
   }
   // Programs: every function of chapters and calc that takes texts, Ints and lists of texts.
   const lines = ["# One", "## Two words here", "plain text, with words.", "", "   ", "#", "Ünïcode Héading 🎉", "1. numbered", "1 + 2*3", "(x - 4) / y", "  12.5^2 ", "a = 3", "!?"];
-  const pool: Record<string, Value[]> = { text: lines, i64: [0, 3, 12], "std.list<type.string<>>": [toList([]), toList(lines.slice(0, 4)), toList(lines)] };
+  const pool: Record<string, Value[]> = { text: lines, int: [0, 3, 12], "std.list<type.string<>>": [toList([]), toList(lines.slice(0, 4)), toList(lines)] };
   for (const name of ["chapters", "calc"]) {
     const q = load(name);
     const l = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
@@ -444,7 +444,7 @@ test("Abort in WebAssembly: status 2 and a reason, through first and budgets; ca
   for (const file of ["# a comment\n2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n\n2026-10-03,coffee,-450,beans\n2026-10-07,coffee,-5,gum\n", book(2000), "2026-01-01,a,1,x\n2026-01-02,b,2\n", "2026-01-01,a,1,x,y\n", "\n2026-01-01,a,1.5,x\n"]) {
     const lines = toList(file.split("\n"));
     const want = outcome(rl, entries.def, [lines, 1]);
-    const got = wl.entries(toWasm(wl, lines, entries.params[0]), 1n) as [unknown, number];
+    const got = wl.entries(toWasm(wl, lines, entries.params[0]), wl["Int.of"](1n)) as [unknown, number];
     assert.equal(flat(answer(wl, entries, got)), flat(want), `entries of a file of ${file.length} bytes`);
     if (want && typeof want === "object" && "aborted" in want) continue;
     assert.equal(answer(wl, report, wl.report(got[0])), outcome(rl, report.def, [want as Value]), "report");
