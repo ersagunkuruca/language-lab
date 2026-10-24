@@ -60,6 +60,8 @@ not only code: an influence is credited even when nothing was copied.
 | Typed holes, and the palette that offers only fillings that type-check | Influence | Hazel (Cyrus Omar and colleagues, "Hazelnut", POPL 2017; "Live functional programming with typed holes", POPL 2019); holes in Agda and Idris. |
 | Several views of one program (graph, Blocks, Steps, Nested, Lisp) | Ersagun's idea | Prior art: Enso (formerly Luna) has synchronized text and graph views. The Lisp view is McCarthy's s-expressions (1960). |
 | Never a type error either: every edit is checked and refused with the reason | Ersagun's idea | Builds on Hazel's "every edit state is meaningful". |
+| An action handed to a handler drawn as what it does (`first(queens(8), else nil)`, the tree keeps the `() =>`) | Influence | Scala's by-name parameters (`=> A`), as LANGUAGE-REVIEW-2026-10-24 §6 proposed. `src/lang/render.ts` `byName`. |
+| Nested patterns drawn over nested matches, which stay one level each (designed, PATTERNS.md) | Influence | The view runs pattern-match compilation backwards, from a decision tree to rows (Luc Maranget, "Compiling pattern matching to good decision trees", ML Workshop 2008). Patterns as a projection of the data: Philip Wadler, "Views", POPL 1987. |
 
 ## Definitions by hash, modules, publishing
 
