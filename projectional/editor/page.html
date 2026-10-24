@@ -193,6 +193,9 @@ button { font: inherit; color: inherit; }
 
 /* blocks */
 .blocks-wrap { overflow-x: auto; padding-bottom: 4px; }
+/* Loose parts: kept, checked, never run. */
+.loose-head { margin: 14px 0 2px; color: var(--faint); font: 12.5px var(--font-code); }
+.loose { opacity: 0.75; }
 .def-card { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .def-head { display: flex; gap: 8px; align-items: center; }
 .blk { position: relative; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px;
@@ -420,6 +423,8 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .rg.lam { fill: var(--frame); }
 .tgraph .rg.let { fill: var(--frame); }
 .tgraph .rg.match, .tgraph .rg.fold { fill: var(--frame); }
+.tgraph .rg.loose { fill: none; stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 6 4; }
+.tgraph .rg.loose.sel { stroke: var(--accent); stroke-width: 2.5; }
 .tgraph .rg.arm { fill: color-mix(in oklch, var(--frame) 55%, var(--tone)); }
 .tgraph .rg.sel, .tgraph .dia.sel, .tgraph .src.sel { stroke: var(--accent); stroke-width: 2.5; }
 .tgraph .cn.sel, .tgraph .pill.sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }

@@ -14,6 +14,7 @@ import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
+import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../src/lang/std.ts";
 import { INT, RATIONAL_TYPE, schemeArith, showIn, showType } from "../src/lang/types.ts";
@@ -349,6 +350,77 @@ export function nextHole(code: Code, defId: Id, id: Id): Id | undefined {
 
 export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
   return guardTyped(info, replace(code, id, () => ({ kind: "hole" })), names, id, "Cleared to a hole. It knows its type: pick from the palette to fill it.");
+}
+
+// What's wired into a node: the parts that would be left lying if it were
+// taken out. A call's inputs (and a step's body), a function's body, what a
+// case looks at and what each case gives, a relation's givens and body.
+export function inputsOf(code: Code, id: Id): Id[] {
+  const n = code.nodes[id];
+  switch (n?.kind) {
+    case "call": { const f = code.nodes[n.fn]; return [...n.args, ...(f?.kind === "lambda" ? [f.body] : [])]; }
+    case "lambda": return [n.body];
+    case "match": return [n.scrutinee, ...n.arms.map((a) => (code.nodes[a] as NodeOf<"arm">).body), ...(n.otherwise ? [n.otherwise] : [])];
+    case "fold": return [n.scrutinee, ...n.arms.map((a) => (code.nodes[a] as NodeOf<"arm">).body)];
+    case "solve": return [...Object.values(n.given), n.body];
+    default: return [];
+  }
+}
+
+export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id> };
+
+// A loose part's new inputs are called what the variables they stand for are.
+const inputNames = (names: Names, was: Record<Id, Id>, now: Record<Id, Id>): Names =>
+  ({ ...names, ...Object.fromEntries(Object.entries(now).filter(([p, v]) => !was[p] && names[v] !== undefined).map(([p, v]) => [p, names[v]])) });
+
+// The definition `id` is written in: a loose part, or `def`.
+const holder = (code: Code, of: Record<Id, Id>, def: Id, id: Id): Id => Object.keys(of).find((l) => code.nodes[l] && subtree(code, l).includes(id)) ?? def;
+
+// Delete one node (NODE-EDITOR.md, "Loose parts", rule 4): its place is a
+// hole, and what was wired into it is kept, loose. Deleting a loose part
+// (its root) throws it away.
+export function deleteOne(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, id: Id): LooseEdit {
+  const at = holder(code, of, def, id);
+  const lb = of[at] ? code.nodes[at] as NodeOf<"def"> : null;
+  const root = lb?.body ? (code.nodes[lb.body].kind === "lambda" ? (code.nodes[lb.body] as NodeOf<"lambda">).body : lb.body) : null;
+  if (lb && (id === at || id === root)) {
+    const r = dropLoose(code, of, home, at);
+    return { ok: true, code: r.code, names, of: r.of, home: r.home, note: "Threw the loose part away. Undo brings it back." };
+  }
+  const owner = of[at] ?? def;
+  let c = code, o = of, hm = home, kept = 0;
+  for (const r of inputsOf(code, id)) {
+    if (!c.nodes[r] || c.nodes[r].kind === "hole") continue;
+    const x = setLoose(c, o, hm, owner, r, scopeAt(c, at, r));
+    c = x.code; o = x.of; hm = x.home; kept++;
+  }
+  const e = guardTyped(info, replace(c, id, () => ({ kind: "hole" })), inputNames(names, home, hm), id, kept
+    ? `Deleted it. What was wired into it is kept, loose, at the end of the text: wire it back in, or delete it too.`
+    : "Deleted it: a hole is left. It knows its type: pick from the palette to fill it.");
+  return e.ok ? { ...e, of: o, home: hm } : e;
+}
+
+// Pull a value off its input (rule 5): the input is a hole, the value lies loose.
+export function unwire(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, slot: Id): LooseEdit {
+  if (code.nodes[slot]?.kind === "hole") return { ok: false, reason: "nothing is wired in there" };
+  const at = holder(code, of, def, slot);
+  // The value moves out under a new id, so the hole can keep the input's.
+  const moved = freshId();
+  const nodes = { ...code.nodes, [moved]: { ...code.nodes[slot], id: moved } as Node };
+  const x = setLoose({ ...code, nodes }, of, home, of[at] ?? def, moved, scopeAt(code, at, slot));
+  const e = guardTyped(info, replace(x.code, slot, () => ({ kind: "hole" })), inputNames(names, home, x.home), slot, "Took it off: the input is a hole, and the value lies loose at the end of the text.");
+  return e.ok ? { ...e, of: x.of, home: x.home } : e;
+}
+
+// Wire a loose part into a hole: it's part of the definition again.
+export function wireLoose(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, part: Id, hole: Id): LooseEdit {
+  if (code.nodes[hole]?.kind !== "hole") return { ok: false, reason: "drop it on an empty input" };
+  const at = holder(code, of, def, hole);
+  if (at === part) return { ok: false, reason: "that's inside the part itself" };
+  const x = wireIn(code, of, home, part, hole, scopeAt(code, at, hole));
+  if (!x) return { ok: false, reason: "that isn't a loose part" };
+  const e = guardTyped(info, x.code, names, hole, "Wired it in: it's part of the definition again.");
+  return e.ok ? { ...e, of: x.of, home: x.home } : e;
 }
 
 export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string): TEdit {

@@ -91,7 +91,9 @@ checked on the built page (fall, two dice), not just read from the code.
 ## Loose parts: editing without keeping the tree whole (agreed, 2026-10-24)
 
 *Agreed with Ersagun on 2026-10-24, after his report from editing two dice `main` in the
-graph. Not built yet: the Editor lane builds it in the order below, after the graph bugs it has queued.*
+graph. Built so far: steps 2 and 3 below (drafts.json, the Blocks section, Delete and unwiring
+leave parts loose, a loose part wires back in from its output), except a drop on a filled input.
+The rest follows in the order below.*
 
 **The problem.** Every gesture in the graph has to leave a whole, typed
 tree behind (pitfall 11). That's why Delete takes everything that feeds
@@ -141,6 +143,19 @@ meaningful because the gaps are holes.
 9. **Graph drawing:** a loose part is drawn faded with a dashed outline, so
    it's plain at a glance what doesn't count yet.
 
+### How it's built
+
+A loose part is a definition with no name (the text calls it `_1`), owned
+by the definition it came from (`editor/drafts.ts`). In the editor it sits
+in the code like any other definition, so every edit, the palette and the
+type checker work on it unchanged; on disk it's split off into drafts.json,
+and what runs, compiles and is hashed is the program without it. A variable
+of its definition that it used becomes an input of its own, called the
+same (`_2(said) = p([text(read(said))])`), so it stays well typed out of
+place; wired back where that variable is in reach, the input is the
+variable again, and elsewhere it becomes a hole. That settles the first
+open question below for now.
+
 ### Open questions
 
 - **Names that go out of scope.** A part taken out of the body may use a
@@ -156,8 +171,8 @@ meaningful because the gaps are holes.
 
 1. Holes drawn as empty inputs; the `+` and filled-input drops (view and
    gesture only, no new file).
-2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section.
-3. Delete and unwiring leave loose parts (rules 4 and 5).
+2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section. ✓
+3. Delete and unwiring leave loose parts (rules 4 and 5). ✓ but the swap on a filled input.
 4. New values on the canvas are loose (rule 7); faded drawing (rule 9).
 5. Pitfall 11 rewritten to say what's refused now: wiring that doesn't fit,
    never removing.

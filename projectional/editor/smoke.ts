@@ -334,6 +334,37 @@ async function textKeepsPlace() {
   await p.close();
 }
 
+// Delete takes out one node: what fed it lies loose at the end of the
+// text and beside the graph, and wires back in from its frame's output
+// (BACKLOG E116, E117; NODE-EDITOR.md, "Loose parts"). Two dice's main.
+async function looseParts() {
+  where = "loose parts";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  await p.locator(".blocks-wrap .head", { hasText: /^named$/ }).first().click();
+  await p.keyboard.press("Delete");
+  const after = await text();
+  const loose = (t: string) => (t.match(/ _\d+ = | _\d+\(/g) ?? []).length;
+  if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
+  if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  const out = (await p.locator(".p-graph .ports circle[data-out]").last().boundingBox())!;
+  const hole = (await p.locator(".p-graph .pill.hole").first().boundingBox())!;
+  await p.mouse.move(out.x + out.width / 2, out.y + out.height / 2); await p.mouse.down();
+  await p.mouse.move(hole.x + hole.width / 2, hole.y + hole.height / 2, { steps: 8 }); await p.mouse.up();
+  if (!/^Wired it in/.test(await p.locator(".status").innerText())) errors.push(`${where}: wiring a loose part into the hole: ${await p.locator(".status").innerText()}`);
+  if (loose(await text()) !== loose(after) - 1) errors.push(`${where}: the part wired in is still listed as loose`);
+  // Undo, twice, gives main back as it was.
+  await p.locator('[data-act="undo"]').click();
+  await p.locator('[data-act="undo"]').click();
+  if ((await text()).includes("-- loose")) errors.push(`${where}: undo left loose parts behind`);
+  await p.close();
+}
+
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -634,6 +665,7 @@ await navScroll();
 await textKeepsPlace();
 await foldedFrame();
 await plusDrop();
+await looseParts();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

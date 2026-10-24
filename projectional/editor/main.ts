@@ -97,6 +97,7 @@ import { PAGE_BASE, pageFile, pageMain, showPage, type Preview } from "../src/la
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { join, looseOf, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
 
@@ -150,6 +151,10 @@ interface Doc {
   edited?: boolean;
   // Pins: definitions whose type is frozen (src/lang/signatures.ts).
   signatures?: Pins;
+  // Loose parts (drafts.ts): definitions of their own in `code`, here with
+  // the definition each belongs to, and the variables their inputs stand for.
+  loose?: Record<Id, Id>;
+  home?: Record<Id, Id>;
 }
 
 interface UI {
@@ -266,8 +271,31 @@ function resolves(code: Code): boolean {
 
 const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar", effects: "main" };
 // The program's own definitions, without the standard library's.
-const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x]);
-const defNamed = (name: string) => doc.code.defs.find((d) => (doc.names.short[d] ?? "") === name);
+const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x] && !d.loose?.[x]);
+// The program without its loose parts: what runs, compiles and is saved as
+// code.json (drafts.ts). One per version of the code.
+const progs = new WeakMap<Code, Code>();
+const prog = (d: Doc = doc): Code => {
+  if (!d.loose || !Object.keys(d.loose).length) return d.code;
+  let c = progs.get(d.code);
+  if (!c) progs.set(d.code, (c = split(d.code, d.loose).code));
+  return c;
+};
+const draftsOf = (d: Doc): Drafts => split(d.code, d.loose ?? {}, d.home ?? {}).drafts;
+// What's in the program proper: holes and errors in loose parts don't stop
+// it running, since they never run.
+const looseIds = new WeakMap<Code, Set<Id>>();
+const inLoose = (id: Id): boolean => {
+  if (!doc.loose || !Object.keys(doc.loose).length) return false;
+  let ids = looseIds.get(doc.code);
+  if (!ids) looseIds.set(doc.code, (ids = new Set(Object.keys(doc.loose).filter((d) => doc.code.nodes[d]).flatMap((d) => subtree(doc.code, d)))));
+  return ids.has(id);
+};
+// Loose parts are called _1, _2, … in the order their definition got them.
+const looseNames = (d: Doc = doc): Names => Object.fromEntries([...new Set(Object.values(d.loose ?? {}))].flatMap((o) => looseOf(d.code, d.loose ?? {}, o).map((x, i) => [x, `_${i + 1}`])));
+const holesIn = (info: T.Info) => [...info.holes.keys()].filter((h) => !inLoose(h)).length;
+const errorsIn = (info: T.Info) => info.errors.filter((e) => !inLoose(e.id)).length;
+const defNamed = (name: string) => ownDefs().find((d) => (doc.names.short[d] ?? "") === name);
 // A program opens on `main`, with the definition that shows it off in the
 // next tab.
 const showcase = () => defNamed(START[doc.program] ?? "main") ?? ownDefs()[0] ?? doc.code.defs[0];
@@ -399,7 +427,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: true, code: doc.code, names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: true, code: prog(), drafts: draftsOf(doc), names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -421,7 +449,7 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ title: x.title, typed: x.typed, code: r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures },
+    addProgram({ title: x.title, typed: x.typed, code: x.drafts ? join(r.code, x.drafts) : r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, loose: x.drafts?.of, home: x.drafts?.home },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -491,7 +519,7 @@ function pasteIntoSelected() {
 // refusal changes nothing and says why.
 // `then` sets what the editor shows after the edit (which definition is
 // open, what's selected) before it's drawn.
-function applyT(e: T.TEdit, then?: () => void): boolean {
+function applyT(e: T.LooseEdit, then?: () => void): boolean {
   if (!e.ok) {
     ui.menu = null;
     ui.note = `Refused: ${heldReason(e.reason)}. Nothing changed.`;
@@ -505,7 +533,9 @@ function applyT(e: T.TEdit, then?: () => void): boolean {
   then?.();
   // A node an edit removed takes its names with it, in every layer.
   const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
-  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) } }, ["code.json", "names.short.json"], e.note + note);
+  // An edit that sets parts loose, or wires one in, says so (drafts.ts).
+  const loose = e.of ? { loose: e.of, home: e.home } : {};
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : [])], e.note + note);
   return true;
 }
 
@@ -517,7 +547,7 @@ function travel(from: Doc[], to: Doc[], label: string) {
   const changed = files().filter((f) => f.get(d) !== f.get(doc)).map((f) => f.name);
   doc = d;
   if (ui.selected && !doc.code.nodes[ui.selected]) ui.selected = null;
-  if (!doc.code.nodes[ui.def]) ui.def = doc.code.defs[0];
+  if (!doc.code.nodes[ui.def] || doc.loose?.[ui.def]) ui.def = doc.loose?.[ui.def] ?? doc.code.defs[0];
   ui.touched = changed;
   ui.note = `${label}: ${changed.join(", ") || "nothing"} changed back.`;
   ui.mode = null;
@@ -593,7 +623,7 @@ function typesOf(): T.Info | null {
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
 const pres = (names: Names = {}, comments: Comments = doc.comments): Presentation => ({
-  names: layer<Names>(LIBRARY.names, doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
+  names: layer<Names>(LIBRARY.names, looseNames(), doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
   comments,
   hints: doc.hints,
   style: { ...styles[ui.style], quote: undefined },
@@ -602,7 +632,8 @@ const pres = (names: Names = {}, comments: Comments = doc.comments): Presentatio
 const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(Object.entries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
 
 const files = () => [
-  { name: "code.json", get: (d: Doc) => JSON.stringify(userCode(d.code)) },
+  { name: "code.json", get: (d: Doc) => JSON.stringify(userCode(prog(d))) },
+  { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)) },
   { name: "names.short.json", get: (d: Doc) => JSON.stringify(d.names.short) },
   { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
   { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
@@ -709,9 +740,9 @@ function unitEdit(info: T.Info, id: Id, unit: Unit | null): T.TEdit {
 function removeSelected() {
   const info = typesOf();
   const id = ui.selected;
-  if (!info || !id || !node(id) || doc.code.defs.includes(id)) return;
+  if (!info || !id || !node(id) || (doc.code.defs.includes(id) && !doc.loose?.[id])) return;
   const n = node(id);
-  if (["lit", "ref", "call", "lambda", "match", "fold", "solve"].includes(n.kind)) void applyT(T.toHole(doc.code, doc.names.short, info, id));
+  if (["lit", "ref", "call", "lambda", "match", "fold", "solve"].includes(n.kind) || doc.loose?.[id]) void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, id));
 }
 
 // ---------------------------------------------------------------- run backwards
@@ -761,7 +792,7 @@ function portText(info: T.Info, p: Id): string {
 // every pixel, which is what its Run panel says.
 const PIXEL: Record<string, string> = { x: "0.5", y: "0.25", time: "1", t: "1" };
 function pixelSeed(def: Id): string[] | null {
-  if (!pictureEntries(doc.code.defs, pres().names)) return null;
+  if (!pictureEntries(ownDefs(), pres().names)) return null;
   const body = defBody(def);
   if (body?.kind !== "lambda") return null;
   const names = body.params.map((p) => pres().names[p] ?? "");
@@ -1075,6 +1106,15 @@ const typedPres = (): Presentation => withHandles(blocksPres());
 const GRAPH_HINT = TOUCH
   ? "long-press for a menu; drag a node to move it; Pick (in the menu) several to move them together; pinch to zoom; tap a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there"
   : "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
+
+// The definition's loose parts, at the end of its text, as _1, _2, …: kept
+// and type-checked, edited like the rest, never run (NODE-EDITOR.md, "Loose
+// parts").
+function looseBlocks(info: T.Info): HTMLElement[] {
+  const parts = looseOf(doc.code, doc.loose ?? {}, ui.def);
+  if (!parts.length) return [];
+  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected)))];
+}
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
   if (ui.mode === "new-def") return newDefinitionForm(info);
@@ -1756,6 +1796,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
+    if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
@@ -1768,7 +1809,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
-  const left = Math.max(8, Math.min(m.x + 10, window.innerWidth - 330)), top = Math.max(8, Math.min(m.y + 10, window.innerHeight - (kind === "hole" ? 420 : 280)));
+  // Kept on the screen: at most as tall as its CSS lets it be (440px, then it scrolls).
+  const tall = kind === "hole" ? 420 : Math.min(440, 16 + rows.length * 58);
+  const left = Math.max(8, Math.min(m.x + 10, window.innerWidth - 330)), top = Math.max(8, Math.min(m.y + 10, window.innerHeight - tall - 8));
   return h("div", { class: "ctx-menu", role: "menu", style: `left:${left}px;top:${top}px` }, ...rows);
 }
 
@@ -1807,6 +1850,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "inline": return toggleInline(target!);
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
+    case "delete": return void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, target!));
     case "swap": case "replace": {
       // Change the function: the function becomes a hole and the inputs stay
       // where they are, so the palette offers what takes them. Replace with:
@@ -1862,14 +1906,18 @@ function graphHooks(info: T.Info) {
     open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
     canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(T.useVar(doc.code, doc.names.short, info, ui.def, b, slot)),
-    clear: (slot: Id) => void applyT(T.toHole(doc.code, doc.names.short, info, slot)),
+    clear: (slot: Id) => void applyT(T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot)),
     addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
     canShare: (from: Id) => {
+      // A loose part goes into an empty input.
+      if (doc.loose?.[from]) return (slot: Id) => (node(slot)?.kind === "hole" ? null : "drop it on an empty input");
       const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
       if ("reason" in p) return () => p.reason;
       return (slot: Id) => { if (slot === from) return "that's where it already goes"; const r = T.useVar(p.code, p.names, p.info, ui.def, p.dot, slot); return r.ok ? null : r.reason; };
     },
-    share: (from: Id, slot: Id) => void applyT(T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
+    share: (from: Id, slot: Id) => void applyT(doc.loose?.[from]
+      ? T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose, doc.home ?? {}, from, slot)
+      : T.share(doc.code, doc.names.short, info, ui.def, from, slot)),
     values: (() => {
       const tr = traced(info);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;
@@ -1882,6 +1930,7 @@ function graphHooks(info: T.Info) {
         note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
     },
     named: new Set(doc.layout.named ?? []),
+    loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
@@ -1926,7 +1975,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const choice = action && needsHandling(z).includes(CHOICE);
   // A page's main is the page: it is running above, and printing what it
   // gives back would only show the page's insides.
-  if (action && !info.errors.length && !info.holes.size && pageMain(doc.code.defs, info, pres().names) === ui.def) {
+  if (action && !errorsIn(info) && !holesIn(info) && pageMain(ownDefs(), info, pres().names) === ui.def) {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} is the page above: it runs there, and Restart runs it again from the start.`));
   } else if (needs.length) {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
@@ -1970,20 +2019,20 @@ const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, st
 const picNote = h("div", {});
 const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
 function pictureSection(info: T.Info | null): HTMLElement | null {
-  const entries = pictureEntries(doc.code.defs, pres().names);
+  const entries = pictureEntries(ownDefs(), pres().names);
   if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
   picNote.replaceChildren(noteView(noteOf(doc)) ?? "");
-  if (pic.for !== doc.code) {
-    const code = pic.for = doc.code;
+  if (pic.for !== prog()) {
+    const code = pic.for = prog();
     pic.now?.stop();
     pic.now = null;
     pic.canvas.hidden = false;
     pic.status.textContent = "Drawing…";
     const shown = (e: unknown) => { pic.canvas.hidden = true; pic.status.textContent = `Can't draw the picture: ${e instanceof Error ? e.message : String(e)}.`; };
-    if (info.errors.length) shown(new Error("the program has errors; fix them first"));
+    if (errorsIn(info)) shown(new Error("the program has errors; fix them first"));
     else drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })
       .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
-        (e) => { if (pic.for === code) shown(info.holes.size ? new Error("the program has holes; fill them first") : e); });
+        (e) => { if (pic.for === code) shown(holesIn(info) ? new Error("the program has holes; fill them first") : e); });
   }
   return picBox;
 }
@@ -2017,13 +2066,13 @@ const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
     h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
     h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
 function pageSection(info: T.Info | null): HTMLElement | null {
-  const main = info && !info.errors.length && !info.holes.size ? pageMain(doc.code.defs, info, pres().names) : null;
+  const main = info && !errorsIn(info) && !holesIn(info) ? pageMain(ownDefs(), info, pres().names) : null;
   if (!main || !info) { leavePage(); return null; }
-  if (page.for !== doc.code) {
+  if (page.for !== prog()) {
     leavePage();
     const kept = keptPages.get(doc.program);
     keptPages.delete(doc.program);
-    if (kept?.for === doc.code) Object.assign(page, kept, { program: doc.program });
+    if (kept?.for === prog()) Object.assign(page, kept, { program: doc.program });
     else { kept?.now?.stop(); startPage(info, main); }
   }
   // Chrome drops every event listener in a frame's document when the frame
@@ -2095,12 +2144,12 @@ function startPage(info: T.Info, main: Id) {
   page.now?.stop();
   page.now = null;
   page.root = null;
-  page.for = doc.code;
+  page.for = prog();
   page.program = doc.program;
   page.status.textContent = "";
   try {
     page.now = showPage({
-      code: doc.code, info, names: pres().names, main, program: titleOf(doc),
+      code: prog(), info, names: pres().names, main, program: titleOf(doc),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME, recordings: "apps/",
       frame: (f) => requestAnimationFrame(f),
       ran: (n: Node_) => {
@@ -2122,9 +2171,9 @@ function startPage(info: T.Info, main: Id) {
 // The page compiled (page.ts pageFile): saved, or opened in a tab.
 function pageHtml(): { html: string; name: string } | null {
   const info = typesOf();
-  const main = info && pageMain(doc.code.defs, info, pres().names);
+  const main = info && pageMain(ownDefs(), info, pres().names);
   if (!info || !main) return null;
-  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, doc.code, info, pres().names, main, WORKLET_RUNTIME), name: `${slug(titleOf(doc))}.html` };
+  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, prog(), info, pres().names, main, WORKLET_RUNTIME), name: `${slug(titleOf(doc))}.html` };
 }
 
 function savePage(open: boolean) {
@@ -2212,7 +2261,7 @@ function runTyped() {
   const files: [string, string][] = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(prefix)) files.push([k, localStorage.getItem(k)!]); } } catch { /* no storage */ }
   const w = (running = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
-  const ask: RunAsk = { code: doc.code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files };
+  const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
     if (running !== w || !ui.output) return;
@@ -2361,6 +2410,7 @@ function guide(): HTMLElement {
     h("p", { class: "hint" }, "Run, above, runs main, or the definition you're looking at backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
     h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
+    h("p", { class: "hint" }, "Delete takes out one node: its place becomes a hole, and whatever was wired into it is kept, loose, in a dashed frame beside the graph and at the end of the text as _1, _2, …. Loose parts are type-checked but never run, and are saved in drafts.json, not code.json. Drag a loose part's output onto an empty input to wire it back in; dragging a wire off an input leaves its value loose too; Delete on a loose part throws it away."),
     h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its comments say so: a definition's, or the program's own (in the Program tab, and above a picture). Credits, in the menu, lists every influence and source of the language itself."));
 }
 
@@ -2526,7 +2576,7 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected), ...looseBlocks(info))
     : h("pre", { class: "text" }, textPanel(info));
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],

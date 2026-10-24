@@ -26,10 +26,8 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E104 | **Bug.** Delete takes everything feeding the node with it (removeSelected calls toHole on the whole subtree): deleting the list `append` needed also deleted the `named(…)` element wired into it. Delete should remove only that node | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M | folded into E117 |
 | E115 | Loose parts 1: holes drawn as empty inputs in the graph (hollow port, type on hover, click for the palette), no hole nodes | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
-| E116 | Loose parts 2: `drafts.json` per definition beside code.json: load, save, Save file, undo, and a `-- loose, not used yet` section at the end of Blocks | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
-| E117 | Loose parts 3: Delete removes one node and leaves what fed it loose; unwiring leaves the value loose; a drop on a filled input swaps and sets the old value loose (rules 4, 5; fixes E104) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
+| E117 | Loose parts 3, the rest: a drop on a filled input swaps and sets the old value loose (rule 5). Delete and unwiring leaving parts loose came with E116 (#433) | NODE-EDITOR.md "Loose parts" |
 | E118 | Loose parts 4: new values made on the canvas are loose (rule 7); loose parts drawn faded, dashed (rule 9) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
 | E119 | Loose parts 5: pitfall 11 rewritten to say what's refused now | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
 | E109 | **Bug.** "Put a dot on its wire" sometimes puts the dot far from the wire | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
@@ -140,6 +138,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E116 | Loose parts: Delete and unwiring leave what fed the node loose, kept in drafts.json and shown at the end of Blocks and in the graph, wired back in by a drag (E117's Delete and unwire with it) | #433 |
+| E104 | Delete takes out one node; what fed it is kept, loose (with E116/E117) | #433 |
 | E108 | Dropping a value on a list's + adds it as a new item | #432 |
 | E107 | A folded frame is selected, outlined and dragged like a node | #431 |
 | E106 | Tidy everything lays it all out afresh, the same every time, and a fresh graph is drawn that way | #430 |
