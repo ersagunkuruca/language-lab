@@ -519,7 +519,8 @@ function pasteIntoSelected() {
 // refusal changes nothing and says why.
 // `then` sets what the editor shows after the edit (which definition is
 // open, what's selected) before it's drawn.
-function applyT(e: T.LooseEdit, then?: () => void): boolean {
+// `place`: where new nodes go in the graph (layout.json), by id.
+function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>): boolean {
   if (!e.ok) {
     ui.menu = null;
     ui.note = `Refused: ${heldReason(e.reason)}. Nothing changed.`;
@@ -535,7 +536,8 @@ function applyT(e: T.LooseEdit, then?: () => void): boolean {
   const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
   // An edit that sets parts loose, or wires one in, says so (drafts.ts).
   const loose = e.of ? { loose: e.of, home: e.home } : {};
-  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : [])], e.note + note);
+  const placed = place ? { layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(place).map(([k, v]) => [lkey(k), v])) } } } : {};
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place ? ["layout.json"] : [])], e.note + note);
   return true;
 }
 
@@ -1713,7 +1715,7 @@ function graphOf(info: T.Info): HTMLElement {
     canUse: (b, slot) => viewOnly(slot) ?? hooks.canUse(b, slot),
     use: (b, slot) => { if (!viewOnly(slot)) hooks.use(b, slot); },
     clear: (slot) => { if (!viewOnly(slot)) hooks.clear(slot); },
-    addDot: (slot) => { if (!viewOnly(slot)) hooks.addDot(slot); },
+    addDot: (slot, at) => { if (!viewOnly(slot)) hooks.addDot(slot, at); },
     canShare: (from) => { const r = viewOnly(from); if (r) return () => r; const c = hooks.canShare(from); return (slot) => viewOnly(slot) ?? c(slot); },
     share: (from, slot) => { if (!viewOnly(from) && !viewOnly(slot)) hooks.share(from, slot); },
   }, viewKey())).el;
@@ -1926,7 +1928,12 @@ function graphHooks(info: T.Info) {
     canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(useOver(info, b, slot)),
     clear: (slot: Id) => void applyT(T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot)),
-    addDot: (slot: Id) => void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, slot)),
+    // A dot put on a wire by a click sits where you clicked, and nothing
+    // else moves (BACKLOG E109).
+    addDot: (slot: Id, at?: { dot: Pos; keep: Record<Id, Pos> }) => {
+      const e = T.addDot(doc.code, doc.names.short, info, ui.def, slot);
+      void applyT(e, undefined, at && e.ok && e.select ? { ...at.keep, [e.select]: at.dot } : undefined);
+    },
     canShare: (from: Id) => {
       // A loose part goes into an empty input.
       if (doc.loose?.[from]) return (slot: Id) => (node(slot)?.kind === "hole" ? null : "drop it on an empty input");
