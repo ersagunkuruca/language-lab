@@ -110,13 +110,14 @@ test("resolved by type: Int's own operations at Int, Number's at Number, part by
   assert.ok(targets(intCopy).includes(INT_OPS.add));
   assert.ok(targets(copies.find((d) => r.names[d] === "twice at Vec")!).includes(S.zipParts));
   assert.ok(targets(p.defs.intTwice).includes(intCopy));
-  // A program with no generic operation comes back as it was.
+  // A definition with no generic operation comes back as it was.
   const k = new Lang();
   const d = k.def("plain");
   k.define(d, k.lit(1));
   const code = base(k.code);
   const info = infer(code, baseNames(k.names));
-  assert.equal(resolveArithmetic(code, info).code, code);
+  const back = resolveArithmetic(code, info).code;
+  for (const id of subtree(code, d)) assert.equal(back.nodes[id], code.nodes[id]);
 });
 
 async function evaluatedAndCompiled() {

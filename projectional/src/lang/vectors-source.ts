@@ -16,18 +16,21 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { S, std } from "./std.ts";
+import { ARITH, S, std } from "./std.ts";
 
 export function buildVectors(): Module {
   const k = new Lang();
   const zip = (op: Id, a: Id, b: Id) => k.call(S.zipParts, op, a, b);
 
+  // + − · on a record of Numbers are the one generic + − · (arith.ts makes
+  // them zip parts), so plus, minus and times are only those under their
+  // old names, kept for a release (NUMBERS.md, "One `+`", step 3).
   const plus = k.def("plus");
-  k.define(plus, k.fn(["a", "b"], (a, b) => zip(B.add, a, b)));
+  k.define(plus, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b)));
   const minus = k.def("minus");
-  k.define(minus, k.fn(["a", "b"], (a, b) => zip(B.sub, a, b)));
+  k.define(minus, k.fn(["a", "b"], (a, b) => k.call(ARITH.sub, a, b)));
   const times = k.def("times");
-  k.define(times, k.fn(["a", "b"], (a, b) => zip(B.mul, a, b)));
+  k.define(times, k.fn(["a", "b"], (a, b) => k.call(ARITH.mul, a, b)));
   const scale = k.def("scale");
   k.define(scale, k.fn(["by", "v"], (by, v) => k.call(S.mapParts, k.fn(["x"], (x) => k.call(B.mul, by, x)), v)));
   const dot = k.def("dot");
@@ -35,7 +38,7 @@ export function buildVectors(): Module {
   const magnitude = k.def("magnitude");
   k.define(magnitude, k.fn(["v"], (v) => k.call(B.sqrt, k.call(dot, v, v))));
   const distance = k.def("distance");
-  k.define(distance, k.fn(["a", "b"], (a, b) => k.call(magnitude, k.call(minus, a, b))));
+  k.define(distance, k.fn(["a", "b"], (a, b) => k.call(magnitude, k.call(ARITH.sub, a, b))));
   const unit = k.def("unit");
   k.define(unit, k.fn(["v"], (v) => k.let("length", k.call(magnitude, v), (l) => k.call(S.mapParts, k.fn(["x"], (x) => k.call(B.div, x, l)), v))));
   const mix = k.def("mix");
@@ -44,13 +47,13 @@ export function buildVectors(): Module {
   k.define(clamp, k.fn(["v", "low", "high"], (v, lo, hi) => k.call(S.mapParts, k.fn(["x"], (x) =>
     k.let("at least low", k.if(k.call(S.less, x, lo), lo, x), (m) => k.if(k.call(S.less, m, hi), m, hi))), v)));
   const reflect = k.def("reflect");
-  k.define(reflect, k.fn(["direction", "normal"], (d, n) => k.call(minus, d, k.call(scale, k.call(B.mul, k.lit(2), k.call(dot, d, n)), n))));
+  k.define(reflect, k.fn(["direction", "normal"], (d, n) => k.call(ARITH.sub, d, k.call(scale, k.call(B.mul, k.lit(2), k.call(dot, d, n)), n))));
 
   const offered: Id[] = [plus, minus, times, scale, dot, magnitude, distance, unit, mix, clamp, reflect];
   const comments: Record<Id, string> = {
-    [plus]: "a + b, part by part: for points, directions, colours, or any record whose fields are all Numbers. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
-    [minus]: "a − b, part by part. The direction from b to a.",
-    [times]: "a · b, part by part: a colour tinted by another.",
+    [plus]: "a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Numbers; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
+    [minus]: "a − b: the old name of −, kept for a release. The direction from b to a.",
+    [times]: "a · b: the old name of ·, kept for a release. A colour tinted by another.",
     [scale]: "Every part of v times by: a direction made longer, a colour made brighter.",
     [dot]: "The parts' products added up: how much a and b point the same way.",
     [magnitude]: "How long v is: √(v · v).",

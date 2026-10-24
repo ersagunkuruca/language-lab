@@ -315,6 +315,13 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         if (head.kind === "lambda") return letD(n, head, ctx);
         if (head.kind === "ref") {
           const t = nodes[head.target];
+          // A generic + − · −x on records is Number's part by part, as
+          // arith.ts resolves it: differentiated as that.
+          if (Object.values(ARITH).includes(head.target) && OPS[head.target] && shapeOf(n.args[0], ctx)) {
+            const parts = n.args.length === 1 ? S.mapParts : S.zipParts;
+            const call = add({ kind: "call", fn: add({ kind: "ref", target: parts }), args: [add({ kind: "ref", target: BUILTIN[OPS[head.target]] }), ...n.args] });
+            return partsD(nodes[call] as NodeOf<"call">, parts, ctx);
+          }
           if (OPS[head.target]) return chain(OPS[head.target], n.args, ctx);
           // floor and mod jump (at whole numbers, at multiples of b), so
           // there they have no slope, and a slope that's 0 between jumps

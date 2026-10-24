@@ -15,6 +15,8 @@ import { Lang } from "./dsl.ts";
 import type { Representation } from "./represent.ts";
 import { S } from "./std.ts";
 import { NUMBER } from "./types.ts";
+import { infer } from "./infer.ts";
+import { resolveArithmetic, usesGenericArithmetic } from "./arith.ts";
 
 // The Number builtins whose answer on f32 inputs may not be an f32, with
 // how many inputs each takes. negate, abs and floor of an f32 are f32
@@ -27,6 +29,9 @@ export const ROUNDED: [Id, number][] = [
 // The program with Float32's jobs added, and the representation that uses
 // them (give it to `represent`).
 export function withFloat32(code: Code, names: Names): { code: Code; names: Names; rep: Representation } {
+  // The one generic + − · first made each type's own (arith.ts), so the
+  // ones at Number are Number's builtins and get rounded below.
+  if (usesGenericArithmetic(code)) ({ code, names } = resolveArithmetic(code, infer(code, names), names));
   const k = new Lang();
   const impl: Record<Id, Id> = {};
   for (const [op, n] of ROUNDED) {

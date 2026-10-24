@@ -776,7 +776,9 @@ hierarchy is the map of which structures to name.
    type`, and `smaller`'s a "is a number type with <". Done, with
    derivatives of the generic operations taken as Number's.
 3. *The vectors module* written with `+`, `−` and `·`; `plus`, `minus`
-   and `times` kept as names for a release, then removed.
+   and `times` kept as names for a release, then removed. Done: they are the
+   generic operations under their old names, and `distance`, `reflect`
+   and the ray marcher use `+` and `−` on points directly.
 4. *An example* using one generic definition at two types, for the
    compiler lane to measure on each target.
 5. Then Rational and Complex (LANGUAGE-REVIEW-2026-10-24 L39, L40), each

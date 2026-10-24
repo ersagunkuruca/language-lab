@@ -110,6 +110,19 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const d = code.nodes[def] as NodeOf<"def">;
     const id = freshId();
     copies.set(key, id);
+    // A pinned definition (a module's) has its body typed with variables of
+    // its own, which the pin's are fresh copies of: they stand for the same.
+    const own = d.body === null ? undefined : info.typeOf.get(d.body);
+    if (own) {
+      env = new Map(env);
+      const pair = (b: Type, p: Type) => {
+        b = s.resolve(b);
+        if (b.t === "var") { if (p.t === "var" && env.has(p.v) && !env.has(b.v)) env.set(b.v, env.get(p.v)!); return; }
+        if (b.t === "con" && p.t === "con") b.args.forEach((a, i) => p.args[i] && pair(a, p.args[i]));
+        if (b.t === "fn" && p.t === "fn") { b.params.forEach((x, i) => p.params[i] && pair(x, p.params[i])); pair(b.ret, p.ret); }
+      };
+      pair(own, sc.type);
+    }
     const renames = new Map<Id, Id>();
     const body = d.body === null ? null : copyTree(d.body, renames, env);
     nodes[id] = { id, kind: "def", body };
