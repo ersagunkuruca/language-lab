@@ -1,5 +1,14 @@
 # A tutorial for the projectional language
 
+> **New here? Start with [GUIDE.md](GUIDE.md)**, a hands-on tour that does
+> real edits on the dice program and is checked against the current editor
+> (2026-10-24). This tutorial was last brought up to date on 2026-10-22, so
+> some editor details below are out of date: the inspector's first tab is
+> now *Selected* when something is picked, Run sits above the inspector,
+> a page's `main` runs in the Run pane, and the effects table in 3.9 is
+> missing Random, Time, Wait and Network (LANGUAGE.md has them). Read it
+> for the ideas and for the list of what's confusing.
+
 This tutorial has two jobs. Right now it's for us: to understand the language
 as it actually is in the code, and to find the parts that are confusing or
 could be simpler. Later, cleaned up, it's for showing the language to other
