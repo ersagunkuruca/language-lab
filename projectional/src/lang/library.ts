@@ -9,13 +9,16 @@ import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
 import { std, stdNames } from "./std.ts";
+import { NOTES } from "./notes.ts";
 
 export const PRELUDE = prelude0 as unknown as Module;
 export const VECTORS = vectors0 as unknown as Module;
 export const HTML_MODULE = html0 as unknown as Module;
 export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE];
 export const CORE: Code = merge(prelude, std);
-export const LIBRARY = library(CORE, layer<Names>(preludeNames, stdNames), MODULES);
+const lib = library(CORE, layer<Names>(preludeNames, stdNames), MODULES);
+// The builtins' and std's plain notes (notes.ts) beside the modules' own.
+export const LIBRARY = { ...lib, comments: { ...NOTES, ...lib.comments } };
 
 // A program's own part: what isn't in the library.
 export const ownPart = (code: Code): Code => ({
