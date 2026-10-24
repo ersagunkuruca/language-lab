@@ -491,7 +491,7 @@ function pasteIntoSelected() {
 function applyT(e: T.TEdit, then?: () => void): boolean {
   if (!e.ok) {
     ui.menu = null;
-    ui.note = `Refused: ${e.reason}. Nothing changed.`;
+    ui.note = `Refused: ${heldReason(e.reason)}. Nothing changed.`;
     ui.touched = [];
     ui.refused = true;
     render();
@@ -548,6 +548,25 @@ function holdType(next: Code): string {
   if (loose === was) return "";
   held = { ...held, [d]: p.pins[d] };
   return ` ${pres().names[d] ?? "It"} keeps its type, ${was}, while the hole is open.`;
+}
+
+// A held type isn't a pin anyone made, so a fill it refuses says so, says
+// what the fill would add (an effect, mostly: die() inside a function that
+// doesn't do Random), and the ways out.
+function heldReason(reason: string): string {
+  const d = ui.def, name = pres().names[d] ?? "it";
+  const m = reason.match(/^(.*) is pinned to (.*), and this makes it (.*)$/);
+  if (!m || m[1] !== name || !held[d] || doc.signatures?.[d]) return reason;
+  const effects = (t: string) => new Set([...t.matchAll(/-\[([^\]]*)\]->/g)].flatMap((x) => x[1].split(", ")).filter((e) => /^[A-Z]/.test(e)));
+  const had = effects(m[2]), added = [...effects(m[3])].filter((e) => !had.has(e));
+  const why = added.length ? `: it would do ${added.join(" and ")} where ${name} doesn't` : "";
+  return `${name} keeps its type, ${m[2]}, while it has a hole, and this would make it ${m[3]}${why}. To allow it, Let it loosen (beside the palette) so its type follows its body, or make the change where ${name} is used`;
+}
+
+function loosenButton(dname: string): HTMLElement {
+  const b = h("button", { class: "btn", type: "button" }, "Let it loosen");
+  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; render(); });
+  return b;
 }
 
 // Type inference for typed programs, once per version of the code.
@@ -1069,6 +1088,10 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   }
 
   if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
+  if (hole && held[ui.def] && !doc.signatures?.[ui.def]) {
+    const dname = pres().names[ui.def] ?? "This definition";
+    out.append(h("div", { class: "acts held" }, h("p", { class: "hint" }, `${dname} keeps its type, ${showPin(held[ui.def], pres().names)}, while it has a hole, so only what keeps it is offered. For something that changes it, let it loosen first.`), loosenButton(dname)));
+  }
   if (hole) out.append(fillPalette(id, info, names));
 
   if (n.kind === "lit") {
@@ -1276,12 +1299,10 @@ function pinRow(info: T.Info, dname: string) {
   const pins = doc.signatures ?? {};
   const pinned = pins[ui.def];
   if (!pinned && held[ui.def]) {
-    const loosen = h("button", { class: "btn", type: "button" }, "Let it loosen");
-    loosen.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; render(); });
     return h("div", { class: "pin-row" },
       h("div", { class: "sub-head" }, `Type of ${dname}`),
       h("p", { class: "hint" }, `Kept at ${showPin(held[ui.def], pres().names)} while it has a hole, so clearing a node doesn't loosen it. Fills must keep it.`),
-      h("div", { class: "acts" }, loosen));
+      h("div", { class: "acts" }, loosenButton(dname)));
   }
   const r = pinned ? T.unpin(pins, ui.def, dname) : T.pin(doc.code, info, pins, ui.def, dname);
   const run = () => { if (r.ok) commit({ signatures: r.pins }, ["signatures.json"], r.note); };
