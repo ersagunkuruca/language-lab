@@ -13,6 +13,9 @@
 // characters (code points), as in the evaluator. UTF-8's byte order is the
 // code points' order, so `less` compares bytes.
 //
+// The world (N4b) is the console and files over the C library and POSIX,
+// failing with Node's world's words and status 2.
+//
 // Every function owns its inputs, as the program's own do, and drops them.
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
@@ -536,9 +539,146 @@ const FNS: Record<string, Fn> = {
   lab_drop(parts); lab_drop(by);
   return t;
 }` },
+
+  // ---- The world (N4b): the console and files over the C library and
+  // POSIX, failing as Node's world (projectional/src/lang/world.ts) does:
+  // with its words for a reason, and status 2.
+  "world.fail": {
+    uses: [],
+    c: `static void lab__fail(int e, lab_cell *path) {
+  const char *p = (const char *)LAB_TB(path);
+  int n = (int)LAB_TN(path);
+  char *s = malloc((size_t)n + 64);
+  if (!s) lab_oom();
+  int k = e == ENOENT ? sprintf(s, "no such file or folder: %.*s", n, p)
+    : e == EISDIR ? sprintf(s, "%.*s is a folder, not a file", n, p)
+    : e == ENOTDIR ? sprintf(s, "%.*s is not a folder", n, p)
+    : e == EACCES ? sprintf(s, "not allowed to use %.*s", n, p)
+    : sprintf(s, "%.40s: %.*s", strerror(e), n, p);
+  lab_drop(lab_reason);
+  lab_reason = lab__text_of(s, (size_t)k);
+  free(s);
+  lab_drop(path);
+  lab_st = 2;
+}
+// A Text as a C string, for the C library's paths.
+static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }
+// 0 nothing there, 1 a file (or anything but a folder), 2 a folder.
+static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }`,
+  },
+  "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
+  "world.printError": { uses: [], c: `static void lab_world_printError(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
+  // All of a stream that's left.
+  "world.readAll": {
+    uses: [],
+    c: `static lab_cell *lab__read_all(FILE *f) {
+  size_t n = 0, cap = 4096;
+  char *s = malloc(cap);
+  if (!s) lab_oom();
+  for (size_t got; (got = fread(s + n, 1, cap - n, f)) > 0;) { n += got; if (n == cap) { s = realloc(s, cap *= 2); if (!s) lab_oom(); } }
+  lab_cell *t = lab__text_of(s, n);
+  free(s);
+  return t;
+}`,
+  },
+  "world.readInput": { uses: ["world.readAll"], c: `static lab_cell *lab_world_readInput(void) { return lab__read_all(stdin); }` },
+  // A line without its end (\n, or \r\n); none at the end of the input.
+  "world.readLine": {
+    uses: [],
+    c: (o) => `static lab_cell *lab_world_readLine(void) {
+  int c = getchar();
+  if (c == EOF) return &${o.nil};
+  size_t n = 0, cap = 128;
+  char *s = malloc(cap);
+  if (!s) lab_oom();
+  for (; c != EOF && c != '\\n'; c = getchar()) { if (n == cap) { s = realloc(s, cap *= 2); if (!s) lab_oom(); } s[n++] = (char)c; }
+  if (n && s[n - 1] == '\\r') n--;
+  ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
+  r->f${o.head} = lab__text_of(s, n);
+  free(s);
+  return (lab_cell *)r;
+}`,
+  },
+  "world.readFile": {
+    uses: ["world.fail", "world.readAll"],
+    c: `static lab_cell *lab_world_readFile(lab_cell *path) {
+  char *p = lab__cstr(path);
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
+  free(p);
+  if (!f) { lab__fail(errno, path); return 0; }
+  lab_cell *t = lab__read_all(f);
+  fclose(f);
+  lab_drop(path);
+  return t;
+}`,
+  },
+  "world.put": {
+    uses: ["world.fail"],
+    c: `static void lab__put(lab_cell *path, lab_cell *t, const char *mode) {
+  char *p = lab__cstr(path);
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, mode);
+  free(p);
+  if (!f) { lab__fail(errno, path); lab_drop(t); return; }
+  fwrite(LAB_TB(t), 1, LAB_TN(t), f);
+  fclose(f);
+  lab_drop(path); lab_drop(t);
+}`,
+  },
+  "world.writeFile": { uses: ["world.put"], c: `static void lab_world_writeFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "wb"); }` },
+  "world.appendFile": { uses: ["world.put"], c: `static void lab_world_appendFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "ab"); }` },
+  "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); lab_drop(path); return r; }` },
+  // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
+  // so a character past U+FFFF comes before U+E000 to U+FFFF.
+  "world.listFolder": {
+    uses: ["world.fail"],
+    c: (l) => `static uint32_t lab__u16(const uint8_t *b, uint32_t n, uint32_t *i, uint32_t *low) {
+  if (*low) { uint32_t u = *low; *low = 0; return u; }
+  uint32_t c = b[(*i)++], w = c < 0x80 ? 0 : c < 0xE0 ? 1 : c < 0xF0 ? 2 : 3;
+  if (w) c &= 0x3F >> w;
+  for (; w && *i < n; w--) c = (c << 6) | (b[(*i)++] & 0x3F);
+  if (c < 0x10000) return c;
+  *low = 0xDC00 | ((c - 0x10000) & 0x3FF);
+  return 0xD800 | ((c - 0x10000) >> 10);
+}
+static int lab__js_order(const void *x, const void *y) {
+  lab_cell *a = *(lab_cell *const *)x, *b = *(lab_cell *const *)y;
+  uint32_t i = 0, j = 0, la = 0, lb = 0;
+  for (;;) {
+    int ea = !la && i >= LAB_TN(a), eb = !lb && j >= LAB_TN(b);
+    if (ea || eb) return ea && eb ? 0 : ea ? -1 : 1;
+    uint32_t u = lab__u16(LAB_TB(a), LAB_TN(a), &i, &la), v = lab__u16(LAB_TB(b), LAB_TN(b), &j, &lb);
+    if (u != v) return u < v ? -1 : 1;
+  }
+}
+static lab_cell *lab_world_listFolder(lab_cell *path) {
+  char *p = lab__cstr(path);
+  int kind = lab__kind(p);
+  DIR *dir = kind == 1 ? (errno = ENOTDIR, (DIR *)0) : opendir(p);
+  free(p);
+  if (!dir) { lab__fail(errno, path); return 0; }
+  size_t n = 0, cap = 16;
+  lab_cell **xs = malloc(cap * sizeof *xs);
+  if (!xs) lab_oom();
+  for (struct dirent *e; (e = readdir(dir));) {
+    if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+    if (n == cap) { xs = realloc(xs, (cap *= 2) * sizeof *xs); if (!xs) lab_oom(); }
+    xs[n++] = lab__text_of(e->d_name, strlen(e->d_name));
+  }
+  closedir(dir);
+  qsort(xs, n, sizeof *xs, lab__js_order);
+  lab_cell *acc = &${l.nil};
+  for (size_t k = n; k-- > 0;) { ${l.cons} *c = lab_new(sizeof(${l.cons}), ${l.type}, ${l.tag}); c->f${l.head} = xs[k]; c->f${1 - l.head} = acc; acc = (lab_cell *)c; }
+  free(xs);
+  lab_drop(path);
+  return acc;
+}`,
+  },
 };
 
 export const RT_C = new Set(Object.keys(FNS));
+// What the world needs from POSIX, before any header.
+export const POSIX = "#define _POSIX_C_SOURCE 200809L";
+export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dirent.h>";
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // The C names the runtime defines besides `lab_` + a function's, which a
 // program's own names must not take.

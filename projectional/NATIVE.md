@@ -4,7 +4,7 @@ Design note for BACKLOG.md C17 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
-**Status.** Stages N1 to N3 are done, and the first half of N4.
+**Status.** Stages N1 to N4 are done: whole programs run natively, built by `lab native`.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -73,6 +73,24 @@ plan.
   ledger's amounts (and their aborts) and the converter's numbers on 300
   random magnitudes give the evaluator's answers, every cell freed, under
   AddressSanitizer too.
+- **N4b.** The world and whole programs:
+  - the console and files over the C library and POSIX (`stat`,
+    `opendir`), failing with the words Node's world uses
+    (projectional/src/lang/world.ts) and status 2. A folder's names are
+    sorted as JavaScript sorts texts, by UTF-16 units;
+  - `main` gets the arguments as a List Text and runs on a thread with a
+    1 GiB stack (address space, used only as deep as the program goes),
+    so calc's 100,000 nested parentheses need no heap copy as compiled
+    JavaScript's do (C21). Its Int is the exit code; an Abort nothing
+    handles prints its reason to standard error and exits with 1;
+  - `lab native <program> [-o out]` writes the C and builds it with `cc`
+    (or `$CC`).
+
+  wc, ledger, chapters, calc, queens and a fixture that lists folders,
+  checks and writes files and reads lines give the evaluator's standard
+  output, standard error, exit code and files, in a folder of their own,
+  on 70 runs: missing files, folders given as files, files given as
+  folders, a name with ü and 🎉, \r\n lines, aborts handled and not.
 
 ## What it's for
 
@@ -155,9 +173,10 @@ compiler's sibling calls at -O2 handle them, and that will be measured.
 `lab compile` does, `main` runs on a thread with a big stack (1 GB of
 address space, used only as deep as the program goes).
 
-**One file.** The program and its runtime are one `.c` file. It needs only
-the C library (`stdint.h`, `math.h`, `stdio.h`). `lab native` will write
-it and call `cc`.
+**One file.** The program and its runtime are one `.c` file. It needs the
+C library, and for the world POSIX (`sys/stat.h`, `dirent.h`) and
+threads (`-pthread`). `lab native` writes it and calls `cc`. Windows
+would need `_stat` and `FindFirstFile` in their place.
 
 ## Plan
 
@@ -182,7 +201,7 @@ it and call `cc`.
 4. **N4. Int, Text and the world: whole programs.**
    - Int and Text as above. Done (N4a).
    - Console, files and arguments over the C library.
-   - main on a big stack; `lab native`.
+   - main on a big stack; `lab native`. Done (N4b).
    - Check: wc, ledger, chapters and calc, printing and exiting as the
      evaluator does.
 5. **N5. Reuse, then measure.**
