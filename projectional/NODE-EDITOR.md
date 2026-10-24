@@ -58,3 +58,32 @@ Sources this draws on, credited per the project's attribution rule:
   detour that crosses no more wires; the rest keep their tunnels.
 - Comment boxes. Comments live in comments.json and show in the inspector;
   drawing them on the canvas is a small step once someone wants it.
+
+## Same edits in both views (audit, 2026-10-24, BACKLOG E97)
+
+Every edit should be reachable from the graph and from the Blocks pane. Both
+views select into the one Selected panel, so anything the panel does works
+from both. The table lists every gesture and where it works. Each mark was
+checked on the built page (fall, two dice), not just read from the code.
+
+| Gesture | Blocks | Graph | How |
+|---|---|---|---|
+| Select a part | ✓ click | ✓ click | a call's name or operator selects the whole call in both |
+| Fill a hole | ✓ | ✓ | the panel's palette, or right-click the hole; type a value or `x * 2` |
+| Replace with… | ✓ | ✓ | panel, menu, Enter |
+| Clear to a hole | ✓ Delete | ✓ Delete, or drag an input's wire off | |
+| Change the function… | ✓ | ✓ | panel, menu, Enter on a call |
+| Copy, cut, paste a whole call | ✓ Ctrl+C/X/V | ✓ Ctrl+C/X/V | the panel's Copy too |
+| Use a variable | ✓ palette | ✓ palette, or drag from the variable to an input | |
+| Share a value (a dot) | ✓ menu | ✓ menu, or drag an output onto another input | |
+| Add a value before this | ✓ menu | ✓ menu | |
+| Add a value here (empty space) | ✗ | ✓ right-click the canvas | gap: E100 |
+| List items, a + b + c inputs: add, move, take out | ✓ panel, menu | ✓ panel, menu, + under the inputs | reorder by dragging an input: E101 |
+| Split by cases, steps earlier/later | ✓ panel | ✓ panel | |
+| Rename | ✓ panel | ✓ panel, menu Name it… | |
+| Open a definition | ✓ double-click a name | ✓ double-click a node, menu Open | |
+| Definition: pin, Let it loosen, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
+| Step through parts | ✓ Tab | ✓ Tab (in reading order) | |
+| Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
+| Long press for the menu (touch) | ✗ (tap selects, and the panel has the edits) | ✓ | gap: E102 |
+| Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |
