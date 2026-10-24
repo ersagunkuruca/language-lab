@@ -39,7 +39,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E93 | A Text port in Run backwards needs quotes (`Ersagun` says "no case named Ersagun"): read unquoted text where Text goes, or say to quote it | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E94 | Hover types of a page's calls carry the whole page row (`die` inside a button hovers with ten effects; same cause as E85) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E95 | "where a is a number type" repeats on every hole of a new `□ + □` | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
-| E96 | The top bar's Tutorial opens TUTORIAL.md (2026-10-22); open or link GUIDE.md (#402), the hands-on start, first | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
@@ -148,6 +147,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E96 | The top bar's Learn opens GUIDE.md as a page (guide.html), which links on to the tutorial | #406 |
 | E99 | The Guide tab says how the editor works today: two views, selecting, holes and the palette, copy and paste, held types, Run, today's effects | #405 |
 | E82 | A hole in a held definition says its type is kept, with Let it loosen beside the palette; a refusal of a held type says what the fill would add and the ways out | #404 |
 | E81 | The palette offers only fills that keep a held or pinned definition's type (die() no longer offered at a seed hole without Random) | #403 |

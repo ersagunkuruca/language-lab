@@ -6,6 +6,7 @@
 //   index.html     the editor; open it locally too
 //   tutorial.html  TUTORIAL.md as a page, its screenshots read from
 //                  projectional/tutorial/
+//   guide.html     GUIDE.md the same way (screenshots in projectional/guide/)
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
@@ -34,15 +35,16 @@ console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
 const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[0] ?? "";
-// Links in TUTORIAL.md are relative to projectional/; the page is at the root.
-const body = markdown(readFileSync(here + "../TUTORIAL.md", "utf8"))
-  .replace(/(src|href)="(?![a-z]+:|#|\/)/g, '$1="projectional/');
-writeFileSync(site + "tutorial.html", `<!doctype html>
+// Links in the docs are relative to projectional/; the pages are at the root.
+const docPage = (md: string, out: string, title: string) => {
+  const body = markdown(readFileSync(here + "../" + md, "utf8"))
+    .replace(/(src|href)="(?![a-z]+:|#|\/)/g, '$1="projectional/');
+  writeFileSync(site + out, `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Language tutorial</title>
+<title>${title}</title>
 ${fonts}
 <style>
 ${tokens}
@@ -73,6 +75,10 @@ ${body}
 </body>
 </html>
 `);
+};
+docPage("TUTORIAL.md", "tutorial.html", "Language tutorial");
+// The hands-on start (GUIDE.md): the editor's Learn button opens it.
+docPage("GUIDE.md", "guide.html", "A hands-on guide to the editor and the language");
 
 // The Cells page: reactive.html's text around editor/reactive.ts.
 const rout = await build({ entryPoints: [here + "reactive.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });

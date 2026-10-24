@@ -2,6 +2,7 @@
 # them on main; nobody commits them, so they never conflict.
 /index.html
 /tutorial.html
+/guide.html
 /reactive.html
 /shaders.html
 /apps/
