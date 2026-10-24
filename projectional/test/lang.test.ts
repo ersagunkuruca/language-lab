@@ -253,3 +253,25 @@ test("an if on one line is bracketed when it is an operand of ++", () => {
   assert.match(out, /^ {2}\(if .* then "-" else ""\)$/m);
   assert.match(out, /^ {2}\+\+ /m);
 });
+
+test("an if's condition and branches read as what they are: a match condition shows its arms, a branch's steps sit inside the branch", () => {
+  const p = load("calc");
+  const info = infer(p.code, p.pres.names);
+  const lines = (d: string) => renderBlocks(p.code, p.pres, info, p.named(d)).split("\n").map((l) => l.trim());
+  const sum = lines("sum rest");
+  // The condition is the test on the token, not a placeholder.
+  assert.ok(sum.includes(`symbol(m) → m = "+" or m = "-"`));
+  // The parse of the right operand happens only when the test passed.
+  const then = sum.indexOf("then"), step = sum.indexOf("right = product(more)"), other = sum.findIndex((l) => l.startsWith("else"));
+  assert.ok(then >= 0 && then < step && step < other, sum.join("\n"));
+  // `? expression` prints the parse, anything else prints the value: each
+  // print belongs to its own branch.
+  const run = lines("run line");
+  const q = run.indexOf(`else if t = symbol("?")`);
+  assert.deepEqual(run.slice(q + 1, q + 7), ["then", "print(parenthesized(‹whole expression›(more)))", "bindings", "else", "print(show(evaluate(‹whole expression›(ts), bindings)))", "bindings"]);
+  // No example shows a part of its program as a placeholder.
+  for (const name of ["calc", "converter", "ledger", "countdown", "queens", "algebra", "effects"]) {
+    const e = load(name), ei = infer(e.code, e.pres.names);
+    for (const d of e.own.defs) assert.doesNotMatch(renderBlocks(e.code, e.pres, ei, d), /‹(match|fold|solve|lambda)›/, `${name}: ${e.pres.names[d]}`);
+  }
+});
