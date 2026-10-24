@@ -319,10 +319,13 @@ test("a chain of matches, each taking apart a field of the last, reads as one ro
   // The four fields of a line in one pattern, and no level of matching left.
   assert.match(parse, /^ {4}\[date, account, cents, memo\] → entry\(date, account, amount\(cents, n\), memo\)$/m);
   assert.doesNotMatch(parse, /match ‹after/);
-  // Every case of the tree is still there, once: as many bad lines as the tree has.
-  const bad = Object.values(l.code.nodes).filter((x) => x.kind === "ref" && l.pres.names[x.target] === "bad line" && subtree(l.code, l.named("parse")).includes(x.id)).length;
-  assert.equal(parse.split("‹bad line›(n)").length - 1, bad);
-  assert.match(text("main"), /^ {4}\[path\] →$/m);
+  // The five cases that all say it's a bad line read once, as what's left.
+  assert.ok(Object.values(l.code.nodes).filter((x) => x.kind === "ref" && l.pres.names[x.target] === "bad line" && subtree(l.code, l.named("parse")).includes(x.id)).length > 1);
+  assert.deepEqual(parse.split("\n").filter((x) => x.includes("→")).map((x) => x.trim().split(" →")[0]), ["[date, account, cents, memo]", "otherwise"]);
+  assert.match(parse, /^ {4}otherwise → ‹bad line›\(n\)$/m);
+  const main = text("main");
+  assert.match(main, /^ {4}\[path\] →$/m);
+  assert.equal(main.split("usage()").length - 1, 1, main);
   // A field the case still reads is not taken into the pattern: countdown's
   // split hands its tail on, so it stays a match of its own.
   const cd = load("countdown");
