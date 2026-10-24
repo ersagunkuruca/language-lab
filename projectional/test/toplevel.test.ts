@@ -639,6 +639,22 @@ test("arithmetic typed in the palette reads the names in scope: x * 2 in double(
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "x", double).ok, false);
 });
 
+test("comparisons, ++ and a minus before a name read in the palette too: x < 1, -x, s ++ \"!\"", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "f", { kind: "function", params: ["x"] }));
+  const f = s.def("f");
+  const hole = s.holes(f)[0];
+  const read = (text: string) => {
+    const r = T.fillValue(s.code, s.all(), s.info(), hole, text, f);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+    return r.ok ? showType(infer(r.code, s.all()).typeOf.get(f)!, s.all()) : "";
+  };
+  for (const text of ["x < 1", "x <= 1", "x ≥ 1", "1 + x > 2", "x = 2"]) assert.match(read(text), /-> Bool$/, text);
+  for (const text of ["-x", "−x + 1", "2 * -x", "-(x + 1)"]) assert.doesNotMatch(read(text), /Bool|Text/, text);
+  assert.equal(read('x ++ "!"'), "(Text) -> Text");
+});
+
 test("a call typed in the palette reads as it prints: sqrt(x + 1) in double(x)", async () => {
   const T = await import("../editor/typed.ts");
   const s = new Session();

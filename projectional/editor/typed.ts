@@ -7,7 +7,8 @@
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
-import type { Names, Presentation } from "../src/presentation.ts";
+import type { Names, Notation, Presentation } from "../src/presentation.ts";
+import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -146,15 +147,39 @@ function readings(t: Typed): Typed[] {
   return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args }))).slice(0, 16);
 }
 
-// What's typed, as values at the leaves of + − × ÷. Split at the last
-// operator of the loosest kind outside brackets and text, so 1 − 2 − 3 is
-// (1 − 2) − 3; a − with nothing before it is a negative number's. A leaf
-// may be a name in scope.
+// What's typed, as values at the leaves of the operators the blocks draw
+// (< ≤ = ++ + − · / …). Split at the last operator of the loosest kind
+// outside brackets and text, so 1 − 2 − 3 is (1 − 2) − 3; a − with nothing
+// before it negates. A leaf may be a name in scope.
 // A leaf may also be a call written the way it prints, f(a, b), of a
 // definition, a builtin or a constructor: `alts` when several share the name.
 type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] };
-// + − × are the one generic arithmetic, so typed over Ints they are Int's.
-const OPS: [string, Id][][] = [[["+", ARITH.add], ["-", ARITH.sub], ["−", ARITH.sub]], [["*", ARITH.mul], ["×", ARITH.mul], ["·", ARITH.mul], ["/", B.div], ["÷", B.div]]];
+// The operators are read from the notation itself (styles/blocks.json),
+// loosest first: each glyph is every function drawn with it, and the first
+// that type-checks is the one meant. The generic arithmetic comes first, so
+// + − × typed over Ints are Int's. Each also reads the way a keyboard
+// types it: <= for ≤, * for ·. (^ groups to the right, which this split
+// doesn't, so it isn't read yet.)
+const KEYS: Record<string, string> = { "-": "−", "*": "·", "×": "·", "÷": "/", "<=": "≤", ">=": "≥" };
+const glyphs = (fixity: string) => {
+  const by = new Map<string, { prec: number; ids: Id[] }>();
+  for (const [id, n] of Object.entries(blocksStyle.notation) as [Id, Notation][]) {
+    if (n.fixity !== fixity || /^\p{L}/u.test(n.glyph) || n.glyph === "^") continue;
+    const g = by.get(n.glyph) ?? { prec: n.prec ?? 5, ids: [] };
+    g.ids.push(id);
+    by.set(n.glyph, g);
+  }
+  for (const g of by.values()) g.ids.sort((a, b) => +b.startsWith("builtin.arith.") - +a.startsWith("builtin.arith."));
+  return by;
+};
+const INFIX = glyphs("infix");
+const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.prec))].sort((a, b) => a - b).map((prec) => {
+  const level = [...INFIX].filter(([, g]) => g.prec === prec).map(([glyph, g]): [string, Id[]] => [glyph, g.ids]);
+  const keyed = Object.entries(KEYS).flatMap(([key, glyph]): [string, Id[]][] => (INFIX.get(glyph)?.prec === prec ? [[key, INFIX.get(glyph)!.ids]] : []));
+  // Longest first: <= before <, ++ before +.
+  return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
+});
+const NEGATE = glyphs("prefix").get("−")?.ids ?? [ARITH.neg];
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   const named = scope.get(t);
@@ -169,13 +194,20 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       if (quoted) continue;
       if (")]".includes(c)) depth++;
       else if ("([".includes(c)) depth--;
-      const op = depth === 0 ? level.find(([sym]) => sym === c) : undefined;
+      const op = depth === 0 ? level.find(([sym]) => t.slice(i - sym.length + 1, i + 1) === sym) : undefined;
       if (!op) continue;
-      const left = t.slice(0, i).trimEnd();
+      const left = t.slice(0, i - op[0].length + 1).trimEnd();
       if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
-      if (!("error" in a) && !("error" in b)) return { op: op[1], args: [a, b] };
+      const alts = op[1].filter((id) => code.nodes[id]);
+      if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
     }
+  }
+  const neg = /^[-−]\s*(.+)$/s.exec(t);
+  if (neg) {
+    const a = typedOut(neg[1], code, names, scope);
+    const alts = NEGATE.filter((id) => code.nodes[id]);
+    if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
   const call = /^([^\s()[\],"]+)\s*\((.*)\)$/s.exec(t);
