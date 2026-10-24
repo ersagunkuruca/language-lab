@@ -274,7 +274,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         const params = [...n.params];
         let body = n.body;
         for (let b = node(body); b?.kind === "lambda"; b = node(body)) { params.push(...b.params); body = b.body; }
-        return region(id, `(${params.map(name).join(", ")}) =>`, params, body, "lam");
+        // A function of nothing is an action, run when what it's given to
+        // asks: first(queens(8), else nil) in the text.
+        return region(id, params.length ? `(${params.map(name).join(", ")}) =>` : "action", params, body, "lam");
       }
       case "match": case "fold": return cases(id, n);
       case "call": return node(n.fn).kind === "lambda" ? letRegion(n) : call(id, n);

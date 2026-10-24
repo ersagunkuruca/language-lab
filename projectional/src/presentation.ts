@@ -23,6 +23,9 @@ export interface Notation {
   fixity: "infix" | "prefix" | "call";
   prec?: number;
   assoc?: "left" | "right" | "both";
+  // A word before an argument where the call reads better with one:
+  // first(queens(8), else nil).
+  words?: string[];
 }
 
 export interface Style {
