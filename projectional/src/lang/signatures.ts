@@ -18,7 +18,7 @@ import { children, type Code, type Id } from "../model.ts";
 import { defDeps } from "../hash.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info, type Options } from "./infer.ts";
-import { showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
+import { schemeArith, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
 // after them. Equal pins are equal JSON.
@@ -57,7 +57,7 @@ export function canonical(sc: Scheme): Pin {
 }
 
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc)) : "");
-export const showPin = (p: Pin, names: Names) => showType(p.type, names);
+export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p));
 
 // Pin these definitions at the types the checker gives them now.
 export function pinsOf(info: Info, defs: Id[]): Pins {

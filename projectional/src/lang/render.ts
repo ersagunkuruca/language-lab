@@ -249,7 +249,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     return out.join("\n");
   }
   const t = info?.typeOf.get(defId);
-  if (t) out.push(`${nameOf(defId)} : ${showType(t, names)}`);
+  if (t) out.push(`${nameOf(defId)} : ${showType(info!.subst.zonk(t), names, info!.subst.arith)}`);
   if (!body) return [...out, `${nameOf(defId)} = extern`].join("\n");
   if (body.kind === "lambda") {
     enter(body.params);

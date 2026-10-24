@@ -167,7 +167,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
-  const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showType(info!.subst.zonk(t), names) : ""; };
+  const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showType(info!.subst.zonk(t), names, info!.subst.arith) : ""; };
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   const errs = new Set((info?.errors ?? []).map((e) => e.id));
   const dotOf = (id: Id): Id | null => {
@@ -261,7 +261,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       case "lit": { const l = litLabel(n.value); return pill(id, l.short, "lit", undefined, l.full); }
       case "hole": {
         const hi = info?.holes.get(id);
-        return pill(id, `□ ${hi ? showType(info!.subst.zonk(hi.expected), names) : ""}`.trim(), "hole");
+        return pill(id, `□ ${hi ? showType(info!.subst.zonk(hi.expected), names, info!.subst.arith) : ""}`.trim(), "hole");
       }
       case "ref": {
         const t = node(n.target);

@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E52 | A page in the Run panel is unstyled (pedal and dice in default serif, the drive picture cut off); a base stylesheet for the mount, or CSS in the examples | QA-2026-10-24 L1 | P2 | S | |
 | E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
 | E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
 | E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
@@ -56,6 +55,7 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 | C43 | **Proposal**: or-parallel `all`/`count` and speculative `first` kept in canonical order, with work stealing (Cilk, Aurora/Muse prior art) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
 | C44 | **Proposal**: fibers in native C (own stacks, an event loop; thread-shared cells get atomic counts, as Koka) and in WASM (JSPI) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
 | C45 | **Proposal**: a persistent vector (RRB trees, Bagwell and Rompf) as a representation of `List` for indexed updates | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after C30 |
+| C34 | WebAssembly and C compile any operation that never returns the way they compile Abort (a status and a reason), found by its shape rather than by `ABORT_OP`'s id | EFFECTS-REVIEW-2026-10-24 §3 | P3 | S | |
 
 ## L: Language and library
 
@@ -63,8 +63,10 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L38 | **Numbers first** (Ersagun 2026-10-24: numbers ahead of everything else in this lane). One `+ − · −x <` for every number type, decided by Ersagun; design and steps in projectional/NUMBERS.md "One `+` for every number system". **Step 1 done in #348**: generic builtins `builtin.arith.*` (std.ts ARITH), the `arith`/`ordered` constraint (types.ts requireArith, in schemes and pins), and `src/lang/arith.ts` resolveArithmetic (each call to its type's own builtin, copies per type, Number by default), called by makeRunner, relate's interpreter, compile() and lowerScalar(); tests in test/arith.test.ts; not offered by the palette yet. **Next:** step 2, the palette offers the generic ops instead of the per-type ones and types print the constraint (needs lane E for the editor side; derive.ts should treat `builtin.arith.*` like Number's for the editor's generated derivatives); step 3, the vectors module written with `+ − ·`; step 4, an example with one generic definition at Int and Number for lane C to measure (lane C asked for this) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | L | step 1 done (#348); step 2 next |
+| L38 | **Numbers first** (Ersagun 2026-10-24: numbers ahead of everything else in this lane). One `+ − · −x <` for every number type, decided by Ersagun; design and steps in projectional/NUMBERS.md "One `+` for every number system". **Step 1 done in #348**: generic builtins `builtin.arith.*` (std.ts ARITH), the `arith`/`ordered` constraint (types.ts requireArith, in schemes and pins), and `src/lang/arith.ts` resolveArithmetic (each call to its type's own builtin, copies per type, Number by default), called by makeRunner, relate's interpreter, compile() and lowerScalar(); tests in test/arith.test.ts; not offered by the palette yet. **Step 2, language side, done in this PR:** a type prints what its number variables may be (`(a) -> a where a is a number type`; types.ts showType's `arith` argument, schemeArith for pins) in the editor, the text view and pin notes, and derive.ts differentiates the generic ops as Number's. Open: a generic op that resolves to Int and is run backwards is planned as Number's, and the `int.*` ops aren't in equations.ts NUMERIC (found by lane E in #350). **Next:** step 2, the palette offers the generic ops instead of the per-type ones and types print the constraint (needs lane E for the editor side; derive.ts should treat `builtin.arith.*` like Number's for the editor's generated derivatives); step 3, the vectors module written with `+ − ·`; step 4, an example with one generic definition at Int and Number for lane C to measure (lane C asked for this) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | L | step 1 done (#348); step 2 language side done; step 3 next |
 | L39 | Rational: **L39a done in this PR** (`std.rational`, `lowest terms` builtin, prelude fraction arithmetic that the generic `+ − · −x <` resolves to, `fraction` and `divide fractions` with no answer at zero, test/rational.test.ts). **L39b:** relate.ts's linear step generic over the field, so fractions run backwards exactly; `lowest terms` records in WASM, C and WGSL (with lane C) | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P1 | M | L39a done; L39b open |
+| L52 | **Bug**: a page's event handler that fetches runs again from the start when the reply lands, so a write, print or file write before the fetch happens twice. Refuse a world action before a fetch in a handler, until L59 resumes instead | EFFECTS-REVIEW-2026-10-24 §1.1 | P0 | S | proposal |
+| L53 | **Bug**: the world-under-Choice rule leaks (a printer taken from a list and called under `count` prints three times, no error). Rows nest instead of unify: a lambda's row is contained in its place's (Koka's `open` where a lambda is passed, as `opened()` does for variables); "no world in a search" becomes a row constraint like `plain`; `worldUnderChoice` and COMPILER.md's known imprecision go | EFFECTS-REVIEW-2026-10-24 §2.1 | P0 | L | design note first |
 | L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
 | L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
 | L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P1 | M | proposal |
@@ -72,6 +74,13 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P1 | M | proposal |
 | L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
 | L51 | Tensors: NUMBERS.md stage 6, as the general algebra after lists as arrays (C30) | LANGUAGE-REVIEW-2026-10-24 Plan 17, NUMBERS.md stage 6 | P1 | L | after L38, and C30 for arrays |
+| L54 | **Proposal**: a third operation shape, answered later and at most once (Koka's `ctl`, one-shot as in OCaml 5); the two shapes there are stay the fast cases. Root of the page dents and what concurrency needs. Design note first, with the concurrency thread | EFFECTS-REVIEW-2026-10-24 §1.5, §5 | P1 | L | design note first |
+| L55 | **Proposal**: Console, Files and Network declared in std like Random, answered by the world when nothing handles them; "world" a flag on the declaration. Only Choice and Diverge stay built in | EFFECTS-REVIEW-2026-10-24 §2.2 | P1 | M | after L53 |
+| L56 | **Proposal**: effects take type parameters (`Yield a`, `Channel a`, `State s`); rows hold applied effects | EFFECTS-REVIEW-2026-10-24 §2.3 | P1 | M | |
+| L59 | **Proposal**: after L54, a page's fetch and wait resume instead of re-running the handler; `Wait` folds into `Time`; the fetch memo scoped to a search, so a page can fetch again | EFFECTS-REVIEW-2026-10-24 §1.1-1.3 | P1 | M | after L54 |
+| L60 | **Proposal**: after L54, the audio worklet's run of `main` replays the page's random numbers and clock under a handler, so `main`'s row no longer depends on the page having sound | EFFECTS-REVIEW-2026-10-24 §1.4 | P2 | M | after L54 |
+| L57 | **Proposal**: a handler's case for the normal finish (`\| done(x) → some(x)`), so a handler can change the result's type | EFFECTS-REVIEW-2026-10-24 §2.5 | P2 | S | |
+| L58 | **Proposal**: named rows for the hosts in std (`View`, `Handler`, `Main`, `Sound`), used by `Html` and `Attribute` by name; the ledger lists them | EFFECTS-REVIEW-2026-10-24 §2.6 | P2 | M | |
 | L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
 | L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
@@ -132,6 +141,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E52 | A page has a base look (page.ts PAGE_BASE, in :where) in the editor and saved; the frame grows with the page | #356 |
 | E51 | The map can be put away: Map button beside Fit, off by default on a phone, at most a fifth of the pane | #353 |
 | E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
 | E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
