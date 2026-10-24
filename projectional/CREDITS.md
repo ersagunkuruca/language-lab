@@ -100,6 +100,20 @@ not only code: an influence is credited even when nothing was copied.
 | `examples/countdown`: every way to reach a target with + − × ÷, written in the editor by clicks | Adapted | Graham Hutton, "The countdown problem", *Journal of Functional Programming* 12(6), 2002 ([pdf](https://www.cs.nott.ac.uk/~pszgmh/countdown.pdf)): the search and its `valid`. The game is Channel 4's *Countdown*. |
 | GET as a read that may run under `Choice`, fetched once per address per run | Our own | Leans on HTTP's definition of safe methods (RFC 9110, §9.2.1). LANGUAGE.md "The web". |
 
+## Concurrency, parallelism and collections (designed, not built)
+
+Proposed in [LANGUAGE-NEEDS-2026-10-24.md](LANGUAGE-NEEDS-2026-10-24.md); the full list of sources is there. When a row is built, its entry moves to the section of the feature.
+
+| What | Label | Who and where |
+|---|---|---|
+| `together` as a scope no branch outlives; errors stop the siblings | Influence | Trio's nurseries (Nathaniel J. Smith, "Notes on structured concurrency", 2018); OCaml 5 Eio's `Fiber.both` and switches (prior art). |
+| Waiting in direct style, no async colour, the handler decides | Influence | Koka, Effekt, OCaml 5 effects; Bob Nystrom, "What color is your function?" (2015) names the problem. |
+| Parallel for pure code, concurrent for waiting code | Influence | Simon Marlow, *Parallel and Concurrent Programming in Haskell* (2013); `par`/`pseq` considered, annotations rejected. |
+| Seeded schedules and virtual time for tests | Prior art | FoundationDB's deterministic simulation (Will Wilson, 2014); tokio's paused clock. |
+| Work stealing, or-parallel search, data parallelism | Prior art | Cilk (Blumofe, Leiserson; Frigo, Leiserson, Randall 1998), Chase-Lev deque (2005); Aurora and Muse Prologs; NESL (Blelloch), Futhark (Henriksen et al. 2017). |
+| Channels; actors not a construct; STM | Influence / Considered, rejected | CSP (Hoare 1978), Go, Erlang (Armstrong); STM (Harris, Marlow, Peyton Jones, Herlihy 2005). |
+| Maps with one meaning and several representations; an order on data; Outcome; foreign definitions | Influence | Weight-balanced trees (Adams 1993), HAMT (Bagwell 2001), RRB vectors (Bagwell, Rompf 2012); OCaml's `compare` and Erlang's term order; Rust's `Result`; Gleam's `@external` and Elm's ports. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |
