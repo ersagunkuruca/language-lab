@@ -16,8 +16,8 @@ import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, FALSE, TRUE } from "../src/lang/std.ts";
-import { INT, schemeArith, showIn, showType } from "../src/lang/types.ts";
-import { read as readInt } from "../src/lang/int.ts";
+import { INT, RATIONAL_TYPE, schemeArith, showIn, showType } from "../src/lang/types.ts";
+import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
 import { blocksOf, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
@@ -122,7 +122,9 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   if ("error" in r) return { ok: false, reason: r.error };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
-  // A whole number where an Int goes is an Int: 0 in slice's position.
+  // A whole number where an Int goes is an Int: 0 in slice's position. And
+  // where a Rational goes, a whole number or one over another is a
+  // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
   const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t && t.args.some(wholes);
   // A name several things share (show, length) is each of them in turn,
@@ -133,8 +135,8 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     if (plain.ok) return plain;
     first ??= plain;
     if (!wholes(t)) continue;
-    const int = written(code, names, info, hole, text, t, true, defId);
-    if (int.ok) return int;
+    const fit = written(code, names, info, hole, text, t, true, defId);
+    if (fit.ok) return fit;
   }
   return first!;
 }
@@ -244,16 +246,21 @@ function topLevel(text: string): string[] | undefined {
   return last.trim() || out.length ? [...out, last] : [];
 }
 
-function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, int: boolean, defId?: Id): TEdit {
+// `fit`: each whole number is written at the number type its place
+// expects, Int or Rational (or a Number where nothing says): as fraction(1)
+// + 1/2 is an Int, then a fraction. One whole number over another is one
+// value, a fraction where a Rational goes. Found by checking the filling
+// with those places left open, then filling each as its hole expects.
+function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, fit: boolean, defId?: Id): TEdit {
   const nodes = { ...code.nodes };
   // Typed alone, an Int is read from the text, so one past 2⁵³ stays exact.
   const exact = /^\s*-?\d+\s*$/.test(text) ? readInt(text.trim())[0] : undefined;
-  const build = (v: Value, at?: Id): Id => {
-    const id = at ?? freshId();
-    if (int && typeof v === "number" && Number.isInteger(v)) {
-      const n = exact ?? v;
-      nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), of: INT };
-    } else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
+  const open = new Map<Id, { n: number } | { p: number; q: number }>();
+  const isWhole = (t: Typed) => ("value" in t && typeof t.value === "number" && Number.isInteger(t.value) ? t.value : null);
+  const build = (v: Value, place?: Id): Id => {
+    const id = place ?? freshId();
+    if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v }); nodes[id] = { id, kind: "hole" }; }
+    else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
     else if (typeof v === "object" && "tag" in v) {
       const fn = v.fields.length ? freshId() : id;
       nodes[fn] = { id: fn, kind: "ref", target: v.tag };
@@ -261,15 +268,38 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     } else throw new Error("only plain values can be written out");
     return id;
   };
-  const tree = (t: Typed, at?: Id): Id => {
-    if ("value" in t) return build(t.value, at);
-    if ("ref" in t) { const id = at ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
-    const id = at ?? freshId(), fn = freshId();
-    nodes[fn] = { id: fn, kind: "ref", target: t.op };
-    nodes[id] = { id, kind: "call", fn, args: t.args.map((a) => tree(a)) };
+  const call = (op: Id, args: Id[], place?: Id): Id => {
+    const id = place ?? freshId(), fn = freshId();
+    nodes[fn] = { id: fn, kind: "ref", target: op };
+    nodes[id] = { id, kind: "call", fn, args };
     return id;
   };
+  const tree = (t: Typed, place?: Id): Id => {
+    if ("value" in t) return build(t.value, place);
+    if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
+    const [p, q] = t.args.map(isWhole);
+    if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
+      const id = place ?? freshId();
+      open.set(id, { p, q });
+      nodes[id] = { id, kind: "hole" };
+      return id;
+    }
+    return call(t.op, t.args.map((a) => tree(a)), place);
+  };
   tree(typed, hole);
+  if (open.size) {
+    const seen = check({ nodes, defs: code.defs }, names);
+    for (const [id, w] of open) {
+      const e = seen.holes.get(id)?.expected;
+      const of = e?.t === "con" && (e.id === INT || e.id === RATIONAL_TYPE) ? e.id : undefined;
+      const lit = (v: number | string, at = of) => { const x = freshId(); nodes[x] = { id: x, kind: "lit", value: v, ...(at ? { of: at } : {}) }; return x; };
+      if ("n" in w) {
+        const n = of && exact !== undefined ? exact : w.n;
+        nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), ...(of ? { of } : {}) };
+      } else if (of === RATIONAL_TYPE) nodes[id] = { id, kind: "lit", value: `${w.p}/${w.q}`, of };
+      else call(B.div, [lit(w.p, undefined), lit(w.q, undefined)], id);
+    }
+  }
   const next = { nodes, defs: code.defs };
   const after = defId ? nextHole(next, defId, hole) : undefined;
   return guardTyped(info, next, names, after ?? hole, `Filled with ${text.trim()}.`);
@@ -314,6 +344,13 @@ export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string
     const [n] = readInt(raw.trim());
     if (n === undefined) return { ok: false, reason: "this is a whole number; that isn't one" };
     return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: typeof n === "number" ? n : String(n), of: INT })), names, id, "Changed a literal.");
+  }
+  if (old.of === RATIONAL_TYPE) {
+    // A fraction: a whole number, or one over another (L75).
+    const parts = ratioParts(raw.trim());
+    if (!parts) return { ok: false, reason: "this is a fraction: a whole number, or top/bottom with the bottom not 0" };
+    const [p, q] = parts;
+    return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: q === 1n && Number.isSafeInteger(Number(p)) ? Number(p) : `${p}/${q}`, of: RATIONAL_TYPE })), names, id, "Changed a literal.");
   }
   const v = typeof old.value === "number" ? Number(raw) : raw;
   if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
