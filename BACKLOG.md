@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E115 | Loose parts 1: holes drawn as empty inputs in the graph (hollow port, type on hover, click for the palette), no hole nodes | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
 | E118 | Loose parts 4: new values made on the canvas are loose (rule 7); loose parts drawn faded, dashed (rule 9) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
 | E119 | Loose parts 5: pitfall 11 rewritten to say what's refused now | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
 | E109 | **Bug.** "Put a dot on its wire" sometimes puts the dot far from the wire | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
@@ -137,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E115 | An empty input of a call or a list is drawn as a hollow port, not a □ node: its type on hover, a click for the palette, a drop target | #435 |
 | E117 | Dropping a value on an input that has one swaps it in; the old value lies loose (a lone variable is just replaced) | #434 |
 | E116 | Loose parts: Delete and unwiring leave what fed the node loose, kept in drafts.json and shown at the end of Blocks and in the graph, wired back in by a drag (E117's Delete and unwire with it) | #433 |
 | E104 | Delete takes out one node; what fed it is kept, loose (with E116/E117) | #433 |

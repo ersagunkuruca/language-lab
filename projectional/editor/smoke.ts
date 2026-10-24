@@ -304,10 +304,18 @@ async function listItems() {
   if (!/\[ □\S*, h1\(/.test(await text())) errors.push(`${where}: Earlier didn't put the hole first`);
   await p.locator("button", { hasText: /^Take it out$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Take it out`));
   if ((await text()) !== before) errors.push(`${where}: taking the new item out doesn't give back main`);
-  const holes = await p.locator(".p-graph .pill.hole").count();
+  const holes = await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").count();
   // The first + may be off the visible part of the canvas: press it where it is.
   await p.locator(".p-graph .add-inp").first().dispatchEvent("pointerdown", { button: 0 }, { timeout: 2000 }).catch(() => errors.push(`${where}: the graph has no + on a list or a chain`));
-  if ((await p.locator(".p-graph .pill.hole").count()) <= holes) errors.push(`${where}: the graph's + didn't add a hole`);
+  if ((await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").count()) <= holes) errors.push(`${where}: the graph's + didn't add a hole`);
+  // It's an empty input, not a node (BACKLOG E115), and a click on it is
+  // the palette's, as a hole's is.
+  const empty = p.locator(".p-graph circle.inp.empty");
+  if (!(await empty.count())) errors.push(`${where}: the new item isn't drawn as an empty input`);
+  else {
+    await empty.first().dispatchEvent("click");
+    if ((await p.locator(".insp-head").first().innerText()).trim() !== "Hole") errors.push(`${where}: clicking the empty input doesn't select its hole`);
+  }
   await p.close();
 }
 
@@ -353,7 +361,7 @@ async function looseParts() {
   if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
   const out = (await p.locator(".p-graph .ports circle[data-out]").last().boundingBox())!;
-  const hole = (await p.locator(".p-graph .pill.hole").first().boundingBox())!;
+  const hole = (await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").first().boundingBox())!;
   await p.mouse.move(out.x + out.width / 2, out.y + out.height / 2); await p.mouse.down();
   await p.mouse.move(hole.x + hole.width / 2, hole.y + hole.height / 2, { steps: 8 }); await p.mouse.up();
   if (!/^Wired it in/.test(await p.locator(".status").innerText())) errors.push(`${where}: wiring a loose part into the hole: ${await p.locator(".status").innerText()}`);
