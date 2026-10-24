@@ -2504,11 +2504,15 @@ function render() {
   }
 }
 
+const SCROLLERS = [".graph-wrap", ".p-text .body", ".blocks-wrap", ".side", ".nav-list"];
+
 function draw() {
   const app = document.getElementById("app")!;
   const p = pres();
   const namer = new Namer(doc.code, p, ui.def);
-  const scroll = [...document.querySelectorAll(".graph-wrap")].map((g) => [g.scrollLeft, g.scrollTop]);
+  // Everything that scrolls keeps its place across a redraw, so a click that
+  // only changes the selection leaves the text where it was.
+  const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
   const focused = document.activeElement?.id;
   const info = typesOf();
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
@@ -2580,7 +2584,7 @@ function draw() {
     h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run"]] as const).map(([k, label]) =>
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
-  document.querySelectorAll(".graph-wrap").forEach((g, i) => { if (scroll[i]) [g.scrollLeft, g.scrollTop] = scroll[i]; });
+  SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
   if (focused) document.getElementById(focused)?.focus();
 }
 
