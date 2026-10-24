@@ -352,6 +352,26 @@ export const INT_OPS = {
   }),
 };
 
+// One + for every number type (NUMBERS.md, "One `+` for every number
+// system"): each of these works on any number type (Number, Int, or a
+// record of Numbers; `less than` on Number or Int), and the program is
+// resolved to the type's own operation before anything runs it
+// (src/lang/arith.ts), so they have no implementation of their own: the
+// one here says so if a caller forgot to resolve.
+const unresolved = (name: string) => () => { throw new Error(`the generic ${name} must be resolved to its type's own operation first (arith.ts)`); };
+const generic = (op: string, name: string, arity: 1 | 2, kind: "arith" | "ordered" = "arith") =>
+  builtin(`arith.${op}`, name, (s) => {
+    const a = s.fresh(false, false, kind);
+    return fn(arity === 1 ? [a] : [a, a], kind === "ordered" ? bool : a, s.freshRow());
+  }, unresolved(name));
+export const ARITH = {
+  add: generic("add", "add", 2),
+  sub: generic("sub", "subtract", 2),
+  mul: generic("mul", "multiply", 2),
+  neg: generic("neg", "negate", 1),
+  less: generic("less", "less than", 2, "ordered"),
+};
+
 // Text at real sizes (src/lang/text.ts). Positions count characters.
 export const TEXT_OPS = {
   length: builtin("text.length", "length", pure([str], int), T.length),

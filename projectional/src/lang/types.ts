@@ -63,6 +63,17 @@ export class PlainError extends TypeError {}
 // variables like plain data is. Such a record is plain data too.
 export class NumbersError extends TypeError {}
 
+// A number type, for the generic arithmetic (NUMBERS.md, "One `+` for every
+// number system"): `arith` is a type that has + − · and −x (Number, Int, or
+// a record of Numbers), `ordered` one that also has < (Number or Int). A
+// type variable can carry either, like `numbers` above, and the program is
+// resolved to each type's own operations before it runs (arith.ts).
+export type Arith = "arith" | "ordered";
+export class ArithError extends TypeError {
+  kind: Arith;
+  constructor(kind: Arith) { super(kind === "ordered" ? "not a number type with <" : "not a number type"); this.kind = kind; }
+}
+
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
 export class Subst {
@@ -80,6 +91,8 @@ export class Subst {
   // For a data type applied to args: its fields' types, if it has one
   // case, or null. Set by the checker.
   recordFields: (id: Id, args: Type[]) => Type[] | null = () => null;
+  // Type variables that may only stand for a number type, and which kind.
+  arith = new Map<number, Arith>();
 
   clone(): Subst {
     const s = new Subst();
@@ -90,13 +103,34 @@ export class Subst {
     s.plainArgs = this.plainArgs;
     s.numbers = new Set(this.numbers);
     s.recordFields = this.recordFields;
+    s.arith = new Map(this.arith);
     return s;
   }
 
-  fresh(plain = false, numbers = false): Type {
-    if (plain || numbers) this.plain.add(this.next);
+  fresh(plain = false, numbers = false, arith?: Arith): Type {
+    if (plain || numbers || arith) this.plain.add(this.next);
     if (numbers) this.numbers.add(this.next);
+    if (arith) this.arith.set(this.next, arith);
     return { t: "var", v: this.next++ };
+  }
+
+  // Require t to be a number type of this kind. A record of Numbers has
+  // + − · and −x part by part, but no <.
+  requireArith(t: Type, kind: Arith): void {
+    t = this.resolve(t);
+    if (t.t === "var") {
+      if (this.arith.get(t.v) !== "ordered") this.arith.set(t.v, kind);
+      this.plain.add(t.v);
+      return;
+    }
+    if (t.t === "con" && (t.id === NUMBER || t.id === INT)) return;
+    if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
+    if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
+    if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
+      try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
+      return;
+    }
+    throw new ArithError(kind);
   }
 
   // Require t to be a record of Numbers: its fields become Numbers.
@@ -164,6 +198,8 @@ export class Subst {
       if (this.occurs(v.v, t)) throw new TypeError("this would need an infinite type");
       this.types.set(v.v, t);
       if (this.numbers.has(v.v)) this.requireNumbers(t);
+      const kind = this.arith.get(v.v);
+      if (kind) this.requireArith(t, kind);
       if (this.plain.has(v.v)) this.requirePlain(t);
       return;
     }
@@ -213,8 +249,9 @@ export class EffectError extends TypeError {
 
 // A type scheme: a type with its own variables, copied fresh at each use.
 // `plain` lists the variables that may only stand for plain data.
-// `numbers` lists those that may only stand for a record of Numbers.
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[] }
+// `numbers` lists those that may only stand for a record of Numbers;
+// `arith` and `ordered` those that may only stand for a number type.
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -231,7 +268,8 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
 
 export function instantiate(sc: Scheme, s: Subst): Type {
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
-  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v))]));
+  const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
+  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   const go = (t: Type): Type => {
     t = s.resolve(t);

@@ -3,13 +3,17 @@
   "notation": {
     "builtin.add":  { "glyph": "+", "fixity": "infix" },
     "builtin.int.add": { "glyph": "+", "fixity": "infix" },
+    "builtin.arith.add": { "glyph": "+", "fixity": "infix" },
     "builtin.sub":  { "glyph": "−", "fixity": "infix" },
     "builtin.int.sub": { "glyph": "−", "fixity": "infix" },
+    "builtin.arith.sub": { "glyph": "−", "fixity": "infix" },
     "builtin.mul":  { "glyph": "×", "fixity": "infix" },
     "builtin.int.mul": { "glyph": "×", "fixity": "infix" },
+    "builtin.arith.mul": { "glyph": "×", "fixity": "infix" },
     "builtin.div":  { "glyph": "÷", "fixity": "infix" },
     "builtin.neg":  { "glyph": "−", "fixity": "prefix" },
     "builtin.int.neg": { "glyph": "−", "fixity": "prefix" },
+    "builtin.arith.neg": { "glyph": "−", "fixity": "prefix" },
     "builtin.sqrt": { "glyph": "√", "fixity": "prefix" }
   }
 }

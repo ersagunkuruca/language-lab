@@ -48,6 +48,11 @@ export function canonical(sc: Scheme): Pin {
   // Only when there are any, so every signature written before keeps its hash.
   const nums = [...vars].filter(([v]) => numbers.has(v)).map(([, i]) => i);
   if (nums.length) out.numbers = nums;
+  for (const k of ["arith", "ordered"] as const) {
+    const these = new Set(sc[k] ?? []);
+    const at = [...vars].filter(([v]) => these.has(v)).map(([, i]) => i);
+    if (at.length) out[k] = at;
+  }
   return out;
 }
 
@@ -71,7 +76,8 @@ export function fresh(p: Pin, s: Subst): Scheme {
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail } };
   };
-  return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!) };
+  return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
+    ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}) };
 }
 
 // The pin's type with its variables made rigid: each one a type of its own
@@ -80,8 +86,10 @@ export function fresh(p: Pin, s: Subst): Scheme {
 export const RIGID = "pin.";
 export function rigid(sc: Scheme): Type {
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
+  const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
+  const kind = (v: number) => (numbers.has(v) ? "numbers" : ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : plain.has(v) ? "plain" : "any");
   const go = (t: Type): Type => {
-    if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${numbers.has(t.v) ? "numbers" : plain.has(t.v) ? "plain" : "any"}.${t.v}`, args: [] } : t;
+    if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${kind(t.v)}.${t.v}`, args: [] } : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     const tail = t.eff.tail;
     const eff: Row = tail !== null && sc.rows.includes(tail) ? { effs: [...t.eff.effs, `${RIGID}row.${tail}`], tail: null } : t.eff;
