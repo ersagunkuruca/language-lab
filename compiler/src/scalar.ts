@@ -1218,6 +1218,53 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       g.body = cps(handle(body, g), k, true, g);
     }
   }
+  // A function whose answer, somewhere it ends, is cons(x, itself(…))
+  // (ledger's entries) recurses once per item, so a long list runs out of
+  // stack. Instead it keeps the items so far, newest first, in one more
+  // input, so each such end is a tail call, and every other end gives
+  // them turned round onto its answer: the same list, built in the same
+  // order. (Tail recursion modulo cons, done by reversing rather than
+  // filling holes, since WasmGC cells are immutable; the JS backend
+  // fills holes, G22.)
+  function modCons(from: number) {
+    const end = funcs.length;
+    for (let i = from; i < end; i++) {
+      const g = funcs[i], t = g.result;
+      if (g.multi || g.spends || g.budgeted || closureCode.has(i) || !isData(t)) continue;
+      const cons = t.cases.findIndex((c) => c.variant === CONS), nil = t.cases.findIndex((c) => c.variant === NIL);
+      if (cons < 0 || nil < 0) continue;
+      const self = (e: SExpr): e is Extract<SExpr, { k: "new" }> => {
+        if (e.k !== "new" || e.t.key !== t.key || e.c !== cons) return false;
+        const last = e.args[e.args.length - 1];
+        return last.k === "call" && last.fn === i && !last.cps;
+      };
+      const ends = (e: SExpr): boolean =>
+        self(e) || (e.k === "let" && ends(e.body)) || (e.k === "if" && (ends(e.then) || ends(e.else))) || (e.k === "case" && e.arms.some((a) => a !== null && ends(a)));
+      if (!ends(g.body)) continue;
+      const p = g.params.length;
+      const h: SFunc = { ...g, name: `${g.name}.onto`, params: [...g.params, t], locals: [...g.locals.slice(0, p), t, ...g.locals.slice(p)], inner: true, body: { k: "num", v: 0 } };
+      const hi = funcs.push(h) - 1, acc: SExpr = { k: "local", i: p };
+      const onto = (e: SExpr): SExpr => {
+        switch (e.k) {
+          case "let": return { ...e, body: onto(e.body) };
+          case "if": return { ...e, then: onto(e.then), else: onto(e.else) };
+          case "case": return { ...e, arms: e.arms.map((a) => (a === null ? null : onto(a))) };
+          case "fail": case "abort": return e;
+          case "call": if (e.fn === i && e.tail) return { ...e, fn: hi, args: [...e.args, acc] }; break;
+          case "new": if (self(e)) {
+            // Its other fields first, as written, then the call's inputs.
+            const xs = e.args.slice(0, -1).map((x) => ({ i: h.locals.push(typeIn(x, h)) - 1, value: x }));
+            const call = e.args[e.args.length - 1] as Extract<SExpr, { k: "call" }>;
+            const body: SExpr = { k: "call", fn: hi, tail: true, args: [...call.args, { k: "new", t, c: cons, args: [...xs.map((x): SExpr => ({ k: "local", i: x.i })), acc] }] };
+            return xs.reduceRight<SExpr>((b, x) => ({ k: "let", i: x.i, value: x.value, body: b }), body);
+          }
+        }
+        return { k: "call", fn: reverse(t), tail: true, args: [acc, e] };
+      };
+      h.body = onto(mapLocals(g.body, (j) => (j < p ? j : j + 1)));
+      g.body = { k: "call", fn: hi, tail: true, args: [...g.params.map((_, j): SExpr => ({ k: "local", i: j })), { k: "new", t, c: nil, args: [] }] };
+    }
+  }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {
     const key = `reverse:${d.key}`;
@@ -1314,7 +1361,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
-    try { func(r); several_(from); } catch (e) {
+    try { func(r); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
       if (funcs.length > from && index.get(r) !== undefined && index.get(r)! >= from) {
         // Refused making its searches: undo it, and what was lowered with it.
