@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E52 | A page in the Run panel is unstyled (pedal and dice in default serif, the drive picture cut off); a base stylesheet for the mount, or CSS in the examples | QA-2026-10-24 L1 | P2 | S | |
 | E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
 | E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
 | E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
@@ -116,6 +115,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E52 | A page has a base look (page.ts PAGE_BASE, in :where) in the editor and saved; the frame grows with the page | #356 |
 | E51 | The map can be put away: Map button beside Fit, off by default on a phone, at most a fifth of the pane | #353 |
 | E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
 | E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
