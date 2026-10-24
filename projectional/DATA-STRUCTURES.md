@@ -81,12 +81,22 @@ in the language itself as a prelude type, with:
   hash go through `meaning`, which is what represent.ts already requires of
   a representation that isn't canonical.
 
+**Done (L76):** the tree is `src/lang/map-tree.ts` (`withMapTree`), its
+jobs tested against the definition through `meaning` with the balance
+checked after every change (`test/map-tree.test.ts`). The chooser takes it
+for a word count, and the represented program prints what the definition
+prints; in the evaluator a word count of 1,200 words (400 different) runs
+about 3.5 times faster, and of 3,000 words about 15 times (the list is
+quadratic, the tree n log n).
+
 What step 2 needs that doesn't exist yet: today representations are applied
 only by `lab run` and `lab compile` with a representations.json (#97). A
 std or library type's representation has to be chosen automatically by the
 evaluator, the compiler and the editor, from the costs of the jobs the
-program uses. That is a Compiler lane change (a new C row), and this lane
-writes the tree and its laws.
+program uses. That is a Compiler lane change (C47). It must also send `equal`, `show`
+and `compare` on a map through `meaning`, since the tree isn't canonical:
+`represent` today replaces jobs by id and has no types to find which
+`equal`s are on maps.
 
 ## Later representations
 
