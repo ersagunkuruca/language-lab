@@ -104,7 +104,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   if (ints) ["int.of", "int.small"].forEach(need);
   const texty = rtNames.some((n) => !NUMERIC.has(n) && n !== "int.of" && n !== "int.small") || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
-  if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
+  if (texty) ["text.new", "text.put", "text.put4", "text.size", "text.byte"].forEach(need);
   const rts: RtFn[] = rtNames.map(runtime);
   // Ryū's tables, for number.js: an i64 array type and a global holding them.
   const ryu = rtNames.includes("number.mulshift");
@@ -315,7 +315,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   ]);
   const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
   // The runtime functions the host uses, by these names.
-  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start", "number.js": "Number.text", "int.of": "Int.of", "int.small": "Int.get" };
+  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.put4": "Text.put4", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start", "number.js": "Number.text", "int.of": "Int.of", "int.small": "Int.get" };
   const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
@@ -673,8 +673,11 @@ export async function runMain(lowered: Lowered, m: Module, name: string, args: s
 // Text across the boundary: a JS string into the module's UTF-8 array, and back.
 export function toText(ex: Record<string, (...xs: never[]) => unknown>, v: string): unknown {
   const b = new TextEncoder().encode(v), t = (ex["Text.new"] as (n: number) => unknown)(b.length);
-  const put = ex["Text.put"] as (t: unknown, i: number, x: number) => void;
-  b.forEach((x, i) => put(t, i, x));
+  const put = ex["Text.put"] as (t: unknown, i: number, x: number) => void, put4 = ex["Text.put4"] as (t: unknown, i: number, x: number) => void;
+  // Four bytes a call (one i32, low byte first), then the rest one by one.
+  const words = new DataView(b.buffer, b.byteOffset, b.byteLength), whole = b.length & ~3;
+  for (let i = 0; i < whole; i += 4) put4(t, i, words.getInt32(i, true));
+  for (let i = whole; i < b.length; i++) put(t, i, b[i]);
   return t;
 }
 export function fromText(ex: Record<string, (...xs: never[]) => unknown>, t: unknown): string {

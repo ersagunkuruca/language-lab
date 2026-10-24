@@ -1843,6 +1843,37 @@ ${drop}
   // bytes to fill, filling one, and reading one back.
   "text.new": { params: [["n", "i32"]], result: "text", locals: [], uses: [], body: "local.get $n\narray.new_default $bytes" },
   "text.put": { params: [["t", "text"], ["i", "i32"], ["b", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nlocal.get $i\nlocal.get $b\narray.set $bytes\ni32.const 0" },
+  // Where the character that ends at byte i (> 0) starts: back over
+  // UTF-8's continuation bytes (10xxxxxx).
+  "text.before": {
+    params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [],
+    body: `
+      block void
+        loop void
+          local.get $i
+          i32.const 1
+          i32.sub
+          local.set $i
+          local.get $i
+          i32.eqz
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 192
+          i32.and
+          i32.const 128
+          i32.eq
+          br_if 0
+        end
+      end
+      local.get $i`,
+  },
+  // Bytes i to i + 3 from w, low byte first (the host fills a text four at a time).
+  "text.put4": {
+    params: [["t", "text"], ["i", "i32"], ["w", "i32"]], result: "i32", locals: [], uses: [],
+    body: [0, 1, 2, 3].map((k) => `local.get $t\nlocal.get $i\ni32.const ${k}\ni32.add\nlocal.get $w\ni32.const ${8 * k}\ni32.shr_u\narray.set $bytes`).join("\n") + "\ni32.const 0",
+  },
   "text.size": { params: [["t", "text"]], result: "i32", locals: [], uses: [], body: "local.get $t\narray.len" },
   "text.byte": { params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nlocal.get $i\narray.get_u $bytes" },
   // range(n): 0, 1, …, n − 1 (std.ts, run.ts), built from the end. Int's and Number's.

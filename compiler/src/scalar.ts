@@ -781,7 +781,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       if (r && c.fields[j].t !== st) throw new Refused("folds over data inside other data (a nested fold isn't in WebAssembly yet)");
     });
     const outside = free.map((b): SExpr => ({ k: "local", i: env.get(b)! }));
-    if (arms.every((a) => a.results.filter((r) => r).length <= 1)) return { k: "call", fn: loop(st, result, arms, free, env, f), args: [expr(n.scrutinee, env, f, false), { k: "new", t: framesOf(st), c: 0, args: [] }, ...outside], tail };
+    if (arms.every((a) => a.results.filter((r) => r).length <= 1)) {
+      const s = expr(n.scrutinee, env, f, false);
+      const fused = s.k === "rt" && s.fn === "text.characters" ? characters(st, result, arms, free, env, f) : null;
+      if (fused && s.k === "rt") {
+        const tl = f.locals.push("text") - 1, t: SExpr = { k: "local", i: tl };
+        return { k: "let", i: tl, value: s.args[0], body: { k: "call", fn: fused.fn, args: [t, { k: "rt", fn: "text.size", args: [t] }, fused.start, ...outside], tail } };
+      }
+      return { k: "call", fn: loop(st, result, arms, free, env, f), args: [s, { k: "new", t: framesOf(st), c: 0, args: [] }, ...outside], tail };
+    }
     const params = [st, ...free.map((b) => f.locals[env.get(b)!])];
     const g: SFunc = { def: id, name: `${f.name}.fold`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const gi = funcs.push(g) - 1;
@@ -885,6 +893,42 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     };
     if (fails(down.body, funcs) || fails(up.body, funcs)) down.partial = up.partial = true;
     return di;
+  }
+  // A fold over `characters(t)` whose arms don't use the rest of the list
+  // itself: no list, and no stack. Its result is the arm for the end,
+  // then each character's arm from the last to the first, the order the
+  // loop above takes them; one function, t and the byte position of the
+  // characters still to go, a tail call per character. (Fusion: Wadler's
+  // deforestation, as the JS backend does with G16.)
+  function characters(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc): { fn: number; start: SExpr } | null {
+    const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
+    if (!nil || !cons || arms.length !== 2) return null;
+    const ci = st.cases.findIndex((c) => c.variant === cons.variant), c = st.cases[ci];
+    const head = c.fields.findIndex((x) => x.t !== st), tail = c.fields.findIndex((x) => x.t === st);
+    if (head < 0 || tail < 0 || st.cases.length !== 2) return null;
+    if (cons.binds[tail] && refsIn(cons.body).includes(cons.binds[tail]!)) return null;
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = ["text", "i32", result, ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.characters`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(free.map((b, j) => [b, 3 + j]));
+    const from = g.locals.push("i32") - 1, x = g.locals.push("text") - 1;
+    if (cons.binds[head]) inner = new Map(inner).set(cons.binds[head]!, x);
+    inner = new Map(inner).set(cons.results[tail]!, 2);
+    const t: SExpr = { k: "local", i: 0 }, at: SExpr = { k: "local", i: 1 };
+    g.body = {
+      k: "if", t: result, cond: { k: "op", op: "not", args: [at] }, then: { k: "local", i: 2 },
+      else: {
+        k: "let", i: from, value: { k: "rt", fn: "text.before", args: [t, at] },
+        body: {
+          k: "let", i: x, value: { k: "rt", fn: "text.bytes", args: [t, { k: "local", i: from }, at] },
+          body: { k: "call", fn: gi, args: [t, { k: "local", i: from }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 3 + j }))], tail: true },
+        },
+      },
+    };
+    if (fails(g.body, funcs)) g.partial = true;
+    // The end's arm, where the fold is (it binds nothing of the list's).
+    return { fn: gi, start: expr(nil.body, env, f, false) };
   }
   // What p's type variables stand for, where c is p at known types.
   function bindVars(p: Type, c: Type, types: At) {

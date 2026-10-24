@@ -512,13 +512,16 @@ test("whole programs in WebAssembly: wc, ledger, chapters and calc's mains print
   const files = {
     "a.txt": "one two\nthree\n", "book.md": "# One\nhello world\n# Two\nmore words here\n",
     "sums.txt": "1+2\nlet x = 3\nx*x\n1 +\n", "ledger.csv": "2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n", "big.csv": book(500),
+    "u.txt": "naïve café 🎉 ok\n日本語\n",
   };
-  const argsets = [[], ["a.txt"], ["-l", "a.txt", "nope"], ["-w", "-c", "book.md"], ["book.md", "out"], ["sums.txt"], ["ledger.csv"], ["big.csv"], ["nope"]];
+  const argsets = [[], ["a.txt"], ["u.txt"], ["-l", "a.txt", "nope"], ["-w", "-c", "book.md"], ["book.md", "out"], ["sums.txt"], ["ledger.csv"], ["big.csv"], ["nope"]];
   for (const name of ["wc", "ledger", "chapters", "calc"]) {
     const p = load(name);
     const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
     assert.ok(l.funcs.some((g) => g.name === "main"), `${name}: main compiles (${l.refused.get(p.named("main"))})`);
     const m = emitWasm(l);
+    // wc's count folds over characters with no list between (C23).
+    if (name === "wc") assert.match(m.wat, /fold\.characters/);
     for (const args of argsets) for (const input of ["3*4\nlet\n", ""]) {
       const want = fakeWorld(files, input), got = fakeWorld(files, input);
       const exit = runProgram(p.code, p.info, p.named("main"), args, { ...want.rt, names: p.pres.names });
