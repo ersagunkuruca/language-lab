@@ -19,7 +19,7 @@ without waiting for the coordinator.
 |---|---|---|
 | **E: Editor** | `projectional/editor/`, the editor's tests and smoke | "Writing programs in the editor" |
 | **C: Compiler and targets** | `compiler/`, JS/WASM/WGSL output, performance, packaging | "Bigger programs and compiler gaps" |
-| **L: Language and library** | the checker, evaluator, `relate.ts`, std, effects, web runtime, examples, docs | started when its first item is picked |
+| **L: Language and library** | the checker, evaluator, `relate.ts`, std, effects, web runtime, examples, docs, the number systems | "Language and library lane" |
 
 Why three: the editor rule already allows only one thread in
 `projectional/editor/` at a time, and the compiler and the language core are
@@ -40,6 +40,14 @@ The recurring quality practices (QA pass, critical review, bigger program;
 see the project instructions) don't take a lane: QA and review write reports
 only, and their findings come in as backlog items. The bigger-program round
 is lane C's item when it's due.
+
+**Language gaps, every round.** Each bigger-program round records
+*language gaps* next to compiler gaps: every place the program declares a
+type, defines a helper or wraps a call only because the language lacks
+something, and which other examples write around the same thing. Each gap
+becomes an L row (P2 when two examples write around it). Targets have a
+measure (milliseconds) and notation didn't, which is how the language fell
+behind the targets; this is its measure (LANGUAGE-REVIEW-2026-10-24, P4).
 
 ## Intake
 
@@ -79,11 +87,18 @@ Within a priority, in this order:
 1. **Bugs before features** (step-by-step rule).
 2. **Removes a special case before adds a feature** (uniformity: one system,
    no special node kinds). Two page models becoming one beats a new widget.
-3. **Serves the thesis**: things that let programs be *written in the editor*
+3. **Removes a workaround in programs**: a place where programs write
+   around the language (declare a type, define a helper, wrap a call only
+   because the language lacks something). A gap that two examples write
+   around is at least **P2** (LANGUAGE-REVIEW-2026-10-24, "Why the language
+   stalled behind targets").
+4. **Serves the thesis**: things that let programs be *written in the editor*
    come before things that make them faster or run elsewhere. The 2026-10-22
    review found authoring is the weakest leg.
-4. **Serves more legs** (regular programs, shaders, web, mobile) before one.
-5. **Smaller first** when all else is equal, so lanes keep moving.
+5. **Serves more legs** (regular programs, shaders, web, mobile) before one.
+6. **More targets last**: a new target or more speed ranks below every
+   language item (Ersagun, 2026-10-24).
+7. **Smaller first** when all else is equal, so lanes keep moving.
 
 The current roadmap step (set by the second review, 2026-10-22): the editor's
 can't-edit list and a bigger program built in the editor, then one page
