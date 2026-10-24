@@ -48,10 +48,29 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells | ROADMAP 4 open | P3 | L | |
 | L17 | Data-type upgrades and path namespaces for modules | ROADMAP 5 open | P3 | L | |
 | L18 | Relational reads past about 1,300 items; a stackless `relate.ts` | ROADMAP 1-5 open, real-sized data | P3 | M | show numbers reads back 3,000 numbers since L11c (each level of a fold run backwards starts on a fresh stack); plain recursion still uses the stack |
-| L19 | Numbers stage 1: Int as data (match/fold view), Rational; stage 2: overloading by name | NUMBERS.md | P3 | L | |
+| L19 | Numbers stage 1: Int as data (match/fold view), Rational; stage 2: overloading by name | NUMBERS.md | P3 | L | Rational and stage 2 proposed again as L39 and L38 (LANGUAGE-REVIEW-2026-10-24) |
 | L20 | `set` with general functions through relations | real-sized data follow-up | P3 | M | |
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
+| L38 | **Proposal** (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Needs Ersagun's call between this and NUMBERS.md's per-type `+` with operation records | LANGUAGE-REVIEW-2026-10-24 | P2 | L | proposal, waiting for the decision |
+| L32 | **Proposal**: Int's builtins drawn with Number's glyphs (`n + 1`, `a < b` instead of `add(n, 1)`, `‹less than›(a, b)`): entries in styles/*.json, no meaning change | LANGUAGE-REVIEW-2026-10-24 §1 | P2 | S | proposal |
+| L30 | **Proposal (bug)**: the blocks text prints a match used as an `if` condition as `if ‹match›`, and a branch's lets and steps before `then`/`else` (calc's `sum rest`, `run line`) | LANGUAGE-REVIEW-2026-10-24 §8 | P1 | S | proposal |
+| L31 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
+| L33 | **Proposal**: `≤ > ≥`, `smaller`, `larger` in the prelude with glyphs (and Text's over `comes before`); examples' own `smaller`/`larger`/`louder` replaced | LANGUAGE-REVIEW-2026-10-24 §2 | P2 | S | proposal |
+| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
+| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
+| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
+| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
+| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P2 | M | proposal |
+| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
+| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
+| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P3 | M | proposal |
+| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P3 | L | proposal |
+| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
+| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P3 | M | proposal |
+| L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
 | L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, results cached by definition hash and re-checked on save (Unison prior art). Design note first | projectional/TESTING.md T7 | P2 | L | |
@@ -74,6 +93,7 @@ Not lane work; the coordinator does these or asks Ersagun.
 | P1 | PRs #43 and #44 open since 2026-10-22 morning, likely superseded by #49: close or land | R2 §8 | P2 | |
 | P2 | Batch deploys (deploy is its own workflow) if Actions cost needs it | Ersagun 2026-10-23 08:26 | P3 | asked, not requested |
 | P3 | A per-repo Actions budget, or a public repo for free Actions | thread "GitHub Actions cost" | P3 | Ersagun's call |
+| P4 | **Proposal** (LANGUAGE-REVIEW-2026-10-24): bigger-program rounds also record language gaps (where a program declares a type, defines a helper or wraps a call only because the language lacks something), and WORKFLOW.md ranks "a gap two examples write around" as P2 | LANGUAGE-REVIEW-2026-10-24 | P2 | proposal |
 
 ## Done
 
