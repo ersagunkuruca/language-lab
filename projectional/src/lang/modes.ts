@@ -124,6 +124,9 @@ interface Firing {
   chosen?: () => void;
   // Arms are exclusive (the value examined was known), so at most one runs.
   exclusive?: boolean;
+  // The result is known and no two arms build it with the same case, so
+  // at most one arm can give it.
+  disjoint?: boolean;
   // Where the choice is, for the plan.
   at?: { node: Id; value: Id; out: Id };
   // What relate.ts runs, when it's more than the goal's own exec says.
@@ -349,7 +352,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         });
         const live = out.filter((v) => !v.stuck.length);
         const answers = live.reduce<Answers>((a, v) => ({ fail: a.fail && v.answers.fail, many: a.many || v.answers.many }), { fail: true, many: false });
-        if (!f.exclusive && live.length > 1) answers.many = true;
+        if (!f.exclusive && !f.disjoint && live.length > 1) answers.many = true;
+        if (f.disjoint) answers.fail = true;
         if (f.exclusive) answers.fail = live.some((v) => v.answers.fail) || live.length < out.length;
         return {
           answers: live.length ? answers : CHECK,
@@ -628,8 +632,36 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   const taken = (exclusive: boolean, v: Id, binds: Id[], st: St): { gives: Id[]; sizes: [Id, Size][] } =>
     exclusive ? { gives: binds.map(slot), sizes: binds.map((b): [Id, Size] => [slot(b), strict(st.sizes.get(v))]) } : { gives: [], sizes: [] };
 
+  // The cases a value can be built with, seen from the node that makes it,
+  // or null when that can't be told: a case applied, a match or a let
+  // that ends in one, or `fail`, which builds nothing.
+  function heads(id: Id): Set<Id> | null {
+    const n = nodes[id];
+    if (n?.kind === "ref") return nodes[n.target]?.kind === "variant" ? new Set([n.target]) : null;
+    if (n?.kind === "call") {
+      if (isLet(n)) return heads((nodes[n.fn] as NodeOf<"lambda">).body);
+      const f = nodes[n.fn];
+      if (f?.kind !== "ref") return null;
+      if (f.target === S.fail) return new Set();
+      return nodes[f.target]?.kind === "variant" ? new Set([f.target]) : null;
+    }
+    if (n?.kind === "match") {
+      const all = [...n.arms.map((a) => (nodes[a] as NodeOf<"arm">).body), ...(n.otherwise ? [n.otherwise] : [])].map(heads);
+      return all.some((h) => !h) ? null : new Set(all.flatMap((h) => [...h!]));
+    }
+    return null;
+  }
+  const disjoint = (bodies: Id[]) => {
+    const hs = bodies.map(heads), seen = new Set<Id>();
+    for (const h of hs) for (const v of h ?? [""]) { if (!h || seen.has(v)) return false; seen.add(v); }
+    return true;
+  };
+
   // A match is a choice of arms. With the value examined known, exactly
-  // one arm runs; with the result known, each arm is tried.
+  // one arm runs; with the result known, each arm is tried, and when no
+  // two build it with the same case at most one gives it (Haar's split
+  // run backwards: an empty list or a pair at the front). Mercury's
+  // determinism analysis does the same for a switch on an output.
   function matchGoal(n: NodeOf<"match">, ctx: Ctx): Goal {
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
     const others = arms.length && n.otherwise ? variantsOf(arms[0].variant).filter((v) => !arms.some((a) => a.variant === v)) : [];
@@ -654,7 +686,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
             gives: others.length === 1 && fieldCount(others[0]) === 0 ? [v] : [], sizes: [],
           }] : []),
         ];
-        return { gives: [], answers: ONE, ends: true, branches, exclusive, at: { node: n.id, value: v, out }, cost: exclusive ? 1 : guess ? 30 : 4 };
+        const one = !exclusive && st.known.has(out) && disjoint([...arms.map((a) => a.body), ...(n.otherwise ? [n.otherwise] : [])]);
+        return { gives: [], answers: ONE, ends: true, branches, exclusive, disjoint: one, at: { node: n.id, value: v, out }, cost: exclusive ? 1 : guess ? 30 : 4 };
       },
     };
   }

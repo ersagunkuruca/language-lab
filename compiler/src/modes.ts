@@ -18,6 +18,7 @@
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../projectional/src/lang/modes.ts";
 import { INT_OPS, S } from "../../projectional/src/lang/std.ts";
+import { B } from "../../projectional/src/prelude.ts";
 
 export class Unsupported extends Error {}
 
@@ -85,7 +86,12 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   // The statements of a plan: each goal, then the choice, then `done`.
   function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit): string {
     const sc: Scope = { env: new Map(env0), lines: [], emit };
-    for (const e of plan.steps) exec(e, sc);
+    for (const e of plan.steps) {
+      // `fail`: this way gives no answer, whatever is left.
+      const f = e.k === "call" ? nodes[(nodes[e.node] as NodeOf<"call">).fn] : undefined;
+      if (f?.kind === "ref" && f.target === S.fail) { sc.lines.push("return $no;"); return sc.lines.join("\n"); }
+      exec(e, sc);
+    }
     sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit) : done(sc.env));
     return sc.lines.join("\n");
   }
@@ -170,6 +176,18 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       if (id === INT_OPS.sub && a !== undefined) return bind(sc, n.args[1], `$int.sub(${a}, ${res})`);
       if (id === INT_OPS.sub && b !== undefined) return bind(sc, n.args[0], `$int.add(${res}, ${b})`);
       if (id === INT_OPS.neg) return bind(sc, n.args[0], `$int.neg(${res})`);
+      // Numbers the same way, one unknown at a time (Haar's join written as
+      // lifting steps); a product or quotient only by a number written in
+      // the program that isn't 0, so there is one answer.
+      const literal = (js: string | undefined) => (js !== undefined && /^\(?-?\d+(\.\d+)?(e[-+]?\d+)?\)?$/.test(js) && Number(js.replace(/[()]/g, "")) !== 0);
+      if (id === B.add && a !== undefined) return bind(sc, n.args[1], `(${res} - ${a})`);
+      if (id === B.add && b !== undefined) return bind(sc, n.args[0], `(${res} - ${b})`);
+      if (id === B.sub && a !== undefined) return bind(sc, n.args[1], `(${a} - ${res})`);
+      if (id === B.sub && b !== undefined) return bind(sc, n.args[0], `(${res} + ${b})`);
+      if (id === B.neg) return bind(sc, n.args[0], `(-${res})`);
+      if (id === B.mul && literal(a)) return bind(sc, n.args[1], `(${res} / ${a})`);
+      if (id === B.mul && literal(b)) return bind(sc, n.args[0], `(${res} / ${b})`);
+      if (id === B.div && literal(b)) return bind(sc, n.args[0], `(${res} * ${b})`);
     }
     throw new Unsupported("a call with no backwards reading here");
   }

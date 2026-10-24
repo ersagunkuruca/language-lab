@@ -8,14 +8,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { makeRunner, type Value } from "../../projectional/src/lang/run.ts";
+import { fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
 import type { Id, NodeOf } from "../../projectional/src/model.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { INT_OPS, PAIR_V, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram } from "../src/program.ts";
+import { $fromList, $toList } from "../src/runtime.js";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const dir = mkdtempSync(join(tmpdir(), "modes-"));
@@ -93,4 +95,40 @@ test("backwards: greet runs as a function, the searches with several answers sta
   const source = compileProgram("backwards", ["main"], runtime);
   assert.match(source, /greet, run backwards \(semidet\)/);
   assert.match(source, /\$relate\(/);
+});
+
+// Haar's split in lifting steps (Sweldens): each step has one unknown run
+// backwards, so the join is arithmetic. No two arms build the list of
+// bands with the same case, and an odd sample out fails: one answer or
+// none, though the list given isn't the one examined.
+test("a split written as lifting steps runs backwards as arithmetic, with the evaluator's answers", async () => {
+  const k = new Lang();
+  const split = k.def("split");
+  k.define(split, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.list() },
+    { variant: CONS, names: ["a", "rest"], body: ([a, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => k.call(S.fail) },
+      { variant: CONS, names: ["b", "more"], body: ([b, more]) => k.let("fast", k.call(B.sub, a, b), (fast) =>
+        k.call(CONS, k.call(PAIR_V, k.call(B.add, b, k.call(B.div, fast, k.lit(2))), fast), k.call(split, more))) },
+    ]) },
+  ])));
+  const [xs] = paramsOf(k, split);
+  k.define(k.def("join"), k.fn(["bands"], (bs) => k.call(S.first, k.thunk(() => k.solve(split, { out: bs }, { [xs]: "xs" }, ({ [xs]: v }) => v)), k.thunk(() => k.list()))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const source = compile(code, info, names, { runtime, exports: ["split", "join"] });
+  assert.match(source, /split, run backwards \(semidet\)/);
+  assert.doesNotMatch(source, /\$relate|\$program/);
+  writeFileSync(join(dir, "haar.js"), source);
+  const defs = (await import(pathToFileURL(join(dir, "haar.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {} });
+  const ev = (name: string, ...args: Value[]) => [...r.call(r.value(Object.keys(names).find((d) => names[d] === name && code.nodes[d]?.kind === "def")!), ...args)][0];
+  for (const samples of [[], [3, 1], [0.5, -0.25, 1, 7]]) {
+    // split may fail (Choice), so it gives its answers in turn.
+    const [bands] = defs.split($toList(samples)) as Iterable<unknown>;
+    assert.deepEqual($fromList(defs.join(bands)), samples);
+    assert.deepEqual(fromList(ev("join", ev("split", toList(samples)))), samples);
+  }
+  assert.deepEqual([...(defs.split($toList([1, 2, 3])) as Iterable<unknown>)], []);
 });
