@@ -778,7 +778,16 @@ hierarchy is the map of which structures to name.
 4. *An example* using one generic definition at two types, for the
    compiler lane to measure on each target.
 5. Then Rational and Complex (LANGUAGE-REVIEW-2026-10-24 L39, L40), each
-   an entry in the table.
+   an entry in the table. **Rational done (L39):** `std.rational`, one
+   case `ratio(top, bottom)` of Ints, always in lowest terms with the sign
+   on top, by the builtin `lowest terms` (Euclid's algorithm, in
+   src/lang/int.ts). Its `+ − · −x <` are prelude definitions (`add
+   fractions` and so on, published but not offered) that arith.ts resolves
+   the generic operations to; `fraction(top, bottom)` and `divide
+   fractions` have no answer at a zero bottom; `show fraction` prints 3/4.
+   `1/10 + 2/10 = 3/10` holds exactly. Still to do: relate.ts's linear step
+   over fractions (running backwards stays at Number), and `lowest terms`
+   in the WASM, C and WGSL targets.
 
 ### Units
 

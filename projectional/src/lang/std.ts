@@ -136,6 +136,16 @@ export const HTML = typedef("std.html", "Html", [], [
   ["text", [["shows", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
   ["part", [["view", (_, self) => tfun([], tref(self), [...PAGE_VIEW])]]],
 ]);
+// Fractions (NUMBERS.md stage 1, LANGUAGE-REVIEW-2026-10-24 L39): exact,
+// a quotient of two Ints kept in lowest terms with the bottom positive, so
+// every fraction has one spelling and `equal` and hashes stay right. Last
+// among the types here, so the ids of the type expressions above don't
+// move. Its arithmetic is the prelude's (src/lang/prelude-source.ts),
+// which the one generic `+` resolves to (src/lang/arith.ts).
+export const RATIONAL = typedef("std.rational", "Rational", [], [
+  ["ratio", [["top", () => tref(INT)], ["bottom", () => tref(INT)]]],
+]);
+export const RATIO = "std.rational.ratio";
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
@@ -339,6 +349,12 @@ export const INT_OPS = {
   quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
   remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
   power: choice("int.power", "power", [int, int], int, I.power),
+  // Both divided by their greatest common divisor, the bottom made positive:
+  // a fraction's one spelling. Total: (n, 0) gives (±1, 0) and (0, 0) stays.
+  lowestTerms: builtin("int.lowestTerms", "lowest terms", pure([int, int], { t: "con", id: PAIR, args: [int, int] }), (a: I.Int, b: I.Int) => {
+    const [t, u] = I.lowestTerms(a, b);
+    return { tag: "std.pair.pair", fields: [t, u] };
+  }),
   show: builtin("int.show", "show", pure([int], str), I.show),
   read: choice("int.read", "read whole number", [str], int, I.read),
   toNumber: builtin("int.toNumber", "as number", pure([int], num), I.toNumber),
@@ -400,7 +416,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

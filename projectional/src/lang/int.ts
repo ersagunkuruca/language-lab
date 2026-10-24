@@ -63,6 +63,16 @@ export function power(a: Int, n: Int): Int[] {
   return [norm(big(a) ** big(n))];
 }
 
+// Divided by their greatest common divisor (Euclid's algorithm), the
+// second made positive: a fraction in lowest terms. (n, 0) gives (±1, 0).
+export function lowestTerms(a: Int, b: Int): [Int, Int] {
+  let x = big(abs(a)), y = big(abs(b));
+  while (y !== 0n) [x, y] = [y, x % y];
+  if (x === 0n) return [0, 0];
+  const sign = less(b, 0) ? -1n : 1n;
+  return [norm((sign * big(a)) / x), norm((sign * big(b)) / x)];
+}
+
 export const show = (a: Int): string => String(a);
 // The nearest float; exact up to 2^53.
 export const toNumber = (a: Int): number => Number(a);
