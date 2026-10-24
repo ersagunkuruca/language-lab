@@ -217,9 +217,14 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
     before: words.flatMap((a) => words.map((b) => [a, b])),
     same: words.flatMap((a) => words.map((b) => [a, b])),
     glued: [["", ""], ["héllo", "🎉"]],
-    shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, NaN, Infinity, -Infinity, 2.0000000001].map((x) => [x]),
+    shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, NaN, Infinity, -Infinity, 2.0000000001,
+      // Written by the runtime: tiny ones as JavaScript does (1e-7 and below), wholes below 2⁵³; the rest by the host.
+      1e-7, -1e-7, 1.5e-7, 5.5e-8, 1e-9, -9.99e-7, 1.23e-8, 9.99e-9, 1e-10, -1e-10, 4.9e-10, 5e-10, -5e-10, 3e-300, 5e-324, 1e-6 - 1e-22, 2 ** 53 - 1, 2 ** 53 + 2, -(2 ** 60), 9.3e18, 123456789012345, 1234567890123.5].map((x) => [x]),
     arith: [[0, 0], [6, 7], [-3, 5], [123456789, 1000], [2 ** 31, 2 ** 31]],
     smaller: [[1, 2], [5, -5], [0, 0]],
+    // mod, from musl's fmod: exact, b's sign, NaN and the infinities as JavaScript's.
+    remainder: [7, -7, 0, -0, 0.5, 1e300, -1e-300, 5e-324, 2 ** 53 + 1, NaN, Infinity, -Infinity, 1e22, 0.1, 6.283185307179586].flatMap((a) =>
+      [3, -3, 0.1, 2.5, 1e-310, 5e-324, 1e300, 2 ** -1074 * 3, Infinity, -Infinity, NaN, 0, 1 / 3].map((b) => [a, b])),
   };
   for (const [name, inputs] of Object.entries(cases)) {
     const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
@@ -229,6 +234,9 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
       assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => JSON.stringify(x)).join(", ")})`);
     }
   }
+  // mod is the module's own: alone it imports nothing, not even texts.
+  const alone = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.remainder], { data: true }));
+  assert.ok(!alone.wat.includes("(import") && !alone.wat.includes("$bytes"), "mod needs no host");
   // Past 2⁶³ an Int traps, a runtime error rather than a wrong answer (big Ints are W5).
   assert.throws(() => w.arith(2n ** 62n, 4n), WebAssembly.RuntimeError);
   // Programs: wc's and chapters' text functions, the evaluator's answers.
@@ -431,6 +439,8 @@ test("what isn't in the profile is refused, with the reason", () => {
   assert.match(why("sinc")!, /Choice/);
   assert.match(why("parabola")!, /calls polynomial/);
   assert.match(why("polynomial")!, /other than Number or Bool/);
+  // With no JavaScript host there's no Math yet.
+  assert.throws(() => emitWasm(lowerScalar(p.code, p.info, p.pres.names, p.own.defs), { wasi: true }), /can't use sin.* yet/);
 });
 
 test("tail calls are return_call: a million steps of recursion in constant stack", async () => {
