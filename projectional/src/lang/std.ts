@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Subst, type Type } from "./types.ts";
+import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 
@@ -200,6 +200,12 @@ for (const op of Object.keys(impl) as (keyof typeof impl)[]) {
 
 const pure = (params: Type[], ret: Type): Sig => (s) => fn(params, ret, s.freshRow());
 
+// What a search's function does besides Choice: never the world, since it
+// runs on paths the search abandons or repeats (LANGUAGE.md, "The world and
+// Choice"). The checker puts the call's row around it instead of making
+// them one (infer.ts, SEARCHES), so code beside the search may still act.
+const searchRow = (s: Subst): Row => { const e = s.freshRow(); s.noWorld.add(e.tail!); return e; };
+
 export const S = {
   less: builtin("less", "less than", pure([num, num], bool)),
   // Only plain data can be compared: two functions that do the same thing
@@ -259,15 +265,18 @@ export const S = {
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.
-  all: builtin("all", "all", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], list(a), e); }),
-  count: builtin("count", "count", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], num, e); }),
+  all: builtin("all", "all", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], list(a), e); }),
+  count: builtin("count", "count", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], num, e); }),
+  // The default runs after the search, not under it: it may act, and the
+  // call does what either does.
   first: builtin("first", "first", (s) => {
-    const a = s.fresh(), e = s.freshRow();
-    return fn([fn([], a, { effs: [CHOICE], tail: e.tail }), fn([], a, e)], a, e);
+    const a = s.fresh(), e = searchRow(s), d = s.freshRow();
+    s.subs.push({ from: e, to: d });
+    return fn([fn([], a, { effs: [CHOICE], tail: e.tail }), fn([], a, d)], a, d);
   }),
   // The at-most-one sibling of all: the first answer as some(answer), or
   // none. This is how a Choice becomes data that can be stored.
-  optional: builtin("optional", "optional", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], optional(a), e); }),
+  optional: builtin("optional", "optional", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], optional(a), e); }),
   // ... and back: the value, or no answer at all.
   valueOf: builtin("valueOf", "value of", (s) => { const a = s.fresh(); return fn([optional(a)], a, s.freshRow([CHOICE])); }),
   // Random's handler that gives the same numbers for the same seed.

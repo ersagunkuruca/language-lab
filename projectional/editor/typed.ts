@@ -15,7 +15,7 @@ import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
-import { INT, schemeArith, showType } from "../src/lang/types.ts";
+import { INT, schemeArith, showIn, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -35,7 +35,7 @@ function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}
 
 export const typeOf = (info: Info | null, id: Id, names: Names): string | null => {
   const t = info?.typeOf.get(id);
-  return t ? showType(info!.subst.zonk(t), names, info!.subst.arith) : null;
+  return t ? showIn(t, names, info!.subst) : null;
 };
 
 // ---------------------------------------------------------------- view
@@ -44,7 +44,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
-  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showType(info!.subst.zonk(hi.expected), names, info!.subst.arith) : null; };
+  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : null; };
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
 
   // Wrap a node's rendering so it can be clicked and shows its type.

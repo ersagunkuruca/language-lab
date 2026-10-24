@@ -241,7 +241,10 @@ the effects of the function body it sits in, so a pure lambda passed to
 compiles to a generator, which is correct but slower than it needs to be.
 The fix belongs in the checker: at a call, require the callee's row to be
 *contained in* the surrounding row, instead of equal to it. Do this when
-it shows up in a profile, not before.
+it shows up in a profile, not before. The checker already does it at a
+search's call (`all`, `count`, `first`, `optional`: LANGUAGE.md, "The world
+and Choice"), with `Subst.subs`, so the general case is that machinery at
+every call.
 
 ### The evaluator stays the definition of the language
 

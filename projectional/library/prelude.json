@@ -3560,7 +3560,8 @@
         0
       ],
       "rows": [
-        1
+        1,
+        2
       ],
       "type": {
         "t": "fn",
@@ -3608,10 +3609,19 @@
         },
         "eff": {
           "effs": [],
-          "tail": 1
+          "tail": 2
         }
       },
-      "plain": []
+      "plain": [],
+      "noWorld": [
+        1
+      ],
+      "subs": [
+        [
+          1,
+          2
+        ]
+      ]
     },
     "@su0m8djlkg5cq4b68i0klesqia": {
       "vars": [],

@@ -18,7 +18,7 @@ import { children, type Code, type Id } from "../model.ts";
 import { defDeps } from "../hash.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info, type Options } from "./infer.ts";
-import { schemeArith, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
+import { CONSOLE, schemeArith, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
 // after them. Equal pins are equal JSON.
@@ -53,6 +53,12 @@ export function canonical(sc: Scheme): Pin {
     const at = [...vars].filter(([v]) => these.has(v)).map(([, i]) => i);
     if (at.length) out[k] = at;
   }
+  // Rows a search runs (no world effects) and rows inside others (types.ts
+  // Subst), the same way.
+  const noWorld = (sc.noWorld ?? []).filter((r) => rows.has(r)).map((r) => rows.get(r)!).sort((a, b) => a - b);
+  if (noWorld.length) out.noWorld = noWorld;
+  const subs = (sc.subs ?? []).filter(([f, t]) => rows.has(f) && rows.has(t)).map(([f, t]): [number, number] => [rows.get(f)!, rows.get(t)!]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (subs.length) out.subs = subs;
   return out;
 }
 
@@ -77,14 +83,20 @@ export function fresh(p: Pin, s: Subst): Scheme {
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail } };
   };
   return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
-    ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}) };
+    ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),
+    ...(p.noWorld ? { noWorld: p.noWorld.map((r) => m.get(r)!) } : {}), ...(p.subs ? { subs: p.subs.map(([f, t]): [number, number] => [m.get(f)!, m.get(t)!]) } : {}) };
 }
 
 // The pin's type with its variables made rigid: each one a type of its own
 // that only matches itself, each row tail an effect of its own. A body
-// fits the pin when its type, instantiated, unifies with this.
+// fits the pin when its type, instantiated, unifies with this. A row inside
+// another (Scheme.subs) puts its effect in that one too, so a body may pass
+// its effects on; a row the pin lets do anything carries a world effect, so
+// a body that runs it under a search doesn't fit.
 export const RIGID = "pin.";
 export function rigid(sc: Scheme): Type {
+  const noWorld = new Set(sc.noWorld ?? []);
+  const inside = (r: number): string[] => [`${RIGID}row.${r}`, ...(sc.subs ?? []).filter(([, t]) => t === r).flatMap(([f]) => inside(f))];
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
   const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
   const kind = (v: number) => (numbers.has(v) ? "numbers" : ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : plain.has(v) ? "plain" : "any");
@@ -92,7 +104,7 @@ export function rigid(sc: Scheme): Type {
     if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${kind(t.v)}.${t.v}`, args: [] } : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     const tail = t.eff.tail;
-    const eff: Row = tail !== null && sc.rows.includes(tail) ? { effs: [...t.eff.effs, `${RIGID}row.${tail}`], tail: null } : t.eff;
+    const eff: Row = tail !== null && sc.rows.includes(tail) ? { effs: [...new Set([...t.eff.effs, ...inside(tail), ...(noWorld.has(tail) ? [] : [CONSOLE])])], tail: null } : t.eff;
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff };
   };
   return go(sc.type);

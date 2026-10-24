@@ -36,7 +36,7 @@ import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, showType, type Type } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, showIn, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel } from "./typed.ts";
 import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
@@ -168,7 +168,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
-  const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showType(info!.subst.zonk(t), names, info!.subst.arith) : ""; };
+  const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst) : ""; };
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   const errs = new Set((info?.errors ?? []).map((e) => e.id));
   const dotOf = (id: Id): Id | null => {
@@ -262,7 +262,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       case "lit": { const l = litLabel(n.value); return pill(id, l.short, "lit", undefined, l.full); }
       case "hole": {
         const hi = info?.holes.get(id);
-        return pill(id, `□ ${hi ? showType(info!.subst.zonk(hi.expected), names, info!.subst.arith) : ""}`.trim(), "hole");
+        return pill(id, `□ ${hi ? showIn(hi.expected, names, info!.subst) : ""}`.trim(), "hole");
       }
       case "ref": {
         const t = node(n.target);

@@ -77,6 +77,11 @@ export class ArithError extends TypeError {
   constructor(kind: Arith) { super(kind === "ordered" ? "not a number type with <" : "not a number type"); this.kind = kind; }
 }
 
+// One row contained in another: what a search's function does is in what
+// the call of the search does, without being all of it (Koka's subeffecting
+// by `open`, Leijen 2017). `at` is the call it came from.
+export interface Sub { from: Row; to: Row; at?: Id }
+
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
 export class Subst {
@@ -96,6 +101,10 @@ export class Subst {
   recordFields: (id: Id, args: Type[]) => Type[] | null = () => null;
   // Type variables that may only stand for a number type, and which kind.
   arith = new Map<number, Arith>();
+  // Row tails that may not take a world effect, and rows contained in
+  // others (WorldError and Sub above).
+  noWorld = new Set<number>();
+  subs: Sub[] = [];
 
   clone(): Subst {
     const s = new Subst();
@@ -107,6 +116,8 @@ export class Subst {
     s.numbers = new Set(this.numbers);
     s.recordFields = this.recordFields;
     s.arith = new Map(this.arith);
+    s.noWorld = new Set(this.noWorld);
+    s.subs = [...this.subs];
     return s;
   }
 
@@ -231,14 +242,25 @@ export class Subst {
     // it. That's what lets f and derivative(f), which may fail where f
     // doesn't, be passed to the same function.
     if (a.tail !== null && a.tail === b.tail) {
-      if (onlyA.length || onlyB.length) this.rows.set(a.tail, { effs: [...onlyA, ...onlyB], tail: this.next++ });
+      if (onlyA.length || onlyB.length) this.bindRow(a.tail, { effs: [...onlyA, ...onlyB], tail: this.next++ });
       return;
     }
     if (onlyA.length && b.tail === null) throw new EffectError(onlyA);
     if (onlyB.length && a.tail === null) throw new EffectError(onlyB);
     const rest = a.tail !== null && b.tail !== null ? this.next++ : null;
-    if (a.tail !== null) this.rows.set(a.tail, { effs: onlyB, tail: rest });
-    if (b.tail !== null) this.rows.set(b.tail, { effs: onlyA, tail: rest });
+    if (a.tail !== null) this.bindRow(a.tail, { effs: onlyB, tail: rest });
+    if (b.tail !== null) this.bindRow(b.tail, { effs: onlyA, tail: rest });
+  }
+
+  // A row tail given its effects, and a tail for the rest; a tail that may
+  // not take a world effect refuses one, and its rest may not either.
+  private bindRow(tail: number, row: Row): void {
+    if (this.noWorld.has(tail)) {
+      const w = row.effs.filter((e) => WORLD.includes(e));
+      if (w.length) throw new WorldError(w);
+      if (row.tail !== null) this.noWorld.add(row.tail);
+    }
+    this.rows.set(tail, row);
   }
 }
 
@@ -250,11 +272,21 @@ export class EffectError extends TypeError {
   }
 }
 
+// The world under a Choice (LANGUAGE.md, "The world and Choice"): a row
+// that may not take a world effect (Console, Files, Update), because what
+// it stands for runs on paths a search may abandon or repeat. An effect
+// error, so a place that reports those reports this too.
+export class WorldError extends EffectError {
+  constructor(effects: Id[]) { super(effects); this.message = "acts on the world under a Choice"; }
+}
+
 // A type scheme: a type with its own variables, copied fresh at each use.
 // `plain` lists the variables that may only stand for plain data.
 // `numbers` lists those that may only stand for a record of Numbers;
 // `arith` and `ordered` those that may only stand for a number type.
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[] }
+// `noWorld` lists the row variables that may not take a world effect, and
+// `subs` pairs of row variables, the first contained in the second.
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; noWorld?: number[]; subs?: [number, number][] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -274,6 +306,8 @@ export function instantiate(sc: Scheme, s: Subst): Type {
   const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
   const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
+  for (const r of sc.noWorld ?? []) if (rm.has(r)) s.noWorld.add(rm.get(r)!);
+  for (const [f, t] of sc.subs ?? []) s.subs.push({ from: { effs: [], tail: rm.get(f) ?? f }, to: { effs: [], tail: rm.get(t) ?? t } });
   const go = (t: Type): Type => {
     t = s.resolve(t);
     if (t.t === "var") return vm.get(t.v) ?? t;
@@ -294,15 +328,21 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // which variables stand only for number types (the checker's `arith`, or a
 // scheme's through schemeArith), the type says so after it: `(a) -> a
 // where a is a number type`.
-export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>): string {
+// Rows one inside the other (`links`, from showIn) print as one: a search's
+// call and its function, keep and its test.
+export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = []): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
+  const root = new Map<number, number>();
+  const find = (r: number): number => { let x = r; while (root.has(x) && root.get(x) !== x) x = root.get(x)!; return x; };
+  for (const [a, b] of links) { const ra = find(a), rb = find(b); if (ra !== rb) root.set(ra, rb); }
+  const tailOf = (r: number) => find(r);
   const count = (t: Type) => {
     if (t.t === "con") t.args.forEach(count);
     if (t.t === "fn") {
       t.params.forEach(count);
       count(t.ret);
-      if (t.eff.tail !== null) tailCount.set(t.eff.tail, (tailCount.get(t.eff.tail) ?? 0) + 1);
+      if (t.eff.tail !== null) tailCount.set(tailOf(t.eff.tail), (tailCount.get(tailOf(t.eff.tail)) ?? 0) + 1);
     }
   };
   count(t);
@@ -318,9 +358,10 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
     }
     const effs = t.eff.effs.map(name);
-    if (t.eff.tail !== null && (tailCount.get(t.eff.tail) ?? 0) > 1) {
-      if (!tailNames.has(t.eff.tail)) tailNames.set(t.eff.tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
-      effs.push(tailNames.get(t.eff.tail)!);
+    const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
+    if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {
+      if (!tailNames.has(tail)) tailNames.set(tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
+      effs.push(tailNames.get(tail)!);
     }
     const arrow = effs.length ? ` -[${effs.join(", ")}]-> ` : " -> ";
     const s = `(${t.params.map((p) => go(p, false)).join(", ")})${arrow}${go(t.ret, false)}`;
@@ -333,6 +374,14 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
   const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("type", "types")}`);
   const clauses = [kinds.arith.length && say(kinds.arith, "number type"), kinds.ordered.length && say(kinds.ordered, "number type with <")].filter(Boolean);
   return clauses.length ? `${shown} where ${clauses.join(", and ")}` : shown;
+}
+
+// A type as the checker `s` has it: its number-type variables said, and
+// rows one inside the other (Subst.subs) printed as one.
+export function showIn(t: Type, names: Names, s: Subst): string {
+  const links: [number, number][] = [];
+  for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null) links.push([f, to]); }
+  return showType(s.zonk(t), names, s.arith, links);
 }
 
 // A scheme's number-type variables, for showType.
