@@ -34,7 +34,7 @@ Sources this draws on, credited per the project's attribution rule:
 | 8 | **No multi-select, so no bulk moves.** | Box select and shift-click everywhere. | Shift-click adds to the selection, shift-drag on empty space draws a box. Dragging any selected node moves them all. Tidy works on the selection. |
 | 9 | **Lists, sequences and curried functions drawn nested.** `cons(1, cons(2, cons(3, nil)))` becomes a staircase; `print; print; print` nests. | Most tools have a "make array" node with N inputs. | A list is one node with one input per item, and a run of steps is a column (done in the "Writing programs" thread; this layout keeps both). `(y) => (angle) => …` is one frame with both parameters, and an `if` always shows *then* above *else*. |
 | 10 | **Scale: can't see the whole and the part at once.** (Burnett's "screen real estate".) | Collapsing to subgraphs, minimaps, zoom. | Functions are the subgraphs: double-click opens one, **Show inline** draws it in place as a view. Zoom and pan are on the infinite canvas. While part of the graph is out of the window, a **map** in its corner shows the whole graph with the window on it; click or drag there to look elsewhere. Any frame inside a definition **folds** into one box (▾ in its corner, or right-click it): what it holds is hidden, a wire coming in ends on the box's left, a value going out leaves on its right. The box names the calls it holds (`trace, with fuel`) and sits where its contents put the frame, so dragging it moves them and unfolding (▸) finds them where they were; if the frame would now cover other nodes, its contents move together to the nearest clear place. Saved in layout.json as a view. |
-| 11 | **Breaking the program by accident.** | Most editors let you wire anything and complain at run time. | Every gesture is a typed edit and is refused, with the reason, if it would add an error. While you drag, inputs that can't take the wire are dimmed and say why. (Already true; listed so it stays true.) |
+| 11 | **Breaking the program by accident.** | Most editors let you wire anything and complain at run time. | What's refused is wiring that doesn't fit: every gesture is a typed edit, refused with the reason if it would add an error, and while you drag, inputs that can't take the wire are dimmed and say why. Nothing is refused for leaving the tree unfinished: Delete, pulling a wire off, a drop on a filled input and Add a value leave **loose parts** and empty inputs (Loose parts, below), kept and type-checked but not run. So no gesture removes work, and Undo takes back any one. |
 
 ## Decisions
 
@@ -91,9 +91,7 @@ checked on the built page (fall, two dice), not just read from the code.
 ## Loose parts: editing without keeping the tree whole (agreed, 2026-10-24)
 
 *Agreed with Ersagun on 2026-10-24, after his report from editing two dice `main` in the
-graph. Built so far: steps 2 and 3 below (drafts.json, the Blocks section, Delete and unwiring
-leave parts loose, a loose part wires back in from its output, a drop on a filled input swaps) and step 1 (an empty input of a call is drawn as a hollow port).
-The rest follows in the order below.*
+graph. All built, in the order below (#433 to #436).*
 
 **The problem.** Every gesture in the graph has to leave a whole, typed
 tree behind (pitfall 11). That's why Delete takes everything that feeds
@@ -175,6 +173,6 @@ open question below for now.
    is still drawn as a □ node, since there's no input to draw it on.
 2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section. ✓
 3. Delete and unwiring leave loose parts (rules 4 and 5). ✓
-4. New values on the canvas are loose (rule 7); faded drawing (rule 9).
+4. New values on the canvas are loose (rule 7); faded drawing (rule 9). ✓
 5. Pitfall 11 rewritten to say what's refused now: wiring that doesn't fit,
-   never removing.
+   never removing. ✓

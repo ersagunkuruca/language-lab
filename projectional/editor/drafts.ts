@@ -117,6 +117,16 @@ export function wireIn(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def
   return { code: { nodes, defs: code.defs.filter((x) => x !== def) }, of: rest, home: left };
 }
 
+// A new loose part, nothing yet: a hole to fill from the palette, then wire
+// in (rule 7). Made on the canvas, it needs no name and no step.
+export function newLoose(code: Code, of: Record<Id, Id>, owner: Id): { code: Code; of: Record<Id, Id>; def: Id; hole: Id } {
+  const hole = freshId(), def = freshId();
+  return {
+    code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "hole" }, [def]: { id: def, kind: "def", body: hole } as Node }, defs: [...code.defs, def] },
+    of: { ...of, [def]: owner }, def, hole,
+  };
+}
+
 // Throw a loose part away.
 export function dropLoose(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def: Id): { code: Code; of: Record<Id, Id>; home: Record<Id, Id> } {
   const gone = new Set(subtree(code, def));

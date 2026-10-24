@@ -398,6 +398,27 @@ async function swapDrop() {
   await p.close();
 }
 
+// A value added on the graph's canvas is loose, and drawn faded, until it's
+// wired in (NODE-EDITOR.md "Loose parts", rules 7 and 9; BACKLOG E118).
+async function looseValue() {
+  where = "a value added on the canvas";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  const box = (await p.locator(".p-graph svg.tgraph").first().boundingBox())!;
+  await p.locator(".p-graph svg.tgraph").first().dispatchEvent("contextmenu", { clientX: box.x + box.width - 40, clientY: box.y + box.height - 40 });
+  await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 }).catch(() => errors.push(`${where}: no Add a value on the canvas`));
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/-- loose, not used yet .*_1 = □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
+  if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
+  if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  await p.keyboard.press("Escape");
+  await p.locator('button[data-act="undo"]').first().click();
+  if ((await p.locator(".p-text .body").innerText()).includes("-- loose")) errors.push(`${where}: Undo left it`);
+  await p.close();
+}
+
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -700,6 +721,7 @@ await foldedFrame();
 await plusDrop();
 await looseParts();
 await swapDrop();
+await looseValue();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

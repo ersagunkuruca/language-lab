@@ -118,8 +118,10 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   for (const l of hooks.loose ?? []) {
     const part = build(code, pres, info, l, hooks, true);
     for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
-    scene.wires.push(...part.wires);
+    scene.wires.push(...part.wires.map((w) => ({ ...w, cls: `${w.cls} faded` })));
     for (const id of part.lit) scene.lit.add(id);
+    scene.faded ??= new Set();
+    for (const id of part.items.keys()) scene.faded.add(id);
   }
   autoArrange(scene);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
@@ -173,6 +175,7 @@ interface Scene {
   result: End | null;        // the definition's result
   defId: Id;
   lit: Set<Id>;              // highlighted with the selection: a binding's uses
+  faded?: Set<Id>;           // items of loose parts, drawn faded
 }
 
 // A laid-out piece, in its own coordinates: how far it reaches, where its
@@ -842,6 +845,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   for (const it of scene.items.values()) {
     const p = pos.get(it.key)!;
     const g = s("g", { transform: `translate(${p.x},${p.y})` }) as SVGGElement;
+    if (scene.faded?.has(it.key)) g.classList.add("faded");
     it.draw(g);
     // A folded frame is drawn as an item: selected, it's outlined like one.
     if (hooks.selected === it.key) g.querySelector("rect.folded")?.classList.add("sel");
