@@ -89,7 +89,9 @@ prints; in the evaluator a word count of 1,200 words (400 different) runs
 about 3.5 times faster, and of 3,000 words about 15 times (the list is
 quadratic, the tree n log n).
 
-What step 2 needs that doesn't exist yet: today representations are applied
+Done as C47 (src/lang/library-reps.ts): `lab` and the editor's Run choose the
+tree when the costs say so, and equal, show and compare on a map are given
+its meaning. Before that, representations were applied
 only by `lab run` and `lab compile` with a representations.json (#97). A
 std or library type's representation has to be chosen automatically by the
 evaluator, the compiler and the editor, from the costs of the jobs the

@@ -36,6 +36,7 @@ import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
+import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
@@ -85,13 +86,16 @@ function load(path: string): Program {
 
 // The program from `main`, with each type it uses stored the way the
 // chooser picks from the declared costs (the definition itself is one of
-// the choices). The rewrite is checked again, like any program.
+// the choices). Library types (std's Map) are chosen for too, unless the
+// table has a row for them (library-reps.ts, C47). The rewrite is checked
+// again, like any program.
 function represented(p: Program, main: Id): Program {
-  let code = p.code;
-  const chosen: string[] = [];
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are.
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return !b || p.code.nodes[b]?.kind !== "typedef"; });
+  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, defs, p.reps);
+  let code = lib.code;
+  const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {
     const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
     if (rep.type === rep.of) continue;
@@ -101,9 +105,9 @@ function represented(p: Program, main: Id): Program {
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
   if (!chosen.length) return p;
-  const info = infer(code, p.names, undefined, p.options as Parameters<typeof infer>[3]);
+  const info = infer(code, names, undefined, p.options as Parameters<typeof infer>[3]);
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { ...p, code, info };
+  return { ...p, code, names, info };
 }
 
 // `lab run` takes a page too: it prints, once, as static HTML.

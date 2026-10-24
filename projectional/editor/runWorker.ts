@@ -12,6 +12,8 @@ import type { Names } from "../src/presentation.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import { browserWorld, type Store } from "../src/lang/browser.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
+import { LIBRARY } from "../src/lang/library.ts";
+import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 
 export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][] };
@@ -34,12 +36,15 @@ self.onmessage = (e: MessageEvent<RunAsk>) => {
   try {
     setDisplayNames(names);
     setProgramPins(pins);
-    const v = runMain(code, infer(code, names), def, {
+    // std's Map stored the way the chooser picks (library-reps.ts, C47).
+    const own = code.defs.filter((d) => !LIBRARY.code.nodes[d] && code.nodes[(code.nodes[d] as { body?: Id }).body ?? ""]?.kind !== "typedef");
+    const first = infer(code, names), lib = withLibraryRepresentations(code, first, names, def, own);
+    const v = runMain(lib.code, lib.chosen.length ? infer(lib.code, lib.names) : first, def, {
       print: (line) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
-      names, world: browserWorld(store, title),
+      names: lib.names, world: browserWorld(store, title),
     });
     flush();
-    post({ done: true, shown: showValue(v, code, names), files: [...wrote] });
+    post({ done: true, shown: showValue(v, lib.code, lib.names), files: [...wrote] });
   } catch (err) {
     flush();
     post({ error: (err as Error).message, files: [...wrote] });
