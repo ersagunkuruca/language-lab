@@ -9,6 +9,8 @@ per person. No parser exists, on purpose.
 New here? Start with [TUTORIAL.md](TUTORIAL.md): an introduction for
 non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
+How a program runs (the editor's Run, the command line, and the compiled
+targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](RUNNING.md).
 For a candid review of the whole project (holes, what's achievable, and a
 roadmap towards real programs, shaders, websites and apps), see
 [REVIEW.md](REVIEW.md) and the second one,
