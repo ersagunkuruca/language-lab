@@ -354,7 +354,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
     if (records.has(key)) return records.get(key)!;
     if (datas.has(key)) return datas.get(key)!;
-    if (inside.includes(t.id)) return null;
+    // A type inside itself at other arguments (List (List Tree)) is
+    // another type; one that grows each level (non-regular) never ends.
+    if (inside.filter((x) => x === t.id).length >= 8) return null;
     const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
     if (td?.kind !== "typedef" || td.effect) return null;
     const self = (v: Id) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type, t.id));
@@ -776,12 +778,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (!result) throw new Refused(`has a fold whose value is ${OTHER}`);
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
-    for (const a of arms) a.results.forEach((r, j) => {
-      const c = st.cases.find((x) => x.variant === a.variant)!;
-      if (r && c.fields[j].t !== st) throw new Refused("folds over data inside other data (a nested fold isn't in WebAssembly yet)");
-    });
+    // A field holding the type inside another (a rose tree's List Tree):
+    // its folded value is that container with each one folded.
+    const nested = arms.some((a) => a.results.some((r, j) => r && st.cases.find((x) => x.variant === a.variant)!.fields[j].t !== st));
     const outside = free.map((b): SExpr => ({ k: "local", i: env.get(b)! }));
-    if (arms.every((a) => a.results.filter((r) => r).length <= 1)) {
+    if (!nested && arms.every((a) => a.results.filter((r) => r).length <= 1)) {
       const s = expr(n.scrutinee, env, f, false);
       const fused = s.k === "rt" && s.fn === "text.characters" ? characters(st, result, arms, free, env, f) : null;
       if (fused && s.k === "rt") {
@@ -796,6 +797,30 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const captured: SExpr[] = free.map((_, j) => ({ k: "local", i: j + 1 }));
     const genv = new Map(free.map((b, j) => [b, j + 1]));
     const scrut: SExpr = { k: "local", i: 0 };
+    // The fold mapped over a container type of st, made once per type:
+    // a function of a container and what the fold captured, rebuilding it
+    // case by case with each st in it folded (nested.ts, what Coq does
+    // for nested inductive types).
+    const maps = new Map<string, number>();
+    const holds = (t: LType, seen = new Set<string>()): boolean =>
+      t === st || (isData(t) && !seen.has(t.key) && (seen.add(t.key), t.cases.some((c) => c.fields.some((x) => holds(x.t, seen)))));
+    const mapped = (t: LType, to: LType, v: SExpr, caps: SExpr[]): SExpr => {
+      if (t === st) return { k: "call", fn: gi, args: [v, ...caps], tail: false };
+      if (!holds(t)) return v;
+      if (!isData(t) || !isData(to) || t.cases.length !== to.cases.length) throw new Refused(`folds over data inside ${isData(t) ? t.name : OTHER} (a nested fold)`);
+      return { k: "call", fn: mapper(t, to), args: [v, ...caps], tail: false };
+    };
+    const mapper = (t: DType, to: DType): number => {
+      const key = `${t.key}>${to.key}`;
+      if (maps.has(key)) return maps.get(key)!;
+      const ps = [t, ...params.slice(1)];
+      const m: SFunc = { def: id, name: `${f.name}.fold.${t.name}`, params: ps, result: to, locals: [...ps], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+      maps.set(key, funcs.push(m) - 1);
+      const x: SExpr = { k: "local", i: 0 }, caps = free.map((_, j): SExpr => ({ k: "local", i: j + 1 }));
+      m.body = { k: "case", scrut: x, s: 0, t, result: to, arms: t.cases.map((c, ci): SExpr =>
+        ({ k: "new", t: to, c: ci, args: c.fields.map((y, j) => mapped(y.t, to.cases[ci].fields[j].t, { k: "field", rec: x, t, c: ci, i: j }, caps)) })) };
+      return maps.get(key)!;
+    };
     const bodies = st.cases.map((c, ci): SExpr | null => {
       const a = arms.find((x) => x.variant === c.variant);
       if (!a) return null;
@@ -805,6 +830,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       a.binds.forEach((b, j) => bind(b, c.fields[j].t, { k: "field", rec: scrut, t: st, c: ci, i: j }));
       a.results.forEach((r, j) => {
         if (!r) return;
+        if (c.fields[j].t !== st) {
+          const to = stype(zonk(r));
+          if (!to) throw new Refused(`has a fold whose value is ${OTHER}`);
+          return bind(r, to, mapped(c.fields[j].t, to, { k: "field", rec: scrut, t: st, c: ci, i: j }, captured));
+        }
         const call: Extract<SExpr, { k: "call" }> = { k: "call", fn: gi, args: [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured], tail: false };
         // A result used once is computed where it's used, so an arm that
         // doesn't need it (insert, once it found the place) stops there.
@@ -818,7 +848,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
     });
     g.body = { k: "case", scrut, s: 0, t: st, arms: bodies, result };
-    if (fails(g.body, funcs)) g.partial = true;
+    // Partial when anything in it fails, the mappers' calls of it included.
+    for (let more = true; more;) {
+      more = false;
+      for (const h of [g, ...[...maps.values()].map((i) => funcs[i])]) if (!h.partial && fails(h.body, funcs)) more = h.partial = true;
+    }
     return { k: "call", fn: gi, args: [expr(n.scrutinee, env, f, false), ...outside], tail };
   }
   // The stack of a fold run as a loop: the values on the way down, newest

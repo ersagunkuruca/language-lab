@@ -77,7 +77,7 @@ not only code: an influence is credited even when nothing was copied.
 | Inferred types, never written | Textbook | Hindley-Milner (Hindley 1969, Milner 1978, Damas and Milner 1982), `src/lang/infer.ts`. |
 | Strictly positive data types | Adapted | The check Coq and Agda use. REVIEW.md §1. |
 | Termination by size-change | Adapted | Lee, Jones and Ben-Amram, "The size-change principle for program termination", POPL 2001. LANGUAGE.md. |
-| Nested data folded through its container | Adapted | Coq's nested inductive types, `src/lang/nested.ts`. |
+| Nested data folded through its container | Adapted | Coq's nested inductive types, `src/lang/nested.ts`; in WebAssembly as one mapping function per container type (`compiler/src/scalar.ts` fold). |
 | Units as part of the type, solved as exponent vectors | Prior art | Andrew Kennedy, "Dimension Types" (ESOP 1994), and F#'s units of measure. LANGUAGE.md credits it. |
 | `match`, `fold`, `if` and `cons` as ordinary function nodes; one system, no special kinds | Ersagun's idea | Related: Church/Scott encodings, where data is its own eliminator, and catamorphisms (below). |
 

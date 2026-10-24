@@ -361,3 +361,53 @@ export function several() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
 }
+
+// Folds over nested data: a rose tree, whose children are a List of
+// trees, and a grove, whose rows are a List of Lists of them. A child
+// field's folded value is the container with each tree folded (List R).
+export function roses() {
+  const k = new Lang();
+  const rose = k.type("rose", [], [["node", [["value", () => k.tref("type.number")], ["kids", (self) => k.tref("std.list", k.tref(self))]]]]);
+  const grove = k.type("grove", [], [["leaf", [["value", () => k.tref("type.number")]]], ["rows", [["rows", (self) => k.tref("std.list", k.tref("std.list", k.tref(self)))]]]]);
+  const listFold = (name: string, nil: () => Id, f: (h: Id, r: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["xs"], (xs) => k.fold(xs, [
+      { variant: NIL, names: [], body: nil },
+      { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => f(h, r!) },
+    ])));
+    return d;
+  };
+  const sum = listFold("sum", () => k.lit(0), (h, r) => k.call(B.add, h, r));
+  const most = listFold("most", () => k.lit(0), (h, r) => k.if(k.call(S.less, h, r), r, h));
+  const sums = listFold("sums", () => k.lit(0), (h, r) => k.call(B.add, k.call(sum, h), r));
+  const node = rose.v.node;
+  const total = k.def("total"), depth = k.def("depth"), mirror = k.def("mirror"), scaled = k.def("scaled"), groveTotal = k.def("grove total");
+  k.define(total, k.fn(["t"], (t) => k.fold(t, [
+    { variant: node, names: ["v", "ks"], results: [null, "totals"], body: ([v], [, ts]) => k.call(B.add, v, k.call(sum, ts!)) },
+  ])));
+  k.define(depth, k.fn(["t"], (t) => k.fold(t, [
+    { variant: node, names: ["v", "ks"], results: [null, "depths"], body: (_, [, ds]) => k.call(B.add, k.lit(1), k.call(most, ds!)) },
+  ])));
+  // A fold whose value is a tree again, and one that uses a value from around it.
+  k.define(mirror, k.fn(["t"], (t) => k.fold(t, [
+    { variant: node, names: ["v", "ks"], results: [null, "ms"], body: ([v], [, ms]) => k.call(node, k.call(B.sub, k.lit(0), v), ms!) },
+  ])));
+  k.define(scaled, k.fn(["by", "t"], (by, t) => k.fold(t, [
+    { variant: node, names: ["v", "ks"], results: [null, "totals"], body: ([v], [, ts]) => k.call(B.add, k.call(B.mul, v, by), k.call(sum, ts!)) },
+  ])));
+  k.define(groveTotal, k.fn(["g"], (g) => k.fold(g, [
+    { variant: grove.v.leaf, names: ["v"], body: ([v]) => v },
+    { variant: grove.v.rows, names: ["rs"], results: ["totals"], body: (_, [ts]) => k.call(sums, ts!) },
+  ])));
+  // With Choice: each node counts or not, so a tree of n nodes has 2ⁿ totals, and the
+  // children's folded values are a List of searches' answers.
+  const some = k.def("some"), ways = k.def("ways"), firstOver = k.def("first over");
+  k.define(some, k.fn(["t"], (t) => k.fold(t, [
+    { variant: node, names: ["v", "ks"], results: [null, "totals"], body: ([v], [, ts]) => k.call(B.add, k.call(S.oneOf, k.list(k.lit(0), v)), k.call(sum, ts!)) },
+  ])));
+  k.define(ways, k.fn(["t"], (t) => k.call(S.count, k.thunk(() => k.call(some, t)))));
+  k.define(firstOver, k.fn(["n", "t"], (n, t) => k.call(S.first, k.thunk(() => k.let("x", k.call(some, t), (x) => k.if(k.call(S.less, n, x), x, k.call(S.fail)))), k.thunk(() => k.lit(-1)))));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), rose, grove, defs: { total, depth, mirror, scaled, groveTotal, ways, firstOver } };
+}
