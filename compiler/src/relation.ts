@@ -28,8 +28,8 @@ interface Relation { name: string; ports: string[]; vars: string[] }
 const INFIX: Record<string, string> = { add: "+", sub: "-", mul: "*", div: "/", pow: "**" };
 const MATH = new Set(["sqrt", "abs", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan", "atan2"]);
 
-// The code, and whether it also wrote `name$one`: the answer's binds, or
-// $no, for a plan with one way to an answer and no case the solver must
+// The code, and whether it also wrote `name$one`: the answer's binds (one
+// bind as itself), or $no, for a plan with one way to an answer and no case the solver must
 // take over (GAPS.md P2).
 export function compileSolve(name: string, rel: Relation, known: string[], binds: string[], title = rel.name, label = (port: string) => port): { code: string; once: boolean } {
   const p = (plan as (r: Relation, k: string[]) => { steps: Step[] })(rel, known);
@@ -85,7 +85,8 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
     }).join("\n");
   };
 
-  const one = once ? `\nfunction ${name}$one(${params.join(", ")}) {\n${gen(0, `return ${answer};`)}\nreturn $no;\n}` : "";
+  const single = binds.length === 1 ? `$clean(${id(binds[0])})` : answer;
+  const one = once ? `\nfunction ${name}$one(${params.join(", ")}) {\n${gen(0, `return ${single};`)}\nreturn $no;\n}` : "";
   return { code: `${doc}\n${fallback}\nfunction ${name}$direct(${params.join(", ")}) {\nconst out = []${ways === 1 ? "" : ", seen = new Set()"};\n${gen(0)}\nreturn out;\n}\n` +
     `function ${name}(${params.join(", ")}) {\nreturn ${name}$direct(${params.join(", ")}) ?? ${viaSolver};\n}` + one, once };
 }

@@ -421,31 +421,25 @@ function apply(operator, a3, b4) {
     return $int.mul(a3, b4);
   }
   if ((operator === "/")) {
-    return (() => {
-      const r$52 = $partial["builtin.int.quotient"](a3, b4);
-      if (r$52 !== $no) {
-        return r$52;
-      }
-      return $perform("std.abort", "std.abort.abort" /* abort */, ["division by zero"]);
-    })();
+    const r$51 = $partial["builtin.int.quotient"](a3, b4);
+    if (r$51 !== $no) {
+      return r$51;
+    }
+    return $perform("std.abort", "std.abort.abort" /* abort */, ["division by zero"]);
   }
   if ((operator === "%")) {
-    return (() => {
-      const r$54 = $partial["builtin.int.remainder"](a3, b4);
-      if (r$54 !== $no) {
-        return r$54;
-      }
-      return $perform("std.abort", "std.abort.abort" /* abort */, ["remainder of division by zero"]);
-    })();
+    const r$52 = $partial["builtin.int.remainder"](a3, b4);
+    if (r$52 !== $no) {
+      return r$52;
+    }
+    return $perform("std.abort", "std.abort.abort" /* abort */, ["remainder of division by zero"]);
   }
   if ((operator === "^")) {
-    return (() => {
-      const r$56 = $partial["builtin.int.power"](a3, b4);
-      if (r$56 !== $no) {
-        return r$56;
-      }
-      return $perform("std.abort", "std.abort.abort" /* abort */, ["negative power"]);
-    })();
+    const r$53 = $partial["builtin.int.power"](a3, b4);
+    if (r$53 !== $no) {
+      return r$53;
+    }
+    return $perform("std.abort", "std.abort.abort" /* abort */, ["negative power"]);
   }
   return $perform("std.abort", "std.abort.abort" /* abort */, [("unknown operator " + operator)]);
 }
@@ -495,34 +489,34 @@ function sum_rest(left, tokens8) {
 function sum_rest$b(left$in, tokens8$in) {
   for (;;) {
     const left = left$in, tokens8 = tokens8$in;
-    const s$57 = tokens8;
-    switch (s$57.tag) {
+    const s$54 = tokens8;
+    switch (s$54.tag) {
       case "std.list.cons" /* cons */: {
-        const t5 = s$57.fields[0];
-        const more5 = s$57.fields[1];
-        let c$58;
-        done$59: {
-          const s$60 = t5;
-          switch (s$60.tag) {
+        const t5 = s$54.fields[0];
+        const more5 = s$54.fields[1];
+        let c$55;
+        done$56: {
+          const s$57 = t5;
+          switch (s$57.tag) {
             case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-              const m2 = s$60.fields[0];
-              c$58 = ((m2 === "+") || (m2 === "-"));
-              break done$59;
+              const m2 = s$57.fields[0];
+              c$55 = ((m2 === "+") || (m2 === "-"));
+              break done$56;
             }
             default: {
-              c$58 = false;
-              break done$59;
+              c$55 = false;
+              break done$56;
             }
           }
         }
-        if (c$58) {
+        if (c$55) {
           const right = ($spendOrThrow(), product(more5));
           $spendOrThrow();
           left$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-            const s$61 = t5;
-            switch (s$61.tag) {
+            const s$58 = t5;
+            switch (s$58.tag) {
               case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                const m3 = s$61.fields[0];
+                const m3 = s$58.fields[0];
                 return m3;
               }
               default: {
@@ -544,34 +538,34 @@ function sum_rest$b(left$in, tokens8$in) {
 function* sum_rest$h(left$in, tokens8$in) {
   for (;;) {
     const left = left$in, tokens8 = tokens8$in;
-    const s$62 = tokens8;
-    switch (s$62.tag) {
+    const s$59 = tokens8;
+    switch (s$59.tag) {
       case "std.list.cons" /* cons */: {
-        const t5 = s$62.fields[0];
-        const more5 = s$62.fields[1];
-        let c$63;
-        done$64: {
-          const s$65 = t5;
-          switch (s$65.tag) {
+        const t5 = s$59.fields[0];
+        const more5 = s$59.fields[1];
+        let c$60;
+        done$61: {
+          const s$62 = t5;
+          switch (s$62.tag) {
             case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-              const m2 = s$65.fields[0];
-              c$63 = ((m2 === "+") || (m2 === "-"));
-              break done$64;
+              const m2 = s$62.fields[0];
+              c$60 = ((m2 === "+") || (m2 === "-"));
+              break done$61;
             }
             default: {
-              c$63 = false;
-              break done$64;
+              c$60 = false;
+              break done$61;
             }
           }
         }
-        if (c$63) {
+        if (c$60) {
           const right = ($spendOrThrow(), (yield [product$h, [more5]]));
           $spendOrThrow();
           left$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-            const s$66 = t5;
-            switch (s$66.tag) {
+            const s$63 = t5;
+            switch (s$63.tag) {
               case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                const m3 = s$66.fields[0];
+                const m3 = s$63.fields[0];
                 return m3;
               }
               default: {
@@ -600,27 +594,27 @@ function unary(tokens9) {
   return r$;
 }
 function unary$b(tokens9) {
-  const s$67 = tokens9;
-  switch (s$67.tag) {
+  const s$64 = tokens9;
+  switch (s$64.tag) {
     case "std.list.cons" /* cons */: {
-      const t6 = s$67.fields[0];
-      const more6 = s$67.fields[1];
-      let c$68;
-      done$69: {
-        const s$70 = t6;
-        switch (s$70.tag) {
+      const t6 = s$64.fields[0];
+      const more6 = s$64.fields[1];
+      let c$65;
+      done$66: {
+        const s$67 = t6;
+        switch (s$67.tag) {
           case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-            const m4 = s$70.fields[0];
-            c$68 = (m4 === "-");
-            break done$69;
+            const m4 = s$67.fields[0];
+            c$65 = (m4 === "-");
+            break done$66;
           }
           default: {
-            c$68 = false;
-            break done$69;
+            c$65 = false;
+            break done$66;
           }
         }
       }
-      if (c$68) {
+      if (c$65) {
         const inner2 = ($spendOrThrow(), unary(more6));
         return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "jigh5f3fhrtjctpdqe548tedql" /* negative */, fields: [inner2.fields[0]] }), inner2.fields[1]] });
       }
@@ -632,27 +626,27 @@ function unary$b(tokens9) {
   }
 }
 function* unary$h(tokens9) {
-  const s$71 = tokens9;
-  switch (s$71.tag) {
+  const s$68 = tokens9;
+  switch (s$68.tag) {
     case "std.list.cons" /* cons */: {
-      const t6 = s$71.fields[0];
-      const more6 = s$71.fields[1];
-      let c$72;
-      done$73: {
-        const s$74 = t6;
-        switch (s$74.tag) {
+      const t6 = s$68.fields[0];
+      const more6 = s$68.fields[1];
+      let c$69;
+      done$70: {
+        const s$71 = t6;
+        switch (s$71.tag) {
           case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-            const m4 = s$74.fields[0];
-            c$72 = (m4 === "-");
-            break done$73;
+            const m4 = s$71.fields[0];
+            c$69 = (m4 === "-");
+            break done$70;
           }
           default: {
-            c$72 = false;
-            break done$73;
+            c$69 = false;
+            break done$70;
           }
         }
       }
-      if (c$72) {
+      if (c$69) {
         const inner2 = ($spendOrThrow(), (yield [unary$h, [more6]]));
         return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "jigh5f3fhrtjctpdqe548tedql" /* negative */, fields: [inner2.fields[0]] }), inner2.fields[1]] });
       }
@@ -675,34 +669,34 @@ function product_rest(left2, tokens10) {
 function product_rest$b(left2$in, tokens10$in) {
   for (;;) {
     const left2 = left2$in, tokens10 = tokens10$in;
-    const s$75 = tokens10;
-    switch (s$75.tag) {
+    const s$72 = tokens10;
+    switch (s$72.tag) {
       case "std.list.cons" /* cons */: {
-        const t7 = s$75.fields[0];
-        const more7 = s$75.fields[1];
-        let c$76;
-        done$77: {
-          const s$78 = t7;
-          switch (s$78.tag) {
+        const t7 = s$72.fields[0];
+        const more7 = s$72.fields[1];
+        let c$73;
+        done$74: {
+          const s$75 = t7;
+          switch (s$75.tag) {
             case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-              const m5 = s$78.fields[0];
-              c$76 = (((m5 === "*") || (m5 === "/")) || (m5 === "%"));
-              break done$77;
+              const m5 = s$75.fields[0];
+              c$73 = (((m5 === "*") || (m5 === "/")) || (m5 === "%"));
+              break done$74;
             }
             default: {
-              c$76 = false;
-              break done$77;
+              c$73 = false;
+              break done$74;
             }
           }
         }
-        if (c$76) {
+        if (c$73) {
           const right2 = ($spendOrThrow(), unary(more7));
           $spendOrThrow();
           left2$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-            const s$79 = t7;
-            switch (s$79.tag) {
+            const s$76 = t7;
+            switch (s$76.tag) {
               case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                const m6 = s$79.fields[0];
+                const m6 = s$76.fields[0];
                 return m6;
               }
               default: {
@@ -724,34 +718,34 @@ function product_rest$b(left2$in, tokens10$in) {
 function* product_rest$h(left2$in, tokens10$in) {
   for (;;) {
     const left2 = left2$in, tokens10 = tokens10$in;
-    const s$80 = tokens10;
-    switch (s$80.tag) {
+    const s$77 = tokens10;
+    switch (s$77.tag) {
       case "std.list.cons" /* cons */: {
-        const t7 = s$80.fields[0];
-        const more7 = s$80.fields[1];
-        let c$81;
-        done$82: {
-          const s$83 = t7;
-          switch (s$83.tag) {
+        const t7 = s$77.fields[0];
+        const more7 = s$77.fields[1];
+        let c$78;
+        done$79: {
+          const s$80 = t7;
+          switch (s$80.tag) {
             case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-              const m5 = s$83.fields[0];
-              c$81 = (((m5 === "*") || (m5 === "/")) || (m5 === "%"));
-              break done$82;
+              const m5 = s$80.fields[0];
+              c$78 = (((m5 === "*") || (m5 === "/")) || (m5 === "%"));
+              break done$79;
             }
             default: {
-              c$81 = false;
-              break done$82;
+              c$78 = false;
+              break done$79;
             }
           }
         }
-        if (c$81) {
+        if (c$78) {
           const right2 = ($spendOrThrow(), (yield [unary$h, [more7]]));
           $spendOrThrow();
           left2$in = ({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: [(() => {
-            const s$84 = t7;
-            switch (s$84.tag) {
+            const s$81 = t7;
+            switch (s$81.tag) {
               case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-                const m6 = s$84.fields[0];
+                const m6 = s$81.fields[0];
                 return m6;
               }
               default: {
@@ -781,27 +775,27 @@ function power(tokens11) {
 }
 function power$b(tokens11) {
   const base = ($spendOrThrow(), atom(tokens11));
-  const s$85 = base.fields[1];
-  switch (s$85.tag) {
+  const s$82 = base.fields[1];
+  switch (s$82.tag) {
     case "std.list.cons" /* cons */: {
-      const t8 = s$85.fields[0];
-      const more8 = s$85.fields[1];
-      let c$86;
-      done$87: {
-        const s$88 = t8;
-        switch (s$88.tag) {
+      const t8 = s$82.fields[0];
+      const more8 = s$82.fields[1];
+      let c$83;
+      done$84: {
+        const s$85 = t8;
+        switch (s$85.tag) {
           case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-            const m7 = s$88.fields[0];
-            c$86 = (m7 === "^");
-            break done$87;
+            const m7 = s$85.fields[0];
+            c$83 = (m7 === "^");
+            break done$84;
           }
           default: {
-            c$86 = false;
-            break done$87;
+            c$83 = false;
+            break done$84;
           }
         }
       }
-      if (c$86) {
+      if (c$83) {
         const exponent = ($spendOrThrow(), unary(more8));
         return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: ["^", base.fields[0], exponent.fields[0]] }), exponent.fields[1]] });
       }
@@ -814,27 +808,27 @@ function power$b(tokens11) {
 }
 function* power$h(tokens11) {
   const base = ($spendOrThrow(), (yield [atom$h, [tokens11]]));
-  const s$89 = base.fields[1];
-  switch (s$89.tag) {
+  const s$86 = base.fields[1];
+  switch (s$86.tag) {
     case "std.list.cons" /* cons */: {
-      const t8 = s$89.fields[0];
-      const more8 = s$89.fields[1];
-      let c$90;
-      done$91: {
-        const s$92 = t8;
-        switch (s$92.tag) {
+      const t8 = s$86.fields[0];
+      const more8 = s$86.fields[1];
+      let c$87;
+      done$88: {
+        const s$89 = t8;
+        switch (s$89.tag) {
           case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-            const m7 = s$92.fields[0];
-            c$90 = (m7 === "^");
-            break done$91;
+            const m7 = s$89.fields[0];
+            c$87 = (m7 === "^");
+            break done$88;
           }
           default: {
-            c$90 = false;
-            break done$91;
+            c$87 = false;
+            break done$88;
           }
         }
       }
-      if (c$90) {
+      if (c$87) {
         const exponent = ($spendOrThrow(), (yield [unary$h, [more8]]));
         return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "19jsd7mt75bqquaai00k4s88ij" /* binary */, fields: ["^", base.fields[0], exponent.fields[0]] }), exponent.fields[1]] });
       }
@@ -855,29 +849,29 @@ function atom(tokens12) {
   return r$;
 }
 function atom$b(tokens12) {
-  const s$93 = tokens12;
-  switch (s$93.tag) {
+  const s$90 = tokens12;
+  switch (s$90.tag) {
     case "std.list.cons" /* cons */: {
-      const t9 = s$93.fields[0];
-      const more9 = s$93.fields[1];
-      const s$94 = t9;
-      switch (s$94.tag) {
+      const t9 = s$90.fields[0];
+      const more9 = s$90.fields[1];
+      const s$91 = t9;
+      switch (s$91.tag) {
         case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-          const d4 = s$94.fields[0];
+          const d4 = s$91.fields[0];
           return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "c8qnc3q04fv6qolvnrj06fkj6q" /* literal */, fields: [(() => {
-            const r$96 = $partial["builtin.int.read"](d4);
-            if (r$96 !== $no) {
-              return r$96;
+            const r$93 = $partial["builtin.int.read"](d4);
+            if (r$93 !== $no) {
+              return r$93;
             }
             return $perform("std.abort", "std.abort.abort" /* abort */, [("not a number: " + d4)]);
           })()] }), more9] });
         }
         case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
-          const w3 = s$94.fields[0];
+          const w3 = s$91.fields[0];
           return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "j31hdqrhpj1eirec5fra54ushl" /* variable */, fields: [w3] }), more9] });
         }
         case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-          const m8 = s$94.fields[0];
+          const m8 = s$91.fields[0];
           if ((m8 === "(")) {
             const inside = ($spendOrThrow(), expression(more9));
             return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [inside.fields[0], expect(")", inside.fields[1])] });
@@ -895,29 +889,29 @@ function atom$b(tokens12) {
   }
 }
 function* atom$h(tokens12) {
-  const s$97 = tokens12;
-  switch (s$97.tag) {
+  const s$94 = tokens12;
+  switch (s$94.tag) {
     case "std.list.cons" /* cons */: {
-      const t9 = s$97.fields[0];
-      const more9 = s$97.fields[1];
-      const s$98 = t9;
-      switch (s$98.tag) {
+      const t9 = s$94.fields[0];
+      const more9 = s$94.fields[1];
+      const s$95 = t9;
+      switch (s$95.tag) {
         case "7ooirerkrpa7v4m513os3u35u2" /* number */: {
-          const d4 = s$98.fields[0];
+          const d4 = s$95.fields[0];
           return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "c8qnc3q04fv6qolvnrj06fkj6q" /* literal */, fields: [(() => {
-            const r$100 = $partial["builtin.int.read"](d4);
-            if (r$100 !== $no) {
-              return r$100;
+            const r$97 = $partial["builtin.int.read"](d4);
+            if (r$97 !== $no) {
+              return r$97;
             }
             return $perform("std.abort", "std.abort.abort" /* abort */, [("not a number: " + d4)]);
           })()] }), more9] });
         }
         case "sob4uovkjgvtl08hmomq2g7s9j" /* word */: {
-          const w3 = s$98.fields[0];
+          const w3 = s$95.fields[0];
           return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [({ tag: "j31hdqrhpj1eirec5fra54ushl" /* variable */, fields: [w3] }), more9] });
         }
         case "heiprc4fnbobd3nei81ji3c5lj" /* symbol */: {
-          const m8 = s$98.fields[0];
+          const m8 = s$95.fields[0];
           if ((m8 === "(")) {
             const inside = ($spendOrThrow(), (yield [expression$h, [more9]]));
             return ({ tag: "7tse88seo65et9kk55u3s9oqcj" /* parsed */, fields: [inside.fields[0], expect(")", inside.fields[1])] });
