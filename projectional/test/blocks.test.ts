@@ -103,3 +103,16 @@ test("a map written out reads as a table, keys left; a set as a column", async (
   const shown = (renderTyped(code, pres, info, ages, null) as unknown as El).lines().slice(1);
   assert.deepEqual(shown, text(ages));
 });
+
+// A definition's name hovers as its own type, not as the caller fills it
+// in: range inside a seeded action isn't a range that draws numbers
+// (BACKLOG E85, E94).
+test("a definition's name hovers as its own type", () => {
+  const p = loadProgram(join(root, "examples", "dice"));
+  const el = renderTyped(p.code, p.pres, infer(p.code, p.pres.names), p.named("a hundred rolls"), null) as unknown as El;
+  const titles: Record<string, string> = {};
+  const walk = (e: El) => { if (/\bref\b/.test(e.attrs.get("class") ?? "")) titles[e.text] = e.attrs.get("title") ?? ""; for (const k of e.kids) if (typeof k !== "string") walk(k); };
+  walk(el);
+  assert.equal(titles.range, "(Number) -> List Number");
+  assert.doesNotMatch(titles.map, /Random/);
+});

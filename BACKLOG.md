@@ -27,7 +27,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E84 | After clearing `seed`'s only use, the palette lists in-scope `seed` as `a` while the definition still says `Number` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
-| E85 | Hover types in Blocks show a library function's effect row as the call site fills it (`range` hovers as `-[Random]->`) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E87 | Selecting a plain Number literal (a dice seed) shows the Unit chooser: noise outside physics | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
@@ -36,7 +35,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E91 | Edit a list's items, and the operands of any node drawn with many inputs (typedGraph chainOperands, `a ++ b ++ c`), in both views: add, reorder, delete. In the graph a "+" input on the node, drag an input to reorder, remove one. Adding a button to dice `main` took seven steps through append/cons/nil (Ersagun 11:11) | learning/editor-findings.md 11, Ersagun 2026-10-24 11:11 | P1 | M | |
 | E92 | In Blocks, clicking a call's function name selects only the name, not the call; nothing says to click its `(` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E93 | A Text port in Run backwards needs quotes (`Ersagun` says "no case named Ersagun"): read unquoted text where Text goes, or say to quote it | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
-| E94 | Hover types of a page's calls carry the whole page row (`die` inside a button hovers with ten effects; same cause as E85) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E95 | "where a is a number type" repeats on every hole of a new `□ + □` | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
@@ -146,6 +144,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E94 | Page calls hover as their own type, not with the page's row (with E85) | #408 |
+| E85 | A definition's name hovers as its own type; types it's used at follow without the caller's effects | #408 |
 | E83 | The Selected panel heads a part with what it is; its id only on hover | #407 |
 | E96 | The top bar's Learn opens GUIDE.md as a page (guide.html), which links on to the tutorial | #406 |
 | E99 | The Guide tab says how the editor works today: two views, selecting, holes and the palette, copy and paste, held types, Run, today's effects | #405 |
