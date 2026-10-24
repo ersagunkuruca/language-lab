@@ -423,6 +423,18 @@ async function phone() {
   }
   const picked = await p.locator(".p-graph svg.canvas rect.picked").count();
   if (nodes.length === 2 && picked !== 2) errors.push(`${where}: two nodes picked by touch, ${picked} stay picked`);
+  // In the text pane too, a long press on a part opens its menu (BACKLOG E102).
+  await p.keyboard.press("Escape");
+  await p.locator('.panes [data-pane="text"]').tap();
+  const part = await p.locator(".blocks-wrap [data-id]").evaluateAll((els) => els.flatMap((e) => {
+    const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+    return r.width && document.elementFromPoint(x, y) === e ? [[x, y]] : [];
+  })[0]);
+  if (!part) errors.push(`${where}: no part of the blocks to press`);
+  else {
+    await hold(part[0], part[1]);
+    if ((await p.locator(".ctx-menu").count()) !== 1) errors.push(`${where}: a long press on the blocks opened ${await p.locator(".ctx-menu").count()} menus`);
+  }
   await p.close();
 }
 
