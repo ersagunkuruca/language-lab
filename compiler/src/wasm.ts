@@ -203,7 +203,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
-      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t };
+      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t };
     },
   });
   const resolve = resolver();
