@@ -167,6 +167,15 @@ async function swapAndUndo() {
   await p.locator('.ctx-menu [data-menu="swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Change the function in its menu`));
   await p.locator("button", { hasText: /^subtract/ }).first().click({ timeout: 2000 }).catch(() => {});
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
+  // Any part is replaced in one step from its panel, and one Undo puts it
+  // back (BACKLOG E86).
+  where = "replace a part with another";
+  await p.locator(".blocks-wrap .ref.var", { hasText: /^drop$/ }).last().click();
+  await p.locator('[data-act="t-replace"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: a selected variable's panel has no Replace with`));
+  await p.locator(".palette .opt", { hasText: /^drift/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: Replace with doesn't offer drift`));
+  if ((await distance()) !== "distance = drift − drift") errors.push(`${where}: after picking drift the text reads ${await distance()}`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
   // A function's name picks its whole call, whose panel changes the
   // function (BACKLOG E92).
   where = "a function's name in the blocks";

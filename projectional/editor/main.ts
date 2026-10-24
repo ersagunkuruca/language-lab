@@ -313,8 +313,8 @@ const redo: Doc[] = [];
 // The program just deleted, until the next edit or switch: Undo brings it
 // back, so a delete needs no "are you sure".
 let deleted: Doc | null = null;
-// Change the function makes the function a hole, then the palette fills
-// it: one change, so one Undo. The fill that comes right after takes the
+// Change the function (or Replace with) makes the function (or the part) a
+// hole, then the palette fills it: one change, so one Undo. The fill that comes right after takes the
 // place of the hole's step in the undo list.
 let swapped: { hole: Id; at: number } | null = null;
 
@@ -1134,6 +1134,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const splittable = T.scopeAt(doc.code, ui.def, id).filter((b) => T.dataTypeOf(doc.code, info, b));
     out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
+      h("button", { class: "btn", type: "button", "data-act": "t-replace", title: "Pick what goes here instead, from the palette" }, "Replace with…"),
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
       n.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
       splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
@@ -1696,6 +1697,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
     if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new dot holding a hole, worked out just before this: in one arm of a match, only there", r.ok ? undefined : r.reason)); }
+    if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
@@ -1746,12 +1748,14 @@ function menuAction(act: string, target: Id | undefined) {
     case "inline": return toggleInline(target!);
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
-    case "swap": {
-      // The function becomes a hole and the inputs stay where they are: the
-      // palette then offers what takes them.
-      const fn = (doc.code.nodes[target!] as NodeOf<"call">).fn;
+    case "swap": case "replace": {
+      // Change the function: the function becomes a hole and the inputs stay
+      // where they are, so the palette offers what takes them. Replace with:
+      // the part itself becomes the hole, and the palette offers what fits.
+      const fn = act === "swap" ? (doc.code.nodes[target!] as NodeOf<"call">).fn : target!;
       const r = T.toHole(doc.code, doc.names.short, info, fn);
-      if (!applyT(r.ok ? { ...r, note: "The function is a hole now and its inputs stayed: pick another from the palette." } : r)) return;
+      const note = act === "swap" ? "The function is a hole now and its inputs stayed: pick another from the palette." : "Pick what goes here from the palette. Undo puts back what was here.";
+      if (!applyT(r.ok ? { ...r, note } : r)) return;
       swapped = { hole: fn, at: undo.length };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
       // From the call's panel: the hole is selected, so the panel is its palette.
@@ -2553,6 +2557,7 @@ document.addEventListener("click", (e) => {
     if (a === "save-file") return saveFile();
     if (a === "delete-program") return deleteProgram();
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
+    if (a === "t-replace" && ui.selected) return menuAction("replace", ui.selected);
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped();
@@ -2643,9 +2648,10 @@ document.addEventListener("keydown", (e) => {
     const edit = document.querySelector<HTMLElement>("#f-query, #f-lit");
     e.preventDefault();
     // A hole or a literal is edited in place; anything else offers what
-    // can be done to it, Change the function first for a call.
+    // can be done to it: Change the function first for a call, Replace
+    // with first for anything else.
     if (edit) edit.focus();
-    else menuForSelected("swap");
+    else menuForSelected(doc.code.nodes[ui.selected]?.kind === "call" ? "swap" : "replace");
     return;
   }
   if (!typing && (e.key === "Delete" || e.key === "Backspace") && ui.selected) {

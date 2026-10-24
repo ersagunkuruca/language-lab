@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E87 | Selecting a plain Number literal (a dice seed) shows the Unit chooser: noise outside physics | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E90 | No "Duplicate definition": cloning a function is copy its body, New definition, paste | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
@@ -139,6 +138,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E86 | Replace with… on a selected part opens the palette in its place | #414 |
 | E95 | Holes show their type without repeating the where clause | #413 |
 | E93 | A Text port in Run reads what's typed as text, quotes or not | #412 |
 | E92 | In the blocks a function's name picks its whole call; a call's panel has Change the function | #411 |
