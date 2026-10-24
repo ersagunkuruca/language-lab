@@ -44,6 +44,7 @@
 // answer, fallback and all. n is a number written down, so the bound is
 // known when the shader is built.
 
+import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
@@ -295,6 +296,9 @@ const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean } = {}): Lowered {
+  // The generic + resolved to each type's own operation first
+  // (projectional/src/lang/arith.ts): nothing here sees a generic one.
+  ({ code, info, names } = resolveArithmetic(code, info, names));
   if (opts.data) opts = { ...opts, records: true };
   // derivative(f) of a function written right there becomes the code of
   // its derivative (derive.ts), checked again, so the GPU gets exact

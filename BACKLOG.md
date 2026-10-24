@@ -6,7 +6,7 @@ priority order: a lane takes its top item that isn't running.
 
 First gathered 2026-10-23 from projectional/ROADMAP.md, NOTES.md, WEB.md,
 NUMBERS.md, COMPILER.md, REVIEW.md, REVIEW-2026-10-22b.md (R2), QA-2026-10-22.md,
-QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), compiler/GAPS.md, the editor and compiler threads'
+QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), QA-2026-10-24.md (QA4), compiler/GAPS.md, the editor and compiler threads'
 queues, and Ersagun's messages in the project chat.
 
 **Status:** ▶ running (don't disturb) · ⏸ parked · blank = waiting.
@@ -18,6 +18,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I3 | Run main on a page prints the raw Html tree (`element(…, <function>)`) under the live page: hide it or say the page is the run | QA4 M1 | 2026-10-24 |
+| I4 | The minimap and the Fit pill cover nodes (first visit at 1280×720; a quarter of the graph on a phone): smaller, collapsible, or only while panning | QA4 M2 | 2026-10-24 |
+| I5 | Pages mounted in the Run panel are unstyled (pedal: default serif, picture cut off): a base stylesheet, or CSS in the examples | QA4 L1 | 2026-10-24 |
+| I6 | Landscape phone gives the graph ~210 of 390 px; at 768 px the top bar hides Credits and Cells | QA4 L2 | 2026-10-24 |
+| I7 | Change the function takes two undos (hole, then fill) | QA4 L3 | 2026-10-24 |
+| I8 | The palette doesn't read typed calls (`sqrt(x)`), only arithmetic | QA4 L4 | 2026-10-24 |
+| I9 | The status bar says nothing after page actions (A strum, Stop sound) | QA4 L5 | 2026-10-24 |
+| I10 | Dice example before any roll: "Rolls: 0; the last 2 s ago" | QA4 L6 | 2026-10-24 |
 
 ## E: Editor
 
@@ -26,10 +34,11 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E49 | **Numbers first (L38 step 2, editor side).** The palette offers the one generic `+ − · −x <` (std.ts `ARITH`: `builtin.arith.add`, `.sub`, `.mul`, `.neg`, `.less`; glyphs already in styles) wherever both sides are one number type, and stops offering the per-type ones (`builtin.add`…, `builtin.int.add`…) for new code; stored programs keep theirs. Today src/lang/infer.ts holes() skips `builtin.arith.*` (one line, near "The generic arithmetic isn't offered yet"); flipping it to skip the per-type arithmetic instead is the core change, then the editor's palette labels and tests. Lane L does showType's constraint and derive.ts | coordinator 2026-10-24 07:09, NUMBERS.md "One `+`" step 2 | P1 | M | |
 
 ## C: Compiler and targets
 
-Thread "Bigger programs and compiler gaps". Current step: the items below in order.
+Thread "Bigger programs and compiler gaps". Current step: the items below in order. New targets and speed rank below every language item (Ersagun, 2026-10-24 07:01): the language comes first, and this lane helps L38's compiled side (generic code: copies or dictionaries) when asked.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
@@ -39,10 +48,27 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 
 ## L: Language and library
 
-Thread "Backlog and planned workflow", which also keeps this file current.
+Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one `+` for every number system, and the number types (fractions, complex, Clifford, matrices, tensors) first, then the rest of LANGUAGE-REVIEW-2026-10-24. Anything that only adds a target ranks below all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L38 | **Numbers first** (Ersagun 2026-10-24: numbers ahead of everything else in this lane). One `+ − · −x <` for every number type, decided by Ersagun; design and steps in projectional/NUMBERS.md "One `+` for every number system". **Step 1 done in #348**: generic builtins `builtin.arith.*` (std.ts ARITH), the `arith`/`ordered` constraint (types.ts requireArith, in schemes and pins), and `src/lang/arith.ts` resolveArithmetic (each call to its type's own builtin, copies per type, Number by default), called by makeRunner, relate's interpreter, compile() and lowerScalar(); tests in test/arith.test.ts; not offered by the palette yet. **Next:** step 2, the palette offers the generic ops instead of the per-type ones and types print the constraint (needs lane E for the editor side; derive.ts should treat `builtin.arith.*` like Number's for the editor's generated derivatives); step 3, the vectors module written with `+ − ·`; step 4, an example with one generic definition at Int and Number for lane C to measure (lane C asked for this) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | L | step 1 done (#348); step 2 next |
+| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P1 | M | proposal |
+| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P1 | M | proposal |
+| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P1 | L | proposal |
+| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P1 | M | proposal |
+| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L51 | Tensors: NUMBERS.md stage 6, as the general algebra after lists as arrays (C30) | LANGUAGE-REVIEW-2026-10-24 Plan 17, NUMBERS.md stage 6 | P1 | L | after L38, and C30 for arrays |
+| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
+| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
+| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
+| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
+| L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
+| L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: lane E shows the mode on the `solve` node | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a to L11e done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells | ROADMAP 4 open | P3 | L | |
@@ -52,24 +78,7 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L20 | `set` with general functions through relations | real-sized data follow-up | P3 | M | |
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
-| L38 | **Proposal** (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Needs Ersagun's call between this and NUMBERS.md's per-type `+` with operation records | LANGUAGE-REVIEW-2026-10-24 | P2 | L | proposal, waiting for the decision |
-| L33 | **Proposal**: `≤ > ≥`, `smaller`, `larger` in the prelude with glyphs (and Text's over `comes before`); examples' own `smaller`/`larger`/`louder` replaced | LANGUAGE-REVIEW-2026-10-24 §2 | P2 | S | proposal |
-| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
-| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
-| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
-| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
-| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P2 | M | proposal |
-| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
-| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P3 | M | proposal |
-| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P3 | L | proposal |
-| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P3 | M | proposal |
-| L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
-| L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
-| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
-| L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, results cached by definition hash and re-checked on save (Unison prior art). Design note first | projectional/TESTING.md T7 | P2 | L | |
 
 ## Testing and fast feedback
@@ -231,8 +240,9 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L33 | `≤ > ≥` (`at most`, `more than`, `at least`), `smaller` and `larger` in the prelude over `<`, and Text's `≤ > ≥` (`not after`, `comes after`, `not before`) over `comes before`, drawn with glyphs. pedal and raymarch adopted the prelude's `smaller`/`larger` (pedal's `louder` was `larger`); calc, chapters and countdown read `c ≥ "0" and c ≤ "9"` instead of `not ‹comes before›(…)`. ledger's `larger` is on Int and stays until L38. | this PR |
 | L32 | Int's arithmetic drawn with Number's glyphs (`n + 1`, `a < b`, not `add(n, 1)`, `‹less than›(a, b)`) in every style; presentation only (LANGUAGE-REVIEW-2026-10-24 §1) | #341 |
-| L31 | The pedal's microphone says what goes wrong, on the page (Ersagun's gaming headset gave nothing): each refusal in words under the button (not allowed, none found, in use or the driver refused, needs https), silence for 3 s said as "muted?", a microphone at a rate the browser won't connect across (Firefox) given its own context at that rate, a stereo input mixed to mono; the constraints only ask (no rate, channels or device), and fall back to plain audio if refused. test/sound-browser.ts checks a refusal is shown | this PR |
+| L31 | The pedal's microphone says what goes wrong, on the page (Ersagun's gaming headset gave nothing): each refusal in words under the button (not allowed, none found, in use or the driver refused, needs https), silence for 3 s said as "muted?", a microphone at a rate the browser won't connect across (Firefox) given its own context at that rate, a stereo input mixed to mono; the constraints only ask (no rate, channels or device), and fall back to plain audio if refused. test/sound-browser.ts checks a refusal is shown | #340 |
 | L30 | The pedal you can hear (Ersagun: Softer and Harder sounded like volume): a Clean/Driven switch for A/B; the output brought back to the loudness that came in, sample by sample (two mean squares in cells, gain at most 4, samples under 0.95), so the drive changes the tone and can't run away into feedback; drive 32 by default, capped at 256; a picture of a sine before and after the drive, SVG drawn by the program. Strum: crest 8.8 to 5.4 at the same loudness. Compiled 63× real time (by hand 4× quicker; the matching is plain recursion building pairs) | #338 |
 | L23 | `conjugate(f, g)` = f⁻¹ ∘ g ∘ f in the prelude, over `inverse`; `examples/conjugate` (in the editor as "Conjugation"): brighter in linear light, a quarter turn about a point, the fast band of a Haar split softened; run and compiled the same | #249 |
 | L15 | Static output: `lab run` on a page prints it once as an HTML document (every text, part and attribute drawn, handlers left out); `<style>` and `<script>` text unescaped | #235 |

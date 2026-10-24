@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { CONS, INT_OPS, NIL, std } from "./std.ts";
+import { CONS, INT_OPS, NIL, S, TEXT_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -56,13 +56,39 @@ export function buildPrelude(): Module {
   const conjugate = k.def("conjugate");
   k.define(conjugate, k.fn(["f", "g"], (f, g) => k.fn(["x"], (x) => k.call(inverse, f, k.call(g, k.call(f, x))))));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate];
+  // The other comparisons, over `<` (and Text's over `comes before`), so
+  // they run backwards and differentiate with no rules of their own; and
+  // the smaller and larger of two numbers, which shaders compile to min
+  // and max.
+  const compare = (name: string, less: Id, f: (less: (a: Id, b: Id) => Id, a: Id, b: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["a", "b"], (a, b) => f((x, y) => k.call(less, x, y), a, b)));
+    return d;
+  };
+  const atMost = compare("at most", S.less, (lt, a, b) => k.call(S.not, lt(b, a)));
+  const moreThan = compare("more than", S.less, (lt, a, b) => lt(b, a));
+  const atLeast = compare("at least", S.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+  const smaller = compare("smaller", S.less, (lt, a, b) => k.if(lt(a, b), a, b));
+  const larger = compare("larger", S.less, (lt, a, b) => k.if(lt(a, b), b, a));
+  const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
+  const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
+  const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",
     [inverse]: "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
     [conjugate]: "g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.",
+    [atMost]: "a ≤ b: not b < a.",
+    [moreThan]: "a > b: b < a.",
+    [atLeast]: "a ≥ b: not a < b.",
+    [smaller]: "The smaller of two numbers (min); a shader's min.",
+    [larger]: "The larger of two numbers (max); a shader's max.",
+    [notAfter]: "Text a ≤ b: a comes before b or is b.",
+    [after]: "Text a > b: b comes before a.",
+    [notBefore]: "Text a ≥ b: b comes before a or is a.",
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied], merge(prelude, std));

@@ -9,7 +9,7 @@
 
 import type { Id } from "../../projectional/src/model.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { CELL_OPS, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ARITH, CELL_OPS, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -134,6 +134,10 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.less]: { js: test(([a, b], narrow) => (narrow?.some(Boolean) ? `(${a} < ${b})` : `$text.less(${a}, ${b})`)), scalar: DATA },
   [TEXT_OPS.code]: { js: "partial", scalar: DATA },
   [TEXT_OPS.fromCode]: { js: "partial", scalar: DATA },
+  // The generic + − · −x <: resolved to each type's own operation (the
+  // records above) before the compiler sees the program, by compile() and
+  // lowerScalar() calling projectional/src/lang/arith.ts first.
+  ...Object.fromEntries(Object.values(ARITH).map((id) => [id, { js: written("never: arith.ts resolves it to its type's own operation before compiling"), scalar: written("never: arith.ts resolves it to its type's own operation before lowering") }])),
 };
 
 // The builtins whose JavaScript is an expression, by id.

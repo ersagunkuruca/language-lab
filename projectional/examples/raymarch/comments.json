@@ -1,8 +1,8 @@
 {
   "uisquodkfrkoo9l79dsb8jbfnq": "A point or a direction in space. The vectors module's operations (plus, minus, scale, dot, unit, …) work on it, and on a GPU it is a vec3f.",
   "54pnspql08fnfblh52eq0qm3qf": "How much red, green and blue, each from 0 to 1.",
-  "lutrps1irm199iqbgvtdo282ue": "The smaller of a and b.",
-  "dqrvoi8fvnbchp3qope2alhp0c": "The larger of a and b.",
+  "@jicapf5pqmv60o38snigitpipg": "The smaller of a and b.",
+  "@2bsqu5k0de084n0uo4u01gsahq": "The larger of a and b.",
   "tl6hjc48ha6qc4hdmncad2augp": "How far p is from a ball of this radius around the origin. Negative inside.",
   "urv9eu7810qd4sqjvlricdqtso": "How far p is from a ring (a torus) lying flat around the origin. The formula is Inigo Quilez's torus, from https://iquilezles.org/articles/distfunctions/.",
   "t8p8dbn9irpk3eesbn2pdf12c7": "The nearer of two shapes, with the seam between them rounded off so they melt together. This is Inigo Quilez's polynomial smooth minimum, from https://iquilezles.org/articles/smin/.",
