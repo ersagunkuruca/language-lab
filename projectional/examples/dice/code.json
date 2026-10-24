@@ -1504,7 +1504,7 @@
       "id": "q3n2r9b7fd8ntraqbctld741kh",
       "kind": "lambda",
       "params": [],
-      "body": "kcsr9fcbqb4vc3g0dt5tns0b5j"
+      "body": "s7d192v9j0e50v0vmgq7rmge6d"
     },
     "1dlk2rkas677cr47kjs28f17db": {
       "id": "1dlk2rkas677cr47kjs28f17db",
@@ -2412,6 +2412,88 @@
         "8o698bkdj6hquemc36hjlgbo4f",
         "aosq0r2lu8b0eeo5v8ra1p5eqd"
       ]
+    },
+    "ktf3egvgt9rua3gk55705b7s5b": {
+      "id": "ktf3egvgt9rua3gk55705b7s5b",
+      "kind": "ref",
+      "target": "@ms3a2v8ka09mr0hqvm9t2d4mq4"
+    },
+    "tf4dm1o5uahula1uuovb4ta4i3": {
+      "id": "tf4dm1o5uahula1uuovb4ta4i3",
+      "kind": "ref",
+      "target": "builtin.cells.read"
+    },
+    "4h6j1tqtoagpmfohmdgdnkstb7": {
+      "id": "4h6j1tqtoagpmfohmdgdnkstb7",
+      "kind": "ref",
+      "target": "43uqhjioppmbi92pv8d0tam6sc"
+    },
+    "tcmpc60noth53285v9e0fun8ib": {
+      "id": "tcmpc60noth53285v9e0fun8ib",
+      "kind": "call",
+      "fn": "tf4dm1o5uahula1uuovb4ta4i3",
+      "args": [
+        "4h6j1tqtoagpmfohmdgdnkstb7"
+      ]
+    },
+    "g4vot8ug58657567jmbaivc07s": {
+      "id": "g4vot8ug58657567jmbaivc07s",
+      "kind": "call",
+      "fn": "ktf3egvgt9rua3gk55705b7s5b",
+      "args": [
+        "tcmpc60noth53285v9e0fun8ib"
+      ]
+    },
+    "01sa7a8uujt16a56m88f0nm1p0": {
+      "id": "01sa7a8uujt16a56m88f0nm1p0",
+      "kind": "ref",
+      "target": "builtin.arith.less"
+    },
+    "3skv8forfj2qdd7d5c1e4no5g8": {
+      "id": "3skv8forfj2qdd7d5c1e4no5g8",
+      "kind": "lit",
+      "value": 0,
+      "of": "type.int"
+    },
+    "irq38ehmiq7h15hk0376da2krl": {
+      "id": "irq38ehmiq7h15hk0376da2krl",
+      "kind": "call",
+      "fn": "01sa7a8uujt16a56m88f0nm1p0",
+      "args": [
+        "3skv8forfj2qdd7d5c1e4no5g8",
+        "g4vot8ug58657567jmbaivc07s"
+      ]
+    },
+    "q4cbar9sgjf86m5ak03o07m1qf": {
+      "id": "q4cbar9sgjf86m5ak03o07m1qf",
+      "kind": "arm",
+      "variant": "std.bool.true",
+      "binds": [],
+      "results": [],
+      "body": "kcsr9fcbqb4vc3g0dt5tns0b5j"
+    },
+    "afckfoeia1qigo3n5ha71vi32f": {
+      "id": "afckfoeia1qigo3n5ha71vi32f",
+      "kind": "lit",
+      "value": "Rolls: 0"
+    },
+    "skvrk77q6r8hdg4lif5pptg530": {
+      "id": "skvrk77q6r8hdg4lif5pptg530",
+      "kind": "arm",
+      "variant": "std.bool.false",
+      "binds": [],
+      "results": [],
+      "body": "afckfoeia1qigo3n5ha71vi32f"
+    },
+    "s7d192v9j0e50v0vmgq7rmge6d": {
+      "id": "s7d192v9j0e50v0vmgq7rmge6d",
+      "kind": "match",
+      "scrutinee": "irq38ehmiq7h15hk0376da2krl",
+      "arms": [
+        "q4cbar9sgjf86m5ak03o07m1qf",
+        "skvrk77q6r8hdg4lif5pptg530"
+      ],
+      "otherwise": null
     }
   },
   "defs": [

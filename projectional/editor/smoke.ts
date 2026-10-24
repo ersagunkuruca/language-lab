@@ -287,6 +287,8 @@ async function pagePreview() {
   // Its buttons still work after the redraw, and back on main.
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 101;")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
+  // The status bar says what was done on the page.
+  if (!(await p.locator(".status[role=status]").innerText()).includes("Clicked “Roll”")) errors.push(`${where}: the status bar says nothing of the click on Roll`);
   await p.locator("[data-def]", { hasText: /^main$/ }).click();
   // The page is main's run: no Run main that would print its insides.
   if (await p.locator('[data-act="t-run"]').count()) errors.push(`${where}: a page's main offers Run main`);
