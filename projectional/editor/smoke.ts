@@ -307,6 +307,29 @@ async function listItems() {
   await p.close();
 }
 
+// Changing the selection leaves the text where it was, from either view
+// (BACKLOG E105): two dice's main, scrolled to its end.
+async function textKeepsPlace() {
+  where = "the text's scroll on a new selection";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 700 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const body = p.locator(".p-text .body");
+  const top = () => body.evaluate((e) => e.scrollTop);
+  await body.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+  const end = await top();
+  if (end < 50) errors.push(`${where}: main's text doesn't scroll at 700 px (${end})`);
+  await p.locator(".blocks-wrap .head").last().click();
+  if (Math.abs((await top()) - end) > 40) errors.push(`${where}: clicking a part scrolled the text from ${end} to ${await top()}`);
+  await p.locator(".p-graph [data-move]").first().dispatchEvent("click");
+  await p.locator(".p-graph [data-move]").first().dispatchEvent("pointerdown", { button: 0 });
+  await p.locator(".p-graph [data-move]").first().dispatchEvent("pointerup", { button: 0 });
+  if ((await top()) < 20) errors.push(`${where}: selecting in the graph sent the text back to the top`);
+  await p.close();
+}
+
 // Opening a program shows its open definition in the navigator, even
 // below the fold (BACKLOG E75): the guitar pedal's main at 1280 by 800.
 async function navScroll() {
@@ -557,6 +580,7 @@ await heldSeed();
 await textPort();
 await listItems();
 await navScroll();
+await textKeepsPlace();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

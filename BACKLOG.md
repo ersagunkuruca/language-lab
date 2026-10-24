@@ -26,6 +26,21 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E104 | **Bug.** Delete takes everything feeding the node with it (removeSelected calls toHole on the whole subtree): deleting the list `append` needed also deleted the `named(…)` element wired into it. Delete should remove only that node | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M | folded into E117 |
+| E106 | **Bug.** Tidy and Reset the layout give two different layouts; Tidy only relaxes from where things are, so it never compacts, never orders inputs, and ignores the room folded frames free. Make Tidy one compact layout of what's shown (folded frames as boxes), the same every time; Reset becomes it | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M |  |
+| E107 | **Bug.** A folded frame isn't a node: no selection outline, it drags from some places and not others | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | S |  |
+| E108 | **Bug.** Dropping an output on a list's `+` does nothing (should add the item), and dropping it on a filled input does nothing (the swap, old value loose, is E117) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | S |  |
+| E115 | Loose parts 1: holes drawn as empty inputs in the graph (hollow port, type on hover, click for the palette), no hole nodes | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
+| E116 | Loose parts 2: `drafts.json` per definition beside code.json: load, save, Save file, undo, and a `-- loose, not used yet` section at the end of Blocks | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
+| E117 | Loose parts 3: Delete removes one node and leaves what fed it loose; unwiring leaves the value loose; a drop on a filled input swaps and sets the old value loose (rules 4, 5; fixes E104) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
+| E118 | Loose parts 4: new values made on the canvas are loose (rule 7); loose parts drawn faded, dashed (rule 9) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
+| E119 | Loose parts 5: pitfall 11 rewritten to say what's refused now | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
+| E109 | **Bug.** "Put a dot on its wire" sometimes puts the dot far from the wire | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
+| E110 | Wires route around nodes but not around frames (lambdas) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M |  |
+| E112 | Let and get nodes exist (right-click a dot) but are hard to find: a toggle for the whole definition, and a Guide line | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
+| E113 | In the graph only the call can be selected, never the function it calls (to change it or open it) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
+| E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
+| E114 | Taking out an `append` and flattening its lists by hand should be short (follows from E104 and E108; E98 does it for you) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P3 | S |  |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
@@ -128,6 +143,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E105 | Choosing a part keeps the text and panels where they were scrolled | #429 |
 | E73 | Phone held upright: the top bar fits, links behind More | #427 |
 | E74 | The map starts hidden where it would cover nodes | #426 |
 | E76 | The status bar says what was typed or set in a page's field | #425 |
