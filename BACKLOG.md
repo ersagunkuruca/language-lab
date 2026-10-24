@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
 | E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
 | E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
 | E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | ready: L75 done (a `lit` with `of: "std.rational"`, value a whole number or "top/bottom"; DSL `k.at`); smaller/larger on every number type is L73 |
@@ -140,6 +139,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E66 | The palette reads < ≤ > ≥ = ++ and -x, from the notation itself | #388 |
 | E65 | Blocks pane: right-click opens the part's menu, clicking an operator selects its call | #387 |
 | E63 | The Blocks pane draws what the blocks text prints: one printer, render.ts blocksOf | #384 |
 | E64 | One pane at a time, a hole's palette and the New definition form switch to the side pane | #380 |
