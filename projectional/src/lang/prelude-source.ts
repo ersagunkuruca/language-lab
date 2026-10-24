@@ -334,6 +334,12 @@ export function buildPrelude(): Module {
   const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
+    [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
+    [map]: "The list of f(item) for each item, in the same order.",
+    [length]: "How many items the list has.",
+    [sum]: "The Numbers of the list added up; 0 for an empty list.",
+    [append]: "The items of the first list, then the items of the second.",
+    [reverse]: "The list back to front.",
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",

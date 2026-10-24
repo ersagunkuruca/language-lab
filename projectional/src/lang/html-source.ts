@@ -28,6 +28,13 @@ import { makeModule, publish, type Module } from "./modules.ts";
 import { PRELUDE } from "./library.ts";
 import { CELL_OPS, CONS, HTML_V, NIL, SHOW_ANY, std } from "./std.ts";
 
+// The tags with a function of their own after div, and what each is for.
+const TAG_NOTES = [
+  ["span", "a run of text inside a line"], ["p", "a paragraph"], ["h1", "the biggest heading"], ["h2", "a second-level heading"],
+  ["section", "a part of the page"], ["footer", "the page's foot"], ["label", "a label for a field"],
+  ["ul", "a list with bullets, whose items are li"], ["li", "one item of a list"], ["strong", "important text, usually bold"],
+] as const;
+
 export function buildHtml(): Module {
   // Built on the prelude (its append), so the prelude is what it's
   // published against, besides the builtins.
@@ -50,7 +57,7 @@ export function buildHtml(): Module {
   // An element with these children, by its tag's name.
   const tag = k.def("tag");
   k.define(tag, k.fn(["name", "children"], (name, children) => el(name, NIL, children)));
-  const tags = ["div", "span", "p", "h1", "h2", "section", "footer", "label", "ul", "li", "strong"].map((t) => {
+  const tags = ["div", ...TAG_NOTES.map(([t]) => t)].map((t) => {
     const d = k.def(t);
     k.define(d, k.fn(["children"], (children) => el(k.lit(t), NIL, children)));
     return d;
@@ -101,6 +108,7 @@ export function buildHtml(): Module {
   const comments: Record<Id, string> = {
     [tag]: "An element with these children, for a tag that has no function of its own here (main, nav, table, …). Each tag a function, as in Elm's Html module (prior art).",
     [tags[0]]: "A div with these children. To give it attributes, wrap it: styled, classed, with.",
+    ...Object.fromEntries(tags.slice(1).map((t, i) => [t, `A ${TAG_NOTES[i][0]} element with these children: ${TAG_NOTES[i][1]}.`])),
     [input]: "An input field: it has attributes and no children.",
     [words]: "Text that doesn't change. Text that does is text(() => …), which the page runs again when what it reads changes.",
     [button]: "A button with this label that runs then when it's clicked.",

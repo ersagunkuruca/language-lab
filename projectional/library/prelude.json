@@ -14961,6 +14961,12 @@
     "@4ufmuo5v7qnbsfq638ej7h0jru:9": "reason"
   },
   "comments": {
+    "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
+    "@9902gjnadddgv3jrh6ir29nf4q": "The list of f(item) for each item, in the same order.",
+    "@ms3a2v8ka09mr0hqvm9t2d4mq4": "How many items the list has.",
+    "@cci1a6fll2qmphm2sgtabs53qo": "The Numbers of the list added up; 0 for an empty list.",
+    "@c9sa21p6t34r9bf9cjcm8h2101": "The items of the first list, then the items of the second.",
+    "@egedg16di7hp3kq2u7ghqi8dbd": "The list back to front.",
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     "@su0m8djlkg5cq4b68i0klesqia": "A fold that prints. Run backwards it unfolds, so it parses.",
     "@9q8d7m9gld6fvdr2gj63v34sgq": "A helper of reverse. Published with the module, not offered in the palette.",

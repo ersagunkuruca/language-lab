@@ -11,6 +11,138 @@ npm run lang    # shows both programs, runs them, and walks through the errors
 npm test        # includes test/lang.test.ts
 ```
 
+## Start here: the language in plain words
+
+This section is for someone opening the editor for the first time. The rest
+of the file goes deeper, and [LIBRARY.md](LIBRARY.md) lists everything a
+program can use without writing it, with its type and one line on what it
+does.
+
+**A program is a list of definitions.** Each has a name, maybe some inputs,
+and a body that computes its answer. Here are three from the two dice
+program, as the editor's text view shows them:
+
+```
+die : () -[Random]-> Number
+die() = add(floor(multiply(random(), 6)), 1)
+
+two dice : () -[Random]-> Number
+two dice() = add(die(), die())
+
+a hundred rolls : (Number) -> List Number
+a hundred rolls(seed) = seeded(seed, map(range(100), (i) => two dice()))
+```
+
+There are no statements and no variables that change. A body is one
+expression, and a name you give inside it (`total = add(i, 2)`) is a
+value you can use below that line.
+
+**Reading a type.** The line above each definition is its type. You never
+write it: the checker works it out and the editor shows it.
+
+- `(Number) -> List Number` takes a Number and gives a list of Numbers.
+- `() -[Random]-> Number` takes nothing, may draw random numbers, and gives
+  a Number. What's in the square brackets is the definition's *effects*,
+  what it may do besides compute. A plain arrow `->` has none: same inputs,
+  same answer, every time.
+- A small letter is any type: `(List a) -> Int` works on a list of
+  anything.
+
+**Effects, and who answers them.** `random()` doesn't decide where the
+numbers come from. It asks, and the nearest thing around it that handles
+`Random` answers. That's why `die` has `Random` in its type, and so does
+`two dice`, which calls it. In `a hundred rolls`, `seeded(seed, …)` is
+the handler: it answers every `random()` inside it from a generator started
+at the seed, so the same seed gives the same hundred rolls. The `Random`
+stops there, and `a hundred rolls` has a plain arrow. If nothing handles
+an effect, the world does when the program runs: the page's Roll button
+calls `die()` straight, and gets the browser's randomness.
+
+Two edits show how types follow what you do. Put `die()` where the Roll
+100 button passes `7`, as `a hundred rolls(die())`, and nothing changes in
+any type: the button's handler is allowed `Random`, and the seed is now
+different on every click. Put `die()` in place of `seed` *inside* `a
+hundred rolls`, as `seeded(die(), …)`, and its type becomes `(a) -[Random]->
+List Number`. The input is no longer used, so it can be anything (`a`). The
+`die()` runs before `seeded` takes over, so `Random` leaks out. Both are
+fine programs; the type tells you which one you wrote.
+
+The effects you'll meet: `Choice` (a search, or an answer that may be
+missing), `Abort` (stopped with a reason), `Random`, `Time` (the clock),
+`Console` and `Files` (printing, files), `Network` (fetching), `Cells` and
+`Update` (a page's changing values), `Log` (debugging lines), and
+`Diverge` (it might not finish). You can declare your own, and handle
+it with a match. See "Effects, and why not monads" below.
+
+**Numbers.** There are four kinds: `Int` (whole, any size), `Number`
+(floating point), `Rational` (exact fractions such as 1/3) and `Complex`.
+One `+ − · <` works on all of them, and the checker picks the kind. Kinds
+don't mix by themselves: `as number`, `whole part`, `as fraction` and `as
+complex` convert.
+
+**Data.** You make a type by listing its cases, each with named fields:
+
+```
+type Shape
+  | circle(radius: Number)
+  | rectangle(width: Number, height: Number)
+```
+
+`circle(2)` makes one. A `match` looks at which case a value is and gives
+each case's fields names; `if … then … else …` is a match on true and
+false. There are no loops: `map`, `keep` and `for each` go through a list,
+`fold` walks any data, and a function may call itself. The library has
+lists, pairs, `Optional` (a value that may be missing), `Outcome` (done,
+or refused with a reason), maps and sets.
+
+**Searching.** `one of([1, 2, 3])` is any of the three: a computation with
+several answers, and the `Choice` effect in its type. `all(…)` collects
+every answer, `first(…, default)` takes the first, and `fail()` has none.
+So a search is written as "pick, check, keep" with no loop, and the same
+`Choice` is how a lookup says "not there": `value at(m, k)` has no answer
+when the map hasn't got `k`, and `first(() => value at(m, k), () => 0)`
+gives a default.
+
+**Pages.** `main` can return a page (`Html`). A `cell` holds a value that
+changes; a part of the page that reads a cell is drawn again when it
+changes, and a button's handler writes cells. The two dice page is about
+forty lines.
+
+**Errors you can't make.** The editor offers only what keeps the program
+correct: a hole shows its type, and the palette lists what fits it. The
+types say what each definition does, so printing from inside a search, or
+a page's view writing a cell, is a type error, not a surprise at run time.
+
+### What's new since 2026-10-23
+
+- **One `+ − · <` for every kind of number** (it used to be a separate
+  set per type), with `Rational` (exact fractions, in lowest terms) and
+  `Complex` (re + im·i) as the new kinds. A literal can be written as a
+  fraction (`1/2`). `smaller`, `larger` and `≤ > ≥` work on every ordered
+  kind. ("Whole numbers and text", LIBRARY.md "Numbers".)
+- **`compare` and `sort`** on any plain data: numbers by value, text
+  alphabetically, cases in the order the type lists them. ("Order, and
+  sort".)
+- **`Outcome`**: `attempt(action)` keeps an `Abort` as data,
+  `done(value)` or `refused(reason)`, so failures can go in a list.
+  ("`Outcome`: the data form of Abort".)
+- **Maps and sets**: `Map k v` and `Set k`, kept sorted so equal maps
+  print the same, with 21 operations (`put`, `value at`, `has item`, …).
+  When `lab` runs a program, a map can be stored as a balanced tree,
+  which is faster, without the program changing.
+  ("Maps and sets".)
+- **Effects fixes**: a page's button whose handler fetches now does what
+  came before the fetch once, not twice. Printing inside a search is
+  refused by the checker instead of leaking, because a search may run a
+  path several times or drop it.
+- **Answered later**: an operation can be declared `later`, and its handler
+  is given the rest of the program as an ordinary function, to resume once
+  (now, or later) or drop. That's how waiting is written: a generator, a
+  page waiting for a reply, two tasks taking turns. It runs in the
+  evaluator; compiled JavaScript doesn't run it yet. ("Effects you define",
+  ANSWERED-LATER.md.)
+- **LIBRARY.md**: every definition the library offers, with a plain note.
+
 ## Short answers
 
 - **Conditionals?** One construct: `match`, a case analysis over a data type.
@@ -347,6 +479,9 @@ The effects:
 | `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | the runtime |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
+| `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
+| `Time` | `now()` | a match (a test's fixed clock); at the top, the clock |
+| `Wait` | `wait(milliseconds)` | a match; at the top, the runtime (not in a page) |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
 | `Cells` | `cell(x)`, `formula(action)`, `each(items, f)`, `read(c)` | the runtime (see "Cells" below) |
 | `Update` | `write(c, x)` | the runtime; a world effect, like `Console` |
