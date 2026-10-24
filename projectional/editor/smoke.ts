@@ -320,6 +320,15 @@ async function navScroll() {
     return r.top >= nav.top && r.bottom <= nav.bottom;
   }).catch(() => null);
   if (seen !== true) errors.push(`${where}: the open definition ${seen === null ? "isn't in the list" : "is out of sight"}`);
+  // Nor does the map start on top of its nodes (BACKLOG E74).
+  where = "the map on a first visit";
+  const covered = await p.evaluate(() => {
+    const m = document.querySelector(".minimap");
+    if (!m || m.getAttribute("display") === "none") return 0;
+    const c = m.getBoundingClientRect();
+    return [...document.querySelectorAll(".p-graph [data-move]")].filter((el) => { const b = el.getBoundingClientRect(); return b.right > c.left && b.left < c.right && b.bottom > c.top && b.top < c.bottom; }).length;
+  });
+  if (covered) errors.push(`${where}: the map covers ${covered} nodes of the pedal's main`);
   await p.close();
 }
 
