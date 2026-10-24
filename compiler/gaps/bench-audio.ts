@@ -14,22 +14,27 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 const p = loadProgram(join(import.meta.dirname, "../../projectional/examples/pedal"));
 const prog = { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names };
 
-// By hand: Haar's split in lifting steps, tanh(8 atanh x) on the slow
-// band, the join, then the compressor (4 to 1 over 0.5, level falling by
-// 0.99976 a sample).
+// By hand: Haar's split in lifting steps, tanh(32 atanh x) on the slow
+// band, the join, the compressor (4 to 1 over 0.5, level falling by
+// 0.99976 a sample), then back to the loudness that came in (mean squares
+// following by 0.9995 a sample, gain at most 4, samples under 0.95).
 function ideal(): Play {
-  let level = 0;
+  let level = 0, dry = 0, wet = 0;
   return (block) => {
     const n = block.length, out = new Array<number>(n);
     for (let i = 0; i + 1 < n; i += 2) {
       const fast = block[i] - block[i + 1], slow = block[i + 1] + fast / 2;
-      const driven = Math.abs(slow) < 1 ? Math.tanh(8 * Math.atanh(slow)) : slow;
+      const driven = Math.abs(slow) < 1 ? Math.tanh(32 * Math.atanh(slow)) : slow;
       const b = driven - fast / 2;
       out[i] = fast + b; out[i + 1] = b;
     }
     for (let i = 0; i < n; i++) {
       level = Math.max(Math.abs(out[i]), level * 0.99976);
       out[i] *= level > 0.5 ? Math.exp(Math.log(0.5 / level) * 0.75) : 1;
+      dry = dry * 0.9995 + block[i] * block[i] * 0.0005;
+      wet = wet * 0.9995 + out[i] * out[i] * 0.0005;
+      const g = wet < 1e-12 ? 1 : Math.min(4, Math.sqrt(dry / wet));
+      out[i] = Math.abs(out[i]) * g > 0.95 ? (out[i] * 0.95) / Math.abs(out[i]) : out[i] * g;
     }
     return out;
   };

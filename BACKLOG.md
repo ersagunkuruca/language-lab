@@ -232,6 +232,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L30 | The pedal you can hear (Ersagun: Softer and Harder sounded like volume): a Clean/Driven switch for A/B; the output brought back to the loudness that came in, sample by sample (two mean squares in cells, gain at most 4, samples under 0.95), so the drive changes the tone and can't run away into feedback; drive 32 by default, capped at 256; a picture of a sine before and after the drive, SVG drawn by the program. Strum: crest 8.8 to 5.4 at the same loudness. Compiled 63× real time (by hand 4× quicker; the matching is plain recursion building pairs) | this PR |
 | L23 | `conjugate(f, g)` = f⁻¹ ∘ g ∘ f in the prelude, over `inverse`; `examples/conjugate` (in the editor as "Conjugation"): brighter in linear light, a quarter turn about a point, the fast band of a Haar split softened; run and compiled the same | #249 |
 | L15 | Static output: `lab run` on a page prints it once as an HTML document (every text, part and attribute drawn, handlers left out); `<style>` and `<script>` text unescaped | #235 |
 | L27 | `Log` in a page's views and handlers: both rows allow it, a line goes to the browser console (a view's each time it runs), evaluator and compiled the same | #232 |
