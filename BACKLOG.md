@@ -37,7 +37,7 @@ so the next bigger program can be built in the editor.
 
 ## C: Compiler and targets
 
-Thread "Bigger programs and compiler gaps". Current step: the items below in order.
+Thread "Bigger programs and compiler gaps". Current step: the items below in order. New targets and speed rank below every language item (Ersagun, 2026-10-24 07:01): the language comes first, and this lane helps L38's compiled side (generic code: copies or dictionaries) when asked.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
@@ -47,10 +47,28 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 
 ## L: Language and library
 
-Thread "Backlog and planned workflow", which also keeps this file current.
+Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one `+` for every number system, and the number types (fractions, complex, Clifford, matrices, tensors) first, then the rest of LANGUAGE-REVIEW-2026-10-24. Anything that only adds a target ranks below all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L38 | (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Decided by Ersagun 2026-10-24 06:48 (one generic `+`); design and steps in NUMBERS.md "One `+` for every number system" | LANGUAGE-REVIEW-2026-10-24 | P1 | L | ▶ thread "Make the language itself better" |
+| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P1 | M | proposal |
+| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P1 | M | proposal |
+| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P1 | L | proposal |
+| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P1 | M | proposal |
+| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L51 | Tensors: NUMBERS.md stage 6, as the general algebra after lists as arrays (C30) | LANGUAGE-REVIEW-2026-10-24 Plan 17, NUMBERS.md stage 6 | P1 | L | after L38, and C30 for arrays |
+| L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
+| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
+| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
+| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
+| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
+| L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
+| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
+| L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: lane E shows the mode on the `solve` node | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a to L11e done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells | ROADMAP 4 open | P3 | L | |
@@ -60,24 +78,7 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L20 | `set` with general functions through relations | real-sized data follow-up | P3 | M | |
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
-| L38 | (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Decided by Ersagun 2026-10-24 06:48 (one generic `+`); design and steps in NUMBERS.md "One `+` for every number system" | LANGUAGE-REVIEW-2026-10-24 | P1 | L | ▶ thread "Make the language itself better" |
-| L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
-| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
-| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
-| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
-| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
-| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P2 | M | proposal |
-| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
-| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P3 | M | proposal |
-| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P3 | L | proposal |
-| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P3 | M | proposal |
-| L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
-| L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
-| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
-| L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, results cached by definition hash and re-checked on save (Unison prior art). Design note first | projectional/TESTING.md T7 | P2 | L | |
 
 ## Testing and fast feedback
