@@ -27,7 +27,7 @@ import { call, num, v } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
-import { S, TRUE } from "./std.ts";
+import { ARITH, S, TRUE } from "./std.ts";
 
 export type Expr = ReturnType<typeof v> | ReturnType<typeof num> | ReturnType<typeof call>;
 export interface Eq { lhs: Expr; rhs: Expr; law?: boolean }
@@ -37,7 +37,12 @@ const define = defineRelation as unknown as (spec: { name: string; ports: string
 export class NotEquations extends Error {}
 
 // Numeric builtins, by the name the solver knows them under.
-export const NUMERIC: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
+// The generic + − · −x solve as Number's do: on Numbers, which is where
+// equations are solved, they are Number's own.
+export const NUMERIC: Record<Id, string> = {
+  ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs",
+  [ARITH.add]: "add", [ARITH.sub]: "sub", [ARITH.mul]: "mul", [ARITH.neg]: "neg",
+};
 const arityOf = (op: string) => (op === "abs" ? 1 : impl[op as keyof typeof impl].length);
 
 // What a variable stands for: an expression for the solver, or (for a let

@@ -39,6 +39,31 @@ test("a call's function as a hole: every function of the right type is offered, 
   const code = replace(p.code, mul.fn, () => ({ kind: "hole" }));
   const info = infer(code);
   const offered = fillings(code, info, mul.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
-  for (const op of ["builtin.mul", "builtin.add", "builtin.sub"]) assert.ok(offered.includes(op), `${op} is offered`);
+  for (const op of ["builtin.arith.mul", "builtin.arith.add", "builtin.arith.sub"]) assert.ok(offered.includes(op), `${op} is offered`);
   for (const target of offered) assert.equal(infer(fillHole(code, {}, mul.fn, { kind: "ref", target, type: null as never }).code).errors.length, info.errors.length, target);
+});
+
+// One + for every number type (NUMBERS.md, "One `+`"): where a Number or
+// an Int is added, the palette offers the generic arithmetic and not each
+// type's own, and a program with the generic one means what it did.
+test("the palette offers one + − · for Numbers and Ints alike, and a program with it runs the same", async () => {
+  const { ARITH } = await import("../src/lang/std.ts");
+  const { runMain } = await import("../src/lang/run.ts");
+  const own = /^builtin\.(int\.)?(add|sub|mul|neg|less)$/;
+  for (const [name, op] of [["physics", "builtin.mul"], ["wc", "builtin.int.add"]]) {
+    const p = loadProgram(join(import.meta.dirname, "../examples", name));
+    const c = Object.values(p.own.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === op)!;
+    const code = replace(p.code, c.fn, () => ({ kind: "hole" }));
+    const offered = fillings(code, infer(code, p.pres.names), c.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
+    for (const g of [ARITH.add, ARITH.sub, ARITH.mul]) assert.ok(offered.includes(g), `${name}: ${g} offered`);
+    assert.deepEqual(offered.filter((t) => own.test(t)), [], `${name}: no type's own arithmetic offered`);
+  }
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const run = (code: typeof p.code) => { const out: string[] = []; runMain(code, infer(code, p.pres.names), p.named("main"), { print: (s) => out.push(s) }); return out; };
+  const fns = Object.values(p.own.nodes).filter((n) => n.kind === "ref" && n.target === "builtin.mul").map((n) => n.id);
+  let code = p.code;
+  for (const f of fns) code = replace(code, f, () => ({ kind: "ref", target: ARITH.mul }));
+  assert.ok(fns.length > 0);
+  assert.deepEqual(infer(code, p.pres.names).errors, []);
+  assert.deepEqual(run(code), run(p.code));
 });

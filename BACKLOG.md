@@ -34,7 +34,13 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E49 | **Numbers first (L38 step 2, editor side).** The palette offers the one generic `+ − · −x <` (std.ts `ARITH`: `builtin.arith.add`, `.sub`, `.mul`, `.neg`, `.less`; glyphs already in styles) wherever both sides are one number type, and stops offering the per-type ones (`builtin.add`…, `builtin.int.add`…) for new code; stored programs keep theirs. Today src/lang/infer.ts holes() skips `builtin.arith.*` (one line, near "The generic arithmetic isn't offered yet"); flipping it to skip the per-type arithmetic instead is the core change, then the editor's palette labels and tests. Lane L does showType's constraint and derive.ts | coordinator 2026-10-24 07:09, NUMBERS.md "One `+`" step 2 | P1 | M | |
+| E51 | The minimap and the Fit pill sit on the graph (1280×720: on `rotate` and `solve rotate`; phone: a quarter of the pane); smaller, collapsible, or shown while panning | QA-2026-10-24 M2 | P1 | S | |
+| E52 | A page in the Run panel is unstyled (pedal and dice in default serif, the drive picture cut off); a base stylesheet for the mount, or CSS in the examples | QA-2026-10-24 L1 | P2 | S | |
+| E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
+| E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
+| E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
+| E56 | The status bar says nothing about page actions (A strum, Stop sound) | QA-2026-10-24 L5 | P3 | S | |
+| E57 | The dice page before any roll says "the last 2 s ago" (examples/dice) | QA-2026-10-24 L6 | P3 | S | |
 
 ## C: Compiler and targets
 
@@ -61,7 +67,6 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P1 | M | proposal |
 | L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
 | L51 | Tensors: NUMBERS.md stage 6, as the general algebra after lists as arrays (C30) | LANGUAGE-REVIEW-2026-10-24 Plan 17, NUMBERS.md stage 6 | P1 | L | after L38, and C30 for arrays |
-| L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
 | L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
@@ -112,6 +117,9 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
+| E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
+| L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
 | L49 | Blocks text: a match as an if condition shows its arms; a branch's steps sit after then/else | #342 |
 | E48 | Steps done for their effects start at the left edge, so a big main (Numbers & physics) opens with its first steps in view; was Inbox I2 (QA3 L4) | #300 |
 | E47 | Pages keep running across program switches; dice says Rolls: 1; ray marcher constructor is rgb (no colour₁). L4 lopsided first view is the layout's shape: Inbox I2 | #298 |
