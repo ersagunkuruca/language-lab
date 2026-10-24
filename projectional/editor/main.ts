@@ -1903,6 +1903,18 @@ function pageSection(info: T.Info | null): HTMLElement | null {
     d.body.replaceChildren(page.root);
     if (!sized.has(d)) {
       sized.add(d);
+      // What's done on the page is said in the status bar too, as an edit
+      // is. Only the bar's text changes: the page is left as it is.
+      d.addEventListener("click", (e) => {
+        const b = (e.target as Element).closest?.("button, a, input[type=checkbox]");
+        const label = b?.textContent?.trim() || b?.getAttribute("aria-label");
+        if (!label) return;
+        ui.note = `Clicked “${label}” on the page.`;
+        ui.touched = [];
+        ui.refused = false;
+        const bar = document.querySelector<HTMLElement>(".status[role=status]");
+        if (bar) { bar.textContent = ui.note; bar.className = "status"; }
+      });
       new ResizeObserver(() => { page.frame.style.height = `${Math.min(Math.max(Math.ceil(d.body.getBoundingClientRect().bottom) + 2, 120), Math.round(innerHeight * 0.7))}px`; }).observe(d.body);
     }
   });
@@ -2455,8 +2467,8 @@ document.addEventListener("click", (e) => {
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped();
     if (a === "t-stop") return stopRun("Stopped.");
-    if (a === "page-restart") { page.for = null; return render(); }
-    if (a === "page-hush") return page.now?.hush?.();
+    if (a === "page-restart") { page.for = null; ui.note = "Started the page again: every cell is back to its first value."; return render(); }
+    if (a === "page-hush") { page.now?.hush?.(); ui.note = "Stopped every sound the page was playing."; return render(); }
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
