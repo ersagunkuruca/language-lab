@@ -230,7 +230,7 @@ numbers). Median of 5, one x86-64 container, gcc -O2, 2026-10-24:
 | ledger, 200,000 entries | 517 ms, 43 MB | 835 ms, 175 MB | 1268 ms, 158 MB |
 | chapters, 1000 into a folder | 213 ms, 4.1 MB | 371 ms, 68 MB | 673 ms, 71 MB |
 
-The compiled JavaScript column is after C24: the bench showed `lab compile`'s
+The compiled JavaScript column is after C26: the bench showed `lab compile`'s
 output spending about 140 ms starting a worker thread for a big stack it no
 longer needed since C21, and main now runs on Node's own (queens' start-up
 was 214 ms, Countdown 317).
