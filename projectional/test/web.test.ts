@@ -137,7 +137,7 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   const root = body.kids[0] as FakeEl;
   const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
   const bars = () => [...root.html().matchAll(/px"><\/span>(\d+)/g)].map((m) => Number(m[1]));
-  assert.equal(root.find("status").textContent, "Rolls: 0; the last 0 s ago");
+  assert.equal(root.find("status").textContent, "Rolls: 0"); // no "last" before any roll
   root.find("hundred").fire("click");
   const once = bars();
   assert.equal(once.length, 11);
