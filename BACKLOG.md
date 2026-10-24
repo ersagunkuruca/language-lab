@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E83 | The Selected panel heads each part with its internal id ("Hole akdibablpg…") | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E84 | After clearing `seed`'s only use, the palette lists in-scope `seed` as `a` while the definition still says `Number` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E85 | Hover types in Blocks show a library function's effect row as the call site fills it (`range` hovers as `-[Random]->`) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
@@ -147,6 +146,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E83 | The Selected panel heads a part with what it is; its id only on hover | #407 |
 | E96 | The top bar's Learn opens GUIDE.md as a page (guide.html), which links on to the tutorial | #406 |
 | E99 | The Guide tab says how the editor works today: two views, selecting, holes and the palette, copy and paste, held types, Run, today's effects | #405 |
 | E82 | A hole in a held definition says its type is kept, with Let it loosen beside the palette; a refusal of a held type says what the fill would add and the ways out | #404 |
