@@ -2,7 +2,7 @@
 // value chips that don't overlap, and tidy.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crossingsOf, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
+import { arrange, crossingsOf, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
 
 test("two crossing wires cross once, in the middle", () => {
   const a = curvePoints(0, 0, 200, 100), b = curvePoints(0, 100, 200, 0);
@@ -106,4 +106,33 @@ test("a wire bends around a node in its way, and keeps its tunnel where it can't
   assert.equal(route({ x: 260, y: 60 }, { x: 0, y: 60 }, [box]).bent, false);
   // Far off its line: it would stray too far, so it stays straight.
   assert.equal(route({ x: 0, y: 60 }, { x: 260, y: 60 }, [{ x: 100, y: -100, w: 60, h: 400 }]).bent, false);
+});
+
+test("arrange lays out afresh: the same from anywhere, again moves nothing, inputs in port order", () => {
+  // f(a, b) inside a frame g, whose result feeds h; a and b start swapped and piled up.
+  const nodes: TNode[] = [
+    { id: "h", x: 0, y: 0, w: 60, h: 40, frame: null },
+    { id: "f", x: 0, y: 0, w: 60, h: 50, frame: "g" },
+    { id: "b", x: 5, y: 0, w: 40, h: 20, frame: "g" },
+    { id: "a", x: 5, y: 100, w: 40, h: 20, frame: "g" },
+  ];
+  const frames = [{ id: "g", parent: null, pad: [10, 20, 10, 10] as [number, number, number, number] }];
+  const wires = [
+    { from: "a", fx: 40, fy: 10, to: "f", tx: 0, ty: 15, flow: true },
+    { from: "b", fx: 40, fy: 10, to: "f", tx: 0, ty: 35, flow: true },
+    { from: "g", fx: 80, fy: 30, to: "h", tx: 0, ty: 20, flow: true },
+  ];
+  const at = arrange(nodes, frames, wires);
+  const placed = nodes.map((n) => ({ ...n, ...at.get(n.id)! }));
+  const p = (id: string) => at.get(id)!;
+  assert.ok(p("a").y < p("b").y, "a feeds the first port, so it's above b");
+  assert.ok(p("a").x + 40 < p("f").x && p("f").x + 60 < p("h").x, "inputs left of what they feed");
+  for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++)
+    if (placed[i].frame === placed[j].frame) assert.ok(!overlaps(placed[i], placed[j]), `${placed[i].id} and ${placed[j].id} overlap`);
+  const again = arrange(placed, frames, wires);
+  for (const n of placed) assert.deepEqual(again.get(n.id), { x: n.x, y: n.y }, `${n.id} moved again`);
+  // From somewhere else entirely, the same picture, moved as a whole.
+  const elsewhere = arrange(nodes.map((n, i) => ({ ...n, x: n.x + 300 - i * 50, y: n.y + i * 70 })), frames, wires);
+  const d = { x: elsewhere.get("h")!.x - p("h").x, y: elsewhere.get("h")!.y - p("h").y };
+  for (const n of nodes) assert.deepEqual(elsewhere.get(n.id), { x: p(n.id).x + d.x, y: p(n.id).y + d.y });
 });

@@ -208,9 +208,10 @@ the gutters between panes resize it.
 the palette, searched; on empty space, *Add a value here* (a new dot holding
 a hole, to fill and wire in); on a node, open, show inline, put a dot on it,
 clear it, or *Change the function…*, which keeps a call's inputs and offers
-every function that takes them (`·` to `+`); on a dot or port, *Show as let and get nodes*. *Tidy* spaces out
-the whole graph or the picked nodes, moving them off wires too; *Reset the
-layout* goes back to the automatic one. Where wires still cross, one hops
+every function that takes them (`·` to `+`); on a dot or port, *Show as let and get nodes*. *Tidy everything*
+lays the graph out afresh, the same way every time (and the way a graph
+nobody has moved is drawn); tidying the picked nodes only spaces those out,
+moving them off wires too. Where wires still cross, one hops
 over the other (a bridge); where a wire runs under a node, its hidden
 stretch shows faintly over it (a tunnel). NODE-EDITOR.md has the reasons.
 
