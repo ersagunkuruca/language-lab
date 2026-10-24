@@ -14,7 +14,13 @@ nearly nine times real time. A2 is done: `listen(microphone, pedal)` on a
 button plays live in a page (`lab build-web examples/pedal`, and
 apps/pedal.html on the site), from the microphone or a recording, with
 Softer and Harder turning the drive as it plays; test/sound-browser.ts
-plays it in Chromium from a fake microphone. A3 is next.
+plays it in Chromium from a fake microphone. A3 is done: the pedal ends in
+a compressor whose level follows the samples one by one, across blocks, in
+a cell (so it is the same at any block size), 4 to 1 over 0.5; compiled it
+plays 2063 blocks a second. A filter crossover is left out: a filter keeps
+state, so its join (the sum) isn't its split run backwards, and conjugation
+doesn't apply; deeper Haar splits are the invertible way to finer bands.
+A4 (the editor) is next.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
@@ -137,8 +143,9 @@ real program.
    cell writes over the port; `lab build-web` pages play. Checked in
    Chromium with a fake microphone (`--use-fake-device-for-media-stream`)
    and an OfflineAudioContext.
-3. **A3. A real pedal.** Envelope follower and compressor; a crossover
-   (Linkwitz–Riley) as an invertible split beside Haar; knobs.
+3. **A3. A real pedal.** Envelope follower and compressor; knobs. (A
+   Linkwitz–Riley crossover was planned as an invertible split beside
+   Haar, but a filter's state makes its join a sum, not its inverse.)
 4. **A4. In the editor.** A Run panel for sound like the one for pages
    (Editor lane, thread "Writing programs in the editor"; this lane's edits
    to projectional/editor purely additive).

@@ -2,8 +2,8 @@
 // as `lab build-web` builds it, served, and played in Chromium from its
 // fake microphone (a beep) and from its recording. What reaches the
 // speakers is tapped with an analyser: it must be sound, louder than what
-// came in (the pedal drives), and the knob must cross to the audio thread
-// (Softer makes it quieter). Fails on any error or warning the page logs.
+// came in (the pedal drives), compressed, and the knob must cross to the
+// audio thread (Softer makes it quieter). Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
 //
@@ -97,20 +97,23 @@ try {
   })()`);
   const check = (what: string, ok: boolean, detail: object) => { if (ok) console.log(`ok  ${what} ${JSON.stringify(detail)}`); else errors.push(`${what}: ${JSON.stringify(detail)}`); };
 
+  // The fake microphone beeps at full scale: driven and compressed, it
+  // comes out near the compressor's threshold (0.5).
   await click("Guitar in (microphone)");
   await playing("Guitar in (microphone)");
   const mic = await peaks(0);
-  check("the microphone, driven", mic.into > 0.01 && mic.out > mic.into, mic);
-  await click("Softer");
-  await click("Softer");
-  const softer = await peaks(0);
-  check("Softer reaches the audio thread", softer.out < mic.out * 0.9, { before: mic.out, after: softer.out });
+  check("the microphone, driven and compressed", mic.into > 0.5 && mic.out > 0.3 && mic.out < 0.8, mic);
   await click("Guitar in (microphone)");
 
+  // The strum is quieter: driven louder, then Softer turns it down.
   await click("A strum");
   await playing("A strum");
   const strum = await peaks(1);
-  check("the recording, driven", strum.into > 0.01 && strum.out > strum.into, strum);
+  check("the recording, driven", strum.into > 0.01 && strum.out > 1.5 * strum.into, strum);
+  await click("Softer");
+  await click("Softer");
+  const softer = await peaks(1);
+  check("Softer reaches the audio thread", softer.out < strum.out * 0.9, { before: strum.out, after: softer.out });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);
