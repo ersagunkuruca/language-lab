@@ -35,7 +35,6 @@ so the next bigger program can be built in the editor.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
-| E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
 | E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
 | E56 | The status bar says nothing about page actions (A strum, Stop sound) | QA-2026-10-24 L5 | P3 | S | |
 | E57 | The dice page before any roll says "the last 2 s ago" (examples/dice) | QA-2026-10-24 L6 | P3 | S | |
@@ -115,6 +114,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E54 | Change the function is one step to undo | #357 |
 | E52 | A page has a base look (page.ts PAGE_BASE, in :where) in the editor and saved; the frame grows with the page | #356 |
 | E51 | The map can be put away: Map button beside Fit, off by default on a phone, at most a fifth of the pane | #353 |
 | E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
