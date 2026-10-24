@@ -160,6 +160,13 @@ async function swapAndUndo() {
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await distance()) !== "distance = drift + drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
+  // The same from the Blocks pane: right-click its +, which stands for the
+  // call as the graph's node does.
+  where = "change the function from the Blocks pane";
+  await p.locator(".blocks-wrap .op", { hasText: "+" }).first().click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Change the function in its menu`));
+  await p.locator("button", { hasText: /^subtract/ }).first().click({ timeout: 2000 }).catch(() => {});
+  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.close();
 }
 

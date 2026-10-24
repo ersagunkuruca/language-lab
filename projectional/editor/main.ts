@@ -171,7 +171,9 @@ interface UI {
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string; running?: boolean } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
-  menu: { target: MenuTarget; x: number; y: number; world: Pos } | null;
+  // `blocks`: opened from the Blocks pane, so the graph's layout items
+  // (tidy, pick, fit) aren't offered.
+  menu: { target: MenuTarget; x: number; y: number; world: Pos; blocks?: boolean } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
   panel: "node" | "program" | "checks" | "files" | "guide";
@@ -1633,6 +1635,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
   if (!m) return null;
   const { kind, id } = m.target;
   const picked = graph?.picked() ?? [];
+  const inGraph = !m.blocks;
   const item = (label: string, act: string, hint = "", disabled?: string) =>
     h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!disabled, title: disabled ? `Can't: ${disabled}` : hint }, label);
   const rows: (HTMLElement | null)[] = [];
@@ -1646,9 +1649,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
   } else if (kind === "binder" && id) {
     const on = (doc.layout.named ?? []).includes(id);
     rows.push(head(names[id] ?? "a value"));
-    if (names[id] !== "_") rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
+    if (names[id] !== "_" && inGraph) rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
     rows.push(item("Name it…", "name"));
-    if (T.isDot(doc.code, ui.def, id)) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
+    if (T.isDot(doc.code, ui.def, id) && inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
     if (T.isDot(doc.code, ui.def, id)) { const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", r.ok ? undefined : r.reason)); }
   } else if ((kind === "node" || kind === "frame") && id) {
     const d = calleeDef(id);
@@ -1663,10 +1666,10 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
-    rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
-    rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Picked nodes move and tidy together (shift-click does the same)"));
+    if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
+    if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Picked nodes move and tidy together (shift-click does the same)"));
   }
-  if (kind !== "hole") {
+  if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
     rows.push(item("Tidy everything", "tidy-all", "Space out every node: no overlaps, nodes off wires, inputs left of what they feed"));
@@ -2140,12 +2143,28 @@ function menuForSelected(focus?: string) {
   if (!id) return;
   const el = document.querySelector(`.p-graph svg.canvas [data-id="${id}"]`) ?? document.querySelector(".blocks-wrap .sel");
   const r = el?.getBoundingClientRect() ?? { left: 40, bottom: 40 };
-  const kind: MenuTarget["kind"] = el?.closest("[data-src]") ? "binder" : el?.closest("[data-frame]") && id !== ui.def ? "frame" : "node";
-  ui.menu = { target: { kind, id }, x: r.left, y: r.bottom, world: { x: 0, y: 0 } };
+  const blocks = !!el?.closest(".blocks-wrap");
+  const kind: MenuTarget["kind"] = blocks ? blocksKind(id) : el?.closest("[data-src]") ? "binder" : el?.closest("[data-frame]") && id !== ui.def ? "frame" : "node";
+  ui.menu = { target: { kind, id }, x: r.left, y: r.bottom, world: { x: 0, y: 0 }, blocks };
   ui.query = "";
   render();
   const items = [...document.querySelectorAll<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")];
   (items.find((b) => b.dataset.menu === focus) ?? items[0])?.focus();
+}
+
+// What a part of the Blocks pane is, for its menu.
+const blocksKind = (id: Id): MenuTarget["kind"] => {
+  const k = doc.code.nodes[id]?.kind;
+  return k === "hole" ? "hole" : k === "binder" ? "binder" : "node";
+};
+
+// The part of the Blocks pane a click or right-click is on. An operator
+// stands for its call, as in the graph, where + is the call's own node.
+function blocksHit(t: EventTarget | null): Id | null {
+  const hit = (t as HTMLElement | null)?.closest?.<HTMLElement>(".blocks-wrap [data-id]");
+  if (!hit) return null;
+  const call = hit.classList.contains("op") ? hit.parentElement?.closest<HTMLElement>("[data-id]") : null;
+  return (call ?? hit).dataset.id!;
 }
 
 function select(id: Id | null) {
@@ -2483,8 +2502,22 @@ document.addEventListener("click", (e) => {
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }
-  const hit = t.closest<HTMLElement>(".blocks-wrap [data-id]");
-  if (hit) { e.stopPropagation(); return select(hit.dataset.id!); }
+  const hit = blocksHit(t);
+  if (hit) { e.stopPropagation(); return select(hit); }
+});
+
+// Right-click in the Blocks pane: the graph's menu for that part.
+document.addEventListener("contextmenu", (e) => {
+  const id = blocksHit(e.target);
+  if (!id) return;
+  e.preventDefault();
+  ui.selected = id;
+  ui.mode = null;
+  ui.menu = { target: { kind: blocksKind(id), id }, x: e.clientX, y: e.clientY, world: { x: 0, y: 0 }, blocks: true };
+  ui.query = "";
+  render();
+  if (blocksKind(id) === "hole") document.getElementById("m-query")?.focus();
+  else document.querySelector<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")?.focus();
 });
 
 document.addEventListener("dblclick", (e) => {
