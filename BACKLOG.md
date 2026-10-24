@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E109 | **Bug.** "Put a dot on its wire" sometimes puts the dot far from the wire | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
 | E110 | Wires route around nodes but not around frames (lambdas) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M |  |
 | E112 | Let and get nodes exist (right-click a dot) but are hard to find: a toggle for the whole definition, and a Guide line | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
 | E113 | In the graph only the call can be selected, never the function it calls (to change it or open it) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
@@ -134,6 +133,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E109 | A dot clicked onto a wire sits where you clicked, and nothing else moves (its let used to reshuffle the whole graph) | #437 |
 | E119 | Pitfall 11 says what's refused now: wiring that doesn't fit, never leaving the tree unfinished (with E118) | #436 |
 | E118 | A value added on the graph's canvas is a loose part where you clicked; loose parts are drawn faded and dashed (pitfall 11 rewritten with it, E119) | #436 |
 | E115 | An empty input of a call or a list is drawn as a hollow port, not a □ node: its type on hover, a click for the palette, a drop target | #435 |

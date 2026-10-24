@@ -56,7 +56,9 @@ export interface GraphHooks {
   canUse: (binder: Id, slot: Id) => string | null;
   use: (binder: Id, slot: Id) => void;
   clear: (slot: Id) => void;
-  addDot: (slot: Id) => void;
+  // A click on a wire: `at`, where the dot goes, and where the value is now
+  // (kept there).
+  addDot: (slot: Id, at?: { dot: Pos; keep: Record<Id, Pos> }) => void;
   // Sharing a node's output: a check per input, and the edit.
   canShare: (from: Id) => (slot: Id) => string | null;
   share: (from: Id, slot: Id) => void;
@@ -970,7 +972,15 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     const folding = (e.target as Element).closest("[data-fold]")?.getAttribute("data-fold");
     if (folding) return hooks.fold?.(folding);
     const edge = (e.target as Element).closest("[data-edge]");
-    if (edge && !e.shiftKey) return hooks.addDot(edge.getAttribute("data-edge")!);
+    if (edge && !e.shiftKey) {
+      // A dot can change how the rest would be laid out (its let wraps the
+      // part of the body that uses it), so everything stays where it is now,
+      // and the dot's middle goes on the click; a dot is 12 across. Tidy
+      // everything lays it out afresh.
+      const w = world(canvas, e), { pos } = placeAll(scene, hooks.at);
+      const keep = Object.fromEntries([...pos].filter(([k]) => !hooks.at[k]).map(([k, q]) => [k, { x: Math.round(q.x), y: Math.round(q.y) }]));
+      return hooks.addDot(edge.getAttribute("data-edge")!, { dot: { x: Math.round(w.x - 6), y: Math.round(w.y - 6) }, keep });
+    }
     const t = (e.target as Element).closest("[data-move], [data-id]");
     if (e.shiftKey) {
       const k = t?.getAttribute("data-move") ?? t?.getAttribute("data-id");

@@ -419,6 +419,35 @@ async function looseValue() {
   await p.close();
 }
 
+// A click on a wire puts a dot where you clicked, and nothing else moves
+// (BACKLOG E109), though the dot's let changes how main would be laid out.
+async function dotOnWire() {
+  where = "a dot put on a wire";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  const places = () => p.locator(".p-graph .items > g").evaluateAll((es) => Object.fromEntries(es.map((e) => [e.querySelector("[data-id]")?.getAttribute("data-id") ?? "", e.getAttribute("transform")])));
+  const dots = () => p.locator(".p-graph [data-src]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { id: e.getAttribute("data-src"), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  const hits = p.locator(".p-graph path.edge-hit");
+  // Every fifth wire: enough to meet one whose dot reshuffled main.
+  for (let i = 0; i < (await hits.count()); i += 5) {
+    const before = await places(), had = new Set((await dots()).map((d) => d.id));
+    const at = await hits.nth(i).evaluate((e: any) => { const q = e.getPointAtLength(e.getTotalLength() / 2), m = e.getScreenCTM(); return { x: q.x * m.a + m.e, y: q.y * m.d + m.f }; });
+    await p.mouse.click(at.x, at.y);
+    if (!/^Put a dot/.test(await p.locator(".status").innerText())) continue;
+    const dot = (await dots()).find((d) => !had.has(d.id));
+    if (!dot || Math.hypot(dot.x - at.x, dot.y - at.y) > 8) errors.push(`${where}: wire ${i}: the dot is ${dot ? Math.round(Math.hypot(dot.x - at.x, dot.y - at.y)) : "?"}px from the click`);
+    const now = await places();
+    const moved = Object.keys(before).filter((k) => k && now[k] && now[k] !== before[k]);
+    if (moved.length) errors.push(`${where}: wire ${i}: ${moved.length} other nodes moved`);
+    await p.locator('button[data-act="undo"]').first().click();
+  }
+  await p.close();
+}
+
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -722,6 +751,7 @@ await plusDrop();
 await looseParts();
 await swapDrop();
 await looseValue();
+await dotOnWire();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
