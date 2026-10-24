@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E82 | Bug. That refusal says "pinned" when the type is only held because a hole was made; say why in plain words (die() runs before `seeded` handles Random) and the two ways out (Let it loosen, or change the caller) | learning/editor-findings.md (Learn the editor thread) | P1 | S | |
 | E83 | The Selected panel heads each part with its internal id ("Hole akdibablpg…") | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E84 | After clearing `seed`'s only use, the palette lists in-scope `seed` as `a` while the definition still says `Number` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E85 | Hover types in Blocks show a library function's effect row as the call site fills it (`range` hovers as `-[Random]->`) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
@@ -35,12 +34,14 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E89 | The palette doesn't read a typed `die() + 1` though `die()` and `x + 1` are read | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E90 | No "Duplicate definition": cloning a function is copy its body, New definition, paste | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
-| E91 | No way to add an item to a list: a list's tail isn't selectable; adding a button to dice `main` took seven steps through append/cons/nil. "Add an item after this" on a list item | learning/editor-findings.md (Learn the editor thread) | P1 | M | |
+| E91 | Edit a list's items, and the operands of any node drawn with many inputs (typedGraph chainOperands, `a ++ b ++ c`), in both views: add, reorder, delete. In the graph a "+" input on the node, drag an input to reorder, remove one. Adding a button to dice `main` took seven steps through append/cons/nil (Ersagun 11:11) | learning/editor-findings.md 11, Ersagun 2026-10-24 11:11 | P1 | M | |
 | E92 | In Blocks, clicking a call's function name selects only the name, not the call; nothing says to click its `(` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E93 | A Text port in Run backwards needs quotes (`Ersagun` says "no case named Ersagun"): read unquoted text where Text goes, or say to quote it | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E94 | Hover types of a page's calls carry the whole page row (`die` inside a button hovers with ten effects; same cause as E85) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E95 | "where a is a number type" repeats on every hole of a new `□ + □` | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E96 | The top bar's Tutorial opens TUTORIAL.md (2026-10-22); open or link GUIDE.md (#402), the hands-on start, first | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
+| E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
+| E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
@@ -147,6 +148,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E82 | A hole in a held definition says its type is kept, with Let it loosen beside the palette; a refusal of a held type says what the fill would add and the ways out | #404 |
 | E81 | The palette offers only fills that keep a held or pinned definition's type (die() no longer offered at a seed hole without Random) | #403 |
 | E70 | Run offers no Run for an action that may give no answer or several (Choice) and says to call it inside first/all/count/optional; Show values says first answer | #400 |
 | E79 | Maps and sets written out read as tables in the blocks; Run's Gives shows a map or set as a table | #397 |

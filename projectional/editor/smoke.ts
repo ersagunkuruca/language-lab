@@ -193,6 +193,33 @@ async function choiceAction() {
   await p.close();
 }
 
+// Ersagun's edit (BACKLOG E81, E82): die() for the seed of a hundred
+// rolls. Its type is held while the hole is open and has no Random, so
+// die() isn't offered; the panel says so and how to let it loosen, after
+// which die() fills it and the type does Random.
+async function heldSeed() {
+  where = "die() as a hundred rolls' seed";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^a hundred rolls$/ }).click();
+  await p.locator(".blocks-wrap .ref.var", { hasText: /^seed$/ }).first().click();
+  await p.keyboard.press("Delete");
+  const die = p.locator(".palette .opt", { hasText: /^die\(\)/ });
+  await p.locator("#f-query").fill("die()");
+  if (await die.count()) errors.push(`${where}: die() is offered while the type is held`);
+  const loosen = p.locator(".held button", { hasText: "Let it loosen" });
+  if (!(await loosen.count())) errors.push(`${where}: the hole's panel doesn't say the type is held, nor offer Let it loosen`);
+  else {
+    await loosen.click();
+    await p.locator("#f-query").fill("die()");
+    await die.first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: after Let it loosen die() isn't offered`));
+    if (!(await p.locator(".p-text").innerText()).includes("Random")) errors.push(`${where}: filled with die(), its type doesn't say Random`);
+  }
+  await p.close();
+}
+
 // A definition made, filled and deleted: the editor draws the program
 // without it (it once drew the deleted one first, and threw).
 async function newAndDeleteDefinition() {
@@ -363,6 +390,7 @@ await visit(edited, "Relations in programs");
 await deleteAndUndo();
 await swapAndUndo();
 await choiceAction();
+await heldSeed();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
