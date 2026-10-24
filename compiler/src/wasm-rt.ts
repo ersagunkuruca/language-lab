@@ -60,7 +60,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
-  "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]],
+  "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]], "array.get": [[0xfb, 0x0b], ["type"]], "array.new": [[0xfb, 0x06], ["type"]],
   "array.set": [[0xfb, 0x0e], ["type"]], "array.len": [[0xfb, 0x0f], []], "array.copy": [[0xfb, 0x11], ["type", "type"]],
 };
 
@@ -129,6 +129,24 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
 export const textBytes = (v: string) => [...new TextEncoder().encode(v)];
 
 // ---- the functions, by name
+
+// Ryū's tables (number.js): for i ≥ 0, 2^(pow5bits(i) − 1 + 125) / 5^i
+// rounded up, then 5^i in its top 125 bits, each 128 bits as (low, high)
+// 64-bit halves, made here with BigInt and put in the module once.
+const POW5_INV_ROWS = 342, POW5_ROWS = 326;
+const bitlength = (n: bigint) => n.toString(2).length;
+export const POW5: bigint[] = (() => {
+  const out: bigint[] = [];
+  const half = (v: bigint) => out.push(BigInt.asIntN(64, v & ((1n << 64n) - 1n)), BigInt.asIntN(64, v >> 64n));
+  for (let i = 0; i < POW5_INV_ROWS; i++) { const p = 5n ** BigInt(i); half((1n << BigInt(bitlength(p) - 1 + 125)) / p + 1n); }
+  for (let i = 0; i < POW5_ROWS; i++) { const p = 5n ** BigInt(i), b = bitlength(p); half(b < 125 ? p << BigInt(125 - b) : p >> BigInt(b - 125)); }
+  return out;
+})();
+// A text constant, one byte per line.
+const lit = (t: string) => [...textBytes(t).map((b) => `i32.const ${b}`), `array.new_fixed $bytes ${textBytes(t).length}`].join("\n");
+// One digit dropped from vr, vp and vm, keeping the last one and whether those before were zeros.
+const drop = ["local.get $vrTZ", "local.get $last", "i32.eqz", "i32.and", "local.set $vrTZ", "local.get $vr", "i64.const 10", "i64.rem_u", "i32.wrap_i64", "local.set $last",
+  ...["vr", "vp", "vm"].flatMap((v) => [`local.get $${v}`, "i64.const 10", "i64.div_u", `local.set $${v}`]), "local.get $removed", "i32.const 1", "i32.add", "local.set $removed"].join("\n");
 
 const R: Record<string, Omit<RtFn, "name">> = {
   // a ++ b
@@ -564,13 +582,660 @@ const R: Record<string, Omit<RtFn, "name">> = {
         local.get $a
       end`,
   },
+  // JavaScript's String of any Number: the shortest digits that read back
+  // as it, laid out as JavaScript lays them out (number.layout). The
+  // digits are Ryū's (Ulf Adams, "Ryū: fast float-to-string conversion",
+  // PLDI 2018; d2s.c, Apache 2.0 or Boost licence), adapted: its tables
+  // are the global $pow5 (POW5 below), its 128-bit products number.mulshift.
+  "number.js": {
+    params: [["x", "f64"]], result: "text",
+    locals: [["bits", "i64"], ["ieeeM", "i64"], ["ieeeE", "i32"], ["e2", "i32"], ["m2", "i64"], ["even", "i32"], ["mv", "i64"], ["mmShift", "i64"],
+      ["q", "i32"], ["e10", "i32"], ["k", "i32"], ["i", "i32"], ["row", "i32"], ["j", "i32"], ["vr", "i64"], ["vp", "i64"], ["vm", "i64"],
+      ["vmTZ", "i32"], ["vrTZ", "i32"], ["removed", "i32"], ["last", "i32"]],
+    uses: ["number.mulshift", "number.pow5factor", "number.layout"],
+    body: `
+      local.get $x
+      local.get $x
+      f64.ne
+      if void
+        ${lit("NaN")}
+        return
+      end
+      local.get $x
+      f64.const 0
+      f64.eq
+      if void
+        ${lit("0")}
+        return
+      end
+      ;; the infinities: x − x isn't 0
+      local.get $x
+      local.get $x
+      f64.sub
+      f64.const 0
+      f64.ne
+      if void
+        local.get $x
+        f64.const 0
+        f64.lt
+        if text
+          ${lit("-Infinity")}
+        else
+          ${lit("Infinity")}
+        end
+        return
+      end
+      ;; x = m2 · 2^e2, and the halfway points to its neighbours (mv ± 2) with two more bits
+      local.get $x
+      i64.reinterpret_f64
+      local.tee $bits
+      i64.const 4503599627370495
+      i64.and
+      local.set $ieeeM
+      local.get $bits
+      i64.const 52
+      i64.shr_u
+      i32.wrap_i64
+      i32.const 2047
+      i32.and
+      local.tee $ieeeE
+      i32.eqz
+      if void
+        i32.const -1076
+        local.set $e2
+        local.get $ieeeM
+        local.set $m2
+      else
+        local.get $ieeeE
+        i32.const 1077
+        i32.sub
+        local.set $e2
+        local.get $ieeeM
+        i64.const 4503599627370496
+        i64.or
+        local.set $m2
+      end
+      local.get $m2
+      i64.const 1
+      i64.and
+      i64.eqz
+      local.set $even
+      local.get $m2
+      i64.const 2
+      i64.shl
+      local.set $mv
+      local.get $ieeeM
+      i64.eqz
+      i32.eqz
+      local.get $ieeeE
+      i32.const 1
+      i32.le_u
+      i32.or
+      i64.extend_i32_u
+      local.set $mmShift
+      ;; to base 10: e10, and the table row and shift for the product
+      local.get $e2
+      i32.const 0
+      i32.ge_s
+      if void
+        ;; q = log10(2^e2) − (e2 > 3), k = 125 + pow5bits(q) − 1, j = q + k − e2
+        local.get $e2
+        i32.const 78913
+        i32.mul
+        i32.const 18
+        i32.shr_u
+        local.get $e2
+        i32.const 3
+        i32.gt_s
+        i32.sub
+        local.tee $q
+        local.set $e10
+        local.get $q
+        i32.const 1217359
+        i32.mul
+        i32.const 19
+        i32.shr_u
+        i32.const 125
+        i32.add
+        local.set $k
+        local.get $q
+        local.get $k
+        i32.add
+        local.get $e2
+        i32.sub
+        local.set $j
+        local.get $q
+        i32.const 1
+        i32.shl
+        local.set $row
+      else
+        ;; q = log10(5^−e2) − (−e2 > 1), i = −e2 − q, k = pow5bits(i) − 125, j = q − k
+        i32.const 0
+        local.get $e2
+        i32.sub
+        local.tee $i
+        i32.const 732923
+        i32.mul
+        i32.const 20
+        i32.shr_u
+        local.get $i
+        i32.const 1
+        i32.gt_s
+        i32.sub
+        local.tee $q
+        local.get $e2
+        i32.add
+        local.set $e10
+        local.get $i
+        local.get $q
+        i32.sub
+        local.tee $i
+        i32.const 1217359
+        i32.mul
+        i32.const 19
+        i32.shr_u
+        i32.const 1
+        i32.add
+        i32.const 125
+        i32.sub
+        local.set $k
+        local.get $q
+        local.get $k
+        i32.sub
+        local.set $j
+        local.get $i
+        i32.const 1
+        i32.shl
+        i32.const ${2 * POW5_INV_ROWS}
+        i32.add
+        local.set $row
+      end
+      local.get $mv
+      local.get $row
+      local.get $j
+      call $number.mulshift
+      local.set $vr
+      local.get $mv
+      i64.const 2
+      i64.add
+      local.get $row
+      local.get $j
+      call $number.mulshift
+      local.set $vp
+      local.get $mv
+      i64.const 1
+      i64.sub
+      local.get $mmShift
+      i64.sub
+      local.get $row
+      local.get $j
+      call $number.mulshift
+      local.set $vm
+      ;; whether the digits dropped below are all zeros (exact ties)
+      local.get $e2
+      i32.const 0
+      i32.ge_s
+      if void
+        local.get $q
+        i32.const 21
+        i32.le_s
+        if void
+          local.get $mv
+          i64.const 5
+          i64.rem_u
+          i64.eqz
+          if void
+            local.get $mv
+            call $number.pow5factor
+            local.get $q
+            i32.ge_s
+            local.set $vrTZ
+          else
+            local.get $even
+            if void
+              local.get $mv
+              i64.const 1
+              i64.sub
+              local.get $mmShift
+              i64.sub
+              call $number.pow5factor
+              local.get $q
+              i32.ge_s
+              local.set $vmTZ
+            else
+              local.get $vp
+              local.get $mv
+              i64.const 2
+              i64.add
+              call $number.pow5factor
+              local.get $q
+              i32.ge_s
+              i64.extend_i32_u
+              i64.sub
+              local.set $vp
+            end
+          end
+        end
+      else
+        local.get $q
+        i32.const 1
+        i32.le_s
+        if void
+          i32.const 1
+          local.set $vrTZ
+          local.get $even
+          if void
+            local.get $mmShift
+            i32.wrap_i64
+            local.set $vmTZ
+          else
+            local.get $vp
+            i64.const 1
+            i64.sub
+            local.set $vp
+          end
+        else
+          local.get $q
+          i32.const 63
+          i32.lt_s
+          if void
+            local.get $mv
+            i64.const 1
+            local.get $q
+            i64.extend_i32_u
+            i64.shl
+            i64.const 1
+            i64.sub
+            i64.and
+            i64.eqz
+            local.set $vrTZ
+          end
+        end
+      end
+      ;; drop digits while the interval still holds a shorter number
+      block void
+        loop void
+          local.get $vp
+          i64.const 10
+          i64.div_u
+          local.get $vm
+          i64.const 10
+          i64.div_u
+          i64.le_u
+          br_if 1
+          local.get $vmTZ
+          local.get $vm
+          i64.const 10
+          i64.rem_u
+          i64.eqz
+          i32.and
+          local.set $vmTZ
+${drop}
+          br 0
+        end
+      end
+      local.get $vmTZ
+      if void
+        block void
+          loop void
+            local.get $vm
+            i64.const 10
+            i64.rem_u
+            i64.eqz
+            i32.eqz
+            br_if 1
+${drop}
+            br 0
+          end
+        end
+      end
+      ;; an exact tie rounds to even
+      local.get $vrTZ
+      local.get $last
+      i32.const 5
+      i32.eq
+      i32.and
+      local.get $vr
+      i64.const 1
+      i64.and
+      i64.eqz
+      i32.and
+      if void
+        i32.const 4
+        local.set $last
+      end
+      local.get $vr
+      local.get $vr
+      local.get $vm
+      i64.eq
+      local.get $even
+      i32.eqz
+      local.get $vmTZ
+      i32.eqz
+      i32.or
+      i32.and
+      local.get $last
+      i32.const 5
+      i32.ge_u
+      i32.or
+      i64.extend_i32_u
+      i64.add
+      local.get $e10
+      local.get $removed
+      i32.add
+      local.get $x
+      f64.const 0
+      f64.lt
+      call $number.layout`,
+  },
+  // (m · the table's 128-bit row) >> j, as Ryū's mulShift64.
+  "number.mulshift": {
+    params: [["m", "i64"], ["row", "i32"], ["j", "i32"]], result: "i64", locals: [["lo", "i64"], ["hi", "i64"], ["sum", "i64"], ["top", "i64"], ["s", "i64"]], uses: ["number.mulhi"],
+    body: `
+      global.get $pow5
+      local.get $row
+      array.get $i64s
+      local.set $lo
+      global.get $pow5
+      local.get $row
+      i32.const 1
+      i32.add
+      array.get $i64s
+      local.set $hi
+      ;; the product's bits 64 to 191 as top:sum
+      local.get $m
+      local.get $lo
+      call $number.mulhi
+      local.get $m
+      local.get $hi
+      i64.mul
+      i64.add
+      local.tee $sum
+      local.get $m
+      local.get $hi
+      i64.mul
+      i64.lt_u
+      i64.extend_i32_u
+      local.get $m
+      local.get $hi
+      call $number.mulhi
+      i64.add
+      local.set $top
+      local.get $j
+      i32.const 64
+      i32.sub
+      i64.extend_i32_u
+      local.tee $s
+      i64.const 64
+      i64.ge_u
+      if i64
+        local.get $top
+        local.get $s
+        i64.const 64
+        i64.sub
+        i64.shr_u
+      else
+        local.get $s
+        i64.eqz
+        if i64
+          local.get $sum
+        else
+          local.get $sum
+          local.get $s
+          i64.shr_u
+          local.get $top
+          i64.const 64
+          local.get $s
+          i64.sub
+          i64.shl
+          i64.or
+        end
+      end`,
+  },
+  // The high 64 bits of a · b, unsigned, from 32-bit halves.
+  "number.mulhi": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["a0", "i64"], ["a1", "i64"], ["b0", "i64"], ["b1", "i64"], ["p01", "i64"], ["p10", "i64"], ["mid", "i64"]], uses: [],
+    body: `
+      local.get $a
+      i64.const 4294967295
+      i64.and
+      local.set $a0
+      local.get $a
+      i64.const 32
+      i64.shr_u
+      local.set $a1
+      local.get $b
+      i64.const 4294967295
+      i64.and
+      local.set $b0
+      local.get $b
+      i64.const 32
+      i64.shr_u
+      local.set $b1
+      local.get $a0
+      local.get $b1
+      i64.mul
+      local.set $p01
+      local.get $a1
+      local.get $b0
+      i64.mul
+      local.set $p10
+      local.get $a0
+      local.get $b0
+      i64.mul
+      i64.const 32
+      i64.shr_u
+      local.get $p01
+      i64.const 4294967295
+      i64.and
+      i64.add
+      local.get $p10
+      i64.const 4294967295
+      i64.and
+      i64.add
+      local.set $mid
+      local.get $a1
+      local.get $b1
+      i64.mul
+      local.get $p01
+      i64.const 32
+      i64.shr_u
+      i64.add
+      local.get $p10
+      i64.const 32
+      i64.shr_u
+      i64.add
+      local.get $mid
+      i64.const 32
+      i64.shr_u
+      i64.add`,
+  },
+  // How many times 5 divides v (not 0).
+  "number.pow5factor": {
+    params: [["v", "i64"]], result: "i32", locals: [["n", "i32"]], uses: [],
+    body: `
+      block void
+        loop void
+          local.get $v
+          i64.const 5
+          i64.rem_u
+          i64.eqz
+          i32.eqz
+          br_if 1
+          local.get $v
+          i64.const 5
+          i64.div_u
+          local.set $v
+          local.get $n
+          i32.const 1
+          i32.add
+          local.set $n
+          br 0
+        end
+      end
+      local.get $n`,
+  },
+  // Digits d times 10^e as JavaScript's Number::toString lays them out
+  // (ECMA-262): n = e + the number of digits; whole up to 21 digits, a
+  // point inside, 0.000ddd down to n = −5, else d.ddde±x.
+  "number.layout": {
+    params: [["d", "i64"], ["e", "i32"], ["neg", "i32"]], result: "text", locals: [["s", "text"], ["k", "i32"], ["n", "i32"], ["out", "text"]], uses: ["int.show", "text.concat", "text.bytes"],
+    body: `
+      local.get $d
+      call $int.show
+      local.tee $s
+      array.len
+      local.tee $k
+      local.get $e
+      i32.add
+      local.set $n
+      local.get $k
+      local.get $n
+      i32.le_s
+      local.get $n
+      i32.const 21
+      i32.le_s
+      i32.and
+      if void
+        local.get $s
+        i32.const 48
+        local.get $n
+        local.get $k
+        i32.sub
+        array.new $bytes
+        call $text.concat
+        local.set $out
+      else
+        local.get $n
+        i32.const 0
+        i32.gt_s
+        local.get $n
+        i32.const 21
+        i32.le_s
+        i32.and
+        if void
+          local.get $s
+          i32.const 0
+          local.get $n
+          call $text.bytes
+          i32.const 46
+          array.new_fixed $bytes 1
+          call $text.concat
+          local.get $s
+          local.get $n
+          local.get $k
+          call $text.bytes
+          call $text.concat
+          local.set $out
+        else
+          local.get $n
+          i32.const -6
+          i32.gt_s
+          local.get $n
+          i32.const 0
+          i32.le_s
+          i32.and
+          if void
+            i32.const 48
+            i32.const 46
+            array.new_fixed $bytes 2
+            i32.const 48
+            i32.const 0
+            local.get $n
+            i32.sub
+            array.new $bytes
+            call $text.concat
+            local.get $s
+            call $text.concat
+            local.set $out
+          else
+            local.get $s
+            i32.const 0
+            i32.const 1
+            call $text.bytes
+            local.set $out
+            local.get $k
+            i32.const 1
+            i32.gt_s
+            if void
+              local.get $out
+              i32.const 46
+              array.new_fixed $bytes 1
+              call $text.concat
+              local.get $s
+              i32.const 1
+              local.get $k
+              call $text.bytes
+              call $text.concat
+              local.set $out
+            end
+            ;; e, the sign (+ or −), the exponent's digits
+            local.get $out
+            i32.const 101
+            i32.const 43
+            i32.const 2
+            local.get $n
+            i32.const 1
+            i32.lt_s
+            i32.mul
+            i32.add
+            array.new_fixed $bytes 2
+            call $text.concat
+            local.get $n
+            i32.const 1
+            i32.sub
+            local.tee $n
+            i32.const 0
+            i32.lt_s
+            if void
+              i32.const 0
+              local.get $n
+              i32.sub
+              local.set $n
+            end
+            local.get $n
+            i64.extend_i32_u
+            call $int.show
+            call $text.concat
+            local.set $out
+          end
+        end
+      end
+      local.get $neg
+      if text
+        i32.const 45
+        array.new_fixed $bytes 1
+        local.get $out
+        call $text.concat
+      else
+        local.get $out
+      end`,
+  },
+  // Bytes a to b of t (the digits above are ASCII).
+  "text.bytes": {
+    params: [["t", "text"], ["a", "i32"], ["b", "i32"]], result: "text", locals: [["r", "text"]], uses: [],
+    body: `
+      local.get $b
+      local.get $a
+      i32.sub
+      array.new_default $bytes
+      local.tee $r
+      i32.const 0
+      local.get $t
+      local.get $a
+      local.get $b
+      local.get $a
+      i32.sub
+      array.copy $bytes $bytes
+      local.get $r`,
+  },
   // std.ts's show of a Number: a whole number as its digits, any other
-  // rounded to 9 places, written as JavaScript writes it. Done here where
-  // that's plain decimals of at most 15 digits (which is then exactly what
-  // JavaScript writes), and by the host's `show` otherwise.
+  // rounded to 9 places, written as JavaScript writes it: plain decimals
+  // of at most 15 digits directly (which is then exactly what JavaScript
+  // writes), otherwise by number.js.
   "number.show": {
     params: [["x", "f64"]], result: "text", locals: [["y", "f64"], ["r", "f64"], ["n", "i64"], ["m", "i64"], ["f", "i64"], ["buf", "text"], ["i", "i32"], ["out", "text"], ["y_text", "text"]],
-    uses: ["int.show", "text.concat", "host.show", "number.tiny"],
+    uses: ["int.show", "text.concat", "number.js", "number.tiny"],
     body: `
       local.get $x
       f64.floor
@@ -588,7 +1253,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
           return
         end
         local.get $x
-        call $host.show
+        call $number.js
         return
       end
       local.get $x
@@ -596,7 +1261,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
       f64.ne
       if void
         local.get $x
-        call $host.show
+        call $number.js
         return
       end
       ;; Math.round(x·1e9): ties toward +∞
@@ -622,8 +1287,10 @@ const R: Record<string, Omit<RtFn, "name">> = {
       f64.const 9.2e18
       f64.ge
       if void
-        local.get $x
-        call $host.show
+        local.get $r
+        f64.const 1e9
+        f64.div
+        call $number.js
         return
       end
       ;; below 1e-6 (and not 0), JavaScript writes 5.5e-7
@@ -674,8 +1341,10 @@ const R: Record<string, Omit<RtFn, "name">> = {
       i64.const 1000000000000000
       i64.ge_u
       if void
-        local.get $x
-        call $host.show
+        local.get $r
+        f64.const 1e9
+        f64.div
+        call $number.js
         return
       end
       local.get $r
@@ -2001,8 +2670,6 @@ export const WASI_IMPORTS: Record<string, { params: ("i32" | "i64")[]; result: "
   args_get: { params: ["i32", "i32"], result: "i32" },
   proc_exit: { params: ["i32"], result: null },
 };
-// A text constant, as instructions.
-const lit = (v: string) => { const b = textBytes(v); return [...b.map((x) => `i32.const ${x}`), `array.new_fixed $bytes ${b.length}`].join("\n"); };
 // WASI's errors (wasi_snapshot_preview1 errno) and rights.
 const E = { ACCES: 2, ISDIR: 31, NOENT: 44, NOTDIR: 54, PERM: 63, NOTCAPABLE: 76 };
 const RIGHT = { READ: 0x2, SEEK: 0x4, WRITE: 0x40, READDIR: 0x4000, FILESTAT: 0x200000 };
@@ -2051,9 +2718,6 @@ const loopTo = (cond: string, body: string) => `
   end`;
 
 const WASI: Record<string, Omit<RtFn, "name">> = {
-  // The show of a Number number.show leaves to the host (one needing 15
-  // or more digits, or past 2^53): with no JavaScript it traps for now.
-  "host.show": { params: [["x", "f64"]], result: "text", locals: [], uses: [], body: "unreachable" },
   // Memory for n bytes of buffer.
   "wasi.room": {
     params: [["n", "i32"]], result: "void", locals: [["want", "i32"]], uses: [],

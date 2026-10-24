@@ -29,15 +29,11 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
-import { S, STD_IMPL } from "../../projectional/src/lang/std.ts";
 import type { Runtime, World } from "../../projectional/src/lang/run.ts";
-import { assemble, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
-// The evaluator's show of a Number, which the runtime asks the host for
-// outside the plain decimals it writes itself (wasm-rt.ts number.show).
-const SHOW = STD_IMPL[S.show] as (x: number) => string;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
@@ -67,7 +63,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A WASI host has no Math: sin and the rest aren't written in WebAssembly yet.
   if (wasi && hosts.length) throw new Error(`a WASI command can't use ${hosts.join(", ")} yet: only a JavaScript host has them`);
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
-  // The runtime functions used, with the ones they use; `host.show` is an import.
+  // The runtime functions used, with the ones they use.
   // WASI's functions it uses (wasi_fd_write …) are imports, and the
   // TextList and TextOption makers the module's own helpers.
   const rtNames: string[] = [], wasiImports: string[] = [];
@@ -76,7 +72,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
     if (/^Text(List|Option)\./.test(name)) return;
     rtNames.push(name);
-    if (name !== "host.show" || wasi) runtime(name).uses.forEach(need);
+    runtime(name).uses.forEach(need);
   };
   const rtCalls = (e: SExpr): void => {
     if (e.k === "rt") need(e.fn);
@@ -101,11 +97,11 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const texty = rtNames.some((n) => !NUMERIC.has(n)) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.size", "text.byte"].forEach(need);
-  // With no JavaScript, host.show is the runtime's own, which traps (wasm-rt.ts).
-  const hostShow = !wasi && rtNames.includes("host.show");
-  const rts: RtFn[] = rtNames.filter((n) => n !== "host.show" || wasi).map(runtime);
+  const rts: RtFn[] = rtNames.map(runtime);
+  // Ryū's tables, for number.js: an i64 array type and a global holding them.
+  const ryu = rtNames.includes("number.mulshift");
   const worldReason = worldOps.some((x) => x.aborts);
-  const worldBase = hosts.length + (hostShow ? 1 : 0);
+  const worldBase = hosts.length;
   const worldIndex = (op: string) => (wasi ? rtIndex(`wasi.${op}`) : worldBase + worldOps.findIndex((x) => x.op === op));
   const reasonIndex = () => (wasi ? rtIndex("wasi.reason") : worldBase + worldOps.length);
   const imports = worldBase + (wasi ? wasiImports.length : worldOps.length + (worldReason ? 1 : 0));
@@ -141,9 +137,10 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A type in the group: a struct, or (`func`) a closure's code's type.
   // A field with `code` holds a closure's code, a (ref $code) of that index.
   // `bytes`: Text's array.
-  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; mutable?: true }[] = [];
+  const structs: { name: string; fields: { name: string; t: LType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; mutable?: true }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
-  const bytesIndex = 0;
+  const bytesIndex = 0, i64sIndex = structs.length;
+  if (ryu) structs.push({ name: "i64s", fields: [], final: true, i64s: true });
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
@@ -184,15 +181,14 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (n === "bytes" ? bytesIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
-      if (n === "host.show") return wasi ? rtIndex(n) : hosts.length;
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
       const h = helpers.findIndex((x) => x.name === n);
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
-    global: (n: string) => (n === "reason" ? reasonG : 0),
+    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : 0),
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
@@ -215,7 +211,6 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     return structs.length + sigs.findIndex((x) => x.key === key);
   };
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
-  const showSig = hostShow ? sig(["f64"], "text") : 0;
   // A world operation giving the unit gives nothing (the module makes it);
   // one that can fail gives a status after.
   const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && t.fields.length === 0;
@@ -260,7 +255,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // gives status 2.
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
-  const reasonG = fuel ? 1 : 0;
+  const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -293,6 +288,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
+    if (x.i64s) return [0x5e, 0x7e, 0x00];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
@@ -303,14 +299,13 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   ]);
   const importSec = vec([
     ...hosts.map((op, i) => [...str("Math"), ...str(HOST[op]!.name), 0x00, ...u(hostSig[i])]),
-    ...(hostShow ? [[...str("host"), ...str("show"), 0x00, ...u(showSig)]] : []),
     ...worldOps.filter(() => !wasi).map((x, i) => [...str("world"), ...str(x.op), 0x00, ...u(worldSig[i])]),
     ...(worldReason && !wasi ? [[...str("world"), ...str("reason"), 0x00, ...u(reasonSig)]] : []),
     ...wasiImports.map((n, i) => [...str("wasi_snapshot_preview1"), ...str(n.slice(5)), 0x00, ...u(wasiSig[i])]),
   ]);
   const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
   // The runtime functions the host uses, by these names.
-  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start" };
+  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start", "number.js": "Number.text" };
   const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
@@ -322,7 +317,11 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   ]);
   // global 0: the fuel left, an f64. Outside any budget it's infinite, so
   // what the checker couldn't see end just runs (only `data` calls it there).
-  const globalSec = vec([...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []), ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : [])]);
+  const globalSec = vec([
+    ...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []),
+    ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : []),
+    ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
+  ]);
   const zero = (t: LType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
@@ -461,7 +460,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     ...(wasi ? section(5, vec([[0x00, 0x01]])) : []),
-    ...(fuel || aborts ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -562,19 +561,20 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(structs.length ? ["  (rec"] : []),
     ...structs.map((x) => {
       if (x.bytes) return "    (type $bytes (array (mut i8)))";
+      if (x.i64s) return "    (type $i64s (array i64))";
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${ty(y.t)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
-    ...(hostShow ? [`  (import "host" "show" (func $host.show (param f64) (result (ref null $bytes))))`] : []),
     ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${" (ref null $bytes)".repeat(x.args.length)})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
     ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
     ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
     ...(wasi ? [`  (memory (export "memory") 1)`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
+    ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
@@ -601,13 +601,11 @@ const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets)
 const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some((x) => mentions(x, k));
 
 // Instantiate with the host's Math. Bool results come back as 0 or 1.
-// `host.show` builds its text through the module's own Text.new and Text.put.
 // `rt`: the console and files, as for the evaluator (run.ts Runtime); an
 // operation the world doesn't have fails saying so, as there.
 export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
-  const host = { show: (x: number) => toText(ex, SHOW(x)) };
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 }, host, world: worldOf(rt, () => ex) });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 }, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
 }
