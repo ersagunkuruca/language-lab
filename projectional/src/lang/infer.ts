@@ -19,10 +19,11 @@ import { planSolve } from "./solve.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, S, SET, SIGS } from "./std.ts";
+import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
+  BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -455,7 +456,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const n = code.nodes[id];
     let t: Type;
     switch (n?.kind) {
-      case "lit": t = n.of ? { t: "con", id: n.of, args: [] } : typeof n.value === "number" ? num : str; break;
+      case "lit": {
+        t = n.of ? { t: "con", id: n.of, args: [] } : typeof n.value === "number" ? num : str;
+        // A literal at Rational is a whole number or top/bottom; at
+        // Complex, a Number (its real part). arith.ts spells them out.
+        if (n.of === RATIONAL_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
+        if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
+        break;
+      }
       case "ref": t = refType(id, n.target, env); break;
       case "hole":
         t = s.fresh();

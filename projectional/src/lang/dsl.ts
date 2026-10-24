@@ -124,6 +124,12 @@ export class Lang extends Builder {
     return this.add({ kind: "lit", value: safe ? Number(v) : String(v), of: INT });
   }
 
+  // A literal at another number type (NUMBERS.md): `"3/4"` or 3 at
+  // Rational, 2.5 at Complex (its real part). arith.ts spells it out.
+  at(type: Id, value: number | string): Id {
+    return this.add({ kind: "lit", value, of: type });
+  }
+
   // Predicates: what a network is. `equal` is a wire, `and` puts wires
   // side by side, and `for some` names unknowns that aren't ports (one
   // `for some` per unknown, nested).

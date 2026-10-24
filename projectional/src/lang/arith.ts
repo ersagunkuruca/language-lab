@@ -27,9 +27,10 @@ import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import type { Info } from "./infer.ts";
-import { ARITH, INT_OPS, S } from "./std.ts";
+import { ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
 import { COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
+import { ratioParts } from "./int.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -70,7 +71,7 @@ const atPrelude = (type: string, op: Id): Id => {
 };
 
 export const usesGenericArithmetic = (code: Code) =>
-  Object.values(code.nodes).some((n) => n.kind === "ref" && n.target in AT);
+  Object.values(code.nodes).some((n) => (n.kind === "ref" && n.target in AT) || (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT));
 
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { code: Code; info: Info; names: Names } {
   if (!usesGenericArithmetic(code)) return { code, info, names };
@@ -194,6 +195,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
         }
         return;
       }
+      if (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT) { literal(n); return; }
       const kids: Id[] = [];
       switch (n.kind) {
         case "call": kids.push(n.fn, ...n.args); break;
@@ -207,6 +209,20 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
       for (const k of kids) walk(k, id);
     };
     walk(root, null);
+  };
+
+  // A literal at Rational or Complex as its constructor's call.
+  const int: Type = { t: "con", id: INT, args: [] };
+  const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
+  const literal = (n: NodeOf<"lit">) => {
+    const t: Type = { t: "con", id: n.of!, args: [] };
+    const parts: [NodeData, Type][] = n.of === RATIONAL_TYPE
+      ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
+      : [[{ kind: "lit", value: typeof n.value === "number" ? n.value : 0 }, num], [{ kind: "lit", value: 0 }, num]];
+    const ctor = n.of === RATIONAL_TYPE ? RATIO : COMPLEX_V;
+    const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
+    nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
+    typeOf.set(n.id, t);
   };
 
   // A generic operation at its type: the type's own, or part by part.

@@ -810,6 +810,9 @@ hierarchy is the map of which structures to name.
    `complex exp` (Euler's formula) and `show complex` (3 − 4i). The
    generic `show` prints both the same way (1/2, 3 − 4i), inside lists
    and records too: number types show as numbers (L74).
+   Literals can be at Rational (`"3/4"`, or a whole number) and at
+   Complex (L75: LANGUAGE.md, "Whole numbers and text"); the palette
+   making them from what a hole expects is E69.
    Derivatives through it are right: the slope of im((x + i)²) is 2.
    Still to do: a Mandelbrot or domain-colouring shader, and the
    multiplication-table form (`algebra(table)`, L40b) that would make

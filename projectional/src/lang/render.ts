@@ -103,7 +103,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   const inline = (id: Id): R => {
     const n = node(id);
     switch (n.kind) {
-      case "lit": return atom(typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value));
+      case "lit": return atom(typeof n.value === "string" && n.of === undefined ? JSON.stringify(n.value) : String(n.value));
       case "hole": return atom("□");
       case "ref": {
         const nota = pres.style.notation[n.target];

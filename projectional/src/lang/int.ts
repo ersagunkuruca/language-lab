@@ -88,3 +88,16 @@ export function read(t: string): Int[] {
   if (!/^-?(0|[1-9][0-9]*)$/.test(t) || t === "-0") return [];
   return [norm(BigInt(t))];
 }
+
+// A fraction literal's parts in lowest terms: 3 is 3/1, "6/-8" isn't one
+// (the sign goes on top), "6/8" is 3/4. Null when it isn't a fraction or
+// the bottom is 0. (arith.ts spells such a literal as ratio(top, bottom).)
+export function ratioParts(v: number | string): [bigint, bigint] | null {
+  const m = typeof v === "number" ? (Number.isInteger(v) ? [String(v), "1"] : null) : /^\s*(-?\d+)\s*(?:\/\s*(\d+)\s*)?$/.exec(v)?.slice(1, 3).map((x) => x ?? "1");
+  if (!m) return null;
+  const [p, q] = m.map((x) => BigInt(x as string));
+  if (q === 0n) return null;
+  const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? (a < 0n ? -a : a) : gcd(b, a % b));
+  const g = gcd(p, q);
+  return [p / g, q / g];
+}

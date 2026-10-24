@@ -121,3 +121,37 @@ test("smaller, larger and at most work on Int and fractions too; the old Number-
   const named = (n: string) => LIBRARY.code.defs.filter((d) => LIBRARY.names[d] === n);
   for (const n of ["smaller", "larger", "at most", "more than", "at least"]) assert.equal(named(n).length, 2, n);
 });
+
+// QA-2026-10-24b (L75): a literal can be at Rational ("3/4", or a whole
+// number) or at Complex (its real part), so ratio(1, 2) + 1 needs no
+// `as fraction`. arith.ts spells each as its constructor's call.
+test("literals at Rational and Complex: exact, in lowest terms, checked, and printed as written", async () => {
+  const { COMPLEX_TYPE, RATIONAL_TYPE } = await import("../src/lang/types.ts");
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const half = k.at(RATIONAL_TYPE, "1/2");
+  const sum = def("sum of literals", () => k.call(lib("show fraction"), k.call(ARITH.add, half, k.at(RATIONAL_TYPE, 1))));
+  const lowest = def("lowest literal", () => k.call(lib("show fraction"), k.at(RATIONAL_TYPE, "6/8")));
+  const cx = def("complex literal", () => k.call(lib("show complex"), k.call(ARITH.mul, k.at(COMPLEX_TYPE, 2.5), k.x(lib("i")))));
+  const bad = def("bad literal", () => k.at(RATIONAL_TYPE, "1/0"));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const errs = (d: Id) => info.errors.filter((e) => subtree(code, d).includes(e.id)).map((e) => e.message);
+  for (const d of [sum, lowest, cx]) assert.deepEqual(errs(d), [], names[d]);
+  assert.match(errs(bad).join("; "), /isn't a fraction/);
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.equal(r.value(sum), "3/2");
+  assert.equal(r.value(lowest), "3/4");
+  assert.equal(r.value(cx), "0 + 2.5i");
+  const path = join(mkdtempSync(join(tmpdir(), "literal-")), "literal.js");
+  const clean = { ...info, errors: info.errors.filter((e) => !subtree(code, bad).includes(e.id)) };
+  writeFileSync(path, compile(code, clean, names, { runtime, exports: ["sum of literals", "lowest literal", "complex literal"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const val = (x: unknown) => (typeof x === "function" ? (x as () => unknown)() : x);
+  assert.deepEqual([val(defs["sum of literals"]), val(defs["lowest literal"]), val(defs["complex literal"])], ["3/2", "3/4", "0 + 2.5i"]);
+  // Drawn as written: 1/2, not "1/2".
+  const pres = { names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as unknown as Parameters<typeof renderBlocks>[1];
+  assert.match(renderBlocks(code, pres, info, sum), /1\/2/);
+  assert.doesNotMatch(renderBlocks(code, pres, info, sum), /"1\/2"/);
+});
