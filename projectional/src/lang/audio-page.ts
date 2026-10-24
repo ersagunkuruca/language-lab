@@ -15,7 +15,11 @@ import { HTML_V } from "./std.ts";
 // Run around main: records its cells in the order it made them, then
 // returns what draws a `listen` attribute. `worklet` is the program
 // bundled with audio-worklet.ts, as a script.
-export function soundPlayer(cells: Cells, worklet: string, main: () => Value) {
+// `base` is where a recording's address is read from (the page's own
+// address when not given): the editor's preview finds them under apps/.
+// `stop` ends everything playing and closes the audio: a page that is
+// gone, replaced or left must not keep sounding.
+export function soundPlayer(cells: Cells, worklet: string, main: () => Value, base?: string) {
   // By their place among main's cells, which is their place on the audio
   // thread too (the handler's own count may have started before main).
   const made: Value[] = [], mine = new Map<number, number>();
@@ -31,7 +35,8 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value) {
     }
   };
   cells.onWrite = (at, value) => { const cell = mine.get(at); if (cell !== undefined && playing.size) send({ cell, value }); };
-  let context: Promise<AudioContext> | null = null;
+  let context: Promise<AudioContext> | null = null, closed = false;
+  const going = new Set<() => void>();
   const start = () => (context ??= (async () => {
     const ctx = new AudioContext({ latencyHint: "interactive" });
     const url = URL.createObjectURL(new Blob([worklet], { type: "text/javascript" }));
@@ -45,7 +50,7 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
       return { node: ctx.createMediaStreamSource(stream), stop: () => stream.getTracks().forEach((t) => t.stop()) };
     }
-    const reply = await fetch(String(to.fields[0]));
+    const reply = await fetch(base ? new URL(String(to.fields[0]), new URL(base, location.href)).href : String(to.fields[0]));
     if (!reply.ok) throw new Error(`${to.fields[0]}: ${reply.status} ${reply.statusText}`);
     const s = ctx.createBufferSource();
     s.buffer = await ctx.decodeAudioData(await reply.arrayBuffer());
@@ -56,12 +61,22 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value) {
 
   return {
     page,
+    // Ends what plays; a click plays again.
+    hush() { for (const end of [...going]) end(); },
+    stop() {
+      closed = true;
+      for (const end of [...going]) end();
+      const ctx = context;
+      context = null;
+      void ctx?.then((c) => c.close()).catch(() => {});
+    },
     listen(e: El, a: Data) {
       const index = place.get(a);
       if (index === undefined) { console.error("a listen inside a part doesn't play: put it where main returns it"); return; }
       let on: { stop: () => void } | null = null;
       e.addEventListener("click", async () => {
-        if (on) { on.stop(); on = null; e.setAttribute("data-playing", "false"); return; }
+        if (on) { on.stop(); return; }
+        if (closed) return;
         on = { stop: () => {} };
         try {
           const ctx = await start();
@@ -73,7 +88,11 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value) {
           for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: cells.peek(c) }); } catch { /* not copied */ } }
           from.node.connect(node).connect(ctx.destination);
           playing.add(node);
-          on = { stop: () => { from.stop(); from.node.disconnect(); node.disconnect(); playing.delete(node); } };
+          const end = () => { from.stop(); from.node.disconnect(); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
+          on = { stop: end };
+          going.add(end);
+          // Stopped while it was starting: nothing plays.
+          if (closed) return end();
           e.setAttribute("data-playing", "true");
         } catch (err) {
           on = null;

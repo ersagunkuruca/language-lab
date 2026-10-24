@@ -42,13 +42,18 @@ export interface PageOptions {
   // workletRuntime (cli/web.ts) prebuilt: given it, a page with sound plays
   // in the preview (AUDIO.md, "Playing a sound from the editor").
   worklet?: string;
+  // Where recordings are read from, when not beside the page (the editor's: apps/).
+  recordings?: string;
 }
 
 export interface Preview {
   root: Node_;
   cells: Cells;
-  // Stops the clock: nothing on this page runs on frames any more.
+  // Stops the clock and any sound: nothing on this page runs on frames,
+  // and nothing plays, any more.
   stop(): void;
+  // A page with sound: stops what plays, and the page stays.
+  hush?: () => void;
 }
 
 // Throws when main can't run (an error, an unhandled effect), with why.
@@ -60,10 +65,10 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => out.log(line), names: o.names, cells, world });
-  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run) : null;
+  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings) : null;
   const value = sound ? sound.page : run();
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });
-  return { root, cells, stop: () => { stopped = true; } };
+  return { root, cells, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
 
 // A page as one HTML file around its scripts: what `lab build-web` writes,

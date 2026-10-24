@@ -172,6 +172,4 @@ for (const name of ["converter", "dice", "pedal"]) {
   console.log(`apps/${name}.html`);
   // The recordings a page with sound plays (AUDIO.md), beside it.
   for (const f of recordings(p.code)) copyFileSync(here + `../examples/${name}/${f}`, site + `apps/${f}`);
-  // And beside the editor, whose preview plays the same page from the site's root.
-  for (const f of recordings(p.code)) copyFileSync(here + `../examples/${name}/${f}`, site + f);
 }
