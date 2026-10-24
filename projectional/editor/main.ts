@@ -1510,7 +1510,12 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   } else return null;
 
   const del = own.length > 1 ? Top.deleteDefinition(code, sh, ui.def) : { ok: false as const, reason: "it's the program's only definition" };
-  out.append(h("div", { class: "acts" }, edit(`Delete ${dname}`, "Delete this definition", del, () => runTop(info, del, (r) => { ui.def = r.select; ui.selected = null; ui.back = []; }), "btn danger")));
+  // Duplicating checks the whole program, so it's worked out on the click.
+  const typeDef = code.nodes[(code.nodes[ui.def] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
+  const dup = () => { const r = T.duplicate(code, sh, info, ui.def); if (r.ok) { ui.def = r.select!; ui.back = []; } applyT(r); };
+  out.append(h("div", { class: "acts" },
+    edit(`Duplicate ${dname}`, "A copy to change, next to it; the original stays as it is", typeDef ? { ok: false, reason: "the copy's cases would share the original's names: make a new type with + New definition" } : { ok: true }, dup),
+    edit(`Delete ${dname}`, "Delete this definition", del, () => runTop(info, del, (r) => { ui.def = r.select; ui.selected = null; ui.back = []; }), "btn danger")));
   return out;
 }
 

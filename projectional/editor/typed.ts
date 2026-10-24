@@ -711,6 +711,29 @@ export function unpin(pins: Pins, def: Id, name: string): PinEdit {
   return { ok: true, pins: rest, note: `Unpinned ${name}: its type follows its body again.` };
 }
 
+// A copy of one of the program's own functions or values, under fresh ids,
+// placed right after it, to change without touching the original. Recursive
+// calls in the copy call the copy.
+export function duplicate(code: Code, names: Names, info: Info, def: Id): TEdit {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.body || !code.defs.includes(def)) return { ok: false, reason: "only a definition is duplicated" };
+  if (isPublished(def)) return { ok: false, reason: "it comes from the library: Copy into the program instead" };
+  if (code.nodes[d.body].kind === "typedef") return { ok: false, reason: "the copy's cases would share the original's names: make a new type with + New definition" };
+  const nodes = { ...code.nodes };
+  const nn = { ...names };
+  const copy = freshId();
+  const body = copyTree(code, nodes, nn, d.body, new Map([[def, copy]]));
+  nodes[copy] = { id: copy, kind: "def", body };
+  const name = names[def] ?? "it";
+  const taken = new Set(code.defs.map((x) => names[x]));
+  let label = `${name} copy`;
+  for (let k = 2; taken.has(label); k++) label = `${name} copy ${k}`;
+  nn[copy] = label;
+  const at = code.defs.indexOf(def) + 1;
+  const next: Code = { nodes, defs: [...code.defs.slice(0, at), copy, ...code.defs.slice(at)] };
+  return guardTyped(info, next, nn, copy, `Duplicated ${name} as ${label}: change it freely, ${name} stays as it was.`);
+}
+
 // A published definition can't change (it is named by what it says). To
 // change one, copy it into the program: a new definition with the same body
 // under fresh ids, which the program's own calls now use. Recursive calls
