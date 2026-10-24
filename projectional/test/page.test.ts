@@ -30,7 +30,7 @@ test("the dice page previews: Roll draws, the clock runs on frames, stop stops i
   const { root, page, tick } = open("dice");
   assert.match(root.find("said").textContent, /Nothing rolled yet/);
   root.find("hundred").fire("click");
-  assert.match(root.find("status").textContent, /^100 rolls/);
+  assert.match(root.find("status").textContent, /^Rolls: 100;/);
   // the status line reads now(), so it asked for a frame, and asks again
   assert.equal(tick(), 1);
   page.stop();
