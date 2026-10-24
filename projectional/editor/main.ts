@@ -1781,7 +1781,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
-  if (needs.length) {
+  // A page's main is the page: it is running above, and printing what it
+  // gives back would only show the page's insides.
+  if (action && !info.errors.length && !info.holes.size && pageMain(doc.code.defs, info, pres().names) === ui.def) {
+    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} is the page above: it runs there, and Restart runs it again from the start.`));
+  } else if (needs.length) {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
   } else if (action) {
