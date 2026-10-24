@@ -283,7 +283,7 @@ const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)"
 // sight unless it's the one picked.
 const onePane = () => typeof matchMedia === "function" && matchMedia("(max-width: 900px), (max-height: 500px)").matches;
 const OPENING = TOUCH
-  ? "A typed program. Tap anything to select it and see its type; tap a hole for a palette of only what fits there; long-press in the graph for a menu."
+  ? "A typed program. Tap anything to select it and see its type; tap a hole for a palette of only what fits there; long-press anything for a menu."
   : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
 
 const ui: UI = {
@@ -2641,11 +2641,33 @@ document.addEventListener("click", (e) => {
     return;
   }
   const hit = blocksHit(t);
+  if (hit && Date.now() - blocksHeld < 800) return;
   if (hit) { e.stopPropagation(); return select(hit); }
+});
+
+// A touch held still on the blocks for half a second opens the part's
+// menu, as in the graph: iOS has no right-click. Where the browser has its
+// own long press (Android), ours comes first and the browser's is dropped;
+// the tap that ends the press doesn't also select.
+let blocksHeld = 0;
+document.addEventListener("pointerdown", (ev) => {
+  if (ev.pointerType !== "touch" || !(ev.target as HTMLElement).closest?.(".blocks-wrap")) return;
+  const at = { x: ev.clientX, y: ev.clientY }, t = ev.target as HTMLElement;
+  const mv = (e: PointerEvent) => { if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) stop(); };
+  const timer = setTimeout(() => {
+    stop();
+    blocksHeld = Date.now();
+    t.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y }));
+  }, 500);
+  const stop = () => { clearTimeout(timer); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
+  window.addEventListener("pointermove", mv);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
 });
 
 // Right-click in the Blocks pane: the graph's menu for that part.
 document.addEventListener("contextmenu", (e) => {
+  if (e.isTrusted && Date.now() - blocksHeld < 1000 && (e.target as HTMLElement | null)?.closest?.(".blocks-wrap")) { e.preventDefault(); return; }
   const id = blocksHit(e.target);
   // Empty space in the blocks: what the graph's canvas offers there.
   if (!id && (e.target as HTMLElement | null)?.closest?.(".blocks-wrap")) {

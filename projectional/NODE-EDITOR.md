@@ -85,5 +85,5 @@ checked on the built page (fall, two dice), not just read from the code.
 | Definition: pin, Let it loosen, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
 | Step through parts | ✓ Tab | ✓ Tab (in reading order) | |
 | Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
-| Long press for the menu (touch) | ✗ (tap selects, and the panel has the edits) | ✓ | gap: E102 |
+| Long press for the menu (touch) | ✓ | ✓ | |
 | Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |

@@ -26,8 +26,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E102 | Blocks pane: a long press opens the part's menu, as in the graph (iOS has no right-click; the panel covers the edits meanwhile) | NODE-EDITOR.md parity audit (E97) | P3 | S | |
-| E103 | **Bug.** Adding a value (a hole of any type) takes about 4 s: its palette checks every function in scope, and it is built twice (menu and panel). Same in the graph and the blocks | found doing E100 | P2 | S | |
+| E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
@@ -135,6 +134,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E102 | Blocks pane: a long press opens the part's menu | #422 |
 | E101 | Graph: drop an input on another of its list or chain to move it there | #421 |
 | E100 | Right-click on the blocks' empty space adds a value | #420 |
 | E97 | Graph and Blocks parity audit (NODE-EDITOR.md); gaps filed as E100-E102 | #419 |
