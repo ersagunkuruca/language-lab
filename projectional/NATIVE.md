@@ -5,6 +5,8 @@ beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
 **Status.** Stages N1 to N4 are done: whole programs run natively, built by `lab native`.
+N5a is done: measured against compiled JavaScript and WebAssembly (below), and
+cells come from free lists. Reuse of a matched cell (N5b) waits on the numbers.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -209,3 +211,36 @@ would need `_stat` and `FindFirstFile` in their place.
    - Compare against compiled JavaScript and WebAssembly on Countdown,
      ledger and wc: time, start-up and peak memory, which are the reasons
      to have this target.
+
+## Measurements (N5a)
+
+`node gaps/bench-native.ts` in compiler/ (needs a C compiler) runs each
+program as a whole process, the way a user starts it, and reads wall time
+and peak memory (ru_maxrss) from `wait4`. Compiled JavaScript is
+`lab compile` under node; WebAssembly is `wasi.ts`'s command under
+node:wasi (wasmtime isn't on this machine, so Node's start-up is in its
+numbers). Median of 5, one x86-64 container, gcc -O2, 2026-10-24:
+
+| program | native | compiled JS | WASM (node:wasi) |
+|---|---|---|---|
+| Countdown's main, every answer | 117 ms, 1.9 MB | 317 ms, 77 MB | 149 ms, 54 MB |
+| queens' main (start-up) | 7.6 ms, 1.9 MB | 214 ms, 72 MB | 62 ms, 51 MB |
+| wc on 2.4 MB | 161 ms, 6.4 MB | 331 ms, 74 MB | 260 ms, 58 MB |
+| ledger, 50,000 entries | 128 ms, 11 MB | 435 ms, 124 MB | 335 ms, 105 MB |
+| ledger, 200,000 entries | 517 ms, 43 MB | 919 ms, 189 MB | 1268 ms, 158 MB |
+| chapters, 1000 into a folder | 213 ms, 4.1 MB | 501 ms, 86 MB | 673 ms, 71 MB |
+
+Before the free lists, the first run of the same bench had native Countdown
+at 196 ms, slower than WebAssembly's 164, and ledger on 200,000 entries at
+807 ms: callgrind put malloc and free at 46% of Countdown's instructions.
+Now each cell up to 256 bytes takes its size in 8s from a byte in its
+header and comes from that size's free list, or is cut from a 256 KB block;
+a freed cell goes back on its list, and blocks are never given back (as
+Lean 4's small-object allocator, and Koka's mimalloc, keep them). Bigger
+cells are malloc's. Under a sanitizer every cell is malloc's, so ASan still
+sees each use after free. The header stays 8 bytes: a case's tag is a byte
+(data with more than 256 cases is refused).
+
+What's left in Countdown's profile is the counting itself (lab_drop,
+lab_dup, lab_fields), which N5b's reuse would cut where a match takes a
+cell apart and builds one of the same size.
