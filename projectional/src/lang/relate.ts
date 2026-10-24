@@ -59,13 +59,13 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, fromList, META, sameNumber, equal as valueEqual, showValue, type Data, type Value } from "./run.ts";
+import { close, fromList, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
 import { resolveArithmetic, usesGenericArithmetic } from "./arith.ts";
 import { infer } from "./infer.ts";
-import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
+import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, intLit, neg as intNeg, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
@@ -938,7 +938,10 @@ export function interpreter(code: Code, opts: Options = {}) {
         },
       });
     }
-    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames)] : null);
+    // compare runs forwards once both are known: which pairs are in order
+    // isn't a search worth making.
+    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames)]
+      : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
     if (many) {
       return wait({
         k: "later", text: id, ready: (s) => args.every((a) => known(a, s)), then: (s) => {

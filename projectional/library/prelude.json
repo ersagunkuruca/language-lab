@@ -5663,6 +5663,726 @@
           "@tu0hmqf815cglqlbjfk0np3l0f:2"
         ],
         "body": "@tu0hmqf815cglqlbjfk0np3l0f:3"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r",
+        "kind": "def",
+        "body": "@v53dcuo5olrbvtgve59t594n5r:1"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:2": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:2",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:3": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:3",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:5": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:5",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:2"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:7": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:7",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:3"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:6": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:6",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:7"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:9": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:9",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:10": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:10",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:12": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:12",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:3"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:14": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:14",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:2"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:13": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:13",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:14"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:16": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:16",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:17": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:17",
+        "kind": "binder"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:20": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:20",
+        "kind": "ref",
+        "target": "builtin.compare"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:21": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:21",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:16"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:22": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:22",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:9"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:19": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:19",
+        "kind": "call",
+        "fn": "@v53dcuo5olrbvtgve59t594n5r:20",
+        "args": [
+          "@v53dcuo5olrbvtgve59t594n5r:21",
+          "@v53dcuo5olrbvtgve59t594n5r:22"
+        ]
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:35": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:35",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:36": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:36",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:10"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:37": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:37",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:3"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:34": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:34",
+        "kind": "call",
+        "fn": "@v53dcuo5olrbvtgve59t594n5r:35",
+        "args": [
+          "@v53dcuo5olrbvtgve59t594n5r:36",
+          "@v53dcuo5olrbvtgve59t594n5r:37"
+        ]
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:32": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:32",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:33": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:33",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:9"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:31": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:31",
+        "kind": "call",
+        "fn": "@v53dcuo5olrbvtgve59t594n5r:32",
+        "args": [
+          "@v53dcuo5olrbvtgve59t594n5r:33",
+          "@v53dcuo5olrbvtgve59t594n5r:34"
+        ]
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:28": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:28",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:29": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:29",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:2"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:30": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:30",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:17"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:27": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:27",
+        "kind": "call",
+        "fn": "@v53dcuo5olrbvtgve59t594n5r:28",
+        "args": [
+          "@v53dcuo5olrbvtgve59t594n5r:29",
+          "@v53dcuo5olrbvtgve59t594n5r:30"
+        ]
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:25": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:25",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:26": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:26",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r:16"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:24": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:24",
+        "kind": "call",
+        "fn": "@v53dcuo5olrbvtgve59t594n5r:25",
+        "args": [
+          "@v53dcuo5olrbvtgve59t594n5r:26",
+          "@v53dcuo5olrbvtgve59t594n5r:27"
+        ]
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:23": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:23",
+        "kind": "arm",
+        "variant": "std.order.before",
+        "binds": [],
+        "results": [],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:24"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:18": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:18",
+        "kind": "match",
+        "scrutinee": "@v53dcuo5olrbvtgve59t594n5r:19",
+        "arms": [
+          "@v53dcuo5olrbvtgve59t594n5r:23"
+        ],
+        "otherwise": "@v53dcuo5olrbvtgve59t594n5r:31"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:15": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:15",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@v53dcuo5olrbvtgve59t594n5r:16",
+          "@v53dcuo5olrbvtgve59t594n5r:17"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:18"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:11": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:11",
+        "kind": "match",
+        "scrutinee": "@v53dcuo5olrbvtgve59t594n5r:12",
+        "arms": [
+          "@v53dcuo5olrbvtgve59t594n5r:13",
+          "@v53dcuo5olrbvtgve59t594n5r:15"
+        ],
+        "otherwise": null
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:8": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:8",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@v53dcuo5olrbvtgve59t594n5r:9",
+          "@v53dcuo5olrbvtgve59t594n5r:10"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:11"
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:4": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:4",
+        "kind": "match",
+        "scrutinee": "@v53dcuo5olrbvtgve59t594n5r:5",
+        "arms": [
+          "@v53dcuo5olrbvtgve59t594n5r:6",
+          "@v53dcuo5olrbvtgve59t594n5r:8"
+        ],
+        "otherwise": null
+      },
+      "@v53dcuo5olrbvtgve59t594n5r:1": {
+        "id": "@v53dcuo5olrbvtgve59t594n5r:1",
+        "kind": "lambda",
+        "params": [
+          "@v53dcuo5olrbvtgve59t594n5r:2",
+          "@v53dcuo5olrbvtgve59t594n5r:3"
+        ],
+        "body": "@v53dcuo5olrbvtgve59t594n5r:4"
+      },
+      "@8lv70ktegk2fi32oir2900hcan": {
+        "id": "@8lv70ktegk2fi32oir2900hcan",
+        "kind": "def",
+        "body": "@8lv70ktegk2fi32oir2900hcan:1"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:2": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:2",
+        "kind": "binder"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:3": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:3",
+        "kind": "binder"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:5": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:5",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:3"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:10": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:10",
+        "kind": "ref",
+        "target": "std.optional.some"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:11": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:11",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:2"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:9": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:9",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:10",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:11"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:12": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:12",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:8": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:8",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:7": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:7",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:8",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:9",
+          "@8lv70ktegk2fi32oir2900hcan:12"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:6": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:6",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@8lv70ktegk2fi32oir2900hcan:7"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:14": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:14",
+        "kind": "binder"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:15": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:15",
+        "kind": "binder"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:17": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:17",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:14"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:22": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:22",
+        "kind": "ref",
+        "target": "std.optional.some"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:23": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:23",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:2"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:21": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:21",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:22",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:23"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:20": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:20",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:24": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:24",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:15"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:19": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:19",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:20",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:21",
+          "@8lv70ktegk2fi32oir2900hcan:24"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:18": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:18",
+        "kind": "arm",
+        "variant": "std.optional.none",
+        "binds": [],
+        "results": [],
+        "body": "@8lv70ktegk2fi32oir2900hcan:19"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:26": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:26",
+        "kind": "binder"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:29": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:29",
+        "kind": "ref",
+        "target": "std.optional.none"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:33": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:33",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:34": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:34",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:26"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:35": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:35",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:2"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:32": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:32",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:33",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:34",
+          "@8lv70ktegk2fi32oir2900hcan:35"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:31": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:31",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:36": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:36",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan:15"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:30": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:30",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:31",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:32",
+          "@8lv70ktegk2fi32oir2900hcan:36"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:28": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:28",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:27": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:27",
+        "kind": "call",
+        "fn": "@8lv70ktegk2fi32oir2900hcan:28",
+        "args": [
+          "@8lv70ktegk2fi32oir2900hcan:29",
+          "@8lv70ktegk2fi32oir2900hcan:30"
+        ]
+      },
+      "@8lv70ktegk2fi32oir2900hcan:25": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:25",
+        "kind": "arm",
+        "variant": "std.optional.some",
+        "binds": [
+          "@8lv70ktegk2fi32oir2900hcan:26"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@8lv70ktegk2fi32oir2900hcan:27"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:16": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:16",
+        "kind": "match",
+        "scrutinee": "@8lv70ktegk2fi32oir2900hcan:17",
+        "arms": [
+          "@8lv70ktegk2fi32oir2900hcan:18",
+          "@8lv70ktegk2fi32oir2900hcan:25"
+        ],
+        "otherwise": null
+      },
+      "@8lv70ktegk2fi32oir2900hcan:13": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:13",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@8lv70ktegk2fi32oir2900hcan:14",
+          "@8lv70ktegk2fi32oir2900hcan:15"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@8lv70ktegk2fi32oir2900hcan:16"
+      },
+      "@8lv70ktegk2fi32oir2900hcan:4": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:4",
+        "kind": "match",
+        "scrutinee": "@8lv70ktegk2fi32oir2900hcan:5",
+        "arms": [
+          "@8lv70ktegk2fi32oir2900hcan:6",
+          "@8lv70ktegk2fi32oir2900hcan:13"
+        ],
+        "otherwise": null
+      },
+      "@8lv70ktegk2fi32oir2900hcan:1": {
+        "id": "@8lv70ktegk2fi32oir2900hcan:1",
+        "kind": "lambda",
+        "params": [
+          "@8lv70ktegk2fi32oir2900hcan:2",
+          "@8lv70ktegk2fi32oir2900hcan:3"
+        ],
+        "body": "@8lv70ktegk2fi32oir2900hcan:4"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96",
+        "kind": "def",
+        "body": "@ffvjl4eq3ftk38cuspridvto96:1"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:2": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:2",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:5": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:5",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:2"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:7": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:7",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:6": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:6",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:7"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:9": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:9",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:10": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:10",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:11": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:11",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:17": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:17",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:15": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:15",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:16": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:16",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:9"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:14": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:14",
+        "kind": "call",
+        "fn": "@ffvjl4eq3ftk38cuspridvto96:15",
+        "args": [
+          "@ffvjl4eq3ftk38cuspridvto96:16",
+          "@ffvjl4eq3ftk38cuspridvto96:17"
+        ]
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:13": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:13",
+        "kind": "ref",
+        "target": "@8lv70ktegk2fi32oir2900hcan"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:18": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:18",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:11"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:12": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:12",
+        "kind": "call",
+        "fn": "@ffvjl4eq3ftk38cuspridvto96:13",
+        "args": [
+          "@ffvjl4eq3ftk38cuspridvto96:14",
+          "@ffvjl4eq3ftk38cuspridvto96:18"
+        ]
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:8": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:8",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@ffvjl4eq3ftk38cuspridvto96:9",
+          "@ffvjl4eq3ftk38cuspridvto96:10"
+        ],
+        "results": [
+          null,
+          "@ffvjl4eq3ftk38cuspridvto96:11"
+        ],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:12"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:4": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:4",
+        "kind": "fold",
+        "scrutinee": "@ffvjl4eq3ftk38cuspridvto96:5",
+        "arms": [
+          "@ffvjl4eq3ftk38cuspridvto96:6",
+          "@ffvjl4eq3ftk38cuspridvto96:8"
+        ]
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:20": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:20",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:19": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:19",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:20"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:22": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:22",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:23": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:23",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:24": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:24",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:26": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:26",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:22"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:28": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:28",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:24"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:27": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:27",
+        "kind": "arm",
+        "variant": "std.optional.none",
+        "binds": [],
+        "results": [],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:28"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:30": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:30",
+        "kind": "binder"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:32": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:32",
+        "kind": "ref",
+        "target": "@v53dcuo5olrbvtgve59t594n5r"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:33": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:33",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:30"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:34": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:34",
+        "kind": "ref",
+        "target": "@ffvjl4eq3ftk38cuspridvto96:24"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:31": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:31",
+        "kind": "call",
+        "fn": "@ffvjl4eq3ftk38cuspridvto96:32",
+        "args": [
+          "@ffvjl4eq3ftk38cuspridvto96:33",
+          "@ffvjl4eq3ftk38cuspridvto96:34"
+        ]
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:29": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:29",
+        "kind": "arm",
+        "variant": "std.optional.some",
+        "binds": [
+          "@ffvjl4eq3ftk38cuspridvto96:30"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:31"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:25": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:25",
+        "kind": "match",
+        "scrutinee": "@ffvjl4eq3ftk38cuspridvto96:26",
+        "arms": [
+          "@ffvjl4eq3ftk38cuspridvto96:27",
+          "@ffvjl4eq3ftk38cuspridvto96:29"
+        ],
+        "otherwise": null
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:21": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:21",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@ffvjl4eq3ftk38cuspridvto96:22",
+          "@ffvjl4eq3ftk38cuspridvto96:23"
+        ],
+        "results": [
+          null,
+          "@ffvjl4eq3ftk38cuspridvto96:24"
+        ],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:25"
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:3": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:3",
+        "kind": "fold",
+        "scrutinee": "@ffvjl4eq3ftk38cuspridvto96:4",
+        "arms": [
+          "@ffvjl4eq3ftk38cuspridvto96:19",
+          "@ffvjl4eq3ftk38cuspridvto96:21"
+        ]
+      },
+      "@ffvjl4eq3ftk38cuspridvto96:1": {
+        "id": "@ffvjl4eq3ftk38cuspridvto96:1",
+        "kind": "lambda",
+        "params": [
+          "@ffvjl4eq3ftk38cuspridvto96:2"
+        ],
+        "body": "@ffvjl4eq3ftk38cuspridvto96:3"
       }
     },
     "defs": [
@@ -5700,6 +6420,9 @@
       "@itrutcjuml4ip1t1nbb8dkfhrh",
       "@3sc5994e0iegdsc875vjlqvv5m",
       "@tu0hmqf815cglqlbjfk0np3l0f",
+      "@v53dcuo5olrbvtgve59t594n5r",
+      "@8lv70ktegk2fi32oir2900hcan",
+      "@ffvjl4eq3ftk38cuspridvto96",
       "@fbbi4qvo7d58s98tv0etifnllv",
       "@g68h67scr0eirikv8og762j6u3",
       "@qvk73gc0r0qv7a38j4oc5nrsjc",
@@ -6943,6 +7666,170 @@
       },
       "plain": []
     },
+    "@v53dcuo5olrbvtgve59t594n5r": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@8lv70ktegk2fi32oir2900hcan": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.optional",
+                "args": [
+                  {
+                    "t": "con",
+                    "id": "std.list",
+                    "args": [
+                      {
+                        "t": "var",
+                        "v": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "con",
+              "id": "std.optional",
+              "args": [
+                {
+                  "t": "con",
+                  "id": "std.list",
+                  "args": [
+                    {
+                      "t": "var",
+                      "v": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@ffvjl4eq3ftk38cuspridvto96": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
     "@fbbi4qvo7d58s98tv0etifnllv": {
       "vars": [],
       "rows": [
@@ -7583,7 +8470,29 @@
     "@tu0hmqf815cglqlbjfk0np3l0f": "show complex",
     "@tu0hmqf815cglqlbjfk0np3l0f:2": "z",
     "@tu0hmqf815cglqlbjfk0np3l0f:6": "re",
-    "@tu0hmqf815cglqlbjfk0np3l0f:7": "im"
+    "@tu0hmqf815cglqlbjfk0np3l0f:7": "im",
+    "@v53dcuo5olrbvtgve59t594n5r": "merge sorted",
+    "@v53dcuo5olrbvtgve59t594n5r:2": "xs",
+    "@v53dcuo5olrbvtgve59t594n5r:3": "ys",
+    "@v53dcuo5olrbvtgve59t594n5r:9": "x",
+    "@v53dcuo5olrbvtgve59t594n5r:10": "xs rest",
+    "@v53dcuo5olrbvtgve59t594n5r:16": "y",
+    "@v53dcuo5olrbvtgve59t594n5r:17": "ys rest",
+    "@8lv70ktegk2fi32oir2900hcan": "add run",
+    "@8lv70ktegk2fi32oir2900hcan:2": "run",
+    "@8lv70ktegk2fi32oir2900hcan:3": "slots",
+    "@8lv70ktegk2fi32oir2900hcan:14": "slot",
+    "@8lv70ktegk2fi32oir2900hcan:15": "higher",
+    "@8lv70ktegk2fi32oir2900hcan:26": "held",
+    "@ffvjl4eq3ftk38cuspridvto96": "sort",
+    "@ffvjl4eq3ftk38cuspridvto96:2": "list",
+    "@ffvjl4eq3ftk38cuspridvto96:9": "item",
+    "@ffvjl4eq3ftk38cuspridvto96:10": "rest",
+    "@ffvjl4eq3ftk38cuspridvto96:11": "slots",
+    "@ffvjl4eq3ftk38cuspridvto96:22": "slot",
+    "@ffvjl4eq3ftk38cuspridvto96:23": "higher",
+    "@ffvjl4eq3ftk38cuspridvto96:24": "merged",
+    "@ffvjl4eq3ftk38cuspridvto96:30": "run"
   },
   "comments": {
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
@@ -7609,6 +8518,9 @@
     "@qvk73gc0r0qv7a38j4oc5nrsjc": "What · is at Rational. Not offered on its own: · is.",
     "@idiaof7f0r6jhar1phf6uup59c": "What −x is at Rational. Not offered on its own: − is.",
     "@becso7bpuoumte8afa0eurkp1r": "What < is at Rational. Not offered on its own: < is.",
+    "@ffvjl4eq3ftk38cuspridvto96": "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    "@v53dcuo5olrbvtgve59t594n5r": "Two sorted lists as one. A helper of sort, not offered.",
+    "@8lv70ktegk2fi32oir2900hcan": "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     "@8o6ptf0efocthvugd6capvcf2l": "The Number x as a complex number, x + 0i.",
     "@7lrku7dm0b5g72i0lrmd8acccv": "i, the square root of −1: i · i is −1.",
     "@aclg13eff4ceaebcksq8gh376d": "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
@@ -7661,6 +8573,7 @@
     "@pd38c7vaapt5d63e9l1q4a08s6",
     "@itrutcjuml4ip1t1nbb8dkfhrh",
     "@3sc5994e0iegdsc875vjlqvv5m",
-    "@tu0hmqf815cglqlbjfk0np3l0f"
+    "@tu0hmqf815cglqlbjfk0np3l0f",
+    "@ffvjl4eq3ftk38cuspridvto96"
   ]
 }

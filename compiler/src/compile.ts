@@ -2438,7 +2438,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
@@ -2451,6 +2451,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     ...program,
     // Only when the code kept shows a case: a library function that does
     // (the html module's px) isn't a reason when nothing calls it.
+    ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$compare(")) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`] : []),
     ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(")) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...solverCode,
     ...constants,

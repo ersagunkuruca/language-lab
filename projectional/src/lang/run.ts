@@ -26,8 +26,10 @@ import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
 import { discharge } from "./ledger.ts";
-import { ABORT, ABORT_OP, CELL_OPS, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
+import * as I from "./int.ts";
+import * as T from "./text.ts";
 import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
@@ -82,6 +84,39 @@ export function equal(a: Value, b: Value): boolean {
   }
   return true;
 }
+
+// The order on plain data (L66): numbers by value (Int, Number and
+// fractions; Number by `equal`'s nearness), text by code point, and other
+// cases by their declaration order (`order`: a variant's place in its
+// type, variantOrder), then their fields left to right, so lists go
+// lexicographically with [] first. OCaml's `compare` and Erlang's term
+// order (prior art). -1, 0 or 1; it agrees with `equal`.
+export function compareValues(a: Value, b: Value, order: Map<Id, number>): number {
+  const todo: [Value, Value][] = [[a, b]];
+  for (let p; (p = todo.pop());) {
+    const [x, y] = p;
+    if (typeof x === "number" && typeof y === "number") { if (!sameNumber(x, y)) return x < y ? -1 : 1; continue; }
+    if (typeof x === "bigint" || typeof y === "bigint") { if (x !== y) return (x as bigint) < (y as bigint) ? -1 : 1; continue; }
+    if (typeof x === "string" && typeof y === "string") { if (x !== y) return T.less(x, y) ? -1 : 1; continue; }
+    if (typeof x !== "object" || typeof y !== "object") continue;
+    if (x.tag === RATIO && y.tag === RATIO) {
+      const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
+      if (l !== r) return I.less(l, r) ? -1 : 1;
+      continue;
+    }
+    if (x.tag !== y.tag) return (order.get(x.tag) ?? 0) < (order.get(y.tag) ?? 0) ? -1 : 1;
+    for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
+  }
+  return 0;
+}
+
+// Each case's place in its type, for compareValues.
+export function variantOrder(code: Code): Map<Id, number> {
+  const out = new Map<Id, number>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "typedef") n.variants.forEach((v, i) => out.set(v, i));
+  return out;
+}
+export const ORDER_VALUES = [ORDER_V.before, ORDER_V.same, ORDER_V.after].map((tag) => ({ tag, fields: [] as Value[] }));
 
 // Function values remember the node they came from (a lambda and the
 // variables it closed over, or a builtin, constructor or projection), so the
@@ -220,12 +255,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The one result of a pure function (the parts builtins take only those).
   const only = (f: Fn, ...xs: Value[]): Value => { for (const v of f(...xs)) return v; throw new Error("a pure function gave no value"); };
   const builtins: Record<Id, Fn> = {};
+  let cmpOrder: Map<Id, number> | undefined;
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = (...a) => one(f(...(a as number[])));
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {
     [S.less]: (a, b) => one(bool((a as number) < (b as number))),
     [S.equal]: (a, b) => one(bool(equal(a, b))),
+    [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
     [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
