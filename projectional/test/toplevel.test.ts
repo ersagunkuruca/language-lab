@@ -747,3 +747,38 @@ test("a duplicated definition is its own copy, recursion included", async () => 
   const again = T.duplicate(r.code, r.names, infer(r.code, r.names), def);
   assert.ok(again.ok && again.names[again.select!] === `${name} copy 2`, "a second copy takes the next free name");
 });
+
+// A list's items and a chain's operands are a row: add one anywhere, move
+// one, take one out, each one undoable edit (BACKLOG E91).
+test("a list's items and a chain's inputs are added, moved and taken out", async () => {
+  const T = await import("../editor/typed.ts");
+  const { CONS, NIL } = await import("../src/lang/std.ts");
+  const nodes: Code["nodes"] = {};
+  const lit = (id: Id, value: string | number) => (nodes[id] = { id, kind: "lit", value }, id);
+  const ref = (id: Id, target: Id) => (nodes[id] = { id, kind: "ref", target }, id);
+  const call = (id: Id, op: Id, a: Id, b: Id) => { ref(`${id}f`, op); nodes[id] = { id, kind: "call", fn: `${id}f`, args: [a, b] }; return id; };
+  nodes.xs = { id: "xs", kind: "def", body: call("l", CONS, lit("a", 1), call("l2", CONS, lit("b", 2), ref("n", NIL))) };
+  nodes.ws = { id: "ws", kind: "def", body: call("t", S.concat, call("t2", S.concat, lit("x", "x"), lit("y", "y")), lit("z", "z")) };
+  const names: Names = { xs: "xs", ws: "ws" };
+  const values = (code: Code, def: Id) => T.rowAt(code, (code.nodes[def] as NodeOf<"def">).body!)!.items.map((i) => (code.nodes[i].kind === "lit" ? (code.nodes[i] as NodeOf<"lit">).value : "□"));
+  const step = (code: Code, r: ReturnType<typeof T.addItem>) => { if (!r.ok) assert.fail(r.reason); assert.equal(infer(r.code, baseNames(r.names)).errors.length, 0); return r.code; };
+  const code = base({ nodes, defs: ["xs", "ws"] });
+  const info = infer(code, baseNames(names));
+  const at = (c: Code, id: Id) => T.rowOfItem(c, id)!;
+
+  assert.equal(at(code, "b").at, 1);
+  assert.deepEqual(values(step(code, T.addItem(code, names, info, at(code, "b").row, 0)), "xs"), ["□", 1, 2]);
+  assert.deepEqual(values(step(code, T.addItem(code, names, info, at(code, "b").row, 1)), "xs"), [1, "□", 2]);
+  assert.deepEqual(values(step(code, T.addItem(code, names, info, at(code, "b").row, 2)), "xs"), [1, 2, "□"]);
+  assert.deepEqual(values(step(code, T.moveItem(code, names, info, at(code, "a").row, 0, 1)), "xs"), [2, 1]);
+  assert.deepEqual(values(step(code, T.removeItem(code, names, info, at(code, "a").row, 0)), "xs"), [2]);
+  const empty = step(code, T.removeItem(code, names, info, at(code, "b").row, 1));
+  const one = step(empty, T.removeItem(empty, names, infer(empty, baseNames(names)), at(empty, "a").row, 0));
+  assert.deepEqual(values(step(one, T.addItem(one, names, infer(one, baseNames(names)), T.rowAt(one, (one.nodes.xs as NodeOf<"def">).body!)!, 0)), "xs"), ["□"], "an empty list grows");
+
+  assert.deepEqual(at(code, "y").row.items, ["x", "y", "z"]);
+  assert.deepEqual(values(step(code, T.addItem(code, names, info, at(code, "y").row, 3)), "ws"), ["x", "y", "z", "□"]);
+  assert.deepEqual(values(step(code, T.moveItem(code, names, info, at(code, "z").row, 2, -1)), "ws"), ["x", "z", "y"]);
+  assert.deepEqual(values(step(code, T.removeItem(code, names, info, at(code, "x").row, 0)), "ws"), ["y", "z"]);
+  assert.equal(T.moveItem(code, names, info, at(code, "x").row, 0, -1).ok, false, "first can't move earlier");
+});

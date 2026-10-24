@@ -974,6 +974,33 @@ function kindLabel(id: Id): string {
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
+// A list's items and the operands of a + b + c are a row (typed.ts): the
+// part you selected says where it is in it, and moves, grows or leaves it.
+// Each edit is checked when clicked.
+function rowSection(info: T.Info, id: Id): HTMLElement | null {
+  const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
+  if (!inRow && !own) return null;
+  const box = h("div", {});
+  const word = (r: T.Row) => (r.kind === "list" ? "item" : "input");
+  const of = (r: T.Row) => (r.kind === "list" ? "the list" : typedPres().names[r.op!] ?? "the call");
+  const go = (r: T.TEdit, add = false) => { if (applyT(r) && add) document.getElementById("f-query")?.focus(); };
+  if (inRow) {
+    const { row, at } = inRow, n = row.items.length;
+    const cant = (why: string) => ({ ok: false as const, reason: why });
+    box.append(h("div", { class: "sub-head" }, `${cap(word(row))} ${at + 1} of ${n} in ${of(row)} · code.json`), h("div", { class: "acts" },
+      edit("Add one before", `A new ${word(row)} just before this`, { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, row, at), true)),
+      edit("Add one after", `A new ${word(row)} just after this`, { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, row, at + 1), true)),
+      edit("Earlier", "Swap it with the one before", at > 0 ? { ok: true } : cant("it's first already"), () => go(T.moveItem(doc.code, doc.names.short, info, row, at, -1))),
+      edit("Later", "Swap it with the one after", at < n - 1 ? { ok: true } : cant("it's last already"), () => go(T.moveItem(doc.code, doc.names.short, info, row, at, 1))),
+      edit("Take it out", `Remove this ${word(row)}; the rest close up`, { ok: true }, () => go(T.removeItem(doc.code, doc.names.short, info, row, at)), "btn danger")));
+  }
+  if (own) {
+    if (!inRow) box.append(h("div", { class: "sub-head" }, `${own.kind === "list" ? `A list of ${own.items.length}` : `${own.items.length} inputs of ${of(own)}`} · code.json`));
+    box.append(h("div", { class: "acts" }, edit(`Add ${own.kind === "list" ? "an item" : "an input"} at the end`, "A new hole at the end, to fill", { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, own, own.items.length), true))));
+  }
+  return box;
+}
+
 // Units: what inference says, and chips to declare one. A chip that would
 // make units disagree is disabled and says why, before you click it.
 const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { m: 1 }], ["s", { s: 1 }], ["kg", { kg: 1 }], ["A", { A: 1 }],
@@ -1108,7 +1135,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const dname = pres().names[ui.def] ?? "This definition";
     out.append(h("div", { class: "acts held" }, h("p", { class: "hint" }, `${dname} keeps its type, ${showPin(held[ui.def], pres().names)}, while it has a hole, so only what keeps it is offered. For something that changes it, let it loosen first.`), loosenButton(dname)));
   }
-  if (hole) out.append(fillPalette(id, info, names));
+  if (hole) out.append(rowSection(info, id) ?? "", fillPalette(id, info, names));
 
   if (n.kind === "lit") {
     // A text gets a box that keeps its lines: Shift+Enter starts a new one,
@@ -1149,6 +1176,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     if (isStep(earlier) && body?.kind === "lambda" && !body.params.length) out.append(h("div", { class: "sub-head" }, "Order of steps · code.json"), h("div", { class: "acts" },
       edit("Do it earlier", "Swap it with the step before", earlier, () => runTop(info, earlier)),
       edit("Do it later", "Swap it with the step after", later, () => runTop(info, later))));
+    const row = rowSection(info, id);
+    if (row) out.append(row);
     if (ui.mode === "split") {
       const list = h("div", { class: "opts" });
       for (const b of splittable) {
@@ -1709,6 +1738,16 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
     if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill) worked out just before this, so this can use it. Inside a match, only in that arm", r.ok ? undefined : r.reason)); }
+    // Its place in a list, or among a + b + c's inputs.
+    const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
+    if (inRow) {
+      const w = inRow.row.kind === "list" ? "item" : "input", last = inRow.at === inRow.row.items.length - 1;
+      rows.push(item(`Add an ${w} after this…`, "row-after", "A new hole just after it, to fill"),
+        item("Move it earlier", "row-earlier", "Swap it with the one before", inRow.at ? undefined : "it's first already"),
+        item("Move it later", "row-later", "Swap it with the one after", last ? "it's last already" : undefined),
+        item(`Take it out of the ${inRow.row.kind === "list" ? "list" : "call"}`, "row-out", "The rest close up"));
+    }
+    if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     const n = doc.code.nodes[id];
@@ -1774,6 +1813,18 @@ function menuAction(act: string, target: Id | undefined) {
       else { ui.selected = fn; render(); document.getElementById("f-query")?.focus(); }
       return;
     }
+    case "row-after": case "row-earlier": case "row-later": case "row-out": case "row-end": {
+      const inRow = T.rowOfItem(doc.code, target!), own = T.rowAt(doc.code, target!), sh = doc.names.short;
+      const r = act === "row-end" ? own && T.addItem(doc.code, sh, info, own, own.items.length)
+        : !inRow ? null
+        : act === "row-after" ? T.addItem(doc.code, sh, info, inRow.row, inRow.at + 1)
+        : act === "row-out" ? T.removeItem(doc.code, sh, info, inRow.row, inRow.at)
+        : T.moveItem(doc.code, sh, info, inRow.row, inRow.at, act === "row-earlier" ? -1 : 1);
+      if (!r || !applyT(r)) return;
+      // A new item is a hole: its menu is the palette, where the old one was.
+      if ((act === "row-after" || act === "row-end") && m && r.ok && r.select) { ui.menu = { ...m, target: { kind: "hole", id: r.select } }; render(); document.getElementById("m-query")?.focus(); }
+      return;
+    }
     case "pick": { graph?.pick(target!); ui.menu = null; return render(); }
     case "tidy-all": return graph?.tidy(null);
     case "tidy-picked": return graph?.tidy(graph.picked());
@@ -1830,6 +1881,7 @@ function graphHooks(info: T.Info) {
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
+    addItem: (row: Id) => { const r = T.rowAt(doc.code, row); if (r && applyT(T.addItem(doc.code, doc.names.short, info, r, r.items.length))) document.getElementById("f-query")?.focus(); },
   };
 }
 
@@ -2283,7 +2335,7 @@ function guide(): HTMLElement {
       "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest (dots, right). A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
   ];
   return h("section", { class: "guide", "aria-label": "Guide" },
-    h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
+    h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2. Replace with… does both in one step. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. An item of a list, or one input of a + b + c, can be added beside, moved earlier or later, or taken out from its panel; in the graph, the + under a node's inputs adds one at the end. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
     h("p", { class: "hint" }, "While a definition has a hole, its type is kept as it was, so a fill that would change it (one that does Random where it didn't, say) isn't offered. The hole's panel says so; Let it loosen there lets the type follow the body again."),
     h("p", { class: "hint" }, "Run, above, runs main, or the definition you're looking at backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
