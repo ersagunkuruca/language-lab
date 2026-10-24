@@ -1000,3 +1000,18 @@ Next, by what the hand versions say is left:
   writing into an array;
 - (c) the join (a written-out mode) taking a view and writing into one;
 - (d) the block coming in as an array.
+
+**Where round 4 stops** (2026-10-24): 2.9× the hand-written pedal, from 6×.
+The rest is open (BACKLOG C30). Measured on hand edits of the compiled
+pedal:
+- (d) alone, the block handed in as an array and the split walking it by
+  index, buys about 8%.
+- (b) and (c) only pay together. The split's array is no use to the join
+  unless the join takes it as a view, and the join's array is no use to
+  the compressor unless it arrives as one.
+- (b) to (d) together come to about 25%, about 2.2×.
+- Fusing the split, drive and join into one loop adds about 5% (2.1×).
+
+No single next stage buys 10%, so the stages stop here. Done again, (b)
+to (d) are one stage. Within 2× would also need the solver's 12-digit
+rounding (`$clean`, about 6% of the time) to be cheaper or not needed.
