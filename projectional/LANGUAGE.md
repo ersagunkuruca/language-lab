@@ -1014,10 +1014,13 @@ fields move too) need a migration, which is a next step.
 
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
 numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate`, the
-comparisons `at most`, `more than`, `at least` (drawn `≤ > ≥`, over `<`, so
-they run backwards and differentiate with no rules of their own) and Text's
-`not after`, `comes after`, `not before` (over `comes before`), `smaller` and
-`larger` (min and max, which a shader compiles to `min` and `max`), the
+comparisons `at most`, `more than`, `at least` (drawn `≤ > ≥`, over the one
+generic `<`, so they work on every ordered number type, run backwards and
+differentiate with no rules of their own) and Text's `not after`, `comes
+after`, `not before` (over `comes before`), `smaller` and `larger` (min and
+max, on every ordered number type too, which a shader compiles to `min` and
+`max`; the Number-only versions published before stay in the prelude,
+hidden, so a program saved with them still opens), the
 fractions `fraction`, `as fraction`, `divide fractions`, `show fraction` and
 `fraction as number` (a Rational is exact and in lowest terms, and the one
 `+ − · <` works on it through the published, unoffered `add fractions`,

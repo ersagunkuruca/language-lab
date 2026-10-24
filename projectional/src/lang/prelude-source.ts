@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { COMPLEX_V, CONS, INT_OPS, NIL, PAIR_V, RATIO, S, TEXT_OPS, std } from "./std.ts";
+import { ARITH, COMPLEX_V, CONS, INT_OPS, NIL, PAIR_V, RATIO, S, TEXT_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -56,20 +56,29 @@ export function buildPrelude(): Module {
   const conjugate = k.def("conjugate");
   k.define(conjugate, k.fn(["f", "g"], (f, g) => k.fn(["x"], (x) => k.call(inverse, f, k.call(g, k.call(f, x))))));
 
-  // The other comparisons, over `<` (and Text's over `comes before`), so
-  // they run backwards and differentiate with no rules of their own; and
-  // the smaller and larger of two numbers, which shaders compile to min
-  // and max.
+  // The other comparisons, over the one generic `<` (and Text's over
+  // `comes before`), so they work on every ordered number type, run
+  // backwards and differentiate with no rules of their own; and the
+  // smaller and larger of two numbers, which shaders compile to min and
+  // max.
   const compare = (name: string, less: Id, f: (less: (a: Id, b: Id) => Id, a: Id, b: Id) => Id) => {
     const d = k.def(name);
     k.define(d, k.fn(["a", "b"], (a, b) => f((x, y) => k.call(less, x, y), a, b)));
     return d;
   };
-  const atMost = compare("at most", S.less, (lt, a, b) => k.call(S.not, lt(b, a)));
-  const moreThan = compare("more than", S.less, (lt, a, b) => lt(b, a));
-  const atLeast = compare("at least", S.less, (lt, a, b) => k.call(S.not, lt(a, b)));
-  const smaller = compare("smaller", S.less, (lt, a, b) => k.if(lt(a, b), a, b));
-  const larger = compare("larger", S.less, (lt, a, b) => k.if(lt(a, b), b, a));
+  const atMost = compare("at most", ARITH.less, (lt, a, b) => k.call(S.not, lt(b, a)));
+  const moreThan = compare("more than", ARITH.less, (lt, a, b) => lt(b, a));
+  const atLeast = compare("at least", ARITH.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+  const smaller = compare("smaller", ARITH.less, (lt, a, b) => k.if(lt(a, b), a, b));
+  const larger = compare("larger", ARITH.less, (lt, a, b) => k.if(lt(a, b), b, a));
+  // The same five over Number's own <, as they were published before the
+  // one generic < reached them: kept, hidden, so a program saved before
+  // still opens and runs (its references are by hash). Not offered.
+  const numberOnly = ["at most", "more than", "at least", "smaller", "larger"].map((name, i) => compare(name, S.less, [
+    (lt: (a: Id, b: Id) => Id, a: Id, b: Id) => k.call(S.not, lt(b, a)), (lt: (a: Id, b: Id) => Id, a: Id, b: Id) => lt(b, a),
+    (lt: (a: Id, b: Id) => Id, a: Id, b: Id) => k.call(S.not, lt(a, b)), (lt: (a: Id, b: Id) => Id, a: Id, b: Id) => k.if(lt(a, b), a, b),
+    (lt: (a: Id, b: Id) => Id, a: Id, b: Id) => k.if(lt(a, b), b, a),
+  ][i]));
   const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
   const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
   const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
@@ -177,11 +186,12 @@ export function buildPrelude(): Module {
     [subC]: "What − is at Complex. Not offered on its own: − is.",
     [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
     [negC]: "What −x is at Complex. Not offered on its own: − is.",
+    ...Object.fromEntries(numberOnly.map((d) => [d, "The Number-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly].map(at));
 }

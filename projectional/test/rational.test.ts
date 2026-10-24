@@ -98,3 +98,26 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
   const { evaluated, compiled } = await both();
   for (const n of NAMES) assert.deepEqual(plain(compiled[n]), plain(evaluated[n]), n);
 });
+
+// QA-2026-10-24b: smaller, larger and ≤ > ≥ were Number's only while + − · <
+// were generic. They're over the one < now, and the Number-only versions
+// stay published (hidden) so programs saved before still open.
+test("smaller, larger and at most work on Int and fractions too; the old Number-only ones are kept", () => {
+  const k = new Lang(LIBRARY.code);
+  const [smaller, larger, atMost, fraction, show] = ["smaller", "larger", "at most", "fraction", "show fraction"].map((n) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const f = (a: number, b: number) => k.call(fraction, k.int(a), k.int(b));
+  const ints = def("ints", () => k.call(larger, k.int(3), k.int(7)));
+  const fracs = def("fracs", () => k.call(S.all, k.thunk(() => k.call(show, k.call(smaller, f(1, 2), f(1, 3))))));
+  const ordered = def("ordered", () => k.call(S.all, k.thunk(() => k.call(atMost, f(2, 4), f(1, 2)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  for (const d of [ints, fracs, ordered]) assert.deepEqual(info.errors.filter((e) => subtree(code, d).includes(e.id)).map((e) => e.message), [], names[d]);
+  const r = makeRunner(code, info, { print: () => {} });
+  const run = (v: Value): Value => { if (typeof v !== "function") return v; for (const x of r.call(v)) return x; throw new Error("no value"); };
+  assert.equal(Number(r.value(ints)), 7);
+  assert.deepEqual(items(run(r.value(fracs))), ["1/3"]);
+  assert.deepEqual(items(run(r.value(ordered))).map((b) => (b as { tag: string }).tag), ["std.bool.true"]);
+  const named = (n: string) => LIBRARY.code.defs.filter((d) => LIBRARY.names[d] === n);
+  for (const n of ["smaller", "larger", "at most", "more than", "at least"]) assert.equal(named(n).length, 2, n);
+});
