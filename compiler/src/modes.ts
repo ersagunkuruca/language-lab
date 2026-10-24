@@ -242,7 +242,9 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const gs = Object.keys(n.given).map((_, i) => `g${i}`);
       const at = (p: string) => gs[given.indexOf(p)];
       const pick = Object.keys(n.binds).map((k) => `r[${outs.indexOf(portOf(k))}]`);
-      out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}`);
+      out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
+        // At most one answer: its binds, or $no (GAPS.md P2).
+        `function ${name}$one(${gs.join(", ")}) {\n${pick.every((p, i) => p === `r[${i}]`) && pick.length === outs.length ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : [${pick.join(", ")}];`}\n}`);
       return name;
     } catch (e) {
       if (!(e instanceof Unsupported)) throw e;

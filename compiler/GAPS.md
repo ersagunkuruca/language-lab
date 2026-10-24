@@ -928,6 +928,8 @@ the power of ten is out of range, fall back to `toPrecision`.
 closure.
 *Fix:* when the solve has one way to an answer, have it give the value or
 `$no`, and compile `first` over it as a plain test.
+**Done** (C28): such a solve also has `name$one`, its binds or `$no`, and
+`first` over it is a test: 5.1× to 4.6×.
 
 **P3. Mode functions try their arms in closures.** Written out,
 `bands$mode0` (Haar's join):
