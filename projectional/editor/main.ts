@@ -2113,6 +2113,9 @@ function typedChecks(namer: Namer, info: T.Info): HTMLElement {
 
 // ---------------------------------------------------------------- frame
 
+// On a narrow screen a cycling group shows only its choice, and tapping it
+// goes to the next (the top bar then fits without scrolling).
+const cycling = (el: HTMLElement) => (el.classList.add("cycle"), el);
 function seg(name: string, value: string, options: [string, string][]) {
   return h("div", { class: "seg", role: "group", "aria-label": name },
     ...options.map(([v, label]) => h("button", { type: "button", class: v === value ? "on" : "", "data-set": name, "data-value": v, "aria-pressed": String(v === value) }, label)));
@@ -2362,8 +2365,8 @@ function draw() {
       h("div", { class: "brand" }, h("strong", {}, "Language Lab"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
-        seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]]),
-        seg("style", ui.style, [["math", "a · b"], ["plain", "a * b"], ["lisp", "(* a b)"]]),
+        cycling(seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]])),
+        cycling(seg("style", ui.style, [["math", "a · b"], ["plain", "a * b"], ["lisp", "(* a b)"]])),
         h("div", { class: "seg history" },
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
@@ -2392,7 +2395,7 @@ function draw() {
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
           ...shown[2]()))),
-    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status" }, ui.note),
+    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note),
     // At phone width one pane at a time, picked here (page.html).
     h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run"]] as const).map(([k, label]) =>
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
@@ -2415,7 +2418,9 @@ document.addEventListener("click", (e) => {
     if (set.dataset.set === "program") return switchProgram(set.dataset.value!);
     if (set.dataset.set === "new-kind") { ui.newKind = set.dataset.value as UI["newKind"]; return render(); }
     const k = set.dataset.set as "layer" | "style" | "text";
-    (ui as unknown as Record<string, string>)[k] = set.dataset.value!;
+    const all = [...(set.parentElement?.children ?? [])] as HTMLElement[];
+    const shut = set.classList.contains("on") && set.parentElement?.classList.contains("cycle") && all.some((b) => b !== set && getComputedStyle(b).display === "none");
+    (ui as unknown as Record<string, string>)[k] = shut ? all[(all.indexOf(set) + 1) % all.length].dataset.value! : set.dataset.value!;
     if (k !== "text") { ui.touched = []; ui.note = k === "layer" ? "Switched names layer. Same code, different words." : "Switched notation. Same code, different symbols and precedence."; }
     return render();
   }
