@@ -114,7 +114,12 @@ and `compare` on a map through `meaning`, since the tree isn't canonical:
 
 A map or a set value, and a literal `as map([...])` in a definition, is
 drawn as a two-column table (a one-column list for a set), keys in order.
-An Editor lane row.
+
+**Done (E79):** the blocks (text and pane, one printer) draw a map or set
+built from a list written out as rows, `"ann" → 31`, the arrows lined up.
+It is found by its type, so any function that builds a `Map` from a list
+of pairs reads this way. Run's "Gives" shows a map or set value as a
+table. The graph's wire labels still show the value's text.
 
 ## Steps
 
@@ -123,7 +128,7 @@ An Editor lane row.
    compiled JS equal to the evaluator. LANGUAGE.md section.
 2. **L76 + C47**: the weight-balanced tree as a representation, and
    library representations chosen automatically.
-3. **E79**: maps and sets drawn as tables.
+3. **E79** (done): maps and sets drawn as tables.
 4. HAMT and the in-place table, when a program measures the need.
 
 ## Prior art
