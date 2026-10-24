@@ -16,7 +16,9 @@
 // `fetch text` can't wait either, so a fetch whose reply hasn't come
 // throws Pending (cells.ts) after reading a cell that is written when the
 // reply lands. A view that fetched keeps what it showed and runs again
-// then; an event handler runs again from the start (html.ts). This is
+// then; an event handler is taken back and runs again from the start
+// (html.ts, cells.ts attempt), so what it did before the fetch happens
+// once. This is
 // Solid's createResource and React's Suspense, with the cells a page
 // already has. Each address is fetched once per page load.
 
@@ -28,6 +30,7 @@ import type { Value, World } from "./run.ts";
 export interface Store {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
   readonly length: number;
   key(i: number): string | null;
 }
@@ -58,14 +61,22 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     if (text === null) throw new Error(`no such file: ${path}`);
     return text;
   };
+  // On a page, an event handler's run may be taken back (cells.ts
+  // attempt): its lines are printed only if it's kept, and its file writes
+  // are undone if it isn't.
+  const later = (g: () => void) => (clock ? clock.cells.later(g) : g());
+  const put = (key: string, text: string) => {
+    if (clock) { const was = store.getItem(key); clock.cells.undo(() => (was === null ? store.removeItem?.(key) : store.setItem(key, was))); }
+    store.setItem(key, text);
+  };
   return {
-    error: (line) => console_.error(line),
-    log: (line) => console_.log(line),
+    error: (line) => later(() => console_.error(line)),
+    log: (line) => later(() => console_.log(line)),
     input: none,
     readLine: none,
     readFile: read,
-    writeFile: (path, text) => store.setItem(prefix + path, text),
-    appendFile: (path, text) => store.setItem(prefix + path, (store.getItem(prefix + path) ?? "") + text),
+    writeFile: (path, text) => put(prefix + path, text),
+    appendFile: (path, text) => put(prefix + path, (store.getItem(prefix + path) ?? "") + text),
     fileExists: (path) => store.getItem(prefix + path) !== null,
     // Every file, as paths: the store has no folders.
     listFolder: () => {

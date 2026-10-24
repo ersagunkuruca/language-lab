@@ -44,6 +44,8 @@ export interface PageOptions {
   worklet?: string;
   // Where recordings are read from, when not beside the page (the editor's: apps/).
   recordings?: string;
+  // How the page fetches (a test's; by default the browser's).
+  fetch?: (url: string) => Promise<string>;
 }
 
 export interface Preview {
@@ -63,8 +65,8 @@ export function showPage(o: PageOptions): Preview {
   const out = o.console ?? console;
   let stopped = false;
   const cells = new Cells(equal);
-  const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
-  const run = () => runMain(o.code, o.info, o.main, { print: (line) => out.log(line), names: o.names, cells, world });
+  const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch });
+  const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings) : null;
   const value = sound ? sound.page : run();
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });

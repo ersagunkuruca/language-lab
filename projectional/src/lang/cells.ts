@@ -75,6 +75,9 @@ export class Pending extends Error {
   }
 }
 
+// What a page's attempt (Cells.attempt) undoes if taken back, and does if kept.
+interface Journal { undo: (() => void)[]; later: (() => void)[] }
+
 export class Cells {
   private current: CellNode | null = null;
   private owner: CellNode | null = null;
@@ -150,6 +153,7 @@ export class Cells {
     if (!n) throw new Error("write needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
     if (this.same(n.value as Value, v)) return;
+    if (this.journal) { const was = n.value as Value; this.journal.undo.push(() => this.write(c, was)); }
     n.value = v;
     if (this.onWrite) this.onWrite(this.order.get(n)!, v);
     for (const o of n.observers) this.mark(o, DIRTY);
@@ -169,6 +173,40 @@ export class Cells {
     this.batching++;
     try { return f(); } finally { if (--this.batching === 0) this.flush(); }
   }
+
+  // A batch that may be taken back: when f throws an error `back` accepts,
+  // every cell it wrote has its old value again, what it wrote elsewhere
+  // is undone (undo), and what can't be undone (later: a printed line) never
+  // happens. A page runs an event handler so: one that fetched what hasn't
+  // come is abandoned and runs again when the reply lands, and an
+  // abandoned run leaves nothing behind, as a path a search abandons
+  // doesn't (EFFECTS-REVIEW-2026-10-24 §1.1, BACKLOG L52). Software
+  // transactional memory's retry, in one thread (Harris, Marlow, Peyton
+  // Jones and Herlihy, 2005).
+  private journal: Journal | null = null;
+  attempt<T>(f: () => T, back: (e: unknown) => boolean): T {
+    if (this.journal) return f();
+    const j: Journal = (this.journal = { undo: [], later: [] });
+    this.batching++;
+    try {
+      const v = f();
+      this.journal = null;
+      for (const g of j.later) g();
+      return v;
+    } catch (e) {
+      this.journal = null;
+      if (back(e)) for (const g of j.undo.reverse()) g();
+      else for (const g of j.later) g();
+      throw e;
+    } finally {
+      this.journal = null;
+      if (--this.batching === 0) this.flush();
+    }
+  }
+  // Undone if the attempt this runs in is taken back.
+  undo(g: () => void): void { this.journal?.undo.push(g); }
+  // Now, or when the attempt this runs in is kept.
+  later(g: () => void): void { if (this.journal) this.journal.later.push(g); else g(); }
 
   // A list mapped item by item, as a formula: an item that's still there
   // (equal to one from the last time) keeps what f made of it, and only new
