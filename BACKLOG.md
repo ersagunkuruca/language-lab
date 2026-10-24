@@ -32,7 +32,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
 | E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
 | E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
-| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | after L75 (whole-number literals at fractions, Language lane); smaller/larger on every number type is L73 |
+| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | ready: L75 done (a `lit` with `of: "std.rational"`, value a whole number or "top/bottom"; DSL `k.at`); smaller/larger on every number type is L73 |
 | E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
@@ -283,6 +283,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L75 | Literals at Rational (`of: "std.rational"`, a whole number or `"top/bottom"`, put in lowest terms; a zero bottom is a checker error) and at Complex (`of: "std.complex"`, the real part), drawn as written and spelled as their constructor's call by arith.ts before anything runs; the language half of QA-2026-10-24b's "ratio(1, 2) + 1 is refused", E69 is the palette half | #380 |
 | L74 | `show` (and Run) print a fraction as 1/2 and a complex number as 3 − 4i, not `ratio(1, 2)`: number types show as numbers, evaluated and compiled (one `showValue`); was E77 (QA-2026-10-24b) | #379 |
 | L73 | `smaller`, `larger`, `at most`, `more than`, `at least` over the one generic `<`, so they work on Int and fractions as + − · < do (found by QA-2026-10-24b); the Number-only versions stay published and hidden so saved programs open, and the examples moved onto the new ones | #377 |
 | L40 | Complex numbers: `std.complex`, `complex(re, im)` of two Numbers; the one `+ − · −x` resolve to prelude definitions (· the complex product) from the same table as Rational's, no `<`; `as complex`, `i`, `complex conjugate`, `modulus`, `angle of`, `polar`, `divide complex`, `complex exp`, `show complex`; a `vec2f` on the GPU and two f64s in WebAssembly with no back-end change; derivatives through it right | #374 |
