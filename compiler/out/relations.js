@@ -72,7 +72,7 @@ function solve$3$one(v0, v2) {
   {
     const v1 = (v2 - v0);
     if ($ok(v1)) {
-      return [$clean(v1)];
+      return $clean(v1);
     }
   }
   return $no;

@@ -259,8 +259,9 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const at = (p: string) => gs[given.indexOf(p)];
       const pick = Object.keys(n.binds).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
       out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
-        // At most one answer: its binds, or $no (GAPS.md P2).
-        `function ${name}$one(${gs.join(", ")}) {\n${outs.length > 1 && pick.every((p, i) => p === `r[${i}]`) && pick.length === outs.length ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : [${pick.join(", ")}];`}\n}`);
+        // At most one answer: its binds (one bind as itself), or $no
+        // (GAPS.md P2).
+        `function ${name}$one(${gs.join(", ")}) {\n${(pick.length === 1 && pick[0] === "r") || (outs.length > 1 && pick.length === outs.length && pick.every((p, i) => p === `r[${i}]`)) ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : ${pick.length === 1 ? pick[0] : `[${pick.join(", ")}]`};`}\n}`);
       return name;
     } catch (e) {
       if (!(e instanceof Unsupported)) throw e;

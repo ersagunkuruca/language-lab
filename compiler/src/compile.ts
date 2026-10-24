@@ -763,7 +763,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // ---- solve nodes: one function each, shared by every specialization
   const solvers = new Map<Id, string>();
   // Solves with at most one answer: they also have `name$one`, which gives
-  // the binds or $no (GAPS.md P2).
+  // the binds (one bind as itself) or $no (GAPS.md P2).
   const onceSolvers = new Set<Id>();
   const solverCode: string[] = [];
   function solver(n: NodeOf<"solve">): string {
@@ -1475,6 +1475,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
+      // `first` of one answer or none, given back from here: its statements
+      // in place, then the other way (GAPS.md P6; G24 in a closure).
+      const body = n.kind === "call" && !reflective && refTo(n.fn, S.first) ? thunk(n.args[0]) : null;
+      if (body && oneAnswer(body.body, null)) {
+        const c = n as NodeOf<"call">, g = thunk(c.args[1]);
+        const leaf = (v: string) => out.leaf(out.bool ? `(${v}.tag === ${JSON.stringify(TRUE)})` : v);
+        return `${scoped(false, () => st(body.body, leaf))}\n${g ? ret(g.body, tail, out) : leaf(`${ex(c.args[1])}()`)}`;
+      }
       return out.leaf(out.bool ? exBool(id) : ex(id));
     }
 
@@ -1937,6 +1945,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const sol = temp("sol");
             const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
             const f = solver(n);
+            const bound = Object.values(n.binds);
+            if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(n.body, k)}\n}`;
             if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
             return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
           });
@@ -1957,6 +1967,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `const ${t} = ${v};\n${parts(ids, k, i + 1, [...acc, t])}`;
       });
       const kind = code.nodes[id].kind;
+      // A let: its bindings as statements, then its body (not a closure).
+      const n = code.nodes[id];
+      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
+        const f = node<"lambda">(n.fn);
+        return f.params.map((p, j) => bindLet(p, letArg(p, n.args[j]))).join("") + parts([...ids.slice(0, i), f.body, ...ids.slice(i + 1)], k, i, acc);
+      }
       if (kind === "lit" || kind === "ref" || !ids.slice(i + 1).some(streamy)) return parts(ids, k, i + 1, [...acc, ex(id)]);
       const t = temp();
       return `const ${t} = ${ex(id)};\n${parts(ids, k, i + 1, [...acc, t])}`;

@@ -19,8 +19,7 @@ function solve$1(g0) {
   return r === $no ? [] : [[r]];
 }
 function solve$1$one(g0) {
-  const r = greet$mode0(g0);
-  return r === $no ? $no : [r];
+  return greet$mode0(g0);
 }
 // join text, run backwards by the relational interpreter: given out, solve for 0, 1
 function solve$2(g0) {
@@ -53,7 +52,7 @@ function solve$5$one(v0, v2) {
   {
     const v1 = (v0 * Math.tan(v2));
     if ($ok(v1) && (v0 * Math.cos(v2)) >= -1e-9) {
-      return [$clean(v1)];
+      return $clean(v1);
     }
   }
   return $no;
@@ -234,9 +233,8 @@ $meta(show_numbers, "@su0m8djlkg5cq4b68i0klesqia:1");
 // who was greeted
 function who_was_greeted(greeting) {
   return (() => {
-    const sol$31 = solve$1$one(greeting);
-    if (sol$31 !== $no) {
-      const name = sol$31[0];
+    const name = solve$1$one(greeting);
+    if (name !== $no) {
       return name;
     }
     return "nobody";
@@ -363,9 +361,8 @@ $meta(read_numbers, "5f51968c");
 
 // height on the ray
 function* height_on_the_ray(angle, x2) {
-  const sol$55 = solve$5$one(x2, angle);
-  if (sol$55 !== $no) {
-    const y = sol$55[0];
+  const y = solve$5$one(x2, angle);
+  if (y !== $no) {
     yield y;
   }
 }

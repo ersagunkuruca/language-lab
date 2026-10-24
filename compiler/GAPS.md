@@ -962,3 +962,27 @@ gives back the samples so far and the level, so each level of its
 recursion makes a Pair. It also counts its depth for the heap fallback
 (C21). *Fix:* return the pair's two fields without the record. This is
 tail recursion modulo a constructor, carried through a Pair's first field.
+
+*Measured* by hand (`$got` for the pair's fields): 3%. It waits for P4,
+where the compressor's list goes into an array and the level is a local.
+
+**P6. The drive still runs in closures** (C32). After P2 and P3, `drive`
+was a closure for `first`, another for the let inside the solve's given,
+and a one-item array for its one answer. **Done**: `first` of one answer
+given back from a definition is its statements in place, a let among a
+search's parts is statements, and a solve with one bind gives the value
+itself. 3.6× to 3.5×.
+
+**Where this leaves P4.** Two hand-written versions of the compiled pedal
+show how far arrays go. The first keeps every definition, with blocks as
+arrays between them: views in and destination passing out (each copy
+pushes its list onto an array it is handed). That runs at 2.3 to 2.8×.
+The second fuses the split, drive and join into one loop and drops the
+pairs: 2.1×. So getting within 2× needs both P4 and fusion across the
+conjugation. Views exist in the plain path (G23); destination passing is
+new, and has to be done in all three of the compiler's paths (plain
+definitions, ones with Choice, and written-out modes). Prior art:
+destination-passing style (Minamide, "A functional representation of
+data structures with a hole", POPL 1998; Shaikhha, Fitzgibbon, Peyton
+Jones and Vytiniotis, FHPC 2017), and OCaml's tail modulo cons (Bour,
+Clément and Scherer, 2021).

@@ -245,153 +245,164 @@ function simplify(expression3) {
       case "b50d2f46" /* sum */: {
         const l4 = rs$28[0];
         const r4 = rs$28[1];
-        return (() => {
-          const r$30 = constant(l4);
+        const r$29 = constant(l4);
+        if (r$29 !== $no) {
+          const r$30 = constant(r4);
           if (r$30 !== $no) {
-            const r$31 = constant(r4);
-            if (r$31 !== $no) {
-              let v$32;
-              const d$33 = $rec.d;
+            let v$31;
+            const d$32 = $rec.d;
+            try {
+              v$31 = (r$29 + r$30);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              $rec.d = d$32;
+              v$31 = $no;
+            }
+            if (v$31 !== $no) {
+              let v$33;
+              const d$34 = $rec.d;
               try {
-                v$32 = (r$30 + r$31);
+                v$33 = ({ tag: "6bce4e58" /* number */, fields: [v$31] });
               } catch (e) {
                 if (!$outOfFuel(e)) throw e;
-                $rec.d = d$33;
-                v$32 = $no;
+                $rec.d = d$34;
+                v$33 = $no;
               }
-              if (v$32 !== $no) {
-                let v$34;
-                const d$35 = $rec.d;
-                try {
-                  v$34 = ({ tag: "6bce4e58" /* number */, fields: [v$32] });
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  $rec.d = d$35;
-                  v$34 = $no;
-                }
-                if (v$34 !== $no) {
-                  return v$34;
-                }
+              if (v$33 !== $no) {
+                return v$33;
               }
             }
           }
-          return ((l4.tag === "6bce4e58" /* number */ && $sameNumber(l4.fields[0], 0)) ? r4 : ((r4.tag === "6bce4e58" /* number */ && $sameNumber(r4.fields[0], 0)) ? l4 : ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] })));
-        })();
+        }
+        if ((l4.tag === "6bce4e58" /* number */ && $sameNumber(l4.fields[0], 0))) {
+          return r4;
+        }
+        if ((r4.tag === "6bce4e58" /* number */ && $sameNumber(r4.fields[0], 0))) {
+          return l4;
+        }
+        return ({ tag: "b50d2f46" /* sum */, fields: [l4, r4] });
       }
       case "f2da4c50" /* difference */: {
         const l5 = rs$28[0];
         const r5 = rs$28[1];
-        return (() => {
-          const r$37 = constant(l5);
-          if (r$37 !== $no) {
-            const r$38 = constant(r5);
-            if (r$38 !== $no) {
+        const r$35 = constant(l5);
+        if (r$35 !== $no) {
+          const r$36 = constant(r5);
+          if (r$36 !== $no) {
+            let v$37;
+            const d$38 = $rec.d;
+            try {
+              v$37 = (r$35 - r$36);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              $rec.d = d$38;
+              v$37 = $no;
+            }
+            if (v$37 !== $no) {
               let v$39;
               const d$40 = $rec.d;
               try {
-                v$39 = (r$37 - r$38);
+                v$39 = ({ tag: "6bce4e58" /* number */, fields: [v$37] });
               } catch (e) {
                 if (!$outOfFuel(e)) throw e;
                 $rec.d = d$40;
                 v$39 = $no;
               }
               if (v$39 !== $no) {
-                let v$41;
-                const d$42 = $rec.d;
-                try {
-                  v$41 = ({ tag: "6bce4e58" /* number */, fields: [v$39] });
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  $rec.d = d$42;
-                  v$41 = $no;
-                }
-                if (v$41 !== $no) {
-                  return v$41;
-                }
+                return v$39;
               }
             }
           }
-          return ((r5.tag === "6bce4e58" /* number */ && $sameNumber(r5.fields[0], 0)) ? l5 : ((l5.tag === "6bce4e58" /* number */ && $sameNumber(l5.fields[0], 0)) ? ({ tag: "af14d535" /* negative */, fields: [r5] }) : ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] })));
-        })();
+        }
+        if ((r5.tag === "6bce4e58" /* number */ && $sameNumber(r5.fields[0], 0))) {
+          return l5;
+        }
+        if ((l5.tag === "6bce4e58" /* number */ && $sameNumber(l5.fields[0], 0))) {
+          return ({ tag: "af14d535" /* negative */, fields: [r5] });
+        }
+        return ({ tag: "f2da4c50" /* difference */, fields: [l5, r5] });
       }
       case "24d4c71f" /* product */: {
         const l6 = rs$28[0];
         const r6 = rs$28[1];
-        return (() => {
-          const r$44 = constant(l6);
-          if (r$44 !== $no) {
-            const r$45 = constant(r6);
-            if (r$45 !== $no) {
-              let v$46;
-              const d$47 = $rec.d;
+        const r$41 = constant(l6);
+        if (r$41 !== $no) {
+          const r$42 = constant(r6);
+          if (r$42 !== $no) {
+            let v$43;
+            const d$44 = $rec.d;
+            try {
+              v$43 = (r$41 * r$42);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              $rec.d = d$44;
+              v$43 = $no;
+            }
+            if (v$43 !== $no) {
+              let v$45;
+              const d$46 = $rec.d;
               try {
-                v$46 = (r$44 * r$45);
+                v$45 = ({ tag: "6bce4e58" /* number */, fields: [v$43] });
               } catch (e) {
                 if (!$outOfFuel(e)) throw e;
-                $rec.d = d$47;
-                v$46 = $no;
+                $rec.d = d$46;
+                v$45 = $no;
               }
-              if (v$46 !== $no) {
-                let v$48;
-                const d$49 = $rec.d;
-                try {
-                  v$48 = ({ tag: "6bce4e58" /* number */, fields: [v$46] });
-                } catch (e) {
-                  if (!$outOfFuel(e)) throw e;
-                  $rec.d = d$49;
-                  v$48 = $no;
-                }
-                if (v$48 !== $no) {
-                  return v$48;
-                }
+              if (v$45 !== $no) {
+                return v$45;
               }
             }
           }
-          return (((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 0)) || (r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 0))) ? $k20 : ((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 1)) ? r6 : ((r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 1)) ? l6 : ({ tag: "24d4c71f" /* product */, fields: [l6, r6] }))));
-        })();
+        }
+        if (((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 0)) || (r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 0)))) {
+          return $k20;
+        }
+        if ((l6.tag === "6bce4e58" /* number */ && $sameNumber(l6.fields[0], 1))) {
+          return r6;
+        }
+        if ((r6.tag === "6bce4e58" /* number */ && $sameNumber(r6.fields[0], 1))) {
+          return l6;
+        }
+        return ({ tag: "24d4c71f" /* product */, fields: [l6, r6] });
       }
       case "af14d535" /* negative */: {
         const a4 = rs$28[0];
-        return (() => {
-          const r$51 = constant(a4);
-          if (r$51 !== $no) {
-            let v$52;
-            const d$53 = $rec.d;
+        const r$47 = constant(a4);
+        if (r$47 !== $no) {
+          let v$48;
+          const d$49 = $rec.d;
+          try {
+            v$48 = (-r$47);
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            $rec.d = d$49;
+            v$48 = $no;
+          }
+          if (v$48 !== $no) {
+            let v$50;
+            const d$51 = $rec.d;
             try {
-              v$52 = (-r$51);
+              v$50 = ({ tag: "6bce4e58" /* number */, fields: [v$48] });
             } catch (e) {
               if (!$outOfFuel(e)) throw e;
-              $rec.d = d$53;
-              v$52 = $no;
+              $rec.d = d$51;
+              v$50 = $no;
             }
-            if (v$52 !== $no) {
-              let v$54;
-              const d$55 = $rec.d;
-              try {
-                v$54 = ({ tag: "6bce4e58" /* number */, fields: [v$52] });
-              } catch (e) {
-                if (!$outOfFuel(e)) throw e;
-                $rec.d = d$55;
-                v$54 = $no;
-              }
-              if (v$54 !== $no) {
-                return v$54;
-              }
+            if (v$50 !== $no) {
+              return v$50;
             }
           }
-          return (() => {
-            const s$56 = a4;
-            switch (s$56.tag) {
-              case "af14d535" /* negative */: {
-                const inner = s$56.fields[0];
-                return inner;
-              }
-              default: {
-                return ({ tag: "af14d535" /* negative */, fields: [a4] });
-              }
-            }
-          })();
-        })();
+        }
+        const s$52 = a4;
+        switch (s$52.tag) {
+          case "af14d535" /* negative */: {
+            const inner = s$52.fields[0];
+            return inner;
+          }
+          default: {
+            return ({ tag: "af14d535" /* negative */, fields: [a4] });
+          }
+        }
       }
       case "563662e0" /* quotient */: {
         const t2 = rs$28[0];
@@ -411,28 +422,28 @@ function simplify(expression3) {
       }
     }
   };
-  const ix$61 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
-  const todo$59 = [{ v: expression3, i: 0, rs: [] }];
+  const ix$57 = { "b50d2f46": [0, 1], "f2da4c50": [0, 1], "24d4c71f": [0, 1], "af14d535": [0], "563662e0": [0, 1], "a9186a8d": [0], "9a6512de": [0] };
+  const todo$55 = [{ v: expression3, i: 0, rs: [] }];
   for (;;) {
-    const top$60 = todo$59[todo$59.length - 1];
-    const v$57 = ix$61[top$60.v.tag];
-    if (v$57 && top$60.i < v$57.length) {
-      todo$59.push({ v: top$60.v.fields[v$57[top$60.i++]], i: 0, rs: [] });
+    const top$56 = todo$55[todo$55.length - 1];
+    const v$53 = ix$57[top$56.v.tag];
+    if (v$53 && top$56.i < v$53.length) {
+      todo$55.push({ v: top$56.v.fields[v$53[top$56.i++]], i: 0, rs: [] });
       continue;
     }
-    const r$58 = step$26(top$60.v, top$60.rs);
-    todo$59.pop();
-    if (!todo$59.length) return r$58;
-    todo$59[todo$59.length - 1].rs.push(r$58);
+    const r$54 = step$26(top$56.v, top$56.rs);
+    todo$55.pop();
+    if (!todo$55.length) return r$54;
+    todo$55[todo$55.length - 1].rs.push(r$54);
   }
 }
 
 // evaluate
 function evaluate(expression4, at) {
-  const fold$62 = function* (s$63) {
-    switch (s$63.tag) {
+  const fold$58 = function* (s$59) {
+    switch (s$59.tag) {
       case "6bce4e58" /* number */: {
-        const value3 = s$63.fields[0];
+        const value3 = s$59.fields[0];
         yield value3;
         break;
       }
@@ -441,12 +452,50 @@ function evaluate(expression4, at) {
         break;
       }
       case "b50d2f46" /* sum */: {
-        for (const l7 of fold$62(s$63.fields[0])) {
-          for (const r7 of fold$62(s$63.fields[1])) {
+        for (const l7 of fold$58(s$59.fields[0])) {
+          for (const r7 of fold$58(s$59.fields[1])) {
+            let v$60;
+            const d$61 = $rec.d;
+            try {
+              v$60 = (l7 + r7);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              $rec.d = d$61;
+              v$60 = $no;
+            }
+            if (v$60 !== $no) {
+              yield v$60;
+            }
+          }
+        }
+        break;
+      }
+      case "f2da4c50" /* difference */: {
+        for (const l8 of fold$58(s$59.fields[0])) {
+          for (const r8 of fold$58(s$59.fields[1])) {
+            let v$62;
+            const d$63 = $rec.d;
+            try {
+              v$62 = (l8 - r8);
+            } catch (e) {
+              if (!$outOfFuel(e)) throw e;
+              $rec.d = d$63;
+              v$62 = $no;
+            }
+            if (v$62 !== $no) {
+              yield v$62;
+            }
+          }
+        }
+        break;
+      }
+      case "24d4c71f" /* product */: {
+        for (const l9 of fold$58(s$59.fields[0])) {
+          for (const r9 of fold$58(s$59.fields[1])) {
             let v$64;
             const d$65 = $rec.d;
             try {
-              v$64 = (l7 + r7);
+              v$64 = (l9 * r9);
             } catch (e) {
               if (!$outOfFuel(e)) throw e;
               $rec.d = d$65;
@@ -459,50 +508,52 @@ function evaluate(expression4, at) {
         }
         break;
       }
-      case "f2da4c50" /* difference */: {
-        for (const l8 of fold$62(s$63.fields[0])) {
-          for (const r8 of fold$62(s$63.fields[1])) {
-            let v$66;
-            const d$67 = $rec.d;
-            try {
-              v$66 = (l8 - r8);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              $rec.d = d$67;
-              v$66 = $no;
-            }
-            if (v$66 !== $no) {
-              yield v$66;
-            }
-          }
-        }
-        break;
-      }
-      case "24d4c71f" /* product */: {
-        for (const l9 of fold$62(s$63.fields[0])) {
-          for (const r9 of fold$62(s$63.fields[1])) {
-            let v$68;
-            const d$69 = $rec.d;
-            try {
-              v$68 = (l9 * r9);
-            } catch (e) {
-              if (!$outOfFuel(e)) throw e;
-              $rec.d = d$69;
-              v$68 = $no;
-            }
-            if (v$68 !== $no) {
-              yield v$68;
-            }
-          }
-        }
-        break;
-      }
       case "af14d535" /* negative */: {
-        for (const a7 of fold$62(s$63.fields[0])) {
+        for (const a7 of fold$58(s$59.fields[0])) {
+          let v$66;
+          const d$67 = $rec.d;
+          try {
+            v$66 = (-a7);
+          } catch (e) {
+            if (!$outOfFuel(e)) throw e;
+            $rec.d = d$67;
+            v$66 = $no;
+          }
+          if (v$66 !== $no) {
+            yield v$66;
+          }
+        }
+        break;
+      }
+      case "563662e0" /* quotient */: {
+        for (const t3 of fold$58(s$59.fields[0])) {
+          for (const b3 of fold$58(s$59.fields[1])) {
+            if ($sameNumber(b3, 0)) {
+              /* fail */
+            } else {
+              let v$68;
+              const d$69 = $rec.d;
+              try {
+                v$68 = (t3 / b3);
+              } catch (e) {
+                if (!$outOfFuel(e)) throw e;
+                $rec.d = d$69;
+                v$68 = $no;
+              }
+              if (v$68 !== $no) {
+                yield v$68;
+              }
+            }
+          }
+        }
+        break;
+      }
+      case "a9186a8d" /* sine */: {
+        for (const a8 of fold$58(s$59.fields[0])) {
           let v$70;
           const d$71 = $rec.d;
           try {
-            v$70 = (-a7);
+            v$70 = Math.sin(a8);
           } catch (e) {
             if (!$outOfFuel(e)) throw e;
             $rec.d = d$71;
@@ -514,82 +565,42 @@ function evaluate(expression4, at) {
         }
         break;
       }
-      case "563662e0" /* quotient */: {
-        for (const t3 of fold$62(s$63.fields[0])) {
-          for (const b3 of fold$62(s$63.fields[1])) {
-            if ($sameNumber(b3, 0)) {
-              /* fail */
-            } else {
-              let v$72;
-              const d$73 = $rec.d;
-              try {
-                v$72 = (t3 / b3);
-              } catch (e) {
-                if (!$outOfFuel(e)) throw e;
-                $rec.d = d$73;
-                v$72 = $no;
-              }
-              if (v$72 !== $no) {
-                yield v$72;
-              }
-            }
-          }
-        }
-        break;
-      }
-      case "a9186a8d" /* sine */: {
-        for (const a8 of fold$62(s$63.fields[0])) {
-          let v$74;
-          const d$75 = $rec.d;
-          try {
-            v$74 = Math.sin(a8);
-          } catch (e) {
-            if (!$outOfFuel(e)) throw e;
-            $rec.d = d$75;
-            v$74 = $no;
-          }
-          if (v$74 !== $no) {
-            yield v$74;
-          }
-        }
-        break;
-      }
       case "9a6512de" /* cosine */: {
-        for (const a9 of fold$62(s$63.fields[0])) {
-          let v$76;
-          const d$77 = $rec.d;
+        for (const a9 of fold$58(s$59.fields[0])) {
+          let v$72;
+          const d$73 = $rec.d;
           try {
-            v$76 = Math.cos(a9);
+            v$72 = Math.cos(a9);
           } catch (e) {
             if (!$outOfFuel(e)) throw e;
-            $rec.d = d$77;
-            v$76 = $no;
+            $rec.d = d$73;
+            v$72 = $no;
           }
-          if (v$76 !== $no) {
-            yield v$76;
+          if (v$72 !== $no) {
+            yield v$72;
           }
         }
         break;
       }
     }
   };
-  for (const r$78 of fold$62(expression4)) {
-    return r$78;
+  for (const r$74 of fold$58(expression4)) {
+    return r$74;
   }
   return $no;
 }
 
-// root near (the rest of the search as `k$81`)
-function root_near$k(f2, guess, k$81) {
-  for (const r$83 of $fuel(100, (function* () {
+// root near (the rest of the search as `k$77`)
+function root_near$k(f2, guess, k$77) {
+  for (const r$79 of $fuel(100, (function* () {
     if ($spend()) {
-      const r$82 = newton(f2, simplify(derivative(f2)), guess);
-      if (r$82 !== $no) {
-        yield r$82;
+      const r$78 = newton(f2, simplify(derivative(f2)), guess);
+      if (r$78 !== $no) {
+        yield r$78;
       }
     }
   }), true)) {
-    if (k$81(r$83)) return true;
+    if (k$77(r$79)) return true;
   }
   return false;
 }
@@ -605,10 +616,10 @@ function parenthesize(shown, needed) {
 // constant
 function constant(expression5) {
   {
-    const s$84 = expression5;
-    switch (s$84.tag) {
+    const s$80 = expression5;
+    switch (s$80.tag) {
       case "6bce4e58" /* number */: {
-        const value4 = s$84.fields[0];
+        const value4 = s$80.fields[0];
         return value4;
         break;
       }
@@ -622,38 +633,38 @@ function constant(expression5) {
 
 // newton
 function newton(f3, slope, guess2) {
-  const r$85 = evaluate(f3, guess2);
-  if (r$85 !== $no) {
-    const r$86 = evaluate(slope, guess2);
-    if (r$86 !== $no) {
-      let v$87;
-      const d$88 = $rec.d;
+  const r$81 = evaluate(f3, guess2);
+  if (r$81 !== $no) {
+    const r$82 = evaluate(slope, guess2);
+    if (r$82 !== $no) {
+      let v$83;
+      const d$84 = $rec.d;
       try {
-        v$87 = (r$85 / r$86);
+        v$83 = (r$81 / r$82);
       } catch (e) {
         if (!$outOfFuel(e)) throw e;
-        $rec.d = d$88;
-        v$87 = $no;
+        $rec.d = d$84;
+        v$83 = $no;
       }
-      if (v$87 !== $no) {
-        let v$89;
-        const d$90 = $rec.d;
+      if (v$83 !== $no) {
+        let v$85;
+        const d$86 = $rec.d;
         try {
-          v$89 = (guess2 - v$87);
+          v$85 = (guess2 - v$83);
         } catch (e) {
           if (!$outOfFuel(e)) throw e;
-          $rec.d = d$90;
-          v$89 = $no;
+          $rec.d = d$86;
+          v$85 = $no;
         }
-        if (v$89 !== $no) {
-          const next = v$89;
+        if (v$85 !== $no) {
+          const next = v$85;
           if ((Math.abs((next - guess2)) < 1e-12)) {
             return next;
           } else {
             if ($spend()) {
-              const r$91 = newton(f3, slope, next);
-              if (r$91 !== $no) {
-                return r$91;
+              const r$87 = newton(f3, slope, next);
+              if (r$87 !== $no) {
+                return r$87;
               }
             }
           }

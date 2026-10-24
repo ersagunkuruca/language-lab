@@ -334,17 +334,15 @@ function slug_character(c) {
 // lower
 function lower(c2) {
   if ((!(c2 < "A") && !("Z" < c2))) {
-    return (() => {
-      const r$88 = $partial["builtin.text.code"](c2);
-      if (r$88 !== $no) {
-        const t$89 = $int.add(r$88, 32);
-        const r$90 = $partial["builtin.text.fromCode"](t$89);
-        if (r$90 !== $no) {
-          return r$90;
-        }
+    const r$87 = $partial["builtin.text.code"](c2);
+    if (r$87 !== $no) {
+      const t$88 = $int.add(r$87, 32);
+      const r$89 = $partial["builtin.text.fromCode"](t$88);
+      if (r$89 !== $no) {
+        return r$89;
       }
-      return c2;
-    })();
+    }
+    return c2;
   }
   return c2;
 }
