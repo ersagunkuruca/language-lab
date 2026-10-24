@@ -4,7 +4,7 @@ Design note for BACKLOG.md C17 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
-**Status.** Stages N1 to N3 are done.
+**Status.** Stages N1 to N3 are done, and the first half of N4.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -50,6 +50,29 @@ plan.
   lowering counted ±∞ as a whole number when comparing (so ∞ ≠ 0 there,
   but ∞ ≈ 0 in the evaluator, whose rule is Number.isInteger); fixed for
   every target.
+- **N4a.** Int, Text and Abort (`compiler/src/c-rt.ts`, the runtime that
+  wasm-rt.ts is to WebAssembly):
+  - an Int is one `int64_t`: odd, the value itself while it fits 62 bits;
+    even, a pointer to a counted cell of 32-bit limbs. Each Int has one
+    spelling, so small ones are equal when their words are. Big products
+    are schoolbook and division is Knuth's Algorithm D (Hacker's Delight's
+    `divmnu`); quotient and remainder round down, as the evaluator's do;
+  - a Text is a counted cell of UTF-8 bytes. Positions count characters,
+    and since UTF-8's byte order is the code points' order, `less` compares
+    bytes;
+  - a Number shown is JavaScript's String(x): the fewest digits that read
+    back as x (the first precision whose correctly rounded digits do, by
+    the C library's printf and strtod), set out as ECMA-262 says;
+  - Abort is status 2, with its reason in `lab_reason`; a handler is a
+    label for status 2, as an attempt is for 1.
+
+  A call is now a statement of its own, in order: C may run a call's
+  arguments in any order, and a call can drop a cell another argument
+  still reads. Calc's arithmetic on 400 Ints of every size, its tokens,
+  parser and descriptions, chapters' words and slugs, wc's tallies,
+  ledger's amounts (and their aborts) and the converter's numbers on 300
+  random magnitudes give the evaluator's answers, every cell freed, under
+  AddressSanitizer too.
 
 ## What it's for
 
@@ -157,7 +180,7 @@ it and call `cc`.
    - Check: Countdown against the evaluator. Done (above); `musttail`
      moves to N5's measurements, and queens to N4 (it needs `number.range`).
 4. **N4. Int, Text and the world: whole programs.**
-   - Int and Text as above.
+   - Int and Text as above. Done (N4a).
    - Console, files and arguments over the C library.
    - main on a big stack; `lab native`.
    - Check: wc, ledger, chapters and calc, printing and exiting as the
