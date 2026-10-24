@@ -93,7 +93,14 @@ same app, packaged.
   goes in as it is, since entities aren't read there.
 - **Mobile?** Packaging, not language: the HTML file plus a web manifest is
   an installable PWA, and Capacitor (Ionic) wraps the same file as an iOS
-  or Android app. Device features (camera, location, notifications) become
+  or Android app. `lab build-app <program> -o folder` (cli/app.ts) writes
+  both: `folder/www` holds the page, a web app manifest, a service worker
+  that keeps every file so it opens offline (its cache named by what it
+  keeps, so a new build replaces it), and two icons in the program's
+  colour; `folder` itself is a Capacitor project whose config points at
+  www/, so `npx cap add android` and `npx cap run android` make the app
+  (its README.md has the steps). Chromium finds the dice app installable
+  and reloads it offline. Device features (camera, location, notifications) become
   world operations in that world's handler. Nothing mobile-specific enters
   the language (REVIEW.md §7.4).
 

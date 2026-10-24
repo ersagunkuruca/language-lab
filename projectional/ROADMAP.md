@@ -140,8 +140,8 @@ run in parallel because they touch different files.
    effect rows (#102). Open: reactive.html's programs moved onto `Html`,
    keyed lists, `solve` over a function value (one generic `bind`),
    static output from `lab run`, a page shown
-   live in the editor. Mobile follows as a packaged web app (a PWA, or
-   Capacitor).
+   live in the editor. Mobile is a packaged web app: `lab build-app`
+   writes an installable, offline PWA that is also a Capacitor project.
 8. **Research items** as they become blocking: costs worked out from folds,
    laws proved by fusion, fast invertible parsing, exact reals as a practical
    numeric type, Clifford algebras (NUMBERS.md stage 4).

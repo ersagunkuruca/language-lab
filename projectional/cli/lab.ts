@@ -7,6 +7,7 @@
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
+//   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //
 // A program is a file saved by the editor (Save file), or a folder of side
 // tables like projectional/examples/sort. `main` gets the arguments as a list
@@ -18,8 +19,8 @@
 // the representation the chooser picks for each type `main` uses, e.g.
 // Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -39,6 +40,7 @@ import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { execFileSync } from "node:child_process";
 import { webPage } from "./web.ts";
+import { appFolder } from "./app.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
@@ -46,6 +48,7 @@ const USAGE = `usage:
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
   lab build-web <program> [-o app.html] one HTML file running the page main returns
+  lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore representations.json and run the definitions as written
@@ -180,7 +183,7 @@ if (!command || command === "help" || command === "--help" || !path) {
 }
 
 const loaded = load(path);
-const main = command === "run" || command === "compile" || command === "native" || command === "build-web" ? entry(loaded, mainName, command === "build-web") : "";
+const main = command === "run" || command === "compile" || command === "native" || command === "build-web" || command === "build-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 const p = main && defined < 0 ? represented(loaded, main) : loaded;
 switch (command) {
   case "run": {
@@ -236,6 +239,16 @@ switch (command) {
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
     writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main));
     process.stderr.write(`lab: wrote ${out}; open it in a browser\n`);
+    break;
+  }
+  case "build-app": {
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : basename(resolve(path)).replace(/\.json$/, "");
+    for (const [file, x] of Object.entries(appFolder(p.title, await webPage(p.title, p.code, p.info, p.names, main)))) {
+      mkdirSync(dirname(join(out, file)), { recursive: true });
+      writeFileSync(join(out, file), x);
+    }
+    process.stderr.write(`lab: wrote ${out}/; put ${out}/www on an HTTPS host to install it, or see ${out}/README.md for Android and iOS\n`);
     break;
   }
   case "check": {
