@@ -39,7 +39,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
 | E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
 | E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
-| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | |
+| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | after L75 (whole-number literals at fractions, Language lane); smaller/larger on every number type is L73 |
 | E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
@@ -47,7 +47,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
 | E75 | Opening a program doesn't scroll the navigator to its open definition (pedal, converter `main` below the fold) | QA-2026-10-24b L7 | P3 | S | |
 | E76 | Status bar quiet after typing in a page's field (converter) | QA-2026-10-24b L8 | P3 | S | |
-| E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | |
+| E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
 | E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | design note projectional/PATTERNS.md (#370); step 1 text rows (#372); step 2 shared bodies as otherwise (#373); step 3 graph rows next |
 | E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | |
