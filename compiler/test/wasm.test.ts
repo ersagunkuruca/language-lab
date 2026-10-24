@@ -261,6 +261,25 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
   }
 });
 
+// Ryū's shortest digits (wasm-rt.ts number.js), which show uses past the
+// plain decimals, so no host is asked: JavaScript's own String, on every
+// binary exponent, the decimal powers, and random bit patterns.
+test("a Number's text in WebAssembly is JavaScript's String: the shortest digits that read back, with no host", async () => {
+  const p = texts();
+  const m = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.shown], { data: true }));
+  assert.deepEqual(WebAssembly.Module.imports(new WebAssembly.Module(m.bytes)), []);
+  const w = await instantiate(m) as unknown as Exports;
+  const text = (x: number) => fromText(w, (w["Number.text"] as (x: number) => unknown)(x));
+  const bits = new Float64Array(1), word = new Uint32Array(bits.buffer);
+  const xs = [0, -0, 0.1, 0.2 + 0.1, 1 / 3, 5e-324, -5e-324, 1.7976931348623157e308, 2.2250738585072014e-308, 2.225073858507201e-308, 1e21, 1e-7, 1e-6, 1e22, 1e23, 2 ** 60, 2 ** 64, 4.35, 5e-310, NaN, Infinity, -Infinity];
+  for (let e = -1074; e < 1024; e++) for (const d of [1, 3, 0.75]) xs.push(d * 2 ** e, -d * 2 ** e);
+  for (let i = 1; i < 10; i++) for (let k = -324; k < 309; k++) xs.push(Number(`${i}e${k}`));
+  let seed = 1;
+  const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0);
+  for (let i = 0; i < 20000; i++) { word[0] = next() ^ (next() << 16); word[1] = next() ^ (next() << 16); xs.push(bits[0]); }
+  for (const x of xs) assert.equal(text(x), String(x));
+});
+
 test("one answer or none in WebAssembly: a status after the answer, handlers as blocks, the evaluator's answers", async () => {
   const p = choices();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });

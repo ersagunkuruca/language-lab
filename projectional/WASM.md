@@ -10,11 +10,13 @@ W4c: Abort, W4d: searches with several answers anywhere, below). wc,
 ledger, chapters, calc, queens and Countdown run whole in WebAssembly,
 main included, and as WASI commands they run under wasmtime with no
 JavaScript (`npm run wasi -- wc` in compiler/), Countdown too since W3c
-wrote mod (from musl's fmod) and most of a Number's show in WebAssembly.
-Countdown's search runs as fast as the hand-written ideal JavaScript.
-With no JavaScript host, sin and the other Math functions are refused,
-and a show that needs 15 or more digits (1/3) traps: a port of fdlibm
-and of a shortest round-trip printer (Ryū) would close both. Left: W5 (big Int), and
+wrote mod (from musl's fmod) in WebAssembly, and W3d a Number's show:
+plain decimals directly, anything else as JavaScript's String, with
+Ryū's shortest digits (its tables, about 10 KB, are in a module only
+when it shows a Number). So a module asks its host for nothing but the
+world. Countdown's search runs as fast as the hand-written ideal
+JavaScript. With no JavaScript host, sin and the other Math functions
+are refused with a reason; a port of fdlibm would close that. Left: W5 (big Int), and
 from W1 nested folds and one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
