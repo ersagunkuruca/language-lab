@@ -1,7 +1,7 @@
 // Sounds (AUDIO.md, stage A1): a sound is what its maker returns, a
 // function on blocks of samples with its state in cells. Played over the
-// same samples, the evaluator and the compiled program give the same bits,
-// at any block size a sound mustn't depend on; `lab render` writes what it
+// same samples, the evaluator and the compiled program give the same
+// numbers, at any block size a sound mustn't depend on; `lab render` writes what it
 // played to a WAV file.
 
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, playBlocks } from "../src/lang/audio.ts";
+import { sameNumber } from "../src/lang/run.ts";
 import { CELL_OPS, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { soundOf } from "../cli/sound.ts";
@@ -29,13 +30,18 @@ const pedal = () => {
   return { p: { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names }, main: p.named("main") };
 };
 
-test("the pedal: the evaluator and the compiled program play the same bits, at blocks of 128 and of 256", async () => {
+test("the pedal: the evaluator and the compiled program play the same samples, at blocks of 128 and of 256", async () => {
   const { p, main } = pedal();
   assert.equal(audioProblem(p.info, main, p.names), null);
   const input = sine(512, 0.3);
   const ways = await Promise.all((["evaluator", "compiled"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
   for (const w of ways) assert.deepEqual(w.silent, []);
-  for (const w of ways.slice(1)) assert.deepEqual(w.out, ways[0].out);
+  // Each way the same bits at either block size; the two ways the same
+  // numbers as the language compares them (the interpreter runs atanh
+  // backwards with fractions, the compiled plan with floats).
+  assert.deepEqual(ways[1].out, ways[0].out);
+  assert.deepEqual(ways[3].out, ways[2].out);
+  ways[0].out.forEach((x, i) => assert.ok(sameNumber(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
   // It drives: a quiet note comes out louder, and silence stays silent.
   const peak = (xs: ArrayLike<number>) => Math.max(...Array.from(xs, Math.abs));
   assert.ok(peak(ways[0].out) > 2 * peak(input), `peak ${peak(ways[0].out)}`);
