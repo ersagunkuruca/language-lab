@@ -441,7 +441,8 @@ test("Abort in WebAssembly: status 2 and a reason, through first and budgets; ca
   const wl = await instantiate(emitWasm(ll)) as unknown as Exports;
   const rl = makeRunner(ledger.code, ledger.info, { print: () => {} });
   const [entries, report] = ["entries", "report"].map((x) => fnOf(ll, x));
-  for (const file of ["# a comment\n2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n\n2026-10-03,coffee,-450,beans\n2026-10-07,coffee,-5,gum\n", book(2000), "2026-01-01,a,1,x\n2026-01-02,b,2\n", "2026-01-01,a,1,x,y\n", "\n2026-01-01,a,1.5,x\n"]) {
+  // book(15000): past the stack before entries became a loop (C24).
+  for (const file of ["# a comment\n2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n\n2026-10-03,coffee,-450,beans\n2026-10-07,coffee,-5,gum\n", book(2000), book(15000), "2026-01-01,a,1,x\n2026-01-02,b,2\n", "2026-01-01,a,1,x,y\n", "\n2026-01-01,a,1.5,x\n"]) {
     const lines = toList(file.split("\n"));
     const want = outcome(rl, entries.def, [lines, 1]);
     const got = wl.entries(toWasm(wl, lines, entries.params[0]), wl["Int.of"](1n)) as [unknown, number];
