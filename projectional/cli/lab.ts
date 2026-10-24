@@ -21,7 +21,7 @@
 // the representation the chooser picks for each type `main` uses, e.g.
 // Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Code, Id } from "../src/model.ts";
@@ -41,7 +41,7 @@ import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { execFileSync } from "node:child_process";
-import { webPage } from "./web.ts";
+import { recordings, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
@@ -238,7 +238,10 @@ switch (command) {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
     writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main));
-    process.stderr.write(`lab: wrote ${out}; open it in a browser\n`);
+    // A recording the page plays, from the program's folder (AUDIO.md).
+    const copied = recordings(p.code).filter((f) => existsSync(join(path, f)) && statSync(path).isDirectory());
+    for (const f of copied) copyFileSync(join(path, f), join(dirname(out), f));
+    process.stderr.write(`lab: wrote ${out}${copied.length ? ` and ${copied.join(", ")} beside it` : ""}; open it in a browser${copied.length ? " (from a web server: a page opened as a file can't fetch its recordings)" : ""}\n`);
     break;
   }
   case "build-app": {

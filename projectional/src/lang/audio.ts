@@ -6,7 +6,9 @@
 import type { Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { AUDIO_BLOCK, AUDIO_MAKER, LIST } from "./std.ts";
+import type { Data, Value } from "./run.ts";
+import { fromList } from "./run.ts";
+import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST } from "./std.ts";
 import { NUMBER, type Type } from "./types.ts";
 
 // The browser's render quantum (Web Audio API, AudioWorklet): the block a
@@ -55,4 +57,20 @@ export function playBlocks(play: (block: number[]) => number[], input: ArrayLike
     for (let i = 0; i < size && at + i < input.length; i++) out[at + i] = got[i];
   }
   return { out, silent };
+}
+
+// A page's `listen` attributes, in the order they're written, where main
+// put them (not inside a `part`, which a view draws later). The page and
+// the audio thread each run main and walk it the same way, so the n-th
+// here is the n-th there (audio-page.ts, audio-worklet.ts).
+export function listens(page: Value): Data[] {
+  const found: Data[] = [];
+  const walk = (v: Value) => {
+    const d = v as Data;
+    if (d?.tag !== HTML_V.element) return;
+    for (const a of fromList(d.fields[1]) as Data[]) if (a.tag === HTML_V.listen) found.push(a);
+    fromList(d.fields[2]).forEach(walk);
+  };
+  walk(page);
+  return found;
 }

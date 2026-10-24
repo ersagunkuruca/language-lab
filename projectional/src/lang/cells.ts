@@ -87,6 +87,14 @@ export class Cells {
   // gives each one its own step budget (html.ts).
   around: (update: () => void) => void = (update) => update();
   private same: (a: Value, b: Value) => boolean;
+  // Each cell's place in the order cells were made, told when it's made
+  // and with each write: a page with sound sends its writes to the audio
+  // thread's run of main, whose cells were made in the same order
+  // (AUDIO.md, audio-page.ts).
+  private made = 0;
+  private order = new WeakMap<CellNode, number>();
+  onCell: ((c: Value, place: number) => void) | null = null;
+  onWrite: ((place: number, v: Value) => void) | null = null;
 
   constructor(same: (a: Value, b: Value) => boolean = Object.is) {
     this.same = same;
@@ -105,7 +113,10 @@ export class Cells {
 
   // Solid's createSignal.
   cell(initial: Value, label = "cell"): Value {
-    return this.wrap(this.node(null, initial, label));
+    const n = this.node(null, initial, label), c = this.wrap(n), place = this.made++;
+    this.order.set(n, place);
+    this.onCell?.(c, place);
+    return c;
   }
 
   // Solid's createMemo, lazy: nothing runs until the first read.
@@ -140,6 +151,7 @@ export class Cells {
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
     if (this.same(n.value as Value, v)) return;
     n.value = v;
+    if (this.onWrite) this.onWrite(this.order.get(n)!, v);
     for (const o of n.observers) this.mark(o, DIRTY);
     if (!this.batching) this.flush();
   }

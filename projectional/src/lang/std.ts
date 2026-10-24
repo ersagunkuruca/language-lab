@@ -118,16 +118,25 @@ export const AUDIO_MAKER: readonly Id[] = discharge("a sound's maker", [CELLS, D
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
+// Where a sound's samples come from (AUDIO.md): the microphone, or a
+// recording the page fetches by its address and plays over and over.
+export const INPUT = typedef("std.input", "Input", [], [
+  ["microphone", []],
+  ["recording", [["address", () => tref(STRING)]]],
+]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
   ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [...PAGE_HANDLER])]]],
+  // A sound played from an input when the element is clicked, and stopped
+  // when it's clicked again (AUDIO.md, A2).
+  ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER))], tref(LIST, tref(NUMBER)), [...AUDIO_BLOCK])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
   ["text", [["shows", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
   ["part", [["view", (_, self) => tfun([], tref(self), [...PAGE_VIEW])]]],
 ]);
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", event: "std.event.event" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
@@ -371,7 +380,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, ATTRIBUTE, HTML] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

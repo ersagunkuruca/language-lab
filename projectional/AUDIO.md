@@ -10,7 +10,11 @@ the pedal plays 41 blocks a second. A1c is done: Haar's split is written
 in lifting steps (one unknown each run backwards), a match whose arms build
 its result with different cases has one answer run backwards, and the join
 compiles to arithmetic: the pedal plays 3258 blocks a second compiled,
-nearly nine times real time. A2 (live in a page) is next.
+nearly nine times real time. A2 is done: `listen(microphone, pedal)` on a
+button plays live in a page (`lab build-web examples/pedal`, and
+apps/pedal.html on the site), from the microphone or a recording, with
+Softer and Harder turning the drive as it plays; test/sound-browser.ts
+plays it in Chromium from a fake microphone. A3 is next.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model

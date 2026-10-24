@@ -78,6 +78,9 @@ const chosen = tests.filter((t) => {
 const pageInputs = closure(["projectional/editor/build.ts", "projectional/editor/smoke.ts", "projectional/editor/shaders-smoke.ts"]);
 const page = all || setup || code.some((f) => pageInputs.has(f) || /^projectional\/(editor|examples|library|styles)\//.test(f));
 const gpu = all || setup || code.some((f) => closure(["compiler/gpu.ts"]).has(f));
+// A page with sound (AUDIO.md): what builds it and what it runs on, and the pedal.
+const soundInputs = closure(["projectional/test/sound-browser.ts", "projectional/cli/web.ts", "projectional/src/lang/page-runtime.ts", "projectional/src/lang/audio-worklet.ts"]);
+const sound = all || setup || code.some((f) => soundInputs.has(f) || f.startsWith("projectional/examples/pedal/"));
 
 const runs: { what: string; cwd: string; cmd: string[] }[] = [];
 for (const p of PACKAGES) {
@@ -91,6 +94,7 @@ if (page) {
   runs.push({ what: "shaders in a browser", cwd: "projectional", cmd: ["node", "editor/shaders-smoke.ts"] });
 }
 if (gpu) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
+if (sound) runs.push({ what: "sound in a browser", cwd: "projectional", cmd: ["node", "test/sound-browser.ts"] });
 
 console.log(all ? "everything, every sweep in full" : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
