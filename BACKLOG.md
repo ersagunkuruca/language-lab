@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E51 | The minimap and the Fit pill sit on the graph (1280×720: on `rotate` and `solve rotate`; phone: a quarter of the pane); smaller, collapsible, or shown while panning | QA-2026-10-24 M2 | P1 | S | |
 | E52 | A page in the Run panel is unstyled (pedal and dice in default serif, the drive picture cut off); a base stylesheet for the mount, or CSS in the examples | QA-2026-10-24 L1 | P2 | S | |
 | E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
 | E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
@@ -117,6 +116,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E51 | The map can be put away: Map button beside Fit, off by default on a phone, at most a fifth of the pane | #353 |
 | E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
 | E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
 | L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
