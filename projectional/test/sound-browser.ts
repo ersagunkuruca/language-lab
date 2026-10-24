@@ -3,7 +3,8 @@
 // fake microphone (a beep) and from its recording. What reaches the
 // speakers is tapped with an analyser: it must be sound, as loud as what
 // came in (loudness matched) but driven (peaks squashed), and the Clean
-// switch must cross to the audio thread (it gives back what came in).
+// switch must cross to the audio thread (it gives back what came in). A
+// microphone that won't open must say why on the page.
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -124,6 +125,15 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const clean = await levels(1);
   check("Clean reaches the audio thread: what came in", clean.intoRms > 0.005 && Math.abs(clean.out - clean.into) < 0.05 * clean.into, clean);
+
+  // A microphone that won't open says why on its button, in words.
+  await run(`navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Could not start audio source", "NotReadableError"))`);
+  await click("Guitar in (microphone)");
+  let said = "";
+  for (let i = 0; i < 50 && !said; i++) { said = await run<string>(`[...document.querySelectorAll("button")].find((b) => b.textContent === "Guitar in (microphone)").dataset.said ?? ""`); if (!said) await new Promise((r) => setTimeout(r, 100)); }
+  check("a microphone that won't open says why on the page", /another program may be using it/.test(said), { said });
+  // It says so in the console too, which is expected here.
+  for (let i = errors.length - 1; i >= 0; i--) if (errors[i].startsWith("sound: the microphone couldn't be opened")) errors.splice(i, 1);
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);
