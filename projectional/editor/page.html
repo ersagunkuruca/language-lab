@@ -425,6 +425,8 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .rg.match, .tgraph .rg.fold { fill: var(--frame); }
 .tgraph .rg.loose { fill: none; stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 6 4; }
 .tgraph .rg.loose.sel { stroke: var(--accent); stroke-width: 2.5; }
+.tgraph .items > g.faded, .tgraph .tw.faded { opacity: .55; }
+.tgraph .items > g.faded:hover { opacity: 1; }
 .tgraph .rg.arm { fill: color-mix(in oklch, var(--frame) 55%, var(--tone)); }
 .tgraph .rg.sel, .tgraph .dia.sel, .tgraph .src.sel { stroke: var(--accent); stroke-width: 2.5; }
 .tgraph .cn.sel, .tgraph .pill.sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }

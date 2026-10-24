@@ -26,8 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E118 | Loose parts 4: new values made on the canvas are loose (rule 7); loose parts drawn faded, dashed (rule 9) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
-| E119 | Loose parts 5: pitfall 11 rewritten to say what's refused now | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | S | |
 | E109 | **Bug.** "Put a dot on its wire" sometimes puts the dot far from the wire | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
 | E110 | Wires route around nodes but not around frames (lambdas) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M |  |
 | E112 | Let and get nodes exist (right-click a dot) but are hard to find: a toggle for the whole definition, and a Guide line | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | S |  |
@@ -136,6 +134,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E119 | Pitfall 11 says what's refused now: wiring that doesn't fit, never leaving the tree unfinished (with E118) | #436 |
+| E118 | A value added on the graph's canvas is a loose part where you clicked; loose parts are drawn faded and dashed (pitfall 11 rewritten with it, E119) | #436 |
 | E115 | An empty input of a call or a list is drawn as a hollow port, not a □ node: its type on hover, a click for the palette, a drop target | #435 |
 | E117 | Dropping a value on an input that has one swaps it in; the old value lies loose (a lone variable is just replaced) | #434 |
 | E116 | Loose parts: Delete and unwiring leave what fed the node loose, kept in drafts.json and shown at the end of Blocks and in the graph, wired back in by a drag (E117's Delete and unwire with it) | #433 |

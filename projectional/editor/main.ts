@@ -97,7 +97,7 @@ import { PAGE_BASE, pageFile, pageMain, showPage, type Preview } from "../src/la
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { join, looseOf, split, type Drafts } from "./drafts.ts";
+import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
 
@@ -1766,7 +1766,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(fillPalette(id, info, names, "m-query"));
   } else if (kind === "space") {
     const r = T.addStep(doc.code, doc.names.short, info, ui.def);
-    rows.push(inGraph ? item("Add a value here…", "add", "A new named value (a hole to fill) here: fill it, then wire it in", r.ok ? undefined : r.reason)
+    rows.push(inGraph ? item("Add a value here…", "add", "A new loose value (a hole to fill) here: fill it, then drag its output onto an input")
       : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", r.ok ? undefined : r.reason));
   } else if (kind === "binder" && id) {
     const on = (doc.layout.named ?? []).includes(id);
@@ -1827,6 +1827,19 @@ function menuAction(act: string, target: Id | undefined) {
   };
   switch (act) {
     case "add": case "add-before": {
+      // On the graph's canvas a new value is a loose part, where you clicked
+      // (NODE-EDITOR.md "Loose parts", rule 7): no step, no name.
+      if (act === "add" && m && !m.blocks) {
+        const x = newLoose(doc.code, doc.loose ?? {}, ui.def);
+        ui.selected = x.hole;
+        revealNext = (id) => id === x.hole || id === x.def;
+        commit({ code: x.code, loose: x.of, home: doc.home ?? {}, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(x.def)]: { x: Math.round(m.world.x), y: Math.round(m.world.y) } } } },
+          ["drafts.json", "layout.json"], "Added a loose value: fill its hole, then drag its output onto an input. Until then it's kept apart, in drafts.json.");
+        ui.menu = { ...m, target: { kind: "hole", id: x.hole } };
+        render();
+        document.getElementById("m-query")?.focus();
+        return;
+      }
       const r = T.addStep(doc.code, doc.names.short, info, ui.def, act === "add-before" ? target : undefined);
       if (!r.ok || !m) return void applyT(r);
       const hole = r.select!, w = m.world;
