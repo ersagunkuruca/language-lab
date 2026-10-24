@@ -41,6 +41,13 @@ switch plays the input as it came, for A/B; and the page draws a sine
 before and after the drive. The strum comes out as loud with its crest
 8.8 to 5.4. Compiled 63 times real time, the hand-written pedal 4 times
 quicker (the matching is plain recursion building pairs).
+What goes wrong with a microphone is said under its button, in words
+(BACKLOG L31): not allowed, none found, in use or its driver refused, a
+page without https, or three seconds of silence (a muted headset). The
+microphone is asked for without echo cancelling, noise suppression or
+gain riding, and nothing about its rate or channels; a headset whose rate
+the browser won't connect across (Firefox) gets an AudioContext of its own
+at that rate, and a stereo input is mixed to mono.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
