@@ -20,7 +20,7 @@ import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
 import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
-import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
+import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, SET_TYPE, TRUE } from "./std.ts";
 import { showIn } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -231,12 +231,42 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     }
   };
 
+  // A map or a set built from a list written out reads as a table, one
+  // row per entry, keys left (DATA-STRUCTURES.md): what it is, not the
+  // pairs it is spelled with. Found by its type, whatever builds it.
+  const table = (id: Id): { fn: Id; rows: { at: Id; cells: Id[] }[] } | null => {
+    const n = node(id), t = info?.typeOf.get(id);
+    const r = t ? info!.subst.resolve(t) : null;
+    if (n.kind !== "call" || n.args.length !== 1 || r?.t !== "con" || (r.id !== MAP_TYPE && r.id !== SET_TYPE)) return null;
+    const items = listItems(n.args[0]);
+    if (!items?.length) return null;
+    const rows = items.map((x) => {
+      const c = node(x);
+      if (r.id === SET_TYPE) return { at: x, cells: [x] };
+      return c.kind === "call" && node(c.fn).kind === "ref" && (node(c.fn) as NodeOf<"ref">).target === PAIR_V ? { at: x, cells: c.args } : null;
+    });
+    return rows.every((x) => x) ? { fn: n.fn, rows: rows as { at: Id; cells: Id[] }[] } : null;
+  };
+
   // Lines for an expression. `lead` is what goes before it on its first
   // line ("x = ", "→ ").
   const block = (id: Id, lead: Piece[]): Blk[] => {
     const n = node(id);
     // A block you can click.
     const hold = (kids: Blk[], cls = "blk") => [grp(kids, 0, id, cls)];
+    const tab = table(id);
+    if (tab && !tab.rows.some((r) => r.cells.some(tall))) {
+      //   as map
+      //     "one" → 1
+      //     "two" → 2
+      const cells = tab.rows.map((r) => r.cells.map((c) => inline(c).p));
+      const wide = Math.max(...cells.map((c) => pieceText(c[0]).length));
+      const rows = tab.rows.map((r, i): Blk => {
+        const [k, v] = cells[i];
+        return { line: v ? [...k, " ".repeat(wide - pieceText(k).length), pn(" → "), ...v] : k, id: r.at, cls: "entry" };
+      });
+      return hold([ln(...lead, ...inline(tab.fn).p), grp(rows)], "blk table");
+    }
     const items = listItems(id);
     if (items && (tall(id) || pieceText(inline(id).p).length > 70)) {
       // A list of tall items (a page's elements) is still a list: [ … ],

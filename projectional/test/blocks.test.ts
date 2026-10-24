@@ -78,3 +78,28 @@ test("the Blocks pane shows every definition line for line as the blocks text pr
     }
   }
 });
+
+test("a map written out reads as a table, keys left; a set as a column", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const { base, baseNames, checkOptions } = await import("../src/lang/load.ts");
+  const { PAIR_V } = await import("../src/lang/std.ts");
+  const { readFileSync } = await import("node:fs");
+  const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const ages = k.def("ages"), colours = k.def("colours");
+  k.define(ages, k.call(lib("as map"), k.list(...([["ann", 31], ["bo", 4]] as const).map(([n, a]) => k.call(PAIR_V, k.lit(n), k.lit(a))))));
+  k.define(colours, k.call(lib("as set"), k.list(k.lit("red"), k.lit("blue"))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+  const text = (d: string) => renderBlocks(code, pres, info, d).split("\n").slice(1);
+  // One row per entry, and the arrows line up.
+  const rows = text(ages).slice(1);
+  assert.deepEqual(rows.map((r) => r.trim().split(/\s*→\s*/)), [['"ann"', "31"], ['"bo"', "4"]], text(ages).join("\n"));
+  assert.equal(new Set(rows.map((r) => r.indexOf("→"))).size, 1, rows.join("\n"));
+  assert.deepEqual(text(colours).slice(1).map((r) => r.trim()), ['"red"', '"blue"']);
+  // The pane draws the same rows.
+  const shown = (renderTyped(code, pres, info, ages, null) as unknown as El).lines().slice(1);
+  assert.deepEqual(shown, text(ages));
+});

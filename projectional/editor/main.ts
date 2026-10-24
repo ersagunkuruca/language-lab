@@ -77,10 +77,10 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, TRUE } from "../src/lang/std.ts";
+import { BOOL, MAP_V, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { needsHandling, showValue, type Value } from "../src/lang/run.ts";
+import { fromList, needsHandling, showValue, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -1781,6 +1781,19 @@ function graphHooks(info: T.Info) {
   };
 }
 
+// A value as the Run panel shows it. A map or a set is a table, a row per
+// entry in key order, as the blocks draw one written out
+// (DATA-STRUCTURES.md); anything else is its text.
+function valueView(v: Value): HTMLElement {
+  const text = (x: Value) => h("code", {}, showValue(x, doc.code, pres().names));
+  const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
+  if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
+    const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));
+    return h("table", { class: "vtable" }, ...rows.map((cells) => h("tr", {}, ...cells.map((c) => h("td", {}, text(c))))));
+  }
+  return text(v);
+}
+
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const t = info.typeOf.get(ui.def);
@@ -1819,7 +1832,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn") box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
-  if (tr?.result !== undefined && (action || value)) box.append(h("p", { class: "hint" }, "Gives ", h("code", {}, showValue(tr.result, doc.code, pres().names))));
+  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, "Gives ", valueView(tr.result)));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   if (tr?.error) box.append(tr.error.message === "reached a hole"
