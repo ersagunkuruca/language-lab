@@ -237,7 +237,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind);
     const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])];
     const args = parts.map((a) => typedOut(a, code, names, scope));
-    if (alts.length && parts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
+    if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
   }
   return r;
 }

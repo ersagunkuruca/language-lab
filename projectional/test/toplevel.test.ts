@@ -707,3 +707,19 @@ test("a call typed in the palette may name a function of several words: as fract
   }
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "as nothing(3)", half).ok, false);
 });
+
+// A call with no inputs reads as one inside arithmetic too: die() + 1
+// (BACKLOG E89).
+test("a call with no inputs is read where a value is typed: die() + 1", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
+  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 7 && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const info = infer(code, p.pres.names);
+  for (const text of ["die()", "die() + 1", "1 + die()"]) {
+    const r = T.fillValue(code, p.pres.names, info, lit.id, text);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+  }
+});

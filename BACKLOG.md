@@ -29,7 +29,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E87 | Selecting a plain Number literal (a dice seed) shows the Unit chooser: noise outside physics | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
-| E89 | The palette doesn't read a typed `die() + 1` though `die()` and `x + 1` are read | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E90 | No "Duplicate definition": cloning a function is copy its body, New definition, paste | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E91 | Edit a list's items, and the operands of any node drawn with many inputs (typedGraph chainOperands, `a ++ b ++ c`), in both views: add, reorder, delete. In the graph a "+" input on the node, drag an input to reorder, remove one. Adding a button to dice `main` took seven steps through append/cons/nil (Ersagun 11:11) | learning/editor-findings.md 11, Ersagun 2026-10-24 11:11 | P1 | M | |
 | E92 | In Blocks, clicking a call's function name selects only the name, not the call; nothing says to click its `(` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
@@ -143,6 +142,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E89 | A call with no inputs reads where a value is typed: die() + 1 | #410 |
 | E84 | Inside a held or pinned definition its parts take the pin's types: a cleared input stays the Number it was | #409 |
 | E94 | Page calls hover as their own type, not with the page's row (with E85) | #408 |
 | E85 | A definition's name hovers as its own type; types it's used at follow without the caller's effects | #408 |
