@@ -129,3 +129,27 @@ test("on the GPU a Complex is a vec2f, and WebAssembly gives the evaluator's num
   assert.equal(w.step(1, 2), [...r.call(r.value(step), 1, 2)][0]);
   assert.equal(w.step(1, 2), Math.hypot(1 - 4 + 1, 4 + 2));
 });
+
+// QA-2026-10-24b: show of a fraction printed ratio(1, 2). Number types show
+// as numbers, evaluated and compiled (the compiled runtime shows with the
+// same function).
+test("show prints a fraction as 1/2 and a complex number as 3 − 4i, in lists too", async () => {
+  const { SHOW_ANY } = await import("../src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const fraction = lib("fraction");
+  const shown = k.def("shown");
+  k.define(shown, k.call(S.all, k.thunk(() => k.call(SHOW_ANY, k.list(k.call(fraction, k.int(2), k.int(4)), k.call(fraction, k.int(6), k.int(3)))))));
+  const shownC = k.def("shown complex");
+  k.define(shownC, k.call(SHOW_ANY, k.list(k.call(COMPLEX_V, k.lit(3), k.lit(-4)), k.call(COMPLEX_V, k.lit(0.5), k.lit(2)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const r = makeRunner(code, info, { print: () => {} });
+  const run = (v: Value): Value => { if (typeof v !== "function") return v; for (const x of r.call(v)) return x; throw new Error("no value"); };
+  assert.deepEqual(items(run(r.value(shown))), ["[1/2, 2]"]);
+  assert.equal(r.value(shownC), "[3 − 4i, 0.5 + 2i]");
+  const path = join(mkdtempSync(join(tmpdir(), "show-")), "show.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["shown", "shown complex"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(items((defs.shown as () => Value)()), ["[1/2, 2]"]);
+  assert.equal(typeof defs["shown complex"] === "function" ? (defs["shown complex"] as () => Value)() : defs["shown complex"], "[3 − 4i, 0.5 + 2i]");
+});

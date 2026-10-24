@@ -26,7 +26,7 @@ import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
 import { discharge } from "./ledger.ts";
-import { ABORT, ABORT_OP, CELL_OPS, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { ABORT, ABORT_OP, CELL_OPS, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
@@ -821,6 +821,9 @@ export function showValue(v: Value, code: Code, names: Names): string {
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names)).join(", ")}]`;
+  // Number types show as numbers, as `show fraction` and `show complex` do.
+  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names)}i`; }
   const name = names[v.tag] ?? v.tag;
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names)).join(", ")})` : name;
 }
