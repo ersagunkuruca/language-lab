@@ -67,7 +67,7 @@ import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
 import { children, freshId, get, ID_PATTERN, isPublished, merge, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
-import { INT, showType as showTypeOf } from "../src/lang/types.ts";
+import { INT } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { relationFor } from "../src/lang/equations.ts";
@@ -78,7 +78,7 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, MAP_V, SET_V, TRUE } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, NUMBER, STRING, type Type } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, NUMBER, STRING, showIn, type Type } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { fromList, needsHandling, showValue, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
@@ -1218,7 +1218,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   return out;
 }
 
-const typeName = (info: T.Info, t: Parameters<T.Info["subst"]["zonk"]>[0], names: Names) => showTypeOf(info.subst.zonk(t), names);
+// With what its type variables stand for: add is (a, a) -> a where a is a
+// number type, not any a.
+const typeName = (info: T.Info, t: Type, names: Names) => showIn(t, names, info.subst);
 
 function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, string] {
   const nm = (id: Id) => names[id] ?? id;

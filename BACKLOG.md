@@ -28,8 +28,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 |---|---|---|---|---|---|
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
-| E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
-| E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
 | E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
 | E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
@@ -134,6 +132,8 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E72 | No longer reproduces (one subtract row); smoke checks it | #423 |
+| E71 | The palette says a generic function's a is a number type | #423 |
 | E102 | Blocks pane: a long press opens the part's menu | #422 |
 | E101 | Graph: drop an input on another of its list or chain to move it there | #421 |
 | E100 | Right-click on the blocks' empty space adds a value | #420 |
