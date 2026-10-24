@@ -381,6 +381,21 @@ transforming programs to eliminate trees", 1990) and short-cut fusion
 deforestation", FPCA 1993) where the steps are known definitions, done by
 inlining.
 
+A block function (List Number to List Number, AUDIO.md) whose list is
+built by definitions that make it front to back also gets a version that
+writes the list into an array it is handed (destination passing, GAPS.md
+P4). The audio runtimes call that version through `$arrayOf`, so a block
+comes back as the array they wanted without its cells. Each definition
+on the way gets an `$into` copy: a cons pushes its head, a tail call hands
+the array on, and a call of itself is a jump. A list it only has as a
+value is copied in. A record with two fields, one of them the list,
+works the same way: the copy pushes the list and returns the other
+field. This covers the compressor's samples and level, which become a
+loop with the level in a local. The item consed onto the rest is pushed
+before the rest is written, so it must have no effects. Prior art:
+destination-passing style (Minamide, POPL 1998; Shaikhha et al., FHPC
+2017).
+
 These loops are the fold job of one representation, `cells` (values stored
 as linked objects, the way the definition is written). How a fold runs is
 being moved into the representation table, so a fold over a value made by

@@ -27,6 +27,19 @@ export function $fromList(l) {
   for (; l.tag === CONS; l = l.fields[1]) out.push(l.fields[0]);
   return out;
 }
+// Destination passing (compile.ts, `$into` copies; GAPS.md P4): a list's
+// items pushed onto an array; a function that has an `$into` version
+// writes its list straight into one.
+export function $pushList(d, l) {
+  for (; l.tag === CONS; l = l.fields[1]) d.push(l.fields[0]);
+}
+export const $withInto = (f, into) => ((f.$into = into), f);
+export function $arrayOf(f, ...args) {
+  if (!f.$into) return $fromList(f(...args));
+  const d = [];
+  f.$into(d, ...args);
+  return d;
+}
 // How cells.ts each turns lists into arrays and back.
 export const $listArrays = { from: $fromList, to: $toList };
 

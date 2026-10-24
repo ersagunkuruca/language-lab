@@ -6,7 +6,7 @@
 // Its cells were made in the same order as the page's, so the page's
 // writes, sent over the port by place, land in the same cells.
 
-import { $cells, $fromList, $setPrint, $setWorld, $toList } from "../../../compiler/src/runtime.js";
+import { $arrayOf, $cells, $setPrint, $setWorld, $toList } from "../../../compiler/src/runtime.js";
 import { listens } from "./audio.ts";
 import type { Cells } from "./cells.ts";
 import { seededGenerator } from "./random.ts";
@@ -59,7 +59,7 @@ export function startSound(main: () => Value, seed = 1): void {
       const input = inputs[0]?.[0] ?? new Float32Array(n);
       if (!this.play) return true;
       let got: number[];
-      try { got = withSteps(PAGE_STEPS, () => $fromList(this.play!($toList(Array.from(input)))) as number[]); } catch (e) {
+      try { got = withSteps(PAGE_STEPS, () => $arrayOf(this.play!, $toList(Array.from(input))) as number[]); } catch (e) {
         this.say(e instanceof OutOfSteps ? "a block didn't finish in its steps, and played silence" : (e as Error).message);
         return true;
       }

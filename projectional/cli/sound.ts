@@ -14,7 +14,7 @@ import { evaluatorCall } from "../src/lang/html.ts";
 import { seededGenerator } from "../src/lang/random.ts";
 import { fromList, PAGE_STEPS, runMain, toList, withSteps } from "../src/lang/run.ts";
 import { compile } from "../../compiler/src/compile.ts";
-import { $fromList, $setWorld, $toList } from "../../compiler/src/runtime.js";
+import { $arrayOf, $setWorld, $toList } from "../../compiler/src/runtime.js";
 
 export type Way = "evaluator" | "compiled";
 export type Play = (block: number[]) => number[];
@@ -34,5 +34,5 @@ export async function soundOf(p: { code: Code; info: Info; names: Names }, def: 
   const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => (l: unknown) => unknown>;
   $setWorld(world);
   const play = step(() => defs[name]());
-  return (block) => step(() => $fromList(play($toList(block))) as number[]);
+  return (block) => step(() => $arrayOf(play, $toList(block)) as number[]);
 }
