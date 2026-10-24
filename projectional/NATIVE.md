@@ -223,12 +223,17 @@ numbers). Median of 5, one x86-64 container, gcc -O2, 2026-10-24:
 
 | program | native | compiled JS | WASM (node:wasi) |
 |---|---|---|---|
-| Countdown's main, every answer | 117 ms, 1.9 MB | 317 ms, 77 MB | 149 ms, 54 MB |
-| queens' main (start-up) | 7.6 ms, 1.9 MB | 214 ms, 72 MB | 62 ms, 51 MB |
-| wc on 2.4 MB | 161 ms, 6.4 MB | 331 ms, 74 MB | 260 ms, 58 MB |
-| ledger, 50,000 entries | 128 ms, 11 MB | 435 ms, 124 MB | 335 ms, 105 MB |
-| ledger, 200,000 entries | 517 ms, 43 MB | 919 ms, 189 MB | 1268 ms, 158 MB |
-| chapters, 1000 into a folder | 213 ms, 4.1 MB | 501 ms, 86 MB | 673 ms, 71 MB |
+| Countdown's main, every answer | 117 ms, 1.9 MB | 179 ms, 58 MB | 149 ms, 54 MB |
+| queens' main (start-up) | 7.6 ms, 1.9 MB | 76 ms, 55 MB | 62 ms, 51 MB |
+| wc on 2.4 MB | 161 ms, 6.4 MB | 193 ms, 59 MB | 260 ms, 58 MB |
+| ledger, 50,000 entries | 128 ms, 11 MB | 296 ms, 110 MB | 335 ms, 105 MB |
+| ledger, 200,000 entries | 517 ms, 43 MB | 835 ms, 175 MB | 1268 ms, 158 MB |
+| chapters, 1000 into a folder | 213 ms, 4.1 MB | 371 ms, 68 MB | 673 ms, 71 MB |
+
+The compiled JavaScript column is after C24: the bench showed `lab compile`'s
+output spending about 140 ms starting a worker thread for a big stack it no
+longer needed since C21, and main now runs on Node's own (queens' start-up
+was 214 ms, Countdown 317).
 
 Before the free lists, the first run of the same bench had native Countdown
 at 196 ms, slower than WebAssembly's 164, and ledger on 200,000 entries at

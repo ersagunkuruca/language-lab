@@ -113,8 +113,9 @@ function entry(p: Program, name: string, web = false): Id {
 }
 
 // The compiled program, and a few lines that run it the way `lab run` does.
-// The thread main runs on gets this much stack, in megabytes.
-const STACK_MB = 1024;
+// Recursion that isn't a tail call goes on the heap past 1,000 levels
+// (BACKLOG.md C21), so main runs on Node's own stack, with no thread of its
+// own to start (C24).
 // `files`: import the runtime by absolute file URL, for an unbundled module;
 // otherwise by absolute path, which is what the bundler resolves.
 function compiled(p: Program, main: Id, files: boolean): string {
@@ -128,19 +129,12 @@ function compiled(p: Program, main: Id, files: boolean): string {
 ${program}
 import { $setWorld as $$setWorld, $setPrint as $$setPrint, $toList as $$toList, $Aborted as $$Aborted } from ${url("../../compiler/src/runtime.js")};
 import { nodeWorld as $$nodeWorld } from ${url("../src/lang/world.ts")};
-import { Worker as $$Worker, isMainThread as $$isMain, parentPort as $$parent } from "node:worker_threads";
 import { writeSync as $$writeSync } from "node:fs";
-// Recursion that isn't a tail call uses the JS stack, so main runs on a
-// thread with a big one (compiler/GAPS.md, G1); the evaluator has no limit.
-if ($$isMain) {
-  const worker = new $$Worker(new URL(import.meta.url), { argv: process.argv.slice(2), resourceLimits: { stackSizeMb: ${STACK_MB} } });
-  worker.on("message", (code) => { process.exitCode = code; });
-} else {
-  // A worker's process.stdout and stderr are relayed to the main thread
-  // separately, which loses their order, so it writes to the descriptors
-  // itself. Standard output goes in large pieces, not a write per print
-  // (GAPS.md G8), flushed before anything goes to standard error and before
-  // the program reads, so a prompt shows before its answer is read.
+{
+  // Standard output goes to the descriptor in large pieces, not a write
+  // per print (GAPS.md G8), flushed before anything goes to standard error
+  // and before the program reads, so a prompt shows before its answer is
+  // read, and the two streams keep their order.
   // A reader that went away (\`| head\`) closes the pipe: the rest is dropped.
   const closed = new Set();
   const write = (fd, text) => {
@@ -165,7 +159,6 @@ if ($$isMain) {
     process.exitCode = 1;
   }
   flush();
-  $$parent.postMessage(process.exitCode);
 }
 `;
 }
