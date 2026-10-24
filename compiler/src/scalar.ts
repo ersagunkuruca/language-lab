@@ -703,7 +703,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     });
     const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
     const num = (v: number): SExpr => ({ k: "num", v });
-    const whole = (e: SExpr) => op("equal", op("floor", e), e);
+    // Whole: as Number.isInteger, so not ±∞ (whose floor is itself; ∞ − ∞ isn't 0).
+    const whole = (e: SExpr) => op("and", op("equal", op("floor", e), e), op("equal", op("sub", e, e), num(0)));
     const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
     const near = op("or", op("equal", a, b), op("and", op("not", op("and", whole(a), whole(b))), op("or", op("less", diff, tol), op("equal", diff, tol))));
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
