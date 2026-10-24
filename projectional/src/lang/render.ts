@@ -178,7 +178,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       }
       case "hole": {
         const hi = info?.holes.get(id);
-        return atom(part("hole", ["□", ...(hi ? [{ cls: "ty", pane: true as const, kids: [showIn(hi.expected, names, info!.subst)] }] : [])], id));
+        // Beside each hole its type alone: "where a is a number type" said
+        // on every hole of □ + □ is noise, and the hover says it in full.
+        return atom(part("hole", ["□", ...(hi ? [{ cls: "ty", pane: true as const, kids: [showIn(hi.expected, names, info!.subst).replace(/ where .*$/s, "")] }] : [])], id));
       }
       case "ref": {
         const nota = pres.style.notation[n.target];

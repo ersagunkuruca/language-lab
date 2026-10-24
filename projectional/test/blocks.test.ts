@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { root } from "../src/io.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
+import { subtree } from "../src/model.ts";
+import { ARITH } from "../src/lang/std.ts";
 
 class El {
   kids: (El | string)[] = [];
@@ -115,4 +117,20 @@ test("a definition's name hovers as its own type", () => {
   walk(el);
   assert.equal(titles.range, "(Number) -> List Number");
   assert.doesNotMatch(titles.map, /Random/);
+});
+
+// A hole shows its type alone beside it; "where a is a number type" isn't
+// said on every hole of □ + □ (BACKLOG E95).
+test("holes of a generic + show their type without the where clause", () => {
+  const p = loadProgram(join(root, "examples", "physics"));
+  const def = p.named("fall");
+  const add = Object.values(p.code.nodes).find((n) => n.kind === "call" && n.args.length === 2 && subtree(p.code, def).includes(n.id) && (p.code.nodes[n.fn] as { target?: string }).target === "builtin.add") as { fn: string; args: string[] } | undefined;
+  assert.ok(add, "fall adds");
+  // the generic + the palette offers, on two holes
+  const nodes = { ...p.code.nodes, [add!.fn]: { ...p.code.nodes[add!.fn], target: ARITH.add } as typeof p.code.nodes[string] };
+  for (const a of add!.args) nodes[a] = { id: a, kind: "hole" };
+  const code = { ...p.code, nodes };
+  const text = (renderTyped(code, p.pres, infer(code, p.pres.names), def, null) as unknown as El).textContent;
+  assert.ok(text.includes("□"), text);
+  assert.doesNotMatch(text, /□[^□]*where[^□]*□/s);
 });

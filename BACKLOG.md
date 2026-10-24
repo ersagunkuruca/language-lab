@@ -31,7 +31,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E90 | No "Duplicate definition": cloning a function is copy its body, New definition, paste | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E91 | Edit a list's items, and the operands of any node drawn with many inputs (typedGraph chainOperands, `a ++ b ++ c`), in both views: add, reorder, delete. In the graph a "+" input on the node, drag an input to reorder, remove one. Adding a button to dice `main` took seven steps through append/cons/nil (Ersagun 11:11) | learning/editor-findings.md 11, Ersagun 2026-10-24 11:11 | P1 | M | |
-| E95 | "where a is a number type" repeats on every hole of a new `□ + □` | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
@@ -140,6 +139,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E95 | Holes show their type without repeating the where clause | #413 |
 | E93 | A Text port in Run reads what's typed as text, quotes or not | #412 |
 | E92 | In the blocks a function's name picks its whole call; a call's panel has Change the function | #411 |
 | E89 | A call with no inputs reads where a value is typed: die() + 1 | #410 |
