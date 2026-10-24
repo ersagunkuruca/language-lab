@@ -4,15 +4,31 @@ Design note for BACKLOG.md C17 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
-**Status.** Stage N1 is done. The scalar profile and its records print as
-C (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
-value, lets, ifs, calls, self tail calls as loops, and budgets. calculus,
-physics, the ray marcher's colours and the strip integral give the
-evaluator's bits, built with GCC and with clang (`compiler/test/c.test.ts`).
-sin, cos, tan, exp, log, pow and atan2 are V8's fdlibm, the code Node's
-Math runs, translated from C++ to C by `compiler/math/to-c.ts` (into
-`src/c-math.ts`). On 140,000 inputs (any bits, the edges, large arguments)
-they give exactly Node's bits.
+**Status.** Stages N1 and N2 are done.
+
+- **N1.** The scalar profile and its records print as C
+  (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
+  value, lets, ifs, calls, self tail calls as loops, and budgets. calculus,
+  physics, the ray marcher's colours and the strip integral give the
+  evaluator's bits, built with GCC and with clang
+  (`compiler/test/c.test.ts`). sin, cos, tan, exp, log, pow and atan2 are
+  V8's fdlibm, the code Node's Math runs, translated from C++ to C by
+  `compiler/math/to-c.ts` (into `src/c-math.ts`). On 140,000 inputs (any
+  bits, the edges, large arguments) they give exactly Node's bits.
+- **N2.** Data has counts:
+  - lists, trees, Optional and the lowering's frames are cells, with a
+    static cell for each case with no fields;
+  - matches, folds (nested ones too, a rose tree's List of children) and
+    equality on data work;
+  - `dup` and `drop` come from liveness, as below.
+
+  sort, insert, the calculus polynomials (100,000 coefficients), Countdown's
+  `valid`, algebra's `derivative`, `same` on lists and a rose tree's
+  total, depth, mirror and scaled give the evaluator's answers. After each
+  call every cell is freed: the harness prints how many are still live,
+  and the tests want 0. They also pass under AddressSanitizer
+  (`NATIVE_CFLAGS="-fsanitize=address,undefined"`), so no cell is used
+  after it is freed.
 
 ## What it's for
 
@@ -104,12 +120,15 @@ it and call `cc`.
 1. **N1. Scalar profile and records.** Done (above). The printer has no
    heap yet: data, closures, text and the world are refused, with the
    stage that brings them.
-2. **N2. Data with counts.**
-   - Lists, trees, Optional, matches, folds and equality, with `dup` and
-     `drop` from a pass over the lowered code.
-   - Check: sort, the calculus polynomials and Countdown's `valid` and
-     `combine` against the evaluator. A test counts cells made and freed,
-     and every run ends with none left.
+2. **N2. Data with counts.** Done (above). `dup` and `drop` are decided
+   while printing:
+   - a use of a local is its last one, or a dup;
+   - a branch drops the locals it doesn't use as it starts;
+   - reading a field borrows the cell, dups the field, and drops the cell
+     after its last read.
+   A cell with no counts left gives up its fields from a stack, so a long
+   list frees without deep recursion. Countdown's `combine` has one answer
+   or none, so it waits for N3.
 3. **N3. Functions as values, one answer or none, searches, Abort.**
    - Closures as counted cells holding their captures.
    - The status convention as C return values.
