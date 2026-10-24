@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E90 | No "Duplicate definition": cloning a function is copy its body, New definition, paste | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E91 | Edit a list's items, and the operands of any node drawn with many inputs (typedGraph chainOperands, `a ++ b ++ c`), in both views: add, reorder, delete. In the graph a "+" input on the node, drag an input to reorder, remove one. Adding a button to dice `main` took seven steps through append/cons/nil (Ersagun 11:11) | learning/editor-findings.md 11, Ersagun 2026-10-24 11:11 | P1 | M | |
 | E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
@@ -137,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E88 | Menu items say what they do, and a greyed one says why | #416 |
 | E87 | Programs with no units keep the unit chooser folded away | #415 |
 | E86 | Replace with… on a selected part opens the palette in its place | #414 |
 | E95 | Holes show their type without repeating the where clause | #413 |

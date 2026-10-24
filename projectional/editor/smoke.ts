@@ -154,6 +154,10 @@ async function swapAndUndo() {
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^fall$/ }).click();
   await p.locator(".p-graph g:has(> text:text-is('+')) > rect.cn").first().click({ button: "right" });
+  // Each item says what it does, and a greyed one says why (BACKLOG E88).
+  const greyed = await p.locator(".ctx-menu .ctx-item:disabled").count(), why = await p.locator(".ctx-menu .ctx-item:disabled .ctx-why.cant").count();
+  if (greyed !== why) errors.push(`${where}: ${greyed - why} greyed menu items don't say why`);
+  if (!(await p.locator('.ctx-menu [data-menu="pick"] .ctx-why').count())) errors.push(`${where}: Pick doesn't say what it does`);
   await p.locator('[data-menu="swap"]').click();
   await p.locator("button", { hasText: /^subtract/ }).first().click();
   const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
