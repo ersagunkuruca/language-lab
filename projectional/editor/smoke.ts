@@ -260,6 +260,8 @@ async function pagePreview() {
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 101;")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
   await p.locator("[data-def]", { hasText: /^main$/ }).click();
+  // The page is main's run: no Run main that would print its insides.
+  if (await p.locator('[data-act="t-run"]').count()) errors.push(`${where}: a page's main offers Run main`);
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
   // Another program and back: the page is as it was, and still answers.

@@ -34,6 +34,13 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E51 | The minimap and the Fit pill sit on the graph (1280×720: on `rotate` and `solve rotate`; phone: a quarter of the pane); smaller, collapsible, or shown while panning | QA-2026-10-24 M2 | P1 | S | |
+| E52 | A page in the Run panel is unstyled (pedal and dice in default serif, the drive picture cut off); a base stylesheet for the mount, or CSS in the examples | QA-2026-10-24 L1 | P2 | S | |
+| E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
+| E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
+| E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
+| E56 | The status bar says nothing about page actions (A strum, Stop sound) | QA-2026-10-24 L5 | P3 | S | |
+| E57 | The dice page before any roll says "the last 2 s ago" (examples/dice) | QA-2026-10-24 L6 | P3 | S | |
 
 ## C: Compiler and targets
 
@@ -110,6 +117,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E50 | A page's main says it is the page above; no Run main printing its Html | #351 |
 | E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
 | L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
 | L49 | Blocks text: a match as an if condition shows its arms; a branch's steps sit after then/else | #342 |
