@@ -9,7 +9,7 @@ import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, maths, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, closures, fractionInputs, fractions, maths, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -689,4 +689,18 @@ test("several answers in WebAssembly: choices in called functions, arguments and
   assert.equal(await runMain(lq, emitWasm(lq), "main", [], { print: (l) => got.push(l) }), exit);
   assert.deepEqual(got, want);
   assert.ok(want.includes("solutions for 8: 92"), want.join("\n"));
+});
+
+test("fractions in WebAssembly: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom", async () => {
+  const p = fractions();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const def of Object.values(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of fractionInputs(f.params.length, 150).map((ys) => ys.map(norm))) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(outcome(r, def, xs)), `${p.names[def]}(${xs.join(", ")})`);
+    }
+  }
 });

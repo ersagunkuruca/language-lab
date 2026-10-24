@@ -325,15 +325,25 @@ function words(line4) {
 
 // slug character
 function slug_character(c) {
-  if (((!(c < "a") && !("z" < c)) || ((!(c < "A") && !("Z" < c)) || (!(c < "0") && !("9" < c))))) {
+  if (((not_before(c, "a") && not_after(c, "z")) || ((not_before(c, "A") && not_after(c, "Z")) || (not_before(c, "0") && not_after(c, "9"))))) {
     return lower(c);
   }
   return "-";
 }
 
+// not before
+function not_before(a, b) {
+  return !$text.less(a, b);
+}
+
+// not after
+function not_after(a2, b2) {
+  return !$text.less(b2, a2);
+}
+
 // lower
 function lower(c2) {
-  if ((!(c2 < "A") && !("Z" < c2))) {
+  if ((not_before(c2, "A") && not_after(c2, "Z"))) {
     const r$87 = $partial["builtin.text.code"](c2);
     if (r$87 !== $no) {
       const t$88 = $int.add(r$87, 32);

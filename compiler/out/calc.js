@@ -337,12 +337,12 @@ function blank(c2) {
 
 // digit
 function digit(c3) {
-  return (!(c3 < "0") && !("9" < c3));
+  return (not_before(c3, "0") && not_after(c3, "9"));
 }
 
 // letter
 function letter(c4) {
-  return ((!(c4 < "a") && !("z" < c4)) || ((!(c4 < "A") && !("Z" < c4)) || (c4 === "_")));
+  return ((not_before(c4, "a") && not_after(c4, "z")) || ((not_before(c4, "A") && not_after(c4, "Z")) || (c4 === "_")));
 }
 
 // keep
@@ -442,6 +442,16 @@ function apply(operator, a3, b4) {
     return $perform("std.abort", "std.abort.abort" /* abort */, ["negative power"]);
   }
   return $perform("std.abort", "std.abort.abort" /* abort */, [("unknown operator " + operator)]);
+}
+
+// not before
+function not_before(a4, b5) {
+  return !$text.less(a4, b5);
+}
+
+// not after
+function not_after(a5, b6) {
+  return !$text.less(b6, a5);
 }
 
 // sum (past 1000 calls deep, its copy on the heap)

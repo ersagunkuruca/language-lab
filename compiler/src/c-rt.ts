@@ -325,6 +325,12 @@ const FNS: Record<string, Fn> = {
   lab_int_drop(x); lab_int_drop(y);
   return r;
 }` },
+  // The greatest common divisor, at least 0 (gcd(0, 0) is 0): Euclid's
+  // algorithm (textbook), on int64s once both are small. For std.ts's
+  // lowest terms, which the lowering writes with this and int.exact.
+  "int.gcd": { uses: ["int.abs"], c: `static lab_int lab_int_gcd(lab_int x, lab_int y) { x = lab_int_abs(x); y = lab_int_abs(y); while (y != LAB_SMALL(0)) { if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y); while (b) { int64_t t = a % b; a = b; b = t; } return LAB_SMALL(a); } lab_int r; lab__floordiv(x, y, 0, &r); lab_int_drop(x); x = y; y = r; } return x; }` },
+  // x over g, g at least 0 and dividing x (int.gcd's); 0 when g is 0.
+  "int.exact": { uses: [], c: `static lab_int lab_int_exact(lab_int x, lab_int g) { lab_int q; if (g == LAB_SMALL(0)) { lab_int_drop(x); return LAB_SMALL(0); } lab__floordiv(x, g, &q, 0); lab_int_drop(x); lab_int_drop(g); return q; }` },
   "int.quotient": { uses: [], c: `static lab_int lab_int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
   "int.remainder": { uses: [], c: `static lab_int lab_int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
   // A negative power has no answer; 0, 1 and −1 to any power are small.

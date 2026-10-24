@@ -285,7 +285,10 @@ only on overflow or a `$huge`; the limbs are Knuth's classical algorithms
 (TAOCP vol. 2, 4.3.1). The host passes a `$huge` limb by limb
 (`Int.limbs`, `Int.limb`, `Int.huge`, `Int.setLimb`; `toInt` and
 `fromInt` in wasm.ts), not under WASI. Quotient and remainder past an
-i64 are Knuth's algorithm D (W5c), and power squares on the big multiply. The runtime's Int functions are written on i64s and called through
+i64 are Knuth's algorithm D (W5c), and power squares on the big multiply.
+A fraction's `lowest terms` is lowered to `int.gcd` (Euclid's algorithm on
+i64s while both fit, else on magnitudes with algorithm D's remainder) and
+`int.exact`, its division (the same in C, NATIVE.md "Values"). The runtime's Int functions are written on i64s and called through
 wrappers that convert (`int.small`, `int.of`, wasm-rt.ts `runtime`), so
 only add, subtract, multiply and the rest need a big path. Measured: the
 ledger (5,000 lines) and wc in WebAssembly take the same time as with

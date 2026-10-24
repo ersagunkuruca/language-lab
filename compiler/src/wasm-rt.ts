@@ -4089,6 +4089,138 @@ ${drop}
       call $int.norm
       i32.const 0`,
   },
+  // The greatest common divisor of a and b, at least 0 (gcd(0, 0) is 0):
+  // Euclid's algorithm (textbook), on i64s while both fit, else on
+  // magnitudes with mag.divrem's remainder. For a fraction's lowest terms
+  // (std.ts's lowest terms, which the lowering writes with this).
+  "int.gcd": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["t", "i64"], ["u", "mag"], ["v", "mag"], ["w", "mag"]], uses: ["int.small", "int.of", "int.mag", "int.norm", "mag.divrem"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.set $x
+        local.get $b
+        call $int.small
+        local.set $y
+        local.get $x
+        i64.const -9223372036854775808
+        i64.ne
+        local.get $y
+        i64.const -9223372036854775808
+        i64.ne
+        i32.and
+        if void
+          local.get $x
+          i64.const 0
+          i64.lt_s
+          if void
+            i64.const 0
+            local.get $x
+            i64.sub
+            local.set $x
+          end
+          local.get $y
+          i64.const 0
+          i64.lt_s
+          if void
+            i64.const 0
+            local.get $y
+            i64.sub
+            local.set $y
+          end
+          block void
+            loop void
+              local.get $y
+              i64.eqz
+              br_if 1
+              local.get $x
+              local.get $y
+              i64.rem_u
+              local.set $t
+              local.get $y
+              local.set $x
+              local.get $t
+              local.set $y
+              br 0
+            end
+          end
+          local.get $x
+          call $int.of
+          return
+        end
+      end
+      local.get $a
+      call $int.mag
+      local.set $u
+      local.get $b
+      call $int.mag
+      local.set $v
+      block void
+        loop void
+          local.get $v
+          array.len
+          i32.eqz
+          br_if 1
+          local.get $u
+          local.get $v
+          i32.const 1
+          call $mag.divrem
+          local.set $w
+          local.get $v
+          local.set $u
+          local.get $w
+          local.set $v
+          br 0
+        end
+      end
+      i32.const 0
+      local.get $u
+      call $int.norm`,
+  },
+  // a over g, g at least 0 and dividing a (int.gcd's); 0 when g is 0.
+  "int.exact": {
+    params: [["a", "int"], ["g", "int"]], result: "int", locals: [], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "mag.divrem"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $g
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $g
+        call $int.small
+        i64.eqz
+        if void
+          i32.const 0
+          ref.i31
+          return
+        end
+        local.get $a
+        call $int.small
+        local.get $g
+        call $int.small
+        i64.div_s
+        call $int.of
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.get $a
+      call $int.mag
+      local.get $g
+      call $int.mag
+      i32.const 0
+      call $mag.divrem
+      call $int.norm`,
+  },
   // The remainder has b's sign (int.ts).
   "int.remainder": {
     params: [["a", "int"], ["b", "int"]], result: "int", locals: [["st", "i32"], ["r", "mag"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "int64.remainder", "mag.divrem", "mag.sub"], native: true, partial: true,

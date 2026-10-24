@@ -19,7 +19,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, maths, roses, sameLists, worldly } from "../src/fixtures.ts";
+import { area, fractionInputs, fractions, maths, roses, sameLists, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -390,4 +390,17 @@ test("whole programs in C: files, console, arguments and exit codes as the evalu
   const exe = compile(emitC(lowerScalar(calc.code, calc.info, calc.pres.names, calc.own.defs, { data: true }), { main: calc.named("main") }).c);
   const deep = spawnSync(exe, [], { input: `${"(".repeat(1e5)}1${")".repeat(1e5)}\n` });
   assert.equal(deep.stdout.toString(), "1\n", deep.stderr.toString());
+});
+
+test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
+  const p = fractions();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const calls: [number, Value[]][] = [];
+  for (const def of Object.values(p.defs)) {
+    const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
+    assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${p.names[def]} is in C`);
+    for (const xs of fractionInputs(lowered.funcs[i].params.length, 150)) calls.push([i, xs.map(norm)]);
+  }
+  sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });
