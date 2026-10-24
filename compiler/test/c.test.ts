@@ -11,7 +11,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { Aborted, bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { norm } from "../../projectional/src/lang/int.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
@@ -32,6 +33,8 @@ const unhex = (w: string) => new Float64Array(new BigUint64Array([BigInt(`0x${w}
 function encode(v: Value, t: LType, out: string[]): void {
   if (t === "f64") { out.push(hex(v as number)); return; }
   if (t === "i32") { out.push((v as Data).tag === TRUE ? "1" : "0"); return; }
+  if (t === "int") { out.push(String(v)); return; }
+  if (t === "text") { out.push(`x${Buffer.from(v as string).toString("hex")}`); return; }
   if (isRecord(t)) { t.fields.forEach((f, j) => encode((v as Data).fields[j], f.t, out)); return; }
   const d = t as DType;
   for (let x = v as Data; ;) {
@@ -46,6 +49,8 @@ function encode(v: Value, t: LType, out: string[]): void {
 function decode(ws: string[], t: LType): Value {
   if (t === "f64") return unhex(ws.shift()!);
   if (t === "i32") return bool(ws.shift() === "1");
+  if (t === "int") return norm(BigInt(ws.shift()!));
+  if (t === "text") return Buffer.from(ws.shift()!.slice(1), "hex").toString();
   if (isRecord(t)) return { tag: (t as RType).variant, fields: t.fields.map((f) => decode(ws, f.t)) };
   const d = t as DType, top: Data = { tag: "", fields: [] };
   for (let into = top; ;) {
@@ -73,7 +78,9 @@ function build(lowered: Lowered) {
       const ws = l.trim().split(/\s+/);
       const live = Number(ws.pop()!.slice(1));
       // "?": no answer (a function with one answer or none).
-      return { value: ws[0] === "?" ? undefined : decode(ws, lowered.funcs[calls[k][0]].result), live };
+      // "!": aborted, with the reason.
+      const value = ws[0] === "?" ? undefined : ws[0] === "!" ? { aborted: decode(ws.slice(1), "text") } : decode(ws, lowered.funcs[calls[k][0]].result);
+      return { value: value as Value, live };
     });
   };
 }
@@ -151,7 +158,7 @@ function sameAndFreed(run: ReturnType<typeof build>, calls: [number, Value[]][],
   calls.forEach(([i, xs], k) => {
     // As text, numbers by their bits (-0 and NaN too): a long list is
     // deeper than deepStrictEqual's recursion goes.
-    const bits = (v: Value) => JSON.stringify(v, (_, x) => (typeof x === "number" ? hex(x) : x));
+    const bits = (v: Value) => JSON.stringify(v, (_, x) => (typeof x === "number" ? hex(x) : typeof x === "bigint" ? `${x}n` : x));
     // The inputs in the message only when short (a long list is too deep for JSON).
     const said = () => { try { const t = bits(xs); return label(i) + (t.length < 2000 ? ` ${t}` : ""); } catch { return label(i); } };
     const [a, b] = [bits(got[k].value) ?? "none", bits(want(i, xs)) ?? "none"];
@@ -221,7 +228,9 @@ function inC(name: string) {
     assert.ok(i >= 0 && !refused.has(i), `${name}: ${fn} is in C (${refused.get(i)})`);
     return i;
   };
-  const want = (i: number, xs: Value[]) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!;
+  const want = (i: number, xs: Value[]) => {
+    try { return first(r.call(r.value(lowered.funcs[i].def), ...xs))!; } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; }
+  };
   return { p, lowered, r, at, want, label: (i: number) => `${name}: ${lowered.funcs[i].name}` };
 }
 
@@ -259,4 +268,64 @@ test("data built and taken apart in C: Peano numbers and binary ones", { skip },
   const calls = [...one("double"), ...one("number"), ...one("factorial"), ...one("is even"), ...two("add"), ...two("multiply"), ...two("power"),
     ...[0, 1, 6, 100, 300].map((k): [number, Value[]] => [n.at("meaning"), [binary(k)]])];
   sameAndFreed(build(n.lowered), calls, n.want, n.label);
+});
+
+test("Ints in C: the evaluator's whole numbers, any size, through calc's arithmetic", { skip }, () => {
+  const c = inC("calc");
+  const apply = c.at("apply");
+  let seed = 7n;
+  const next = () => (seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n);
+  const pick = (): bigint => {
+    const k = Number(next() % 10n), sign = next() % 2n ? -1n : 1n;
+    if (k < 3) return sign * (next() % 100n);
+    if (k < 5) return sign * (2n ** 62n + (next() % 5n) - 2n);
+    if (k < 7) return sign * (next() * next() * (next() % 3n ? next() : 1n));
+    return sign * (next() % 2n ** 64n);
+  };
+  const ops = ["+", "-", "*", "/", "%", "^"];
+  const calls: [number, Value[]][] = [];
+  for (let k = 0; k < 400; k++) {
+    const op = ops[k % ops.length], a = pick(), b = op === "^" ? next() % 7n - 1n : op === "/" || op === "%" ? (k % 40 ? pick() : 0n) : pick();
+    calls.push([apply, [op, norm(a), norm(b)]]);
+  }
+  calls.push([apply, ["^", 3, 200]], [apply, ["^", -1, norm(2n ** 70n)]], [apply, ["^", 0, 0]], [apply, ["?", 1, 2]]);
+  sameAndFreed(build(c.lowered), calls, c.want, c.label);
+  const l = inC("ledger");
+  const money = l.at("money"), pad = l.at("pad");
+  const amount = l.at("amount");
+  sameAndFreed(build(l.lowered), [
+    ...[0, 5, -5, 123456, -100, norm(10n ** 30n + 7n)].map((x): [number, Value[]] => [money, [x]]), [pad, ["ab", 5]], [pad, ["abcdef", 2]],
+    // Aborts, with the evaluator's reasons.
+    ...["12.50", "-3.07", "7", "x", "1.2.3", "", "99999999999999999999.99"].map((t, k): [number, Value[]] => [amount, [t, k + 1]]), [l.at("bad line"), [7]],
+  ], l.want, l.label);
+  const e = inC("effects");
+  sameAndFreed(build(e.lowered), [[10, 3], [10, 0], [-1, 2]].map((xs): [number, Value[]] => [e.at("share"), xs]), e.want, e.label);
+});
+
+test("Text in C: parsing, words, slugs and tallies give the evaluator's texts", { skip }, () => {
+  const lines = ["1 + 2 * 3", "(4 - 1) ^ 2 / 3", "x + 1", "2 *", "", "  ", "12345678901234567890 * 98765432109876543210", "π ≈ 3", "a b c", "7 % 0"];
+  const c = inC("calc");
+  const tokens = c.at("tokens"), describe = c.at("describe"), whole = c.at("whole expression");
+  const toks = (t: string) => c.want(tokens, [t]);
+  sameAndFreed(build(c.lowered), [
+    ...lines.map((t): [number, Value[]] => [tokens, [t]]),
+    ...lines.map((t): [number, Value[]] => [describe, [toks(t)]]),
+    ...lines.map((t): [number, Value[]] => [whole, [toks(t)]]),
+  ], c.want, c.label);
+  const texts = ["# One\nsome words here\n", "Hello, World! Ça va?", "", "  many   spaces\tand\ttabs  ", "emoji 🙂 and ünïcödé", "## Two: The Return", "x".repeat(3000)];
+  const ch = inC("chapters");
+  sameAndFreed(build(ch.lowered), ["words", "lower", "slug", "heading"].flatMap((fn) => texts.map((t): [number, Value[]] => [ch.at(fn), [t]])), ch.want, ch.label);
+  const w = inC("wc");
+  sameAndFreed(build(w.lowered), texts.map((t): [number, Value[]] => [w.at("count"), [t]]), w.want, w.label);
+  const b = inC("backwards");
+  sameAndFreed(build(b.lowered), [[b.at("greet"), ["Ada"]], [b.at("words"), [toList(["a", "bb", ""])]]], b.want, b.label);
+});
+
+test("Numbers shown in C: JavaScript's shortest digits, rounded as the evaluator rounds", { skip }, () => {
+  const v = inC("converter");
+  let seed = 3n;
+  const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
+  const xs = [0, -0, 1, -1, 0.5, 1e21, 1e-7, 123.456, 1 / 3, NaN, Infinity, -Infinity, 5e-324, 1.7976931348623157e308, 0.1 + 0.2, 2 ** 53, 4.35, 1e-10, 0.0000005,
+    ...Array.from({ length: 300 }, (_, k) => (next() - 0.5) * 10 ** Math.floor(next() * 40 - 20) * (k % 3 ? 1 : 1e9))];
+  sameAndFreed(build(v.lowered), ["as °C", "as cups", "as min/km"].flatMap((fn) => xs.map((x): [number, Value[]] => [v.at(fn), [x]])), v.want, v.label);
 });

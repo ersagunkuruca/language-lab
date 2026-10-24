@@ -169,6 +169,8 @@ not only code: an influence is credited even when nothing was copied.
 | `Choice` functions as lazy streams of answers (the generators) | Prior art | Wadler, "How to replace failure by a list of successes" (FPCA 1985). COMPILER.md. |
 | Native code via C with reference counting (`compiler/src/c.ts`: dup and drop from liveness) and reuse (planned, NATIVE.md) | Influence | Koka's Perceus (Reinking, Xie, de Moura and Leijen, PLDI 2021); Lean 4's reset/reuse (Ullrich and de Moura, "Counting Immutable Beans", IFL 2019). No code taken. |
 | sin, cos, tan, exp, log, pow and atan2 in native programs (generated `compiler/src/c-math.ts`, by `compiler/math/to-c.ts`) | Adapted | The same fdlibm as V8 ports it (`compiler/math/ieee754.cc`, notices kept), translated from C++ to C. |
+| Big Int division in native programs (`lab__divmod` in `compiler/src/c-rt.ts`) | Adapted | Knuth's Algorithm D (The Art of Computer Programming vol. 2, 4.3.1) as Henry S. Warren's Hacker's Delight writes it (`divmnu`), rewritten for 32-bit limbs in a 64-bit word. |
+| Native Ints as one word, the value itself when it fits and a pointer to limbs when it doesn't (`compiler/src/c-rt.ts`) | Prior art | Tagged small integers as in OCaml and Lean 4 (whose `Nat` is a scalar until it overflows, then a GMP number). No code taken. |
 | Compiling numeric code to WebAssembly and WGSL | Ersagun's idea | Follows the [WGSL](https://www.w3.org/TR/WGSL/) and WebAssembly specifications. |
 | Whole programs to WebAssembly with the host's garbage collector (WasmGC), one struct type per case (design, WASM.md) | Prior art | OCaml's wasm_of_ocaml (Jérôme Vouillon), Guile's Hoot (Spritely Institute), Kotlin/Wasm and dart2wasm compile garbage-collected languages to WasmGC. No code taken. |
 
