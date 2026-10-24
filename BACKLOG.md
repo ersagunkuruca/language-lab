@@ -30,7 +30,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
 | E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
-| E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
 | E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | design note projectional/PATTERNS.md (#370); step 1 text rows (#372); step 2 shared bodies as otherwise (#373); step 3 graph rows next |
@@ -130,6 +129,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E74 | The map starts hidden where it would cover nodes | #426 |
 | E76 | The status bar says what was typed or set in a page's field | #425 |
 | E75 | Opening a program shows its open definition in the navigator | #424 |
 | E72 | No longer reproduces (one subtract row); smoke checks it | #423 |

@@ -253,7 +253,17 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     mapped();
   });
   let on: boolean | null = mapChoice();
-  const wanted = () => { const r = root.getBoundingClientRect(); return on ?? (r.width >= 600 && r.height >= 400); };
+  // Unchosen, it's shown where there's room for it, and not over the
+  // picture: its corner has to be clear of what's drawn when the graph is
+  // first shown. Decided once, so it doesn't come and go while panning.
+  let auto: boolean | null = null;
+  const size = () => { const w = Math.min(MAP.w, Math.round(root.getBoundingClientRect().width / 5)); return { w, h: Math.round((w * MAP.h) / MAP.w) }; };
+  const clear = () => {
+    const r = root.getBoundingClientRect(), { w, h } = size();
+    const c = { l: r.right - 10 - w, t: r.bottom - 10 - h, r: r.right - 10, b: r.bottom - 10 };
+    return ![...world.querySelectorAll("[data-move]")].some((el) => { const b = el.getBoundingClientRect(); return b.right > c.l && b.left < c.r && b.bottom > c.t && b.top < c.b; });
+  };
+  const wanted = () => { const r = root.getBoundingClientRect(); return on ?? (auto ??= r.width >= 600 && r.height >= 400 && clear()); };
   mapBtn.className += " map-toggle";
   tools.append(mapBtn);
 
@@ -290,7 +300,7 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     mapBtn.title = showing ? "Hide the map of the whole graph" : "Show a map of the whole graph";
     map.setAttribute("display", showing ? "inline" : "none");
     if (!showing) return;
-    const w = Math.min(MAP.w, Math.round(r.width / 5)), h = Math.round((w * MAP.h) / MAP.w);
+    const { w, h } = size();
     map.setAttribute("width", String(w));
     map.setAttribute("height", String(h));
     k = Math.min((w - 8) / whole.width, (h - 8) / whole.height);
