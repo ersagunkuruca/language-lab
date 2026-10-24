@@ -35,7 +35,7 @@ import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, typ
 
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
-type MType = LType | "i64";
+type MType = LType | "i64" | "mag";
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
@@ -43,7 +43,6 @@ const HOST: Partial<Record<Op, { name: string; params: number }>> = {
 };
 // Number arithmetic the runtime writes itself (mod, from musl's fmod): it
 // alone doesn't make a module need texts.
-const NUMERIC = new Set(["number.mod", "number.fmod"]);
 const small = (v: bigint) => v >= -(2n ** 30n) && v < 2n ** 30n;
 // float32: to f32 and back, which rounds to the nearest binary32 value.
 const INSTR: Partial<Record<Op, [number | number[], string]>> = {
@@ -97,12 +96,12 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     need("wasi.line");
     need("wasi_proc_exit");
   }
-  // Ints (W5): an i31, or a $big; the host makes and reads them with Int.of and Int.get.
+  // Ints (W5): an i31, a $big or a $huge; the host makes and reads them with toInt and fromInt.
   const ints = rtNames.some((n) => { const f = runtime(n); return [...f.params.map(([, t]) => t), f.result].includes("int"); })
     || funcs.some((f) => [...f.params, ...f.locals, f.result].includes("int") || mentions(f.body, "int"))
     || lowered.records.some((x) => x.fields.some((y) => y.t === "int")) || lowered.data.some((d) => d.cases.some((c) => c.fields.some((y) => y.t === "int")));
-  if (ints) ["int.of", "int.small"].forEach(need);
-  const texty = rtNames.some((n) => !NUMERIC.has(n) && n !== "int.of" && n !== "int.small") || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
+  if (ints) ["int.of", "int.small", ...(wasi ? [] : ["int.limbs", "int.limb", "int.huge", "int.setLimb"])].forEach(need);
+  const texty = rtNames.some((n) => { const f = runtime(n); return [...f.params, ...f.locals, ["", f.result] as const].some(([, t]) => t === "text" || t === "list" || t === "option") || /\$bytes|\$text\./.test(f.body); }) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.put4", "text.size", "text.byte"].forEach(need);
   const rts: RtFn[] = rtNames.map(runtime);
@@ -145,12 +144,15 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A type in the group: a struct, or (`func`) a closure's code's type.
   // A field with `code` holds a closure's code, a (ref $code) of that index.
   // `bytes`: Text's array.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; mutable?: true }[] = [];
+  const structs: { name: string; fields: { name: string; t: MType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; u32s?: true; mutable?: true }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   const bytesIndex = 0, i64sIndex = structs.length;
   if (ryu) structs.push({ name: "i64s", fields: [], final: true, i64s: true });
   const bigIndex = structs.length;
   if (ints) structs.push({ name: "big", fields: [{ name: "v", t: "i64" }], final: true });
+  // Past an i64 (W5b): a $huge, its sign and its magnitude's 32-bit limbs.
+  const u32sIndex = structs.length, hugeIndex = u32sIndex + 1;
+  if (ints) structs.push({ name: "u32s", fields: [], final: true, u32s: true }, { name: "huge", fields: [{ name: "neg", t: "i32" }, { name: "mag", t: "mag" }], final: true });
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
@@ -191,7 +193,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -203,13 +205,13 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
-      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t };
+      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t };
     },
   });
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
   const refIndex = (t: RType | DType | FType) => (isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
-  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : [VAL[t]]);
+  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
   // answer: 0 for an answer, 1 for none.
@@ -299,6 +301,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
     if (x.i64s) return [0x5e, 0x7e, 0x00];
+    if (x.u32s) return [0x5e, 0x7f, 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
@@ -315,7 +318,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   ]);
   const funcSec = vec([...funcSig, ...helperSig, ...rtSig].map((t) => u(t)));
   // The runtime functions the host uses, by these names.
-  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.put4": "Text.put4", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start", "number.js": "Number.text", "int.of": "Int.of", "int.small": "Int.get" };
+  const RT_EXPORTS: Record<string, string> = { "text.new": "Text.new", "text.put": "Text.put", "text.put4": "Text.put4", "text.size": "Text.size", "text.byte": "Text.byte", "wasi.start": "_start", "number.js": "Number.text", "int.of": "Int.of", "int.small": "Int.get", "int.limbs": "Int.limbs", "int.limb": "Int.limb", "int.huge": "Int.huge", "int.setLimb": "Int.setLimb" };
   const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
@@ -332,7 +335,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : []),
     ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
   ]);
-  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
+  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
@@ -482,8 +485,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType) => sname(refIndex(r));
-  const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t);
-  const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : `${t}.const 0`);
+  const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t);
+  const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
   function wat(e: SExpr, f: SFunc, d: string, ld: number, fl: number): string {
     const w = (x: SExpr) => wat(x, f, d, ld, fl);
@@ -573,6 +576,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...structs.map((x) => {
       if (x.bytes) return "    (type $bytes (array (mut i8)))";
       if (x.i64s) return "    (type $i64s (array i64))";
+      if (x.u32s) return "    (type $u32s (array (mut i32)))";
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${ty(y.t)})` : ty(y.t)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
@@ -667,7 +671,25 @@ export async function runMain(lowered: Lowered, m: Module, name: string, args: s
   const [v, st] = f.partial ? (got as [unknown, number]) : [got, 0];
   if (st === 2) { (rt.world?.error ?? rt.print)(fromText(ex, ex["Abort.reason"]())); return 1; }
   if (st !== 0) throw new Error(`${name} had no answer`);
-  return f.result === "f64" ? Number(v) : f.result === "int" ? Number((ex["Int.get"] as (x: unknown) => bigint)(v)) : 0;
+  return f.result === "f64" ? Number(v) : f.result === "int" ? Number(fromInt(ex, v)) : 0;
+}
+
+// An Int across the boundary: an i64 through Int.of and Int.get, past
+// that a $huge's sign and 32-bit limbs.
+export function toInt(ex: Record<string, (...xs: never[]) => unknown>, v: bigint): unknown {
+  if (v >= -(2n ** 63n) && v < 2n ** 63n) return (ex["Int.of"] as (x: bigint) => unknown)(v);
+  const limbs: number[] = [];
+  for (let m = v < 0n ? -v : v; m; m >>= 32n) limbs.push(Number(m & 0xffffffffn) | 0);
+  const x = (ex["Int.huge"] as (neg: number, n: number) => unknown)(v < 0n ? 1 : 0, limbs.length);
+  limbs.forEach((l, i) => (ex["Int.setLimb"] as (x: unknown, i: number, l: number) => void)(x, i, l));
+  return x;
+}
+export function fromInt(ex: Record<string, (...xs: never[]) => unknown>, x: unknown): bigint {
+  const n = (ex["Int.limbs"] as (x: unknown) => number)(x);
+  if (n === 0) return (ex["Int.get"] as (x: unknown) => bigint)(x);
+  let m = 0n;
+  for (let i = Math.abs(n) - 1; i >= 0; i--) m = (m << 32n) | BigInt((ex["Int.limb"] as (x: unknown, i: number) => number)(x, i) >>> 0);
+  return n < 0 ? -m : m;
 }
 
 // Text across the boundary: a JS string into the module's UTF-8 array, and back.
