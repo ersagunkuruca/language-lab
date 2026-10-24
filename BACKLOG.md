@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E65 | Blocks pane: no right-click menu, and clicking an operator (`+`) doesn't select its call, so Change the function is graph-only there | QA-2026-10-24b M5 | P2 | S | |
 | E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
 | E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
 | E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
@@ -139,6 +138,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E65 | Blocks pane: right-click opens the part's menu, clicking an operator selects its call | #387 |
 | E63 | The Blocks pane draws what the blocks text prints: one printer, render.ts blocksOf | #384 |
 | E64 | One pane at a time, a hole's palette and the New definition form switch to the side pane | #380 |
 | E60 | An action handed to a handler is drawn by name, first(queens(8), else nil); its graph frame is titled action (was L36) | #368 |
