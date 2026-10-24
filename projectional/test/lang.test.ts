@@ -74,7 +74,9 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  assert.ok(tried > 1000 * sweepShare, `tried ${tried}`);
+  // All of it is over 1000. A slice is an eighth of the targets but not
+  // of the fillings (some arms offer more), so it is held to 100.
+  assert.ok(tried > (sweepShare === 1 ? 1000 : 100), `tried ${tried}`);
 });
 
 test("the palette leaves out what would be a type error, and the checker catches it if forced", () => {
