@@ -451,6 +451,10 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .edge-hit, .tgraph .tw[data-edge] { cursor: copy; }
 .tgraph .edge-hit:hover + .tw, .tgraph .tw[data-edge]:hover { stroke: var(--accent); stroke-width: 2.4; }
 .tgraph .inp.use { fill: var(--wire); stroke: var(--wire); }
+.tgraph .add-inp { cursor: pointer; }
+.tgraph .add-inp circle { fill: var(--canvas); stroke: var(--wire); stroke-width: 1.4; stroke-dasharray: 2 2; }
+.tgraph .add-inp text { font: 600 11px var(--font-ui); fill: var(--muted); pointer-events: none; }
+.tgraph .add-inp:hover circle { stroke: var(--accent); stroke-dasharray: none; }
 .tgraph .portl { fill: var(--faint); font-size: 11px; pointer-events: none; }
 .tgraph .val rect { fill: var(--panel); }
 .tgraph .val text { fill: var(--accent); font: 500 10.5px var(--font-code); }

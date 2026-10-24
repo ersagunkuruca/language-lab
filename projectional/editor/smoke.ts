@@ -250,6 +250,35 @@ async function heldSeed() {
   await p.close();
 }
 
+// A list's items are added, moved and taken out from the panel, in either
+// view, and the graph's + adds one at the end (BACKLOG E91): the button row
+// of two dice's main.
+async function listItems() {
+  where = "a list's items";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const text = async () => (await p.locator(".p-text").innerText()).replace(/\s+/g, " ");
+  const before = await text();
+  await p.locator(".blocks-wrap .head", { hasText: /^h1$/ }).first().click();
+  const head = (await p.locator(".sub-head", { hasText: /^Item 1 of \d+ in the list/ }).count());
+  if (!head) errors.push(`${where}: h1(…) in main's list doesn't say it's an item`);
+  await p.locator("button", { hasText: /^Add one after$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Add one after`));
+  if ((await p.locator(".insp-head").first().innerText()).trim() !== "Hole") errors.push(`${where}: the new item isn't a selected hole`);
+  if (!/h1\(\[words\("Two dice"\)\]\), □/.test(await text())) errors.push(`${where}: no hole after h1 in ${(await text()).slice(400, 600)}`);
+  await p.locator("button", { hasText: /^Earlier$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: a new item can't move earlier`));
+  if (!/\[ □\S*, h1\(/.test(await text())) errors.push(`${where}: Earlier didn't put the hole first`);
+  await p.locator("button", { hasText: /^Take it out$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Take it out`));
+  if ((await text()) !== before) errors.push(`${where}: taking the new item out doesn't give back main`);
+  const holes = await p.locator(".p-graph .pill.hole").count();
+  // The first + may be off the visible part of the canvas: press it where it is.
+  await p.locator(".p-graph .add-inp").first().dispatchEvent("pointerdown", { button: 0 }, { timeout: 2000 }).catch(() => errors.push(`${where}: the graph has no + on a list or a chain`));
+  if ((await p.locator(".p-graph .pill.hole").count()) <= holes) errors.push(`${where}: the graph's + didn't add a hole`);
+  await p.close();
+}
+
 // A Text port reads what's typed as text, quotes or not (BACKLOG E93):
 // greet run forwards from a name.
 async function textPort() {
@@ -447,6 +476,7 @@ await swapAndUndo();
 await choiceAction();
 await heldSeed();
 await textPort();
+await listItems();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

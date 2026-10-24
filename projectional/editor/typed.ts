@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
-import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
+import { children, collect, freshId, parentOf, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Notation, Presentation } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
@@ -15,7 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { ARITH, FALSE, SIGS, TRUE } from "../src/lang/std.ts";
+import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../src/lang/std.ts";
 import { INT, RATIONAL_TYPE, schemeArith, showIn, showType } from "../src/lang/types.ts";
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
@@ -710,6 +710,129 @@ export function unpin(pins: Pins, def: Id, name: string): PinEdit {
   const { [def]: _, ...rest } = pins;
   return { ok: true, pins: rest, note: `Unpinned ${name}: its type follows its body again.` };
 }
+
+// ---------------------------------------------------------------- rows
+//
+// A list is cons(a, cons(b, nil)), shown [a, b]; a chain of one operation
+// where grouping doesn't matter, a ++ (b ++ c), is shown as one call with
+// every operand side by side. Either way its parts are edited as a row:
+// add one, move one, take one out. The program keeps its pairs; these edits
+// rewire them, so the meaning changes only where you asked.
+
+export interface Row { kind: "list" | "chain"; root: Id; op?: Id; items: Id[]; spine: Id[] }
+
+const consOf = (code: Code, id: Id): NodeOf<"call"> | null => {
+  const n = code.nodes[id];
+  const f = n?.kind === "call" ? code.nodes[n.fn] : undefined;
+  return n?.kind === "call" && f?.kind === "ref" && f.target === CONS && n.args.length === 2 ? n : null;
+};
+const opOf = (code: Code, id: Id): Id | null => {
+  const n = code.nodes[id];
+  const f = n?.kind === "call" && n.args.length === 2 ? code.nodes[n.fn] : undefined;
+  return f?.kind === "ref" && ASSOCIATIVE.has(f.target) ? f.target : null;
+};
+
+// The row `root` is, if it is one. spine[i] is the cons holding items[i],
+// and spine[items.length] the nil that ends the list.
+export function rowAt(code: Code, root: Id): Row | null {
+  const n = code.nodes[root];
+  if ((n?.kind === "ref" && n.target === NIL) || consOf(code, root)) {
+    const items: Id[] = [], spine: Id[] = [];
+    for (let at = root; ; ) {
+      const c = consOf(code, at);
+      spine.push(at);
+      if (c) { items.push(c.args[0]); at = c.args[1]; continue; }
+      const end = code.nodes[at];
+      return end?.kind === "ref" && end.target === NIL ? { kind: "list", root, items, spine } : null;
+    }
+  }
+  const op = opOf(code, root);
+  if (!op) return null;
+  const items: Id[] = [];
+  const walk = (a: Id) => { if (a !== root && opOf(code, a) !== op) items.push(a); else for (const b of (code.nodes[a] as NodeOf<"call">).args) walk(b); };
+  walk(root);
+  return { kind: "chain", root, op, items, spine: [] };
+}
+
+// The row `id` is an item of, and where.
+export function rowOfItem(code: Code, id: Id): { row: Row; at: number } | null {
+  const up = parentOf(code, id);
+  if (!up || up.slot !== "args") return null;
+  let root = up.parent;
+  if (consOf(code, root) && up.index === 0) {
+    for (let p = parentOf(code, root); p && p.slot === "args" && p.index === 1 && consOf(code, p.parent); p = parentOf(code, root)) root = p.parent;
+  } else {
+    const op = opOf(code, root);
+    if (!op) return null;
+    for (let p = parentOf(code, root); p && p.slot === "args" && opOf(code, p.parent) === op; p = parentOf(code, root)) root = p.parent;
+  }
+  const row = rowAt(code, root);
+  const at = row ? row.items.indexOf(id) : -1;
+  return row && at >= 0 ? { row, at } : null;
+}
+
+const itemWord = (row: Row) => (row.kind === "list" ? "item" : "input");
+
+// A new hole in the row, before items[at] (at the end when at is its length).
+export function addItem(code: Code, names: Names, info: Info, row: Row, at: number): TEdit {
+  const hole = freshId(), pair = freshId(), head = freshId();
+  let next: Code;
+  let made: Node;
+  if (row.kind === "list") {
+    const tail = row.spine[at];
+    if (!parentOf(code, tail)) return { ok: false, reason: "this list has nowhere to grow" };
+    next = swapIn(code, tail, pair);
+    made = { id: pair, kind: "call", fn: head, args: [hole, tail] };
+    next.nodes[head] = { id: head, kind: "ref", target: CONS };
+  } else {
+    const last = at >= row.items.length;
+    const beside = row.items[last ? row.items.length - 1 : at];
+    next = swapIn(code, beside, pair);
+    made = { id: pair, kind: "call", fn: head, args: last ? [beside, hole] : [hole, beside] };
+    next.nodes[head] = { id: head, kind: "ref", target: row.op! };
+  }
+  next.nodes[pair] = made;
+  next.nodes[hole] = { id: hole, kind: "hole" };
+  const where = at >= row.items.length ? "at the end" : at === 0 ? "first" : `as the ${ordinal(at + 1)}`;
+  return guardTyped(info, next, names, hole, `A new ${itemWord(row)} ${where}: fill its hole.`);
+}
+
+// Take items[at] out of the row.
+export function removeItem(code: Code, names: Names, info: Info, row: Row, at: number): TEdit {
+  let next: Code;
+  if (row.kind === "list") {
+    const cell = row.spine[at];
+    if (!parentOf(code, cell)) return { ok: false, reason: "this list can't lose its first item here" };
+    next = swapIn(code, cell, consOf(code, cell)!.args[1]);
+  } else {
+    const item = row.items[at];
+    const up = parentOf(code, item)!;
+    const pair = code.nodes[up.parent] as NodeOf<"call">;
+    if (!parentOf(code, up.parent)) return { ok: false, reason: "this has nowhere to put what's left" };
+    next = swapIn(code, up.parent, pair.args[up.index === 0 ? 1 : 0]);
+  }
+  return guardTyped(info, collect(next), names, undefined, `Took the ${ordinal(at + 1)} ${itemWord(row)} out.`);
+}
+
+// Swap items[at] with its neighbour `by` away (-1 earlier, 1 later).
+export function moveItem(code: Code, names: Names, info: Info, row: Row, at: number, by: -1 | 1): TEdit {
+  const other = at + by;
+  if (other < 0 || other >= row.items.length) return { ok: false, reason: by < 0 ? "it's first already" : "it's last already" };
+  const a = row.items[at], b = row.items[other];
+  const pa = parentOf(code, a)!, pb = parentOf(code, b)!;
+  const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const put = (p: { parent: Id; index?: number }, id: Id) => {
+    const n = next.nodes[p.parent] as NodeOf<"call">;
+    const args = [...n.args];
+    args[p.index!] = id;
+    next.nodes[p.parent] = { ...n, args };
+  };
+  put(pa, b);
+  put(pb, a);
+  return guardTyped(info, next, names, a, `Moved it ${by < 0 ? "earlier" : "later"}.`);
+}
+
+const ordinal = (n: number) => (["first", "second", "third", "fourth", "fifth"][n - 1] ?? `${n}th`);
 
 // A copy of one of the program's own functions or values, under fresh ids,
 // placed right after it, to change without touching the original. Recursive

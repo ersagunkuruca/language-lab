@@ -35,7 +35,7 @@
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
-import { chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
+import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel } from "./typed.ts";
@@ -68,6 +68,8 @@ export interface GraphHooks {
   // Frames drawn folded into one box, and folding or unfolding one.
   folded?: Set<Id>;
   fold?: (frame: Id) => void;
+  // The + under a list's or a + b + c's inputs: one more, at the end.
+  addItem?: (row: Id) => void;
   // Right-click: what was under the pointer, where (screen and world).
   menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
@@ -338,14 +340,22 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
     const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0);
-    const bh = Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0);
+    // A list, or a chain of one operation, takes one more input at its +.
+    const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
+    const plus = grows ? 16 : 0;
+    const bh = Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus;
     const top = badge ? 14 : 0;
-    const portY = (i: number) => top + ((bh - top) / (inputs.length + 1)) * (i + 1);
+    const portY = (i: number) => top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1);
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
       g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       inputs.forEach((a, i) => g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
+      if (grows) {
+        const add = s("g", { class: "add-inp", "data-add": id });
+        add.append(s("circle", { cx: 0, cy: bh - 11, r: 6 }), s("text", { x: 0, y: bh - 7.5, "text-anchor": "middle" }, "+"));
+        g.append(titled(add, list ? "Add an item at the end" : "Add an input at the end"));
+      }
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
     }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label });
     const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
@@ -972,6 +982,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   root.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const start = ev.target as Element;
+    const add = start.closest("[data-add]")?.getAttribute("data-add");
+    if (add && hooks.addItem) { ev.preventDefault(); hooks.addItem(add); return; }
     const src = start.closest("[data-src]")?.getAttribute("data-src");
     const out = start.closest("[data-out]")?.getAttribute("data-out");
     const slot = start.closest("circle.inp")?.getAttribute("data-slot");
