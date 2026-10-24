@@ -26,7 +26,15 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
+| E81 | Bug. The palette offers fills the next step refuses: at the seed hole of `a hundred rolls` it lists `die()`, and picking it is refused (the held type has no Random). Filter by the held effect row, or grey such rows with the reason | learning/editor-findings.md (Learn the editor thread) | P1 | S | |
+| E82 | Bug. That refusal says "pinned" when the type is only held because a hole was made; say why in plain words (die() runs before `seeded` handles Random) and the two ways out (Let it loosen, or change the caller) | learning/editor-findings.md (Learn the editor thread) | P1 | S | |
+| E83 | The Selected panel heads each part with its internal id ("Hole akdibablpg…") | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
+| E84 | After clearing `seed`'s only use, the palette lists in-scope `seed` as `a` while the definition still says `Number` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
+| E85 | Hover types in Blocks show a library function's effect row as the call site fills it (`range` hovers as `-[Random]->`) | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
+| E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
+| E87 | Selecting a plain Number literal (a dice seed) shows the Unit chooser: noise outside physics | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
+| E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
+| E89 | The palette doesn't read a typed `die() + 1` though `die()` and `x + 1` are read | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
@@ -133,6 +141,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E70 | Run offers no Run for an action that may give no answer or several (Choice) and says to call it inside first/all/count/optional; Show values says first answer | #400 |
 | E79 | Maps and sets written out read as tables in the blocks; Run's Gives shows a map or set as a table | #397 |
 | E69 | A typed 1/2 where a fraction goes is one half; each whole number takes the type its place expects | #395 |
 | E68 | Create a definition: 3.8 s → 0.85 s; a filling's recheck checks units only in the definitions it can affect | #392 |
