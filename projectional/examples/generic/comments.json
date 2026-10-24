@@ -1,0 +1,6 @@
+{
+  "or19v4413a2gpub3qa7hihfntl": "Horner's rule (prior art: William George Horner, 1819; known earlier to Qin Jiushao and to Newton): one multiply and one add per coefficient, highest first.",
+  "hvtgan5peeuf1htba2vpa06i5j": "The polynomial with these coefficients (highest power first) at x. x − x is zero in whatever number type x is, so no literal fixes the type: the type reads (List a, a) -> a where a is a number type.",
+  "vfjif66rc3pdptpv983v2ubeei": "The polynomial's values at x, x + step, x + 2·step, … added up, steps of them. The count is an Int; everything else is the one generic + and ·. A loop for measuring each number type on each target.",
+  "qec7lrrj0ftdb00r3joh8c6tm7": "One definition, three number types: the same polynomial at an Int, a Number and a fraction, each with that type's own + and · (resolved per type before the program runs: NUMBERS.md, \"One + for every number system\"). Int stays exact past 2⁵³, Number rounds, fractions stay exact."
+}

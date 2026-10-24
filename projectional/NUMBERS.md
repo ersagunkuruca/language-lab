@@ -780,7 +780,13 @@ hierarchy is the map of which structures to name.
    generic operations under their old names, and `distance`, `reflect`
    and the ray marcher use `+` and `−` on points directly.
 4. *An example* using one generic definition at two types, for the
-   compiler lane to measure on each target.
+   compiler lane to measure on each target. Done: `examples/generic`, a
+   polynomial by Horner's rule with no literal in it (`x − x` is its
+   zero), so its type is `(List a, a) -> a where a is a number type`;
+   `main` evaluates it at an Int, a Number and a fraction, and `walk` adds
+   up 100,000 of its values at Int and Number (300 at fractions), the loop
+   to measure. The compiled JavaScript prints what the evaluator prints
+   (compiler/test/compile.test.ts).
 5. Then Rational and Complex (LANGUAGE-REVIEW-2026-10-24 L39, L40), each
    an entry in the table. **Rational done (L39):** `std.rational`, one
    case `ratio(top, bottom)` of Ints, always in lowest terms with the sign
