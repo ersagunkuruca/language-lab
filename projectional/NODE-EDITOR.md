@@ -77,7 +77,7 @@ checked on the built page (fall, two dice), not just read from the code.
 | Use a variable | ✓ palette | ✓ palette, or drag from the variable to an input | |
 | Share a value (a dot) | ✓ menu | ✓ menu, or drag an output onto another input | |
 | Add a value before this | ✓ menu | ✓ menu | |
-| Add a value here (empty space) | ✗ | ✓ right-click the canvas | gap: E100 |
+| Add a value (empty space) | ✓ right-click empty space: at the start | ✓ right-click the canvas: where you clicked | |
 | List items, a + b + c inputs: add, move, take out | ✓ panel, menu | ✓ panel, menu, + under the inputs | reorder by dragging an input: E101 |
 | Split by cases, steps earlier/later | ✓ panel | ✓ panel | |
 | Rename | ✓ panel | ✓ panel, menu Name it… | |
