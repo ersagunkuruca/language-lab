@@ -586,7 +586,8 @@ only, and doesn't export, now compares as that type, so `times in` uses
 `===`. Uses are followed through generic callers. On top of the faster `$eq`
 that change is within the noise on chapters (about 545 ms either way); the
 win is smaller code and a compare V8 can inline. A copy per type,
-for generics used at several types, is still open.
+for generics used at several types, was measured and left (Backlog C11):
+no example program compiles a generic `$eq` any more.
 
 **G14 again. `heading` is a generator (perf: 51 → 48 ms).** It has one
 answer or none, and `sections` wraps it in `optional`, which drains it with
