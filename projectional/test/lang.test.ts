@@ -286,6 +286,22 @@ test("a field read reads as value.field: the record first, then what is taken fr
   assert.doesNotMatch(larger, /cents\(|name\(/);
 });
 
+test("a value of a one-case type taken apart reads as a let of its fields, and stays in its branch", () => {
+  const cd = load("countdown"), info = infer(cd.code, cd.pres.names);
+  const lines = (d: string) => renderBlocks(cd.code, cd.pres, info, cd.named(d)).split("\n").map((l) => l.trim());
+  // Both halves are searched, each result taken apart, then joined.
+  const results = lines("results");
+  const steps = ["halves(front, back) = split(numbers)", "found(expr, value) = results(front)", "found(expr₂, value₂) = results(back)"].map((l) => results.indexOf(l));
+  assert.ok(steps.every((i, k) => i >= 0 && (k === 0 || i > steps[k - 1])), results.join("\n"));
+  assert.ok(results[steps[2] + 1].startsWith("join("), results.join("\n"));
+  // split's else takes the rest apart only when it goes that way.
+  const split = lines("split");
+  const other = split.indexOf("else");
+  assert.ok(other >= 0 && split[other + 1] === "halves(front, back) = split(tail)", split.join("\n"));
+  // A type with several cases is still matched, case by case.
+  assert.ok(lines("valid").includes("match op"));
+});
+
 test("a step done for what it does reads as the step; an unnamed value something reads is called for its type", () => {
   const ledger = load("ledger"), li = infer(ledger.code, ledger.pres.names);
   const usage = renderBlocks(ledger.code, ledger.pres, li, ledger.named("usage")).split("\n").map((l) => l.trim());

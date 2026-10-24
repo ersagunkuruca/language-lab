@@ -148,13 +148,24 @@ test("a folded frame is one box where the frame was, with its wires in on the le
   assert.ok(ends.length < open.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "")).length, "wires inside are not drawn");
 });
 
-test("a field read is labelled .field, so what's wired into it reads as p.field", () => {
-  const l = loadProgram(join(root, "examples", "ledger"));
-  const svg = typedGraph(l.code, l.pres, infer(l.code, l.pres.names), l.named("larger"), {
+const labelsOf = (example: string, d: string) => {
+  const l = loadProgram(join(root, "examples", example));
+  const svg = typedGraph(l.code, l.pres, infer(l.code, l.pres.names), l.named(d), {
     selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
     canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded: new Set(),
   }).root as unknown as El;
-  const labels = svg.all().filter((e) => e.getAttribute("class") === "cl").map((e) => e.children.length ? "" : e.textContent);
+  return svg.all().filter((e) => /^(cl|portl)$/.test(e.getAttribute("class") ?? "")).map((e) => e.textContent);
+};
+
+test("a field read is labelled .field, so what's wired into it reads as p.field", () => {
+  const labels = labelsOf("ledger", "larger");
   assert.ok(labels.includes(".cents") && labels.includes(".name"), labels.join(" "));
   assert.ok(!labels.includes("cents") && !labels.includes("name"), labels.join(" "));
+});
+
+test("a value of a one-case type taken apart is drawn as the let of its fields, then what runs next", () => {
+  const labels = labelsOf("countdown", "results");
+  assert.ok(labels.includes("halves(front, back) =") && labels.includes("found(expr, value) ="), labels.join(" | "));
+  assert.ok(!labels.includes("match Halves") && !labels.includes("match Found"), labels.join(" | "));
+  assert.ok(labelsOf("countdown", "valid").includes("match Op"));
 });
