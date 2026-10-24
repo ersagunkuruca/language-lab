@@ -17,8 +17,8 @@ when it shows a Number). So a module asks its host for nothing but the
 world. Countdown's search runs as fast as the hand-written ideal
 JavaScript. With no JavaScript host, sin and the other Math functions
 are refused with a reason; a port of fdlibm would close that. An Int grows
-past 64 bits as the evaluator's does (W5b, W5c). Left:
-from W1 nested folds and one cast per arm. What runs in WebAssembly is the
+past 64 bits as the evaluator's does (W5b, W5c), and folds go through
+nested data (W1d). Left: from W1 one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -309,8 +309,10 @@ rest with the reason, so nothing breaks between stages.
 1. **W1 data.** Records first (W1a, done: one struct type per record
    type, readers for the host). Then variants and records of any fields,
    matches and folds over them, lists as cons cells (W1b, done),
-   structural `equal` and folds over lists as loops (W1c, done). Left:
-   folds over data nested in other data (a rose tree's `List Tree`), and
+   structural `equal` and folds over lists as loops (W1c, done), folds
+   over data nested in other data (W1d, done: a rose tree's `List Tree`
+   folds to a `List R`, through one function per container type that the
+   fold makes and calls on the field). Left:
    one cast per arm rather than per field read. The binary encoder in wasm.ts gets the type
    section's recursion groups, struct and array types and reference
    types. Programs: calculus and physics without text, and Countdown's

@@ -9,7 +9,7 @@ import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, closures, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -167,6 +167,35 @@ test("equal on data in WebAssembly: the evaluator's rule on each number, two lon
   let a = w["List.nil"](), b = w["List.nil"]();
   for (let i = 0; i < 1e6; i++) { a = w["List.cons"](i, a); b = w["List.cons"](i, b); }
   assert.equal(w.same(a, b), 1);
+});
+
+test("folds over nested data in WebAssembly: a rose tree's List of children, a grove's List of Lists, the evaluator's answers", async () => {
+  const p = roses();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const node = (v: number, ...kids: Value[]): Value => ({ tag: p.rose.v.node, fields: [v, toList(kids)] });
+  const leaf = (v: number): Value => ({ tag: p.grove.v.leaf, fields: [v] });
+  const rows = (...xs: Value[][]): Value => ({ tag: p.grove.v.rows, fields: [toList(xs.map(toList))] });
+  let n = 0;
+  const grow = (d: number): Value => node(n++ % 7 - 3, ...Array.from({ length: d > 0 ? (n * 5) % 4 : 0 }, () => grow(d - 1)));
+  const trees = [node(1), node(1, node(2), node(3, node(4))), grow(4), grow(6),
+    node(0, ...Array.from({ length: 50_000 }, (_, i) => node(i))), Array.from({ length: 300 }, (_, i) => i).reduce((t, i) => node(i, t), node(-1))];
+  const groves = [leaf(5), rows(), rows([], [leaf(1)]), rows([leaf(1), rows([leaf(2), leaf(3)], [])], [rows([leaf(4)])])];
+  const cases: [keyof typeof p.defs, Value[][]][] = [
+    ["total", trees.map((t) => [t])], ["depth", trees.map((t) => [t])], ["mirror", trees.slice(0, 4).map((t) => [t])],
+    ["scaled", trees.map((t) => [3, t])], ["groveTotal", groves.map((g) => [g])],
+    ["ways", trees.slice(0, 2).map((t) => [t])], ["firstOver", [5, 9, 100].flatMap((x) => trees.slice(0, 2).map((t) => [x, t]))],
+  ];
+  for (const [name, inputs] of cases) {
+    const def = p.defs[name], f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs) {
+      const want = first(r.call(r.value(def), ...xs));
+      const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      assert.deepStrictEqual(got, want, name);
+    }
+  }
 });
 
 test("functions as values in WebAssembly: closures, call_ref, a definition by name, constants", async () => {
