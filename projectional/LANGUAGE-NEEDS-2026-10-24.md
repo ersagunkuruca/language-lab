@@ -9,7 +9,7 @@ awkward, so be it; the targets' weirdness must not dent the language.
 Part 1 designs concurrency and parallelism as one idea on the effects the
 language already has. Part 2 is an inventory of what a serious language
 still lacks, ranked by what blocks real programs now. Both end in proposals
-that go into BACKLOG.md (rows L60 to L69 and C40 to C45). Nothing here is
+that go into BACKLOG.md (rows L62 to L71 and C40 to C45). Nothing here is
 built yet.
 
 **How it was read.** LANGUAGE.md (effects, cells, pages, "Where effects
@@ -367,7 +367,7 @@ adds). Needed, in the order they block this design:
    answer them and a concurrent program runs with a fake clock and network.
 
 So L54's design note, which the review says is to be written "with the
-concurrency thread", is the first step of this plan: L60 below is that
+concurrency thread", is the first step of this plan: L71 below is that
 note and `together` together.
 
 # Part 2: What a serious language still needs
@@ -539,22 +539,22 @@ it will be when there are two projects. (L68, P3.)
 
 # Plan
 
-In BACKLOG.md as proposals, lane by lane. Ids start at L60 and C40 so they
+In BACKLOG.md as proposals, lane by lane. Ids start at L62 and C40 (the first, `together`, is L71: L60 and L61 were taken) so they
 can't clash with rows other threads add today.
 
 | id | what | lane | size | after |
 |---|---|---|---|---|
-| L60 | L54's design note with this one, then `together`, `race`, `within` in the prelude as handlers over `await`; std's waiting ops as start + await; Abort stops siblings; cancellation is a dropped `k` | L | L | L54, L56 |
-| L62 | Pure branches marked by a row constraint (no world, no Update, no waits) and shown in the editor; the runtime may run them elsewhere | L | S | L60, L53 |
-| L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, a match answering `await` gives virtual time and a fake network; a test shows an interleaving bug found by a seed | L | M | L60, L55 |
-| L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs one | L | M | L60, a program |
+| L71 | L54's design note with this one, then `together`, `race`, `within` in the prelude as handlers over `await`; std's waiting ops as start + await; Abort stops siblings; cancellation is a dropped `k` | L | L | L54, L56 |
+| L62 | Pure branches marked by a row constraint (no world, no Update, no waits) and shown in the editor; the runtime may run them elsewhere | L | S | L71, L53 |
+| L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, a match answering `await` gives virtual time and a fake network; a test shows an interleaving bug found by a seed | L | M | L71, L55 |
+| L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs one | L | M | L71, a program |
 | L65 | `Map k v` and `Set k`: meaning as sorted pairs, a balanced tree first, folds in key order, drawn as a table | L | L | L66 |
 | L66 | A structural order on plain data: `compare`, generic `sort`, `smaller`/`larger` on any plain data | L | S | — |
 | L67 | `Outcome a` with `attempt` and `value or abort`, the data form of Abort | L | S | — |
 | L68 | Sharing modules between projects by hash, with a browser | L | L | — (P3) |
 | L69 | Foreign definitions: a typed, rowed declaration with a body per target, on L7's builtin records | L, C | M | — |
 | L70 | Design note: grammars written once as printers, parsed by running them backwards; calc's parser as the first | L | M | — |
-| C40 | Compiled JS for L54 and L60: suspendable copies (C21's generators) for definitions that perform an answered-later operation; the world's `await(any of …)` as a promise | C | M | L60 |
+| C40 | Compiled JS for L54 and L71: suspendable copies (C21's generators) for definitions that perform an answered-later operation; the world's `await(any of …)` as a promise | C | M | L71 |
 | C41 | Pure `together` branches on worker_threads / Web Workers, over a cost threshold | C | M | L62 |
 | C42 | Data-parallel `map` and associative folds over arrays, on a thread pool and later as compute shaders | C | L | C30, L38's laws |
 | C43 | Or-parallel `all` and `count`, and speculative `first` in canonical order, with work stealing | C | L | C41 |
@@ -567,7 +567,7 @@ Do the quick unblockers in lane L right after the current numbers step:
 **L66** (order), **L67** (Outcome), then **L65** (maps), with L35 and L37
 moved up beside them. Start concurrency with the effects review's **L52**
 (the page-handler bug, now) and **L53**, then **L54's design note, written
-as L60's first step**, with **L56**; then `together` and **L63** in the
+as L71's first step**, with **L56**; then `together` and **L63** in the
 evaluator, **C40**, and the review's **L59**, which removes the
 page-handler dent for good.
 Leave parallelism (C41 to C43) until a program is slow for want of it: the
