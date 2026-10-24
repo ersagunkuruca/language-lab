@@ -88,10 +88,10 @@ checked on the built page (fall, two dice), not just read from the code.
 | Long press for the menu (touch) | ✓ | ✓ | |
 | Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |
 
-## Loose parts: editing without keeping the tree whole (proposed, 2026-10-24)
+## Loose parts: editing without keeping the tree whole (agreed, 2026-10-24)
 
-*Proposed after Ersagun's report from editing two dice `main` in the
-graph; not built yet. Waiting on his go-ahead.*
+*Agreed with Ersagun on 2026-10-24, after his report from editing two dice `main` in the
+graph. Not built yet: the Editor lane builds it in the order below, after the graph bugs it has queued.*
 
 **The problem.** Every gesture in the graph has to leave a whole, typed
 tree behind (pitfall 11). That's why Delete takes everything that feeds
