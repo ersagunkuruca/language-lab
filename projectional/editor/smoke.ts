@@ -237,6 +237,12 @@ async function heldSeed() {
     await die.first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: after Let it loosen die() isn't offered`));
     if (!(await p.locator(".p-text").innerText()).includes("Random")) errors.push(`${where}: filled with die(), its type doesn't say Random`);
   }
+  // A program with no units keeps the unit chooser folded (BACKLOG E87).
+  where = "a dice seed's panel";
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator(".blocks-wrap .lit", { hasText: /^7$/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: main shows no 7`));
+  if (await p.locator(".sub-head", { hasText: "Unit" }).count()) errors.push(`${where}: the unit chooser shows in a program with no units`);
+  if (!(await p.locator("details.units summary").count())) errors.push(`${where}: no folded Give it a unit`);
   await p.close();
 }
 
