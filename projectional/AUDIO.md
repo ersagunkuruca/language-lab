@@ -25,8 +25,10 @@ pedal takes 0.069 ms a block, 14 500 blocks a second, 39 times real time;
 the same pedal by hand in JavaScript is 6 times quicker, and the evaluator
 plays 8 blocks a second. Half the compiled time was telling apart the
 answers of a solve that has one way to an answer (atanh run backwards,
-128 times a block): it is now just the answer. What's left is mostly
-`$clean`, the solver's rounding to 12 digits, which goes through a string.
+128 times a block): it is now just the answer. Bigger-program round 4 (compiler/GAPS.md) then took the
+compiled pedal from 6× to 2.9× the hand-written one: rounding without a
+string, one-answer solves and modes written plainly, and the compressor
+writing its block straight into an array.
 A4 (the editor's Run panel, with the Editor lane) is next.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
