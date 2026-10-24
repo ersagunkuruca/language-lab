@@ -60,9 +60,9 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const done = (env: Map<Id, string>) => {
         const vs = outs.map((p) => env.get(an.slot(portNode(lam, p))));
         if (vs.some((v) => v === undefined)) throw new Unsupported("a port is never found");
-        return `return [${vs.join(", ")}];`;
+        return `return ${vs.length === 1 ? vs[0] : `[${vs.join(", ")}]`};`;
       };
-      const body = writePlan(plan, env, done, emit);
+      const body = writePlan(plan, env, done, emit, "return $no;");
       out.push(`// ${names[def] ?? def}, run with ${ins.length ? ins.map((p) => (p === "out" ? "its result" : names[lam.params[Number(p)]] ?? p)).join(", ") : "nothing"} known\nfunction ${name}(${params.join(", ")}) {\n${body}\n}`);
     } catch (e) {
       made.delete(key);
@@ -71,30 +71,44 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     return name;
   }
 
-  // What the statements of a plan see: the slots that hold a value, and
-  // the statements so far, in order.
-  interface Scope { env: Map<Id, string>; lines: string[]; emit: ModeEmit }
+  // What the statements of a plan see: the slots that hold a value, the
+  // statements so far, in order, and what to do when this way fails
+  // (`return $no;`, or leave an arm's block for the next arm).
+  interface Scope { env: Map<Id, string>; lines: string[]; emit: ModeEmit; fail: string }
   const get = (sc: Scope, s: Id) => sc.env.get(an.slot(s));
   const fresh = (sc: Scope, js: string) => { const t = `m$${temps++}`; sc.lines.push(`const ${t} = ${js};`); return t; };
-  // A slot gets a value: if it has one, they must be equal.
-  const bind = (sc: Scope, s: Id, js: string) => {
+  // The temps that hold a case with no fields (a nil), by its variant.
+  const bare = new Map<string, Id>();
+  // A slot gets a value: if it has one, they must be equal (for a case
+  // with no fields, the same tag).
+  const bind = (sc: Scope, s: Id, js: string, variant?: Id) => {
     const k = an.slot(s), was = sc.env.get(k);
-    if (was !== undefined) sc.lines.push(`if (!$eq(${was}, ${js})) return $no;`);
-    else sc.env.set(k, /^[\p{L}\p{N}_$]+$/u.test(js) ? js : fresh(sc, js));
+    const v = variant ?? bare.get(js), w = was !== undefined ? bare.get(was) : undefined;
+    if (was !== undefined && v !== undefined) sc.lines.push(`if (${was}.tag !== ${sc.emit.tag(v)}) ${sc.fail}`);
+    else if (was !== undefined && w !== undefined) sc.lines.push(`if (${js}.tag !== ${sc.emit.tag(w)}) ${sc.fail}`);
+    else if (was !== undefined) sc.lines.push(`if (!$eq(${was}, ${js})) ${sc.fail}`);
+    else {
+      const t = /^[\p{L}\p{N}_$]+$/u.test(js) ? js : fresh(sc, js);
+      if (v !== undefined) bare.set(t, v);
+      sc.env.set(k, t);
+    }
   };
 
   // The statements of a plan: each goal, then the choice, then `done`.
-  function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit): string {
-    const sc: Scope = { env: new Map(env0), lines: [], emit };
-    for (const e of plan.steps) {
-      // `fail`: this way gives no answer, whatever is left.
-      const f = e.k === "call" ? nodes[(nodes[e.node] as NodeOf<"call">).fn] : undefined;
-      if (f?.kind === "ref" && f.target === S.fail) { sc.lines.push("return $no;"); return sc.lines.join("\n"); }
-      exec(e, sc);
-    }
-    sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit) : done(sc.env));
+  function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit, fail: string): string {
+    // `fail`: this way gives no answer, whatever is left (the goals before
+    // it can only fail too).
+    if (fails(plan)) return fail;
+    const sc: Scope = { env: new Map(env0), lines: [], emit, fail };
+    for (const e of plan.steps) exec(e, sc);
+    sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit, fail) : done(sc.env));
     return sc.lines.join("\n");
   }
+
+  const fails = (plan: Plan) => plan.steps.some((e) => {
+    const f = e.k === "call" ? nodes[(nodes[e.node] as NodeOf<"call">).fn] : undefined;
+    return f?.kind === "ref" && f.target === S.fail;
+  });
 
   function exec(e: Exec, sc: Scope) {
     if (e.waits) throw new Unsupported("a goal waits");
@@ -102,7 +116,8 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       case "given": {
         const js = sc.emit.value(e.node);
         if (js === null) throw new Unsupported("a value only known in its scope");
-        bind(sc, e.node, js);
+        const n = nodes[e.node];
+        bind(sc, e.node, js, n.kind === "ref" && nodes[n.target]?.kind === "variant" ? n.target : undefined);
         break;
       }
       case "same": {
@@ -116,7 +131,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       case "case": {
         const val = get(sc, e.value);
         if (val !== undefined) {
-          sc.lines.push(`if (${val}.tag !== ${sc.emit.tag(e.variant)}) return $no;`);
+          sc.lines.push(`if (${val}.tag !== ${sc.emit.tag(e.variant)}) ${sc.fail}`);
           e.binds.forEach((b, i) => bind(sc, b, `${val}.fields[${i}]`));
         } else {
           const fs = e.binds.map((b) => get(sc, b));
@@ -135,7 +150,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (head.kind !== "ref" || nodes[head.target]?.kind === "binder") throw new Unsupported("a function known only when it runs");
     const t = nodes[head.target];
     const args = n.args.map((a) => get(sc, a)), res = get(sc, n.id);
-    const check = (r: string) => sc.lines.push(`if (${r} === $no) return $no;`);
+    const check = (r: string) => sc.lines.push(`if (${r} === $no) ${sc.fail}`);
     if (args.every((a) => a !== undefined)) {
       const f = sc.emit.forward(n, args as string[]);
       if (!f) throw new Unsupported("a call that can't run forward");
@@ -153,21 +168,21 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       if (vals.some((x) => x === undefined)) throw new Unsupported("a mode's input not known");
       const r = fresh(sc, `${modeFn(head.target, ins, sc.emit)}(${vals.join(", ")})`);
       check(r);
-      return outs.forEach((p, i) => bind(sc, port(p), `${r}[${i}]`));
+      return outs.forEach((p, i) => bind(sc, port(p), outs.length === 1 ? r : `${r}[${i}]`));
     }
     if (t.kind === "variant" && res !== undefined) {
-      sc.lines.push(`if (${res}.tag !== ${sc.emit.tag(head.target)}) return $no;`);
+      sc.lines.push(`if (${res}.tag !== ${sc.emit.tag(head.target)}) ${sc.fail}`);
       return n.args.forEach((a, i) => bind(sc, a, `${res}.fields[${i}]`));
     }
     if (t.kind === "builtin" && res !== undefined) {
       const id = head.target, [a, b] = args;
       // Text joined: one side known, the other is what's left.
       if (id === S.concat && a !== undefined) {
-        sc.lines.push(`if (!${res}.startsWith(${a})) return $no;`);
+        sc.lines.push(`if (!${res}.startsWith(${a})) ${sc.fail}`);
         return bind(sc, n.args[1], `${res}.slice(${a}.length)`);
       }
       if (id === S.concat && b !== undefined) {
-        sc.lines.push(`if (!${res}.endsWith(${b})) return $no;`);
+        sc.lines.push(`if (!${res}.endsWith(${b})) ${sc.fail}`);
         return bind(sc, n.args[0], `${res}.slice(0, ${res}.length - ${b}.length)`);
       }
       // Whole numbers: any two sides give the third (relate.ts does the same).
@@ -192,9 +207,10 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     throw new Unsupported("a call with no backwards reading here");
   }
 
-  // A choice of arms. The value known: its arm. Else each arm in turn,
-  // until one gives the answer.
-  function choose(c: NonNullable<Plan["branch"]>, env: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit): string {
+  // A choice of arms. The value known: its arm. Else each arm in turn, in
+  // a block of its own that it leaves when it fails, until one gives the
+  // answer (and returns it).
+  function choose(c: NonNullable<Plan["branch"]>, env: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit, fail: string): string {
     const val = env.get(an.slot(c.value));
     if (val !== undefined) {
       const written = c.arms.filter((a) => a.variant !== null);
@@ -203,22 +219,22 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
         const inner = new Map(env);
         const pre = a.binds.map((b, i) => {
           const k = an.slot(b), was = inner.get(k);
-          if (was !== undefined) return `if (!$eq(${was}, ${val}.fields[${i}])) return $no;`;
+          if (was !== undefined) return `if (!$eq(${was}, ${val}.fields[${i}])) ${fail}`;
           const t = `m$${temps++}`;
           inner.set(k, t);
           return `const ${t} = ${val}.fields[${i}];`;
         });
-        return `if (${val}.tag === ${emit.tag(a.variant!)}) {\n${[...pre, writePlan(a.plan, inner, done, emit)].join("\n")}\n}`;
+        return `if (${val}.tag === ${emit.tag(a.variant!)}) {\n${[...pre, writePlan(a.plan, inner, done, emit, fail)].join("\n")}\n}`;
       });
-      return [...parts, other ? `{\n${writePlan(other.plan, new Map(env), done, emit)}\n}` : "return $no;"].join("\n");
+      return [...parts, other ? `{\n${writePlan(other.plan, new Map(env), done, emit, fail)}\n}` : fail].join("\n");
     }
     if (c.arms.some((a) => a.variant === null)) throw new Unsupported("otherwise, for a value not known");
     // The arms' plans build the value themselves (a case goal).
-    const tries = c.arms.map((a) => {
-      const r = `r$${temps++}`;
-      return `const ${r} = (() => {\n${writePlan(a.plan, new Map(env), done, emit)}\n})();\nif (${r} !== $no) return ${r};`;
+    const tries = c.arms.filter((a) => !fails(a.plan)).map((a) => {
+      const r = `arm$${temps++}`;
+      return `${r}: {\n${writePlan(a.plan, new Map(env), done, emit, `break ${r};`)}\n}`;
     });
-    return [...tries, "return $no;"].join("\n");
+    return [...tries, fail].join("\n");
   }
 
   // The function for a solve node, or null when it stays with relate.ts:
@@ -241,10 +257,10 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const ins = order(given), outs = portsOf(lam).filter((p) => !ins.includes(p));
       const gs = Object.keys(n.given).map((_, i) => `g${i}`);
       const at = (p: string) => gs[given.indexOf(p)];
-      const pick = Object.keys(n.binds).map((k) => `r[${outs.indexOf(portOf(k))}]`);
+      const pick = Object.keys(n.binds).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
       out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
         // At most one answer: its binds, or $no (GAPS.md P2).
-        `function ${name}$one(${gs.join(", ")}) {\n${pick.every((p, i) => p === `r[${i}]`) && pick.length === outs.length ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : [${pick.join(", ")}];`}\n}`);
+        `function ${name}$one(${gs.join(", ")}) {\n${outs.length > 1 && pick.every((p, i) => p === `r[${i}]`) && pick.length === outs.length ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : [${pick.join(", ")}];`}\n}`);
       return name;
     } catch (e) {
       if (!(e instanceof Unsupported)) throw e;
