@@ -1,9 +1,11 @@
 // A page with sound in a real browser (AUDIO.md, A2): examples/pedal built
 // as `lab build-web` builds it, served, and played in Chromium from its
 // fake microphone (a beep) and from its recording. What reaches the
-// speakers is tapped with an analyser: it must be sound, louder than what
-// came in (the pedal drives), compressed, and the knob must cross to the
-// audio thread (Softer makes it quieter). Fails on any error or warning the page logs.
+// speakers is tapped with an analyser: it must be sound, as loud as what
+// came in (loudness matched) but driven (peaks squashed), and the Clean
+// switch must cross to the audio thread (it gives back what came in). A
+// microphone that won't open must say why on the page.
+// Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
 //
@@ -75,7 +77,7 @@ try {
     };
   })()` });
   await send("Page.navigate", { url: `http://127.0.0.1:${port}/pedal.html` });
-  for (let i = 0; i < 100 && !(await run<boolean>(`document.querySelectorAll("button").length === 4`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; i < 100 && !(await run<boolean>(`document.querySelectorAll("button").length === 5`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
   const click = (label: string) => run(`[...document.querySelectorAll("button")].find((b) => b.textContent === ${JSON.stringify(label)}).click()`);
   const playing = async (label: string) => {
     for (let i = 0; i < 100; i++) {
@@ -84,36 +86,54 @@ try {
     }
     throw new Error(`${label} didn't start playing`);
   };
-  // The loudest sample in and out over a second of playing.
-  const peaks = (tap: number) => run<{ into: number; out: number }>(`(async () => {
+  // The loudest sample and the loudness (RMS) in and out over a second of
+  // playing; loud over peak is the crest, which falls as the drive clips.
+  const levels = (tap: number) => run<{ into: number; out: number; intoRms: number; outRms: number }>(`(async () => {
     const t = window.taps[${tap}], buf = new Float32Array(2048);
-    let into = 0, out = 0;
+    let into = 0, out = 0, inSq = 0, outSq = 0, n = 0;
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      t.into.getFloatTimeDomainData(buf); for (const x of buf) into = Math.max(into, Math.abs(x));
-      t.out.getFloatTimeDomainData(buf); for (const x of buf) out = Math.max(out, Math.abs(x));
+      t.into.getFloatTimeDomainData(buf); for (const x of buf) { into = Math.max(into, Math.abs(x)); inSq += x * x; }
+      t.out.getFloatTimeDomainData(buf); for (const x of buf) { out = Math.max(out, Math.abs(x)); outSq += x * x; }
+      n += buf.length;
     }
-    return { into, out };
+    return { into, out, intoRms: Math.sqrt(inSq / n), outRms: Math.sqrt(outSq / n) };
   })()`);
+  // Driven: about as loud as what came in, under the speakers' limit, its
+  // peaks squashed towards its loudness.
+  const driven = (l: { into: number; out: number; intoRms: number; outRms: number }) =>
+    l.intoRms > 0.005 && l.out < 1 && l.outRms < 1.6 * l.intoRms && l.outRms > l.intoRms / 1.6 && l.out / l.outRms < 0.8 * (l.into / l.intoRms);
   const check = (what: string, ok: boolean, detail: object) => { if (ok) console.log(`ok  ${what} ${JSON.stringify(detail)}`); else errors.push(`${what}: ${JSON.stringify(detail)}`); };
 
-  // The fake microphone beeps at full scale: driven and compressed, it
-  // comes out near the compressor's threshold (0.5).
+  // The fake microphone beeps at full scale, on and off: driven, it comes
+  // out as loud and under the speakers' limit. (Each beep starts from
+  // silence, so the compressor's attack lets its first samples through
+  // high, to the limit: its crest doesn't fall.)
   await click("Guitar in (microphone)");
   await playing("Guitar in (microphone)");
-  const mic = await peaks(0);
-  check("the microphone, driven and compressed", mic.into > 0.5 && mic.out > 0.3 && mic.out < 0.8, mic);
+  const mic = await levels(0);
+  check("the microphone, driven", mic.intoRms > 0.005 && mic.out < 1 && mic.outRms < 1.6 * mic.intoRms && mic.outRms > mic.intoRms / 1.6, mic);
   await click("Guitar in (microphone)");
 
-  // The strum is quieter: driven louder, then Softer turns it down.
+  // The strum, driven; then Clean (a write that crosses to the audio
+  // thread) gives it back as it came in.
   await click("A strum");
   await playing("A strum");
-  const strum = await peaks(1);
-  check("the recording, driven", strum.into > 0.01 && strum.out > 1.5 * strum.into, strum);
-  await click("Softer");
-  await click("Softer");
-  const softer = await peaks(1);
-  check("Softer reaches the audio thread", softer.out < strum.out * 0.9, { before: strum.out, after: softer.out });
+  const strum = await levels(1);
+  check("the recording, driven", driven(strum), strum);
+  await click("Driven");
+  await new Promise((r) => setTimeout(r, 300));
+  const clean = await levels(1);
+  check("Clean reaches the audio thread: what came in", clean.intoRms > 0.005 && Math.abs(clean.out - clean.into) < 0.05 * clean.into, clean);
+
+  // A microphone that won't open says why on its button, in words.
+  await run(`navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Could not start audio source", "NotReadableError"))`);
+  await click("Guitar in (microphone)");
+  let said = "";
+  for (let i = 0; i < 50 && !said; i++) { said = await run<string>(`[...document.querySelectorAll("button")].find((b) => b.textContent === "Guitar in (microphone)").dataset.said ?? ""`); if (!said) await new Promise((r) => setTimeout(r, 100)); }
+  check("a microphone that won't open says why on the page", /another program may be using it/.test(said), { said });
+  // It says so in the console too, which is expected here.
+  for (let i = errors.length - 1; i >= 0; i--) if (errors[i].startsWith("sound: the microphone couldn't be opened")) errors.splice(i, 1);
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

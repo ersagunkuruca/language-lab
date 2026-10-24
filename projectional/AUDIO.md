@@ -13,7 +13,7 @@ compiles to arithmetic: the pedal plays 3258 blocks a second compiled,
 nearly nine times real time. A2 is done: `listen(microphone, pedal)` on a
 button plays live in a page (`lab build-web examples/pedal`, and
 apps/pedal.html on the site), from the microphone or a recording, with
-Softer and Harder turning the drive as it plays; test/sound-browser.ts
+Softer and Harder turning the drive as it plays and Clean/Driven to compare; test/sound-browser.ts
 plays it in Chromium from a fake microphone. A3 is done: the pedal ends in
 a compressor whose level follows the samples one by one, across blocks, in
 a cell (so it is the same at any block size), 4 to 1 over 0.5; compiled it
@@ -29,8 +29,25 @@ answers of a solve that has one way to an answer (atanh run backwards,
 compiled pedal from 6× to 2.9× the hand-written one: rounding without a
 string, one-answer solves and modes written plainly, and the compressor
 writing its block straight into an array.
-A4 (the editor's Run panel, with the Editor lane) is next. Its hook is
-in place; see "Playing a sound from the editor" below.
+A4 is done: the editor's preview plays the pedal (Editor lane).
+The pedal you can hear (BACKLOG L30): Softer and Harder sounded like
+volume, because at drive 8 a quiet strum mostly got louder. Now the
+output is brought back to the loudness that came in, sample by sample
+(`as loud as`: two mean squares following over about 2000 samples, in
+cells, so it is the same at any block size; the gain at most 4 and every
+sample under 0.95, so Harder can't turn a microphone hearing the speakers
+up into feedback); the drive starts at 32 and stops at 256; a Clean/Driven
+switch plays the input as it came, for A/B; and the page draws a sine
+before and after the drive. The strum comes out as loud with its crest
+8.8 to 5.4. Compiled 63 times real time, the hand-written pedal 4 times
+quicker (the matching is plain recursion building pairs).
+What goes wrong with a microphone is said under its button, in words
+(BACKLOG L31): not allowed, none found, in use or its driver refused, a
+page without https, or three seconds of silence (a muted headset). The
+microphone is asked for without echo cancelling, noise suppression or
+gain riding, and nothing about its rate or channels; a headset whose rate
+the browser won't connect across (Firefox) gets an AudioContext of its own
+at that rate, and a stereo input is mixed to mono.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
@@ -196,8 +213,8 @@ Recordings are read from apps/, where the build puts them beside the
 pages. A page's sound stops when the page is left, edited or restarted,
 and a Stop sound button ends whatever it plays. `node editor/sound-smoke.ts`
 plays the strum through the built editor's preview and checks that it is
-driven, that Softer reaches the audio thread, and that nothing plays after
-leaving the page or pressing Stop sound.
+driven (as loud, peaks squashed), that Clean reaches the audio thread,
+and that nothing plays after leaving the page or pressing Stop sound.
 
 ## Prior art
 
@@ -215,5 +232,6 @@ leaving the page or pressing Stop sound.
   processor in its own global scope, `MessagePort` between them.
 - **The pedal**: Haar's split (Alfréd Haar, 1910); `tanh` soft clipping is
   textbook distortion; a multiband compressor splits with a crossover
-  (Linkwitz and Riley, 1976). Conjugation itself is Ersagun's idea from
+  (Linkwitz and Riley, 1976); the output matched to the input's loudness
+  is level-matched A/B, as listening tests do (ITU-R BS.1116). Conjugation itself is Ersagun's idea from
   Rubik's cube commutators (NOTES.md).
