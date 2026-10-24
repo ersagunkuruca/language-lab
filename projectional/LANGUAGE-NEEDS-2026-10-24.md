@@ -36,6 +36,15 @@ inside `together`, as today. With it come `race(actions)` (the first to
 finish wins, the others stop) and `within(ms, action)`, which is `race`
 against a `wait`.
 
+**And `together` is written in the language, not in the runtime.** The
+effects review (EFFECTS-REVIEW-2026-10-24.md §5, PR #359) found the one
+shape effects lack: an operation its handler answers *later*, at most once
+(L54). With it, `together` is a handler of about twenty lines in the
+prelude, a scheduler is a program, and the runtime keeps only the world's
+event loop. This design is built on L54 rather than around it, so that
+concurrency doesn't become runtime code with special rows, which is the
+monster Ersagun asked us to avoid.
+
 **Parallelism is a property of pure code, concurrency of waiting code**
 (Marlow's distinction). The rows already say which is which. A branch with
 no world effects may run on another core, and nobody can tell, because pure
@@ -48,7 +57,8 @@ fetches is *run again from the start* when the reply comes, and LANGUAGE.md
 asks programmers to "fetch before you write". That is the browser's
 inability to block leaking into the language. With fibers, the handler just
 waits where it fetched. This is the clearest case of Ersagun's rule in the
-current design, and it is the first thing to fix.
+current design; the effects review files it as L52 (refuse the double
+run now) and L59 (resume instead, after L54).
 
 **What else a serious language needs, in order:** (1) maps and sets, with an
 order on plain data so they have one meaning; (2) nested patterns and
@@ -104,6 +114,44 @@ pages = together([
 ])
 ```
 
+### How `together` is written: on an operation answered later
+
+This part depends on L54 (an operation answered later, at most once) and
+L56 (effects that take a type), both proposed by the effects review. With
+them, every waiting operation in std is two halves: *start* the request
+(fetch this address, wake me in 30 ms), which gives back a `Ticket a` at
+once, and `await(ticket)`, answered later with the `a`. `fetch text(url)`
+stays one call for the programmer; it is `await(start fetch(url))`
+underneath, in std, written once.
+
+`together` is then a handler, in the prelude, over `await`:
+
+```
+together(actions) =
+  match run each(actions)                 -- branch by branch, in order
+  | await(ticket) later k →               -- a branch waits: keep its rest
+      park(ticket, k); run the next ready branch
+  -- when every branch is parked: await(any of(tickets)) outward,
+  -- which the next handler out (another together, or the world) answers
+  -- later with the first ticket that is ready; resume that branch's k
+```
+
+(The notation for "answered later" is L54's to choose; `later k` is a
+placeholder. `k` is the rest of the branch, usable once.)
+
+What this buys, over a scheduler in the runtime:
+
+- **Nesting is free.** An inner `together` that has nothing ready does
+  `await(any of(…))`, and to the outer one that is just a branch waiting.
+- **The world has one waiting job:** answer `await(any of(tickets))` when
+  one is ready. That is the event loop every host has (the browser's,
+  Node's, poll in C), and the only runtime part left.
+- **Tests answer it too.** Once Console, Files and Network are declared
+  effects a match can answer (L55), a test handler answers `await` from a
+  virtual clock and a fake network, in the language (below).
+- **Pages get it for nothing.** A page's event handler runs under the
+  page's own handler for `await`, so a fetch waits where it is (L59).
+
 Three things follow from it being a plain function of a list of actions:
 
 1. **The meaning is the sequential one.** Take out the `together` and
@@ -135,10 +183,12 @@ and the language already has a word for that.
 ### Stopping: cancellation is a cut, not an exception
 
 When a branch is stopped (it lost a `race`, or a sibling aborted), it
-stops at its next waiting operation and nothing after that runs. This is
-the same mechanism as an operation that never returns: an escaping `abort`
-already drops the rest of the computation and every alternative it still
-had (LANGUAGE.md, "Effects you define"). Cancellation reuses it.
+stops at its next waiting operation and nothing after that runs. With L54
+that is simply the handler never resuming the branch's `k`: a one-shot
+rest that is dropped is a cut. It is the same mechanism as an operation
+that never returns: an escaping `abort` already drops the rest of the
+computation and every alternative it still had (LANGUAGE.md, "Effects you
+define"). Cancellation reuses it.
 
 It is deliberately **not** an `Abort` that a `match` can catch. In Python
 and Java, cancellation is an exception, and code that catches every
@@ -197,7 +247,8 @@ channels.
 ## Deterministic testing of concurrent programs
 
 Because waiting is an effect and the scheduler is its handler, a test can
-answer it. Under `seeded(seed, action)` the scheduler's choices (which
+answer it (once L55 lets a match answer Network and the console, and the
+clock as it already can). Under `seeded(seed, action)` the scheduler's choices (which
 ready fiber runs next) come from the same generator, and a `match` that
 answers `wait(ms)` and `now()` from a virtual clock (`| wait(ms) → unit`
 already skips pauses) runs a concurrent program the same way every time,
@@ -255,7 +306,9 @@ cost. The editor shows the result, so it's not magic.
 - **Event handlers become fibers.** A click handler that fetches waits
   where it fetched, then goes on. The "run again from the start" rule and
   its advice go away. Two clicks while a fetch is out are two fibers; each
-  writes when its reply comes. (L61.)
+  writes when its reply comes. This is the effects review's L59 (after
+  L54); until then its L52 refuses a world action before a fetch in a
+  handler, so nothing happens twice.
 - **Views keep Suspense.** A view is a pure read of cells, so running it
   again when a reply lands is correct and cheap, as Solid's resources do.
   Nothing changes there.
@@ -271,8 +324,8 @@ The language is the same everywhere; this table is where the kinks go.
 
 | target | fibers (waiting branches) | parallel pure code | kinks |
 |---|---|---|---|
-| evaluator (`run.ts`) | a machine state per branch; a ready queue; a waiting op parks the state and the world's promise wakes it | none needed (one thread); answers identical | none: this is where the design is easiest |
-| compiled JavaScript | a definition that can wait and runs under `together` or in a page handler gets a suspendable copy (C21's generator copies, yielding at waiting ops); runtime.js's scheduler drives them with promises | worker_threads in Node, Web Workers in a page, for a branch over a cost; data copied by structured clone | copies of data across workers; two copies of some definitions (already true since C21) |
+| evaluator (`run.ts`) | `k` is the machine's continuation, already on the heap; the world answers `await(any of …)` from a promise | none needed (one thread); answers identical | none: this is where the design is easiest |
+| compiled JavaScript | a definition that can perform an answered-later operation gets a suspendable copy (C21's generator copies, yielding at the operation), so `k` is a paused generator; the world's `await(any of …)` is a promise | worker_threads in Node, Web Workers in a page, for a branch over a cost; data copied by structured clone | copies of data across workers; two copies of some definitions (already true since C21) |
 | WebAssembly | JavaScript Promise Integration (JSPI) suspends the module on a host promise; later the stack-switching proposal (typed continuations, WasmFX) gives fibers inside the module | the threads proposal shares linear memory only; WasmGC objects can't cross threads until a shared-GC proposal lands, so pure parallel branches run in place | parallelism waits on the platform; the language doesn't change for it |
 | native C | each fiber its own small stack (a context switch like Go's goroutines or Boost.Context), an event loop over poll or epoll for waits | a pool of threads with work-stealing deques (Chase and Lev, 2005; Cilk's work-first rule) | reference counts on cells that cross threads must be atomic: a cell is marked shared when it crosses, as Koka does (Ullrich and de Moura; Reinking, Xie, de Moura, Leijen, "Perceus", 2021), so cells that never cross keep cheap counts |
 | WGSL | no `together` (no waiting on a GPU) | a shader already is data parallelism; data-parallel `map` over arrays becomes a compute shader later | none new |
@@ -295,21 +348,27 @@ parallel part runs the branches in place with the same answers.
 
 ## What this needs from the effects design
 
-Concurrency adds no new kind of effect and no first-class continuation in
-the language. It needs three things the effects design should keep clean:
+The effects review (PR #359, its §5 written for this note) says effects
+are a sound base for concurrency and one shape short. Kept as they are:
+inferred rows (so pure code runs in parallel with no effect at all), deep
+handlers (a structured scope is a handler around the computation), and the
+world-under-search rule (the model for every "not here" rule concurrency
+adds). Needed, in the order they block this design:
 
-1. **One family of waiting operations**, listed in one place (like
-   `WORLD` in types.ts): `wait`, `fetch text`, `read line`, `read input`,
-   later `receive`. The scheduler is their handler.
-2. **Cut on escape**, as abort does today, reused for cancellation.
-3. **Runtime handlers for stateful things** (cells, the scheduler), with a
-   row rule saying what crosses into them, as "Where effects go" does. The
-   scheduler is one more row in that table, generated from a `discharge`
-   call like the others.
+1. **L54, an operation answered later, at most once** (Koka's `ctl`,
+   one-shot as OCaml 5's continuations are). `together`, `race`, `await`
+   and later `receive` are written on it. The two shapes there are today
+   (answered now, never answered) stay the fast cases.
+2. **L56, effects that take a type**, for `Ticket a` and `Channel a`.
+3. **L53, the world rule as a row constraint**, not a walk over the code:
+   the "pure branch" test for parallelism (L62) is the same kind of
+   constraint, and the review shows the walk leaks.
+4. **L55, Console, Files and Network as declared effects**, so a test can
+   answer them and a concurrent program runs with a fake clock and network.
 
-A sibling thread is reviewing the effects design for soundness and
-simplicity; its verdict is summarized in "The effects review" at the end of
-this document.
+So L54's design note, which the review says is to be written "with the
+concurrency thread", is the first step of this plan: L60 below is that
+note and `together` together.
 
 # Part 2: What a serious language still needs
 
@@ -407,8 +466,8 @@ that is the programmer's word, not the checker's. (L69.)
 
 `together`, real suspension in page handlers, and the seeded scheduler.
 Ranked here, not first, because no current program is blocked by it; but
-the page-handler rerun is a dent in the language today, so L61 is a bug
-fix as much as a feature.
+the page-handler rerun is a dent in the language today, so the effects
+review's L52 and L59 are bug fixes as much as features.
 
 ## 7. Tests in the language (already designed: T7)
 
@@ -450,8 +509,9 @@ test, render a page on a server, or write its own cache. It's the one
 extension of the effects design this review would consider, and only after
 the effects review says the base is sound. First-class, multi-shot
 continuations are not proposed: they are what makes handlers hard to
-compile and hard to think about, and every program so far has been fine
-without them.
+compile and hard to think about. The one-shot, answered-later operation of
+L54 (Part 1) is the most this review would add, and it is enough for
+concurrency.
 
 ## 10. Sharing code between projects
 
@@ -484,10 +544,9 @@ can't clash with rows other threads add today.
 
 | id | what | lane | size | after |
 |---|---|---|---|---|
-| L60 | `together`, `race`, `within` in std and the evaluator: a fiber per branch, waiting ops park it; answers in order; Abort stops siblings; cancellation as a cut | L | M | — |
-| L61 | A page's event handler is a fiber: a fetch waits where it is, the "run again from the start" rule goes | L (then E for the run panel) | M | L60, C40 |
-| L62 | Pure branches marked by the checker (no world, no Update, no waits) and shown in the editor; the runtime may run them elsewhere | L | S | L60 |
-| L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, a match answering `wait` and `now` gives virtual time; a test shows an interleaving bug found by a seed | L | M | L60 |
+| L60 | L54's design note with this one, then `together`, `race`, `within` in the prelude as handlers over `await`; std's waiting ops as start + await; Abort stops siblings; cancellation is a dropped `k` | L | L | L54, L56 |
+| L62 | Pure branches marked by a row constraint (no world, no Update, no waits) and shown in the editor; the runtime may run them elsewhere | L | S | L60, L53 |
+| L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, a match answering `await` gives virtual time and a fake network; a test shows an interleaving bug found by a seed | L | M | L60, L55 |
 | L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs one | L | M | L60, a program |
 | L65 | `Map k v` and `Set k`: meaning as sorted pairs, a balanced tree first, folds in key order, drawn as a table | L | L | L66 |
 | L66 | A structural order on plain data: `compare`, generic `sort`, `smaller`/`larger` on any plain data | L | S | — |
@@ -495,7 +554,7 @@ can't clash with rows other threads add today.
 | L68 | Sharing modules between projects by hash, with a browser | L | L | — (P3) |
 | L69 | Foreign definitions: a typed, rowed declaration with a body per target, on L7's builtin records | L, C | M | — |
 | L70 | Design note: grammars written once as printers, parsed by running them backwards; calc's parser as the first | L | M | — |
-| C40 | Compiled JS: suspendable copies (C21's generators) for definitions that wait under `together` or in a handler, and the scheduler in runtime.js | C | M | L60 |
+| C40 | Compiled JS for L54 and L60: suspendable copies (C21's generators) for definitions that perform an answered-later operation; the world's `await(any of …)` as a promise | C | M | L60 |
 | C41 | Pure `together` branches on worker_threads / Web Workers, over a cost threshold | C | M | L62 |
 | C42 | Data-parallel `map` and associative folds over arrays, on a thread pool and later as compute shaders | C | L | C30, L38's laws |
 | C43 | Or-parallel `all` and `count`, and speculative `first` in canonical order, with work stealing | C | L | C41 |
@@ -506,8 +565,11 @@ can't clash with rows other threads add today.
 
 Do the quick unblockers in lane L right after the current numbers step:
 **L66** (order), **L67** (Outcome), then **L65** (maps), with L35 and L37
-moved up beside them. Start concurrency with **L60 and L63 together** in
-the evaluator, then **C40 and L61**, which remove the page-handler dent.
+moved up beside them. Start concurrency with the effects review's **L52**
+(the page-handler bug, now) and **L53**, then **L54's design note, written
+as L60's first step**, with **L56**; then `together` and **L63** in the
+evaluator, **C40**, and the review's **L59**, which removes the
+page-handler dent for good.
 Leave parallelism (C41 to C43) until a program is slow for want of it: the
 pedal, the ray marcher and Countdown are the candidates, and the
 bigger-program rounds will say when. FFI (L69) goes in when the first
@@ -551,4 +613,15 @@ Each is named where it's used above; collected here.
 
 ## The effects review
 
-*To be filled in from the sibling thread "Review the effects design".*
+The sibling thread's review is EFFECTS-REVIEW-2026-10-24.md (PR #359).
+Its verdict for this note, in its own words: effects are "a sound base for
+concurrency, but they are one shape short". Its proposals L52 to L59 are
+the foundation of Part 1: L54 (answered later, once) and L56 (effects with
+a type) are what `together` is written on; L53 and L55 are what the
+parallelism test and the deterministic tests need; L59 is the page
+handler fix that this note first proposed as its own row (dropped in
+favour of L59). The targets' ways of hosting a resumption (generators in
+JavaScript, the heap continuations the evaluator already has, stack
+switching or continuation passing in WebAssembly, a stack per fiber or
+continuation passing in C) are hosting kinks, which is where Ersagun's
+rule says they belong.
