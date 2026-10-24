@@ -7,21 +7,19 @@
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
-import type { Names, Notation, Presentation } from "../src/presentation.ts";
+import type { Names, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
-import { isPublished, resolveRefs } from "../src/model.ts";
+import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { ARITH, chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
+import { ARITH, FALSE, TRUE } from "../src/lang/std.ts";
 import { INT, schemeArith, showIn, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
-import { flattened, matchRows, type Pat } from "../src/lang/patterns.ts";
-import { takenApart } from "../src/lang/render.ts";
-import { portLabel } from "../src/lang/equations.ts";
+import { blocksOf, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -42,255 +40,24 @@ export const typeOf = (info: Info | null, id: Id, names: Names): string | null =
 
 // ---------------------------------------------------------------- view
 
+// The pane draws what the blocks text prints (render.ts blocksOf), so the
+// two can't drift apart: a piece that stands for a node is a span you can
+// click, with its type on hover; a group of lines is a box.
 export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null): HTMLElement {
-  const names = pres.names;
-  const node = (id: Id) => code.nodes[id];
-  const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
-  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : null; };
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
-
-  // Wrap a node's rendering so it can be clicked and shows its type.
-  const x = (id: Id, cls: string, ...kids: Kid[]) => {
-    const t = typeOf(info, id, names);
-    const err = errorAt.get(id);
-    return h("span", { class: `x ${cls}${selected === id ? " sel" : ""}${err ? " err" : ""}`, "data-id": id, title: err ?? (t ? `${t}` : undefined) }, ...kids);
+  const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
+  const title = (id: Id | undefined, more?: string) => {
+    const said = id ? errorAt.get(id) ?? typeOf(info, id, pres.names) ?? undefined : undefined;
+    return said && more ? `${said}\n\n${more}` : said ?? more;
   };
-  const bind = (id: Id) => {
-    const t = typeOf(info, id, names);
-    return h("span", { class: `x bnd${selected === id ? " sel" : ""}`, "data-id": id, title: t ?? undefined }, name(id), t ? h("span", { class: "ty" }, `: ${t}`) : null);
+  // What only the pane shows (a name's type, a hole's) is marked aside.
+  const piece = (p: Piece): Kid => (typeof p === "string" ? p : h("span", { class: `${cls(p.id, p.cls)}${p.pane ? " aside" : ""}`, "data-id": p.id, title: title(p.id, p.title) }, ...p.kids.map(piece)));
+  const draw = (b: Blk): HTMLElement => {
+    if ("line" in b) return h("div", { class: `ln${b.id ? ` ${cls(b.id, b.cls)}` : b.cls ? ` ${b.cls}` : ""}`, "data-id": b.id }, ...b.line.map(piece));
+    const c = [b.pad ? "ind" : "", cls(b.id, b.cls) ?? ""].filter(Boolean).join(" ");
+    return h("div", { class: c || undefined, "data-id": b.id, style: b.pad && b.pad !== 2 ? `padding-left: ${b.pad * 11}px` : undefined }, ...b.kids.map(draw));
   };
-  const kw = (s: string) => h("span", { class: "kw" }, s);
-  const sep = (s: string) => h("span", { class: "pn" }, s);
-  const list = (ids: Id[], f: (id: Id) => Kid, between = ", ") => ids.flatMap((id, i) => (i ? [sep(between), f(id)] : [f(id)]));
-
-  // The typedef an arm's variant belongs to.
-  const ownerTypedef = (arm: Id): Node | null => {
-    const v = (node(arm) as NodeOf<"arm">).variant;
-    const def = info?.owner.get(v);
-    const d = def ? code.nodes[def] : null;
-    return d?.kind === "def" && d.body ? node(d.body) : null;
-  };
-  const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
-  const isLet = (n: Node) => n.kind === "call" && node(n.fn).kind === "lambda";
-  // A step: a let, or a value of a one-case type taken apart.
-  const isStep = (n: Node) => isLet(n) || (n.kind === "match" && takenApart(code, info, n));
-  const tall = (id: Id): boolean => {
-    const n = node(id);
-    if (n.kind === "match" || n.kind === "fold" || n.kind === "solve" || isLet(n)) return true;
-    if (n.kind === "call") return [n.fn, ...n.args].some(tall);
-    if (n.kind === "lambda") return tall(n.body);
-    return false;
-  };
-  const listItems = (id: Id): Id[] | null => {
-    const items: Id[] = [];
-    for (let n = node(id); ; ) {
-      if (n.kind === "ref" && n.target === NIL) return items;
-      if (n.kind !== "call" || node(n.fn).kind !== "ref" || (node(n.fn) as NodeOf<"ref">).target !== CONS) return null;
-      items.push(n.args[0]);
-      n = node(n.args[1]);
-    }
-  };
-
-  // An action handed to a call, a function of nothing, is drawn as what it
-  // does (render.ts byName): first(queens(8), else nil). The lambda stays
-  // clickable around it.
-  const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? [kw(`${nota.words[i]} `)] : []);
-  const isAction = (a: Id) => { const l = node(a); return l.kind === "lambda" && l.params.length === 0; };
-  const byName = (a: Id, nota: Notation | undefined, i: number): HTMLElement => {
-    const l = node(a);
-    return isAction(a) ? x(a, "lam byname", ...word(nota, i), inline((l as NodeOf<"lambda">).body)[0]) : h("span", {}, ...word(nota, i), inline(a)[0]);
-  };
-  // A pattern, its names selectable (patterns.ts).
-  const patKids = (p: Pat): Kid[] => {
-    if ("v" in p) return [bind(p.v)];
-    if ("any" in p) return [sep("_")];
-    const items: Pat[] = [];
-    let end: Pat = p;
-    while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
-    const ends = "con" in end && end.con === NIL;
-    if (items.length && (ends || items.length > 1)) return [sep("["), ...[...items.map(patKids), ...(ends ? [] : [[sep(".."), ...patKids(end)]])].flatMap((k, i) => (i ? [sep(", "), ...k] : k)), sep("]")];
-    return [h("span", { class: "con" }, name(p.con)), ...(p.args.length ? [sep("("), ...p.args.map(patKids).flatMap((k, i) => (i ? [sep(", "), ...k] : k)), sep(")")] : [])];
-  };
-
-  // One line, with the precedence it binds at.
-  const inline = (id: Id): [HTMLElement, number] => {
-    const n = node(id);
-    switch (n.kind) {
-      case "lit": {
-        const l = litLabel(n.value), el = x(id, "lit", l.short);
-        if (l.full) el.title = `${el.title ? `${el.title}\n\n` : ""}${l.full}`;
-        return [el, 100];
-      }
-      case "hole": return [x(id, "hole", "□", holeType(id) ? h("span", { class: "ty" }, holeType(id)!) : null), 100];
-      case "ref": {
-        const t = node(n.target);
-        const cls = t?.kind === "binder" ? "var" : t?.kind === "variant" ? "con" : t?.kind === "def" ? "def" : "fn";
-        return [x(id, `ref ${cls}`, name(n.target)), 100];
-      }
-      case "lambda": return [x(id, "lam", sep("("), ...list(n.params, bind), sep(") => "), inline(n.body)[0]), 0];
-      case "call": {
-        const items = listItems(id);
-        if (items) return [x(id, "call", sep("["), ...list(items, (i) => inline(i)[0]), sep("]")), 100];
-        const f = node(n.fn);
-        const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-        const ops = chainOperands(code, id);
-        const args = (ops ?? n.args).map(inline);
-        const paren = ([e, p]: [HTMLElement, number], ok: boolean): Kid[] => (ok ? [e] : [sep("("), e, sep(")")]);
-        if (nota?.fixity === "infix" && ops) {
-          // a ++ b ++ c: one chain, whichever way the pairs nest.
-          const p = nota.prec ?? 5;
-          return [x(id, "call", ...args.flatMap((a, i) => [...(i ? [h("span", { class: "op x", "data-id": n.fn }, ` ${nota.glyph} `)] : []), ...paren(a, a[1] > p)])), p];
-        }
-        if (nota?.fixity === "infix" && args.length === 2) {
-          const p = nota.prec ?? 5;
-          const [l, r] = args;
-          const lok = l[1] > p || (l[1] === p && nota.assoc !== "right");
-          const rok = r[1] > p || (r[1] === p && nota.assoc !== "left" && nota.assoc !== undefined);
-          return [x(id, "call", ...paren(l, lok), h("span", { class: "op x", "data-id": n.fn }, ` ${nota.glyph} `), ...paren(r, rok)), p];
-        }
-        if (nota?.fixity === "prefix" && args.length === 1) {
-          const p = nota.prec ?? 9;
-          return [x(id, "call", h("span", { class: "op x", "data-id": n.fn }, nota.glyph), ...paren(args[0], args[0][1] > p)), p];
-        }
-        // A field read is p.x (render.ts draws it the same).
-        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return [x(id, "call", ...paren(args[0], args[0][1] >= 100), sep("."), x(n.fn, "ref fn", name(f.target))), 100];
-        const head = inline(n.fn);
-        const shown = ops ? args.map((a) => a[0]) : n.args.map((a, i) => byName(a, nota, i));
-        return [x(id, "call", ...paren(head, head[1] >= 100), sep("("), ...shown.flatMap((a, i) => (i ? [sep(", "), a] : [a])), sep(")")), 100];
-      }
-      default: return [block(id), 100];
-    }
-  };
-
-  const line = (...kids: Kid[]) => h("div", { class: "ln" }, ...kids);
-  const indent = (...kids: Kid[]) => h("div", { class: "ind" }, ...kids);
-  const hang = (head: Kid[], id: Id) => (tall(id) ? [line(...head), indent(block(id))] : [line(...head, inline(id)[0])]);
-
-  // Lines for an expression that needs them.
-  const block = (id: Id): HTMLElement => {
-    const n = node(id);
-    if (!tall(id)) return line(inline(id)[0]);
-    if (isStep(n)) {
-      // A run of steps is one column, each step its own box: x = …, then
-      // the next, not each one nested inside the one before (the right-
-      // nested lets are how the tree holds an order, not how it reads).
-      const steps: HTMLElement[] = [];
-      let rest: Id = id;
-      for (let c = node(rest); isStep(c); c = node(rest)) {
-        if (c.kind === "match") {
-          // A value of a one-case type taken apart: pair(x, y) = centre.
-          const arm = node(c.arms[0]) as NodeOf<"arm">;
-          steps.push(x(c.id, "step", ...hang([h("span", { class: `x arm${selected === arm.id ? " sel" : ""}`, "data-id": arm.id }, ...patKids({ con: arm.variant, args: arm.binds.map((v) => ({ v })) })), sep(" = ")], c.scrutinee)));
-          rest = arm.body;
-          continue;
-        }
-        const lam = node((c as NodeOf<"call">).fn) as NodeOf<"lambda">;
-        const args = (c as NodeOf<"call">).args;
-        steps.push(x(c.id, "step", ...lam.params.flatMap((p, i) => hang(name(p) === "_" ? [] : [bind(p), sep(" = ")], args[i]))));
-        rest = lam.body;
-      }
-      return h("div", { class: "blk let" }, ...steps, block(rest));
-    }
-    if (n.kind === "match" && isBool(n)) {
-      const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
-      const t = arm(TRUE), f = arm(FALSE);
-      return x(id, "blk", line(kw("if "), inline(n.scrutinee)[0]),
-        h("div", { class: `ind x arm${selected === t.id ? " sel" : ""}`, "data-id": t.id }, ...hang([kw("then ")], t.body)),
-        h("div", { class: `ind x arm${selected === f.id ? " sel" : ""}`, "data-id": f.id }, ...hang([kw("else ")], f.body)));
-    }
-    // A case whose body only takes one of its fields apart further is one
-    // row per inner case (patterns.ts). Cases that say the same thing stay
-    // separate rows here: each is its own node to edit.
-    const rows = n.kind === "match" && !isBool(n) ? matchRows(code, info, n) : [];
-    if (n.kind === "match" && flattened(rows)) {
-      const arms = rows.map((r) => h("div", { class: `arm x${selected === r.at ? " sel" : ""}`, "data-id": r.at }, ...hang([...patKids(r.pat), sep(" → ")], r.body)));
-      if (n.otherwise) arms.push(h("div", { class: "arm" }, ...hang([kw("otherwise"), sep(" → ")], n.otherwise)));
-      return x(id, "blk", line(kw("match "), inline(n.scrutinee)[0]), indent(...arms));
-    }
-    if (n.kind === "match" || n.kind === "fold") {
-      const arms = n.arms.map((a) => {
-        const arm = node(a) as NodeOf<"arm">;
-        const results = arm.results.filter((r): r is Id => r !== null);
-        const pat: Kid[] = [h("span", { class: "con" }, name(arm.variant)), ...(arm.binds.length ? [sep("("), ...list(arm.binds, bind), sep(")")] : [])];
-        if (results.length) pat.push(kw(" with "), ...list(results, bind));
-        return h("div", { class: `arm x${selected === a ? " sel" : ""}`, "data-id": a }, ...hang([...pat, sep(" → ")], arm.body));
-      });
-      if (n.kind === "match" && n.otherwise) arms.push(h("div", { class: "arm" }, ...hang([kw("otherwise"), sep(" → ")], n.otherwise)));
-      // A match on a computation, by an effect's operations, is a handler.
-      const handles = n.kind === "match" && n.arms.length > 0 && !!(ownerTypedef(n.arms[0]) as { effect?: true } | null)?.effect;
-      return x(id, "blk", line(kw(handles ? "handle " : `${n.kind} `), inline(n.scrutinee)[0]), indent(...arms));
-    }
-    if (n.kind === "lambda") return x(id, "blk", line(sep("("), ...list(n.params, bind), sep(") =>")), indent(block(n.body)));
-    if (n.kind === "solve") {
-      // solve polar(x = …, y = …) for length, angle
-      const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
-      const given = Object.entries(n.given).flatMap(([k, e], i) => [...(i ? [sep(", ")] : []), h("span", { class: "pn" }, `${label(k)} = `), inline(e)[0]]);
-      const wanted = Object.entries(n.binds).flatMap(([k, b], i) => [...(i ? [sep(", ")] : []), ...(name(b) === label(k) ? [] : [h("span", { class: "pn" }, `${label(k)} as `)]), bind(b)]);
-      return x(id, "blk", line(kw("solve "), x(n.fn, "ref fn", name(n.fn)), sep("("), ...given, sep(")"), kw(" for "), ...wanted), block(n.body));
-    }
-    if (n.kind === "call") {
-      // A list of tall items (a page's elements) is still a list: [ … ],
-      // one item under another, as on one line.
-      const items = listItems(id);
-      if (items) {
-        const comma = (i: number) => (i < items.length - 1 ? sep(",") : null);
-        return x(id, "blk", line(sep("[")), indent(...items.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep("]")));
-      }
-      const f = node(n.fn);
-      if (tall(n.fn) && !n.args.some(tall)) {
-        return x(id, "blk", line(kw("apply")), indent(block(n.fn)), line(kw("to "), sep("("), ...list(n.args, (a) => inline(a)[0]), sep(")")));
-      }
-      // An operator's operands one under another, each after the operator.
-      const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
-      const ops = chainOperands(code, id) ?? n.args;
-      if (nota?.fixity === "infix" && ops.length >= 2) {
-        const p = nota.prec ?? 5;
-        return x(id, "blk", ...ops.map((a, i) => {
-          const op = i ? [h("span", { class: "op x", "data-id": n.fn }, `${nota.glyph} `)] : [];
-          if (tall(a)) return op.length ? h("div", { class: "chain" }, ...op, block(a)) : block(a);
-          const [e, q] = inline(a);
-          return line(...op, ...(q > p ? [e] : [sep("("), e, sep(")")]));
-        }));
-      }
-      const head = f.kind === "ref" ? x(n.fn, "ref fn", name(f.target)) : inline(n.fn)[0];
-      const comma = (i: number) => (i < ops.length - 1 ? sep(",") : null);
-      const arg = (a: Id, i: number) => {
-        const b = ops === n.args && isAction(a) ? (node(a) as NodeOf<"lambda">).body : a;
-        const w = ops === n.args ? word(nota, i) : [];
-        if (!tall(b)) return line(...(b === a ? [...w, inline(a)[0]] : [byName(a, nota, i)]), comma(i));
-        return b === a ? h("div", {}, ...(w.length ? [line(...w)] : []), block(a), comma(i)) : x(a, "lam byname", ...(w.length ? [line(...w)] : []), block(b), comma(i));
-      };
-      return x(id, "blk", line(head, sep("(")), indent(...ops.map(arg)), line(sep(")")));
-    }
-    return line(inline(id)[0]);
-  };
-
-  const def = node(defId) as NodeOf<"def">;
-  const body = def.body ? node(def.body) : null;
-  const out = h("div", { class: "typed" });
-  if (pres.comments[defId]) out.append(h("div", { class: "cmt" }, `-- ${resolveRefs(pres.comments[defId], name)}`));
-  if (body?.kind === "typedef") {
-    out.append(line(kw(body.effect ? "effect " : "type "), x(defId, "def", name(defId)), ...body.params.map((p) => h("span", {}, " ", bind(p)))));
-    const tt = (id: Id): string => {
-      const t = node(id);
-      if (t.kind === "tfun") return `(${t.params.map(tt).join(", ")}) -> ${tt(t.result)}`;
-      const r = t as NodeOf<"tref">;
-      return [name(r.target), ...r.args.map((a) => { const s = tt(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
-    };
-    out.append(indent(...body.variants.map((v) => {
-      const { fields: fs, returns } = node(v) as NodeOf<"variant">;
-      return h("div", { class: `ln x variant${selected === v ? " sel" : ""}`, "data-id": v }, sep("| "), h("span", { class: "con" }, name(v)),
-        ...(fs.length ? [sep("("), ...list(fs, (f) => h("span", { class: `x fld${selected === f ? " sel" : ""}`, "data-id": f }, name(f), h("span", { class: "ty" }, `: ${tt((node(f) as NodeOf<"field">).type)}`))), sep(")")] : []),
-        ...(returns ? [kw(" returns "), h("span", { class: "ty" }, tt(returns))] : []));
-    })));
-    return out;
-  }
-  const t = typeOf(info, defId, names);
-  out.append(line(x(defId, "def", name(defId)), h("span", { class: "ty big" }, t ? ` : ${t}` : "")));
-  if (!body) return out;
-  if (body.kind === "lambda") out.append(...hang([x(defId, "def", name(defId)), sep("("), ...list(body.params, bind), sep(") = ")], body.body));
-  else out.append(...hang([x(defId, "def", name(defId)), sep(" = ")], def.body!));
-  return out;
+  return h("div", { class: "typed" }, ...blocksOf(code, pres, info, defId, { pane: true }).map(draw));
 }
 
 // ---------------------------------------------------------------- edits
@@ -499,20 +266,6 @@ export function nextHole(code: Code, defId: Id, id: Id): Id | undefined {
   const holes = order.filter((x) => code.nodes[x].kind === "hole");
   const at = order.indexOf(id);
   return holes.find((h) => order.indexOf(h) > at) ?? holes[0];
-}
-
-// A literal as drawn in the graph and the blocks. A long or multiline text
-// (a page's CSS, say) shows its first line, clipped, and how many lines it
-// has, so it doesn't stretch its view; hovering shows all of it, and the
-// inspector edits all of it.
-const SHORT = 32;
-export function litLabel(v: string | number | boolean): { short: string; full?: string } {
-  if (typeof v !== "string") return { short: String(v) };
-  const lines = v.split("\n");
-  if (lines.length === 1 && v.length <= SHORT) return { short: JSON.stringify(v) };
-  const first = lines.find((l) => l.trim()) ?? "";
-  const clip = first.trim().length > SHORT ? `${first.trim().slice(0, SHORT - 1)}…` : `${first.trim()}${lines.length > 1 ? "…" : ""}`;
-  return { short: `${JSON.stringify(clip).slice(0, -1)}"${lines.length > 1 ? ` · ${lines.length} lines` : ""}`, full: v };
 }
 
 export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
@@ -845,7 +598,7 @@ export function addCase(code: Code, names: Names, info: Info, type: Id, name: st
   return { ...r, note: `Added ${name.trim()}. ${holes ? `${holes} match${holes === 1 ? "" : "es"} and fold${holes === 1 ? "" : "s"} got a new case with a hole to fill, so none is missing a case.` : "Nothing matches on this type yet."}` };
 }
 
-export { fillings, type Filling, type Info };
+export { fillings, litLabel, type Filling, type Info };
 
 // ---------------------------------------------------------------- pins and copies
 //

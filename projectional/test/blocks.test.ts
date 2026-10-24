@@ -18,21 +18,25 @@ class El {
   setAttribute(k: string, v: string) { this.attrs.set(k, v); }
   append(...ks: (El | string)[]) { this.kids.push(...ks); }
   get textContent(): string { return this.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join(""); }
-  // What it reads, without the types shown beside names.
-  get text(): string { return this.kids.map((k) => (typeof k === "string" ? k : /\bty\b/.test(k.attrs.get("class") ?? "") ? "" : k.text)).join(""); }
-  // Lines as the pane shows them: each .ln on its own line.
+  // What it reads, without what only the pane shows beside it (types).
+  get text(): string { return this.kids.map((k) => (typeof k === "string" ? k : /\baside\b/.test(k.attrs.get("class") ?? "") ? "" : k.text)).join(""); }
+  // Lines as the pane shows them: each .ln on its own line, indented as
+  // far as the boxes around it are (22px is two spaces of the text).
   lines(): string[] {
     const out: string[] = [];
-    const walk = (e: El) => {
-      if (/\bln\b/.test(e.attrs.get("class") ?? "")) { out.push(e.text); return; }
-      for (const k of e.kids) if (typeof k !== "string") walk(k);
+    const walk = (e: El, ind: string) => {
+      const pad = /padding-left: (\d+)px/.exec(e.attrs.get("style") ?? "")?.[1];
+      const more = pad ? " ".repeat(+pad / 11) : /\bind\b/.test(e.attrs.get("class") ?? "") ? "  " : "";
+      if (/\bln\b/.test(e.attrs.get("class") ?? "")) { out.push(ind + more + e.text); return; }
+      for (const k of e.kids) if (typeof k !== "string") walk(k, ind + more);
     };
-    walk(this);
+    walk(this, "");
     return out;
   }
 }
 (globalThis as unknown as { document: unknown }).document = { createElement: (tag: string) => new El(tag) };
 const { renderTyped } = await import("../editor/typed.ts");
+const { renderBlocks } = await import("../src/lang/render.ts");
 
 const pane = (example: string, def: string) => {
   const p = loadProgram(join(root, "examples", example));
@@ -57,4 +61,20 @@ test("the Blocks pane reads nested matches as rows of patterns", () => {
   const parse = pane("ledger", "parse");
   assert.ok(parse.some((l) => l.startsWith("[date, account, cents, memo] → entry(")), parse.join("\n"));
   assert.ok(!parse.some((l) => l.startsWith("match ‹after") || l.startsWith("match after")), parse.join("\n"));
+});
+
+// (Cases that say the same thing still read once in the text and stay
+// separate rows in the pane, each its own node to edit: PATTERNS.md step 4.)
+test("the Blocks pane shows every definition line for line as the blocks text prints it", () => {
+  for (const example of ["queens", "countdown", "sort", "dice", "physics", "effects", "relations"]) {
+    const p = loadProgram(join(root, "examples", example));
+    const info = infer(p.code, p.pres.names);
+    for (const def of p.own.defs) {
+      // A long text is clipped in the pane; what the text says is the same.
+      const texts = (ls: string[]) => ls.map((l) => l.replace(/"(?:[^"\\]|\\.)*"(?: · \d+ lines)?/g, '"…"'));
+      const text = texts(renderBlocks(p.code, p.pres, info, def).split("\n"));
+      const shown = texts((renderTyped(p.code, p.pres, info, def, null) as unknown as El).lines());
+      assert.deepEqual(shown, text, `${example} ${p.pres.names[def]}`);
+    }
+  }
 });

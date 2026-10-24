@@ -80,17 +80,21 @@ export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows:
 }
 
 // A list of two or more, or one that ends, reads as a list: [a, b],
-// [a, b, ..rest].
-export function patternText(p: Pat, name: (id: Id) => string, con: (id: Id) => string): string {
-  const text = (q: Pat): string => {
-    if ("v" in q) return name(q.v);
-    if ("any" in q) return "_";
+// [a, b, ..rest]. Made of whatever the view draws names, cases and
+// punctuation as: text here, selectable pieces in the blocks (render.ts).
+export function patternWith<T>(p: Pat, name: (id: Id) => T, con: (id: Id) => T, punct: (s: string) => T): T[] {
+  const commas = (ks: T[][]) => ks.flatMap((k, i) => (i ? [punct(", "), ...k] : k));
+  const parts = (q: Pat): T[] => {
+    if ("v" in q) return [name(q.v)];
+    if ("any" in q) return [punct("_")];
     const items: Pat[] = [];
     let end: Pat = q;
     while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
     const ends = "con" in end && end.con === NIL;
-    if (items.length && (ends || items.length > 1)) return `[${[...items.map(text), ...(ends ? [] : [`..${text(end)}`])].join(", ")}]`;
-    return q.args.length ? `${con(q.con)}(${q.args.map(text).join(", ")})` : con(q.con);
+    if (items.length && (ends || items.length > 1)) return [punct("["), ...commas([...items.map(parts), ...(ends ? [] : [[punct(".."), ...parts(end)]])]), punct("]")];
+    return [con(q.con), ...(q.args.length ? [punct("("), ...commas(q.args.map(parts)), punct(")")] : [])];
   };
-  return text(p);
+  return parts(p);
 }
+
+export const patternText = (p: Pat, name: (id: Id) => string, con: (id: Id) => string): string => patternWith(p, name, con, (s) => s).join("");
