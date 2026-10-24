@@ -4,9 +4,13 @@
   "comments": false,
   "notation": {
     "builtin.add": { "glyph": "+", "fixity": "call" },
+    "builtin.int.add": { "glyph": "+", "fixity": "call" },
     "builtin.sub": { "glyph": "-", "fixity": "call" },
+    "builtin.int.sub": { "glyph": "-", "fixity": "call" },
     "builtin.mul": { "glyph": "*", "fixity": "call" },
+    "builtin.int.mul": { "glyph": "*", "fixity": "call" },
     "builtin.div": { "glyph": "/", "fixity": "call" },
-    "builtin.neg": { "glyph": "negate", "fixity": "call" }
+    "builtin.neg": { "glyph": "negate", "fixity": "call" },
+    "builtin.int.neg": { "glyph": "negate", "fixity": "call" }
   }
 }
