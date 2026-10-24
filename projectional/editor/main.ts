@@ -2548,9 +2548,12 @@ function draw() {
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
-        h("a", { class: "btn", href: "guide.html", title: "A hands-on guide: one program changed step by step (GUIDE.md); it links on to the tutorial" }, "Learn"),
-        h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
-        h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
+        // On a phone held upright they're behind More, so the bar fits.
+        h("button", { class: "btn more", type: "button", "data-act": "more", "aria-expanded": "false" }, "More"),
+        h("div", { class: "links" },
+          h("a", { class: "btn", href: "guide.html", title: "A hands-on guide: one program changed step by step (GUIDE.md); it links on to the tutorial" }, "Learn"),
+          h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
+          h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells")))),
     h("main", { class: "grid is-typed", style: dockStyle(), "data-pane": ui.pane },
       navigator(p),
       graphMenu(info),
@@ -2648,6 +2651,7 @@ document.addEventListener("click", (e) => {
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
     if (a === "t-replace" && ui.selected) return menuAction("replace", ui.selected);
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
+    if (a === "more") { const open = !!document.querySelector(".bar")?.classList.toggle("more-open"); act.setAttribute("aria-expanded", String(open)); return; }
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-run" && typesOf()) return runTyped();
     if (a === "t-stop") return stopRun("Stopped.");

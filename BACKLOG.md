@@ -28,7 +28,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 |---|---|---|---|---|---|
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
-| E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
 | E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
@@ -129,6 +128,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E73 | Phone held upright: the top bar fits, links behind More | #427 |
 | E74 | The map starts hidden where it would cover nodes | #426 |
 | E76 | The status bar says what was typed or set in a page's field | #425 |
 | E75 | Opening a program shows its open definition in the navigator | #424 |
