@@ -772,7 +772,9 @@ hierarchy is the map of which structures to name.
    compiled. Not yet offered by the palette.
 2. *The palette and the views* (with the editor lane): the palette offers
    the generic `+` (and stops offering the per-type ones for new code);
-   types print the constraint.
+   types print the constraint: `twice : (a) -> a where a is a number
+   type`, and `smaller`'s a "is a number type with <". Done, with
+   derivatives of the generic operations taken as Number's.
 3. *The vectors module* written with `+`, `−` and `·`; `plus`, `minus`
    and `times` kept as names for a release, then removed.
 4. *An example* using one generic definition at two types, for the

@@ -58,7 +58,7 @@ import { children, freshId, ownerOfTypeParts } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
-import { FIRST, PAIR_V, S, SECOND } from "./std.ts";
+import { ARITH, FIRST, PAIR_V, S, SECOND } from "./std.ts";
 
 export class NotDifferentiable extends Error {}
 
@@ -86,8 +86,11 @@ interface Ctx {
 
 interface SolverTree { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: SolverTree[] }
 const PRIMS = FN as unknown as Record<string, { d: ((args: SolverTree[]) => SolverTree)[] }>;
-const OPS: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
-const BUILTIN: Record<string, Id> = Object.fromEntries(Object.entries(OPS).map(([id, op]) => [op, id]));
+const NUMBER_OPS: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
+const BUILTIN: Record<string, Id> = Object.fromEntries(Object.entries(NUMBER_OPS).map(([id, op]) => [op, id]));
+// The one generic + − · −x < (std.ts ARITH) differentiate as Number's: a
+// slope is a Number, and arith.ts resolves them only after this.
+const OPS: Record<Id, string> = { ...NUMBER_OPS, ...Object.fromEntries(Object.entries(ARITH).filter(([op]) => op in impl).map(([op, id]) => [id, op])) };
 
 // lenient: put `fail` where the slope can't be read, instead of refusing.
 export function deriver(code: Code, names: Names = {}, lenient = false) {

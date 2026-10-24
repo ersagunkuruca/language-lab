@@ -26,7 +26,7 @@ import { defGroups, hashes } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
 import { pinKey, pinsOf, type Pins } from "./signatures.ts";
-import { showType } from "./types.ts";
+import { schemeArith, showType } from "./types.ts";
 
 export const MODULE_FORMAT = "projectional-module";
 
@@ -230,7 +230,7 @@ export function adopt(code: Code, names: Names, lib: Library, comments: Comments
 export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}): Result<{ code: Code; uses: number }> {
   const a = pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
-  if (pinKey(a) !== pinKey(b)) return { ok: false, reason: `its type changed from ${showType(a.type, names)} to ${showType(b.type, names)}` };
+  if (pinKey(a) !== pinKey(b)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
   const old = code.nodes[from], neu = code.nodes[to];
   if (old?.kind !== "def" || neu?.kind !== "def") return { ok: false, reason: "both definitions need to be loaded" };
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);
