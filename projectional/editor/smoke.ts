@@ -200,6 +200,12 @@ async function phone() {
     await p.setViewportSize({ width: w, height: hgt });
     const [sw, sh] = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
     if (sw > w || sh > hgt) errors.push(`${where}: at ${w} by ${hgt} the page is ${sw} by ${sh} px, not one screen`);
+    // The top bar fits a tablet without scrolling, and a phone held
+    // sideways gives the graph most of its height.
+    const [bw, bc] = await p.locator(".bar").evaluate((e) => [e.scrollWidth, e.clientWidth]);
+    if (w >= 768 && bw > bc) errors.push(`${where}: at ${w} by ${hgt} the top bar scrolls (${bw} of ${bc} px)`);
+    const g = (await p.locator(".p-graph .canvas-wrap").boundingBox())?.height ?? 0;
+    if (g < hgt * 0.58) errors.push(`${where}: at ${w} by ${hgt} the graph gets ${Math.round(g)} px`);
   }
   await p.setViewportSize({ width: 390, height: 844 });
   for (const [pane, shows] of [["nav", ".p-nav"], ["text", ".p-text"], ["side", ".side"], ["graph", ".p-graph"]]) {
