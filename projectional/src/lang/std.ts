@@ -158,6 +158,16 @@ export const COMPLEX_V = "std.complex.complex";
 // What `compare` answers (L66): a before b, the same, or after.
 export const ORDER = typedef("std.order", "Order", [], [["before", []], ["same", []], ["after", []]]);
 export const ORDER_V = { before: "std.order.before", same: "std.order.same", after: "std.order.after" } as const;
+// The data form of Abort, as Optional is of Choice (L67): a run that may
+// have been refused, kept with its reason so it can go in a list or a
+// record. The prelude's `attempt` turns an Abort into one, `value or
+// abort` turns one back. Rust's Result is the influence; here the effect
+// is the default and the data the exception.
+export const OUTCOME = typedef("std.outcome", "Outcome", ["a"], [
+  ["done", [["value", ([a]) => tref(a)]]],
+  ["refused", [["reason", () => tref(STRING)]]],
+]);
+export const OUTCOME_V = { done: "std.outcome.done", refused: "std.outcome.refused" } as const;
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
@@ -441,7 +451,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

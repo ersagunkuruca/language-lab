@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ARITH, COMPARE, COMPLEX_V, CONS, INT_OPS, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, INT_OPS, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -185,7 +185,21 @@ export function buildPrelude(): Module {
       ]) },
     ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort];
+  // Errors as data (L67): `attempt` runs an action and keeps its answer or
+  // its Abort as an Outcome, the way `optional` keeps a Choice; `value or
+  // abort` is the Abort again, the way `value of` is the Choice. Rust's
+  // Result and `?` are the influence.
+  const attempt = k.def("attempt");
+  k.define(attempt, k.fn(["action"], (action) => k.handle(k.call(OUTCOME_V.done, k.call(action)), [
+    { variant: ABORT_OP, names: ["reason"], body: ([why]) => k.call(OUTCOME_V.refused, why) },
+  ])));
+  const valueOrAbort = k.def("value or abort");
+  k.define(valueOrAbort, k.fn(["outcome"], (o) => k.match(o, [
+    { variant: OUTCOME_V.done, names: ["value"], body: ([v]) => v },
+    { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
+  ])));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort, attempt, valueOrAbort];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
@@ -211,6 +225,8 @@ export function buildPrelude(): Module {
     [negF]: "What −x is at Rational. Not offered on its own: − is.",
     [lessF]: "What < is at Rational. Not offered on its own: < is.",
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
+    [valueOrAbort]: "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     [asC]: "The Number x as a complex number, x + 0i.",
