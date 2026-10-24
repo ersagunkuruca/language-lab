@@ -148,6 +148,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E99 | The Guide tab says how the editor works today: two views, selecting, holes and the palette, copy and paste, held types, Run, today's effects | #405 |
 | E82 | A hole in a held definition says its type is kept, with Let it loosen beside the palette; a refusal of a held type says what the fill would add and the ways out | #404 |
 | E81 | The palette offers only fills that keep a held or pinned definition's type (die() no longer offered at a seed hole without Random) | #403 |
 | E70 | Run offers no Run for an action that may give no answer or several (Choice) and says to call it inside first/all/count/optional; Show values says first answer | #400 |
