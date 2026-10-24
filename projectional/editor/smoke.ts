@@ -153,6 +153,21 @@ async function swapAndUndo() {
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
+  // In the graph, an input dropped on another input of the same + moves
+  // there (BACKLOG E101); one Undo puts it back.
+  where = "reorder inputs in the graph";
+  const ports = p.locator(".p-graph g:has(> text:text-is('+')) > circle.inp");
+  const [one, two] = [await ports.nth(0).boundingBox(), await ports.nth(1).boundingBox()];
+  if (one && two) {
+    await p.mouse.move(one.x + one.width / 2, one.y + one.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(two.x + two.width / 2, two.y + two.height / 2, { steps: 6 });
+    await p.mouse.up();
+    if ((await distance()) !== "distance = drop + drift") errors.push(`${where}: dropping drift's input on drop's reads ${await distance()}`);
+    await p.locator('button[data-act="undo"]').first().click();
+  } else errors.push(`${where}: the + node's inputs aren't on screen`);
+  where = "change the function, then undo";
   await p.locator(".p-graph g:has(> text:text-is('+')) > rect.cn").first().click({ button: "right" });
   // Each item says what it does, and a greyed one says why (BACKLOG E88).
   const greyed = await p.locator(".ctx-menu .ctx-item:disabled").count(), why = await p.locator(".ctx-menu .ctx-item:disabled .ctx-why.cant").count();
@@ -160,7 +175,6 @@ async function swapAndUndo() {
   if (!(await p.locator('.ctx-menu [data-menu="pick"] .ctx-why').count())) errors.push(`${where}: Pick doesn't say what it does`);
   await p.locator('[data-menu="swap"]').click();
   await p.locator("button", { hasText: /^subtract/ }).first().click();
-  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await distance()) !== "distance = drift + drop") errors.push(`${where}: one Undo leaves ${await distance()}`);

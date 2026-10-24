@@ -78,7 +78,7 @@ checked on the built page (fall, two dice), not just read from the code.
 | Share a value (a dot) | ✓ menu | ✓ menu, or drag an output onto another input | |
 | Add a value before this | ✓ menu | ✓ menu | |
 | Add a value (empty space) | ✓ right-click empty space: at the start | ✓ right-click the canvas: where you clicked | |
-| List items, a + b + c inputs: add, move, take out | ✓ panel, menu | ✓ panel, menu, + under the inputs | reorder by dragging an input: E101 |
+| List items, a + b + c inputs: add, move, take out | ✓ panel, menu | ✓ panel, menu, + under the inputs, drag an input onto another to move it | |
 | Split by cases, steps earlier/later | ✓ panel | ✓ panel | |
 | Rename | ✓ panel | ✓ panel, menu Name it… | |
 | Open a definition | ✓ double-click a name | ✓ double-click a node, menu Open | |
