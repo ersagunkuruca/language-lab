@@ -20,7 +20,8 @@ are V8's fdlibm compiled to WebAssembly (W3e: `compiler/math/gen.ts`
 writes `src/wasm-math.ts`), the same bits as Node's Math; a JavaScript
 host still gives its own Math, so a page matches the browser. An Int grows
 past 64 bits as the evaluator's does (W5b, W5c), and folds go through
-nested data (W1d). Left: from W1 one cast per arm. What runs in WebAssembly is the
+nested data (W1d). All five stages are done; one cast per arm (W1)
+was measured and left, since skipping every cast gains nothing measurable. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
@@ -314,8 +315,9 @@ rest with the reason, so nothing breaks between stages.
    structural `equal` and folds over lists as loops (W1c, done), folds
    over data nested in other data (W1d, done: a rose tree's `List Tree`
    folds to a `List R`, through one function per container type that the
-   fold makes and calls on the field). Left:
-   one cast per arm rather than per field read. The binary encoder in wasm.ts gets the type
+   fold makes and calls on the field). One cast
+   per arm rather than per field read was measured and left: with every
+   cast skipped, Countdown runs no faster. The binary encoder in wasm.ts gets the type
    section's recursion groups, struct and array types and reference
    types. Programs: calculus and physics without text, and Countdown's
    `solutions` count.
