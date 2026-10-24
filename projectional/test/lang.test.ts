@@ -278,6 +278,14 @@ test("an if's condition and branches read as what they are: a match condition sh
   }
 });
 
+test("a field read reads as value.field: the record first, then what is taken from it", () => {
+  const text = (name: string, d: string) => { const e = load(name); return renderBlocks(e.code, e.pres, infer(e.code, e.pres.names), e.named(d)); };
+  assert.match(text("raymarch", "ring"), /√\(p\.x · p\.x \+ p\.z · p\.z\)/);
+  const larger = text("ledger", "larger");
+  assert.ok(larger.includes("b.cents < a.cents") && larger.includes("a.name < b.name"), larger);
+  assert.doesNotMatch(larger, /cents\(|name\(/);
+});
+
 test("a step done for what it does reads as the step; an unnamed value something reads is called for its type", () => {
   const ledger = load("ledger"), li = infer(ledger.code, ledger.pres.names);
   const usage = renderBlocks(ledger.code, ledger.pres, li, ledger.named("usage")).split("\n").map((l) => l.trim());
