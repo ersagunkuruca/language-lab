@@ -38,6 +38,7 @@ import { modeCompiler, type ModeEmit } from "./modes.ts";
 import { INLINE, jsKind } from "./builtins.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
+import { expandInverses } from "./inverses.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
@@ -83,6 +84,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   if (x.expanded.length) {
     code = x.code;
     names = x.names;
+    info = infer(code, names);
+  }
+  // inverse(f, …) of a named f is a solve on f (inverses.ts).
+  const inv = expandInverses(code, names);
+  if (inv.expanded.length) {
+    code = inv.code;
+    names = inv.names;
     info = infer(code, names);
   }
   // Is this node a text literal below the surrogates? (TEXT_OPS.less)
