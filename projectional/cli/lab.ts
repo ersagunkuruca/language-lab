@@ -115,7 +115,7 @@ function entry(p: Program, name: string, web = false): Id {
 // The compiled program, and a few lines that run it the way `lab run` does.
 // Recursion that isn't a tail call goes on the heap past 1,000 levels
 // (BACKLOG.md C21), so main runs on Node's own stack, with no thread of its
-// own to start (C24).
+// own to start (C26).
 // `files`: import the runtime by absolute file URL, for an unbundled module;
 // otherwise by absolute path, which is what the bundler resolves.
 function compiled(p: Program, main: Id, files: boolean): string {
