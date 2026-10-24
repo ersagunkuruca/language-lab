@@ -995,7 +995,11 @@ refused with both types named. Data type upgrades (where constructors and
 fields move too) need a migration, which is a next step.
 
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
-numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate` and the
+numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate`, the
+comparisons `at most`, `more than`, `at least` (drawn `≤ > ≥`, over `<`, so
+they run backwards and differentiate with no rules of their own) and Text's
+`not after`, `comes after`, `not before` (over `comes before`), `smaller` and
+`larger` (min and max, which a shader compiles to `min` and `max`), and the
 helpers `reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
 any function value run backwards, through `applied(f, x) = f(x)`, since
 `solve` names a definition. `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
