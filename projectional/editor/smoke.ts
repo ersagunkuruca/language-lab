@@ -389,6 +389,13 @@ async function phone() {
   await p.goto(page);
   const size = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
   if (size[0] > 390 || size[1] > 844) errors.push(`${where}: the page is ${size[0]} by ${size[1]} px, not one screen`);
+  // Upright, the top bar fits without scrolling, and More shows the links
+  // that make room for it (BACKLOG E73).
+  const [tw, tc] = await p.locator(".bar").evaluate((e) => [e.scrollWidth, e.clientWidth]);
+  if (tw > tc) errors.push(`${where}: the top bar scrolls (${tw} of ${tc} px)`);
+  await p.locator(".bar .more").tap();
+  if (!(await p.locator(".bar .links a", { hasText: "Learn" }).isVisible())) errors.push(`${where}: More doesn't show Learn`);
+  await p.locator(".bar .more").tap();
   // Sideways, and a tablet: one screen too.
   for (const [w, hgt] of [[844, 390], [768, 1024]]) {
     await p.setViewportSize({ width: w, height: hgt });
