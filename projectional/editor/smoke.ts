@@ -358,6 +358,29 @@ async function foldedFrame() {
   await p.close();
 }
 
+// A value dropped on a list's + becomes a new item, wired to it (BACKLOG
+// E108): in two dice's main, the words saying "Two dice" onto h1's list.
+async function plusDrop() {
+  where = "an output dropped on a list's +";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  const words = p.locator(".p-graph g.items > g", { has: p.locator("text.cl", { hasText: /^words$/ }) }).locator("circle.outp[data-out]");
+  // The list that h1 takes: the + nearest that words node.
+  const from = (await words.first().boundingBox())!;
+  const pluses = await p.locator(".p-graph [data-add]").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  const to = pluses.sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y))[0];
+  if (!to) { errors.push(`${where}: no + in main`); return p.close(); }
+  await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await p.mouse.down();
+  await p.mouse.move(to.x, to.y, { steps: 8 }); await p.mouse.up();
+  const text = (await p.locator(".p-text").innerText()).replace(/\s+/g, " ");
+  if (!/h1\(\[(\S+), \1\]\)/.test(text)) errors.push(`${where}: h1's list didn't get the value as a second item: ${await p.locator(".status").innerText()}`);
+  await p.close();
+}
+
 // Opening a program shows its open definition in the navigator, even
 // below the fold (BACKLOG E75): the guitar pedal's main at 1280 by 800.
 async function navScroll() {
@@ -610,6 +633,7 @@ await listItems();
 await navScroll();
 await textKeepsPlace();
 await foldedFrame();
+await plusDrop();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
