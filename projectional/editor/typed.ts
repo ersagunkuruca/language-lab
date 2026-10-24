@@ -293,7 +293,8 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
 // [3, 1, 2], circle(2). It becomes the code that builds it (literals and
 // constructor calls), type-checked like any other filling. Arithmetic on
 // values reads too: 1 + 2 is add(1, 2), and so do the names in scope
-// there, the hole's inputs and lets first: x * 2 in double(x).
+// there, the hole's inputs and lets first: x * 2 in double(x). A call
+// reads as it prints, sqrt(x + 1), so it takes one fill, not two.
 export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: string, defId?: Id): TEdit {
   const all = { ...display, ...names };
   const scope = new Map<string, Id>();
@@ -303,20 +304,38 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   if ("error" in r) return { ok: false, reason: r.error };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
-  const plain = written(code, names, info, hole, text, r, false, defId);
   // A whole number where an Int goes is an Int: 0 in slice's position.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
   const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t && t.args.some(wholes);
-  if (plain.ok || !wholes(r)) return plain;
-  const int = written(code, names, info, hole, text, r, true, defId);
-  return int.ok ? int : plain;
+  // A name several things share (show, length) is each of them in turn,
+  // and the first that type-checks there is the one meant.
+  let first: TEdit | undefined;
+  for (const t of readings(r)) {
+    const plain = written(code, names, info, hole, text, t, false, defId);
+    if (plain.ok) return plain;
+    first ??= plain;
+    if (!wholes(t)) continue;
+    const int = written(code, names, info, hole, text, t, true, defId);
+    if (int.ok) return int;
+  }
+  return first!;
+}
+
+// Each way to read what's typed, one id per called name: at most 16.
+function readings(t: Typed): Typed[] {
+  if (!("op" in t)) return [t];
+  let out: Typed[][] = [[]];
+  for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
+  return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args }))).slice(0, 16);
 }
 
 // What's typed, as values at the leaves of + − × ÷. Split at the last
 // operator of the loosest kind outside brackets and text, so 1 − 2 − 3 is
 // (1 − 2) − 3; a − with nothing before it is a negative number's. A leaf
 // may be a name in scope.
-type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[] };
+// A leaf may also be a call written the way it prints, f(a, b), of a
+// definition, a builtin or a constructor: `alts` when several share the name.
+type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] };
 // + − × are the one generic arithmetic, so typed over Ints they are Int's.
 const OPS: [string, Id][][] = [[["+", ARITH.add], ["-", ARITH.sub], ["−", ARITH.sub]], [["*", ARITH.mul], ["×", ARITH.mul], ["·", ARITH.mul], ["/", B.div], ["÷", B.div]]];
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
@@ -342,7 +361,35 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     }
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
+  const call = /^([^\s()[\],"]+)\s*\((.*)\)$/s.exec(t);
+  const parts = call ? topLevel(call[2]) : undefined;
+  if (call && parts) {
+    const named = scope.get(call[1]);
+    // Out of scope, a binder or a field isn't something to call.
+    const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind);
+    const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])];
+    const args = parts.map((a) => typedOut(a, code, names, scope));
+    if (alts.length && parts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
+  }
   return r;
+}
+
+// The arguments of a call, split at its own commas: none inside brackets
+// or text. Undefined when the brackets don't close where they should.
+function topLevel(text: string): string[] | undefined {
+  const out: string[] = [];
+  let depth = 0, quoted = false, from = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c) && --depth < 0) return undefined;
+    else if (c === "," && depth === 0) { out.push(text.slice(from, i)); from = i + 1; }
+  }
+  if (depth || quoted) return undefined;
+  const last = text.slice(from);
+  return last.trim() || out.length ? [...out, last] : [];
 }
 
 function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, int: boolean, defId?: Id): TEdit {
