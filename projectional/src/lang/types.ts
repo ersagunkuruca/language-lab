@@ -290,8 +290,11 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
 // Type variables print as a, b, c. A row tail is printed only when it links
 // two places (map's function and map itself); a tail that appears once just
-// means "and possibly more", which is the default reading anyway.
-export function showType(t: Type, names: Names): string {
+// means "and possibly more", which is the default reading anyway. Given
+// which variables stand only for number types (the checker's `arith`, or a
+// scheme's through schemeArith), the type says so after it: `(a) -> a
+// where a is a number type`.
+export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
   const count = (t: Type) => {
@@ -323,5 +326,15 @@ export function showType(t: Type, names: Names): string {
     const s = `(${t.params.map((p) => go(p, false)).join(", ")})${arrow}${go(t.ret, false)}`;
     return nested ? s : s;
   };
-  return go(t, false);
+  const shown = go(t, false);
+  if (!arith?.size) return shown;
+  const kinds: Record<Arith, string[]> = { arith: [], ordered: [] };
+  for (const [v, letter] of varNames) { const k = arith.get(v); if (k) kinds[k].push(letter); }
+  const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("type", "types")}`);
+  const clauses = [kinds.arith.length && say(kinds.arith, "number type"), kinds.ordered.length && say(kinds.ordered, "number type with <")].filter(Boolean);
+  return clauses.length ? `${shown} where ${clauses.join(", and ")}` : shown;
 }
+
+// A scheme's number-type variables, for showType.
+export const schemeArith = (sc: Pick<Scheme, "arith" | "ordered">): Map<number, Arith> =>
+  new Map<number, Arith>([...(sc.arith ?? []).map((v) => [v, "arith"] as const), ...(sc.ordered ?? []).map((v) => [v, "ordered"] as const)]);

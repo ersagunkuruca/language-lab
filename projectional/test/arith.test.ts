@@ -17,7 +17,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, INT_OPS, S } from "../src/lang/std.ts";
 import { resolveArithmetic, usesGenericArithmetic } from "../src/lang/arith.ts";
-import { NUMBER, STRING, showType } from "../src/lang/types.ts";
+import { NUMBER, STRING, schemeArith, showType } from "../src/lang/types.ts";
 import { subtree, type Id, type NodeOf } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
@@ -51,6 +51,8 @@ function program() {
     // The operation itself, passed as a value.
     intNegated: def("int negated", () => k.call(LIBRARY_MAP(), k.list(k.int(1), k.int(-2)), k.x(ARITH.neg))),
     vecsNegated: def("vecs negated", () => k.call(LIBRARY_MAP(), k.list(vec(1, 0, -1)), k.x(ARITH.neg))),
+    // The slope of x·x + x at 3: the generic ops differentiate as Number's.
+    slope: def("slope", () => k.call(k.call(S.derivative, k.fn(["x"], (x) => k.call(ARITH.add, k.call(ARITH.mul, x, x), x))), k.lit(3))),
     // Mistakes the checker catches.
     textTwice: def("text twice", () => k.call(twice, k.lit("ab"))),
     vecSmaller: def("vec smaller", () => k.call(smaller, vec(1, 2, 3), vec(0, 0, 0))),
@@ -71,7 +73,7 @@ const items = (v: Value): Value[] => { const out: Value[] = []; let l = v as { f
 
 test("a definition with no literal works on every number type, and its type says so", () => {
   const p = program();
-  const ok = [p.defs.twice, p.defs.smaller, p.defs.spread, p.defs.intTwice, p.defs.bigTwice, p.defs.numberTwice, p.defs.vecTwice, p.defs.intSmaller, p.defs.numberSmaller, p.defs.intSpread, p.defs.numberSpread, p.defs.vecSpread, p.defs.intNegated, p.defs.vecsNegated];
+  const ok = [p.defs.slope, p.defs.twice, p.defs.smaller, p.defs.spread, p.defs.intTwice, p.defs.bigTwice, p.defs.numberTwice, p.defs.vecTwice, p.defs.intSmaller, p.defs.numberSmaller, p.defs.intSpread, p.defs.numberSpread, p.defs.vecSpread, p.defs.intNegated, p.defs.vecsNegated];
   for (const d of ok) assert.deepEqual(errorAt(p, d), [], p.names[d]);
   const sc = (d: Id) => p.info.schemes.get(d)!;
   assert.equal(showType(sc(p.defs.twice).type, p.names), "(a) -> a");
@@ -79,6 +81,12 @@ test("a definition with no literal works on every number type, and its type says
   assert.equal(sc(p.defs.smaller).ordered?.length, 1);
   assert.equal(showType(sc(p.defs.intTwice).type, p.names), "Int");
   assert.equal(showType(sc(p.defs.vecTwice).type, p.names), "Vec");
+  // Printed, the type says what a may be.
+  const shown = (d: Id) => showType(sc(d).type, p.names, schemeArith(sc(d)));
+  assert.equal(shown(p.defs.twice), "(a) -> a where a is a number type");
+  assert.equal(shown(p.defs.smaller), "(a, a) -> a where a is a number type with <");
+  assert.equal(shown(p.defs.intTwice), "Int");
+  assert.equal(showType(p.info.subst.zonk(p.info.typeOf.get(p.defs.spread)!), p.names, p.info.subst.arith), "(a, a) -> a where a is a number type");
 });
 
 test("text, a record that isn't all Numbers, and < on a record are type errors", () => {
@@ -113,7 +121,7 @@ test("resolved by type: Int's own operations at Int, Number's at Number, part by
 
 async function evaluatedAndCompiled() {
   const p = program();
-  const names = ["int twice", "big twice", "number twice", "vec twice", "int smaller", "number smaller", "int spread", "number spread", "vec spread", "int negated", "vecs negated"];
+  const names = ["slope", "int twice", "big twice", "number twice", "vec twice", "int smaller", "number smaller", "int spread", "number spread", "vec spread", "int negated", "vecs negated"];
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const byName = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
   const evaluated = Object.fromEntries(names.map((n) => [n, r.value(byName(n))]));
@@ -127,6 +135,7 @@ async function evaluatedAndCompiled() {
 
 test("the evaluator gives each type's answer", async () => {
   const { evaluated: e } = await evaluatedAndCompiled();
+  assert.equal(e.slope, 7);
   assert.equal(e["int twice"], 42);
   assert.equal(e["big twice"], 18014398509481986n);
   assert.equal(e["number twice"], 2.5);
