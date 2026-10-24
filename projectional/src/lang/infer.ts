@@ -380,6 +380,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (pin && code.nodes[d]) {
         const p = fresh(pin, s);
         if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${show(p.type)}, and this makes it ${show(t)}`);
+        // Inside, the body's types are the pin's too: an input whose only
+        // use was cleared is still the Number the pin says, and a hole
+        // there expects what the pin does.
+        else try { s.unify(t, fresh(pin, s).type); } catch (e) { if (!(e instanceof TypeError)) throw e; }
         sc = p;
       }
       info.schemes.set(d, sc);

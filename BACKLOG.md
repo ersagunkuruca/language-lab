@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E84 | After clearing `seed`'s only use, the palette lists in-scope `seed` as `a` while the definition still says `Number` | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E86 | Replacing a part takes Delete then the palette; a selected non-hole has no "Replace with…" opening the palette in place | learning/editor-findings.md (Learn the editor thread) | P2 | S | |
 | E87 | Selecting a plain Number literal (a dice seed) shows the Unit chooser: noise outside physics | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
 | E88 | Graph menu on a wire or port: "Put a dot on its wire" greyed with no reason; "Pick" and "Back to the automatic place" unexplained | learning/editor-findings.md (Learn the editor thread) | P3 | S | |
@@ -144,6 +143,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E84 | Inside a held or pinned definition its parts take the pin's types: a cleared input stays the Number it was | #409 |
 | E94 | Page calls hover as their own type, not with the page's row (with E85) | #408 |
 | E85 | A definition's name hovers as its own type; types it's used at follow without the caller's effects | #408 |
 | E83 | The Selected panel heads a part with what it is; its id only on hover | #407 |
