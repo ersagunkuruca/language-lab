@@ -20,7 +20,14 @@ a cell (so it is the same at any block size), 4 to 1 over 0.5; compiled it
 plays 2063 blocks a second. A filter crossover is left out: a filter keeps
 state, so its join (the sum) isn't its split run backwards, and conjugation
 doesn't apply; deeper Haar splits are the invertible way to finer bands.
-A4 (the editor) is next.
+A5 is measured (`node gaps/bench-audio.ts` in compiler/): compiled, the
+pedal takes 0.069 ms a block, 14 500 blocks a second, 39 times real time;
+the same pedal by hand in JavaScript is 6 times quicker, and the evaluator
+plays 8 blocks a second. Half the compiled time was telling apart the
+answers of a solve that has one way to an answer (atanh run backwards,
+128 times a block): it is now just the answer. What's left is mostly
+`$clean`, the solver's rounding to 12 digits, which goes through a string.
+A4 (the editor's Run panel, with the Editor lane) is next.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model

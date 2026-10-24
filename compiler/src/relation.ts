@@ -53,7 +53,11 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
     return `$FN.${e.f}.eval(${a.join(", ")})`;
   };
 
+  // One way to an answer: nothing to tell apart, so no key and no set
+  // (the pedal's tanh, run as atanh backwards, is 128 of these a block).
+  const ways = p.steps.reduce((n, s) => n * (s.type === "solve" ? s.branches.length : 1), 1);
   const gen = (i: number): string => {
+    if (i === p.steps.length && ways === 1) return `out.push([${binds.map((b) => `$clean(${id(b)})`).join(", ")}]);`;
     if (i === p.steps.length) {
       const all = rel.ports.map((port) => `$clean(${id(port)})`);
       const pick = binds.map((b) => `vals[${rel.ports.indexOf(b)}]`);
@@ -73,6 +77,6 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
     }).join("\n");
   };
 
-  return `${doc}\n${fallback}\nfunction ${name}$direct(${params.join(", ")}) {\nconst out = [], seen = new Set();\n${gen(0)}\nreturn out;\n}\n` +
+  return `${doc}\n${fallback}\nfunction ${name}$direct(${params.join(", ")}) {\nconst out = []${ways === 1 ? "" : ", seen = new Set()"};\n${gen(0)}\nreturn out;\n}\n` +
     `function ${name}(${params.join(", ")}) {\nreturn ${name}$direct(${params.join(", ")}) ?? ${viaSolver};\n}`;
 }
