@@ -15,7 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { ARITH, FALSE, TRUE } from "../src/lang/std.ts";
+import { ARITH, FALSE, SIGS, TRUE } from "../src/lang/std.ts";
 import { INT, RATIONAL_TYPE, schemeArith, showIn, showType } from "../src/lang/types.ts";
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
@@ -48,8 +48,22 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
-    const said = id ? errorAt.get(id) ?? typeOf(info, id, pres.names) ?? undefined : undefined;
+    const said = id ? errorAt.get(id) ?? ownTypeOf(id) ?? undefined : undefined;
     return said && more ? `${said}\n\n${more}` : said ?? more;
+  };
+  // A name of a definition hovers as the definition's own type. Its type
+  // here has the caller's effects in its row (range inside a seeded action
+  // reads -[Random]->), which reads as if range drew numbers itself; where
+  // it's used at other types, those follow, without the caller's effects.
+  const ownTypeOf = (id: Id) => {
+    const n = code.nodes[id];
+    if (n?.kind !== "ref" || !info) return typeOf(info, id, pres.names);
+    const own = info.schemes.get(n.target)?.type ?? SIGS[n.target]?.(info.subst.clone());
+    const here = typeOf(info, id, pres.names);
+    if (!own) return here;
+    // A generic one (+ on Numbers) says what it is here too.
+    const mine = showType(own, pres.names), bare = (t: string | null) => t?.replace(/ -\[[^\]]*\]->/g, " ->");
+    return here && bare(here) !== bare(mine) ? `${mine}\nhere: ${bare(here)}` : mine;
   };
   // What only the pane shows (a name's type, a hole's) is marked aside.
   const piece = (p: Piece): Kid => (typeof p === "string" ? p : h("span", { class: `${cls(p.id, p.cls)}${p.pane ? " aside" : ""}`, "data-id": p.id, title: title(p.id, p.title) }, ...p.kids.map(piece)));
