@@ -6,7 +6,11 @@ Compiled, it played 17 blocks a second of the 375 real time needs: both ways
 back (atanh's, Haar's) ran in the relational interpreter for each call.
 A1b is done: `inverse` and `conjugate` of a named function compile to a
 solve on it (compiler/src/inverses.ts), so drive is tanh in closed form and
-the pedal plays 41 blocks a second. A1c writes Haar's join out.
+the pedal plays 41 blocks a second. A1c is done: Haar's split is written
+in lifting steps (one unknown each run backwards), a match whose arms build
+its result with different cases has one answer run backwards, and the join
+compiles to arithmetic: the pedal plays 3258 blocks a second compiled,
+nearly nine times real time. A2 (live in a page) is next.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
