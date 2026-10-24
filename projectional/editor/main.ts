@@ -364,6 +364,9 @@ function showProgram() {
   ui.note = OPENING;
   save();
   render();
+  // A program's open definition may be below the navigator's fold (pedal's
+  // main): bring it into view.
+  document.querySelector(".p-nav .nav-row[data-def].on")?.scrollIntoView({ block: "nearest" });
 }
 
 // ---------------------------------------------------------------- programs and files
