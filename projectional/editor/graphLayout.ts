@@ -17,7 +17,9 @@
 //   labels       spots for value chips that cover no node and no other chip
 
 export type Pos = { x: number; y: number };
-export type Box = { x: number; y: number; w: number; h: number };
+// `reach`, for route: how far a wire may stray to get around it (a frame's
+// whole height; a node's, the default).
+export type Box = { x: number; y: number; w: number; h: number; reach?: number };
 
 export const overlaps = (a: Box, b: Box, m = 0) =>
   a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
@@ -127,7 +129,7 @@ export function hopPath(p: Pos[], at: number[], r = 5): string {
 // under it, whichever crosses fewer of the wires in `drawn` and strays
 // less, as a chain of the same curves through a waypoint at each corner.
 // Only a wire that runs left to right past the node bends, and only by a
-// little (`reach`); otherwise it keeps its tunnel. `boxes` are the nodes it
+// little (`reach`, or the box's own); otherwise it keeps its tunnel. `boxes` are the nodes it
 // may not cross (not its own ends); a bend also keeps off `text` (titles).
 // Returns the points to draw, and whether it bent.
 export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: Box[] = [], n = 28, clear = 8, reach = 40): { pts: Pos[]; bent: boolean } {
@@ -138,13 +140,24 @@ export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: B
   const straight = curvePoints(a.x, a.y, b.x, b.y, n);
   let pts = straight, way: Pos[] = [];
   for (let k = 0; k < 6; k++) {
-    const hit = under(pts).find((box) => box.x - clear > a.x && box.x + box.w + clear < b.x);
+    // A node is passed when the wire runs from its left to its right. A
+    // frame (a box with its own reach) is also cut at a corner by a wire
+    // with an end over or under it: that one goes round on the end's side.
+    const before = (box: Box) => box.x - clear > a.x, after = (box: Box) => box.x + box.w + clear < b.x;
+    // Frames first, the outermost first: going round it goes round all it holds.
+    const hit = under(pts).filter((box) => (before(box) && after(box)) || (box.reach !== undefined && (before(box) || after(box))))
+      .sort((p, q) => (q.reach !== undefined ? q.w * q.h : 0) - (p.reach !== undefined ? p.w * p.h : 0))[0];
     if (!hit) break;
     const ys = pts.filter((q) => inside(q, hit)).map((q) => q.y);
     const wy = ys.reduce((s, y) => s + y, 0) / ys.length;
-    const tries = [hit.y - clear, hit.y + hit.h + clear].filter((y) => Math.abs(y - wy) <= reach).flatMap((y) => {
+    const side = (y: number, end: Pos) => (y < hit.y) === (end.y < hit.y);
+    const ok = (y: number) => (before(hit) || side(y, a)) && (after(hit) || side(y, b));
+    const tries = [hit.y - clear, hit.y + hit.h + clear].filter((y) => Math.abs(y - wy) <= (hit.reach ?? reach) && ok(y)).flatMap((y) => {
       // Corners in order along the wire; one that would fold back is no way.
-      const next = [...way, { x: hit.x - clear, y }, { x: hit.x + hit.w + clear, y }].sort((p, q) => p.x - q.x);
+      const corners = [...(before(hit) ? [{ x: hit.x - clear, y }] : []), ...(after(hit) ? [{ x: hit.x + hit.w + clear, y }] : [])];
+      // Bends already made round what's inside a frame go: the wire passes it all.
+      const kept = hit.reach === undefined ? way : way.filter((q) => q.x < hit.x - clear || q.x > hit.x + hit.w + clear);
+      const next = [...kept, ...corners].sort((p, q) => p.x - q.x);
       if (next.some((q, i) => i > 0 && q.x - next[i - 1].x < 0.5)) return [];
       const p = chain([a, ...next, b]);
       const onText = text.filter((box) => p.some((q) => inside(q, box))).length;
@@ -154,8 +167,13 @@ export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: B
     way = tries[0].next;
     pts = tries[0].p;
   }
-  // Bent only if it hides under fewer nodes and crosses no more wires.
-  if (!way.length || under(pts).length >= under(straight).length || crossings(pts) > crossings(straight)) return { pts: straight, bent: false };
+  // Bent only if it hides under fewer nodes and crosses no more wires; or
+  // if it runs through fewer frames and under no more nodes: a wire through
+  // a frame reads as going into it, which is worth a crossing or two.
+  const frames = (p: Pos[]) => under(p).filter((box) => box.reach !== undefined).length;
+  const nodes = (p: Pos[]) => under(p).length - frames(p);
+  const out = frames(pts) < frames(straight) && nodes(pts) <= nodes(straight);
+  if (!way.length || (!out && (under(pts).length >= under(straight).length || crossings(pts) > crossings(straight)))) return { pts: straight, bent: false };
   return { pts, bent: true };
 }
 
