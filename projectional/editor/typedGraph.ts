@@ -825,6 +825,8 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const p = pos.get(it.key)!;
     const g = s("g", { transform: `translate(${p.x},${p.y})` }) as SVGGElement;
     it.draw(g);
+    // A folded frame is drawn as an item: selected, it's outlined like one.
+    if (hooks.selected === it.key) g.querySelector("rect.folded")?.classList.add("sel");
     if (picked.has(it.key)) g.prepend(s("rect", { x: -4, y: -4, width: it.w + 8, height: it.h + 8, rx: 9, class: "picked" }));
     if (scene.lit.has(it.key)) g.classList.add("lit");
     itemG.append(g);

@@ -334,6 +334,30 @@ async function textKeepsPlace() {
   await p.close();
 }
 
+// A folded frame is a node like the rest (BACKLOG E107): pressing on its
+// words selects it, outlined, and drags it. Two dice's main, its first lambda.
+async function foldedFrame() {
+  where = "a folded frame";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await p.locator('.p-graph .fold-t:text("▾")').first().dispatchEvent("click");
+  const box = p.locator(".p-graph rect.folded").first();
+  const words = p.locator(".p-graph rect.folded + text.rt").first();
+  await words.scrollIntoViewIfNeeded();
+  const wb = await words.boundingBox();
+  if (!wb) { errors.push(`${where}: folding drew no box`); return p.close(); }
+  await p.mouse.click(wb.x + 5, wb.y + wb.height / 2);
+  if (!/\bsel\b/.test((await box.getAttribute("class")) ?? "")) errors.push(`${where}: a click on its title doesn't select it, or it isn't outlined`);
+  const at = () => box.evaluate((e) => e.parentElement!.getAttribute("transform"));
+  const before = await at();
+  await p.mouse.move(wb.x + 5, wb.y + wb.height / 2); await p.mouse.down(); await p.mouse.move(wb.x + 60, wb.y + 50, { steps: 5 }); await p.mouse.up();
+  if ((await at()) === before) errors.push(`${where}: dragging it by its title doesn't move it`);
+  await p.close();
+}
+
 // Opening a program shows its open definition in the navigator, even
 // below the fold (BACKLOG E75): the guitar pedal's main at 1280 by 800.
 async function navScroll() {
@@ -585,6 +609,7 @@ await textPort();
 await listItems();
 await navScroll();
 await textKeepsPlace();
+await foldedFrame();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

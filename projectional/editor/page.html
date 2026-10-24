@@ -425,7 +425,10 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .cn.sel, .tgraph .pill.sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
 .tgraph .rt { fill: var(--faint); font: 500 11.5px var(--font-code); }
 .tgraph .rg.folded { stroke: var(--line); stroke-width: 1; }
+.tgraph .rg.folded.sel { stroke: var(--accent); stroke-width: 2.5; }
 .tgraph .fold-n { fill: var(--faint); font: 11px var(--font-ui); }
+/* A frame's words are part of the frame: a press on them selects and drags it. */
+.tgraph .rt, .tgraph .fold-n { pointer-events: none; }
 .tgraph .fold-t { fill: var(--faint); font: 12px var(--font-ui); cursor: pointer; }
 .tgraph .fold-t:hover { fill: var(--accent); }
 .tgraph .cn { fill: var(--tone); stroke: none; cursor: pointer; }
