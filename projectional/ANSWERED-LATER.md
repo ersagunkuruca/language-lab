@@ -1,7 +1,7 @@
 # Operations answered later, and concurrency on them
 
-BACKLOG L54, written together with L71 as both rows ask. This is the design
-note; nothing here is built yet. The two documents behind it say why it
+BACKLOG L54, written together with L71 as both rows ask. Step 1 (L54a) is
+built: the evaluator and the checker run it (`test/later.test.ts`). The two documents behind it say why it
 matters: EFFECTS-REVIEW-2026-10-24 §1.5 finds the root of the page dents
 (a handler fetch runs twice, fetch-once, `Wait` apart from `Time`) in "an
 operation is answered now, or never", and LANGUAGE-NEEDS-2026-10-24 Part 1
@@ -80,6 +80,29 @@ The rest is an ordinary function value, so it can be stored: in a list of
 parked fibers, in a record, or in a cell. It may not be compared or shown,
 the same as any function.
 
+### Resuming twice, or never
+
+What happens in each case is decided, so a program never meets a surprise:
+
+- **Never resumed.** Allowed, and it means what it says: nothing after
+  the operation runs, the same as an operation that never returns. The
+  case's value is the match's value, and any choices the computation still
+  had are dropped with it, a cut. This is how a page drops a stale request
+  and how `race` stops its losers.
+- **Resumed twice on one path.** The checker refuses it: "this resumes the
+  rest of `yield` a second time: the rest runs once, so resume it on one
+  path only". Each branch of a match is its own path. A fold's case runs
+  once per item, so the rest can't be used inside one. A case whose own
+  row has `Choice` can't hold the rest at all, since a search would resume
+  it once per answer (`infer.ts`, `resumedTwice`).
+- **Resumed twice after being passed on.** When the case passes the rest
+  to a function or stores it in data, that counts as its one use. What the
+  receiver does with it can't be followed without linear types, so a
+  second call there stops the run with "the rest of `yield` was resumed a
+  second time: a rest runs once", naming the operation. This is the only
+  part checked when the program runs, and it is where OCaml 5 checks all of
+  it.
+
 ## How each target runs it
 
 - **Evaluator.** Its continuation is a linked list of immutable frames on
@@ -104,8 +127,9 @@ the same as any function.
   fiber in C. Each is that target's own hosting choice, and none changes
   the language. Until then, those targets refuse a program that performs a
   `later` operation, with that reason.
-- **Running backwards (relate.ts).** A `later` operation is refused under
-  a relation, as a world action is: there is nothing to run backwards.
+- **Running backwards (relate.ts).** Not taken on in step 1. A `later`
+  operation has nothing to run backwards, so it is to be refused under a
+  relation, the way a world action is.
 
 ## What it unlocks
 
@@ -143,14 +167,16 @@ In the order the BACKLOG wants them:
 
 ## Steps
 
-1. **L54a, the shape, in the evaluator.**
+1. **L54a, the shape, in the evaluator. Done.**
    - The `later` flag on a variant.
    - The rest binder in an arm, the checker's types above, and the
      one-shot error.
    - `yield` and a round-robin scheduler of two fibers as tests, written
      in the language.
    - Compiled targets refuse a `later` operation with a clear reason.
-   - The editor shows the rest binder (an Editor row).
+   - The text shows the rest as `yield(item) with rest`, the way a fold's
+     folded values read, and the declaration as `returns Unit, later`. The
+     editor's own drawing of it is E75.
 2. **C40**, compiled JavaScript by generators. Then pages can use it.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,

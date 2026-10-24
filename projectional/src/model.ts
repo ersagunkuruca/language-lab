@@ -35,8 +35,10 @@ export type Node =
   // whose fields are what each operation is given. Calling an operation
   // performs it; `returns` is the type a handler answers it with, and an
   // operation without one never returns (it ends the handled computation).
+  // `later`: the handler may answer it later, at most once; its case is
+  // given the rest of the computation as a function (ANSWERED-LATER.md).
   | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true }
-  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id }
+  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true }
   | { id: Id; kind: "field"; type: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.

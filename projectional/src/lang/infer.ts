@@ -732,10 +732,31 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (seen.has(arm.variant)) err(arm.id, `${nm(arm.variant)} is handled twice`);
       seen.add(arm.variant);
       const fs = fields(arm.variant);
-      if (arm.binds.length !== fs.length) err(arm.id, `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
+      const op = code.nodes[arm.variant] as NodeOf<"variant">;
+      // An operation answered later: one more binder, the rest of the
+      // computation, (answer) -[the match's row]-> the match's value. It
+      // resumes under this same match (deep), so it can do what the match
+      // does and gives what the match gives (ANSWERED-LATER.md).
+      const later = op.later && op.returns ? 1 : 0;
+      if (arm.binds.length !== fs.length + later) err(arm.id, later ? `${nm(arm.variant)} has ${fs.length} inputs and the rest of the computation, ${arm.binds.length} bound` : `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
       const inner = new Map(env);
       arm.binds.forEach((b, i) => { if (fs[i]) { inner.set(b, fs[i]); info.typeOf.set(b, fs[i]); } });
-      const r = (code.nodes[arm.variant] as NodeOf<"variant">).returns;
+      const r = op.returns;
+      if (later && arm.binds.length === fs.length + 1) {
+        const rest = arm.binds[fs.length];
+        const t: Type = { t: "fn", params: [typeExpr(r!, new Map())], ret: result, eff: row };
+        inner.set(rest, t);
+        info.typeOf.set(rest, t);
+        // A case gives one value, so a search can't resume the rest once
+        // per answer; and on any one path it resumes the rest at most once.
+        const own = s.freshRow();
+        unifyAt(arm.body, result, expr(arm.body, inner, own), "this case");
+        if (s.resolveRow(own).effs.includes(CHOICE)) err(arm.body, `this case may give several answers or none, so it could resume the rest of ${nm(arm.variant)} more than once: handle the Choice here (first, optional)`);
+        try { s.unifyRow(own, row); } catch (e) { if (e instanceof EffectError) err(arm.body, `this case performs ${effName(e)}, which nothing here handles`); else throw e; }
+        const twice = resumedTwice(code, arm.body, rest);
+        if (twice) err(twice, `this resumes the rest of ${nm(arm.variant)} a second time: the rest runs once, so resume it on one path only`);
+        continue;
+      }
       if (!r) { unifyAt(arm.body, result, expr(arm.body, inner, row), "this case"); continue; }
       // An answer is one value: the computation carries on once with it.
       const own = s.freshRow();
@@ -759,6 +780,40 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));
   }
   return info;
+}
+
+// Where `body` uses the binder `rest` a second time on one path, or null.
+// Each branch of a match is its own path; a fold's case runs once per
+// item, so the rest may not be used in one; a function value that holds
+// the rest counts as its one use (a second call of it is caught when it
+// happens, ANSWERED-LATER.md).
+export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
+  let second: Id | null = null;
+  // The most uses on any one path through id.
+  const uses = (id: Id): number => {
+    const n = code.nodes[id];
+    switch (n.kind) {
+      case "ref": return n.target === rest ? 1 : 0;
+      case "call": return sum([n.fn, ...n.args]);
+      case "lambda": return Math.min(uses(n.body), 1) + (uses(n.body) > 1 ? flag(n.body) : 0);
+      case "match": {
+        const first = uses(n.scrutinee), then = Math.max(0, ...n.arms.map((a) => uses((code.nodes[a] as NodeOf<"arm">).body)), n.otherwise ? uses(n.otherwise) : 0);
+        if (first && then) flag(id);
+        return first + then;
+      }
+      case "fold": {
+        const first = uses(n.scrutinee), inArm = n.arms.some((a) => uses((code.nodes[a] as NodeOf<"arm">).body) > 0);
+        if (inArm) flag(id);
+        return first + (inArm ? 1 : 0);
+      }
+      case "solve": return sum([...Object.values(n.given), n.body]);
+      default: return 0;
+    }
+  };
+  const flag = (id: Id) => { second ??= id; return 0; };
+  const sum = (ids: Id[]) => { let t = 0; for (const x of ids) { const u = uses(x); if (t > 0 && u > 0) flag(x); t += u; } return t; };
+  if (uses(body) > 1) second ??= body;
+  return second;
 }
 
 // Children that are expressions or binders (types and variants excluded).

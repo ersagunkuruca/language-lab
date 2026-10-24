@@ -318,10 +318,15 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       } else {
         for (const a of n.arms) {
           const arm = node(a) as NodeOf<"arm">;
-          const results = arm.results.filter((r): r is Id => r !== null);
-          enter([...arm.binds, ...results]);
-          row(arm.body, [...pattern({ con: arm.variant, args: arm.binds.map((v) => ({ v })) }), ...(results.length ? [kw(" with "), ...commas(results.map((r) => [bind(r)]))] : [])], a);
-          leave([...arm.binds, ...results]);
+          // An operation answered later binds the rest after its fields,
+          // read like a fold's folded values: yield(item) with rest.
+          const op = node(arm.variant) as NodeOf<"variant">;
+          const later = handles && op.later && arm.binds.length === op.fields.length + 1;
+          const fields = later ? arm.binds.slice(0, -1) : arm.binds;
+          const results = later ? [arm.binds[arm.binds.length - 1]] : arm.results.filter((r): r is Id => r !== null);
+          enter([...fields, ...results]);
+          row(arm.body, [...pattern({ con: arm.variant, args: fields.map((v) => ({ v })) }), ...(results.length ? [kw(" with "), ...commas(results.map((r) => [bind(r)]))] : [])], a);
+          leave([...fields, ...results]);
         }
         if (n.kind === "match" && n.otherwise) row(n.otherwise, [kw("otherwise")]);
       }
@@ -390,7 +395,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     out.push(grp(body.variants.map((v) => {
       const vn = node(v) as NodeOf<"variant">;
       const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);
-      return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : [])], id: v, cls: "variant" };
+      return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : []), ...(vn.returns && vn.later ? [kw(", later")] : [])], id: v, cls: "variant" };
     })));
     return out;
   }

@@ -33,6 +33,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
 | E74 | Maps and sets drawn as tables: a `Map` value (and an `as map([...])` literal) as two columns, keys in order; a `Set` as one column. DATA-STRUCTURES.md "The editor" | DATA-STRUCTURES.md | P2 | S | ready: L65 done (#389) |
+| E75 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | after L54a |
 | E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
 | E75 | Opening a program doesn't scroll the navigator to its open definition (pedal, converter `main` below the fold) | QA-2026-10-24b L7 | P3 | S | |
 | E76 | Status bar quiet after typing in a page's field (converter) | QA-2026-10-24b L8 | P3 | S | |
