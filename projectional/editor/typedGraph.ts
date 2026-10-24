@@ -425,13 +425,18 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const at = new Map<Id, Pos>();
     const vals = steps.map(([, v]) => lay(v));
     const colW = Math.max(0, ...vals.map((v) => v.w));
+    // Steps done only for their effects (print this, then that) read top
+    // to bottom, the last one included: nothing flows sideways, so each
+    // starts at the left edge, as lines of text do. Lets line up on the
+    // right, where their dots are.
+    const sequence = steps.every(([b]) => name(b) === "_");
     let y = 0, w = 0, h = 0, right = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
       const silent = name(b) === "_";
-      const vx = colW - v.w;
+      const vx = sequence ? 0 : colW - v.w;
       shift(at, v, vx, y);
-      const py = y + v.outY, x = Math.max(colW, vx + v.outX) + 22;
+      const py = y + v.outY, x = (sequence ? vx + v.outX : Math.max(colW, vx + v.outX)) + 22;
       if (named(b)) {
         // A let node: `name =`, its value wired in; its uses are get nodes.
         const label = `${name(b)} =`;
@@ -466,10 +471,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     });
     const valsH = Math.max(0, y - 18);
     const body = lay(rest);
-    // Steps done only for their effects (print this, then that) read top
-    // to bottom, the last one included: nothing flows sideways.
-    const sequence = steps.every(([b]) => name(b) === "_");
-    const bx = sequence ? Math.max(0, colW - body.w) : right + 26;
+    const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
     shift(at, body, bx, by);
     return { w: Math.max(w, bx + body.w), h: Math.max(h, valsH, by + body.h), outX: bx + body.outX, outY: by + body.outY, out: body.out, at };
