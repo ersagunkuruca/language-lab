@@ -1,0 +1,10 @@
+import { loadProgram } from "./src/lang/load.ts";
+import { infer } from "./src/lang/infer.ts";
+import { compile } from "../compiler/src/compile.ts";
+import { writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+const p = loadProgram("examples/pedal");
+const info = infer(p.code, p.pres.names, undefined, p.options);
+writeFileSync("/tmp/claude-0/ped.mjs", compile(p.code, info, p.pres.names, { runtime: pathToFileURL("/home/user/language-lab/compiler/src/runtime.js").href, exports: ["drive"] }));
+const { defs } = await import("/tmp/claude-0/ped.mjs");
+let t = performance.now(); for (let i = 0; i < 1280; i++) defs.drive(8, 0.3); console.log("drive", ((performance.now() - t) / 10).toFixed(1), "ms per 128");

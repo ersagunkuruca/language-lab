@@ -77,3 +77,15 @@ export async function pageRuntime(): Promise<string> {
   });
   return out.outputFiles[0].text;
 }
+
+// The audio thread's runtime, prebuilt the same way (src/lang/worklet-runtime.ts):
+// what the editor puts before a page's compiled program to play its sound
+// (page.ts workletFile).
+export async function workletRuntime(): Promise<string> {
+  const { build } = await esbuild();
+  const out = await build({
+    entryPoints: [join(here, "../src/lang/worklet-runtime.ts")],
+    bundle: true, platform: "browser", format: "iife", globalName: "$lab", target: "es2022", minify: true, write: false, logLevel: "warning",
+  });
+  return out.outputFiles[0].text;
+}

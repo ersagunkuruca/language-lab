@@ -16,7 +16,7 @@ import { build } from "esbuild";
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { markdown } from "./markdown.ts";
 import { mkdirSync } from "node:fs";
-import { pageRuntime, recordings, webPage } from "../cli/web.ts";
+import { pageRuntime, recordings, webPage, workletRuntime } from "../cli/web.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 
@@ -25,7 +25,7 @@ const site = here + "../../";
 // What the editor's "Save page" puts before a page's compiled program.
 // The worker Run uses (editor/runWorker.ts), as text the editor starts.
 const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text) } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text), WORKLET_RUNTIME: JSON.stringify(await workletRuntime()) } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);

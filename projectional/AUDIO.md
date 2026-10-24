@@ -29,7 +29,8 @@ answers of a solve that has one way to an answer (atanh run backwards,
 compiled pedal from 6× to 2.9× the hand-written one: rounding without a
 string, one-answer solves and modes written plainly, and the compressor
 writing its block straight into an array.
-A4 (the editor's Run panel, with the Editor lane) is next.
+A4 (the editor's Run panel, with the Editor lane) is next. Its hook is
+in place; see "Playing a sound from the editor" below.
 
 This is the design for the audio target (BACKLOG.md C25), written before the
 code, in the shape of WEB.md, WASM.md and NATIVE.md. It is the smallest model
@@ -160,6 +161,34 @@ real program.
    to projectional/editor purely additive).
 5. **A5. Measure.** Blocks per second against the 375 real time needs, in
    compiled JS and, if it is short, WebAssembly in the worklet.
+
+## Playing a sound from the editor (A4's hook)
+
+The editor previews a page with the evaluator, but the audio thread runs
+compiled code, made in the browser with no bundler. These pieces are
+ready for the Run panel:
+
+- `WORKLET_RUNTIME` (editor/build.ts defines it, as `PAGE_RUNTIME` is):
+  cli/web.ts `workletRuntime()`. This is the compiler's runtime and
+  `startSound` (src/lang/worklet-runtime.ts), prebuilt as a script that
+  sets `$lab` on the audio thread.
+- `workletFile(WORKLET_RUNTIME, code, info, names, main)` (src/lang/page.ts):
+  the script for the audio thread. The program is compiled there and
+  then, with `link: "global"`, and runs `main` again on the audio thread.
+  `hasSound(code)` says whether a program needs it.
+- `soundPlayer(cells, worklet, () => main())` (src/lang/audio-page.ts):
+  - run around the preview's `main`, with the preview's cells;
+  - gives `{ page, listen }`: mount `page`, and pass `listen` as
+    `Mount.listen` (src/lang/html.ts);
+  - each element with a `listen` attribute then plays on click and stops
+    on a second click;
+  - the preview's cell writes reach the audio thread by creation order,
+    so the evaluator's cells and the compiled program's line up.
+- "Save page": `pageFile(title, PAGE_RUNTIME, code, info, names, main,
+  WORKLET_RUNTIME)` gives a page that plays, as `lab build-web`'s does.
+
+test/audio.test.ts checks that a worklet made this way plays the same
+samples as the bundled one.
 
 ## Prior art
 

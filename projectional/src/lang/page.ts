@@ -14,6 +14,7 @@ import { Cells } from "./cells.ts";
 import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
 import { compile } from "../../../compiler/src/compile.ts";
+import { HTML_V } from "./std.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -90,8 +91,27 @@ ${body ? `${body}\n` : ""}${scripts.map((js) => `<script>${js.replace(/<\/script
 // pageRuntime), and the program is compiled to a script that takes its
 // helpers from there. Bigger than `lab build-web`'s, which keeps only what
 // the program uses, and the same page.
-export function pageFile(title: string, runtime: string, code: Code, info: Info, names: Names, main: Id): string {
+// A page with sound also gives `worklet`, workletRuntime (cli/web.ts)
+// prebuilt, and plays: its program for the audio thread is made here too.
+export function pageFile(title: string, runtime: string, code: Code, info: Info, names: Names, main: Id, worklet?: string): string {
   const name = names[main];
   const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global" });
-  return pageShell(title, runtime, `(() => {\n${program}\n$lab.startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)});\n})();`);
+  const sound = worklet && hasSound(code) ? `, ${JSON.stringify(workletFile(worklet, code, info, names, main))}` : "";
+  return pageShell(title, runtime, `(() => {\n${program}\n$lab.startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${sound});\n})();`);
+}
+
+// Does the program play sound (a `listen` attribute anywhere)?
+export const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
+
+// The script the audio thread runs for a page with sound (AUDIO.md, A4),
+// made in a browser: `runtime` is cli/web.ts workletRuntime, and the
+// program, compiled here, takes its helpers from it and runs main again
+// there (audio-worklet.ts startSound). The editor plays a page's sound
+// with it: audio-page.ts soundPlayer(cells, workletFile(…), main) gives
+// the page to mount and the `listen` hook (html.ts Mount.listen) that
+// plays it.
+export function workletFile(runtime: string, code: Code, info: Info, names: Names, main: Id): string {
+  const name = names[main];
+  const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global" });
+  return `${runtime}\n(() => {\n${program}\n$lab.startSound(defs[${JSON.stringify(name)}]);\n})();`;
 }

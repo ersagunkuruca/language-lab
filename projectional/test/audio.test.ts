@@ -18,7 +18,8 @@ import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, listens, playBlocks } from "../src/lang/audio.ts";
 import { runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { soundWorklet } from "../cli/web.ts";
+import { soundWorklet, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { pageFile, workletFile } from "../src/lang/page.ts";
 import { sameNumber } from "../src/lang/run.ts";
 import { CELL_OPS, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
@@ -144,6 +145,26 @@ test("the pedal page's worklet plays the pedal, and the page's cell writes reach
   assert.ok(peak(quiet) < 0.8 * peak(offline.slice(128)), `${peak(quiet)} against ${peak(offline.slice(128))}`);
   assert.deepEqual(said, []);
   assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
+});
+
+// The same worklet made in a browser, the editor's way (A4): the prebuilt
+// audio-thread runtime and the program compiled to take its helpers from
+// it. It plays what the bundled one plays; "Save page" carries it.
+test("a worklet made without a bundler plays what the bundled one plays", async () => {
+  const { p, page } = pedal();
+  const play = (source: string) => {
+    const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+    class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console });
+    const node = new made[0]({ processorOptions: { index: 0 } });
+    const out = [new Float32Array(128), new Float32Array(128)];
+    node.process([[Float32Array.from(sine(128, 0.3))]], [out]);
+    return [...out[0]];
+  };
+  const runtime = await workletRuntime();
+  const made = workletFile(runtime, p.code, p.info, p.names, page);
+  assert.deepEqual(play(made), play(await soundWorklet(p.code, p.info, p.names, page)));
+  assert.ok(pageFile("Pedal", await pageRuntime(), p.code, p.info, p.names, page, runtime).includes(JSON.stringify(made).slice(0, 200)));
 });
 
 test("a page with sound copies its recording beside it, and carries its program for the audio thread", () => {
