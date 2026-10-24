@@ -4,12 +4,11 @@ import { $no, $stream0, $showAny, $int, $text, $impl, $many, $partial, $setPath,
 // sum and difference: given sum, difference, solve for a, b
 const solve$0$plan = $planned({"name":"mgcebnp7roc7m4l0tscmiltsi1","ports":["095ehaelth31d6t4po8v3nas3h","ni08ovt7psg5j62ntu8o8rgila","0rk5fs3t58pfj9mn3i8a31kjsd","1dutrs6g5io90n9fc7od483ujp"],"eqs":[{"lhs":{"k":"call","f":"add","args":[{"k":"var","name":"095ehaelth31d6t4po8v3nas3h"},{"k":"var","name":"ni08ovt7psg5j62ntu8o8rgila"}]},"rhs":{"k":"var","name":"0rk5fs3t58pfj9mn3i8a31kjsd"},"law":false},{"lhs":{"k":"call","f":"sub","args":[{"k":"var","name":"095ehaelth31d6t4po8v3nas3h"},{"k":"var","name":"ni08ovt7psg5j62ntu8o8rgila"}]},"rhs":{"k":"var","name":"1dutrs6g5io90n9fc7od483ujp"},"law":false}],"vars":["095ehaelth31d6t4po8v3nas3h","ni08ovt7psg5j62ntu8o8rgila","0rk5fs3t58pfj9mn3i8a31kjsd","1dutrs6g5io90n9fc7od483ujp"]}, ["0rk5fs3t58pfj9mn3i8a31kjsd","1dutrs6g5io90n9fc7od483ujp"]);
 function solve$0$direct(v2, v3) {
-  const out = [], seen = new Set();
+  const out = [];
   {
     const v0 = ((v2 + v3) / 2); const v1 = ((v2 - v3) / 2);
     if ($ok(v0) && $ok(v1)) {
-      const vals = [$clean(v0), $clean(v1), $clean(v2), $clean(v3)], key = $key(vals);
-      if (!seen.has(key)) { seen.add(key); out.push([vals[0], vals[1]]); }
+      out.push([$clean(v0), $clean(v1)]);
     }
   }
   return out;
@@ -48,12 +47,11 @@ function solve$2(v1) {
 // add: given 0, out, solve for 1
 const solve$3$plan = $planned({"name":"add","ports":["0","1","out"],"eqs":[{"lhs":{"k":"var","name":"out"},"rhs":{"k":"call","f":"add","args":[{"k":"var","name":"0"},{"k":"var","name":"1"}]},"law":false}],"vars":["0","1","out"]}, ["0","out"]);
 function solve$3$direct(v0, v2) {
-  const out = [], seen = new Set();
+  const out = [];
   {
     const v1 = (v2 - v0);
     if ($ok(v1)) {
-      const vals = [$clean(v0), $clean(v1), $clean(v2)], key = $key(vals);
-      if (!seen.has(key)) { seen.add(key); out.push([vals[1]]); }
+      out.push([$clean(v1)]);
     }
   }
   return out;
