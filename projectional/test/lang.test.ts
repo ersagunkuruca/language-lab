@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { get, replace, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -310,6 +310,23 @@ test("an action handed to a handler reads as what it does, by name", () => {
   assert.doesNotMatch(main, /\(\) =>/);
   // A function with inputs is still drawn as one.
   assert.match(main, /\(board\) => print/);
+});
+
+test("a chain of matches, each taking apart a field of the last, reads as one row per case: nested patterns", () => {
+  const l = load("ledger"), info = infer(l.code, l.pres.names);
+  const text = (d: string) => renderBlocks(l.code, l.pres, info, l.named(d));
+  const parse = text("parse");
+  // The four fields of a line in one pattern, and no level of matching left.
+  assert.match(parse, /^ {4}\[date, account, cents, memo\] → entry\(date, account, amount\(cents, n\), memo\)$/m);
+  assert.doesNotMatch(parse, /match ‹after/);
+  // Every case of the tree is still there, once: as many bad lines as the tree has.
+  const bad = Object.values(l.code.nodes).filter((x) => x.kind === "ref" && l.pres.names[x.target] === "bad line" && subtree(l.code, l.named("parse")).includes(x.id)).length;
+  assert.equal(parse.split("‹bad line›(n)").length - 1, bad);
+  assert.match(text("main"), /^ {4}\[path\] →$/m);
+  // A field the case still reads is not taken into the pattern: countdown's
+  // split hands its tail on, so it stays a match of its own.
+  const cd = load("countdown");
+  assert.match(renderBlocks(cd.code, cd.pres, infer(cd.code, cd.pres.names), cd.named("split")), /^ {6}match tail$/m);
 });
 
 test("a step done for what it does reads as the step; an unnamed value something reads is called for its type", () => {

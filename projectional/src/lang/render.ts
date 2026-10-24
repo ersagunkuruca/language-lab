@@ -75,6 +75,45 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   const byName = (id: Id): Id => { const n = node(id); return n.kind === "lambda" && n.params.length === 0 ? n.body : id; };
   const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? `${nota.words[i]} ` : "");
 
+  // Nested patterns, read back from nested matches. A field the body
+  // matches on, and reads nowhere else, becomes that match's cases in its
+  // place; an inner otherwise is _ there. The rows are the leaves.
+  type Pat = { v: Id } | { con: Id; args: Pat[] } | { any: true };
+  const deeper = (binds: Id[], body: Id): Id | undefined => {
+    const m = node(body);
+    if (m.kind !== "match" || isBool(m) || isHandler(m)) return undefined;
+    const s = node(m.scrutinee);
+    if (s.kind !== "ref" || !binds.includes(s.target)) return undefined;
+    const elsewhere = [...m.arms, ...(m.otherwise ? [m.otherwise] : [])].some((x) => subtree(code, x).some((y) => (node(y) as { target?: Id }).target === s.target));
+    return elsewhere ? undefined : s.target;
+  };
+  const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : p);
+  const rows = (pat: Pat, binds: Id[], body: Id): { pat: Pat; binds: Id[]; body: Id }[] => {
+    const b = deeper(binds, body);
+    if (!b) return [{ pat, binds, body }];
+    const m = node(body) as NodeOf<"match">;
+    const rest = binds.filter((x) => x !== b);
+    return [
+      ...m.arms.flatMap((a) => {
+        const arm = node(a) as NodeOf<"arm">;
+        return rows(put(pat, b, { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body);
+      }),
+      ...(m.otherwise ? rows(put(pat, b, { any: true }), rest, m.otherwise) : []),
+    ];
+  };
+  // A list of two or more, or one that ends, reads as a list: [a, b],
+  // [a, b, ..rest].
+  const patText = (p: Pat): string => {
+    if ("v" in p) return nameOf(p.v);
+    if ("any" in p) return "_";
+    const items: Pat[] = [];
+    let end: Pat = p;
+    while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
+    const ends = "con" in end && end.con === NIL;
+    if (items.length && (ends || items.length > 1)) return `[${[...items.map(patText), ...(ends ? [] : [`..${patText(end)}`])].join(", ")}]`;
+    return p.args.length ? `${base(p.con)}(${p.args.map(patText).join(", ")})` : base(p.con);
+  };
+
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
     const n = node(id);
@@ -208,6 +247,20 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     }
     if (n.kind === "match" || n.kind === "fold") {
       const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];
+      // A case whose body only takes one of its fields apart further reads
+      // as one row per inner case: nested patterns (PATTERNS.md).
+      if (n.kind === "match" && !isHandler(n)) {
+        for (const a of n.arms) {
+          const arm = node(a) as NodeOf<"arm">;
+          for (const row of rows({ con: arm.variant, args: arm.binds.map((b) => ({ v: b })) }, arm.binds, arm.body)) {
+            enter(row.binds);
+            out.push(...hang(row.body, ind + "  ", `${patText(row.pat)} → `));
+            leave(row.binds);
+          }
+        }
+        if (n.otherwise) out.push(...hang(n.otherwise, ind + "  ", "otherwise → "));
+        return out;
+      }
       for (const a of n.arms) {
         const arm = node(a) as NodeOf<"arm">;
         const results = arm.results.filter((r): r is Id => r !== null);
