@@ -9,7 +9,7 @@
 
 import type { Id } from "../../projectional/src/model.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ARITH, CELL_OPS, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ARITH, CELL_OPS, COMPARE, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -88,6 +88,8 @@ export const TARGETS: Record<Id, Target> = {
   [SET]: { js: written("setCall(): `$setPath` along the field written in place"), scalar: no("set takes the field it sets written in place; records in the scalar profile are built whole") },
   // Cases print with the names the program was compiled with ($names).
   [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names)`), scalar: DATA },
+  // Cases compare in the order their types declare them ($order).
+  [COMPARE]: { js: op(([a, b]) => `$compare(${a}, ${b}, $order)`), scalar: DATA },
   // The world: the runtime's World, set by whoever runs the program.
   [IO.printError]: { js: op(([a]) => `$io.printError(${a})`), scalar: WORLD },
   [IO.readInput]: { js: op(() => `$io.readInput()`), scalar: WORLD },

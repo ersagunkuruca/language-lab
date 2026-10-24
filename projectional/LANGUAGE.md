@@ -141,6 +141,26 @@ text` would copy.
 All of these run in the evaluator, the compiler (`$int`, `$impl`, `$many`
 in its runtime) and forward in the relational interpreter.
 
+### Order, and sort
+
+`compare(a, b)` answers `before`, `same` or `after` (the std type `Order`)
+for any two values of one plain type, the way `equal` answers for any
+two: numbers by value (Int, Number and fractions; Numbers as near as
+`equal` counts them are the same), text by code point, cases in the order
+their type declares them (`low` before `medium` before `high`, `none`
+before `some`, `[]` before any other list), then fields left to right, so
+lists go lexicographically. Functions and cells can't be compared, as
+they can't be told equal. This is OCaml's `compare` and Erlang's term
+order (prior art), with the cases' order taken from the program rather
+than from names or hashes. `sort` (prelude) puts a list in that order: a
+merge sort (von Neumann, 1945) written bottom-up, as a binary counter of
+sorted runs (Okasaki's bottom-up mergesort), so every step is a fold or a
+recursion the termination check accepts and its type, `(List a) -> List
+a`, has no Diverge. Both run in the evaluator, compiled JavaScript (the
+cases' order is written into the program as `$order`) and forward in the
+relational interpreter (`run.ts compareValues`). Map keys and set elements
+will use the same order (L65).
+
 ## Case analysis: `match`
 
 ```

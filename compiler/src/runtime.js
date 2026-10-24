@@ -97,8 +97,11 @@ export { STD_IMPL as $impl, STD_MANY as $many } from '../../projectional/src/lan
 import { STD_MANY } from '../../projectional/src/lang/std.ts';
 export const $partial = Object.fromEntries(Object.entries(STD_MANY).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
-import { showValue } from '../../projectional/src/lang/run.ts';
+import { showValue, compareValues, ORDER_VALUES } from '../../projectional/src/lang/run.ts';
 export const $showAny = (v, names) => showValue(v, null, names);
+// `compare` (L66): `order` is each case's place in its type (compile.ts
+// writes it as $order), so cases compare as in the evaluator.
+export const $compare = (a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1];
 
 export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));
 export const $mod = (a, b) => ((a % b) + b) % b;

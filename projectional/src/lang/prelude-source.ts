@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ARITH, COMPLEX_V, CONS, INT_OPS, NIL, PAIR_V, RATIO, S, TEXT_OPS, std } from "./std.ts";
+import { ARITH, COMPARE, COMPLEX_V, CONS, INT_OPS, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -148,7 +148,44 @@ export function buildPrelude(): Module {
   k.define(showC, k.fn(["z"], (z) => cx(z, (a, b) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
     k.if(k.call(S.less, b, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, b)), k.lit("i")))))));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC];
+  // Sorting by the order on plain data (`compare`, L66): a merge sort
+  // written bottom-up, so every step is a fold or a recursion the
+  // termination check accepts (merge shrinks one list or the other; add
+  // run walks the slots), and the type has no Diverge. Each slot holds a
+  // sorted run of 2^i items or none, as a binary counter: von Neumann's
+  // merge sort (1945), counted as Okasaki's bottom-up mergesort does.
+  const mergeSorted = k.def("merge sorted");
+  k.define(mergeSorted, k.fn(["xs", "ys"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => ys },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => xs },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.match(k.call(COMPARE, y, x), [
+        { variant: ORDER_V.before, names: [], body: () => k.call(CONS, y, k.call(mergeSorted, xs, yr)) },
+      ], k.call(CONS, x, k.call(mergeSorted, xr, ys))) },
+    ]) },
+  ])));
+  const addRun = k.def("add run");
+  k.define(addRun, k.fn(["run", "slots"], (run, slots) => k.match(slots, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.call(SOME, run), k.x(NIL)) },
+    { variant: CONS, names: ["slot", "higher"], body: ([slot, higher]) => k.match(slot, [
+      { variant: NONE, names: [], body: () => k.call(CONS, k.call(SOME, run), higher) },
+      { variant: SOME, names: ["held"], body: ([held]) => k.call(CONS, k.x(NONE), k.call(addRun, k.call(mergeSorted, held, run), higher)) },
+    ]) },
+  ])));
+  const sort = k.def("sort");
+  k.define(sort, k.fn(["list"], (xs) => k.fold(
+    k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["item", "rest"], results: [null, "slots"], body: ([item], [, slots]) => k.call(addRun, k.call(CONS, item, k.x(NIL)), slots!) },
+    ]), [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["slot", "higher"], results: [null, "merged"], body: ([slot], [, merged]) => k.match(slot, [
+        { variant: NONE, names: [], body: () => merged! },
+        { variant: SOME, names: ["run"], body: ([run]) => k.call(mergeSorted, run, merged!) },
+      ]) },
+    ])));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
@@ -173,6 +210,9 @@ export function buildPrelude(): Module {
     [mulF]: "What · is at Rational. Not offered on its own: · is.",
     [negF]: "What −x is at Rational. Not offered on its own: − is.",
     [lessF]: "What < is at Rational. Not offered on its own: < is.",
+    [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
+    [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     [asC]: "The Number x as a complex number, x + 0i.",
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
@@ -189,9 +229,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Number-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun].map(at));
 }

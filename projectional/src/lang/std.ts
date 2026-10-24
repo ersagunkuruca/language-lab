@@ -155,6 +155,9 @@ export const COMPLEX = typedef("std.complex", "Complex", [], [
   ["complex", [["re", () => tref(NUMBER)], ["im", () => tref(NUMBER)]]],
 ]);
 export const COMPLEX_V = "std.complex.complex";
+// What `compare` answers (L66): a before b, the same, or after.
+export const ORDER = typedef("std.order", "Order", [], [["before", []], ["same", []], ["after", []]]);
+export const ORDER_V = { before: "std.order.before", same: "std.order.same", after: "std.order.after" } as const;
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
@@ -424,6 +427,10 @@ export const TEXT_OPS = {
 // presentation, so they're an input to the run, like the console). Number's
 // own show stays: run backwards, it is what reads numbers.
 export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
+// The order on plain data (L66, run.ts compareValues): numbers by value,
+// text by code point, cases in the order their type declares them, then
+// fields left to right. Plain data only, like `equal`.
+export const COMPARE = builtin("compare", "compare", (s) => { const a = s.fresh(true); return fn([a, a], { t: "con", id: "std.order", args: [] }, s.freshRow()); });
 
 // Records: set(field, record, value) is the record with that field changed.
 // `field` is a field, or a path of fields (p ↦ p.address.city), which the
@@ -434,7 +441,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
