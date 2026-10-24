@@ -638,3 +638,24 @@ test("arithmetic typed in the palette reads the names in scope: x * 2 in double(
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "y * 2", double).ok, false);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "x", double).ok, false);
 });
+
+test("a call typed in the palette reads as it prints: sqrt(x + 1) in double(x)", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "double", { kind: "function", params: ["x"] }));
+  const double = s.def("double");
+  const x = (s.code.nodes[(s.code.nodes[double] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0];
+  const hole = s.holes(double)[0];
+  for (const text of ["sqrt(x)", "sqrt(x + 1)", "sqrt(x) * 2", "2 * sqrt(sqrt(x))", "length(show(x))"]) {
+    const r = T.fillValue(s.code, s.all(), s.info(), hole, text, double);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+  }
+  const r = T.fillValue(s.code, s.all(), s.info(), hole, "sqrt(x)", double);
+  if (!r.ok) return;
+  const c = r.code.nodes[hole] as NodeOf<"call">;
+  assert.deepEqual([s.all()[(r.code.nodes[c.fn] as NodeOf<"ref">).target], (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], ["sqrt", x]);
+  // A name nothing has, or a call that doesn't type-check, is nothing.
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "nope(x)", double).ok, false);
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "sqrt(x, x)", double).ok, false);
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "a(x)", double).ok, false);
+});

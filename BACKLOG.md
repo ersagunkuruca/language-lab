@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
 
 ## C: Compiler and targets
 
@@ -139,6 +138,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E55 | The palette reads a typed call, sqrt(x + 1), as one fill; a shared name is tried as each of its meanings | #365 |
 | E53 | Landscape phone: graph 208 to 234 px (one-line status, slimmer panes); tablet top bar fits (names and notation cycle) | #364 |
 | E56 | The status bar says what was done on a page (clicks on it, Stop sound, Restart) | #362 |
 | E57 | The dice page before any roll says Rolls: 0 | #361 |
