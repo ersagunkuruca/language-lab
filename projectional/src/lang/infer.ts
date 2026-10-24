@@ -50,6 +50,8 @@ export interface Info {
   owner: Map<Id, Id>;
   // Definitions the palette doesn't offer: a module's helpers.
   hidden: Set<Id>;
+  // What it was checked with, so the palette's rechecks see the same pins.
+  options?: Options;
 }
 
 // pins: signatures that definitions must keep and callers see
@@ -78,7 +80,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A filling tried by the palette adds no types, so their parts' owners
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []) };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -1007,7 +1009,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // group too: everything in it already depends on this group.
   const affected = dependents(code, h.group);
   let before: number | undefined;
-  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }).errors.length;
+  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }, info.options).errors.length;
   const whole = (f: Filling) => recheck(fillHole(code, {}, hole, f).code) <= (before ??= recheck(code));
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge, a square
@@ -1028,6 +1030,9 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   let planned: string | undefined;
   const samePlans = (f: Filling) => plans(fillHole(code, {}, hole, f).code) === (planned ??= plans(code));
   const checked = new Map<string, boolean>();
+  const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
+  const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];
+  let aroundBefore: string | undefined;
   const safe = (s: Subst, f: Filling, risky: boolean) => {
     if (risky || (solves.length && !samePlans(f))) return whole(f);
     // A row only renamed pins nothing: a pure call's empty row joining the
@@ -1040,12 +1045,17 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       const r = s.resolveRow({ effs: [], tail: v });
       return r.effs.length > 0 || r.tail === null || pinned.includes(`r${r.tail}`);
     });
-    if (!touches) return true;
+    // A pinned group's own type is the pin's, so what its body makes of
+    // the hole is seen in the hole: the type it expects, the effects
+    // around it, the inputs in scope. Fillings that change none of those
+    // keep the pin; the others are checked against it.
+    const held = pinnedGroup && groupKey(s, around) !== (aroundBefore ??= groupKey(info.subst, around));
+    if (!touches && !held) return true;
     // Units are the exception: what a call does to them is the callee's
     // own (multiply multiplies them, add needs them equal), so a ref or a
     // call is checked for each thing it names.
     const named = f.kind === "ref" || f.kind === "call" ? `|${f.target}` : "";
-    const key = groupKey(s, h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; })) + named;
+    const key = groupKey(s, [...h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; }), ...(pinnedGroup ? around : [])]) + named;
     if (!checked.has(key)) checked.set(key, whole(f));
     return checked.get(key)!;
   };

@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { replace, type NodeOf } from "../src/model.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
-import { loadProgram } from "../src/lang/load.ts";
+import { checkOptions, loadProgram } from "../src/lang/load.ts";
+import { pinsOf } from "../src/lang/signatures.ts";
 import { fillHole } from "../src/lang/refactor.ts";
 import { sweep } from "./helpers.ts";
 
@@ -66,4 +67,25 @@ test("the palette offers one + − · for Numbers and Ints alike, and a program 
   assert.ok(fns.length > 0);
   assert.deepEqual(infer(code, p.pres.names).errors, []);
   assert.deepEqual(run(code), run(p.code));
+});
+
+// A definition with a hole keeps its type while the hole is open (the
+// editor holds it, as if pinned), so a filling that would change it is
+// refused; the palette mustn't offer it. Ersagun's edit: die() for the seed
+// of a hundred rolls, whose type has no Random (BACKLOG E81).
+test("at a hole in a held definition, the palette offers only what keeps its type", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
+  const named = (n: string) => Object.keys(p.pres.names).find((d) => p.pres.names[d] === n)!;
+  const rolls = named("a hundred rolls"), die = named("die");
+  const lam = p.code.nodes[(p.code.nodes[rolls] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const seed = Object.values(p.code.nodes).find((n) => n.kind === "ref" && n.target === lam.params[0])!.id;
+  const held = pinsOf(infer(p.code, p.pres.names, undefined, checkOptions), [rolls]);
+  const opts = { ...checkOptions, pins: { ...checkOptions.pins, ...held } };
+  const code = replace(p.code, seed, () => ({ kind: "hole" }));
+  const info = infer(code, p.pres.names, undefined, opts);
+  const offered = fillings(code, info, seed);
+  assert.ok(offered.some((f) => "target" in f && f.target === lam.params[0]), "seed itself is offered");
+  assert.ok(!offered.some((f) => "target" in f && f.target === die), "die() would give it Random");
+  const bad = offered.filter((f) => infer(fillHole(code, {}, seed, f).code, p.pres.names, undefined, opts).errors.length > info.errors.length);
+  assert.deepEqual(bad.map((f) => JSON.stringify(f)), []);
 });
