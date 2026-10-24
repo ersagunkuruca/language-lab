@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
 | E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
 | E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | ready: L75 done (a `lit` with `of: "std.rational"`, value a whole number or "top/bottom"; DSL `k.at`); smaller/larger on every number type is L73 |
 | E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
@@ -139,6 +138,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E67 | The palette reads calls of several-word names: as fraction(3), ‹as fraction›(3) | #390 |
 | E66 | The palette reads < ≤ > ≥ = ++ and -x, from the notation itself | #388 |
 | E65 | Blocks pane: right-click opens the part's menu, clicking an operator selects its call | #387 |
 | E63 | The Blocks pane draws what the blocks text prints: one printer, render.ts blocksOf | #384 |
