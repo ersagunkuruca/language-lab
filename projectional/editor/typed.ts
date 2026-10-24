@@ -14,7 +14,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
-import { chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
+import { ARITH, chainOperands, CONS, FALSE, NIL, TRUE } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
@@ -317,7 +317,8 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
 // (1 − 2) − 3; a − with nothing before it is a negative number's. A leaf
 // may be a name in scope.
 type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[] };
-const OPS: [string, Id][][] = [[["+", B.add], ["-", B.sub], ["−", B.sub]], [["*", B.mul], ["×", B.mul], ["·", B.mul], ["/", B.div], ["÷", B.div]]];
+// + − × are the one generic arithmetic, so typed over Ints they are Int's.
+const OPS: [string, Id][][] = [[["+", ARITH.add], ["-", ARITH.sub], ["−", ARITH.sub]], [["*", ARITH.mul], ["×", ARITH.mul], ["·", ARITH.mul], ["/", B.div], ["÷", B.div]]];
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   const named = scope.get(t);

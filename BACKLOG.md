@@ -34,7 +34,6 @@ so the next bigger program can be built in the editor.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E49 | **Numbers first (L38 step 2, editor side).** The palette offers the one generic `+ − · −x <` (std.ts `ARITH`: `builtin.arith.add`, `.sub`, `.mul`, `.neg`, `.less`; glyphs already in styles) wherever both sides are one number type, and stops offering the per-type ones (`builtin.add`…, `builtin.int.add`…) for new code; stored programs keep theirs. Today src/lang/infer.ts holes() skips `builtin.arith.*` (one line, near "The generic arithmetic isn't offered yet"); flipping it to skip the per-type arithmetic instead is the core change, then the editor's palette labels and tests. Lane L does showType's constraint and derive.ts | coordinator 2026-10-24 07:09, NUMBERS.md "One `+`" step 2 | P1 | M | |
 
 ## C: Compiler and targets
 
@@ -111,6 +110,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E49 | The palette offers the one generic + − · −x < (typed arithmetic too); units and backwards solving read it | #350 |
 | L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
 | L49 | Blocks text: a match as an if condition shows its arms; a branch's steps sit after then/else | #342 |
 | E48 | Steps done for their effects start at the left edge, so a big main (Numbers & physics) opens with its first steps in view; was Inbox I2 (QA3 L4) | #300 |
