@@ -168,6 +168,18 @@ export const OUTCOME = typedef("std.outcome", "Outcome", ["a"], [
   ["refused", [["reason", () => tref(STRING)]]],
 ]);
 export const OUTCOME_V = { done: "std.outcome.done", refused: "std.outcome.refused" } as const;
+// Maps and sets (L65, DATA-STRUCTURES.md): ordinary data with one spelling,
+// the entries sorted by key in compare's order with no key twice, the
+// items sorted with none twice. So equal, show, compare and hashing need
+// no special case, and a fold goes in key order. The prelude builds them
+// and keeps the spelling; how they are stored is a representation (L76).
+export const MAP = typedef("std.map", "Map", ["k", "v"], [
+  ["map of", [["entries", ([k, v]) => tref(LIST, tref(PAIR, tref(k), tref(v)))]]],
+]);
+export const SET_TYPE = typedef("std.set", "Set", ["k"], [
+  ["set of", [["items", ([k]) => tref(LIST, tref(k))]]],
+]);
+export const MAP_V = "std.map.map of", SET_V = "std.set.set of";
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
@@ -451,7 +463,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

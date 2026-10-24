@@ -161,6 +161,36 @@ cases' order is written into the program as `$order`) and forward in the
 relational interpreter (`run.ts compareValues`). Map keys and set elements
 will use the same order (L65).
 
+### Maps and sets
+
+A map and a set are ordinary data with one spelling (DATA-STRUCTURES.md):
+
+```
+Map k v = map of(entries: List (Pair k v))   -- sorted by key, no key twice
+Set k   = set of(items: List k)              -- sorted, no item twice
+```
+
+The order is `compare`'s, so any plain data can be a key. The prelude
+builds them and keeps the spelling: `empty map`, `as map(pairs)` (a later
+pair wins), `put`, `remove key`, `value at` (a `Choice`: no answer when the
+key isn't there), `has key`, `merge maps`, `keys of`, `values of`,
+`entries of`, `map size`; `empty set`, `as set`, `add item`, `remove item`,
+`has item`, `set union`, `set intersection`, `set difference`, `items of`,
+`set size`. Counting words is a fold that does
+
+```
+put(counts, word, first(value at(counts, word), else 0) + 1)
+```
+
+Because each map has one spelling, two maps with the same entries are
+`equal` however they were built, `show` prints them in key order, and a
+fold over `entries of` goes in key order on every target (JavaScript,
+Python and Go leave that order to the representation). The operations walk
+the list, so each is linear; a balanced tree that stores them in log n
+(L76) is a representation, chosen without the program changing. Haskell's
+`Data.Map`, OCaml's `Map` and Rust's `BTreeMap` are the prior art.
+(`test/maps.test.ts`.)
+
 ## Case analysis: `match`
 
 ```

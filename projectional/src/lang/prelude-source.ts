@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, INT_OPS, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TRUE, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -185,6 +185,138 @@ export function buildPrelude(): Module {
       ]) },
     ])));
 
+  // Maps and sets (L65, DATA-STRUCTURES.md): the entries sorted by key in
+  // compare's order with no key twice, the items sorted with none twice,
+  // so each has one spelling. Every operation keeps it. Each walks the
+  // list, so each is linear until the balanced tree (L76) stores them;
+  // ordered maps with folds in key order are Haskell's Data.Map, OCaml's
+  // Map and Rust's BTreeMap.
+  const byOrder = (a: Id, b: Id, before: () => Id, same: () => Id, after: () => Id) => k.match(k.call(COMPARE, a, b), [
+    { variant: ORDER_V.before, names: [], body: before },
+    { variant: ORDER_V.same, names: [], body: same },
+    { variant: ORDER_V.after, names: [], body: after },
+  ]);
+  const entry = (e: Id, f: (key: Id, value: Id) => Id, names = ["key", "value"]) => k.match(e, [{ variant: PAIR_V, names, body: ([a, b]) => f(a, b) }]);
+  const entriesOf = (m: Id, f: (es: Id) => Id) => k.match(m, [{ variant: MAP_V, names: ["entries"], body: ([es]) => f(es) }]);
+  const itemsOf = (s: Id, f: (xs: Id) => Id, name = "items") => k.match(s, [{ variant: SET_V, names: [name], body: ([xs]) => f(xs) }]);
+  const P = (a: Id, b: Id) => k.call(PAIR_V, a, b);
+  // A walk down a sorted list to the place of `key`: what to give at the
+  // end, where the item is the key, and where it is past it.
+  const walk = (name: string, params: string[], at: (keyOf: (item: Id, f: (itemKey: Id) => Id) => Id) => (args: Id[], self: Id) => { end: Id; here: (item: Id, rest: Id) => Id; past: (item: Id, rest: Id) => Id; before: (item: Id, rest: Id) => Id }, keyOf: (item: Id, f: (itemKey: Id) => Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["list", ...params], (xs, ...args) => {
+      const c = at(keyOf)(args, d);
+      return k.match(xs, [
+        { variant: NIL, names: [], body: () => c.end },
+        { variant: CONS, names: ["item", "rest"], body: ([item, rest]) => keyOf(item, (ik) => byOrder(args[0], ik, () => c.before(item, rest), () => c.here(item, rest), () => c.past(item, rest))) },
+      ]);
+    }));
+    return d;
+  };
+  const pairKey = (item: Id, f: (ik: Id) => Id) => entry(item, (ik) => f(ik), ["item key", "item value"]);
+  const itself = (item: Id, f: (ik: Id) => Id) => f(item);
+  const putEntry = walk("put entry", ["key", "value"], () => ([key, value], self) => ({
+    end: k.call(CONS, P(key, value), k.x(NIL)),
+    before: (item, rest) => k.call(CONS, P(key, value), k.call(CONS, item, rest)),
+    here: (_, rest) => k.call(CONS, P(key, value), rest),
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, key, value)),
+  }), pairKey);
+  const removeEntry = walk("remove entry", ["key"], () => ([key], self) => ({
+    end: k.x(NIL),
+    before: (item, rest) => k.call(CONS, item, rest),
+    here: (_, rest) => rest,
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, key)),
+  }), pairKey);
+  const lookupEntry = walk("lookup entry", ["key"], () => ([key], self) => ({
+    end: k.call(S.fail),
+    before: () => k.call(S.fail),
+    here: (item) => entry(item, (_, v) => v),
+    past: (_, rest) => k.call(self, rest, key),
+  }), pairKey);
+  const addItem_ = walk("add to items", ["item"], () => ([x], self) => ({
+    end: k.call(CONS, x, k.x(NIL)),
+    before: (item, rest) => k.call(CONS, x, k.call(CONS, item, rest)),
+    here: (item, rest) => k.call(CONS, item, rest),
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, x)),
+  }), itself);
+  const removeItem_ = walk("remove from items", ["item"], () => ([x], self) => ({
+    end: k.x(NIL),
+    before: (item, rest) => k.call(CONS, item, rest),
+    here: (_, rest) => rest,
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, x)),
+  }), itself);
+  const hasItem_ = walk("items have", ["item"], () => ([x], self) => ({
+    end: k.x(FALSE),
+    before: () => k.x(FALSE),
+    here: () => k.x(TRUE),
+    past: (_, rest) => k.call(self, rest, x),
+  }), itself);
+  const hasEntry = walk("entries have", ["key"], () => ([key], self) => ({
+    end: k.x(FALSE),
+    before: () => k.x(FALSE),
+    here: () => k.x(TRUE),
+    past: (_, rest) => k.call(self, rest, key),
+  }), pairKey);
+
+  const def = (name: string, params: string[], body: (...ps: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const emptyMap = k.def("empty map");
+  k.define(emptyMap, k.call(MAP_V, k.x(NIL)));
+  const emptySet = k.def("empty set");
+  k.define(emptySet, k.call(SET_V, k.x(NIL)));
+  const put = def("put", ["map", "key", "value"], (m, key, v) => entriesOf(m, (es) => k.call(MAP_V, k.call(putEntry, es, key, v))));
+  const remove = def("remove key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(MAP_V, k.call(removeEntry, es, key))));
+  const lookup = def("value at", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(lookupEntry, es, key)));
+  const hasKey = def("has key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(hasEntry, es, key)));
+  // Folded from the end of the list, so an earlier pair is put last: the
+  // pairs reversed first, so a later pair wins, as puts in a row would.
+  const pairsAsEntries = def("pairs as entries", ["pairs"], (ps) => k.fold(k.call(reverse, ps), [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["pair", "rest"], results: [null, "entries"], body: ([pr], [, es]) => entry(pr, (key, v) => k.call(putEntry, es!, key, v)) },
+  ]));
+  const asMap = def("as map", ["pairs"], (ps) => k.call(MAP_V, k.call(pairsAsEntries, ps)));
+  const entries = def("entries of", ["map"], (m) => entriesOf(m, (es) => es));
+  const keys = def("keys of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (key) => key)))));
+  const values = def("values of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (_, v) => v)))));
+  const mergeMaps = def("merge maps", ["first", "second"], (a, b) => entriesOf(a, (ea) => entriesOf(b, (eb) => k.call(MAP_V, k.fold(eb, [
+    { variant: NIL, names: [], body: () => ea },
+    { variant: CONS, names: ["entry", "rest"], results: [null, "merged"], body: ([e], [, merged]) => entry(e, (key, v) => k.call(putEntry, merged!, key, v)) },
+  ])))));
+  const mapSize = def("map size", ["map"], (m) => entriesOf(m, (es) => k.call(length, es)));
+
+  const asSet = def("as set", ["items"], (xs) => k.call(SET_V, k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "items"], body: ([x], [, r]) => k.call(addItem_, r!, x) },
+  ])));
+  const addItem = def("add item", ["set", "item"], (st, x) => itemsOf(st, (xs) => k.call(SET_V, k.call(addItem_, xs, x))));
+  const removeItem = def("remove item", ["set", "item"], (st, x) => itemsOf(st, (xs) => k.call(SET_V, k.call(removeItem_, xs, x))));
+  const has = def("has item", ["set", "item"], (st, x) => itemsOf(st, (xs) => k.call(hasItem_, xs, x)));
+  const items = def("items of", ["set"], (st) => itemsOf(st, (xs) => xs));
+  const setSize = def("set size", ["set"], (st) => itemsOf(st, (xs) => k.call(length, xs)));
+  // The three set operations: one walk down both sorted lists at once,
+  // keeping what each wants from the smaller head, the shape of merge
+  // sorted.
+  const both = (name: string, keepLeft: boolean, keepBoth: boolean, keepRight: boolean) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["xs", "ys"], (xs, ys) => k.match(xs, [
+      { variant: NIL, names: [], body: () => (keepRight ? ys : k.x(NIL)) },
+      { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+        { variant: NIL, names: [], body: () => (keepLeft ? xs : k.x(NIL)) },
+        { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => byOrder(x, y,
+          () => { const r = k.call(d, xr, ys); return keepLeft ? k.call(CONS, x, r) : r; },
+          () => { const r = k.call(d, xr, yr); return keepBoth ? k.call(CONS, x, r) : r; },
+          () => { const r = k.call(d, xs, yr); return keepRight ? k.call(CONS, y, r) : r; }) },
+      ]) },
+    ])));
+    return d;
+  };
+  const unionItems = both("union of items", true, true, true);
+  const interItems = both("intersection of items", false, true, false);
+  const diffItems = both("difference of items", true, false, false);
+  const setOp = (name: string, f: Id) => def(name, ["a", "b"], (a, b) => itemsOf(a, (xs) => itemsOf(b, (ys) => k.call(SET_V, k.call(f, xs, ys)), "items₂")));
+  const union = setOp("set union", unionItems);
+  const intersection = setOp("set intersection", interItems);
+  const difference = setOp("set difference", diffItems);
+
   // Errors as data (L67): `attempt` runs an action and keeps its answer or
   // its Abort as an Outcome, the way `optional` keeps a Choice; `value or
   // abort` is the Abort again, the way `value of` is the Choice. Rust's
@@ -199,7 +331,8 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort, attempt, valueOrAbort];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
@@ -227,6 +360,28 @@ export function buildPrelude(): Module {
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
     [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
     [valueOrAbort]: "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
+    [emptyMap]: "The map with no entries.",
+    [asMap]: "The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).",
+    [put]: "The map with key holding value, in place of what it held.",
+    [lookup]: "What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.",
+    [remove]: "The map without key.",
+    [hasKey]: "Whether the map holds key.",
+    [mergeMaps]: "The entries of both maps; where both hold a key, the second's value wins.",
+    [keys]: "The keys, in order.",
+    [values]: "The values, in the order of their keys.",
+    [entries]: "The entries as pair(key, value), in key order.",
+    [mapSize]: "How many keys the map holds.",
+    [emptySet]: "The set with no items.",
+    [asSet]: "The set of a list's items: in compare's order, each once.",
+    [addItem]: "The set with item in it.",
+    [removeItem]: "The set without item.",
+    [has]: "Whether the set has item.",
+    [union]: "The items in either set.",
+    [intersection]: "The items in both sets.",
+    [difference]: "The items of the first set that aren't in the second.",
+    [items]: "The items, in order.",
+    [setSize]: "How many items the set has.",
+    ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     [asC]: "The Number x as a complex number, x + 0i.",
@@ -245,9 +400,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Number-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers].map(at));
 }

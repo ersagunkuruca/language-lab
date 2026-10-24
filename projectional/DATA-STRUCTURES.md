@@ -40,14 +40,17 @@ Prelude, offered:
 
 | | maps | sets |
 |---|---|---|
-| build | `as map(pairs)` (a later pair wins), `put(m, k, v)`, `remove(m, k)` | `as set(items)`, `add item(s, x)`, `remove item(s, x)` |
-| ask | `lookup(m, k)`: a Choice, no answer when the key is absent; `has key(m, k)` | `has(s, x)` |
-| combine | `merge maps(a, b)` (b wins) | `union`, `intersection`, `difference` |
-| read out | `keys`, `values`, `entries`, `size` | `items`, `size` |
+| build | `empty map`, `as map(pairs)` (a later pair wins), `put(m, k, v)`, `remove key(m, k)` | `empty set`, `as set(items)`, `add item(s, x)`, `remove item(s, x)` |
+| ask | `value at(m, k)`: a Choice, no answer when the key is absent; `has key(m, k)` | `has item(s, x)` |
+| combine | `merge maps(a, b)` (b wins) | `set union`, `set intersection`, `set difference` |
+| read out | `keys of`, `values of`, `entries of`, `map size` | `items of`, `set size` |
 
-`lookup` is a Choice because absence is computed (LANGUAGE.md: no null);
-`first(lookup(m, k), else 0)` is a lookup with a default, and `optional`
-stores one. Counting words is `put(m, w, first(lookup(m, w), else 0) + 1)`
+The names avoid the plain words (`size`, `lookup`, `difference`) that
+example programs already use for their own definitions.
+
+`value at` is a Choice because absence is computed (LANGUAGE.md: no null);
+`first(value at(m, k), else 0)` is a lookup with a default, and `optional`
+stores one. Counting words is `put(m, w, first(value at(m, w), else 0) + 1)`
 in a fold.
 
 All of these are folds and structural recursions, so the termination check
@@ -55,7 +58,7 @@ accepts them and their types have no Diverge. Each is linear in the size of
 the map until step 2: fine for the programs in examples/, and the meaning
 the faster versions are checked against.
 
-**Running backwards.** `lookup(m, k) = v` run backwards over `k` is "which
+**Running backwards.** `value at(m, k) = v` run backwards over `k` is "which
 keys hold v": the relational interpreter walks the entries, as it does for
 any list, so it comes for free from the meaning.
 
@@ -70,7 +73,7 @@ in Haskell's `containers`, with Hirai and Yamamoto's 2011 parameters), written
 in the language itself as a prelude type, with:
 
 - `meaning`: the tree's entries in order, which is the step 1 value;
-- jobs: `put`, `lookup`, `remove`, `has key` in log n, `union` and friends
+- jobs: `put`, `value at`, `remove key`, `has key` in log n, `union` and friends
   by split and join (Blelloch, Ferizovic and Sun, 2016), folds in order in
   n;
 - `canonical: false`. A tree's shape depends on the order of insertion, so
