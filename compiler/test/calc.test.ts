@@ -4,7 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { session, ways } from "../gaps/calc.ts";
+import { deep, session, ways } from "../gaps/calc.ts";
+import { $rec } from "../src/runtime.js";
 
 const w = await ways();
 
@@ -32,4 +33,15 @@ test("calc: random sessions agree three ways", () => {
     assert.deepEqual(w.compiled(input), want);
     assert.deepEqual(w.ideal(input), want);
   }
+});
+
+test("calc: parentheses 100,000 deep, and an error 5,000 deep, on the default stack (C21)", () => {
+  // JavaScript's stack holds about 1,500 of them; past 1,000 calls the
+  // parser's heap copies run instead.
+  assert.deepEqual(w.compiled(deep(100_000)), { out: ["1"], err: [], code: 0 });
+  const bad = "(".repeat(5000) + "1 +" + ")".repeat(5000);
+  const input = [deep(5000), bad, "7 / 0", "1 + 1"].join("\n");
+  assert.deepEqual(w.compiled(input), w.evaluator(input));
+  // The aborts deep inside put the count back.
+  assert.equal($rec.d, 0);
 });

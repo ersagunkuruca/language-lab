@@ -118,6 +118,40 @@ export const $spend = () => (fuel.length ? --fuel[fuel.length - 1].left >= 0 : (
 export function $spendOrThrow() { if (!$spend()) throw OUT; }
 export const $outOfFuel = (e) => e === OUT;
 
+// ---- deep recursion (compile.ts, C21) ------------------------------------
+// How many calls of definitions with a heap copy are on JavaScript's stack
+// (run.ts keeps it, so a page's update starts where it was even when one
+// is cut off). A catch that goes on puts back what it was at its try.
+export { depth as $rec } from '../../projectional/src/lang/run.ts';
+import { depth as $rec } from '../../projectional/src/lang/run.ts';
+// Runs a heap copy: each yield names a heap copy to call and its arguments,
+// whose answer (or exception) goes back in where it yielded. The calls
+// waiting are an array here, not frames on the stack.
+export function $drive(g) {
+  const stack = [g];
+  let v, thrown = false;
+  for (;;) {
+    const top = stack[stack.length - 1];
+    let r;
+    try { r = thrown ? top.throw(v) : top.next(v); } catch (e) {
+      stack.pop();
+      if (!stack.length) throw e;
+      v = e;
+      thrown = true;
+      continue;
+    }
+    thrown = false;
+    if (r.done) {
+      stack.pop();
+      v = r.value;
+      if (!stack.length) return v;
+    } else {
+      stack.push(r.value[0](...r.value[1]));
+      v = undefined;
+    }
+  }
+}
+
 // The frame is active exactly while the body is running, as in the
 // evaluator, so a lazily consumed body still counts its own calls.
 export function* $fuel(n, body, streams) {
@@ -125,7 +159,8 @@ export function* $fuel(n, body, streams) {
   if (!streams) {
     fuel.push(frame);
     let v;
-    try { v = body(); } catch (e) { if (e === OUT) return; throw e; } finally { fuel.pop(); }
+    const d = $rec.d;
+    try { v = body(); } catch (e) { if (e === OUT) { $rec.d = d; return; } throw e; } finally { fuel.pop(); }
     yield v;
     return;
   }
@@ -133,7 +168,8 @@ export function* $fuel(n, body, streams) {
   for (;;) {
     fuel.push(frame);
     let r;
-    try { r = it.next(); } catch (e) { if (e === OUT) return; throw e; } finally { fuel.pop(); }
+    const d = $rec.d;
+    try { r = it.next(); } catch (e) { if (e === OUT) { $rec.d = d; return; } throw e; } finally { fuel.pop(); }
     if (r.done) return;
     yield r.value;
   }
@@ -247,9 +283,11 @@ export function $perform(effect, op, args) {
 export function $handle(effect, answers, escapes, body) {
   const h = { effect, answers }, at = handlers.length;
   handlers.push(h);
+  const d = $rec.d;
   try { return body(); } catch (e) {
     if (!(e instanceof Escape) || e.handler !== h) throw e;
     handlers.length = at;
+    $rec.d = d;
     return escapes[e.op](...e.args);
   } finally { handlers.length = at; }
 }
@@ -258,10 +296,11 @@ export function $handle(effect, answers, escapes, body) {
 // try/catch (GAPS.md G18): `$enter` before the body, `$caught` in the catch
 // (rethrows what isn't this handler's, and cuts the stack back so the case
 // runs outside it), `$leave` in the finally.
-export function $enter(effect) { const h = { effect, answers: {}, at: handlers.length }; handlers.push(h); return h; }
+export function $enter(effect) { const h = { effect, answers: {}, at: handlers.length, d: $rec.d }; handlers.push(h); return h; }
 export function $caught(e, h) {
   if (!(e instanceof Escape) || e.handler !== h) throw e;
   handlers.length = h.at;
+  $rec.d = h.d;
   return e;
 }
 export function $leave(h) { handlers.length = h.at; }
@@ -273,12 +312,13 @@ export function* $handleS(effect, answers, escapes, body) {
   const h = { effect, answers };
   const it = body()[Symbol.iterator]();
   for (;;) {
-    const at = handlers.length;
+    const at = handlers.length, d = $rec.d;
     handlers.push(h);
     let r;
     try { r = it.next(); } catch (e) {
       handlers.length = at;
       if (!(e instanceof Escape) || e.handler !== h) throw e;
+      $rec.d = d;
       yield* escapes[e.op](...e.args);
       return;
     } finally { handlers.length = at; }
