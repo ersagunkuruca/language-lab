@@ -56,7 +56,7 @@ const commands = (name: string): Record<string, string[]> => {
   execFileSync("node", ["wasi.ts", name, join(dir, `${name}.wasm`)], { ...quiet, cwd: join(root, "compiler") });
   return {
     native: [`./${name}`],
-    "compiled JS": ["node", "--stack-size=65500", `${name}.mjs`],
+    "compiled JS": ["node", `${name}.mjs`],
     "WASM (node:wasi)": ["node", "--no-warnings", "wasi.mjs", `${name}.wasm`],
   };
 };

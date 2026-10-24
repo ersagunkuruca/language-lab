@@ -122,7 +122,8 @@ recursion:
   is heap continuations for the recursive definitions that aren't tail
   calls, the same way the evaluator does it, and only for those (the
   checker knows which they are). **Cheap fix done**: a program
-  `lab compile` writes runs `main` in a worker thread with a 1 GB stack.
+  `lab compile` writes runs `main` in a worker thread with a 1 GB stack
+  (dropped in C24, once the full fix made it only a start-up cost).
   **Full fix done** (C21): a definition in a cycle of calls also gets a
   generator copy whose calls in the cycle yield, and past 1,000 such calls
   the call runs it under `$drive` (runtime.js), so pages and modules take
@@ -506,7 +507,8 @@ module takes 210 to 310 ms and `node chapters.ideal.js` 75 to 180 ms, noisy
 because of the file system. Start-up alone (the usage message) is 77 ms
 against 27 ms. That's G8 again: the runtime's imports, and now also the
 worker thread with a 1 GB stack that `lab compile` starts, which every
-compiled program pays.
+compiled program pays. (Gone since C24: with C21's heap continuations main runs on
+Node's own stack, and queens' start-up went from 214 ms to 76.)
 
 In a profile of the compiled code on the 1000-chapter book, `times in` is
 17% of the time, the garbage collector 17%, the `split` builtin 12% and
