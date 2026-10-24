@@ -190,6 +190,14 @@ async function phone() {
     if (!(await p.locator(shows).isVisible())) errors.push(`${where}: the ${pane} pane shows nothing`);
     if (await p.locator(".p-graph").isVisible() !== (pane === "graph")) errors.push(`${where}: the graph shows with the ${pane} pane`);
   }
+  // The map would cover a phone's graph: it starts put away, and Map
+  // brings it out.
+  if (await p.locator(".p-graph .minimap").isVisible()) errors.push(`${where}: the map covers the graph on a phone`);
+  else if (await p.locator(".p-graph .map-toggle").isVisible()) {
+    await p.locator(".p-graph .map-toggle").tap();
+    if (!(await p.locator(".p-graph .minimap").isVisible())) errors.push(`${where}: Map didn't show the map`);
+    await p.locator(".p-graph .map-toggle").tap();
+  }
   // A touch held still is a right-click: the graph's menu opens.
   const bb = (await p.locator(".p-graph svg.canvas").boundingBox())!;
   const cdp = await p.context().newCDPSession(p);

@@ -126,8 +126,12 @@ const views = new Map<string, View>();
 const READABLE = 0.6;
 // The height the Fit / zoom pill takes at the bottom of the window.
 const PILL = 36;
-// The map's size.
+// The map's size: at most this, and at most a fifth of the window's width.
 const MAP = { w: 168, h: 112 };
+// Whether the map is shown, as last chosen with its button. Unchosen, it
+// is shown where there's room for it: not on a phone's graph.
+const MAP_KEY = "lab:map";
+const mapChoice = (): boolean | null => { try { const v = localStorage.getItem(MAP_KEY); return v === null ? null : v === "on"; } catch { return null; } };
 
 export function infiniteCanvas(key: string, cls: string): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
@@ -240,7 +244,18 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     zoom.title = pc === 100 ? "Actual size" : `Zoomed to ${pc}%: click for actual size (100%)`;
   };
   shown(view?.z ?? 1);
+  zoom.className += " zoom";
   tools.append(btn("Fit", "Show the whole graph, centered", () => fit()), zoom);
+  // The map sits on the graph, so it can be put away and brought back.
+  const mapBtn = btn("Map", "", () => {
+    on = !wanted();
+    try { localStorage.setItem(MAP_KEY, on ? "on" : "off"); } catch { /* no storage */ }
+    mapped();
+  });
+  let on: boolean | null = mapChoice();
+  const wanted = () => { const r = root.getBoundingClientRect(); return on ?? (r.width >= 600 && r.height >= 400); };
+  mapBtn.className += " map-toggle";
+  tools.append(mapBtn);
 
   // The map: the whole picture small, with the window on it as a frame,
   // shown only while part of the picture is out of the window, so it is
@@ -264,13 +279,22 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
   let whole: DOMRect | null = null, k = 1, at = { x: 0, y: 0 };
   mapped = () => {
     const r = root.getBoundingClientRect();
+    mapBtn.hidden = true;
     if (!view || !whole || !whole.width || !r.width) { map.setAttribute("display", "none"); return; }
     const sx = -view.x / view.z, sy = -view.y / view.z, sw = r.width / view.z, sh = (r.height - PILL) / view.z;
     const out = whole.x < sx - 1 || whole.y < sy - 1 || whole.x + whole.width > sx + sw + 1 || whole.y + whole.height > sy + sh + 1;
-    map.setAttribute("display", out ? "inline" : "none");
-    if (!out) return;
-    k = Math.min((MAP.w - 8) / whole.width, (MAP.h - 8) / whole.height);
-    at = { x: (MAP.w - whole.width * k) / 2 - whole.x * k, y: (MAP.h - whole.height * k) / 2 - whole.y * k };
+    // The button is there while there's more than the window shows.
+    mapBtn.hidden = !out;
+    const showing = out && wanted();
+    mapBtn.className = `btn map-toggle${showing ? " on" : ""}`;
+    mapBtn.title = showing ? "Hide the map of the whole graph" : "Show a map of the whole graph";
+    map.setAttribute("display", showing ? "inline" : "none");
+    if (!showing) return;
+    const w = Math.min(MAP.w, Math.round(r.width / 5)), h = Math.round((w * MAP.h) / MAP.w);
+    map.setAttribute("width", String(w));
+    map.setAttribute("height", String(h));
+    k = Math.min((w - 8) / whole.width, (h - 8) / whole.height);
+    at = { x: (w - whole.width * k) / 2 - whole.x * k, y: (h - whole.height * k) / 2 - whole.y * k };
     if (stale) copy();
     shrink.setAttribute("transform", `translate(${at.x},${at.y}) scale(${k})`);
     Object.entries({ x: at.x + sx * k, y: at.y + sy * k, width: sw * k, height: sh * k }).forEach(([a, v]) => frame.setAttribute(a, String(v)));
