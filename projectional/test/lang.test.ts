@@ -74,7 +74,9 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  assert.ok(tried > 1000 * sweepShare, `tried ${tried}`);
+  // All of it is over 1000. A slice is an eighth of the targets but not
+  // of the fillings (some arms offer more), so it is held to 100.
+  assert.ok(tried > (sweepShare === 1 ? 1000 : 100), `tried ${tried}`);
 });
 
 test("the palette leaves out what would be a type error, and the checker catches it if forced", () => {
@@ -274,4 +276,19 @@ test("an if's condition and branches read as what they are: a match condition sh
     const e = load(name), ei = infer(e.code, e.pres.names);
     for (const d of e.own.defs) assert.doesNotMatch(renderBlocks(e.code, e.pres, ei, d), /‹(match|fold|solve|lambda)›/, `${name}: ${e.pres.names[d]}`);
   }
+});
+
+test("a step done for what it does reads as the step; an unnamed value something reads is called for its type", () => {
+  const ledger = load("ledger"), li = infer(ledger.code, ledger.pres.names);
+  const usage = renderBlocks(ledger.code, ledger.pres, li, ledger.named("usage")).split("\n").map((l) => l.trim());
+  // Print the usage, then give back 2: the print is a step, not a value.
+  assert.ok(usage.includes(`‹print error›("usage: ledger file.csv")`), usage.join("\n"));
+  for (const d of ["usage", "run", "failed"]) assert.doesNotMatch(renderBlocks(ledger.code, ledger.pres, li, ledger.named(d)), /‹\?/, d);
+  // Countdown's numbers have no name but the search reads them: whatever
+  // they are called, the binding and the use are the same name.
+  const cd = load("countdown");
+  const main = renderBlocks(cd.code, cd.pres, infer(cd.code, cd.pres.names), cd.named("main"));
+  assert.doesNotMatch(main, /‹\?/);
+  const [, name] = main.match(/^ {2}(\S+) = \[1, 3, 7, 10, 25, 50\]$/m) ?? [];
+  assert.ok(name && main.includes(`solutions(${name}, 765)`), main);
 });

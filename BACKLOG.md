@@ -61,7 +61,6 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P1 | M | proposal |
 | L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
 | L51 | Tensors: NUMBERS.md stage 6, as the general algebra after lists as arrays (C30) | LANGUAGE-REVIEW-2026-10-24 Plan 17, NUMBERS.md stage 6 | P1 | L | after L38, and C30 for arrays |
-| L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
 | L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
@@ -112,6 +111,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
 | L49 | Blocks text: a match as an if condition shows its arms; a branch's steps sit after then/else | #342 |
 | E48 | Steps done for their effects start at the left edge, so a big main (Numbers & physics) opens with its first steps in view; was Inbox I2 (QA3 L4) | #300 |
 | E47 | Pages keep running across program switches; dice says Rolls: 1; ray marcher constructor is rgb (no colour₁). L4 lopsided first view is the layout's shape: Inbox I2 | #298 |
