@@ -93,7 +93,7 @@ import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
-import { pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
+import { PAGE_BASE, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -1862,6 +1862,7 @@ const page = {
   // A page with sound: stop everything it plays, whatever its own buttons say.
   hushBtn: h("button", { class: "btn", type: "button", "data-act": "page-hush", title: "Stop every sound this page is playing" }, "Stop sound") as HTMLButtonElement,
 };
+const sized = new WeakSet<Document>();
 const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
   h("div", { class: "acts" },
     page.hushBtn,
@@ -1889,8 +1890,14 @@ function pageSection(info: T.Info | null): HTMLElement | null {
   queueMicrotask(() => {
     const d = page.frame.contentDocument;
     if (!d || !page.root || d.body.contains(page.root)) return;
-    d.body.style.margin = "0";
+    // The look a saved page has (page.ts PAGE_BASE), and a frame as tall
+    // as the page, up to most of the window; past that it scrolls.
+    if (!d.getElementById("lab-base")) d.head.append(Object.assign(d.createElement("style"), { id: "lab-base", textContent: PAGE_BASE }));
     d.body.replaceChildren(page.root);
+    if (!sized.has(d)) {
+      sized.add(d);
+      new ResizeObserver(() => { page.frame.style.height = `${Math.min(Math.max(Math.ceil(d.body.getBoundingClientRect().bottom) + 2, 120), Math.round(innerHeight * 0.7))}px`; }).observe(d.body);
+    }
   });
   return pageBox;
 }
