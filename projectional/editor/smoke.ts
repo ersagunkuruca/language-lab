@@ -509,6 +509,13 @@ async function pagePreview() {
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: after another program and back the page says ${await status()}`);
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after another program and back: the page says ${await status()}`);
+  // What's typed in a page's field is said too (BACKLOG E76).
+  await p.locator('[data-set="program"]', { hasText: "Page: unit converter" }).click();
+  const field = f.locator("input").first();
+  await field.fill("100");
+  await field.press("Enter");
+  if (!(await p.locator(".status[role=status]").innerText()).includes("Typed 100 in")) errors.push(`${where}: the status bar says nothing of typing 100 in the converter`);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
   // Saved where its name says it's a page, or the browser shows it as text.
   const saved = join(mkdtempSync(join(tmpdir(), "smoke-")), file.suggestedFilename());
