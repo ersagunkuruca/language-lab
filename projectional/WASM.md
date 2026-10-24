@@ -16,7 +16,9 @@ Ryū's shortest digits (its tables, about 10 KB, are in a module only
 when it shows a Number). So a module asks its host for nothing but the
 world. Countdown's search runs as fast as the hand-written ideal
 JavaScript. With no JavaScript host, sin and the other Math functions
-are refused with a reason; a port of fdlibm would close that. An Int grows
+are V8's fdlibm compiled to WebAssembly (W3e: `compiler/math/gen.ts`
+writes `src/wasm-math.ts`), the same bits as Node's Math; a JavaScript
+host still gives its own Math, so a page matches the browser. An Int grows
 past 64 bits as the evaluator's does (W5b, W5c), and folds go through
 nested data (W1d). Left: from W1 one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:

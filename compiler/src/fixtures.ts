@@ -411,3 +411,17 @@ export function roses() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), rose, grove, defs: { total, depth, mirror, scaled, groveTotal, ways, firstOver } };
 }
+
+// Each Math function once, for WebAssembly with no JavaScript host.
+export function maths() {
+  const k = new Lang();
+  const one = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["x"], (x) => k.call(op, x))); return d; };
+  const two = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["x", "y"], (x, y) => k.call(op, x, y))); return d; };
+  // A WASI command needs a main; this one exits with 0.
+  const main = k.def("main");
+  k.define(main, k.fn([], () => k.lit(0)));
+  const defs = { main, sin: one("sin of", B.sin), cos: one("cos of", B.cos), tan: one("tan of", B.tan), exp: one("exp of", B.exp), log: one("log of", B.log), pow: two("pow of", B.pow), atan2: two("atan2 of", B.atan2) };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
+}

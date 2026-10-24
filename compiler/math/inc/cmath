@@ -1,0 +1,13 @@
+#pragma once
+// A stand-in for the system header, for gen.ts: fabs, floor and sqrt are WebAssembly instructions.
+#include <cstdint>
+inline double fabs(double x) { return __builtin_fabs(x); }
+inline double floor(double x) { return __builtin_floor(x); }
+inline double sqrt(double x) { return __builtin_sqrt(x); }
+// musl's scalbn (MIT): x * 2^n, by at most three multiplications.
+inline double scalbn(double x, int n) {
+  double y = x;
+  if (n > 1023) { y *= 0x1p1023; n -= 1023; if (n > 1023) { y *= 0x1p1023; n -= 1023; if (n > 1023) n = 1023; } }
+  else if (n < -1022) { y *= 0x1p-1022 * 0x1p53; n += 1022 - 53; if (n < -1022) { y *= 0x1p-1022 * 0x1p53; n += 1022 - 53; if (n < -1022) n = -1022; } }
+  uint64_t u = (uint64_t)(0x3ff + n) << 52; double s; __builtin_memcpy(&s, &u, 8); return y * s;
+}

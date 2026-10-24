@@ -30,6 +30,7 @@
 // printed alongside it for reading.
 
 import type { Runtime, World } from "../../projectional/src/lang/run.ts";
+import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
@@ -61,9 +62,10 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const wasi = !!opts.wasi;
   const { funcs } = lowered;
   // Host functions used, in a fixed order: they take the first indices.
-  const hosts = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
-  // A WASI host has no Math: sin and the rest aren't written in WebAssembly yet.
-  if (wasi && hosts.length) throw new Error(`a WASI command can't use ${hosts.join(", ")} yet: only a JavaScript host has them`);
+  // A WASI host has no Math: there sin and the rest are V8's fdlibm,
+  // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
+  const maths = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
+  const hosts = wasi ? [] : maths, math = wasi && maths.length > 0;
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
   // The runtime functions used, with the ones they use.
   // WASI's functions it uses (wasi_fd_write …) are imports, and the
@@ -82,6 +84,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     kids(e).forEach(rtCalls);
   };
   funcs.forEach((f) => rtCalls(f.body));
+  if (math) maths.forEach((op) => need(`math.${op}`));
   // The world's operations used, imported from "world" in the order first
   // used, then "reason" (the last failure's) when one can fail.
   const worldOps: Extract<SExpr, { k: "world" }>[] = [];
@@ -200,7 +203,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       const h = helpers.findIndex((x) => x.name === n);
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
-    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : 0),
+    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : 0),
+    memory: (n: string) => (n === "math" ? 1 : 0),
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
@@ -267,7 +271,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // gives status 2.
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
-  const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0);
+  const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0), mspG = pow5G + (ryu ? 1 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -334,6 +338,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []),
     ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : []),
     ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
+    // The math functions' stack pointer, from the end of their page down.
+    ...(math ? [[0x7f, 0x01, 0x41, ...s(65536), 0x0b]] : []),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -445,6 +451,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "op": {
         const args = e.args.flatMap(code1);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
+        if (math && HOST[e.op]) return [...args, 0x10, ...u(rtIndex(`math.${e.op}`))];
         if (e.op === "mod") return [...args, 0x10, ...u(rtIndex("number.mod"))];
         return [...args, ...[INSTR[e.op]![0]].flat()];
       }
@@ -473,11 +480,14 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
-    ...(wasi ? section(5, vec([[0x00, 0x01]])) : []),
-    ...(fuel || aborts || ryu ? section(6, globalSec) : []), ...section(7, exportSec),
+    // WASI's memory, then the math functions' (wasm-math.ts).
+    ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
+    ...(fuel || aborts || ryu || math ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
+    // fdlibm's tables, in the math functions' memory.
+    ...(math ? section(11, vec([[0x02, 0x01, 0x41, ...s(MATH_DATA_AT), 0x0b, ...vec(MATH_DATA.map((b) => [b]))]])) : []),
   ]);
 
   // ---- text, for reading
@@ -567,7 +577,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
       case "zero": return `${d}${zeroText(e.t)}`;
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
-      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
+      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
@@ -587,9 +597,11 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
     ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
     ...(wasi ? [`  (memory (export "memory") 1)`] : []),
+    ...(math ? ["  (memory $math 1)"] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
+    ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (memory $math) (i32.const ${MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
