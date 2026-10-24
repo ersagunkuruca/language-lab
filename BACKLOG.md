@@ -274,7 +274,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L73 | `smaller`, `larger`, `at most`, `more than`, `at least` over the one generic `<`, so they work on Int and fractions as + − · < do (found by QA-2026-10-24b); the Number-only versions stay published and hidden so saved programs open, and the examples moved onto the new ones | #375 |
+| L73 | `smaller`, `larger`, `at most`, `more than`, `at least` over the one generic `<`, so they work on Int and fractions as + − · < do (found by QA-2026-10-24b); the Number-only versions stay published and hidden so saved programs open, and the examples moved onto the new ones | #377 |
 | L40 | Complex numbers: `std.complex`, `complex(re, im)` of two Numbers; the one `+ − · −x` resolve to prelude definitions (· the complex product) from the same table as Rational's, no `<`; `as complex`, `i`, `complex conjugate`, `modulus`, `angle of`, `polar`, `divide complex`, `complex exp`, `show complex`; a `vec2f` on the GPU and two f64s in WebAssembly with no back-end change; derivatives through it right | #374 |
 | L53 | The world-under-Choice rule comes from the types: a search's function (`all`, `count`, `first`, `optional`) has a row of its own that can't take `Console`, `Files` or `Update`, contained in the call's row (Koka subeffecting, influence), so a printer taken out of a list or passed down is refused and code beside a search may still print; pins carry it (`noWorld`, `subs`); `worldUnderChoice` gone | #369 |
 | L52 | A page's event handler that fetches is taken back and run again when the reply lands (cells.ts `attempt`, `undo`, `later`; STM's retry, influence), so what it did before the fetch happens once | #363 |
