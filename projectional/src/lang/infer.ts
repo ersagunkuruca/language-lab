@@ -22,7 +22,7 @@ import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, WORLD, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
+  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -53,6 +53,10 @@ export interface Info {
 export interface Options { pins?: Pins; hidden?: Iterable<Id> }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
+const ARITH_WHAT = {
+  arith: "number types (Number, Int, or one case whose fields are all Numbers)",
+  ordered: "Numbers or Ints",
+};
 const str: Type = { t: "con", id: STRING, args: [] };
 const bool: Type = { t: "con", id: BOOL, args: [] };
 
@@ -77,6 +81,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     } catch (e) {
       if (e instanceof EffectError) err(id, `${what || "this"} performs ${effName(e)}, which nothing here handles`);
       else if (e instanceof NumbersError) err(id, `${what ? what + ": " : ""}${show(got)} isn't a record of Numbers (Number, or one case whose fields are all Numbers)`);
+      else if (e instanceof ArithError) err(id, `${what ? what + ": " : ""}${show(got)} isn't ${ARITH_WHAT[e.kind]}`);
       else if (e instanceof PlainError) err(id, `${what ? what + ": " : ""}${show(got)} has functions in it, and only plain data can be used here`);
       else if (e instanceof TypeError) err(id, `${what ? what + ": " : ""}expected ${show(want)}, got ${show(got)}`);
       else throw e;
@@ -303,6 +308,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
       let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)), numbers: [...fv.vars].filter((v) => s.numbers.has(v)) };
+      const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered");
+      if (arith.length) sc.arith = arith;
+      if (ordered.length) sc.ordered = ordered;
       // A pinned definition must keep its pin, and its callers see the pin
       // whatever the body says, so a change that breaks it is an error here
       // and nowhere else.
@@ -425,6 +433,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         } catch (e) {
           if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
           else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Numbers (Number, or one case whose fields are all Numbers)`);
+          else if (e instanceof ArithError) err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
           else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
           else if (e instanceof TypeError) {
             // Find the argument that's wrong, for a useful message.
@@ -1036,7 +1045,9 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (h.group.includes(d)) consider(d, sc.type, true);
     else consider(d, instantiate(sc, info.subst), affected.has(d));
   }
-  for (const [id, sig] of Object.entries(SIGS)) consider(id, sig(info.subst));
+  // The generic arithmetic isn't offered yet: the views and the palette's
+  // choice between it and each type's own come next (NUMBERS.md, "One `+`").
+  for (const [id, sig] of Object.entries(SIGS)) if (!id.startsWith("builtin.arith.")) consider(id, sig(info.subst));
   for (const [part, def] of info.owner) {
     if (code.nodes[part].kind === "variant") consider(part, constructorType(code, info.subst, def, part));
     // A field of a one-case type reads it from a value: fst(p), pages(c).

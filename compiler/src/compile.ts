@@ -25,6 +25,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
+import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -72,6 +73,9 @@ const GOT = "const $got = [];";
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  // The generic + resolved to each type's own operation first
+  // (projectional/src/lang/arith.ts): nothing here sees a generic one.
+  ({ code, info, names } = resolveArithmetic(code, info, names));
   // derivative(f) and gradient(f) of a function written right there become
   // the code of its derivative (derive.ts), checked again, as in the scalar
   // profile (scalar.ts): plain arithmetic, no $derivative at run time, and

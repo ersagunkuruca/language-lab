@@ -21,6 +21,7 @@ import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
+import { resolveArithmetic } from "./arith.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
@@ -201,6 +202,9 @@ export class Aborted extends Error {
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
+  // The generic + resolved to each type's own (arith.ts); a program
+  // without one is unchanged.
+  ({ code, info } = resolveArithmetic(code, info));
   // Our own copy of the node table: `derivative` writes new code into it.
   code = { nodes: { ...code.nodes }, defs: code.defs };
   const defs = new Map<Id, Value>();

@@ -63,6 +63,8 @@ import { close, fromList, META, sameNumber, equal as valueEqual, showValue, type
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
+import { resolveArithmetic, usesGenericArithmetic } from "./arith.ts";
+import { infer } from "./infer.ts";
 import { CELL_OPS, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, intLit, neg as intNeg, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
@@ -460,6 +462,9 @@ function plansFor(code: Code, names?: Names): ReturnType<typeof analyzer> {
 }
 
 export function interpreter(code: Code, opts: Options = {}) {
+  // The generic + resolved to each type's own first (arith.ts), as the
+  // evaluator does; a program from the evaluator is resolved already.
+  if (usesGenericArithmetic(code)) code = resolveArithmetic(code, infer(code)).code;
   const nodes = code.nodes;
   const owner = ownerOfTypeParts(code);
   const spend = opts.spend ?? (() => true);
