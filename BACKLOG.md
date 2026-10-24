@@ -34,7 +34,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E63 | Bug: the Blocks pane doesn't show E58-E61 steps 1-2 (`p.x`, a let of fields, `first(queens(8), else nil)`, nested patterns, otherwise): they went into `renderBlocks` (src/lang/render.ts), but the pane draws through `renderTyped` (editor/typed.ts); share one walk or port them, and check the pane's own text | QA-2026-10-24b H1 | P1 | M | ▶ the pane draws them (#376, a port through src/lang/patterns.ts); next, one printer for the pane and the text |
-| E64 | Bug: one-pane layouts (phone, tablet) open the palette and the New definition form in the Run pane, out of sight; tapping a □ or + New definition should show them | QA-2026-10-24b H2 | P1 | S | |
 | E65 | Blocks pane: no right-click menu, and clicking an operator (`+`) doesn't select its call, so Change the function is graph-only there | QA-2026-10-24b M5 | P2 | S | |
 | E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
 | E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
@@ -148,6 +147,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E64 | One pane at a time, a hole's palette and the New definition form switch to the side pane | #380 |
 | E60 | An action handed to a handler is drawn by name, first(queens(8), else nil); its graph frame is titled action (was L36) | #368 |
 | E59 | A value of a one-case type taken apart is drawn as a let of its fields, found(expr, value) = results(front), in the text and the graph (was L35) | #367 |
 | E58 | A field read is drawn as p.x in the text and .x in the graph (was L34) | #366 |

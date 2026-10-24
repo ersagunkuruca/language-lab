@@ -277,6 +277,9 @@ const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.
 // A touch screen is told about taps, long presses and pinches, not hover,
 // right-click and shift.
 const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+// One pane at a time (page.html's media query): the side pane is out of
+// sight unless it's the one picked.
+const onePane = () => typeof matchMedia === "function" && matchMedia("(max-width: 900px), (max-height: 500px)").matches;
 const OPENING = TOUCH
   ? "A typed program. Tap anything to select it and see its type; tap a hole for a palette of only what fits there; long-press in the graph for a menu."
   : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
@@ -2151,6 +2154,8 @@ function select(id: Id | null) {
   if (ui.selected === id) return;
   if (ui.selected !== id) { ui.mode = null; ui.query = ""; }
   ui.selected = id;
+  // One pane at a time: a hole's palette is in the side pane, so show it.
+  if (id && doc.code.nodes[id]?.kind === "hole" && onePane()) ui.pane = "side";
   render();
 }
 
@@ -2459,7 +2464,7 @@ document.addEventListener("click", (e) => {
     if (a === "goto-node") return select(act.dataset.target!);
     // The form is in the side panel's first tab: show it, whichever tab
     // (the Guide, on a first visit) was open.
-    if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; if (ui.mode) ui.panel = "node"; render(); document.getElementById("f-def-name")?.focus(); return; }
+    if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; if (ui.mode) { ui.panel = "node"; if (onePane()) ui.pane = "side"; } render(); document.getElementById("f-def-name")?.focus(); return; }
     if (a === "new-program") return newProgram();
     if (a === "copy") return copySelected();
     if (a === "t-values") return showValues();

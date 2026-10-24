@@ -213,6 +213,12 @@ async function phone() {
     if (!(await p.locator(shows).isVisible())) errors.push(`${where}: the ${pane} pane shows nothing`);
     if (await p.locator(".p-graph").isVisible() !== (pane === "graph")) errors.push(`${where}: the graph shows with the ${pane} pane`);
   }
+  // The New definition form is in the side pane: asking for it shows it.
+  await p.locator('.panes [data-pane="nav"]').tap();
+  await p.locator('[data-act="new-def"]').first().tap();
+  if (!(await p.locator("#f-def-name").isVisible())) errors.push(`${where}: + New definition opened its form out of sight`);
+  await p.locator('[data-act="new-def"]').first().evaluate((b) => (b as HTMLElement).click()).catch(() => {});
+  await p.locator('.panes [data-pane="graph"]').tap();
   // The map would cover a phone's graph: it starts put away, and Map
   // brings it out.
   if (await p.locator(".p-graph .minimap").isVisible()) errors.push(`${where}: the map covers the graph on a phone`);
