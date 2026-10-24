@@ -1675,8 +1675,11 @@ function graphMenu(info: T.Info): HTMLElement | null {
   const { kind, id } = m.target;
   const picked = graph?.picked() ?? [];
   const inGraph = !m.blocks;
+  // What an item does, or why it can't, is written under it: a tooltip
+  // never shows on a greyed item, nor on a phone.
   const item = (label: string, act: string, hint = "", disabled?: string) =>
-    h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!disabled, title: disabled ? `Can't: ${disabled}` : hint }, label);
+    h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!disabled },
+      label, disabled || hint ? h("span", { class: `ctx-why${disabled ? " cant" : ""}` }, disabled ? `Can't: ${disabled}` : hint) : null);
   const rows: (HTMLElement | null)[] = [];
   const names = typedPres().names;
   const head = (t: string) => h("div", { class: "ctx-head" }, t);
@@ -1684,7 +1687,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(fillPalette(id, info, names, "m-query"));
   } else if (kind === "space") {
     const r = T.addStep(doc.code, doc.names.short, info, ui.def);
-    rows.push(item("Add a value here…", "add", "A new dot holding a hole, here: fill it, then wire the dot in", r.ok ? undefined : r.reason));
+    rows.push(item("Add a value here…", "add", "A new named value (a hole to fill) here: fill it, then wire it in", r.ok ? undefined : r.reason));
   } else if (kind === "binder" && id) {
     const on = (doc.layout.named ?? []).includes(id);
     rows.push(head(names[id] ?? "a value"));
@@ -1700,21 +1703,21 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
-    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new dot holding a hole, worked out just before this: in one arm of a match, only there", r.ok ? undefined : r.reason)); }
+    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill) worked out just before this, so this can use it. Inside a match, only in that arm", r.ok ? undefined : r.reason)); }
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
-    if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear"));
+    if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
-    if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "For the picked nodes" : "Forget where it was put"));
-    if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Picked nodes move and tidy together (shift-click does the same)"));
+    if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: the layout places them again" : "Forget where it was dragged: the layout places it again"));
+    if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
     rows.push(item("Tidy everything", "tidy-all", "Space out every node: no overlaps, nodes off wires, inputs left of what they feed"));
-    rows.push(item("Reset the layout", "reset-all", "Every node back to the automatic place"));
-    rows.push(item("Fit", "fit"));
+    rows.push(item("Reset the layout", "reset-all", "Forget where every node was dragged"));
+    rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
   const left = Math.max(8, Math.min(m.x + 10, window.innerWidth - 330)), top = Math.max(8, Math.min(m.y + 10, window.innerHeight - (kind === "hole" ? 420 : 280)));
   return h("div", { class: "ctx-menu", role: "menu", style: `left:${left}px;top:${top}px` }, ...rows);
