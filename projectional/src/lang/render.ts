@@ -14,6 +14,7 @@ import type { Notation, Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
+import { matchRows, patternText, sharedOtherwise } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
 import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showIn, showType } from "./types.ts";
@@ -74,53 +75,6 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   // runs; the tree keeps the lambda.
   const byName = (id: Id): Id => { const n = node(id); return n.kind === "lambda" && n.params.length === 0 ? n.body : id; };
   const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? `${nota.words[i]} ` : "");
-
-  // Nested patterns, read back from nested matches. A field the body
-  // matches on, and reads nowhere else, becomes that match's cases in its
-  // place; an inner otherwise is _ there. The rows are the leaves.
-  type Pat = { v: Id } | { con: Id; args: Pat[] } | { any: true };
-  const deeper = (binds: Id[], body: Id): Id | undefined => {
-    const m = node(body);
-    if (m.kind !== "match" || isBool(m) || isHandler(m)) return undefined;
-    const s = node(m.scrutinee);
-    if (s.kind !== "ref" || !binds.includes(s.target)) return undefined;
-    const elsewhere = [...m.arms, ...(m.otherwise ? [m.otherwise] : [])].some((x) => subtree(code, x).some((y) => (node(y) as { target?: Id }).target === s.target));
-    return elsewhere ? undefined : s.target;
-  };
-  const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : p);
-  type Row = { pat: Pat; binds: Id[]; body: Id };
-  const hasAny = (p: Pat): boolean => "any" in p || ("con" in p && p.args.some(hasAny));
-  // What an expression says, without its ids: two copies of ‹bad line›(n)
-  // are the same.
-  const shape = (root: Id) => {
-    const ids = subtree(code, root), at = new Map(ids.map((x, i) => [x, i]));
-    return JSON.stringify(ids.map((x) => JSON.stringify(node(x), (k, v) => (k === "id" ? undefined : typeof v === "string" && at.has(v) ? `#${at.get(v)}` : v))));
-  };
-  const rows = (pat: Pat, binds: Id[], body: Id): Row[] => {
-    const b = deeper(binds, body);
-    if (!b) return [{ pat, binds, body }];
-    const m = node(body) as NodeOf<"match">;
-    const rest = binds.filter((x) => x !== b);
-    return [
-      ...m.arms.flatMap((a) => {
-        const arm = node(a) as NodeOf<"arm">;
-        return rows(put(pat, b, { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body);
-      }),
-      ...(m.otherwise ? rows(put(pat, b, { any: true }), rest, m.otherwise) : []),
-    ];
-  };
-  // A list of two or more, or one that ends, reads as a list: [a, b],
-  // [a, b, ..rest].
-  const patText = (p: Pat): string => {
-    if ("v" in p) return nameOf(p.v);
-    if ("any" in p) return "_";
-    const items: Pat[] = [];
-    let end: Pat = p;
-    while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
-    const ends = "con" in end && end.con === NIL;
-    if (items.length && (ends || items.length > 1)) return `[${[...items.map(patText), ...(ends ? [] : [`..${patText(end)}`])].join(", ")}]`;
-    return p.args.length ? `${base(p.con)}(${p.args.map(patText).join(", ")})` : base(p.con);
-  };
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -256,30 +210,15 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     if (n.kind === "match" || n.kind === "fold") {
       const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];
       // A case whose body only takes one of its fields apart further reads
-      // as one row per inner case: nested patterns (PATTERNS.md).
+      // as one row per inner case: nested patterns (patterns.ts).
       if (n.kind === "match" && !isHandler(n)) {
-        const all: Row[] = [];
-        for (const a of n.arms) {
-          const arm = node(a) as NodeOf<"arm">;
-          for (const row of rows({ con: arm.variant, args: arm.binds.map((b) => ({ v: b })) }, arm.binds, arm.body)) all.push(row);
-        }
-        // Rows that give the same value, reading none of their own names,
-        // read once as the otherwise: the line too short, the line too long.
-        // Only when no row left has a _ that would catch them first.
-        const plainRow = (r: Row) => !subtree(code, r.body).some((y) => r.binds.includes((node(y) as { target?: Id }).target!));
-        const groups = new Map<string, Row[]>();
-        for (const r of all) if (plainRow(r)) groups.set(shape(r.body), [...(groups.get(shape(r.body)) ?? []), r]);
-        const own = n.otherwise ? shape(n.otherwise) : undefined;
-        const same = own !== undefined ? groups.get(own) : [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length)[0];
-        const kept = same ? all.filter((r) => !same.includes(r)) : all;
-        const fold = !!same && !kept.some((r) => hasAny(r.pat));
-        const shared = fold ? n.otherwise ?? same![0].body : n.otherwise;
-        for (const row of fold ? kept : all) {
+        const { rows, otherwise } = sharedOtherwise(code, matchRows(code, info, n), n.otherwise ?? undefined);
+        for (const row of rows) {
           enter(row.binds);
-          out.push(...hang(row.body, ind + "  ", `${patText(row.pat)} → `));
+          out.push(...hang(row.body, ind + "  ", `${patternText(row.pat, nameOf, base)} → `));
           leave(row.binds);
         }
-        if (shared) out.push(...hang(shared, ind + "  ", "otherwise → "));
+        if (otherwise) out.push(...hang(otherwise, ind + "  ", "otherwise → "));
         return out;
       }
       for (const a of n.arms) {
