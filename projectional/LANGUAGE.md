@@ -999,8 +999,12 @@ numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate`, the
 comparisons `at most`, `more than`, `at least` (drawn `≤ > ≥`, over `<`, so
 they run backwards and differentiate with no rules of their own) and Text's
 `not after`, `comes after`, `not before` (over `comes before`), `smaller` and
-`larger` (min and max, which a shader compiles to `min` and `max`), and the
-helpers `reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
+`larger` (min and max, which a shader compiles to `min` and `max`), the
+fractions `fraction`, `as fraction`, `divide fractions`, `show fraction` and
+`fraction as number` (a Rational is exact and in lowest terms, and the one
+`+ − · <` works on it through the published, unoffered `add fractions`,
+`subtract fractions`, `multiply fractions`, `negate fraction` and `fraction
+less than`), and the helpers `reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
 any function value run backwards, through `applied(f, x) = f(x)`, since
 `solve` names a definition. `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
 f's space, the way back being f run backwards (`examples/conjugate`: an

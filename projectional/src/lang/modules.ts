@@ -94,8 +94,10 @@ export function renameKeys<T>(table: Record<string, T>, rename: Map<Id, Id>): Re
 }
 
 // Make a module of published definitions: their nodes, names and pins.
-export function makeModule(title: string, code: Code, names: Names, exports: Id[], pins: Pins, comments: Comments = {}): Module {
-  const defs = defGroups(code, exports).flat().filter(isPublished);
+// `helpers`: published with the module though nothing exported uses them
+// (what a generic operation resolves to, arith.ts), and not offered.
+export function makeModule(title: string, code: Code, names: Names, exports: Id[], pins: Pins, comments: Comments = {}, helpers: Id[] = []): Module {
+  const defs = defGroups(code, [...exports, ...helpers]).flat().filter(isPublished);
   const ids = new Set(defs.flatMap((d) => nodeIds(code, d)));
   const pick = <T>(t: Record<Id, T>) => Object.fromEntries(Object.entries(t).filter(([k]) => ids.has(k)));
   return {

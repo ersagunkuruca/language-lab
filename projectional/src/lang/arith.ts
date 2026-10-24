@@ -28,7 +28,8 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import type { Info } from "./infer.ts";
 import { ARITH, INT_OPS, S } from "./std.ts";
-import { INT, NUMBER, type Row, type Scheme, type Type } from "./types.ts";
+import { INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
+import { PRELUDE } from "./library.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -40,6 +41,22 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
   [ARITH.mul]: { number: B.mul, int: INT_OPS.mul, arity: 2 },
   [ARITH.neg]: { number: B.neg, int: INT_OPS.neg, arity: 1 },
   [ARITH.less]: { number: S.less, int: INT_OPS.less, arity: 2 },
+};
+
+// And at Rational: the prelude's definitions, found by name when first
+// needed (their ids are their content's hashes).
+const RATIONAL_AT: Record<Id, string> = {
+  [ARITH.add]: "add fractions", [ARITH.sub]: "subtract fractions", [ARITH.mul]: "multiply fractions",
+  [ARITH.neg]: "negate fraction", [ARITH.less]: "fraction less than",
+};
+let rationalOps: Record<Id, Id> | null = null;
+const atRational = (op: Id): Id => {
+  rationalOps ??= Object.fromEntries(Object.entries(RATIONAL_AT).map(([g, name]) => {
+    const d = Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
+    if (!d) throw new Error(`the prelude has no ${name}`);
+    return [g, d];
+  }));
+  return rationalOps[op];
 };
 
 export const usesGenericArithmetic = (code: Code) =>
@@ -173,8 +190,9 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const operation = (id: Id, t: Type, parent: Id | null) => {
     const at = AT[(nodes[id] as NodeOf<"ref">).target];
     const x = t.t === "fn" ? t.params[0] : num;
-    if (x.t === "con" && (x.id === NUMBER || x.id === INT)) {
-      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : at.number };
+    if (x.t === "con" && (x.id === NUMBER || x.id === INT || x.id === RATIONAL_TYPE)) {
+      const target = (nodes[id] as NodeOf<"ref">).target;
+      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : x.id === RATIONAL_TYPE ? atRational(target) : at.number };
       typeOf.set(id, t);
       return;
     }

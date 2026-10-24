@@ -117,6 +117,7 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.quotient]: { js: "partial", scalar: INT },
   [INT_OPS.remainder]: { js: "partial", scalar: INT },
   [INT_OPS.power]: { js: "partial", scalar: INT },
+  [INT_OPS.lowestTerms]: { js: "impl", scalar: INT },
   [INT_OPS.show]: { js: op(([a]) => `String(${a})`), scalar: INT },
   [INT_OPS.read]: { js: "partial", scalar: INT },
   [INT_OPS.toNumber]: { js: op(([a]) => `Number(${a})`), scalar: INT },
