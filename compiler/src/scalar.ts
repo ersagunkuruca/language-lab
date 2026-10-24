@@ -49,7 +49,7 @@ import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT, ABORT_OP, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -538,7 +538,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (opts.data && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
           if (t && isFn(t)) return named(n.target, id, t);
-          return { k: "call", fn: func(n.target), args: [], tail };
+          // A constant of a type with variables (empty map) is made at the
+          // type it has here.
+          const types: At = new Map(), ct = info.typeOf.get(n.target) && info.subst.zonk(info.typeOf.get(n.target)!);
+          if (ct) bindVars(ct, zonk(id), types);
+          return { k: "call", fn: func(n.target, types), args: [], tail };
         }
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
@@ -573,6 +577,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Numbers or Bools");
           const [x, y] = args();
           return same(x, y, t, f, tail);
+        }
+        if (opts.data && target === COMPARE) {
+          // compare (run.ts compareValues) as −1, 0 or 1 from the type's
+          // own order, then the Order case.
+          const t = stype(zonk(n.args[0])), o = stype(zonk(id));
+          if (!t || !o || !isData(o)) throw new Refused(`compares ${whyNot(zonk(n.args[0]))}`);
+          const [x, y] = args(), [lx, ly] = [f.locals.push(t) - 1, f.locals.push(t) - 1], c = f.locals.push("f64") - 1, at: SExpr = { k: "local", i: c };
+          const order = (v: Id): SExpr => build(v, zonk(id), []);
+          const num = (v: number): SExpr => ({ k: "num", v });
+          return { k: "let", i: lx, value: x, body: { k: "let", i: ly, value: y, body: { k: "let", i: c, value: compared({ k: "local", i: lx }, { k: "local", i: ly }, t, f, false), body: { k: "if", cond: { k: "op", op: "less", args: [at, num(0)] }, then: order(ORDER_V.before), else: { k: "if", cond: { k: "op", op: "equal", args: [at, num(0)] }, then: order(ORDER_V.same), else: order(ORDER_V.after), t: o }, t: o } } } };
         }
         if (opts.data && target === INT_OPS.lowestTerms) {
           // int.ts's lowest terms from the runtime's gcd and exact division:
@@ -724,6 +738,53 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
     const near = op("or", op("equal", a, b), op("and", op("not", op("and", whole(a), whole(b))), op("or", op("less", diff, tol), op("equal", diff, tol))));
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
+  }
+  // compare's order (run.ts compareValues) as −1, 0 or 1: numbers by
+  // value, Bools and cases in the order their type declares them, text by
+  // code point, fractions by value, then fields left to right.
+  function compared(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
+    const num = (v: number): SExpr => ({ k: "num", v });
+    const pick = (eq: SExpr, lt: SExpr): SExpr => ({ k: "if", cond: eq, then: num(0), else: { k: "if", cond: lt, then: num(-1), else: num(1), t: "f64" }, t: "f64" });
+    if (isFn(t)) throw new Refused("compares functions");
+    if (t === "f64") return pick(same(x, y, t, f, false), { k: "op", op: "less", args: [x, y] });
+    if (t === "i32") return pick({ k: "op", op: "beq", args: [x, y] }, { k: "op", op: "not", args: [x] });
+    if (t === "int") return pick({ k: "rt", fn: "int.equal", args: [x, y] }, { k: "rt", fn: "int.less", args: [x, y] });
+    if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
+    return { k: "call", fn: ordering(t), args: [x, y], tail };
+  }
+  // compared on a record or data type, a function of its own (recursive
+  // for a type that contains itself): different cases by their places,
+  // the same case field by field, the last a tail call, so two long lists
+  // compare in constant stack.
+  function ordering(t: RType | DType): number {
+    const key = `<${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: t.def, name: `${t.name}.compare`, params: [t, t], result: "f64", locals: [t, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const a: SExpr = { k: "local", i: 0 }, b: SExpr = { k: "local", i: 1 };
+    const num = (v: number): SExpr => ({ k: "num", v });
+    const all = (pairs: [SExpr, SExpr, LType][]): SExpr => {
+      if (!pairs.length) return num(0);
+      const [x, y, ft] = pairs[pairs.length - 1];
+      return pairs.slice(0, -1).reduceRight<SExpr>((rest, [x2, y2, t2]) => {
+        const c = g.locals.push("f64") - 1, at: SExpr = { k: "local", i: c };
+        return { k: "let", i: c, value: compared(x2, y2, t2, g, false), body: { k: "if", cond: { k: "op", op: "equal", args: [at, num(0)] }, then: rest, else: at, t: "f64" } };
+      }, compared(x, y, ft, g, true));
+    };
+    if (isRecord(t) ? t.variant === RATIO : t.cases.length === 1 && t.cases[0].variant === RATIO) {
+      // A fraction by value: top · other bottom against other top · bottom.
+      const part = (r: SExpr, j: number): SExpr => (isRecord(t) ? { k: "get", rec: r, t, i: j } : { k: "field", rec: r, t, c: 0, i: j });
+      const times = (u: SExpr, v: SExpr): SExpr => ({ k: "rt", fn: "int.mul", args: [u, v] });
+      const [l, r] = [g.locals.push("int") - 1, g.locals.push("int") - 1];
+      g.body = { k: "let", i: l, value: times(part(a, 0), part(b, 1)), body: { k: "let", i: r, value: times(part(b, 0), part(a, 1)), body: compared({ k: "local", i: l }, { k: "local", i: r }, "int", g, true) } };
+    } else if (isRecord(t)) g.body = all(t.fields.map((x, j) => [{ k: "get", rec: a, t, i: j }, { k: "get", rec: b, t, i: j }, x.t]));
+    else {
+      const arms = t.cases.map((c, ci) => all(c.fields.map((x, j) => [{ k: "field", rec: a, t, c: ci, i: j }, { k: "field", rec: b, t, c: ci, i: j }, x.t])));
+      // Different cases: a's place against b's.
+      const apart: SExpr = { k: "case", scrut: a, s: 0, t, result: "f64", arms: t.cases.map((_, i) => ({ k: "case", scrut: b, s: 1, t, result: "f64", arms: t.cases.map((_, j) => num(i < j ? -1 : i > j ? 1 : 0)) })) };
+      g.body = { k: "if", cond: { k: "op", op: "beq", args: [{ k: "tag", rec: a, t }, { k: "tag", rec: b, t }] }, then: { k: "case", scrut: a, s: 0, t, arms, result: "f64" }, else: apart, t: "f64" };
+    }
+    return index.get(key)!;
   }
   // Structural equality on a record or data type, a function of its own
   // (recursive for a type that contains itself): the same case, then each

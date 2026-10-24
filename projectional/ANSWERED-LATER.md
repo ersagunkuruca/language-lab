@@ -176,7 +176,7 @@ In the order the BACKLOG wants them:
    - Compiled targets refuse a `later` operation with a clear reason.
    - The text shows the rest as `yield(item) with rest`, the way a fold's
      folded values read, and the declaration as `returns Unit, later`. The
-     editor's own drawing of it is E75.
+     editor's own drawing of it is E80.
 2. **C40**, compiled JavaScript by generators. Then pages can use it.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
