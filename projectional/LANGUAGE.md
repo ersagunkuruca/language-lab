@@ -1022,7 +1022,14 @@ fractions `fraction`, `as fraction`, `divide fractions`, `show fraction` and
 `fraction as number` (a Rational is exact and in lowest terms, and the one
 `+ − · <` works on it through the published, unoffered `add fractions`,
 `subtract fractions`, `multiply fractions`, `negate fraction` and `fraction
-less than`), and the helpers `reverse onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
+less than`), the complex numbers `as complex`, `i`, `complex conjugate`,
+`modulus`, `angle of`, `polar`, `divide complex`, `complex exp` and `show
+complex` (a Complex is `complex(re, im)`, a record of two Numbers, so the
+parts builtins and the vectors module work on it and a shader holds it as a
+`vec2f`; the one `+ − · −x` works on it through the unoffered `add
+complex`, `subtract complex`, `multiply complex` and `negate complex`, ·
+being the complex product, and it has no `<`), and the helpers `reverse
+onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
 any function value run backwards, through `applied(f, x) = f(x)`, since
 `solve` names a definition. `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
 f's space, the way back being f run backwards (`examples/conjugate`: an

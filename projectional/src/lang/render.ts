@@ -88,7 +88,15 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     return elsewhere ? undefined : s.target;
   };
   const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : p);
-  const rows = (pat: Pat, binds: Id[], body: Id): { pat: Pat; binds: Id[]; body: Id }[] => {
+  type Row = { pat: Pat; binds: Id[]; body: Id };
+  const hasAny = (p: Pat): boolean => "any" in p || ("con" in p && p.args.some(hasAny));
+  // What an expression says, without its ids: two copies of ‹bad line›(n)
+  // are the same.
+  const shape = (root: Id) => {
+    const ids = subtree(code, root), at = new Map(ids.map((x, i) => [x, i]));
+    return JSON.stringify(ids.map((x) => JSON.stringify(node(x), (k, v) => (k === "id" ? undefined : typeof v === "string" && at.has(v) ? `#${at.get(v)}` : v))));
+  };
+  const rows = (pat: Pat, binds: Id[], body: Id): Row[] => {
     const b = deeper(binds, body);
     if (!b) return [{ pat, binds, body }];
     const m = node(body) as NodeOf<"match">;
@@ -250,15 +258,28 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       // A case whose body only takes one of its fields apart further reads
       // as one row per inner case: nested patterns (PATTERNS.md).
       if (n.kind === "match" && !isHandler(n)) {
+        const all: Row[] = [];
         for (const a of n.arms) {
           const arm = node(a) as NodeOf<"arm">;
-          for (const row of rows({ con: arm.variant, args: arm.binds.map((b) => ({ v: b })) }, arm.binds, arm.body)) {
-            enter(row.binds);
-            out.push(...hang(row.body, ind + "  ", `${patText(row.pat)} → `));
-            leave(row.binds);
-          }
+          for (const row of rows({ con: arm.variant, args: arm.binds.map((b) => ({ v: b })) }, arm.binds, arm.body)) all.push(row);
         }
-        if (n.otherwise) out.push(...hang(n.otherwise, ind + "  ", "otherwise → "));
+        // Rows that give the same value, reading none of their own names,
+        // read once as the otherwise: the line too short, the line too long.
+        // Only when no row left has a _ that would catch them first.
+        const plainRow = (r: Row) => !subtree(code, r.body).some((y) => r.binds.includes((node(y) as { target?: Id }).target!));
+        const groups = new Map<string, Row[]>();
+        for (const r of all) if (plainRow(r)) groups.set(shape(r.body), [...(groups.get(shape(r.body)) ?? []), r]);
+        const own = n.otherwise ? shape(n.otherwise) : undefined;
+        const same = own !== undefined ? groups.get(own) : [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length)[0];
+        const kept = same ? all.filter((r) => !same.includes(r)) : all;
+        const fold = !!same && !kept.some((r) => hasAny(r.pat));
+        const shared = fold ? n.otherwise ?? same![0].body : n.otherwise;
+        for (const row of fold ? kept : all) {
+          enter(row.binds);
+          out.push(...hang(row.body, ind + "  ", `${patText(row.pat)} → `));
+          leave(row.binds);
+        }
+        if (shared) out.push(...hang(shared, ind + "  ", "otherwise → "));
         return out;
       }
       for (const a of n.arms) {

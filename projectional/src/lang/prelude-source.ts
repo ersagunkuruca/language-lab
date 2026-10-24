@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { CONS, INT_OPS, NIL, PAIR_V, RATIO, S, TEXT_OPS, std } from "./std.ts";
+import { COMPLEX_V, CONS, INT_OPS, NIL, PAIR_V, RATIO, S, TEXT_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -103,7 +103,43 @@ export function buildPrelude(): Module {
   const toNum = k.def("fraction as number");
   k.define(toNum, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(B.div, k.call(INT_OPS.toNumber, p), k.call(INT_OPS.toNumber, q)))));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum];
+  // Complex numbers: a record of two Numbers (std.ts), re + im·i. + − ·
+  // and −x at Complex are these (arith.ts), so they aren't offered on
+  // their own; · is (a + bi)(c + di) = (ac − bd) + (ad + bc)i.
+  const cx = (v: Id, f: (re: Id, im: Id) => Id, names = ["re", "im"]) => k.match(v, [{ variant: COMPLEX_V, names, body: ([a, b]) => f(a, b) }]);
+  const n = { add: (a: Id, b: Id) => k.call(B.add, a, b), sub: (a: Id, b: Id) => k.call(B.sub, a, b), mul: (a: Id, b: Id) => k.call(B.mul, a, b), div: (a: Id, b: Id) => k.call(B.div, a, b) };
+  const twoC = (name: string, f: (a: Id, b: Id, c: Id, d: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["z", "w"], (z, w) => cx(z, (a, b) => cx(w, (c, e) => f(a, b, c, e), ["re₂", "im₂"]))));
+    return d;
+  };
+  const C = (re: Id, im: Id) => k.call(COMPLEX_V, re, im);
+  const addC = twoC("add complex", (a, b, c, d) => C(n.add(a, c), n.add(b, d)));
+  const subC = twoC("subtract complex", (a, b, c, d) => C(n.sub(a, c), n.sub(b, d)));
+  const mulC = twoC("multiply complex", (a, b, c, d) => C(n.sub(n.mul(a, c), n.mul(b, d)), n.add(n.mul(a, d), n.mul(b, c))));
+  const negC = k.def("negate complex");
+  k.define(negC, k.fn(["z"], (z) => cx(z, (a, b) => C(k.call(B.neg, a), k.call(B.neg, b)))));
+  const asC = k.def("as complex");
+  k.define(asC, k.fn(["x"], (x) => C(x, k.lit(0))));
+  const unitI = k.def("i");
+  k.define(unitI, C(k.lit(0), k.lit(1)));
+  const conjC = k.def("complex conjugate");
+  k.define(conjC, k.fn(["z"], (z) => cx(z, (a, b) => C(a, k.call(B.neg, b)))));
+  const modulus = k.def("modulus");
+  k.define(modulus, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.sqrt, n.add(n.mul(a, a), n.mul(b, b))))));
+  const angle = k.def("angle of");
+  k.define(angle, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.atan2, b, a))));
+  const polar = k.def("polar");
+  k.define(polar, k.fn(["size", "angle"], (r, t) => C(n.mul(r, k.call(B.cos, t)), n.mul(r, k.call(B.sin, t)))));
+  const divC = twoC("divide complex", (a, b, c, d) => k.let("c² + d²", n.add(n.mul(c, c), n.mul(d, d)), (m) =>
+    k.if(k.call(S.equal, m, k.lit(0)), k.call(S.fail), C(n.div(n.add(n.mul(a, c), n.mul(b, d)), m), n.div(n.sub(n.mul(b, c), n.mul(a, d)), m)))));
+  const expC = k.def("complex exp");
+  k.define(expC, k.fn(["z"], (z) => cx(z, (a, b) => k.let("eᵃ", k.call(B.exp, a), (e) => C(n.mul(e, k.call(B.cos, b)), n.mul(e, k.call(B.sin, b)))))));
+  const showC = k.def("show complex");
+  k.define(showC, k.fn(["z"], (z) => cx(z, (a, b) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
+    k.if(k.call(S.less, b, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, b)), k.lit("i")))))));
+
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC];
   const comments: Record<Id, string> = {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
@@ -128,11 +164,24 @@ export function buildPrelude(): Module {
     [mulF]: "What · is at Rational. Not offered on its own: · is.",
     [negF]: "What −x is at Rational. Not offered on its own: − is.",
     [lessF]: "What < is at Rational. Not offered on its own: < is.",
+    [asC]: "The Number x as a complex number, x + 0i.",
+    [unitI]: "i, the square root of −1: i · i is −1.",
+    [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
+    [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
+    [angle]: "The angle from the positive real line to z, in radians, between −π and π (atan2).",
+    [polar]: "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
+    [divC]: "z ÷ w for complex numbers; no answer when w is 0.",
+    [expC]: "e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.",
+    [showC]: "A complex number as 3 + 4i or 3 − 4i.",
+    [addC]: "What + is at Complex. Not offered on its own: + is.",
+    [subC]: "What − is at Complex. Not offered on its own: − is.",
+    [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
+    [negC]: "What −x is at Complex. Not offered on its own: − is.",
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC].map(at));
 }
