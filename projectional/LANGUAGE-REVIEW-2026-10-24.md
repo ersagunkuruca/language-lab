@@ -594,16 +594,16 @@ arrays, which is why they come last.
 # Plan
 
 Ordered. Each is one PR unless it says otherwise; each goes to BACKLOG.md
-as a proposal (L30 to L48) until Ersagun or the coordinator says to start.
+as a proposal (L32 to L50; L30 and L31 were taken by the pedal, so the two text bugs are L49 and L50) until Ersagun or the coordinator says to start.
 Bugs first, then the views that change what every program looks like, then
 the numbers.
 
 **Bugs**
 
-1. **L30** The blocks text prints a match used as a condition as
+1. **L49** The blocks text prints a match used as a condition as
    `if ‹match›`, and prints a branch's lets and steps before `then`/`else`
    (calc's `sum rest`, `run line`). S.
-2. **L31** An unnamed step done for its effect prints as `‹?q8pk› = …`
+2. **L50** An unnamed step done for its effect prints as `‹?q8pk› = …`
    (ledger's `usage`, `run`, `failed`; countdown's `main`). S.
 
 **Notation (views; no meaning hash changes)**
@@ -663,7 +663,7 @@ the numbers.
 
 **Start with L32 (Int glyphs) today**: it is one table, it changes no
 meaning, and it removes the single most contrived-looking thing in ledger,
-calc, chapters and wc. Then the two text bugs (L30, L31), since bugs come
+calc, chapters and wc. Then the two text bugs (L49, L50), since bugs come
 first and the text is what Ersagun reads. Then **L38, one `+`**, because
 fractions, complex numbers and everything after depend on it, and it
 replaces a special case (two arithmetics, and the vectors module's private
