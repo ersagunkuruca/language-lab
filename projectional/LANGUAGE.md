@@ -412,6 +412,19 @@ of its own, declare an effect for it (`effect Invalid = invalid(line: Int,
 why: Text)`), which also makes the type say *which* error a function can
 raise.
 
+**Answered later** (ANSWERED-LATER.md) is the third shape, for waiting:
+`effect Yield = yield(item: Number) returns Unit, later`. Its case is given
+the rest of the computation as a function, `| yield(item) with rest → …`,
+which it may resume once, now or later (it can be stored, say in a list of
+parked fibers), or drop. The rest has the type `(answer) -[the match's
+effects]-> the match's value`, and resumes under the same match. The
+checker refuses resuming it twice on one path; once it has been passed on,
+a second resume stops the run with that reason. A generator, a page that
+waits for a fetch, and a round-robin scheduler of two fibers are each a few
+lines in the language (`test/later.test.ts`). The evaluator runs it;
+compiled JavaScript does not yet (C40). This is Koka's `ctl` with OCaml 5's
+one-shot continuations.
+
 Errors with reasons are now `Abort` (REVIEW.md §4.3): `read file` aborts
 with "no such file: notes.txt", and `Choice` stays reason-free, for search.
 

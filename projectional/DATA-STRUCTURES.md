@@ -123,7 +123,7 @@ An Editor lane row.
    compiled JS equal to the evaluator. LANGUAGE.md section.
 2. **L76 + C47**: the weight-balanced tree as a representation, and
    library representations chosen automatically.
-3. **E74**: maps and sets drawn as tables.
+3. **E79**: maps and sets drawn as tables.
 4. HAMT and the in-place table, when a program measures the need.
 
 ## Prior art

@@ -354,6 +354,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     return body && (code.nodes[body] as NodeOf<"typedef">).effect ? def! : null;
   };
   const operations = new Map<Fn, Id>();
+  // The rests of computations whose operation is answered later
+  // (ANSWERED-LATER.md): the frames from the perform up to its handler and
+  // the choice points made since the handler began, kept as a function
+  // value that may be called once.
+  interface Rest { top: Frame | null; h: HandleFrame; cps: Choice[]; fuel: Fuel | null; used: boolean; op: Id }
+  const rests = new WeakMap<Fn, Rest>();
+  const restOf = (r: Rest): Fn => {
+    const f = ((...args: Value[]) => run((m) => m.apply(f, args))) as Fn;
+    rests.set(f, r);
+    return f;
+  };
 
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
     const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), { lambda: n.id, get env() { return toMap(env); } });
@@ -403,6 +414,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
     // Call a function value with its arguments, in the current continuation.
     apply(f: Value, args: Value[]): void {
+      const rest = rests.get(f as Fn);
+      if (rest) return this.resumeRest(rest, args[0]);
       const c = closures.get(f as Fn);
       if (c) {
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
@@ -434,8 +447,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (f.t === "seeded") return this.ret(f.gen.next());
       const h = f as HandleFrame;
       const arm = h.arms.get(op)!;
+      const variant = code.nodes[op] as NodeOf<"variant">;
+      // Answered later: the case runs outside the match, as for one that
+      // never returns, and is given the rest to resume once, or drop.
+      if (variant.later && variant.returns) {
+        const rest = restOf({ top: this.k, h, cps: this.cps.splice(h.base), fuel: this.fuel, used: false, op });
+        this.k = h.next;
+        this.fuel = h.fuel;
+        return this.eval(arm.body, bind(h.env, arm.binds, [...args, rest]));
+      }
       const env = bind(h.env, arm.binds, args);
-      if ((code.nodes[op] as NodeOf<"variant">).returns) {
+      if (variant.returns) {
         this.push({ t: "answer", handler: h, next: null });
         return this.eval(arm.body, env);
       }
@@ -443,6 +465,25 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       this.k = h.next;
       this.fuel = h.fuel;
       this.eval(arm.body, env);
+    }
+
+    // Resume a kept rest with the answer: its frames go on top of the
+    // caller's, its handler again at their bottom (deep), its choice points
+    // back on the stack. A rest runs once.
+    resumeRest(r: Rest, answer: Value) {
+      if (r.used) throw new Error(`the rest of ${rt.names?.[r.op] ?? stdNames[r.op] ?? r.op} was resumed a second time: a rest runs once`);
+      r.used = true;
+      const shift = this.cps.length - r.h.base;
+      for (let f = r.top; f; f = f.next) {
+        if (f.t === "handle" || f.t === "handler") f.base += shift;
+        if (f === r.h) break;
+      }
+      r.h.next = this.k;
+      r.h.fuel = this.fuel;
+      this.cps.push(...r.cps);
+      this.k = r.top;
+      this.fuel = r.fuel;
+      this.ret(answer);
     }
 
     // What the program leaves unhandled, the runtime handles: Log goes to

@@ -43,13 +43,14 @@ export class Lang extends Builder {
 
   // An effect: a data type whose cases are operations. Each operation
   // lists its inputs and the type it returns, or null for one that never
-  // returns (it ends the handled computation, like abort).
-  effect(name: string, ops: [string, [string, () => Id][], (() => Id) | null][]) {
+  // returns (it ends the handled computation, like abort). "later" marks
+  // one its handler may answer later, at most once (ANSWERED-LATER.md).
+  effect(name: string, ops: [string, [string, () => Id][], (() => Id) | null, "later"?][]) {
     const def = this.def(name);
     const ids: Record<string, Id> = {};
-    const vs = ops.map(([oname, fs, returns]) => {
+    const vs = ops.map(([oname, fs, returns, later]) => {
       const fids = fs.map(([fname, ty]) => this.named(this.add({ kind: "field", type: ty() }), fname));
-      return (ids[oname] = this.named(this.add({ kind: "variant", fields: fids, ...(returns ? { returns: returns() } : {}) }), oname));
+      return (ids[oname] = this.named(this.add({ kind: "variant", fields: fids, ...(returns ? { returns: returns() } : {}), ...(later ? { later: true as const } : {}) }), oname));
     });
     this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: [], variants: vs, effect: true }) };
     return { def, op: ids };

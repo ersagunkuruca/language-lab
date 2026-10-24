@@ -108,7 +108,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     return body && (code.nodes[body] as NodeOf<"typedef">).effect ? def! : null;
   };
   const handlerOf = (n: NodeOf<"match">) => (n.arms.length ? effectOf((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : null);
-  const perform = (op: Id, args: string[]) => `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`;
+  // An operation answered later needs suspendable copies (C40), not built
+  // yet: such a program runs in the evaluator (ANSWERED-LATER.md).
+  const later = (op: Id) => { if ((code.nodes[op] as NodeOf<"variant">).later) throw new Error(`${names[op] ?? op} is answered later, which compiled JavaScript doesn't run yet (BACKLOG C40); the evaluator runs it`); };
+  const perform = (op: Id, args: string[]) => (later(op), `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`);
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   // Which possibly-divergent definitions spend a step per call (GAPS.md G1,
   // fuel). Only those that can run under a `with fuel`, or under a page's
@@ -1464,6 +1467,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function handleEx(n: NodeOf<"match">): string {
       const arms = n.arms.map((a) => node<"arm">(a));
+      arms.forEach((a) => later(a.variant));
       if (!arms.some((a) => node<"variant">(a.variant).returns)) {
         // Only escapes: a try/catch (GAPS.md G18), no tables or closures.
         const h = temp("h"), e = temp("e");
