@@ -17,8 +17,7 @@ when it shows a Number). So a module asks its host for nothing but the
 world. Countdown's search runs as fast as the hand-written ideal
 JavaScript. With no JavaScript host, sin and the other Math functions
 are refused with a reason; a port of fdlibm would close that. An Int grows
-past 64 bits as the evaluator's does (W5b). Left: W5c (big quotient,
-remainder and power), and
+past 64 bits as the evaluator's does (W5b, W5c). Left:
 from W1 nested folds and one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
@@ -282,8 +281,8 @@ subtract and multiply try the i64 (or i31) way first and take the limbs
 only on overflow or a `$huge`; the limbs are Knuth's classical algorithms
 (TAOCP vol. 2, 4.3.1). The host passes a `$huge` limb by limb
 (`Int.limbs`, `Int.limb`, `Int.huge`, `Int.setLimb`; `toInt` and
-`fromInt` in wasm.ts), not under WASI. Quotient, remainder and power still
-trap past 2⁶³ (W5c, Knuth's algorithm D). The runtime's Int functions are written on i64s and called through
+`fromInt` in wasm.ts), not under WASI. Quotient and remainder past an
+i64 are Knuth's algorithm D (W5c), and power squares on the big multiply. The runtime's Int functions are written on i64s and called through
 wrappers that convert (`int.small`, `int.of`, wasm-rt.ts `runtime`), so
 only add, subtract, multiply and the rest need a big path. Measured: the
 ledger (5,000 lines) and wc in WebAssembly take the same time as with

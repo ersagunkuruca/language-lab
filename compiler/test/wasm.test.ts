@@ -210,6 +210,11 @@ const bigs = (() => {
   return [...edges, ...random].flatMap((x) => [x, -x]);
 })();
 // As the evaluator spells them (int.ts): a number while it's safe.
+// Big divisions (W5c): by one limb and by several, signs every way, and
+// quotients whose first guess is too big (Knuth's D6, with v's top limb just over half).
+const divisions = [...bigs.flatMap((a, i) => [[a, bigs[(i * 5 + 1) % bigs.length]], [a, 7n], [a, -(2n ** 32n) + 1n], [a * 3n + 1n, a], [-(2n ** 63n), -1n]]),
+  [2n ** 128n - 1n, 2n ** 64n + 1n], [2n ** 96n, (2n ** 63n + 1n) * 2n ** 32n + 2n ** 31n], [0x7fffffff800000010000000000000000n, 0x800000000000000000000003n],
+  [0x800000000000000000000000n * 0x10000n - 1n, 0x800000000000000000000001n]].map((xs) => xs.map(norm));
 const bigPairs = bigs.flatMap((a, i) => [[a, bigs[(i * 7 + 3) % bigs.length]], [a, a], [a, 3n], [-(2n ** 63n), a]].map((xs) => xs.map(norm)));
 
 test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, characters counted, not bytes", async () => {
@@ -306,9 +311,10 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   const codes = [-1, 0, 65, 127, 128, 233, 2047, 2048, 0xd7ff, 0xd800, 0xdfff, 0xe000, 0xffff, 0x10000, 0x1f389, 0x10ffff, 0x110000];
   const lists = [[], ["1", "2", "3"], ["4", "x", "5"], ["-0"], Array.from({ length: 1e4 }, (_, i) => String(i))].map((xs) => toList(xs));
   const cases: Record<keyof typeof p.defs, Value[][]> = {
-    quotient: ints.flatMap((a) => ints.map((b) => [a, b])),
-    remainder: ints.flatMap((a) => ints.map((b) => [a, b])),
-    power: [[2, 10], [-3, 3], [0, 0], [5, -1], [-1, 63], [1, 2 ** 40], [2, 62], [-2, 63], [10, 18]],
+    quotient: [...ints.flatMap((a) => ints.map((b) => [a, b])), ...divisions],
+    remainder: [...ints.flatMap((a) => ints.map((b) => [a, b])), ...divisions],
+    power: [[2, 10], [-3, 3], [0, 0], [5, -1], [-1, 63], [1, 2 ** 40], [2, 62], [-2, 63], [10, 18], [2, 64], [-3, 200], [10n ** 20n, 7], [7, 1000],
+      [0, 2n ** 70n], [1, 2n ** 70n], [-1, 2n ** 70n], [-1, 2n ** 70n + 1n], [5, -(2n ** 70n)]].map((xs) => xs.map((x) => norm(BigInt(x)))),
     whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, 2 ** 63, -(2 ** 63), 2 ** 64 + 4096, -1.5e19, 1e300, -Number.MAX_VALUE, NaN, Infinity, -Infinity].map((x) => [x]),
     reread: [...texts, ...bigs.map(String), "9223372036854775808", "-9223372036854775809", "0123456789012345678901", "-", "12345678901234567890x"].map((t) => [t]),
     found: ["", "abc", "héllo wörld", "a🎉b🎉c", "aaa"].flatMap((t) => ["", "a", "b", "ö", "🎉", "c", "wörld", "aa", "zz"].map((q) => [t, q])),
@@ -331,14 +337,12 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
       // A partial function's answer comes with its status.
       if (f.partial) { const [v, status] = got as [unknown, number]; got = status === 0 ? fromWasm(w, v, f.result) : undefined; }
       else got = fromWasm(w, got, f.result);
-      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : JSON.stringify(x))).join(", ")})`);
+      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "object" ? "[list]" : typeof x === "bigint" ? `${x}n` : JSON.stringify(x))).join(", ")})`);
       compared++;
     }
   }
   assert.ok(compared > 500);
   assert.ok(lowered.funcs.find((g) => g.def === p.defs.plusOne)!.partial);
-  // Quotient, remainder and power past 2⁶³ still trap (W5c): the smallest over -1.
-  assert.throws(() => w["quotient of"](w["Int.of"](-(2n ** 63n)), w["Int.of"](-1n)), WebAssembly.RuntimeError);
 });
 
 // A value as text without recursion, to compare long lists.
