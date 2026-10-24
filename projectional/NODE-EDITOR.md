@@ -92,7 +92,7 @@ checked on the built page (fall, two dice), not just read from the code.
 
 *Agreed with Ersagun on 2026-10-24, after his report from editing two dice `main` in the
 graph. Built so far: steps 2 and 3 below (drafts.json, the Blocks section, Delete and unwiring
-leave parts loose, a loose part wires back in from its output, a drop on a filled input swaps).
+leave parts loose, a loose part wires back in from its output, a drop on a filled input swaps) and step 1 (an empty input of a call is drawn as a hollow port).
 The rest follows in the order below.*
 
 **The problem.** Every gesture in the graph has to leave a whole, typed
@@ -170,7 +170,9 @@ open question below for now.
 ### Order of PRs (Editor lane)
 
 1. Holes drawn as empty inputs; the `+` and filled-input drops (view and
-   gesture only, no new file).
+   gesture only, no new file). ✓ for a call's inputs and a list's items, where a hole
+   was most of them; a hole that is a whole function body or a case's result
+   is still drawn as a □ node, since there's no input to draw it on.
 2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section. ✓
 3. Delete and unwiring leave loose parts (rules 4 and 5). ✓
 4. New values on the canvas are loose (rule 7); faded drawing (rule 9).

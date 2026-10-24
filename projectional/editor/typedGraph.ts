@@ -228,6 +228,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { does, handles };
   };
 
+  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : ""; };
+
   const pill = (id: Id, text: string, cls: string, src?: Id, more?: string): Sub => {
     const w = Math.max(28, tw(text) + 18), h = 24;
     return item(id, w, h, (g) => {
@@ -277,10 +279,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     if (d) return useNode(id, d);
     switch (n.kind) {
       case "lit": { const l = litLabel(n.value); return pill(id, l.short, "lit", undefined, l.full); }
-      case "hole": {
-        const hi = info?.holes.get(id);
-        return pill(id, `□ ${hi ? showIn(hi.expected, names, info!.subst) : ""}`.trim(), "hole");
-      }
+      case "hole": return pill(id, `□ ${holeType(id)}`.trim(), "hole");
       case "ref": {
         const t = node(n.target);
         return pill(id, name(n.target), t?.kind === "variant" ? "con" : "fnref");
@@ -351,7 +350,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
     // an inner ++ with a dot on it stays its own node.
     const inputs = list ?? chainOperands(code, id, (a) => !!dotOf(a)) ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
-    const kids = inputs.map(arg);
+    // An input with nothing in it is drawn as an empty port, not a node
+    // (NODE-EDITOR.md "Loose parts", rule 3): click it for the palette.
+    const empty = (a: Id) => node(a)?.kind === "hole";
+    const kids = inputs.map((a) => (empty(a) ? null : arg(a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
     const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0);
@@ -365,7 +367,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
       g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
-      inputs.forEach((a, i) => g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
+      inputs.forEach((a, i) => g.append(empty(a)
+        ? titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: `inp empty${sel(a)}${errs.has(a) ? " err" : ""}`, "data-slot": a, "data-id": a }), `${holeType(a) ? `${holeType(a)}: ` : ""}empty. Click it for the palette, or drag a value onto it`)
+        : titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
       if (grows) {
         const add = s("g", { class: "add-inp", "data-add": id });
         add.append(s("circle", { cx: 0, cy: bh - 11, r: 6 }), s("text", { x: 0, y: bh - 7.5, "text-anchor": "middle" }, "+"));
@@ -1005,7 +1009,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     // Ours (a long press) or the browser's from a touch: a tap will follow.
     if (!e.isTrusted || (e as PointerEvent).pointerType === "touch") menuAt = Date.now();
     const el = e.target as Element;
-    const hole = el.closest(".pill.hole")?.getAttribute("data-slot");
+    const hole = el.closest(".pill.hole, circle.inp.empty")?.getAttribute("data-slot");
     const src = el.closest("[data-src]")?.getAttribute("data-src");
     const fr = el.closest("[data-frame]")?.getAttribute("data-frame");
     const id = el.closest("[data-id]")?.getAttribute("data-id");
