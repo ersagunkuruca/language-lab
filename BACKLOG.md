@@ -51,6 +51,15 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L38 | **Numbers first** (Ersagun 2026-10-24: numbers ahead of everything else in this lane). One `+ − · −x <` for every number type, decided by Ersagun; design and steps in projectional/NUMBERS.md "One `+` for every number system". **Step 1 done in #348**: generic builtins `builtin.arith.*` (std.ts ARITH), the `arith`/`ordered` constraint (types.ts requireArith, in schemes and pins), and `src/lang/arith.ts` resolveArithmetic (each call to its type's own builtin, copies per type, Number by default), called by makeRunner, relate's interpreter, compile() and lowerScalar(); tests in test/arith.test.ts; not offered by the palette yet. **Next:** step 2, the palette offers the generic ops instead of the per-type ones and types print the constraint (needs lane E for the editor side; derive.ts should treat `builtin.arith.*` like Number's for the editor's generated derivatives); step 3, the vectors module written with `+ − ·`; step 4, an example with one generic definition at Int and Number for lane C to measure (lane C asked for this) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | L | step 1 done (#348); step 2 next |
+| L39 | `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P1 | M | proposal |
+| L40 | `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P1 | M | proposal |
+| L41 | table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
+| L42 | `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P2 | M | proposal |
+| L43 | grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P2 | L | proposal |
+| L44 | small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
+| L45 | dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P2 | M | proposal |
+| L51 | Tensors: NUMBERS.md stage 6 (one contraction, dense/strided/diagonal/sparse representations, shapes inferred on the units machinery), after C30 (lists as arrays) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | L | after C30 |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: lane E shows the mode on the `solve` node | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a to L11e done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells | ROADMAP 4 open | P3 | L | |
@@ -60,19 +69,11 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L20 | `set` with general functions through relations | real-sized data follow-up | P3 | M | |
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
-| L38 | (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Decided by Ersagun 2026-10-24 06:48 (one generic `+`); design and steps in NUMBERS.md "One `+` for every number system" | LANGUAGE-REVIEW-2026-10-24 | P1 | L | ▶ thread "Make the language itself better" |
 | L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
 | L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
 | L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
-| L39 | **Proposal**: `Rational` as lowest-terms Int pairs, `gcd` builtin in each target, exact `÷` with `Choice` at zero, relate.ts's linear step generic over the field. After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 1 | P2 | M | proposal |
-| L40 | **Proposal**: `algebra(table)` for monomial multiplication tables, and `Complex` as the first, with a Mandelbrot or domain-colouring shader (`vec2f`). After L38 | LANGUAGE-REVIEW-2026-10-24 Part 2 | P2 | M | proposal |
-| L41 | **Proposal**: table products expanded at compile time, zero terms dropped (with lane C, like C9's gradient expansion) | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L42 | **Proposal**: `Cl(p, q, r)` from the signature; dual, split-complex and `Cl(3, 0)` named; a PGA (`Cl(3, 0, 1)`) motor in the ray marcher | LANGUAGE-REVIEW-2026-10-24 Part 2, NUMBERS.md stage 4 | P3 | M | proposal |
-| L43 | **Proposal**: grade inference on the units machinery; quaternions as the rotor representation of `Cl(3, 0)` | NUMBERS.md stage 4 | P3 | L | proposal |
-| L44 | **Proposal**: small matrices `Mat2` to `Mat4` as the matrix-unit table, `mat4x4f` on the GPU | LANGUAGE-REVIEW-2026-10-24 Part 2 | P3 | M | proposal |
-| L45 | **Proposal**: dual numbers and jets as a second `derivative`, tested against derive.ts | NUMBERS.md stage 8 | P3 | M | proposal |
 | L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
 | L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
 | L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
