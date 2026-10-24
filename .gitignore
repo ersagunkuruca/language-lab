@@ -5,3 +5,5 @@
 /reactive.html
 /shaders.html
 /apps/
+# The recordings a page with sound plays, beside the editor too.
+/*.wav

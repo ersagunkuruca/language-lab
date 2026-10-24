@@ -190,6 +190,12 @@ ready for the Run panel:
 test/audio.test.ts checks that a worklet made this way plays the same
 samples as the bundled one.
 
+The editor does this (A4): showPage (src/lang/page.ts) takes `worklet`,
+the guitar pedal is one of the editor's examples, and its preview plays.
+The recordings are copied beside the editor too. `node editor/sound-smoke.ts`
+plays the strum through the built editor's preview and checks that it is
+driven and that Softer reaches the audio thread.
+
 ## Prior art
 
 - **Faust** (Yann Orlarey, Dominique Fober, Stéphane Letz, Grame, 2002 on):

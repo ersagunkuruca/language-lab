@@ -47,6 +47,9 @@ import raymarchComments from "../examples/raymarch/comments.json" with { type: "
 import diceCode from "../examples/dice/code.json" with { type: "json" };
 import diceNames from "../examples/dice/names.default.json" with { type: "json" };
 import diceComments from "../examples/dice/comments.json" with { type: "json" };
+import pedalCode from "../examples/pedal/code.json" with { type: "json" };
+import pedalNames from "../examples/pedal/names.default.json" with { type: "json" };
+import pedalComments from "../examples/pedal/comments.json" with { type: "json" };
 import converterCode from "../examples/converter/code.json" with { type: "json" };
 import converterNames from "../examples/converter/names.default.json" with { type: "json" };
 import converterComments from "../examples/converter/comments.json" with { type: "json" };
@@ -121,7 +124,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -205,6 +208,7 @@ const initialFor = (program: Program): Doc =>
   : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
   : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
   : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
+  : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
   : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : program === "conjugate" ? typedDoc("conjugate", conjugateCode as Code, conjugateNames, conjugateComments)
@@ -1843,6 +1847,7 @@ function pictureSection(info: T.Info | null): HTMLElement | null {
 // put back into the frame each time; their listeners and watchers go with
 // them, and what you typed into the page stays.
 declare const PAGE_RUNTIME: string; // cli/web.ts pageRuntime, put in by editor/build.ts
+declare const WORKLET_RUNTIME: string; // cli/web.ts workletRuntime: a page with sound plays (AUDIO.md)
 const page = {
   frame: h("iframe", { class: "page", title: "The page main returns, running" }) as HTMLIFrameElement,
   status: h("p", { class: "hint" }),
@@ -1908,7 +1913,7 @@ function startPage(info: T.Info, main: Id) {
   try {
     page.now = showPage({
       code: doc.code, info, names: pres().names, main, program: titleOf(doc),
-      doc: page.maker as unknown as PageDoc, store: localStorage,
+      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME,
       frame: (f) => requestAnimationFrame(f),
       ran: (n: Node_) => {
         if (!page.flashBox.checked) return;
@@ -1931,7 +1936,7 @@ function pageHtml(): { html: string; name: string } | null {
   const info = typesOf();
   const main = info && pageMain(doc.code.defs, info, pres().names);
   if (!info || !main) return null;
-  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, doc.code, info, pres().names, main), name: `${slug(titleOf(doc))}.html` };
+  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, doc.code, info, pres().names, main, WORKLET_RUNTIME), name: `${slug(titleOf(doc))}.html` };
 }
 
 function savePage(open: boolean) {
