@@ -9,11 +9,12 @@
 // confused on screen.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { resolveRefs } from "../model.ts";
+import { resolveRefs, subtree } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
+import { paramName } from "./refactor.ts";
 import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
 import { showType } from "./types.ts";
 
@@ -22,13 +23,17 @@ const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
 
 export function renderBlocks(code: Code, pres: Presentation, info: Info | null, defId: Id): string {
   const names = pres.names;
-  const base = (id: Id) => names[id] ?? (code.nodes[id]?.kind === "builtin" ? (code.nodes[id] as NodeOf<"builtin">).op : `?${id.slice(0, 4)}`);
+  // A binder nobody named is called for its type (items, x, event), as the
+  // editor names a new parameter; only what isn't a binder shows its id.
+  const given = new Map<Id, string>();
+  const base = (id: Id) => names[id] ?? given.get(id) ?? (code.nodes[id]?.kind === "builtin" ? (code.nodes[id] as NodeOf<"builtin">).op : `?${id.slice(0, 4)}`);
   const quote = (s: string) => (pres.style.quote && !plain.test(s) ? pres.style.quote[0] + s + pres.style.quote[1] : s);
   const shown = new Map<Id, string>();
   const inScope: Id[] = [];
   const nameOf = (id: Id) => quote(shown.get(id) ?? base(id));
   const enter = (ids: Id[]) => {
     for (const id of ids) {
+      if (!names[id]) given.set(id, paramName(info?.typeOf.get(id), names));
       const b = base(id);
       const clash = inScope.filter((o) => base(o) === b).length;
       shown.set(id, clash ? b + String(clash + 1).split("").map((d) => SUB[+d]).join("") : b);
@@ -135,7 +140,9 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       enter(lam.params);
       const labels = lam.params.map(nameOf);
       leave(lam.params);
-      const lines = lam.params.flatMap((p, i) => block(n.args[i], ind, base(p) === "_" ? "" : `${labels[i]} = `));
+      // A step done for what it does, that nothing reads, is just the step.
+      const unread = (p: Id) => base(p) === "_" || (!names[p] && !subtree(code, lam.body).some((x) => (node(x) as { target?: Id }).target === p));
+      const lines = lam.params.flatMap((p, i) => block(n.args[i], ind, unread(p) ? "" : `${labels[i]} = `));
       enter(lam.params);
       const rest = block(lam.body, ind, lead);
       leave(lam.params);

@@ -53,7 +53,6 @@ Thread "Backlog and planned workflow", which also keeps this file current.
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L38 | **Proposal** (LANGUAGE-REVIEW-2026-10-24, Part 2): one `+ − · ÷` for every number type, generic over a closed set of structures (additive, module, ring, field, ordered) given per type in a side table; generalises the checker's `numbers` constraint; Int and Number first, the vectors module's `plus`/`minus` become `+`/`−`. Supersedes L19's stage 2. Needs Ersagun's call between this and NUMBERS.md's per-type `+` with operation records | LANGUAGE-REVIEW-2026-10-24 | P2 | L | proposal, waiting for the decision |
-| L50 | **Proposal (bug)**: an unnamed step done for its effect prints as `‹?q8pk› = …` in the text (ledger's `usage`, `run`, `failed`; countdown's `main`) | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L33 | **Proposal**: `≤ > ≥`, `smaller`, `larger` in the prelude with glyphs (and Text's over `comes before`); examples' own `smaller`/`larger`/`louder` replaced | LANGUAGE-REVIEW-2026-10-24 §2 | P2 | S | proposal |
 | L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
 | L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
@@ -103,6 +102,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L50 | Blocks text: a step nothing reads is just the step; an unnamed binder is named for its type | #344 |
 | L49 | Blocks text: a match as an if condition shows its arms; a branch's steps sit after then/else | #342 |
 | E48 | Steps done for their effects start at the left edge, so a big main (Numbers & physics) opens with its first steps in view; was Inbox I2 (QA3 L4) | #300 |
 | E47 | Pages keep running across program switches; dice says Rolls: 1; ray marcher constructor is rgb (no colour₁). L4 lopsided first view is the layout's shape: Inbox I2 | #298 |
