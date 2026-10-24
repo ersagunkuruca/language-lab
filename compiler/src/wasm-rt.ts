@@ -8,9 +8,11 @@
 // while it's being filled). A character position counts characters, so a
 // position is found by walking from the start, as std.ts does for text
 // outside the Basic Multilingual Plane; UTF-8's byte order is code-point
-// order, so comparing is comparing bytes. Int is an i64, and an operation
-// whose answer doesn't fit traps: a runtime error, not a wrong answer
-// (big Ints are stage W5).
+// order, so comparing is comparing bytes. An Int is an i31, an i64 in a
+// $big, or past that a $huge of 32-bit limbs (W5b); the int64.* functions
+// compute on the i64 and trap when the answer doesn't fit, and the int.*
+// natives take the limbs then. Quotient, remainder and power still trap
+// past 2⁶³ (W5c).
 //
 // The functions match std.ts and text.ts: slice clamps, split is
 // JavaScript's (non-overlapping, left to right), show is std.ts's show.
@@ -18,9 +20,10 @@
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
 // `option` an Optional Text, and `void` a result of nothing.
-// `int` an Int (W5): an i31 while it fits in 31 bits, else a $big;
+// `int` an Int (W5): an i31 while it fits in 31 bits, a $big, a $huge;
 // `i64` a plain machine word, which the functions below compute with.
-export type VT = "i32" | "i64" | "int" | "f64" | "text" | "list" | "option" | "void";
+// `mag` a big Int's magnitude, an array of 32-bit limbs.
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void";
 
 export interface RtFn {
   name: string;
@@ -56,7 +59,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i64.add": [[0x7c], []], "i64.sub": [[0x7d], []], "i64.mul": [[0x7e], []], "i64.div_s": [[0x7f], []], "i64.div_u": [[0x80], []], "i64.rem_s": [[0x81], []], "i64.rem_u": [[0x82], []],
   "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []], "i64.shl": [[0x86], []], "i64.shr_s": [[0x87], []], "i64.shr_u": [[0x88], []],
   "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i64.le_u": [[0x58], []], "i64.ge_u": [[0x5a], []],
-  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.shr_u": [[0x76], []],
+  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
   // Linear memory (WASI's buffers), aligned naturally, at offset 0.
@@ -131,7 +134,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
     `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} ${f.result === "void" ? (f.partial ? " (result i32)" : "") : ` (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})`}${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
     ...lines.map((l) => {
       const [op, ...args] = l.split(/\s+/);
-      return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z]+$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : a)).filter(Boolean).join(" ") : ""}`;
+      return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z][a-z0-9]*$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : (op === "ref.test" || op === "ref.cast") && !a.startsWith("(") ? `(ref ${a})` : a)).filter(Boolean).join(" ") : ""}`;
     }),
     "  )",
   ].join("\n");
@@ -418,8 +421,8 @@ const R: Record<string, Omit<RtFn, "name">> = {
   },
   // Decimal digits, as std.ts's show of an Int. Kept at or below zero
   // while dividing, so the smallest i64 has its digits too.
-  "int.show": {
-    params: [["n", "int"]], result: "text", locals: [["m", "i64"], ["buf", "text"], ["i", "i32"], ["r", "text"]], uses: [],
+  "int64.show": {
+    params: [["n", "i64"]], result: "text", locals: [["m", "i64"], ["buf", "text"], ["i", "i32"], ["r", "text"]], uses: [],
     body: `
       i32.const 20
       array.new_default $bytes
@@ -489,9 +492,9 @@ const R: Record<string, Omit<RtFn, "name">> = {
       array.copy $bytes $bytes
       local.get $r`,
   },
-  // Overflow is a trap: the answer would need a big Int (W5).
-  "int.add": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
+  // On i64s, overflow is a trap: int.add and the rest take the limbs then.
+  "int64.add": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -511,8 +514,8 @@ const R: Record<string, Omit<RtFn, "name">> = {
       end
       local.get $r`,
   },
-  "int.sub": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
+  "int64.sub": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -533,8 +536,8 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $r`,
   },
   // a·b, checked by dividing back (and the one case that division can't see).
-  "int.mul": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [],
+  "int64.mul": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [],
     body: `
       local.get $a
       local.get $b
@@ -566,8 +569,8 @@ const R: Record<string, Omit<RtFn, "name">> = {
       end
       local.get $r`,
   },
-  "int.neg": {
-    params: [["a", "int"]], result: "int", locals: [], uses: [],
+  "int64.neg": {
+    params: [["a", "i64"]], result: "i64", locals: [], uses: [],
     body: `
       local.get $a
       i64.const -9223372036854775808
@@ -579,18 +582,18 @@ const R: Record<string, Omit<RtFn, "name">> = {
       local.get $a
       i64.sub`,
   },
-  "int.less": { params: [["a", "int"], ["b", "int"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.lt_s" },
-  "int.equal": { params: [["a", "int"], ["b", "int"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.eq" },
-  "int.toNumber": { params: [["a", "int"]], result: "f64", locals: [], uses: [], body: "local.get $a\nf64.convert_i64_s" },
-  "int.abs": {
-    params: [["a", "int"]], result: "int", locals: [], uses: ["int.neg"],
+  "int64.less": { params: [["a", "i64"], ["b", "i64"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.lt_s" },
+  "int64.equal": { params: [["a", "i64"], ["b", "i64"]], result: "i32", locals: [], uses: [], body: "local.get $a\nlocal.get $b\ni64.eq" },
+  "int64.toNumber": { params: [["a", "i64"]], result: "f64", locals: [], uses: [], body: "local.get $a\nf64.convert_i64_s" },
+  "int64.abs": {
+    params: [["a", "i64"]], result: "i64", locals: [], uses: ["int64.neg"],
     body: `
       local.get $a
       i64.const 0
       i64.lt_s
       if i64
         local.get $a
-        call $int.neg
+        call $int64.neg
       else
         local.get $a
       end`,
@@ -1092,10 +1095,10 @@ ${drop}
   // (ECMA-262): n = e + the number of digits; whole up to 21 digits, a
   // point inside, 0.000ddd down to n = −5, else d.ddde±x.
   "number.layout": {
-    params: [["d", "i64"], ["e", "i32"], ["neg", "i32"]], result: "text", locals: [["s", "text"], ["k", "i32"], ["n", "i32"], ["out", "text"]], uses: ["int.show", "text.concat", "text.bytes"],
+    params: [["d", "i64"], ["e", "i32"], ["neg", "i32"]], result: "text", locals: [["s", "text"], ["k", "i32"], ["n", "i32"], ["out", "text"]], uses: ["int64.show", "text.concat", "text.bytes"],
     body: `
       local.get $d
-      call $int.show
+      call $int64.show
       local.tee $s
       array.len
       local.tee $k
@@ -1208,7 +1211,7 @@ ${drop}
             end
             local.get $n
             i64.extend_i32_u
-            call $int.show
+            call $int64.show
             call $text.concat
             local.set $out
           end
@@ -1242,8 +1245,1263 @@ ${drop}
       array.copy $bytes $bytes
       local.get $r`,
   },
+  // Big Ints (W5b). A magnitude is an (array (mut i32)) of 32-bit limbs,
+  // least significant first, with no zero limb at the top (0 is empty).
+  // An Int past an i64 is a $huge: its sign (1 for negative) and its
+  // magnitude; one that fits stays an i31 or a $big, so each value has one
+  // form. Schoolbook arithmetic, as in Knuth's Seminumerical Algorithms
+  // (TAOCP vol. 2, 4.3.1); show and read go by 10⁹ at a time.
+  "mag.at": {
+    params: [["a", "mag"], ["i", "i32"]], result: "i64", locals: [], uses: [],
+    body: `
+      local.get $i
+      local.get $a
+      array.len
+      i32.lt_u
+      if i64
+        local.get $a
+        local.get $i
+        array.get $u32s
+        i64.extend_i32_u
+      else
+        i64.const 0
+      end`,
+  },
+  "mag.trim": {
+    params: [["a", "mag"]], result: "mag", locals: [["n", "i32"], ["r", "mag"]], uses: [],
+    body: `
+      local.get $a
+      array.len
+      local.set $n
+      block void
+        loop void
+          local.get $n
+          i32.eqz
+          br_if 1
+          local.get $a
+          local.get $n
+          i32.const 1
+          i32.sub
+          array.get $u32s
+          br_if 1
+          local.get $n
+          i32.const 1
+          i32.sub
+          local.set $n
+          br 0
+        end
+      end
+      local.get $n
+      local.get $a
+      array.len
+      i32.eq
+      if mag
+        local.get $a
+      else
+        local.get $n
+        array.new_default $u32s
+        local.tee $r
+        i32.const 0
+        local.get $a
+        i32.const 0
+        local.get $n
+        array.copy $u32s $u32s
+        local.get $r
+      end`,
+  },
+  // An unsigned 64-bit u's magnitude.
+  "mag.of": {
+    params: [["u", "i64"]], result: "mag", locals: [], uses: ["mag.trim"],
+    body: `
+      local.get $u
+      i32.wrap_i64
+      local.get $u
+      i64.const 32
+      i64.shr_u
+      i32.wrap_i64
+      array.new_fixed $u32s 2
+      call $mag.trim`,
+  },
+  "mag.add": {
+    params: [["a", "mag"], ["b", "mag"]], result: "mag", locals: [["n", "i32"], ["i", "i32"], ["r", "mag"], ["carry", "i64"], ["s", "i64"]], uses: ["mag.at", "mag.trim"],
+    body: `
+      local.get $a
+      array.len
+      local.tee $n
+      local.get $b
+      array.len
+      local.tee $i
+      local.get $n
+      local.get $i
+      i32.gt_u
+      select
+      i32.const 1
+      i32.add
+      local.tee $n
+      array.new_default $u32s
+      local.set $r
+      i32.const 0
+      local.set $i
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $i
+          call $mag.at
+          local.get $b
+          local.get $i
+          call $mag.at
+          i64.add
+          local.get $carry
+          i64.add
+          local.set $s
+          local.get $r
+          local.get $i
+          local.get $s
+          i32.wrap_i64
+          array.set $u32s
+          local.get $s
+          i64.const 32
+          i64.shr_u
+          local.set $carry
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
+  },
+  // a − b, for a ≥ b.
+  "mag.sub": {
+    params: [["a", "mag"], ["b", "mag"]], result: "mag", locals: [["n", "i32"], ["i", "i32"], ["r", "mag"], ["borrow", "i64"], ["s", "i64"]], uses: ["mag.at", "mag.trim"],
+    body: `
+      local.get $a
+      array.len
+      local.tee $n
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $i
+          call $mag.at
+          local.get $b
+          local.get $i
+          call $mag.at
+          i64.sub
+          local.get $borrow
+          i64.sub
+          local.tee $s
+          i64.const 0
+          i64.lt_s
+          i64.extend_i32_u
+          local.set $borrow
+          ;; a negative difference wraps to it plus 2³²
+          local.get $r
+          local.get $i
+          local.get $s
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
+  },
+  // −1, 0 or 1 as a is less than, equal to or more than b.
+  "mag.cmp": {
+    params: [["a", "mag"], ["b", "mag"]], result: "i32", locals: [["i", "i32"], ["n", "i32"], ["x", "i32"], ["y", "i32"]], uses: [],
+    body: `
+      local.get $a
+      array.len
+      local.tee $i
+      local.get $b
+      array.len
+      local.tee $n
+      i32.ne
+      if void
+        local.get $i
+        local.get $n
+        i32.lt_u
+        if i32
+          i32.const -1
+        else
+          i32.const 1
+        end
+        return
+      end
+      block void
+        loop void
+          local.get $i
+          i32.eqz
+          br_if 1
+          local.get $i
+          i32.const 1
+          i32.sub
+          local.set $i
+          local.get $a
+          local.get $i
+          array.get $u32s
+          local.tee $x
+          local.get $b
+          local.get $i
+          array.get $u32s
+          local.tee $y
+          i32.ne
+          if void
+            local.get $x
+            local.get $y
+            i32.lt_u
+            if i32
+              i32.const -1
+            else
+              i32.const 1
+            end
+            return
+          end
+          br 0
+        end
+      end
+      i32.const 0`,
+  },
+  "mag.mul": {
+    params: [["a", "mag"], ["b", "mag"]], result: "mag", locals: [["la", "i32"], ["lb", "i32"], ["i", "i32"], ["j", "i32"], ["r", "mag"], ["ai", "i64"], ["carry", "i64"], ["t", "i64"]], uses: ["mag.trim"],
+    body: `
+      local.get $a
+      array.len
+      local.tee $la
+      local.get $b
+      array.len
+      local.tee $lb
+      i32.add
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          local.get $la
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $i
+          array.get $u32s
+          i64.extend_i32_u
+          local.set $ai
+          i64.const 0
+          local.set $carry
+          i32.const 0
+          local.set $j
+          block void
+            loop void
+              local.get $j
+              local.get $lb
+              i32.ge_u
+              br_if 1
+              ;; ai·b[j] + r[i+j] + carry fits in 64 bits
+              local.get $ai
+              local.get $b
+              local.get $j
+              array.get $u32s
+              i64.extend_i32_u
+              i64.mul
+              local.get $r
+              local.get $i
+              local.get $j
+              i32.add
+              array.get $u32s
+              i64.extend_i32_u
+              i64.add
+              local.get $carry
+              i64.add
+              local.set $t
+              local.get $r
+              local.get $i
+              local.get $j
+              i32.add
+              local.get $t
+              i32.wrap_i64
+              array.set $u32s
+              local.get $t
+              i64.const 32
+              i64.shr_u
+              local.set $carry
+              local.get $j
+              i32.const 1
+              i32.add
+              local.set $j
+              br 0
+            end
+          end
+          local.get $r
+          local.get $i
+          local.get $lb
+          i32.add
+          local.get $carry
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
+  },
+  // a divided by a small d (unsigned, not 0), and what's left.
+  "mag.divsmall": {
+    params: [["a", "mag"], ["d", "i32"]], result: "mag", locals: [["i", "i32"], ["r", "mag"], ["rem", "i64"], ["cur", "i64"], ["dd", "i64"]], uses: ["mag.trim"],
+    body: `
+      local.get $d
+      i64.extend_i32_u
+      local.set $dd
+      local.get $a
+      array.len
+      local.tee $i
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          i32.eqz
+          br_if 1
+          local.get $i
+          i32.const 1
+          i32.sub
+          local.set $i
+          local.get $rem
+          i64.const 32
+          i64.shl
+          local.get $a
+          local.get $i
+          array.get $u32s
+          i64.extend_i32_u
+          i64.or
+          local.tee $cur
+          local.get $dd
+          i64.rem_u
+          local.set $rem
+          local.get $r
+          local.get $i
+          local.get $cur
+          local.get $dd
+          i64.div_u
+          i32.wrap_i64
+          array.set $u32s
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
+  },
+  "mag.modsmall": {
+    params: [["a", "mag"], ["d", "i32"]], result: "i32", locals: [["i", "i32"], ["rem", "i64"], ["dd", "i64"]], uses: [],
+    body: `
+      local.get $d
+      i64.extend_i32_u
+      local.set $dd
+      local.get $a
+      array.len
+      local.set $i
+      block void
+        loop void
+          local.get $i
+          i32.eqz
+          br_if 1
+          local.get $i
+          i32.const 1
+          i32.sub
+          local.set $i
+          local.get $rem
+          i64.const 32
+          i64.shl
+          local.get $a
+          local.get $i
+          array.get $u32s
+          i64.extend_i32_u
+          i64.or
+          local.get $dd
+          i64.rem_u
+          local.set $rem
+          br 0
+        end
+      end
+      local.get $rem
+      i32.wrap_i64`,
+  },
+  // a·m + c, for small m and c (unsigned).
+  "mag.muladd": {
+    params: [["a", "mag"], ["m", "i32"], ["c", "i32"]], result: "mag", locals: [["n", "i32"], ["i", "i32"], ["r", "mag"], ["carry", "i64"], ["t", "i64"]], uses: ["mag.trim"],
+    body: `
+      local.get $c
+      i64.extend_i32_u
+      local.set $carry
+      local.get $a
+      array.len
+      local.tee $n
+      i32.const 1
+      i32.add
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $i
+          array.get $u32s
+          i64.extend_i32_u
+          local.get $m
+          i64.extend_i32_u
+          i64.mul
+          local.get $carry
+          i64.add
+          local.set $t
+          local.get $r
+          local.get $i
+          local.get $t
+          i32.wrap_i64
+          array.set $u32s
+          local.get $t
+          i64.const 32
+          i64.shr_u
+          local.set $carry
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      local.get $n
+      local.get $carry
+      i32.wrap_i64
+      array.set $u32s
+      local.get $r
+      call $mag.trim`,
+  },
+  // a · 2^k.
+  "mag.shl": {
+    params: [["a", "mag"], ["k", "i32"]], result: "mag", locals: [["n", "i32"], ["w", "i32"], ["i", "i32"], ["r", "mag"], ["v", "i64"]], uses: ["mag.trim"],
+    body: `
+      local.get $k
+      i32.const 5
+      i32.shr_u
+      local.set $w
+      local.get $a
+      array.len
+      local.tee $n
+      local.get $w
+      i32.add
+      i32.const 1
+      i32.add
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $i
+          array.get $u32s
+          i64.extend_i32_u
+          local.get $k
+          i32.const 31
+          i32.and
+          i64.extend_i32_u
+          i64.shl
+          local.set $v
+          local.get $r
+          local.get $i
+          local.get $w
+          i32.add
+          local.get $r
+          local.get $i
+          local.get $w
+          i32.add
+          array.get $u32s
+          local.get $v
+          i32.wrap_i64
+          i32.or
+          array.set $u32s
+          local.get $r
+          local.get $i
+          local.get $w
+          i32.add
+          i32.const 1
+          i32.add
+          local.get $v
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
+  },
+  // The Number nearest a (ties to even, Infinity past the largest), as
+  // JavaScript's Number of a BigInt: its top 64 bits, any bit below
+  // kept as the last one, rounded once, then scaled by a power of two.
+  "mag.toNumber": {
+    params: [["a", "mag"]], result: "f64", locals: [["n", "i32"], ["lz", "i32"], ["i", "i32"], ["top", "i64"], ["lo", "i64"], ["e", "i32"]], uses: ["mag.at"],
+    body: `
+      local.get $a
+      array.len
+      local.tee $n
+      i32.const 2
+      i32.le_u
+      if void
+        local.get $a
+        i32.const 0
+        call $mag.at
+        local.get $a
+        i32.const 1
+        call $mag.at
+        i64.const 32
+        i64.shl
+        i64.or
+        f64.convert_i64_u
+        return
+      end
+      local.get $a
+      local.get $n
+      i32.const 1
+      i32.sub
+      array.get $u32s
+      i32.clz
+      local.set $lz
+      local.get $a
+      local.get $n
+      i32.const 3
+      i32.sub
+      call $mag.at
+      local.set $lo
+      local.get $a
+      local.get $n
+      i32.const 1
+      i32.sub
+      call $mag.at
+      local.get $lz
+      i32.const 32
+      i32.add
+      i64.extend_i32_u
+      i64.shl
+      local.get $a
+      local.get $n
+      i32.const 2
+      i32.sub
+      call $mag.at
+      local.get $lz
+      i64.extend_i32_u
+      i64.shl
+      i64.or
+      local.get $lo
+      i32.const 32
+      local.get $lz
+      i32.sub
+      i64.extend_i32_u
+      i64.shr_u
+      i64.or
+      local.set $top
+      ;; the bits below the top 64: those of lo, and every lower limb
+      local.get $lo
+      i64.const 1
+      i32.const 32
+      local.get $lz
+      i32.sub
+      i64.extend_i32_u
+      i64.shl
+      i64.const 1
+      i64.sub
+      i64.and
+      i64.eqz
+      i32.eqz
+      local.set $i
+      block void
+        loop void
+          local.get $i
+          br_if 1
+          local.get $e
+          local.get $n
+          i32.const 3
+          i32.sub
+          i32.ge_u
+          br_if 1
+          local.get $a
+          local.get $e
+          array.get $u32s
+          i32.const 0
+          i32.ne
+          local.set $i
+          local.get $e
+          i32.const 1
+          i32.add
+          local.set $e
+          br 0
+        end
+      end
+      local.get $top
+      local.get $i
+      i64.extend_i32_u
+      i64.or
+      f64.convert_i64_u
+      local.get $n
+      i32.const 5
+      i32.shl
+      local.get $lz
+      i32.sub
+      i32.const 64
+      i32.sub
+      local.tee $e
+      i32.const 1023
+      i32.gt_s
+      if f64
+        f64.const 1e308
+        f64.const 10
+        f64.mul
+      else
+        local.get $e
+        i32.const 1023
+        i32.add
+        i64.extend_i32_u
+        i64.const 52
+        i64.shl
+        f64.reinterpret_i64
+      end
+      f64.mul`,
+  },
+  // a's digits, 10⁹ at a time from the end.
+  "mag.show": {
+    params: [["a", "mag"]], result: "text", locals: [["m", "mag"], ["c", "i32"], ["out", "text"], ["s", "text"]], uses: ["mag.modsmall", "mag.divsmall", "int64.show", "text.concat"],
+    body: `
+      local.get $a
+      local.set $m
+      i32.const 0
+      array.new_default $bytes
+      local.set $out
+      block void
+        loop void
+          local.get $m
+          i32.const 1000000000
+          call $mag.modsmall
+          local.set $c
+          local.get $m
+          i32.const 1000000000
+          call $mag.divsmall
+          local.set $m
+          local.get $c
+          i64.extend_i32_u
+          call $int64.show
+          local.set $s
+          local.get $m
+          array.len
+          i32.eqz
+          if void
+            local.get $s
+            local.get $out
+            call $text.concat
+            local.set $out
+            br 2
+          end
+          i32.const 48
+          i32.const 9
+          local.get $s
+          array.len
+          i32.sub
+          array.new $bytes
+          local.get $s
+          call $text.concat
+          local.get $out
+          call $text.concat
+          local.set $out
+          br 0
+        end
+      end
+      local.get $out`,
+  },
+  // Whether x is below 0, and its magnitude.
+  "int.negative": {
+    params: [["x", "int"]], result: "i32", locals: [], uses: [], native: true,
+    body: `
+      local.get $x
+      ref.test i31
+      if i32
+        local.get $x
+        ref.cast i31
+        i31.get_s
+        i32.const 0
+        i32.lt_s
+      else
+        local.get $x
+        ref.test $big
+        if i32
+          local.get $x
+          ref.cast $big
+          struct.get $big 0
+          i64.const 0
+          i64.lt_s
+        else
+          local.get $x
+          ref.cast $huge
+          struct.get $huge 0
+        end
+      end`,
+  },
+  "int.mag": {
+    params: [["x", "int"]], result: "mag", locals: [["v", "i64"]], uses: ["int.small", "mag.of"], native: true,
+    body: `
+      local.get $x
+      ref.test $huge
+      if mag
+        local.get $x
+        ref.cast $huge
+        struct.get $huge 1
+      else
+        local.get $x
+        call $int.small
+        local.tee $v
+        i64.const 0
+        i64.lt_s
+        if i64
+          i64.const 0
+          local.get $v
+          i64.sub
+        else
+          local.get $v
+        end
+        call $mag.of
+      end`,
+  },
+  // The Int with this sign and magnitude, in its one form.
+  "int.norm": {
+    params: [["neg", "i32"], ["m", "mag"]], result: "int", locals: [["u", "i64"]], uses: ["mag.at", "int.of"], native: true,
+    body: `
+      local.get $m
+      array.len
+      i32.const 2
+      i32.le_u
+      if void
+        local.get $m
+        i32.const 0
+        call $mag.at
+        local.get $m
+        i32.const 1
+        call $mag.at
+        i64.const 32
+        i64.shl
+        i64.or
+        local.set $u
+        local.get $neg
+        if void
+          local.get $u
+          i64.const -9223372036854775808
+          i64.le_u
+          if void
+            i64.const 0
+            local.get $u
+            i64.sub
+            call $int.of
+            return
+          end
+        else
+          local.get $u
+          i64.const 0
+          i64.ge_s
+          if void
+            local.get $u
+            call $int.of
+            return
+          end
+        end
+      end
+      local.get $neg
+      local.get $m
+      struct.new $huge`,
+  },
+  // Sign and magnitude plus sign and magnitude.
+  "int.addsm": {
+    params: [["na", "i32"], ["ma", "mag"], ["nb", "i32"], ["mb", "mag"]], result: "int", locals: [["c", "i32"]], uses: ["mag.add", "mag.sub", "mag.cmp", "int.norm"], native: true,
+    body: `
+      local.get $na
+      local.get $nb
+      i32.eq
+      if void
+        local.get $na
+        local.get $ma
+        local.get $mb
+        call $mag.add
+        call $int.norm
+        return
+      end
+      local.get $ma
+      local.get $mb
+      call $mag.cmp
+      local.tee $c
+      i32.eqz
+      if void
+        i32.const 0
+        ref.i31
+        return
+      end
+      local.get $c
+      i32.const 0
+      i32.gt_s
+      if int
+        local.get $na
+        local.get $ma
+        local.get $mb
+        call $mag.sub
+        call $int.norm
+      else
+        local.get $nb
+        local.get $mb
+        local.get $ma
+        call $mag.sub
+        call $int.norm
+      end`,
+  },
+  "int.add": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["r", "i64"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.addsm"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.tee $x
+        local.get $b
+        call $int.small
+        local.tee $y
+        i64.add
+        local.set $r
+        ;; no overflow: the answer has the sign of one of them
+        local.get $x
+        local.get $r
+        i64.xor
+        local.get $y
+        local.get $r
+        i64.xor
+        i64.and
+        i64.const 0
+        i64.ge_s
+        if void
+          local.get $r
+          call $int.of
+          return
+        end
+      end
+      local.get $a
+      call $int.negative
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.negative
+      local.get $b
+      call $int.mag
+      call $int.addsm`,
+  },
+  "int.sub": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["r", "i64"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.addsm"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.tee $x
+        local.get $b
+        call $int.small
+        local.tee $y
+        i64.sub
+        local.set $r
+        local.get $x
+        local.get $y
+        i64.xor
+        local.get $x
+        local.get $r
+        i64.xor
+        i64.and
+        i64.const 0
+        i64.ge_s
+        if void
+          local.get $r
+          call $int.of
+          return
+        end
+      end
+      local.get $a
+      call $int.negative
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.negative
+      i32.eqz
+      local.get $b
+      call $int.mag
+      call $int.addsm`,
+  },
+  "int.mul": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [], uses: ["int.small", "int.of", "int.negative", "int.mag", "mag.mul", "int.norm"], native: true,
+    body: `
+      local.get $a
+      ref.test i31
+      local.get $b
+      ref.test i31
+      i32.and
+      if void
+        local.get $a
+        call $int.small
+        local.get $b
+        call $int.small
+        i64.mul
+        call $int.of
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.get $b
+      call $int.negative
+      i32.xor
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.mag
+      call $mag.mul
+      call $int.norm`,
+  },
+  "int.neg": {
+    params: [["a", "int"]], result: "int", locals: [["x", "i64"]], uses: ["int.small", "int.of", "int.norm", "mag.of"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      if int
+        local.get $a
+        ref.cast $huge
+        struct.get $huge 0
+        i32.eqz
+        local.get $a
+        ref.cast $huge
+        struct.get $huge 1
+        call $int.norm
+      else
+        local.get $a
+        call $int.small
+        local.tee $x
+        i64.const -9223372036854775808
+        i64.eq
+        if int
+          i32.const 0
+          local.get $x
+          call $mag.of
+          struct.new $huge
+        else
+          i64.const 0
+          local.get $x
+          i64.sub
+          call $int.of
+        end
+      end`,
+  },
+  "int.abs": {
+    params: [["a", "int"]], result: "int", locals: [], uses: ["int.negative", "int.neg"], native: true,
+    body: `
+      local.get $a
+      call $int.negative
+      if int
+        local.get $a
+        call $int.neg
+      else
+        local.get $a
+      end`,
+  },
+  "int.less": {
+    params: [["a", "int"], ["b", "int"]], result: "i32", locals: [["na", "i32"], ["nb", "i32"], ["c", "i32"]], uses: ["int.small", "int.negative", "int.mag", "mag.cmp"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.get $b
+        call $int.small
+        i64.lt_s
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.tee $na
+      local.get $b
+      call $int.negative
+      local.tee $nb
+      i32.ne
+      if void
+        local.get $na
+        return
+      end
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.mag
+      call $mag.cmp
+      local.set $c
+      local.get $na
+      if i32
+        local.get $c
+        i32.const 0
+        i32.gt_s
+      else
+        local.get $c
+        i32.const 0
+        i32.lt_s
+      end`,
+  },
+  "int.equal": {
+    params: [["a", "int"], ["b", "int"]], result: "i32", locals: [], uses: ["int.small", "int.negative", "int.mag", "mag.cmp"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.get $b
+        call $int.small
+        i64.eq
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.get $b
+      call $int.negative
+      i32.eq
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.mag
+      call $mag.cmp
+      i32.eqz
+      i32.and`,
+  },
+  "int.toNumber": {
+    params: [["a", "int"]], result: "f64", locals: [], uses: ["int.small", "int.mag", "mag.toNumber"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      if f64
+        local.get $a
+        call $int.mag
+        call $mag.toNumber
+        f64.const -1
+        f64.const 1
+        local.get $a
+        ref.cast $huge
+        struct.get $huge 0
+        select
+        f64.mul
+      else
+        local.get $a
+        call $int.small
+        f64.convert_i64_s
+      end`,
+  },
+  "int.show": {
+    params: [["a", "int"]], result: "text", locals: [], uses: ["int.small", "int64.show", "mag.show", "text.concat"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      if text
+        local.get $a
+        ref.cast $huge
+        struct.get $huge 0
+        if text
+          i32.const 45
+          array.new_fixed $bytes 1
+        else
+          i32.const 0
+          array.new_default $bytes
+        end
+        local.get $a
+        ref.cast $huge
+        struct.get $huge 1
+        call $mag.show
+        call $text.concat
+      else
+        local.get $a
+        call $int.small
+        call $int64.show
+      end`,
+  },
+  // The whole part of x, past 2⁶³ from its bits: its significand moved up.
+  "int.wholePart": {
+    params: [["x", "f64"]], result: "int", locals: [["y", "f64"], ["bits", "i64"], ["st", "i32"]], uses: ["int64.wholePart", "int.of", "mag.of", "mag.shl", "int.norm"], partial: true, native: true,
+    body: `
+      local.get $x
+      f64.floor
+      local.tee $y
+      f64.abs
+      f64.const 9.2e18
+      f64.ge
+      local.get $y
+      local.get $y
+      f64.sub
+      f64.const 0
+      f64.eq
+      i32.and
+      if void
+        local.get $y
+        f64.const 0
+        f64.lt
+        local.get $y
+        i64.reinterpret_f64
+        local.tee $bits
+        i64.const 4503599627370495
+        i64.and
+        i64.const 4503599627370496
+        i64.or
+        call $mag.of
+        local.get $bits
+        i64.const 52
+        i64.shr_u
+        i32.wrap_i64
+        i32.const 2047
+        i32.and
+        i32.const 1075
+        i32.sub
+        call $mag.shl
+        call $int.norm
+        i32.const 0
+        return
+      end
+      local.get $x
+      call $int64.wholePart
+      local.set $st
+      call $int.of
+      local.get $st`,
+  },
+  // Up to 18 digits as an i64; more, 32 bits at a time.
+  "int.read": {
+    params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "mag"], ["st", "i32"]], uses: ["int64.read", "int.of", "mag.muladd", "int.norm"], partial: true, native: true,
+    body: `
+      local.get $t
+      array.len
+      local.set $n
+      local.get $n
+      if void
+        local.get $t
+        i32.const 0
+        array.get_u $bytes
+        i32.const 45
+        i32.eq
+        local.set $neg
+      end
+      local.get $n
+      local.get $neg
+      i32.sub
+      i32.const 18
+      i32.le_u
+      if void
+        local.get $t
+        call $int64.read
+        local.set $st
+        call $int.of
+        local.get $st
+        return
+      end
+      local.get $neg
+      local.set $i
+      ;; no zeros in front
+      local.get $t
+      local.get $i
+      array.get_u $bytes
+      i32.const 48
+      i32.eq
+      if void
+        ref.null eq
+        i32.const 1
+        return
+      end
+      i32.const 0
+      array.new_default $u32s
+      local.set $m
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 48
+          i32.sub
+          local.tee $c
+          i32.const 9
+          i32.gt_u
+          if void
+            ref.null eq
+            i32.const 1
+            return
+          end
+          local.get $m
+          i32.const 10
+          local.get $c
+          call $mag.muladd
+          local.set $m
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $neg
+      local.get $m
+      call $int.norm
+      i32.const 0`,
+  },
   // An Int from an i64, and back: an i31 while it fits in 31 bits, else a
-  // $big (for now holding the i64, W5a).
+  // $big holding the i64 (a $huge has its own, int.norm).
   "int.of": {
     params: [["v", "i64"]], result: "int", locals: [], uses: [], native: true,
     body: `
@@ -1277,13 +2535,66 @@ ${drop}
         struct.get $big 0
       end`,
   },
+  // The host's way to a $huge, which doesn't fit Int.get's i64: its limb
+  // count, negative when it's negative (0 when it isn't a $huge), and its
+  // limbs; and to make one, limb by limb, least significant first.
+  "int.limbs": {
+    params: [["x", "int"]], result: "i32", locals: [["n", "i32"]], uses: [], native: true,
+    body: `
+      local.get $x
+      ref.test $huge
+      if i32
+        local.get $x
+        ref.cast $huge
+        struct.get $huge 1
+        array.len
+        local.set $n
+        i32.const 0
+        local.get $n
+        i32.sub
+        local.get $n
+        local.get $x
+        ref.cast $huge
+        struct.get $huge 0
+        select
+      else
+        i32.const 0
+      end`,
+  },
+  "int.limb": {
+    params: [["x", "int"], ["i", "i32"]], result: "i32", locals: [], uses: [], native: true,
+    body: `
+      local.get $x
+      ref.cast $huge
+      struct.get $huge 1
+      local.get $i
+      array.get $u32s`,
+  },
+  "int.huge": {
+    params: [["neg", "i32"], ["n", "i32"]], result: "int", locals: [], uses: [], native: true,
+    body: `
+      local.get $neg
+      local.get $n
+      array.new_default $u32s
+      struct.new $huge`,
+  },
+  "int.setLimb": {
+    params: [["x", "int"], ["i", "i32"], ["v", "i32"]], result: "void", locals: [], uses: [], native: true,
+    body: `
+      local.get $x
+      ref.cast $huge
+      struct.get $huge 1
+      local.get $i
+      local.get $v
+      array.set $u32s`,
+  },
   // std.ts's show of a Number: a whole number as its digits, any other
   // rounded to 9 places, written as JavaScript writes it: plain decimals
   // of at most 15 digits directly (which is then exactly what JavaScript
   // writes), otherwise by number.js.
   "number.show": {
     params: [["x", "f64"]], result: "text", locals: [["y", "f64"], ["r", "f64"], ["n", "i64"], ["m", "i64"], ["f", "i64"], ["buf", "text"], ["i", "i32"], ["out", "text"], ["y_text", "text"]],
-    uses: ["int.show", "text.concat", "number.js", "number.tiny"],
+    uses: ["int64.show", "text.concat", "number.js", "number.tiny"],
     body: `
       local.get $x
       f64.floor
@@ -1297,7 +2608,7 @@ ${drop}
         if void
           local.get $x
           i64.trunc_f64_s
-          call $int.show
+          call $int64.show
           return
         end
         local.get $x
@@ -1361,7 +2672,7 @@ ${drop}
       f64.eq
       if void
         i64.const 0
-        call $int.show
+        call $int64.show
         return
       end
       ;; more than 15 digits after the zeros at the end go: JavaScript's
@@ -1425,7 +2736,7 @@ ${drop}
       local.get $m
       i64.const 1000000000
       i64.div_u
-      call $int.show
+      call $int64.show
       call $text.concat
       local.set $out
       local.get $f
@@ -1503,12 +2814,12 @@ ${drop}
   // it: r's digits without the zeros at the end, a point after the first,
   // then e-7, e-8 or e-9.
   "number.tiny": {
-    params: [["r", "f64"]], result: "text", locals: [["d", "text"], ["n", "i32"], ["out", "text"], ["part", "text"]], uses: ["int.show", "text.concat"],
+    params: [["r", "f64"]], result: "text", locals: [["d", "text"], ["n", "i32"], ["out", "text"], ["part", "text"]], uses: ["int64.show", "text.concat"],
     body: `
       local.get $r
       f64.abs
       i64.trunc_f64_s
-      call $int.show
+      call $int64.show
       local.tee $d
       array.len
       local.set $n
@@ -2288,7 +3599,7 @@ ${drop}
   // By squaring, each product checked; a is squared only when a higher
   // power is still to come, so it overflows only when the answer would.
   "int.power": {
-    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["r", "i64"]], uses: ["int.mul"], partial: true,
+    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["r", "i64"]], uses: ["int64.mul"], partial: true,
     body: `
       local.get $n
       i64.const 0
@@ -2313,7 +3624,7 @@ ${drop}
         if void
           local.get $r
           local.get $a
-          call $int.mul
+          call $int64.mul
           local.set $r
         end
         local.get $n
@@ -2324,7 +3635,7 @@ ${drop}
         br_if 1
         local.get $a
         local.get $a
-        call $int.mul
+        call $int64.mul
         local.set $a
         br 0
       end
@@ -2333,8 +3644,8 @@ ${drop}
       i32.const 0`,
   },
   // Rounds down; Infinity and NaN have no answer (x − x isn't 0).
-  "int.wholePart": {
-    params: [["x", "f64"]], result: "int", locals: [], uses: [], partial: true,
+  "int64.wholePart": {
+    params: [["x", "f64"]], result: "i64", locals: [], uses: [], partial: true,
     body: `
       local.get $x
       local.get $x
@@ -2353,8 +3664,8 @@ ${drop}
   },
   // Only what show writes: -?(0|[1-9][0-9]*), not -0. Kept at or below
   // zero while reading, so the smallest i64 reads too.
-  "int.read": {
-    params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "i64"]], uses: ["int.mul", "int.sub", "int.neg"], partial: true,
+  "int64.read": {
+    params: [["t", "text"]], result: "i64", locals: [["i", "i32"], ["n", "i32"], ["neg", "i32"], ["c", "i32"], ["m", "i64"]], uses: ["int64.mul", "int64.sub", "int64.neg"], partial: true,
     body: `
       local.get $t
       array.len
@@ -2421,10 +3732,10 @@ ${drop}
         end
         local.get $m
         i64.const 10
-        call $int.mul
+        call $int64.mul
         local.get $c
         i64.extend_i32_u
-        call $int.sub
+        call $int64.sub
         local.set $m
         local.get $i
         i32.const 1
@@ -2438,7 +3749,7 @@ ${drop}
         local.get $m
       else
         local.get $m
-        call $int.neg
+        call $int64.neg
       end
       i32.const 0`,
   },

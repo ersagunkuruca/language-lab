@@ -5,8 +5,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Aborted, bool, fromList, makeRunner, runProgram, toList, type Value, type World } from "../../projectional/src/lang/run.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
+import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
-import { emitWasm, fromText, instantiate, runMain, toText } from "../src/wasm.ts";
+import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { area, choices, closures, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
@@ -73,7 +74,7 @@ const helper = (w: Exports, name: string, key: string) => w[`${name}(${key})`] ?
 function toWasm(w: Exports, v: Value, t: LType): unknown {
   if (t === "f64") return v;
   if (t === "text") return toText(w, v as string);
-  if (t === "int") return w["Int.of"](BigInt(v as number | bigint));
+  if (t === "int") return toInt(w, BigInt(v as number | bigint));
   if (isRecord(t)) return helper(w, `${t.name}.${t.case}`, t.key)(...t.fields.map((f, j) => toWasm(w, (v as Data).fields[j], f.t)));
   if (t === "i32") return (v as Data).tag === TRUE ? 1 : 0;
   if (!isData(t)) throw new Error("no makers for functions");
@@ -96,7 +97,7 @@ function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "f64") return x as number;
   if (t === "text") return fromText(w, x);
   // An Int is a JS number while it's safe, as in the evaluator (int.ts).
-  if (t === "int") { const n = w["Int.get"](x) as bigint; return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
+  if (t === "int") { const n = fromInt(w, x); return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
   if (t === "i32") return bool(x === 1);
   if (isFn(t)) throw new Error("no readers for functions");
   if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
@@ -200,6 +201,17 @@ test("functions as values in WebAssembly: closures, call_ref, a definition by na
   }
 });
 
+// Ints past an i64 (W5b): around each edge (i31, i64), and random ones of up to 300 bits.
+const bigs = (() => {
+  let seed = 12345n;
+  const next = () => (seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n);
+  const edges = [2n ** 30n, 2n ** 31n, 2n ** 32n, 2n ** 62n, 2n ** 63n, 2n ** 64n, 2n ** 96n, 10n ** 18n, 10n ** 19n].flatMap((x) => [x - 1n, x, x + 1n]);
+  const random = Array.from({ length: 24 }, (_, i) => { let v = 0n; for (let j = 0; j <= i % 5; j++) v = (v << 64n) | next(); return v >> (next() % 64n); });
+  return [...edges, ...random].flatMap((x) => [x, -x]);
+})();
+// As the evaluator spells them (int.ts): a number while it's safe.
+const bigPairs = bigs.flatMap((a, i) => [[a, bigs[(i * 7 + 3) % bigs.length]], [a, a], [a, 3n], [-(2n ** 63n), a]].map((xs) => xs.map(norm)));
+
 test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, characters counted, not bytes", async () => {
   const p = texts();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
@@ -220,8 +232,9 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
     shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, NaN, Infinity, -Infinity, 2.0000000001,
       // Written by the runtime: tiny ones as JavaScript does (1e-7 and below), wholes below 2⁵³; the rest by the host.
       1e-7, -1e-7, 1.5e-7, 5.5e-8, 1e-9, -9.99e-7, 1.23e-8, 9.99e-9, 1e-10, -1e-10, 4.9e-10, 5e-10, -5e-10, 3e-300, 5e-324, 1e-6 - 1e-22, 2 ** 53 - 1, 2 ** 53 + 2, -(2 ** 60), 9.3e18, 123456789012345, 1234567890123.5].map((x) => [x]),
-    arith: [[0, 0], [6, 7], [-3, 5], [123456789, 1000], [2 ** 31, 2 ** 31]],
-    smaller: [[1, 2], [5, -5], [0, 0]],
+    arith: [[0, 0], [6, 7], [-3, 5], [123456789, 1000], [2 ** 31, 2 ** 31], ...bigPairs],
+    smaller: [[1, 2], [5, -5], [0, 0], ...bigPairs],
+    sameInt: [[1, 1], [-1, 1], [0, 0], ...bigPairs, ...bigs.map((x) => [norm(x), norm(x < 0n ? -x : x)])],
     // mod, from musl's fmod: exact, b's sign, NaN and the infinities as JavaScript's.
     remainder: [7, -7, 0, -0, 0.5, 1e300, -1e-300, 5e-324, 2 ** 53 + 1, NaN, Infinity, -Infinity, 1e22, 0.1, 6.283185307179586].flatMap((a) =>
       [3, -3, 0.1, 2.5, 1e-310, 5e-324, 1e300, 2 ** -1074 * 3, Infinity, -Infinity, NaN, 0, 1 / 3].map((b) => [a, b])),
@@ -231,14 +244,12 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
     for (const xs of inputs) {
       const want = first(r.call(r.value(def), ...xs));
       const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
-      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => JSON.stringify(x)).join(", ")})`);
+      assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "bigint" ? `${x}n` : JSON.stringify(x))).join(", ")})`);
     }
   }
   // mod is the module's own: alone it imports nothing, not even texts.
   const alone = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.remainder], { data: true }));
   assert.ok(!alone.wat.includes("(import") && !alone.wat.includes("$bytes"), "mod needs no host");
-  // Past 2⁶³ an Int traps, a runtime error rather than a wrong answer (big Ints are W5).
-  assert.throws(() => w.arith(w["Int.of"](2n ** 62n), w["Int.of"](4n)), WebAssembly.RuntimeError);
   // Programs: wc's and chapters' text functions, the evaluator's answers.
   for (const [name, fn, inputs] of [
     ["wc", "blank", [[""], ["  "], ["a b"], ["\t x"]]],
@@ -298,8 +309,8 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
     quotient: ints.flatMap((a) => ints.map((b) => [a, b])),
     remainder: ints.flatMap((a) => ints.map((b) => [a, b])),
     power: [[2, 10], [-3, 3], [0, 0], [5, -1], [-1, 63], [1, 2 ** 40], [2, 62], [-2, 63], [10, 18]],
-    whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, NaN, Infinity, -Infinity].map((x) => [x]),
-    reread: texts.map((t) => [t]),
+    whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, 2 ** 63, -(2 ** 63), 2 ** 64 + 4096, -1.5e19, 1e300, -Number.MAX_VALUE, NaN, Infinity, -Infinity].map((x) => [x]),
+    reread: [...texts, ...bigs.map(String), "9223372036854775808", "-9223372036854775809", "0123456789012345678901", "-", "12345678901234567890x"].map((t) => [t]),
     found: ["", "abc", "héllo wörld", "a🎉b🎉c", "aaa"].flatMap((t) => ["", "a", "b", "ö", "🎉", "c", "wörld", "aa", "zz"].map((q) => [t, q])),
     code: texts.map((t) => [t]),
     character: codes.map((n) => [n]),
@@ -326,8 +337,7 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   }
   assert.ok(compared > 500);
   assert.ok(lowered.funcs.find((g) => g.def === p.defs.plusOne)!.partial);
-  // Past 2⁶³ an Int traps (big Ints are W5): reading one, or the smallest over -1.
-  assert.throws(() => w["reread"](toText(w, "9223372036854775808")), WebAssembly.RuntimeError);
+  // Quotient, remainder and power past 2⁶³ still trap (W5c): the smallest over -1.
   assert.throws(() => w["quotient of"](w["Int.of"](-(2n ** 63n)), w["Int.of"](-1n)), WebAssembly.RuntimeError);
 });
 

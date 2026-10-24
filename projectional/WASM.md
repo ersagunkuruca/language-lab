@@ -16,7 +16,9 @@ Ryū's shortest digits (its tables, about 10 KB, are in a module only
 when it shows a Number). So a module asks its host for nothing but the
 world. Countdown's search runs as fast as the hand-written ideal
 JavaScript. With no JavaScript host, sin and the other Math functions
-are refused with a reason; a port of fdlibm would close that. Left: W5 (big Int), and
+are refused with a reason; a port of fdlibm would close that. An Int grows
+past 64 bits as the evaluator's does (W5b). Left: W5c (big quotient,
+remainder and power), and
 from W1 nested folds and one cast per arm. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Numbers, Bools, records of them as immutable structs (W1a), data with
@@ -243,7 +245,7 @@ as they are needed, one at a time, each with a measurement.
 |---|---|
 | Number | `f64` (boxed `(struct f64)` where polymorphic) |
 | Bool | `i32`; `i31ref` where polymorphic |
-| Int | an `i31ref` while it fits in 31 bits, else a `$big` struct (W5, see Int below) |
+| Int | an `i31ref` while it fits in 31 bits, else a `$big` struct (an i64), else a `$huge` (sign and 32-bit limbs; see Int below) |
 | a type's cases | one struct type per variant, all subtypes of the type's base struct, which holds the tag as an `i32` field; a match is a `br_table` on the tag |
 | a record (one case) | its struct, no tag test |
 | List | cons cells as structs; arrays from `split` as `(array anyref)` |
@@ -272,9 +274,16 @@ one, and a JS host's BigInt isn't there in WASI, so (decided in W5a) an
 Int is an `eqref`: an `i31ref` while it fits in 31 bits, with no
 allocation, else a `$big` struct. That is how Hoot (Guile Scheme on
 WasmGC) keeps fixnums and wasm_of_ocaml keeps OCaml's ints. W5a holds an
-i64 in `$big`, so past 2⁶³ it still traps; W5b makes it a sign and
-32-bit limbs, written in WebAssembly, so it grows as the evaluator's
-does. The runtime's Int functions are written on i64s and called through
+i64 in `$big`; past 2⁶³ (W5b) it is a `$huge`: a sign and a trimmed
+`(array (mut i32))` of 32-bit limbs, least significant first, so it grows
+as the evaluator's does. Each Int is in its one spelling: the smallest of
+the three that holds it, so equal stays a comparison of cases. Add,
+subtract and multiply try the i64 (or i31) way first and take the limbs
+only on overflow or a `$huge`; the limbs are Knuth's classical algorithms
+(TAOCP vol. 2, 4.3.1). The host passes a `$huge` limb by limb
+(`Int.limbs`, `Int.limb`, `Int.huge`, `Int.setLimb`; `toInt` and
+`fromInt` in wasm.ts), not under WASI. Quotient, remainder and power still
+trap past 2⁶³ (W5c, Knuth's algorithm D). The runtime's Int functions are written on i64s and called through
 wrappers that convert (`int.small`, `int.of`, wasm-rt.ts `runtime`), so
 only add, subtract, multiply and the rest need a big path. Measured: the
 ledger (5,000 lines) and wc in WebAssembly take the same time as with
