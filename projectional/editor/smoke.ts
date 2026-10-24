@@ -231,6 +231,25 @@ async function heldSeed() {
   await p.close();
 }
 
+// A Text port reads what's typed as text, quotes or not (BACKLOG E93):
+// greet run forwards from a name.
+async function textPort() {
+  where = "a Text port in Run";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Run backwards" }).click();
+  await p.locator("[data-def]", { hasText: /^greet$/ }).click();
+  const port = p.locator('.port-row.known input[type="text"]').first();
+  if (!(await port.count())) { errors.push(`${where}: greet has no known port to type in`); return p.close(); }
+  await port.fill("Ersagun");
+  await port.press("Enter");
+  await port.dispatchEvent("change");
+  const bad = await p.locator(".status-line.bad").allInnerTexts();
+  if (bad.length) errors.push(`${where}: typing Ersagun says ${JSON.stringify(bad)}`);
+  await p.close();
+}
+
 // A definition made, filled and deleted: the editor draws the program
 // without it (it once drew the deleted one first, and threw).
 async function newAndDeleteDefinition() {
@@ -402,6 +421,7 @@ await deleteAndUndo();
 await swapAndUndo();
 await choiceAction();
 await heldSeed();
+await textPort();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
