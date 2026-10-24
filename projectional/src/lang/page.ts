@@ -15,6 +15,7 @@ import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
 import { compile } from "../../../compiler/src/compile.ts";
 import { HTML_V } from "./std.ts";
+import { soundPlayer } from "./audio-page.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -38,6 +39,9 @@ export interface PageOptions {
   frame: (f: () => void) => void;
   // Each time a part runs again: a preview can flash it.
   ran?: (el: Node_) => void;
+  // workletRuntime (cli/web.ts) prebuilt: given it, a page with sound plays
+  // in the preview (AUDIO.md, "Playing a sound from the editor").
+  worklet?: string;
 }
 
 export interface Preview {
@@ -55,8 +59,10 @@ export function showPage(o: PageOptions): Preview {
   let stopped = false;
   const cells = new Cells(equal);
   const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
-  const value = runMain(o.code, o.info, o.main, { print: (line) => out.log(line), names: o.names, cells, world });
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran });
+  const run = () => runMain(o.code, o.info, o.main, { print: (line) => out.log(line), names: o.names, cells, world });
+  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run) : null;
+  const value = sound ? sound.page : run();
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });
   return { root, cells, stop: () => { stopped = true; } };
 }
 
