@@ -72,7 +72,8 @@ function build(lowered: Lowered) {
     return lines.map((l, k) => {
       const ws = l.trim().split(/\s+/);
       const live = Number(ws.pop()!.slice(1));
-      return { value: decode(ws, lowered.funcs[calls[k][0]].result), live };
+      // "?": no answer (a function with one answer or none).
+      return { value: ws[0] === "?" ? undefined : decode(ws, lowered.funcs[calls[k][0]].result), live };
     });
   };
 }
@@ -151,8 +152,11 @@ function sameAndFreed(run: ReturnType<typeof build>, calls: [number, Value[]][],
     // As text, numbers by their bits (-0 and NaN too): a long list is
     // deeper than deepStrictEqual's recursion goes.
     const bits = (v: Value) => JSON.stringify(v, (_, x) => (typeof x === "number" ? hex(x) : x));
-    assert.equal(bits(got[k].value), bits(want(i, xs)), label(i));
-    assert.equal(got[k].live, 0, `${label(i)}: cells left`);
+    // The inputs in the message only when short (a long list is too deep for JSON).
+    const said = () => { try { const t = bits(xs); return label(i) + (t.length < 2000 ? ` ${t}` : ""); } catch { return label(i); } };
+    const [a, b] = [bits(got[k].value) ?? "none", bits(want(i, xs)) ?? "none"];
+    if (a !== b) assert.equal(a, b, said());
+    if (got[k].live !== 0) assert.equal(got[k].live, 0, `${said()}: cells left`);
   });
 }
 
@@ -204,4 +208,55 @@ test("equal on data in C, and folds over nested data: a rose tree's List of chil
     calls.push([i, lowered.funcs[i].params.map((t) => (t === "f64" ? 10 : tree))]);
   }
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
+});
+
+// The functions of name that are in C, by name.
+function inC(name: string) {
+  const p = load(name);
+  const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  const { refused } = emitC(lowered);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const at = (fn: string, partial?: boolean) => {
+    const i = lowered.funcs.findIndex((g) => g.name === fn && !g.inner && (partial === undefined || g.partial === partial));
+    assert.ok(i >= 0 && !refused.has(i), `${name}: ${fn} is in C (${refused.get(i)})`);
+    return i;
+  };
+  const want = (i: number, xs: Value[]) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!;
+  return { p, lowered, r, at, want, label: (i: number) => `${name}: ${lowered.funcs[i].name}` };
+}
+
+test("one answer or none in C: partial functions say they have none, and the closures they take and make are counted cells", { skip }, () => {
+  const a = inC("algebra");
+  const es = fromList(a.r.value(a.p.named("samples")));
+  const evaluate = a.at("evaluate"), constant = a.at("constant"), simplify = a.at("simplify"), derivative = a.at("derivative"), newton = a.at("newton");
+  const derive = (e: Value) => a.want(derivative, [e]);
+  const calls: [number, Value[]][] = [
+    ...es.flatMap((e) => [0, -1.5, 2, 1e-300, Infinity].map((x): [number, Value[]] => [evaluate, [e, x]])),
+    ...es.flatMap((e): [number, Value[]][] => [[constant, [e]], [simplify, [e]], [simplify, [derive(e)]], [newton, [e, derive(e), 1]], [newton, [e, derive(e), -3]]]),
+  ];
+  sameAndFreed(build(a.lowered), calls, a.want, a.label);
+  const c = inC("calculus");
+  const sinc = c.at("sinc"), parabola = c.at("parabola", true), x2 = c.at("x² − 2");
+  sameAndFreed(build(c.lowered), [-2, 0, -0, 1e-9, 3, NaN].flatMap((x): [number, Value[]][] => [[sinc, [x]], [parabola, [x]], [x2, [x]]]), c.want, c.label);
+});
+
+test("searches in C: Countdown's solutions, every answer in the evaluator's order, and every cell freed", { skip }, () => {
+  const c = inC("countdown");
+  const solutions = c.at("solutions");
+  const calls: [number, Value[]][] = [[[1, 2, 3], 6], [[2, 3, 5], 1], [[4], 4], [[4], 5], [[], 0], [[1, 3, 7, 10], 24], [[25, 50, 75, 3, 6], 228]]
+    .map(([ns, t]) => [solutions, [toList(ns as number[]), t as number]]);
+  sameAndFreed(build(c.lowered), calls, c.want, c.label);
+});
+
+test("data built and taken apart in C: Peano numbers and binary ones", { skip }, () => {
+  const n = inC("numbers");
+  const Nat = n.lowered.funcs[n.at("double")].params[0] as DType, Binary = n.lowered.funcs[n.at("meaning")].params[0] as DType;
+  const peano = (k: number): Value => { let v: Value = { tag: Nat.cases[0].variant, fields: [] }; for (let j = 0; j < k; j++) v = { tag: Nat.cases[1].variant, fields: [v] }; return v; };
+  const binary = (k: number): Value => (k === 0 ? { tag: Binary.cases[0].variant, fields: [] } : { tag: Binary.cases[1 + (k % 2)].variant, fields: [binary(Math.floor(k / 2))] });
+  const ks = [0, 1, 2, 3, 5];
+  const one = (fn: string) => ks.map((k): [number, Value[]] => [n.at(fn), [peano(k)]]);
+  const two = (fn: string) => ks.flatMap((k) => ks.slice(0, 3).map((j): [number, Value[]] => [n.at(fn), [peano(k), peano(j)]]));
+  const calls = [...one("double"), ...one("number"), ...one("factorial"), ...one("is even"), ...two("add"), ...two("multiply"), ...two("power"),
+    ...[0, 1, 6, 100, 300].map((k): [number, Value[]] => [n.at("meaning"), [binary(k)]])];
+  sameAndFreed(build(n.lowered), calls, n.want, n.label);
 });

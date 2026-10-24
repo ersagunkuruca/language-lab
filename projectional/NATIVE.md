@@ -4,7 +4,7 @@ Design note for BACKLOG.md C17 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
-**Status.** Stages N1 and N2 are done.
+**Status.** Stages N1 to N3 are done.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -29,6 +29,27 @@ plan.
   and the tests want 0. They also pass under AddressSanitizer
   (`NATIVE_CFLAGS="-fsanitize=address,undefined"`), so no cell is used
   after it is freed.
+- **N3.** Functions as values, one answer or none, and searches:
+  - a closure is a counted cell: its code, then what it captured. A call
+    goes through a pointer typed by the function type, and the code owns
+    the closure, as it owns its other inputs;
+  - a function with one answer or none sets `lab_st` to 1 and gives a
+    stand-in (0, or no cell). Each call to one checks it, and leaves
+    through the nearest label (an attempt, a failing budget) after
+    dropping what it owns there, or says none itself;
+  - first, optional, all and count are a body, then a label for none. The
+    boxes the lowering's searches put answers in are counted cells;
+  - and, or run both sides, as WebAssembly's i32.and does: a side can hold
+    cells, and skipping it would leak them.
+
+  Countdown's whole search (`solutions`, through the lowering's k
+  closures), algebra's evaluate, simplify and newton, calculus's partial
+  definitions and the Peano and binary numbers give the evaluator's
+  answers, every cell freed, under AddressSanitizer too. Abort waits for
+  N4, since its reason is a Text. Writing the tests found that the shared
+  lowering counted ±∞ as a whole number when comparing (so ∞ ≠ 0 there,
+  but ∞ ≈ 0 in the evaluator, whose rule is Number.isInteger); fixed for
+  every target.
 
 ## What it's for
 
@@ -132,8 +153,9 @@ it and call `cc`.
 3. **N3. Functions as values, one answer or none, searches, Abort.**
    - Closures as counted cells holding their captures.
    - The status convention as C return values.
-   - k as a closure, with `musttail` measured.
-   - Check: queens and Countdown against the evaluator.
+   - k as a closure.
+   - Check: Countdown against the evaluator. Done (above); `musttail`
+     moves to N5's measurements, and queens to N4 (it needs `number.range`).
 4. **N4. Int, Text and the world: whole programs.**
    - Int and Text as above.
    - Console, files and arguments over the C library.
