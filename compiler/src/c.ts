@@ -633,6 +633,40 @@ int main(int argc, char **argv) {
     }
 
     // Statements that end by returning e's value, or setting a variable to it.
+    // An arm that reads its case's fields into locals and then no longer
+    // needs the cell: if nothing else holds the cell, its fields move into
+    // the locals (no dup now, no drop when it goes) and the cell is freed
+    // with the fields nobody took dropped by type, not by lab_fields; if
+    // it's shared, the fields are dup'd and the cell loses one count.
+    // Perceus's drop specialization (Reinking, Xie, de Moura and Leijen,
+    // PLDI 2021).
+    function takeApart(a: SExpr, s: number, t: DType, c: number, after: Set<number>, d: string): { lines: string[]; body: SExpr } | null {
+      const reads: { i: number; f: number }[] = [];
+      let body = a;
+      while (body.k === "let" && body.value.k === "field" && body.value.rec.k === "local" && body.value.rec.i === s && body.value.c === c) {
+        reads.push({ i: body.i, f: body.value.i });
+        body = body.body;
+      }
+      if (!reads.length || free(body).has(s) || new Set(reads.map((r) => r.f)).size < reads.length) return null;
+      const used = union(free(body), after);
+      const n = cname(t, c), fields = t.cases[c].fields;
+      const at = (k: number) => `((${n} *)${local(s)})->f${k}`;
+      const kept = reads.filter((r) => used.has(r.i) || !counted(f.locals[r.i]));
+      const moved = new Set(kept.map((r) => r.f));
+      return {
+        body,
+        lines: [
+          `${d}if (${local(s)}->rc == 1) {`,
+          ...kept.map((r) => `${d}  ${local(r.i)} = ${at(r.f)};`),
+          ...fields.flatMap((x, k) => (moved.has(k) || !counted(x.t) ? [] : [`${d}  ${drop(x.t, at(k))}`])),
+          `${d}  lab_free(${local(s)});`,
+          `${d}} else {`,
+          ...kept.map((r) => `${d}  ${local(r.i)} = ${dup(f.locals[r.i], at(r.f))};`),
+          `${d}  if (${local(s)}->rc) ${local(s)}->rc--;`,
+          `${d}}`,
+        ],
+      };
+    }
     function block(e: SExpr, to: { set: string } | "return", d: string, after: Set<number>): string[] {
       const pre: string[] = [];
       const give = (x: string) => (to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`);
@@ -659,7 +693,9 @@ int main(int argc, char **argv) {
         pre.push(`${d}switch (${local(e.s)}->tag) {`);
         e.arms.forEach((a, j) => {
           if (!a) return;
-          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...drops(inLive, arms[j], after, d + "  "), ...block(a, to, d + "  ", after), ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
+          const taken = isCounted(e.s) && !after.has(e.s) ? takeApart(a, e.s, e.t, j, after, d + "  ") : null;
+          const body = taken ? [...taken.lines, ...block(taken.body, to, d + "  ", after)] : block(a, to, d + "  ", after);
+          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...drops(inLive, arms[j], after, d + "  "), ...body, ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
         });
         pre.push(`${d}default: abort();`, `${d}}`);
         return pre;

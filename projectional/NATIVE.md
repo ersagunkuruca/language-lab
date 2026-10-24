@@ -6,7 +6,9 @@ plan.
 
 **Status.** Stages N1 to N4 are done: whole programs run natively, built by `lab native`.
 N5a is done: measured against compiled JavaScript and WebAssembly (below), and
-cells come from free lists. Reuse of a matched cell (N5b) waits on the numbers.
+cells come from free lists. N5b is done: a match on a cell nobody else holds moves its
+fields out and frees it by its type (below). Reuse of that cell by the arm's
+new one (N5c) is next.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -249,3 +251,38 @@ sees each use after free. The header stays 8 bytes: a case's tag is a byte
 What's left in Countdown's profile is the counting itself (lab_drop,
 lab_dup, lab_fields), which N5b's reuse would cut where a match takes a
 cell apart and builds one of the same size.
+
+## Matched cells (N5b, N5c)
+
+Measured first, by hand on ledger's C (50,000 entries): 75% of its cells
+were made right after a cell of the same size was freed, nearly all in
+two loops (`add to.onto` and `List.reverse`) that take a cons apart and
+build a cons. Patching those two loops by hand took ledger from 125 to
+85 ms (815M instructions to 446M): about 25 ms from not counting the
+fields at all, 14 from giving the cell back to the new cons.
+
+**N5b, done.** An arm reads its case's fields into locals first (that is
+how matches lower). When nothing after those reads uses the cell, the
+arm now asks whether the cell is held only here (`rc == 1`). If so, the
+fields move into the locals with no dup, the fields nobody reads are
+dropped by their types, and the cell goes back on its free list: no
+`lab_drop`, no `lab_fields` switch, and no drop of each moved field later
+when the cell would have gone. If it's shared, the fields are dup'd and
+the cell loses a count, as before. This is Perceus's drop specialization
+(Reinking, Xie, de Moura and Leijen, PLDI 2021).
+`takeApart` in compiler/src/c.ts.
+
+Instructions (callgrind) and wall time (best of 7), before and after:
+
+| program | instructions | time |
+|---|---|---|
+| Countdown's main | 893M → 746M (−16%) | 114 → 96 ms |
+| ledger, 50,000 entries | 815M → 646M (−21%) | 123 → 107 ms |
+
+Both paths run: Countdown takes 942,500 shared cells apart (its search
+shares sublists), ledger 250,834. Outputs are byte for byte the same, and
+the C tests still free every cell.
+
+**N5c, next.** The freed cell given to the arm's next cell of the same
+shape instead of the free list (Lean 4's reset/reuse: Ullrich and de
+Moura, IFL 2019), worth about 14 ms more on ledger by the hand patch.
