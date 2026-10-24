@@ -78,7 +78,7 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, MAP_V, SET_V, TRUE } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, NUMBER } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, NUMBER, STRING, type Type } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { fromList, needsHandling, showValue, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
@@ -784,6 +784,16 @@ function seeded(def: Id): string[] | null {
   return null;
 }
 
+// A port's text read as a value, the way values print. Where a Text goes,
+// what's typed is that text, quotes or not: Ersagun, or "Ersagun".
+function readPort(info: T.Info, p: Id, text: string): ReturnType<typeof parseValue> {
+  const def = info.typeOf.get(ui.def);
+  const t = p === "out" ? (def && info.subst.resolve(def).t === "fn" ? (info.subst.resolve(def) as { ret: Type }).ret : undefined) : info.typeOf.get(p);
+  const z = t ? info.subst.resolve(t) : null;
+  if (z?.t === "con" && z.id === STRING && !/^\s*"/.test(text)) return { value: text };
+  return parseValue(text, doc.code, pres().names);
+}
+
 function setPortText(p: Id, text: string) {
   const ports = portsOfDef(ui.def);
   const cur = ports.map((_, i) => doc.examples?.[ui.def]?.[i] ?? "");
@@ -810,7 +820,7 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
   if (hit) return hit;
   const out: Backwards = { answers: [], more: false };
   // A port's value is written the way values print: 3, "text", [1, 2], true.
-  const read = known.map((k) => [k, parseValue(portText(info, k), doc.code, pres().names)] as const);
+  const read = known.map((k) => [k, readPort(info, k, portText(info, k))] as const);
   const bad = read.find(([, r]) => "error" in r);
   if (bad) {
     const who = bad[0] === "out" ? "The result" : new Namer(doc.code, pres(), ui.def).name(bad[0]);
@@ -2090,7 +2100,8 @@ function traced(info: T.Info): Trace | null {
   let m = traces.get(doc.code);
   if (!m) traces.set(doc.code, (m = new Map()));
   if (!m.has(key)) {
-    const args = texts.map((t) => parseValue(t, doc.code, pres().names));
+    const params = (defBody(ui.def) as NodeOf<"lambda">).params;
+    const args = texts.map((t, i) => readPort(info, params[i], t));
     m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
       : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value), quietWorld()));
   }
