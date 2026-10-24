@@ -220,7 +220,11 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         // A field read is drawn as p.x: it is still the field's projection
         // called on p, the way it runs backwards.
         if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(part("call", [...paren(args[0], args[0].prec >= ATOM), pn("."), part("ref fn", [nameOf(f.target)], n.fn)], id));
-        const head = inline(n.fn);
+        // A named function's name stands for its call, as an operator's
+        // glyph does: clicking it picks the whole call (the editor's
+        // Change the function is how the name itself is replaced).
+        const named = inline(n.fn);
+        const head = f.kind === "ref" ? { ...named, p: named.p.map((x) => (typeof x === "string" ? x : { ...x, cls: `${x.cls} head` })) } : named;
         const shownArgs = ops ? args.map((a) => a.p) : n.args.map((a, i) => {
           const b = byName(a), kids = [...word(nota, i), ...inline(b).p];
           return b === a ? kids : [part("lam byname", kids, a)];
