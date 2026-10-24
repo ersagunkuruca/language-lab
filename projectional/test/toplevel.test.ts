@@ -781,4 +781,6 @@ test("a list's items and a chain's inputs are added, moved and taken out", async
   assert.deepEqual(values(step(code, T.moveItem(code, names, info, at(code, "z").row, 2, -1)), "ws"), ["x", "z", "y"]);
   assert.deepEqual(values(step(code, T.removeItem(code, names, info, at(code, "x").row, 0)), "ws"), ["y", "z"]);
   assert.equal(T.moveItem(code, names, info, at(code, "x").row, 0, -1).ok, false, "first can't move earlier");
+  assert.deepEqual(values(step(code, T.moveItemTo(code, names, info, at(code, "x").row, 0, 2)), "ws"), ["y", "z", "x"], "dragged to the end, the rest move up");
+  assert.deepEqual(values(step(code, T.moveItemTo(code, names, info, at(code, "z").row, 2, 0)), "ws"), ["z", "x", "y"]);
 });

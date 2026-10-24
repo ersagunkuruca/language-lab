@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E101 | Graph: drag an input up or down to reorder a list's items or a + b + c's inputs (the panel and menu do it now) | E91, Ersagun 2026-10-24 11:11 | P3 | S | |
 | E102 | Blocks pane: a long press opens the part's menu, as in the graph (iOS has no right-click; the panel covers the edits meanwhile) | NODE-EDITOR.md parity audit (E97) | P3 | S | |
 | E103 | **Bug.** Adding a value (a hole of any type) takes about 4 s: its palette checks every function in scope, and it is built twice (menu and panel). Same in the graph and the blocks | found doing E100 | P2 | S | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
@@ -136,6 +135,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E101 | Graph: drop an input on another of its list or chain to move it there | #421 |
 | E100 | Right-click on the blocks' empty space adds a value | #420 |
 | E97 | Graph and Blocks parity audit (NODE-EDITOR.md); gaps filed as E100-E102 | #419 |
 | E91 | A list's items and a + b + c's inputs: add, move, take out, in both views; + on graph nodes | #418 |

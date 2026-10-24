@@ -818,18 +818,27 @@ export function removeItem(code: Code, names: Names, info: Info, row: Row, at: n
 export function moveItem(code: Code, names: Names, info: Info, row: Row, at: number, by: -1 | 1): TEdit {
   const other = at + by;
   if (other < 0 || other >= row.items.length) return { ok: false, reason: by < 0 ? "it's first already" : "it's last already" };
-  const a = row.items[at], b = row.items[other];
-  const pa = parentOf(code, a)!, pb = parentOf(code, b)!;
+  const r = moveItemTo(code, names, info, row, at, other);
+  return r.ok ? { ...r, note: `Moved it ${by < 0 ? "earlier" : "later"}.` } : r;
+}
+
+// Take items[from] out and put it back at `to`; the others keep their order.
+// Each place in the row keeps its pair (cons or call); only what the pairs
+// hold moves.
+export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from: number, to: number): TEdit {
+  if (from === to) return { ok: false, reason: "it's there already" };
+  const order = [...row.items];
+  const [it] = order.splice(from, 1);
+  order.splice(to, 0, it);
+  const places = row.items.map((i) => parentOf(code, i)!);
   const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
-  const put = (p: { parent: Id; index?: number }, id: Id) => {
+  places.forEach((p, i) => {
     const n = next.nodes[p.parent] as NodeOf<"call">;
     const args = [...n.args];
-    args[p.index!] = id;
+    args[p.index!] = order[i];
     next.nodes[p.parent] = { ...n, args };
-  };
-  put(pa, b);
-  put(pb, a);
-  return guardTyped(info, next, names, a, `Moved it ${by < 0 ? "earlier" : "later"}.`);
+  });
+  return guardTyped(info, next, names, it, `Moved it to be the ${ordinal(to + 1)}.`);
 }
 
 const ordinal = (n: number) => (["first", "second", "third", "fourth", "fifth"][n - 1] ?? `${n}th`);

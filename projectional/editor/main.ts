@@ -1885,6 +1885,10 @@ function graphHooks(info: T.Info) {
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
+    reorder: (item: Id, onto: Id) => {
+      const a = T.rowOfItem(doc.code, item), b = T.rowOfItem(doc.code, onto);
+      if (a && b && a.row.root === b.row.root) applyT(T.moveItemTo(doc.code, doc.names.short, info, a.row, a.at, b.at));
+    },
     addItem: (row: Id) => { const r = T.rowAt(doc.code, row); if (r && applyT(T.addItem(doc.code, doc.names.short, info, r, r.items.length))) document.getElementById("f-query")?.focus(); },
   };
 }

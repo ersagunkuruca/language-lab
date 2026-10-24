@@ -70,6 +70,9 @@ export interface GraphHooks {
   fold?: (frame: Id) => void;
   // The + under a list's or a + b + c's inputs: one more, at the end.
   addItem?: (row: Id) => void;
+  // An input of a list or a chain dropped on another of its inputs: it
+  // moves there.
+  reorder?: (item: Id, onto: Id) => void;
   // Right-click: what was under the pointer, where (screen and world).
   menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
@@ -998,6 +1001,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
         if (src && to) hooks.use(src, to);
         else if (out && to) hooks.share(out, to);
         else if (slot && !to) hooks.clear(slot);
+        else if (slot && to && to !== slot) hooks.reorder?.(slot, to);
       });
     } else if (mv) {
       ev.preventDefault();
