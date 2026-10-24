@@ -180,6 +180,17 @@ async function swapAndUndo() {
   if ((await distance()) !== "distance = drift − drift") errors.push(`${where}: after picking drift the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
+  // Right-click on the blocks' empty space adds a value, as the graph's
+  // canvas does (BACKLOG E100); Undo takes it back.
+  where = "add a value from the blocks";
+  const steps = async () => (await p.locator(".p-text").innerText()).split("\n").filter((l) => /^\s*\S+ = /.test(l)).length;
+  const had = await steps();
+  await p.locator(".blocks-wrap").dispatchEvent("contextmenu", { clientX: 600, clientY: 700 });
+  // A hole of any type is offered everything, so its palette takes seconds (E103).
+  await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 }).catch(() => errors.push(`${where}: no Add a value on the blocks' empty space`));
+  if ((await steps()) !== had + 1) errors.push(`${where}: no new named value (${had} before, ${await steps()} after)`);
+  await p.keyboard.press("Escape");
+  await p.locator('button[data-act="undo"]').first().click();
   // A function's name picks its whole call, whose panel changes the
   // function (BACKLOG E92).
   where = "a function's name in the blocks";

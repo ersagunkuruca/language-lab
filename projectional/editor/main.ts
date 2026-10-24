@@ -1721,7 +1721,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(fillPalette(id, info, names, "m-query"));
   } else if (kind === "space") {
     const r = T.addStep(doc.code, doc.names.short, info, ui.def);
-    rows.push(item("Add a value here…", "add", "A new named value (a hole to fill) here: fill it, then wire it in", r.ok ? undefined : r.reason));
+    rows.push(inGraph ? item("Add a value here…", "add", "A new named value (a hole to fill) here: fill it, then wire it in", r.ok ? undefined : r.reason)
+      : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", r.ok ? undefined : r.reason));
   } else if (kind === "binder" && id) {
     const on = (doc.layout.named ?? []).includes(id);
     rows.push(head(names[id] ?? "a value"));
@@ -1784,8 +1785,11 @@ function menuAction(act: string, target: Id | undefined) {
       const hole = r.select!, w = m.world;
       ui.selected = hole;
       revealNext = (id) => id === hole || id === r.dot;
-      commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } } },
-        ["code.json", "names.short.json", "layout.json"], r.note);
+      // From the graph's canvas the new node sits where you clicked; from
+      // the blocks it has no place to keep, so the layout places it.
+      const placed = m.blocks ? doc.layout : { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } };
+      commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: placed },
+        ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "just before this"}: fill its hole, then use it by name.` : r.note);
       ui.menu = { ...m, target: { kind: "hole", id: hole } };
       render();
       document.getElementById("m-query")?.focus();
@@ -2639,6 +2643,15 @@ document.addEventListener("click", (e) => {
 // Right-click in the Blocks pane: the graph's menu for that part.
 document.addEventListener("contextmenu", (e) => {
   const id = blocksHit(e.target);
+  // Empty space in the blocks: what the graph's canvas offers there.
+  if (!id && (e.target as HTMLElement | null)?.closest?.(".blocks-wrap")) {
+    e.preventDefault();
+    ui.menu = { target: { kind: "space" }, x: e.clientX, y: e.clientY, world: { x: 0, y: 0 }, blocks: true };
+    ui.query = "";
+    render();
+    document.querySelector<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")?.focus();
+    return;
+  }
   if (!id) return;
   e.preventDefault();
   ui.selected = id;
