@@ -31,7 +31,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
 | E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
 | E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
-| E75 | Opening a program doesn't scroll the navigator to its open definition (pedal, converter `main` below the fold) | QA-2026-10-24b L7 | P3 | S | |
 | E76 | Status bar quiet after typing in a page's field (converter) | QA-2026-10-24b L8 | P3 | S | |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
@@ -132,6 +131,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E75 | Opening a program shows its open definition in the navigator | #424 |
 | E72 | No longer reproduces (one subtract row); smoke checks it | #423 |
 | E71 | The palette says a generic function's a is a number type | #423 |
 | E102 | Blocks pane: a long press opens the part's menu | #422 |

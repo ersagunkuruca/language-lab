@@ -307,6 +307,22 @@ async function listItems() {
   await p.close();
 }
 
+// Opening a program shows its open definition in the navigator, even
+// below the fold (BACKLOG E75): the guitar pedal's main at 1280 by 800.
+async function navScroll() {
+  where = "the navigator on opening a program";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: guitar pedal" }).click();
+  const seen = await p.locator(".p-nav .nav-row[data-def].on").evaluate((e) => {
+    const r = e.getBoundingClientRect(), nav = e.closest(".p-nav")!.getBoundingClientRect();
+    return r.top >= nav.top && r.bottom <= nav.bottom;
+  }).catch(() => null);
+  if (seen !== true) errors.push(`${where}: the open definition ${seen === null ? "isn't in the list" : "is out of sight"}`);
+  await p.close();
+}
+
 // A Text port reads what's typed as text, quotes or not (BACKLOG E93):
 // greet run forwards from a name.
 async function textPort() {
@@ -517,6 +533,7 @@ await choiceAction();
 await heldSeed();
 await textPort();
 await listItems();
+await navScroll();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
