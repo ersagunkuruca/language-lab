@@ -2439,7 +2439,7 @@ function draw() {
           h("button", { type: "button", "data-act": "undo", disabled: !undo.length && !deleted }, "Undo"),
           h("button", { type: "button", "data-act": "redo", disabled: !redo.length }, "Redo"),
           h("button", { type: "button", "data-act": "reset", disabled: !isExample(doc.program), title: isExample(doc.program) ? "Back to the example as shipped" : "Your own program has nothing to go back to; Undo steps back" }, "Reset")),
-        h("a", { class: "btn", href: "tutorial.html" }, "Tutorial"),
+        h("a", { class: "btn", href: "guide.html", title: "A hands-on guide: one program changed step by step (GUIDE.md); it links on to the tutorial" }, "Learn"),
         h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
         h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells"))),
     h("main", { class: "grid is-typed", style: dockStyle(), "data-pane": ui.pane },
