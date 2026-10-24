@@ -9,7 +9,7 @@ import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { ARITH, S } from "../src/lang/std.ts";
-import { INT, NUMBER, STRING, showType } from "../src/lang/types.ts";
+import { INT, NUMBER, RATIONAL_TYPE, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
 
 // A program written from nothing with the editor's gestures only: the same
@@ -674,6 +674,25 @@ test("a call typed in the palette reads as it prints: sqrt(x + 1) in double(x)",
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "nope(x)", double).ok, false);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "sqrt(x, x)", double).ok, false);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "a(x)", double).ok, false);
+});
+
+test("where a fraction goes, a typed 1/2 is one half and a typed 1 is one: as fraction(1) + 1/2", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "f", { kind: "function", params: ["x"] }));
+  const f = s.def("f");
+  const hole = s.holes(f)[0];
+  const lits = (text: string) => {
+    const r = T.fillValue(s.code, s.all(), s.info(), hole, text, f);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+    return r.ok ? subtree(r.code, hole).map((id) => r.code.nodes[id]).filter((n): n is NodeOf<"lit"> => n.kind === "lit").map((n) => [n.value, n.of]) : [];
+  };
+  // Each whole number at what its place takes: as fraction takes an Int.
+  assert.deepEqual(lits("as fraction(1) + 1/2"), [[1, INT], ["1/2", RATIONAL_TYPE]]);
+  assert.deepEqual(lits("as fraction(2) · 3"), [[2, INT], [3, RATIONAL_TYPE]]);
+  // Where a Number goes, 1/2 is still 1 divided by 2.
+  assert.deepEqual(lits("1/2 + x · 0.5"), [[1, undefined], [2, undefined], [0.5, undefined]]);
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "as fraction(1) + 1/0", f).ok, false);
 });
 
 test("a call typed in the palette may name a function of several words: as fraction(3)", async () => {

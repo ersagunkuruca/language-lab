@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | ready: L75 done (a `lit` with `of: "std.rational"`, value a whole number or "top/bottom"; DSL `k.at`); smaller/larger on every number type is L73 |
 | E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
@@ -136,6 +135,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E69 | A typed 1/2 where a fraction goes is one half; each whole number takes the type its place expects | #395 |
 | E68 | Create a definition: 3.8 s → 0.85 s; a filling's recheck checks units only in the definitions it can affect | #392 |
 | E67 | The palette reads calls of several-word names: as fraction(3), ‹as fraction›(3) | #390 |
 | E66 | The palette reads < ≤ > ≥ = ++ and -x, from the notation itself | #388 |
