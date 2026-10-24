@@ -4,6 +4,7 @@
 //   lab run <program> [arguments…]       run `main` with the evaluator; a page
 //                                        prints as static HTML (WEB.md)
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
+//   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //
@@ -34,11 +35,15 @@ import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
+import { CFLAGS, emitC } from "../../compiler/src/c.ts";
+import { lowerScalar } from "../../compiler/src/scalar.ts";
+import { execFileSync } from "node:child_process";
 import { webPage } from "./web.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
+  lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
   lab build-web <program> [-o app.html] one HTML file running the page main returns
 options:
@@ -175,7 +180,7 @@ if (!command || command === "help" || command === "--help" || !path) {
 }
 
 const loaded = load(path);
-const main = command === "run" || command === "compile" || command === "build-web" ? entry(loaded, mainName, command === "build-web") : "";
+const main = command === "run" || command === "compile" || command === "native" || command === "build-web" ? entry(loaded, mainName, command === "build-web") : "";
 const p = main && defined < 0 ? represented(loaded, main) : loaded;
 switch (command) {
   case "run": {
@@ -208,6 +213,22 @@ switch (command) {
       process.stderr.write("lab: esbuild isn't installed (npm install in projectional/), so the output imports the runtime from this checkout\n");
     }
     process.stderr.write(`lab: wrote ${out}; run it with: node ${out} [arguments…]\n`);
+    break;
+  }
+  case "native": {
+    // The program as one C file, then built by the system's C compiler
+    // with the flags that keep the evaluator's numbers (compiler/src/c.ts).
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : basename(resolve(path)).replace(/\.json$/, "");
+    const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true });
+    let c: string;
+    try { c = emitC(lowered, { main }).c; } catch (e) { fail((e as Error).message); }
+    writeFileSync(`${out}.c`, c);
+    const cc = process.env.CC ?? "cc", flags = [...CFLAGS, "-pthread", "-o", out, `${out}.c`, "-lm"];
+    try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
+      fail(`wrote ${out}.c, but ${cc} didn't build it; build it with: cc ${flags.join(" ")}`);
+    }
+    process.stderr.write(`lab: wrote ${out} (and ${out}.c); run it with: ./${out} [arguments…]\n`);
     break;
   }
   case "build-web": {

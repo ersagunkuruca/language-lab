@@ -45,11 +45,13 @@
 // its reason in `lab_reason`, and a handler a label for it as an attempt
 // is for status 1. Every call is a statement of its own, in order, since C
 // runs a call's arguments in any order and a call may drop what another
-// argument reads. What uses the world isn't printed yet (N4b): it is in
-// `refused`, with the reason, and so is anything that calls it.
+// argument reads. The console and files (N4b) are c-rt.ts's too, and
+// `main` (opts.main) runs the program on a thread with a big stack. What
+// can't be printed is in `refused`, with the reason, and so is anything
+// that calls it.
 
 import { FDLIBM_C } from "./c-math.ts";
-import { BASE, cName, RESERVED, RT_C, runtimeC, type ListNames } from "./c-rt.ts";
+import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import { fails, isData, isFn, isRecord, kids, mapKids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -68,9 +70,9 @@ const FDLIBM: Partial<Record<Op, string>> = {
 };
 const PRINTED = new Set<SExpr["k"]>([
   "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "field", "tag", "case",
-  "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle",
+  "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world",
 ]);
-const LIST_TEXT = "std.list<type.string<>>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
@@ -118,7 +120,11 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // A Number is its bits in hex, a Bool 0 or 1, a record its fields, data
 // its case's number then its fields; a function with one answer or none
 // prints `?` first when it has none.
-export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProgram {
+// `main`: the definition to run as the program, with the arguments (a
+// List Text) if it takes them, on a thread with a big stack (1 GiB of
+// address space, used only as deep as the program goes); its Int or Number
+// is the exit code, and an Abort's reason goes to standard error, with 1.
+export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
@@ -132,7 +138,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, body: settle(f.body) }));
-  const used = new Set<string>(["new", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", ...RESERVED]);
+  const used = new Set<string>(["new", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -152,8 +158,8 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn)));
-    if (k) refused.set(i, k.k === "rt" ? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world (${k.op}) in C comes with NATIVE.md's stage N4b` : `${k.k} isn't printed as C`);
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    if (k) refused.set(i, k.k === "rt" ? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
   for (let changed = true; changed;) {
@@ -211,7 +217,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
   };
   // The names a runtime function that makes or reads a list needs.
   const listNames = (fn: string): ListNames => {
-    const d = data.get(runtime(fn).list ?? LIST_TEXT)!;
+    const d = data.get(fn === "world.readLine" ? OPTION_TEXT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     const tag = d.cases.findIndex((c) => c.fields.length > 0);
     return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) };
   };
@@ -251,7 +257,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
   const text = kept.map((i) => func(funcs[i], i));
-  const ints = rts.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
+  const ints = opts.main !== undefined || rts.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
   const tests = opts.harness ? harness() : "";
 
@@ -260,7 +266,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
     const n = sname.get(r.key)!;
     types.push(r.mutable
       ? `typedef struct { lab_cell h; ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ")} } ${n}; // a box`
-      : `typedef struct { ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ")} } ${n}; // ${r.name}: ${r.fields.map((x) => x.name).join(", ")}`);
+      : `typedef struct { ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ") || "char none;"} } ${n}; // ${r.name}: ${r.fields.map((x) => x.name).join(", ")}`);
   }
   for (const d of data.values()) {
     d.cases.forEach((c, j) => {
@@ -300,7 +306,10 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
     fieldsOf.push(ks.length ? `case ${tnum.get(`shape ${s}`)}: ${ks.join(" ")} break;` : "");
   }
 
+  const world = [...rts].some((x) => x.startsWith("world."));
+  const entry = opts.main === undefined ? "" : program(opts.main);
   const c = [
+    ...(world ? [POSIX] : []),
     "// Generated by compiler/src/c.ts from a typed program. Do not edit.",
     "// Build with -ffp-contract=off (and -msse2 -mfpmath=sse on 32-bit x86):",
     "// the numbers are then the evaluator's, bit for bit.",
@@ -309,6 +318,8 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
     "#include <stdio.h>",
     "#include <stdlib.h>",
     "#include <math.h>",
+    ...(world ? [WORLD_H] : []),
+    ...(entry ? ["#include <pthread.h>"] : []),
     ...(math ? [FDLIBM_C] : []),
     ...(cells ? [CELLS] : []),
     ...(ints ? [BASE] : []),
@@ -325,9 +336,50 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
     "",
     text.join("\n\n"),
     ...(opts.harness ? ["", tests] : []),
+    ...(entry ? ["", entry] : []),
     "",
   ].join("\n");
   return { c, names, refused };
+
+  function program(def: string): string {
+    const i = kept.find((j) => funcs[j].def === def && !funcs[j].inner);
+    if (i === undefined) {
+      const j = funcs.findIndex((g) => g.def === def && !g.inner);
+      throw new Error(`main isn't in C: ${j < 0 ? lowered.refused.get(def as never) ?? "it isn't lowered" : refused.get(j)}`);
+    }
+    const f = funcs[i];
+    const list = f.params.length ? (f.params[0] as DType) : null;
+    const ln = list && (() => { const tag = list.cases.findIndex((c) => c.fields.length > 0); return { cons: cname(list, tag), nil: cname(list, 1 - tag), type: tnum.get(list.key)!, tag, head: list.cases[tag].fields.findIndex((x) => x.t !== list) }; })();
+    const code = f.result === "int" ? "lab_code = (int)(LAB_IS_SMALL(r) ? LAB_VAL(r) : (int64_t)LAB_BIG(r)->d[0] * (LAB_BIG(r)->neg ? -1 : 1)); lab_int_drop(r);"
+      : f.result === "f64" ? "lab_code = (int)r;" : counted(f.result) ? `${drop(f.result, "r")} lab_code = 0;` : "(void)r; lab_code = 0;";
+    return `// The program: main on a thread with room to recurse deeply.
+static int lab_argc, lab_code;
+static char **lab_argv;
+static void *lab_run(void *unused) {
+  (void)unused;
+${ln ? `  lab_cell *args = &${ln.nil};
+  for (int k = lab_argc; k-- > 1;) { ${ln.cons} *c = lab_new(sizeof(${ln.cons}), ${ln.type}, ${ln.tag}); c->f${ln.head} = lab__text_of(lab_argv[k], strlen(lab_argv[k])); c->f${1 - ln.head} = args; args = (lab_cell *)c; }
+` : ""}  ${ty(f.result)} r = ${names.get(i)}(${ln ? "args" : ""});
+  if (lab_st) {
+    fflush(stdout);
+    if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); }
+    lab_code = 1;
+    return 0;
+  }
+  ${code}
+  return 0;
+}
+int main(int argc, char **argv) {
+  pthread_attr_t a;
+  pthread_t t;
+  lab_argc = argc; lab_argv = argv;
+  pthread_attr_init(&a);
+  if (pthread_attr_setstacksize(&a, sizeof(void *) == 8 ? (size_t)1 << 30 : (size_t)1 << 28) || pthread_create(&t, &a, lab_run, 0)) lab_run(0);
+  else pthread_join(t, 0);
+  fflush(stdout);
+  return lab_code;
+}`;
+  }
 
   function func(f: SFunc, i: number): string {
     const loops = calls(f.body).some((x) => x.fn === i && x.tail);
@@ -451,6 +503,16 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
         }
+        // The console and files: a Unit's call is a statement; one that
+        // fails has set lab_st to 2, with the reason.
+        case "world": {
+          rts.add(`world.${e.op}`);
+          const c = `${cName(`world.${e.op}`)}(${args(e.args, pre, d, after).join(", ")})`;
+          const unit = isRecord(e.t) && !e.t.fields.length;
+          if (!unit) return e.aborts ? checked(c, e.t, pre, d, after) : stated(c, e.t, pre, d);
+          pre.push(`${d}${c};`, ...(e.aborts ? [`${d}if (lab_st) {`, ...out(d + "  ", after), `${d}}`] : []));
+          return zero(e.t);
+        }
         // The reason goes in lab_reason, then out with status 2.
         case "abort": {
           const r = ex(e.reason, pre, d, after);
@@ -471,7 +533,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
         }
         case "make": {
           const xs = args(e.args, pre, d, after);
-          if (!e.t.mutable) return `((${ty(e.t)}){ ${xs.join(", ")} })`;
+          if (!e.t.mutable) return `((${ty(e.t)}){ ${xs.join(", ") || "0"} })`;
           const v = temp(e.t), n = sname.get(e.t.key)!;
           pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, 0);`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
           return v;
@@ -673,6 +735,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
       case "int": return "int";
       case "text": return "text";
       case "rt": return rtType(e.fn);
+      case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
       case "cap": return shapes[e.shape].caps[e.i];
@@ -684,7 +747,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
   // A value that stands for none: what a function gives with no answer,
   // and what a box holds before a search sets it.
   function zero(t: LType): string {
-    return t === "f64" || t === "i32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ")} })`;
+    return t === "f64" || t === "i32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
   }
 
   function harness(): string {
@@ -702,7 +765,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean } = {}): CProg
         done.add(key);
         if (isRecord(t)) {
           const n = sname.get(t.key)!;
-          io.push(`static ${n} lab_read_${n}(void) { ${n} r; ${t.fields.map((x, j) => `r.f${j} = ${rd(x.t)};`).join(" ")} return r; }`,
+          io.push(`static ${n} lab_read_${n}(void) { ${n} r = ${zero(t)}; ${t.fields.map((x, j) => `r.f${j} = ${rd(x.t)};`).join(" ")} return r; }`,
             `static void lab_print_${n}(${n} r) { ${t.fields.map((x, j) => `${pr(x.t, `r.f${j}`)}`).join(" ")} }`);
         } else {
           const d = t as DType, n = dname.get(d.key)!;

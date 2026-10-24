@@ -7,17 +7,19 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { Aborted, bool, fromList, makeRunner, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { dirname, join } from "node:path";
+import { Aborted, bool, fromList, makeRunner, runProgram, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { nodeWorld } from "../../projectional/src/lang/world.ts";
+import { book } from "../gaps/ledger.ts";
 import { norm } from "../../projectional/src/lang/int.ts";
 import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, maths, roses, sameLists } from "../src/fixtures.ts";
+import { area, maths, roses, sameLists, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -66,11 +68,14 @@ function decode(ws: string[], t: LType): Value {
 
 // The program built, and a function that makes the calls and gives back
 // each answer, with the cells still live after it.
-function build(lowered: Lowered) {
-  const { c } = emitC(lowered, { harness: true });
+const compile = (c: string) => {
   const src = join(dir, `p${builds}.c`), exe = join(dir, `p${builds++}`);
   writeFileSync(src, c);
-  execFileSync(cc, [...CFLAGS, "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
+  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
+  return exe;
+};
+function build(lowered: Lowered) {
+  const exe = compile(emitC(lowered, { harness: true }).c);
   return (calls: [number, Value[]][]) => {
     const input = calls.map(([i, xs]) => { const out = [String(i)]; xs.forEach((x, j) => encode(x, lowered.funcs[i].params[j], out)); return out.join(" "); }).join("\n") + "\n";
     const lines = execFileSync(exe, { input, maxBuffer: 1 << 28 }).toString().trim().split("\n");
@@ -328,4 +333,61 @@ test("Numbers shown in C: JavaScript's shortest digits, rounded as the evaluator
   const xs = [0, -0, 1, -1, 0.5, 1e21, 1e-7, 123.456, 1 / 3, NaN, Infinity, -Infinity, 5e-324, 1.7976931348623157e308, 0.1 + 0.2, 2 ** 53, 4.35, 1e-10, 0.0000005,
     ...Array.from({ length: 300 }, (_, k) => (next() - 0.5) * 10 ** Math.floor(next() * 40 - 20) * (k % 3 ? 1 : 1e9))];
   sameAndFreed(build(v.lowered), ["as °C", "as cups", "as min/km"].flatMap((fn) => xs.map((x): [number, Value[]] => [v.at(fn), [x]])), v.want, v.label);
+});
+
+// Whole programs (NATIVE.md N4b): main with its arguments, the console and
+// files, in a folder of their own, against the evaluator with Node's world
+// in another folder with the same files.
+test("whole programs in C: files, console, arguments and exit codes as the evaluator's with Node's world", { skip }, () => {
+  const scratch = mkdtempSync(join(tmpdir(), "native-run-"));
+  const files: Record<string, string> = {
+    "a.txt": "one two\nthree\n", "book.md": "# One\nhello world\n# Two\nmore words here\n", "sums.txt": "1+2\nlet x = 3\nx*x\n1 +\n",
+    "ledger.csv": "2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n", "big.csv": book(500), "out/.keep": "", "Ünï 🎉.txt": "é\n", "z.txt": "", "Zed.txt": "",
+  };
+  const folder = () => {
+    const d = mkdtempSync(join(scratch, "d-"));
+    for (const [p, t] of Object.entries(files)) { mkdirSync(join(d, dirname(p)), { recursive: true }); writeFileSync(join(d, p), t); }
+    return d;
+  };
+  const contents = (d: string): Record<string, string> => Object.fromEntries((readdirSync(d, { recursive: true }) as string[]).sort()
+    .map((p) => [p, statSync(join(d, p)).isDirectory() ? "(folder)" : readFileSync(join(d, p), "utf8")]));
+  const w = worldly();
+  const programs = [
+    ...["wc", "ledger", "chapters", "calc", "queens"].map((name) => { const p = load(name); return { name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs, main: p.named("main") }; }),
+    { name: "worldly", code: w.code, info: w.info, names: w.names, roots: [w.main], main: w.main },
+  ];
+  const argsets = [[], ["a.txt", "Ünï 🎉.txt"], ["-l", "a.txt", "nope", "out"], ["book.md", "out"], ["book.md", "gone"], ["ledger.csv"], ["big.csv"], ["out", "a.txt"], ["."], ["a.txt/x"]];
+  let runs = 0;
+  for (const p of programs) {
+    const exe = compile(emitC(lowerScalar(p.code, p.info, p.names, p.roots, { data: true }), { main: p.main }).c);
+    // The console's input matters to calc and worldly (read line), the
+    // arguments to the rest.
+    const inputs = ["calc", "worldly"].includes(p.name) ? ["3*4\nlet\n", "a\r\nb", "(((2)))^10 % 7\n-(5 - 8) * 2 / 0\nzz\n"] : ["3*4\n"];
+    for (const args of p.name === "queens" ? [[]] : p.name === "calc" ? argsets.slice(0, 3) : argsets) for (const input of inputs) {
+      const want = folder(), got = folder();
+      const printed: string[] = [], errors: string[] = [], lines = input.split("\n");
+      const cwd = process.cwd();
+      process.chdir(want);
+      let exit: number;
+      try {
+        exit = runProgram(p.code, p.info, p.main, args, { print: (l) => printed.push(l), names: p.names, world: {
+          ...nodeWorld(), error: (l) => errors.push(l), input: () => lines.splice(0).join("\n"),
+          readLine: () => (lines.length > 1 || lines[0] ? lines.shift()!.replace(/\r$/, "") : null),
+        } });
+      } finally { process.chdir(cwd); }
+      const r = spawnSync(exe, args, { cwd: got, input, maxBuffer: 1 << 26 });
+      const lined = (xs: string[]) => xs.map((l) => `${l}\n`).join("");
+      assert.deepEqual(
+        { code: r.status, out: r.stdout.toString(), err: r.stderr.toString(), files: contents(got) },
+        { code: exit, out: lined(printed), err: lined(errors), files: contents(want) },
+        `${p.name} ${args.join(" ")} < ${JSON.stringify(input)}`);
+      runs++;
+    }
+  }
+  assert.equal(runs, 70);
+  // Nesting 100,000 deep: main's thread has the stack for it.
+  const calc = load("calc");
+  const exe = compile(emitC(lowerScalar(calc.code, calc.info, calc.pres.names, calc.own.defs, { data: true }), { main: calc.named("main") }).c);
+  const deep = spawnSync(exe, [], { input: `${"(".repeat(1e5)}1${")".repeat(1e5)}\n` });
+  assert.equal(deep.stdout.toString(), "1\n", deep.stderr.toString());
 });
