@@ -186,8 +186,10 @@ Because each map has one spelling, two maps with the same entries are
 `equal` however they were built, `show` prints them in key order, and a
 fold over `entries of` goes in key order on every target (JavaScript,
 Python and Go leave that order to the representation). The operations walk
-the list, so each is linear; a balanced tree that stores them in log n
-(L76) is a representation, chosen without the program changing. Haskell's
+the list, so each is linear; a weight-balanced tree that stores them in
+log n (`src/lang/map-tree.ts`, Adams 1993) is a representation, checked
+against them, which the chooser takes for a program that puts and looks up
+a lot (choosing it without the program asking is C47). Haskell's
 `Data.Map`, OCaml's `Map` and Rust's `BTreeMap` are the prior art.
 (`test/maps.test.ts`.)
 
