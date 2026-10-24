@@ -154,6 +154,9 @@ at them.
   `int.gcd` (Euclid's algorithm, on int64s once both are small) and
   `int.exact` (division by a divisor known to divide), with both negated
   when the bottom is below 0.
+- `compare` (Backlog C46) is lowered per type, as `equal` is: a function
+  per record or data type giving −1, 0 or 1 (cases by their place, then
+  fields left to right), so maps, sets and sort run natively too.
 
 **Left to right, said in C.** C doesn't say in which order a call's
 arguments run, and GCC runs them right to left (found in N1's test

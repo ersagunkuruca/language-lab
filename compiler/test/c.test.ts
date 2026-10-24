@@ -19,7 +19,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, fractionInputs, fractions, maths, roses, sameLists, worldly } from "../src/fixtures.ts";
+import { area, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -401,6 +401,20 @@ test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too,
     const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
     assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${p.names[def]} is in C`);
     for (const xs of fractionInputs(lowered.funcs[i].params.length, 150)) calls.push([i, xs.map(norm)]);
+  }
+  sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
+});
+
+test("compare and sort in C: the evaluator's order on every plain type, and every cell freed", { skip }, () => {
+  const p = ordered();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const inputs = orderedInputs(), calls: [number, Value[]][] = [];
+  const value = (x: unknown): Value => (typeof x === "bigint" ? norm(x) : Array.isArray(x) ? toList(x.map(value)) : x as Value);
+  for (const [name, def] of Object.entries(p.defs)) {
+    const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
+    assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${name} is in C`);
+    for (const xs of inputs[name]) calls.push([i, xs.map(value)]);
   }
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });

@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, ARITH, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, ARITH, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -461,4 +461,69 @@ export function fractionInputs(n: number, count: number): bigint[][] {
   const next = () => (seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n);
   const pick = () => { const r = next() % 10n; return r < 4n ? edges[Number(next() % BigInt(edges.length))] : r < 8n ? (next() % 200n) - 100n : (next() * next()) * (next() % 2n ? 1n : -1n) * 6n; };
   return Array.from({ length: count }, () => Array.from({ length: n }, pick));
+}
+
+// compare (L66) at each kind of plain type, and the prelude's sort, which
+// is written with it: Numbers, Ints, Text, Bools, lists, pairs, an
+// Optional's cases and fractions by value.
+export function ordered() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const cmp = (a: Id, b: Id) => k.call(COMPARE, a, b);
+  const int = (x: Id) => k.call(INT_OPS.add, x, k.int(0)), txt = (x: Id) => k.call(S.concat, x, k.lit(""));
+  const ints = (xs: Id) => k.call(lib("map"), xs, k.fn(["n"], (n) => int(n)));
+  // Each text with how many times it comes, in a Map.
+  const tally = k.def("tally");
+  k.define(tally, k.fn(["ts", "m"], (ts, m) => k.match(ts, [
+    { variant: NIL, names: [], body: () => m },
+    { variant: CONS, names: ["t", "rest"], body: ([t, rest]) => k.call(tally, rest, k.call(lib("put"), m, txt(t), k.call(S.first, k.thunk(() => k.call(INT_OPS.add, k.call(lib("value at"), m, t), k.int(1))), k.thunk(() => k.int(1))))) },
+  ])));
+  const maybe = (x: Id) => k.if(k.call(S.less, x, k.lit(0)), NONE, k.call(SOME, x));
+  const defs = {
+    numbers: d("numbers", ["x", "y"], (x, y) => cmp(k.call(B.add, x, k.lit(0)), y)),
+    ints: d("ints", ["a", "b"], (a, b) => cmp(int(a), b)),
+    texts: d("texts", ["s", "t"], (s, t) => cmp(txt(s), t)),
+    bools: d("bools", ["x", "y"], (x, y) => cmp(k.call(S.less, x, k.lit(0)), k.call(S.less, y, k.lit(0)))),
+    lists: d("lists", ["xs", "ys"], (xs, ys) => cmp(ints(xs), ys)),
+    pairs: d("pairs", ["s", "xs", "t", "ys"], (s, xs, t, ys) => cmp(k.call(PAIR_V, txt(s), ints(xs)), k.call(PAIR_V, t, ys))),
+    options: d("options", ["x", "y"], (x, y) => cmp(maybe(x), maybe(y))),
+    fractions: d("fractions", ["a", "b", "c", "e"], (a, b, c, e) => cmp(k.call(lib("fraction"), a, b), k.call(lib("fraction"), c, e))),
+    sorted: d("sorted", ["xs"], (xs) => k.call(lib("sort"), ints(xs))),
+    sortedTexts: d("sorted texts", ["ts"], (ts) => k.call(lib("sort"), k.call(lib("map"), ts, k.fn(["t"], (t) => txt(t))))),
+    // Maps and sets (L65) keep their entries in compare's order.
+    counted: d("counted", ["ts"], (ts) => k.call(lib("entries of"), k.call(tally, ts, k.x(lib("empty map"))))),
+    unique: d("unique", ["xs", "ys"], (xs, ys) => k.call(lib("items of"), k.call(lib("set union"), k.call(lib("as set"), ints(xs)), k.call(lib("as set"), ys)))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+
+// Inputs for ordered(), by function: near and equal Numbers, Ints past
+// 2⁶⁴, texts by code point (é after z, emoji after both), lists that share
+// a start, fractions with zero bottoms.
+export function orderedInputs(): Record<string, unknown[][]> {
+  let seed = 9n;
+  const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 33n);
+  const of = <T>(xs: T[]) => xs[next() % xs.length];
+  const nums = [0, -0, 1, -1, 0.5, 1 + 1e-12, 3, -2.5, 1e300, -Infinity, Infinity, NaN];
+  const ints = [0n, 1n, -1n, 7n, -7n, 2n ** 31n, 2n ** 53n + 1n, 2n ** 62n, -(2n ** 63n), 2n ** 64n, -(10n ** 30n), 2n ** 100n];
+  const texts = ["", "a", "ab", "b", "z", "é", "🎉", "aa", "A", "a b"];
+  const list = (n: number) => Array.from({ length: n }, () => of(ints));
+  const many = <T>(count: number, make: () => T[]) => Array.from({ length: count }, make);
+  return {
+    numbers: many(200, () => [of(nums), of(nums)]),
+    ints: many(200, () => [of(ints), of(ints)]),
+    texts: many(200, () => [of(texts), of(texts)]),
+    bools: many(20, () => [of([-1, 1]), of([-1, 1])]),
+    lists: many(200, () => { const xs = list(next() % 4); return [xs, next() % 2 ? [...xs, ...list(next() % 3)] : list(next() % 4)]; }),
+    pairs: many(100, () => [of(texts), list(next() % 3), of(texts), list(next() % 3)]),
+    options: many(50, () => [of([-1, 0, 1, 2]), of([-1, 0, 1, 2])]),
+    fractions: many(200, () => [of(ints), of([...ints, 0n, 3n, -6n]), of(ints), of([...ints, 2n, -4n])]),
+    sorted: [[[]], [list(1)], [list(2)], [list(9)], [list(300)], [Array.from({ length: 200 }, (_, i) => BigInt((i * 37) % 11))]],
+    sortedTexts: [[[]], [texts], [[...texts].reverse()], [many(150, () => of(texts))]],
+    counted: [[[]], [texts], [many(100, () => of(texts))]],
+    unique: many(30, () => [list(next() % 8), list(next() % 8)]),
+  };
 }
