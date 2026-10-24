@@ -6,9 +6,9 @@ plan.
 
 **Status.** Stages N1 to N4 are done: whole programs run natively, built by `lab native`.
 N5a is done: measured against compiled JavaScript and WebAssembly (below), and
-cells come from free lists. N5b is done: a match on a cell nobody else holds moves its
-fields out and frees it by its type (below). Reuse of that cell by the arm's
-new one (N5c) is next.
+cells come from free lists. N5b and N5c are done: a match on a cell nobody else holds
+moves its fields out, and the cell becomes the arm's next cell of the same
+fields (below).
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
@@ -283,6 +283,26 @@ Both paths run: Countdown takes 942,500 shared cells apart (its search
 shares sublists), ledger 250,834. Outputs are byte for byte the same, and
 the C tests still free every cell.
 
-**N5c, next.** The freed cell given to the arm's next cell of the same
-shape instead of the free list (Lean 4's reset/reuse: Ullrich and de
-Moura, IFL 2019), worth about 14 ms more on ledger by the hand patch.
+**N5c, done.** The cell isn't freed if the arm makes a cell with the same
+fields (so the same size): it is held in a local, and that new cell
+takes it, with its type and tag rewritten, instead of `lab_new`; a shared
+cell leaves the local 0 and the new cell is made as before. Every way
+through the arm uses it or frees it: a branch that doesn't make one frees
+it at its start, a way out with no answer frees it, and it's freed before
+an attempt, a budget or a handler (whose labels could be gone to after
+it's used). An arm where some way through does neither is printed again
+without. Fields read where they're used, not in lets at the top (the
+lowering's own functions, like `List.reverse`), are read into locals at
+the top now, so those arms are taken apart too. This is Lean 4's reset
+and reuse (Ullrich and de Moura, "Counting Immutable Beans", IFL 2019).
+
+| program | instructions | time |
+|---|---|---|
+| ledger, 50,000 entries | 646M → 388M (−40%) | 108 → 79 ms |
+| Countdown's main | 746M → 746M | 101 → 99 ms |
+
+Countdown takes expressions apart and builds other things, so nothing
+there has the fields to reuse. Together N5b and N5c take ledger from
+815M instructions to 388M (123 to 79 ms) and Countdown from 893M to 746M
+(114 to 99 ms). The C tests pass under AddressSanitizer too, and both
+programs' outputs are byte for byte the same.
