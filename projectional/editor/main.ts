@@ -1807,6 +1807,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
+  // One that may give no answer, or several, runs inside what picks: Run
+  // would only say so after the fact. Its values still show, the first
+  // answer's.
+  const choice = action && needsHandling(z).includes(CHOICE);
   // A page's main is the page: it is running above, and printing what it
   // gives back would only show the page's insides.
   if (action && !info.errors.length && !info.holes.size && pageMain(doc.code.defs, info, pres().names) === ui.def) {
@@ -1814,6 +1818,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   } else if (needs.length) {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
+  } else if (choice) {
+    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
+      h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional"), "."));
   } else if (action) {
     const going = ui.output?.def === ui.def && ui.output.running;
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
@@ -1832,7 +1839,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn") box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
-  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, "Gives ", valueView(tr.result)));
+  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result)));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   if (tr?.error) box.append(tr.error.message === "reached a hole"

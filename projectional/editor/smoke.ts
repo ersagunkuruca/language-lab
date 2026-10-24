@@ -170,6 +170,29 @@ async function swapAndUndo() {
   await p.close();
 }
 
+// An action that may give no answer (a Choice) isn't offered a Run that
+// can only fail: the panel says how to run it, and its values still show.
+async function choiceAction() {
+  where = "an action with a Choice";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("sum");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator("#f-query").fill("fraction(1, 2) + fraction(1, 3)");
+  await p.keyboard.press("Enter");
+  if (await p.locator('[data-act="t-run"]').count()) errors.push(`${where}: Run is offered, and can only fail`);
+  if (!(await p.locator(".run", { hasText: "first(" }).count())) errors.push(`${where}: the panel doesn't say how to run it`);
+  await p.locator('[data-act="t-values"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Show values`));
+  const gives = await p.locator(".run").first().innerText();
+  if (!/first answer:\s*5\/6/.test(gives)) errors.push(`${where}: Show values reads ${JSON.stringify(gives)}`);
+  await p.close();
+}
+
 // A definition made, filled and deleted: the editor draws the program
 // without it (it once drew the deleted one first, and threw).
 async function newAndDeleteDefinition() {
@@ -339,6 +362,7 @@ await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
 await deleteAndUndo();
 await swapAndUndo();
+await choiceAction();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
