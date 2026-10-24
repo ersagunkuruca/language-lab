@@ -723,3 +723,27 @@ test("a call with no inputs is read where a value is typed: die() + 1", async ()
     assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
   }
 });
+
+// Duplicate makes a copy to change on its own: fresh ids, its own
+// variables, and recursive calls that call the copy (BACKLOG E90).
+test("a duplicated definition is its own copy, recursion included", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/countdown"));
+  const refsTo = (code: Code, root: Id, target: Id) => subtree(code, root).filter((x) => code.nodes[x].kind === "ref" && (code.nodes[x] as NodeOf<"ref">).target === target);
+  const def = p.code.defs.find((d) => !isPublished(d) && refsTo(p.code, d, d).length)!;
+  assert.ok(def, "countdown has a recursive definition");
+  const name = p.pres.names[def];
+  const r = T.duplicate(p.code, p.pres.names, infer(p.code, p.pres.names), def);
+  if (!r.ok) assert.fail(r.reason);
+  const copy = r.select!;
+  assert.equal(r.names[copy], `${name} copy`);
+  assert.equal(r.code.defs.indexOf(copy), r.code.defs.indexOf(def) + 1);
+  const theirs = new Set(subtree(p.code, def)), mine = subtree(r.code, copy);
+  assert.ok(mine.every((x) => !theirs.has(x)), "the copy shares no node with the original");
+  assert.ok(refsTo(r.code, copy, copy).length && !refsTo(r.code, copy, def).length, "the copy's recursive calls call the copy");
+  assert.deepEqual(r.code.nodes[def], p.code.nodes[def]);
+  const again = T.duplicate(r.code, r.names, infer(r.code, r.names), def);
+  assert.ok(again.ok && again.names[again.select!] === `${name} copy 2`, "a second copy takes the next free name");
+});

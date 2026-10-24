@@ -286,6 +286,12 @@ async function newAndDeleteDefinition() {
   await p.locator(".hole").first().click();
   await p.locator(".opt").first().click();
   await p.keyboard.press("Escape");
+  // Duplicate opens a copy next to it (BACKLOG E90); deleting the copy
+  // leaves double.
+  await p.locator("button", { hasText: "Duplicate double" }).click();
+  if (!(await p.locator(".nav-row[data-def]").allInnerTexts()).some((s) => s.trim() === "double copy")) errors.push(`${where}: Duplicate made no "double copy"`);
+  await p.locator("button", { hasText: "Delete double copy" }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: Duplicate didn't open the copy`));
+  await p.locator("[data-def]", { hasText: /^double$/ }).first().click();
   await p.locator("button", { hasText: "Delete double" }).click();
   if ((await p.locator(".nav-row[data-def]").allInnerTexts()).some((s) => s.trim() === "double")) errors.push(`${where}: Delete left the definition in the list`);
   await p.close();
