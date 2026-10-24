@@ -154,7 +154,7 @@ const labelsOf = (example: string, d: string) => {
     selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
     canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded: new Set(),
   }).root as unknown as El;
-  return svg.all().filter((e) => /^(cl|portl)$/.test(e.getAttribute("class") ?? "")).map((e) => e.textContent);
+  return svg.all().filter((e) => /^(cl|portl|rt)$/.test(e.getAttribute("class") ?? "")).map((e) => e.textContent);
 };
 
 test("a field read is labelled .field, so what's wired into it reads as p.field", () => {
@@ -168,4 +168,10 @@ test("a value of a one-case type taken apart is drawn as the let of its fields, 
   assert.ok(labels.includes("halves(front, back) =") && labels.includes("found(expr, value) ="), labels.join(" | "));
   assert.ok(!labels.includes("match Halves") && !labels.includes("match Found"), labels.join(" | "));
   assert.ok(labelsOf("countdown", "valid").includes("match Op"));
+});
+
+test("an action handed to a handler is a frame titled action, not () =>", () => {
+  const labels = labelsOf("queens", "main");
+  assert.ok(labels.includes("action") && !labels.includes("() =>"), labels.join(" | "));
+  assert.ok(labels.includes("(board) =>"), labels.join(" | "));
 });

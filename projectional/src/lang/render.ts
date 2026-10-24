@@ -10,7 +10,7 @@
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { resolveRefs, subtree } from "../model.ts";
-import type { Presentation } from "../presentation.ts";
+import type { Notation, Presentation } from "../presentation.ts";
 import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
@@ -67,6 +67,13 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
 
   // Steps before a value: lets, and values taken apart.
   const hasSteps = (id: Id) => { const n = node(id); return isLet(n) || (n.kind === "match" && takesApart(n)); };
+
+  // An argument that is an action, a function of nothing, is drawn as what
+  // it does, as Scala draws a by-name parameter: count(queens(8)), not
+  // count(() => queens(8)). The callee still decides when, and whether, it
+  // runs; the tree keeps the lambda.
+  const byName = (id: Id): Id => { const n = node(id); return n.kind === "lambda" && n.params.length === 0 ? n.body : id; };
+  const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? `${nota.words[i]} ` : "");
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -134,7 +141,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
         // called on p, the way it runs backwards.
         if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(`${paren(args[0], args[0].prec >= 100)}.${nameOf(f.target)}`);
         const head = inline(n.fn);
-        return atom(`${paren(head, head.prec >= 100)}(${args.map((a) => a.text).join(", ")})`);
+        return atom(`${paren(head, head.prec >= 100)}(${ops ? args.map((a) => a.text).join(", ") : n.args.map((a, i) => word(nota, i) + inline(byName(a)).text).join(", ")})`);
       }
       default: return atom(`‹${n.kind}›`);
     }
@@ -254,7 +261,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return [...block(n.fn, ind, `${lead}apply `), `${ind}  to (${n.args.map((a) => inline(a).text).join(", ")})`];
       const args = ops.map((a, i) => {
-        const lines = block(a, ind + "  ", "");
+        const lines = block(ops === n.args ? byName(a) : a, ind + "  ", ops === n.args ? word(nota, i) : "");
         if (i < ops.length - 1) lines[lines.length - 1] += ",";
         return lines;
       });

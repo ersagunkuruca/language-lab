@@ -302,6 +302,16 @@ test("a value of a one-case type taken apart reads as a let of its fields, and s
   assert.ok(lines("valid").includes("match op"));
 });
 
+test("an action handed to a handler reads as what it does, by name", () => {
+  const q = load("queens");
+  const main = renderBlocks(q.code, q.pres, infer(q.code, q.pres.names), q.named("main"));
+  // first runs the search, else gives nil; count and all run it to the end.
+  assert.ok(main.includes("first(queens(8), else nil)") && main.includes("count(queens(8))") && main.includes("all(queens(6))"), main);
+  assert.doesNotMatch(main, /\(\) =>/);
+  // A function with inputs is still drawn as one.
+  assert.match(main, /\(board\) => print/);
+});
+
 test("a step done for what it does reads as the step; an unnamed value something reads is called for its type", () => {
   const ledger = load("ledger"), li = infer(ledger.code, ledger.pres.names);
   const usage = renderBlocks(ledger.code, ledger.pres, li, ledger.named("usage")).split("\n").map((l) => l.trim());

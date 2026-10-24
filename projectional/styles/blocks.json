@@ -19,6 +19,7 @@
     "builtin.arith.neg": { "glyph": "−", "fixity": "prefix", "prec": 9 },
     "builtin.sqrt":   { "glyph": "√", "fixity": "prefix", "prec": 10 },
     "builtin.equal":  { "glyph": "=", "fixity": "infix", "prec": 4 },
+    "builtin.first":  { "glyph": "first", "fixity": "call", "words": ["", "else"] },
     "builtin.less":   { "glyph": "<", "fixity": "infix", "prec": 4 },
     "@q8448b3cvu3u37nsqf5k6etio0": { "glyph": "≤", "fixity": "infix", "prec": 4 },
     "@b98gg61sq5voof01qmqpqmdt7d": { "glyph": ">", "fixity": "infix", "prec": 4 },
