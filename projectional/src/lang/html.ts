@@ -39,6 +39,8 @@ export interface Mount {
   ran?: (el: Node_, node: CellNode) => void;
   // The step budget of each update (run.ts, withSteps).
   steps?: number;
+  // What plays an element's sound (audio-page.ts), when the page can.
+  listen?: (el: El, a: Data) => void;
 }
 
 // What a part of the page shows when its update ran out of steps: a
@@ -148,6 +150,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             };
             fire();
           });
+        } else if (a.tag === HTML_V.listen) {
+          if (m.listen) m.listen(e, a);
+          else console.warn("this page can't play sound here: build it with lab build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);
       }
       e.append(...fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg)));

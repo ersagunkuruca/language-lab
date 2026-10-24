@@ -677,8 +677,18 @@ type Html      = element(tag: Text, attributes: List Attribute, children: List H
                | part(view: () -[Cells, Diverge, Time, Network]-> Html)
 type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
                | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random]-> Unit)
+               | listen(to: Input, play: (List Number) -[Cells, Update, Random, Diverge]-> List Number)
 type Event     = event(value: Text, key: Text)
+type Input     = microphone | recording(address: Text)
 ```
+
+`listen` plays a sound (AUDIO.md) when its element is clicked, and stops
+it when it's clicked again: the input, a block of 128 samples at a time,
+through `play`, to the speakers. `play` runs on the audio thread, where
+main runs once more to make it; cells main made are the same cells there,
+so a handler's write to one (a knob) reaches the sound as it plays. So a
+page with sound keeps main to making cells: no clock or random numbers
+there.
 
 Pages are written with the **html module** (`library/html.json`, built
 from `src/lang/html-source.ts`), ordinary functions that build these

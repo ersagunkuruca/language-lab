@@ -6,6 +6,7 @@
 // program (cli/web.ts pageRuntime, page.ts pageFile).
 
 import { $cells, $setPrint, $setWorld } from "../../../compiler/src/runtime.js";
+import { soundPlayer } from "./audio-page.ts";
 import { browserWorld, type Store } from "./browser.ts";
 import { compiledCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 
@@ -19,10 +20,13 @@ const storage = (): Store => {
   return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, String(v)), get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null };
 };
 
-// `program` names the page's files in localStorage (browser.ts).
-export function startPage(main: () => unknown, program: string): void {
+// `program` names the page's files in localStorage (browser.ts). A page
+// with sound gives `worklet`, its program bundled for the audio thread
+// (cli/web.ts, audio-page.ts).
+export function startPage(main: () => unknown, program: string, worklet?: string): void {
   $setWorld(browserWorld(storage(), program, console, { cells: $cells(), frame: (f) => requestAnimationFrame(f) }));
   $setPrint((line: string) => console.log(line));
   const doc = document as unknown as Doc & { body: { append(n: Node_): void } };
-  doc.body.append(mountHtml(main() as never, { cells: $cells(), doc, call: compiledCall }));
+  const sound = worklet ? soundPlayer($cells(), worklet, main as never) : null;
+  doc.body.append(mountHtml((sound ? sound.page : main()) as never, { cells: $cells(), doc, call: compiledCall, listen: sound?.listen }));
 }

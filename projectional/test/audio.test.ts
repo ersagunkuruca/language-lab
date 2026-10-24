@@ -15,7 +15,10 @@ import { Lang } from "../src/lang/dsl.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
-import { audioProblem, playBlocks } from "../src/lang/audio.ts";
+import { audioProblem, listens, playBlocks } from "../src/lang/audio.ts";
+import { runInNewContext } from "node:vm";
+import { runMain } from "../src/lang/run.ts";
+import { soundWorklet } from "../cli/web.ts";
 import { sameNumber } from "../src/lang/run.ts";
 import { CELL_OPS, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
@@ -25,9 +28,11 @@ import { readWav, writeWav } from "../cli/wav.ts";
 const lab = join(import.meta.dirname, "../cli/lab.ts");
 const dir = mkdtempSync(join(tmpdir(), "audio-"));
 const sine = (n: number, amp: number) => Array.from({ length: n }, (_, i) => amp * Math.sin((2 * Math.PI * 220 * i) / 48000));
+// The page main returns, from the evaluator.
+const evaluatorPage = (p: ReturnType<typeof pedal>["p"], page: Id) => runMain(p.code, p.info, page, { print: () => {}, names: p.names });
 const pedal = () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/pedal"));
-  return { p: { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names }, main: p.named("main") };
+  return { p: { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names }, main: p.named("pedal"), page: p.named("main") };
 };
 
 test("the pedal: the evaluator and the compiled program play the same samples, at blocks of 128 and of 256", async () => {
@@ -98,7 +103,7 @@ test("WAV files: 16-bit PCM read as -1 to 1, floats written and read back as the
 test("lab render: the pedal over a WAV file, written as one; a program whose main isn't a sound is refused", () => {
   const input = join(dir, "in.wav"), out = join(dir, "out.wav");
   writeFileSync(input, writeWav({ rate: 48000, samples: Float64Array.from(sine(300, 0.3)) }));
-  const r = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/pedal"), input, "-o", out, "--compiled"], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/pedal"), "--main", "pedal", input, "-o", out, "--compiled"], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   const wav = readWav(readFileSync(out));
   assert.equal(wav.rate, 48000);
@@ -106,4 +111,44 @@ test("lab render: the pedal over a WAV file, written as one; a program whose mai
   const bad = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/wc"), input], { encoding: "utf8" });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /main can't be a sound/);
+});
+
+// The audio thread's side of the pedal page (audio-worklet.ts), in a
+// stand-in for an AudioWorkletGlobalScope: its processor plays what the
+// pedal plays offline, and a write the page sends over the port (Softer)
+// reaches the cell the block function reads.
+test("the pedal page's worklet plays the pedal, and the page's cell writes reach it", async () => {
+  const { p, main, page } = pedal();
+  const source = await soundWorklet(p.code, p.info, p.names, page);
+  const made: { name: string; processor: new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null; postMessage(m: unknown): void }; process(i: Float32Array[][], o: Float32Array[][]): boolean } }[] = [];
+  const said: unknown[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
+  runInNewContext(source, { registerProcessor: (name: string, processor: never) => made.push({ name, processor }), AudioWorkletProcessor, console });
+  assert.equal(made.length, 1);
+  const node = new made[0].processor({ processorOptions: { index: 0 } });
+  // The browser's samples are 32-bit floats, in and out.
+  const input = [...Float32Array.from(sine(256, 0.3))], offline = playBlocks(await soundOf(p, main, "compiled"), input, 128).out;
+  const play = (at: number) => {
+    const out = [new Float32Array(128), new Float32Array(128)];
+    assert.equal(node.process([[Float32Array.from(input.slice(at, at + 128))]], [out]), true);
+    return out;
+  };
+  const [left, right] = play(0);
+  assert.deepEqual([...left], [...Float32Array.from(offline.slice(0, 128))]);
+  assert.deepEqual([...right], [...left]);
+  // The page's first cell is the drive: at 1, drive is the sample itself.
+  node.port.onmessage!({ data: { cell: 0, value: 1 } });
+  const [quiet] = play(128);
+  quiet.forEach((x, i) => assert.ok(Math.abs(x - input[128 + i]) < 1e-6, `sample ${i}`));
+  assert.deepEqual(said, []);
+  assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
+});
+
+test("a page with sound copies its recording beside it, and carries its program for the audio thread", () => {
+  const out = join(dir, "pedal.html");
+  const r = spawnSync(process.execPath, [lab, "build-web", join(import.meta.dirname, "../examples/pedal"), "-o", out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /strum\.wav beside it/);
+  assert.deepEqual(readFileSync(join(dir, "strum.wav")), readFileSync(join(import.meta.dirname, "../examples/pedal/strum.wav")));
+  assert.match(readFileSync(out, "utf8"), /lab-sound/);
 });
