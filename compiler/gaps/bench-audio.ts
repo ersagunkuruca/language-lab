@@ -38,7 +38,7 @@ function ideal(): Play {
 const blocks = Array.from({ length: 64 }, (_, b) => Array.from({ length: 128 }, (_, i) => 0.4 * Math.sin((2 * Math.PI * 110 * (b * 128 + i)) / 48000)));
 const ways: [string, Play, number][] = [
   ["compiled", await soundOf(prog, p.named("pedal"), "compiled"), 2000],
-  ["evaluator", await soundOf(prog, p.named("pedal"), "evaluator"), 20],
+  ["evaluator", await soundOf(prog, p.named("pedal"), "evaluator"), 4],
   ["by hand", ideal(), 20000],
 ];
 const firsts = ways.map(([, play]) => play(blocks[0]));
@@ -46,9 +46,13 @@ firsts.slice(1).forEach((f) => f.forEach((x, i) => assert.ok(Math.abs(x - firsts
 const rate: Record<string, number> = {};
 for (const [name, play, n] of ways) {
   for (let i = 0; i < Math.min(n, 200); i++) play(blocks[i % blocks.length]);
-  const t = performance.now();
-  for (let i = 0; i < n; i++) play(blocks[i % blocks.length]);
-  const ms = (performance.now() - t) / n;
+  // The best of five runs: a laptop's other work only ever adds time.
+  let ms = Infinity;
+  for (let r = 0; r < 5; r++) {
+    const t = performance.now();
+    for (let i = 0; i < n; i++) play(blocks[i % blocks.length]);
+    ms = Math.min(ms, (performance.now() - t) / n);
+  }
   rate[name] = 1000 / ms;
   console.log(`${name.padEnd(10)} ${ms.toFixed(4)} ms a block, ${Math.round(1000 / ms)} blocks/s, ${(1000 / ms / 375).toFixed(1)}× real time`);
 }

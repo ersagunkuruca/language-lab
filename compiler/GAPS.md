@@ -986,3 +986,17 @@ destination-passing style (Minamide, "A functional representation of
 data structures with a hole", POPL 1998; Shaikhha, Fitzgibbon, Peyton
 Jones and Vytiniotis, FHPC 2017), and OCaml's tail modulo cons (Bour,
 Clément and Scherer, 2021).
+
+**P4a. Destination passing for plain definitions** (C30). **Done**: a
+plain definition that builds its list front to back has an `$into` copy
+that pushes onto an array it is handed. A two-field record holding the
+list is written the same way and returns the other field, which covers
+the compressor (samples and level). A block function has a version the
+audio runtimes call (`$arrayOf`). The compressor is a loop with its level
+in a local, and the block reaches the runtime as an array: 3.5× to 2.9×
+(best of five runs; `bench-audio.ts` now takes that).
+Next, by what the hand versions say is left:
+- (b) the split (`bands`, which can fail, so it is on the Choice path)
+  writing into an array;
+- (c) the join (a written-out mode) taking a view and writing into one;
+- (d) the block coming in as an array.

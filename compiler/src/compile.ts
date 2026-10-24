@@ -29,7 +29,7 @@ import { children, subtree, type Code, type Id, type Node, type NodeOf } from ".
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { BOOL, CONS, FALSE, INT_OPS, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { BOOL, CONS, FALSE, INT_OPS, LIST, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
@@ -292,7 +292,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const streamsFn = (t: Type, rho: Rho) => t.t === "fn" && choice(t.eff, rho);
 
   // Where `ret` puts a value.
-  interface Out { bool: boolean; leaf: (js: string) => string }
+  // `into`: an `$into` copy's answer, pushed onto the array `d` (P4).
+  interface Out { bool: boolean; leaf: (js: string) => string; into?: { d: string; shape: Into } }
   interface Reuse { s: string; cell: Id; root: Id; binds: Id[] }
   const RETURN: Out = { bool: false, leaf: (js) => `return ${js};` };
   const RETURN_BOOL: Out = { bool: true, leaf: (js) => `return ${js};` };
@@ -315,7 +316,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // G21, `walkable`).
   // `own`: the `$own` copy, which may change its own parameters' cells
   // (GAPS.md G25).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean }
+  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null }
+  // A copy that writes its list into an array it is handed (`$into`): the
+  // list itself, or the list field `k` of a record with two fields, when it
+  // returns the other one (GAPS.md P4).
+  interface Into { rec: Id | null; k: number }
   const specs = new Map<string, Spec>();
   const queue: Spec[] = [];
   const isFnDef = (def: Id) => code.nodes[node<"def">(def).body!]?.kind === "lambda";
@@ -334,6 +339,102 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const v = td.variants[0];
     return v !== CONS && node<"variant">(v).fields.length > 0 ? v : null;
   };
+  // ---- lists written into arrays (GAPS.md P4)
+  // Destination passing: a copy of a definition that builds its list front
+  // to back is handed an array and pushes the items onto it, so a caller
+  // that wants an array (the audio runtime, for a block) gets one with no
+  // cells. Its tail calls hand the array on, a call of itself is a jump,
+  // and a list it only has as a value is copied in ($pushList). A record
+  // with two fields, one of them the list (the compressor's samples and
+  // level), works the same way: the copy pushes the list and returns the
+  // other field. Prior art: destination-passing style (Minamide, "A
+  // functional representation of data structures with a hole", POPL 1998;
+  // Shaikhha, Fitzgibbon, Peyton Jones and Vytiniotis, FHPC 2017), and
+  // tail modulo cons (G22; Bour, Clément and Scherer, OCaml 4.14).
+  const refTarget = (id: Id) => { const r = code.nodes[id]; return r.kind === "ref" ? r.target : null; };
+  const isList = (t: Type) => { const z = sub.zonk(t); return z.t === "con" && z.id === LIST; };
+  const isNumbers = (t: Type) => { const z = sub.zonk(t); return z.t === "con" && z.id === LIST && sub.zonk(z.args[0]).t === "con" && (sub.zonk(z.args[0]) as { id: Id }).id === NUMBER; };
+  const isBlockFn = (t: Type) => t.t === "fn" && t.params.length === 1 && isNumbers(t.params[0]) && isNumbers(t.ret);
+  // The expressions a definition's answer can be: through lets and matches.
+  const tailsOf = (id: Id): Id[] => {
+    const n = code.nodes[id];
+    if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return tailsOf(node<"lambda">(n.fn).body);
+    if (n.kind === "match" && !handlerOf(n)) return [...n.arms.flatMap((a) => tailsOf(node<"arm">(a).body)), ...(n.otherwise ? tailsOf(n.otherwise) : [])];
+    return [id];
+  };
+  const intoShapes = new Map<Id, Into | null>();
+  function intoShape(def: Id): Into | null {
+    if (intoShapes.has(def)) return intoShapes.get(def)!;
+    let r: Into | null = null;
+    if (!reflective && code.nodes[def]?.kind === "def" && isFnDef(def) && !info.divergent.has(def)) {
+      const t = info.schemes.get(def)!.type;
+      const ret = t.t === "fn" ? sub.zonk(t.ret) : null;
+      const v = ret?.t === "con" && ret.id !== LIST ? unpackOf({ def } as Spec) : null;
+      if (ret?.t === "con" && ret.id === LIST) r = { rec: null, k: 0 };
+      else if (v && node<"variant">(v).fields.length === 2) {
+        const ks = new Set<number>();
+        for (const leaf of tailsOf(node<"lambda">(node<"def">(def).body!).body)) {
+          const n = code.nodes[leaf];
+          if (n.kind === "call" && refTarget(n.fn) === v) n.args.forEach((a, i) => { if (isList(ty(a))) ks.add(i); });
+        }
+        if (ks.size === 1) r = { rec: v, k: [...ks][0] };
+      }
+    }
+    intoShapes.set(def, r);
+    return r;
+  }
+  const sameInto = (a: Into | null, b: Into | null) => !!a && !!b && a.rec === b.rec && a.k === b.k;
+  const mentionsAny = (id: Id, bs: Id[]) => subtree(code, id).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && bs.includes(n.target); });
+  // A match an `$into` copy writes without the record: on a call whose
+  // copy can write into the array too, with one arm for the record.
+  //  - "pass": the arm gives back the record with an item consed onto its
+  //    list, and its other field as it was (the compressor's step). The
+  //    item is pushed first, then the call writes the rest.
+  //  - "field": the arm's answer is the record's list itself, the one use
+  //    of it (the compressor, which keeps the level in a cell).
+  function intoMatch(m: NodeOf<"match">, shape: Into): { kind: "pass" | "field"; call: NodeOf<"call">; arm: NodeOf<"arm">; to: Into; head?: Id } | null {
+    const c = code.nodes[m.scrutinee], g = c.kind === "call" ? refTarget(c.fn) : null;
+    if (handlerOf(m) || m.otherwise || m.arms.length !== 1 || !g || code.nodes[g]?.kind !== "def") return null;
+    const to = intoShape(g), arm = node<"arm">(m.arms[0]);
+    if (!to?.rec || arm.variant !== to.rec) return null;
+    const call = c as NodeOf<"call">, b = code.nodes[arm.body];
+    if (shape.rec !== null && sameInto(shape, to) && b.kind === "call" && refTarget(b.fn) === to.rec) {
+      const l = code.nodes[b.args[to.k]], o = code.nodes[b.args[1 - to.k]];
+      if (l.kind === "call" && refTarget(l.fn) === CONS && refTarget(l.args[1]) === arm.binds[to.k] && refTarget(b.args[1 - to.k]) === arm.binds[1 - to.k] && o.kind === "ref" && !mentionsAny(l.args[0], arm.binds))
+        return { kind: "pass", call, arm, to, head: l.args[0] };
+    }
+    if (shape.rec === null) {
+      const uses = subtree(code, arm.body).filter((x) => refTarget(x) === arm.binds[to.k]);
+      if (uses.length === 1 && tailsOf(arm.body).includes(uses[0])) return { kind: "field", call, arm, to };
+    }
+    return null;
+  }
+  // Is an `$into` copy worth having: does some answer build the list, or
+  // hand the array to a copy that does?
+  const intoGains = new Map<Id, boolean>();
+  function intoGain(def: Id): boolean {
+    if (intoGains.has(def)) return intoGains.get(def)!;
+    intoGains.set(def, false);
+    const shape = intoShape(def);
+    const r = !!shape && gainsIn(node<"lambda">(node<"def">(def).body!).body, shape, def);
+    intoGains.set(def, r);
+    return r;
+  }
+  function gainsIn(id: Id, shape: Into, def: Id | null): boolean {
+    const n = code.nodes[id];
+    if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return gainsIn(node<"lambda">(n.fn).body, shape, def);
+    if (n.kind === "match" && !handlerOf(n)) {
+      const m = intoMatch(n, shape);
+      if (m) return m.kind === "pass" || intoGain(refTarget(m.call.fn)!);
+      return n.arms.some((a) => gainsIn(node<"arm">(a).body, shape, def)) || (!!n.otherwise && gainsIn(n.otherwise, shape, def));
+    }
+    if (n.kind !== "call") return false;
+    const f = refTarget(n.fn);
+    if (shape.rec === null && f === CONS) return true;
+    if (shape.rec !== null && f === shape.rec) return refTarget(n.args[shape.k]) !== NIL;
+    return !!f && f !== def && code.nodes[f]?.kind === "def" && sameInto(intoShape(f), shape) && intoGain(f);
+  }
+
   // What a JS expression is known to be: data just built, or a record whose
   // fields arrived as separate arguments.
   const pieces = new Map<string, { variant: Id; fields: string[] }>();
@@ -393,16 +494,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // `out`: a single-answer copy whose answers are all one record, which
   // puts the record's fields in `$got` and returns whether it has one
   // (GAPS.md G13 again): its caller takes them apart straight away.
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const bool = !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}`), streams, bool, single, cps, arr, own, out };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}`), streams, bool, single, cps, arr, own, out, into };
       if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
       queue.push(s);
@@ -861,7 +962,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return js;
     };
     const callOf = (s: Spec, args: string[]): string => {
-      if (!heap || s.streams || s.cps || s.single || s.out || !cycles(s.def, sp.def)) return `${s.name}(${args.join(", ")})`;
+      if (!heap || s.streams || s.cps || s.single || s.out || s.into || !cycles(s.def, sp.def)) return `${s.name}(${args.join(", ")})`;
       yields.add(s.name);
       return `(yield [${s.name}$h, [${args.join(", ")}]])`;
     };
@@ -1251,8 +1352,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ps = n.params.map(local).join(", ");
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
       const b = code.nodes[n.body].kind;
-      if (b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda")) return `((${ps}) => {\n${ret(n.body)}\n})`;
-      return `((${ps}) => ${ex(n.body)})`;
+      const plainJs = b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda") ? `((${ps}) => {\n${ret(n.body)}\n})` : `((${ps}) => ${ex(n.body)})`;
+      // A block function (List Number to List Number, AUDIO.md) that builds
+      // its block also has a version that writes it into an array, for the
+      // audio runtimes ($arrayOf).
+      const t = ty(n.id);
+      if (reflective || !isBlockFn(t) || !gainsIn(n.body, { rec: null, k: 0 }, null)) return plainJs;
+      const d = temp("d");
+      return `$withInto(${plainJs}, (${[d, ...n.params.map(local)].join(", ")}) => {\n${ret(n.body, false, intoOut(d, { rec: null, k: 0 }))}\n})`;
     }
 
     // A call with one result.
@@ -1407,6 +1514,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
       if (n.kind === "match") {
         if (handlerOf(n)) return out.leaf(out.bool ? `(${handleEx(n)}.tag === ${JSON.stringify(TRUE)})` : handleEx(n));
+        const m = out.into ? intoMatch(n, out.into.shape) : null;
+        if (m && intoCallee(m.call, m.to) && (m.kind === "field" || pure(m.head!))) return intoMatchJs(m, tail, out);
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
           return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out, reuse)}\n}\n${ret(e, tail, out, reuse)}`)}`;
@@ -1439,6 +1548,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `const ${s} = ${ex(n.scrutinee)};\nswitch (${s}.tag) {\n${cases.join("\n")}\n}`;
       }
       if (n.kind === "fold" && !out.bool) return out === RETURN ? foldLoop(n) : out.leaf(foldEx(n));
+      if (out.into) { const js = intoJs(n, tail, out); if (js !== null) return js; }
       // A cons built in the matched cell, which nothing else holds.
       const inCell = reuse && n.kind === "call" && code.nodes[n.fn].kind === "ref" && node<"ref">(n.fn).target === CONS && !isConst(id) &&
         !mentions(id, reuse.cell) && clearOf(id, reuse.cell, reuse.root) ? reuse.s : null;
@@ -1518,6 +1628,74 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
       return holeCall(n);
     }
+    // ---- an `$into` copy's answers (P4)
+    // What isn't written out (a list only had as a value) is copied in.
+    const intoOut = (d: string, shape: Into): Out => ({
+      bool: false,
+      into: { d, shape },
+      leaf: (js) => {
+        if (shape.rec === null) return `$pushList(${d}, ${js});\nreturn;`;
+        const r = temp("r");
+        return `const ${r} = ${js};\n$pushList(${d}, ${r}.fields[${shape.k}]);\nreturn ${r}.fields[${1 - shape.k}];`;
+      },
+    });
+    // Lists whose items a call has already pushed: their one use is done.
+    const intoDone = new Set<Id>();
+    // The `$into` copy a call can hand the array to, if it has one worth
+    // having.
+    function intoCallee(n: NodeOf<"call">, shape: Into): Spec | null {
+      const g = refTarget(n.fn);
+      if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g) || callStreams(n)) return null;
+      const c = defCall(n);
+      if (c.streams || c.bool) return null;
+      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape);
+    }
+    // A call that writes into the array `d`: a jump if it is this copy.
+    function intoCallJs(n: NodeOf<"call">, t: Spec, tail: boolean, d: string, pre = ""): string {
+      if (tail && t.name === sp.name) {
+        jumps = true;
+        const args = loopArgs(n, t);
+        const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
+        return `${pre}${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
+      }
+      return `${pre}return ${t.name}(${[d, ...argsOf(n, t)].join(", ")});`;
+    }
+    function intoMatchJs(m: NonNullable<ReturnType<typeof intoMatch>>, tail: boolean, out: Out): string {
+      const { d } = out.into!, t = intoCallee(m.call, m.to)!;
+      if (m.kind === "pass") {
+        const h = temp("h");
+        return intoCallJs(m.call, t, tail, d, `const ${h} = ${ex(m.head!)};\n${d}.push(${h});\n`);
+      }
+      const other = m.arm.binds[1 - m.to.k];
+      intoDone.add(m.arm.binds[m.to.k]);
+      const call = `${t.name}(${[d, ...argsOf(m.call, t)].join(", ")})`;
+      return `${referenced.has(other) ? `const ${local(other)} = ${call};` : `${call};`}\n${ret(m.arm.body, tail, out)}`;
+    }
+    // A list's items pushed in order: the cons cells written out, and the
+    // rest copied in.
+    function pushInto(id: Id, d: string): string {
+      const n = code.nodes[id];
+      if (n.kind === "ref" && n.target === NIL) return "";
+      if (n.kind === "call" && refTarget(n.fn) === CONS) return `${d}.push(${ex(n.args[0])});\n${pushInto(n.args[1], d)}`;
+      return `$pushList(${d}, ${ex(id)});\n`;
+    }
+    function intoJs(n: Node, tail: boolean, out: Out): string | null {
+      const { d, shape } = out.into!;
+      if (n.kind === "ref" && intoDone.has(n.target)) return "return;";
+      if (shape.rec === null && n.kind === "ref" && n.target === NIL) return "return;";
+      if (n.kind !== "call") return null;
+      const f = refTarget(n.fn);
+      if (shape.rec === null && f === CONS) return `${pushInto(n.id, d)}return;`;
+      if (shape.rec !== null && f === shape.rec) {
+        // The fields in order: the list pushed, the other kept.
+        const o = temp("o");
+        const parts = n.args.map((a, i) => (i === shape.k ? pushInto(a, d) : `const ${o} = ${ex(a)};\n`));
+        return `${parts.join("")}return ${o};`;
+      }
+      const t = intoCallee(n as NodeOf<"call">, shape);
+      return t ? intoCallJs(n as NodeOf<"call">, t, tail, d) : null;
+    }
+
     function selfCall(n: Node): boolean {
       if (n.kind !== "call") return false;
       const f = code.nodes[n.fn];
@@ -2181,6 +2359,18 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...paramNames(sp), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
       }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
+      if (sp.into) {
+        // Its list pushed onto `d` (P4); a record's other field returned.
+        jumps = false;
+        holes = null;
+        const d = temp("d"), { rec } = sp.into;
+        const stmts = ret(lam.body, true, intoOut(d, sp.into));
+        const what = rec ? `its ${names[rec] ?? "record"}'s list pushed onto \`${d}\`, the other field returned` : `its list pushed onto \`${d}\``;
+        if (!jumps) return `${header} (${what})\nfunction ${sp.name}(${[d, ...paramNames(sp)].join(", ")}) {\n${stmts}\n}`;
+        const ins = paramNames(sp).map((p) => `${p}$in`);
+        const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
+        return `${header} (${what})\nfunction ${sp.name}(${[d, ...ins].join(", ")}) {\nfor (;;) {\n${fresh}${stmts}\n}\n}`;
+      }
       // A definition that fills holes returns the first cell it made, kept
       // in a field of a cell made up for it; every other answer goes into
       // the last hole.
@@ -2246,7 +2436,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
