@@ -18,14 +18,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I3 | Run main on a page prints the raw Html tree (`element(…, <function>)`) under the live page: hide it or say the page is the run | QA4 M1 | 2026-10-24 |
-| I4 | The minimap and the Fit pill cover nodes (first visit at 1280×720; a quarter of the graph on a phone): smaller, collapsible, or only while panning | QA4 M2 | 2026-10-24 |
-| I5 | Pages mounted in the Run panel are unstyled (pedal: default serif, picture cut off): a base stylesheet, or CSS in the examples | QA4 L1 | 2026-10-24 |
-| I6 | Landscape phone gives the graph ~210 of 390 px; at 768 px the top bar hides Credits and Cells | QA4 L2 | 2026-10-24 |
-| I7 | Change the function takes two undos (hole, then fill) | QA4 L3 | 2026-10-24 |
-| I8 | The palette doesn't read typed calls (`sqrt(x)`), only arithmetic | QA4 L4 | 2026-10-24 |
-| I9 | The status bar says nothing after page actions (A strum, Stop sound) | QA4 L5 | 2026-10-24 |
-| I10 | Dice example before any roll: "Rolls: 0; the last 2 s ago" | QA4 L6 | 2026-10-24 |
+| (empty) | I3 to I10 were triaged into E49 to E57 and are done | | |
 
 ## E: Editor
 
@@ -290,6 +283,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L74 | `show` (and Run) print a fraction as 1/2 and a complex number as 3 − 4i, not `ratio(1, 2)`: number types show as numbers, evaluated and compiled (one `showValue`); was E77 (QA-2026-10-24b) | #379 |
 | L73 | `smaller`, `larger`, `at most`, `more than`, `at least` over the one generic `<`, so they work on Int and fractions as + − · < do (found by QA-2026-10-24b); the Number-only versions stay published and hidden so saved programs open, and the examples moved onto the new ones | #377 |
 | L40 | Complex numbers: `std.complex`, `complex(re, im)` of two Numbers; the one `+ − · −x` resolve to prelude definitions (· the complex product) from the same table as Rational's, no `<`; `as complex`, `i`, `complex conjugate`, `modulus`, `angle of`, `polar`, `divide complex`, `complex exp`, `show complex`; a `vec2f` on the GPU and two f64s in WebAssembly with no back-end change; derivatives through it right | #374 |
 | L53 | The world-under-Choice rule comes from the types: a search's function (`all`, `count`, `first`, `optional`) has a row of its own that can't take `Console`, `Files` or `Update`, contained in the call's row (Koka subeffecting, influence), so a printer taken out of a list or passed down is refused and code beside a search may still print; pins carry it (`noWorld`, `subs`); `worldUnderChoice` gone | #369 |

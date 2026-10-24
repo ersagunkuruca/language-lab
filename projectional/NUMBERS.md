@@ -807,7 +807,9 @@ hierarchy is the map of which structures to name.
    `vec2f`, and WebAssembly takes it as two f64s, with nothing new in any
    back end. The prelude adds `as complex`, `i`, `complex conjugate`,
    `modulus`, `angle of`, `polar`, `divide complex` (no answer at 0),
-   `complex exp` (Euler's formula) and `show complex` (3 − 4i).
+   `complex exp` (Euler's formula) and `show complex` (3 − 4i). The
+   generic `show` prints both the same way (1/2, 3 − 4i), inside lists
+   and records too: number types show as numbers (L74).
    Derivatives through it are right: the slope of im((x + i)²) is 2.
    Still to do: a Mandelbrot or domain-colouring shader, and the
    multiplication-table form (`algebra(table)`, L40b) that would make
