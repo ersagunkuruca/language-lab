@@ -359,6 +359,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "lit": case "ref": case "hole": case "lambda": return true;
         case "match": return !handlerOf(n) && one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body)) && (!n.otherwise || one(n.otherwise));
         case "fold": return one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body));
+        case "solve": return givenOf(n).every(one) && (solver(n), onceSolvers.has(n.id)) && one(n.body);
         case "call": {
           if (!n.args.every(one)) return false;
           const f = code.nodes[n.fn];
@@ -761,6 +762,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   // ---- solve nodes: one function each, shared by every specialization
   const solvers = new Map<Id, string>();
+  // Solves with at most one answer: they also have `name$one`, which gives
+  // the binds or $no (GAPS.md P2).
+  const onceSolvers = new Set<Id>();
   const solverCode: string[] = [];
   function solver(n: NodeOf<"solve">): string {
     if (!solvers.has(n.id)) {
@@ -769,6 +773,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
       if (relational(n) && modes.solver(n, name, modeEmit(true))) {
         solverCode.push(...modes.code.splice(0));
+        onceSolvers.add(n.id);
         return name;
       }
       if (relational(n)) {
@@ -780,7 +785,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           `return $relate($program, ${JSON.stringify(n.fn)}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
         return name;
       }
-      solverCode.push(compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[n.fn] ?? n.fn, label));
+      const c = compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[n.fn] ?? n.fn, label);
+      solverCode.push(c.code);
+      if (c.once) onceSolvers.add(n.id);
     }
     return solvers.get(n.id)!;
   }
@@ -1929,7 +1936,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return parts(givenOf(n), (vals) => {
             const sol = temp("sol");
             const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
-            return `for (const ${sol} of ${solver(n)}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
+            const f = solver(n);
+            if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
+            return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
           });
         }
         default: throw new Error(`internal: a ${n.kind} with Choice`);
