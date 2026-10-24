@@ -8,7 +8,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { S } from "../src/lang/std.ts";
+import { ARITH, S } from "../src/lang/std.ts";
 import { INT, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
 
@@ -72,14 +72,14 @@ test("a program written from nothing: a data type, a function over it, and a mai
   const area = s.def("area");
   s.fill(area, (f) => f.kind === "match" && f.type === shape);
   // circle(radius) → 3 · radius · radius
-  s.fill(area, call(B.mul));
+  s.fill(area, call(ARITH.mul));
   s.number(area, 3);
-  s.fill(area, call(B.mul));
+  s.fill(area, call(ARITH.mul));
   const binds = (variant: Id) => (Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === variant) as NodeOf<"arm">).binds;
   s.fill(area, ref(binds(circle)[0]));
   s.fill(area, ref(binds(circle)[0]));
   // square(side) → side · side
-  s.fill(area, call(B.mul));
+  s.fill(area, call(ARITH.mul));
   s.fill(area, ref(binds(sq.variant)[0]));
   s.fill(area, ref(binds(sq.variant)[0]));
   assert.equal(s.holes(area).length, 0);
@@ -256,7 +256,7 @@ test("a pasted copy is a new piece: what it binds comes along, what it can't rea
   s.ok(Top.newDefinition(s.code, s.names, "twice", { kind: "function", params: ["x"] }));
   const twice = s.def("twice");
   const x = (s.code.nodes[(s.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0];
-  s.fill(twice, call(B.add));
+  s.fill(twice, call(ARITH.add));
   s.fill(twice, ref(x));
   s.fill(twice, ref(x));
   const sum = (s.code.nodes[(s.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
@@ -288,7 +288,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   s.number(size, 0);
   const h = s.holes(size)[0];
   void h;
-  s.fill(size, call(B.mul));
+  s.fill(size, call(ARITH.mul));
   const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
   s.fill(size, ref(cons.binds[0]));
   s.number(size, 10);
@@ -330,7 +330,7 @@ test("insertion sort, the textbook algorithm, written with palette picks and a t
   // if x < head: a match on a value given next, whose scrutinee is a hole.
   const m = s.fill(insert, (f) => f.kind === "match" && f.on === null && f.type === "std.bool") as NodeOf<"match">;
   assert.equal(s.code.nodes[m.scrutinee].kind, "hole");
-  s.fill(insert, call(S.less)); s.fill(insert, ref(x)); s.fill(insert, ref(arm.binds[0]));
+  s.fill(insert, call(ARITH.less)); s.fill(insert, ref(x)); s.fill(insert, ref(arm.binds[0]));
   // Reading order is if/then/else: the true case's hole comes next.
   const then = (s.code.nodes[m.arms.find((a) => (s.code.nodes[a] as NodeOf<"arm">).variant === TRUE)!] as NodeOf<"arm">).body;
   assert.equal(T.nextHole(s.code, insert, m.scrutinee), then);
@@ -616,7 +616,7 @@ test("arithmetic typed where a value goes is calls of the operators: 2 × (3 −
     const c = n as NodeOf<"call">;
     return `${(r.code.nodes[c.fn] as NodeOf<"ref">).target}(${c.args.map(show).join(", ")})`;
   };
-  assert.equal(show(lit.id), `${B.sub}(${B.mul}(2, ${B.sub}(3, 1)), -1)`);
+  assert.equal(show(lit.id), `${ARITH.sub}(${ARITH.mul}(2, ${ARITH.sub}(3, 1)), -1)`);
 });
 
 test("arithmetic typed in the palette reads the names in scope: x * 2 in double(x)", async () => {
@@ -633,7 +633,7 @@ test("arithmetic typed in the palette reads the names in scope: x * 2 in double(
   const r = T.fillValue(s.code, s.all(), s.info(), hole, "x * 2", double);
   if (!r.ok) return;
   const c = r.code.nodes[hole] as NodeOf<"call">;
-  assert.deepEqual([(r.code.nodes[c.fn] as NodeOf<"ref">).target, (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], [B.mul, x]);
+  assert.deepEqual([(r.code.nodes[c.fn] as NodeOf<"ref">).target, (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], [ARITH.mul, x]);
   // Out of scope it is nothing, and a name alone is the list's.
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "y * 2", double).ok, false);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "x", double).ok, false);

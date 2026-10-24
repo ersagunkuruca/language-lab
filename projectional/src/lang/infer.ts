@@ -58,6 +58,8 @@ const ARITH_WHAT = {
   ordered: "Numbers or Ints",
 };
 const str: Type = { t: "con", id: STRING, args: [] };
+// Each number type's own arithmetic, which the generic + − · −x < stand for.
+const PER_TYPE = new Set(["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]));
 const bool: Type = { t: "con", id: BOOL, args: [] };
 
 // `reuse` rechecks only the definitions in `only` and takes the others'
@@ -1045,9 +1047,10 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (h.group.includes(d)) consider(d, sc.type, true);
     else consider(d, instantiate(sc, info.subst), affected.has(d));
   }
-  // The generic arithmetic isn't offered yet: the views and the palette's
-  // choice between it and each type's own come next (NUMBERS.md, "One `+`").
-  for (const [id, sig] of Object.entries(SIGS)) if (!id.startsWith("builtin.arith.")) consider(id, sig(info.subst));
+  // One + for every number type (NUMBERS.md, "One `+`"): the palette
+  // offers the generic arithmetic, not each type's own, which stored
+  // programs keep and which is what the generic resolves to.
+  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id)) consider(id, sig(info.subst));
   for (const [part, def] of info.owner) {
     if (code.nodes[part].kind === "variant") consider(part, constructorType(code, info.subst, def, part));
     // A field of a one-case type reads it from a value: fst(p), pages(c).

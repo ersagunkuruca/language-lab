@@ -58,7 +58,8 @@ const ZERO: Vec = BASE.map(() => 0);
 function rules(op: string, port: (k: string) => string, why: string, node: Id): Constraint[] {
   const eq = (a: string, b: string): Constraint => ({ terms: [[a, 1], [b, -1]], rhs: ZERO, why, node });
   const is = (a: string, v: Vec): Constraint => ({ terms: [[a, 1]], rhs: v, why, node });
-  switch (op) {
+  // The generic + − · −x < (arith.add…) keep units as Number's own do.
+  switch (op.replace(/^arith\./, "")) {
     case "add": case "sub": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
     case "neg": case "abs": case "floor": case "float32": return [eq(port("0"), port("out"))];
     // mod(7 m, 3 m) is 1 m: both sides and the answer share a unit.
