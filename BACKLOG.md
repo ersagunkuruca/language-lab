@@ -26,7 +26,9 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E97 | Everything doable in Blocks is doable in the graph and the other way round. Start with a short audit table of every gesture and where it works (gaps he hit: copy and paste of a whole call, clear and fill, list items, Let it loosen); do it before adding more Blocks-only gestures | Ersagun 2026-10-24 11:11 | P1 | L | |
+| E100 | The Blocks pane has no right-click on empty space: "Add a value here…" is only in the graph (Add a value before this works in both) | NODE-EDITOR.md parity audit (E97) | P3 | S | |
+| E101 | Graph: drag an input up or down to reorder a list's items or a + b + c's inputs (the panel and menu do it now) | E91, Ersagun 2026-10-24 11:11 | P3 | S | |
+| E102 | Blocks pane: a long press opens the part's menu, as in the graph (iOS has no right-click; the panel covers the edits meanwhile) | NODE-EDITOR.md parity audit (E97) | P3 | S | |
 | E98 | Meaning-keeping simplifications offered as a menu suggestion when they apply, one undoable edit: first `append([a, b], [c])` → `[a, b, c]` and `cons(x, [a])` → `[x, a]` within a definition | Ersagun 2026-10-24 11:11 | P3 | M | later |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
@@ -134,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E97 | Graph and Blocks parity audit (NODE-EDITOR.md); gaps filed as E100-E102 | #419 |
 | E91 | A list's items and a + b + c's inputs: add, move, take out, in both views; + on graph nodes | #418 |
 | E90 | Duplicate a definition: a copy to change, next to it | #417 |
 | E88 | Menu items say what they do, and a greyed one says why | #416 |
