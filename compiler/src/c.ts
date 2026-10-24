@@ -169,7 +169,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     const j = strict.findIndex((x) => x.k === "fail" || x.k === "abort");
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
-  const funcs = lowered.funcs.map((f) => ({ ...f, body: settle(f.body) }));
+  const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -232,6 +232,8 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const cname = (t: DType, c: number) => `${dname.get(t.key)}_${t.cases[c].name.replace(/[^A-Za-z0-9_]/g, "_")}`;
   const names = new Map(kept.map((i) => [i, `lab_${ident(funcs[i].name)}`]));
 
+  // Cells of the same fields are one size, so one can take the other's place.
+  const layout = (fs: { t: LType }[]) => fs.map((x) => ty(x.t)).join(", ");
   const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
   const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || (isRecord(t) && !!t.mutable);
@@ -453,13 +455,27 @@ int main(int argc, char **argv) {
     // parts run.
     const targets: Target[] = [];
     const pending: { t: LType; v: string }[] = [];
+    // Cells taken apart (takeApart) that the next new cell of the same
+    // fields can have, innermost last: v holds the cell, or 0 if it was
+    // shared. Every way on either uses it or frees it.
+    const tokens: { v: string; fields: string; alive: boolean; used: boolean }[] = [];
+    const letGo = (ts: typeof tokens, d: string) => ts.filter((x) => x.alive).map((x) => ((x.used = true), `${d}if (${x.v}) { lab_free(${x.v}); ${x.v} = 0; }`));
+    // Branches with the tokens alive before them: one a branch uses is
+    // freed at the start of each branch that doesn't.
+    const branches = (gens: (() => string[])[], d: string): string[][] => {
+      const live = tokens.filter((x) => x.alive);
+      const done = gens.map((g) => { live.forEach((x) => (x.alive = true)); const lines = g(); return { lines, gone: live.filter((x) => !x.alive) }; });
+      const taken = live.filter((x) => done.some((b) => b.gone.includes(x)));
+      live.forEach((x) => (x.alive = !taken.includes(x)));
+      return done.map((b) => [...letGo(taken.filter((x) => !b.gone.includes(x)).map((x) => ({ ...x, alive: true })), d), ...b.lines]);
+    };
     // Going out with no answer from a point where `after` is live: drop
     // what the target won't use, then jump (or return a zero).
     const out = (d: string, after: Set<number>): string[] => {
       const t = targets.at(-1);
       const gone = [...after].filter((j) => !t?.keep.has(j)).map((j) => `${d}${drop(f.locals[j], local(j))}`);
       const temps = pending.slice(t?.pending ?? 0).filter((x) => counted(x.t)).map((x) => `${d}${drop(x.t, x.v)}`);
-      return [...gone, ...temps, t ? `${d}goto ${t.label};` : f.partial ? `${d}return ${zero(f.result)};` : `${d}abort(); // no answer, and nowhere to go`];
+      return [...gone, ...temps, ...letGo(tokens, d), t ? `${d}goto ${t.label};` : f.partial ? `${d}return ${zero(f.result)};` : `${d}abort(); // no answer, and nowhere to go`];
     };
     // A label to go to, with what it keeps.
     const within = <T>(keep: Set<number>, body: (label: string) => T): T => {
@@ -578,7 +594,10 @@ int main(int argc, char **argv) {
           if (!c.fields.length) return `(&${cname(e.t, e.c)})`;
           const xs = args(e.args, pre, d, after);
           const v = temp(e.t), n = cname(e.t, e.c);
-          pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, ${e.c});`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
+          const r = tokens.findLast((x) => x.alive && x.fields === layout(c.fields));
+          const made = `${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, ${e.c});`;
+          if (r) { r.alive = false; r.used = true; }
+          pre.push(r ? `${d}if (${r.v}) { ${v} = ${r.v}; ${v}->type = ${tnum.get(e.t.key)}; ${v}->tag = ${e.c}; } else ${made}` : `${d}${made}`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
           return v;
         }
         case "field": return borrow(e.rec, e.t.cases[e.c].fields[e.i].t, (r) => `((${cname(e.t, e.c)} *)${r})->f${e.i}`, pre, d, after);
@@ -639,13 +658,31 @@ int main(int argc, char **argv) {
     // with the fields nobody took dropped by type, not by lab_fields; if
     // it's shared, the fields are dup'd and the cell loses one count.
     // Perceus's drop specialization (Reinking, Xie, de Moura and Leijen,
-    // PLDI 2021).
-    function takeApart(a: SExpr, s: number, t: DType, c: number, after: Set<number>, d: string): { lines: string[]; body: SExpr } | null {
+    // PLDI 2021). And the cell itself goes to the arm's first new cell
+    // with the same fields, if every way through makes one or frees it
+    // (Lean 4's reset and reuse: Ullrich and de Moura, IFL 2019).
+    function takeApart(a: SExpr, s: number, t: DType, c: number, after: Set<number>, d: string, rest: (b: SExpr) => string[]): string[] | null {
       const reads: { i: number; f: number }[] = [];
       let body = a;
       while (body.k === "let" && body.value.k === "field" && body.value.rec.k === "local" && body.value.rec.i === s && body.value.c === c) {
         reads.push({ i: body.i, f: body.value.i });
         body = body.body;
+      }
+      // Fields read later in the arm (a function written in the lowering
+      // reads them where it uses them) are read into locals here too.
+      const later = walk(body).filter((x): x is Extract<SExpr, { k: "field" }> => x.k === "field" && x.rec.k === "local" && x.rec.i === s);
+      if (later.some((x) => x.c !== c)) return null;
+      if (later.length) {
+        const into = new Map<number, number>();
+        for (const x of later) {
+          if (into.has(x.i)) continue;
+          const j = f.locals.push(t.cases[c].fields[x.i].t) - 1;
+          decls.push(`  ${ty(f.locals[j])} ${local(j)};`);
+          into.set(x.i, j);
+          reads.push({ i: j, f: x.i });
+        }
+        const swap = (x: SExpr): SExpr => (x.k === "field" && x.rec.k === "local" && x.rec.i === s ? { k: "local", i: into.get(x.i)! } : mapKids(x, swap));
+        body = swap(body);
       }
       if (!reads.length || free(body).has(s) || new Set(reads.map((r) => r.f)).size < reads.length) return null;
       const used = union(free(body), after);
@@ -653,23 +690,44 @@ int main(int argc, char **argv) {
       const at = (k: number) => `((${n} *)${local(s)})->f${k}`;
       const kept = reads.filter((r) => used.has(r.i) || !counted(f.locals[r.i]));
       const moved = new Set(kept.map((r) => r.f));
-      return {
-        body,
-        lines: [
-          `${d}if (${local(s)}->rc == 1) {`,
-          ...kept.map((r) => `${d}  ${local(r.i)} = ${at(r.f)};`),
-          ...fields.flatMap((x, k) => (moved.has(k) || !counted(x.t) ? [] : [`${d}  ${drop(x.t, at(k))}`])),
-          `${d}  lab_free(${local(s)});`,
-          `${d}} else {`,
-          ...kept.map((r) => `${d}  ${local(r.i)} = ${dup(f.locals[r.i], at(r.f))};`),
-          `${d}  if (${local(s)}->rc) ${local(s)}->rc--;`,
-          `${d}}`,
-        ],
-      };
+      // The rest with the cell to give away; if some way through neither
+      // used nor freed it, the rest again without.
+      const r = { v: `r${temps++}`, fields: layout(fields), alive: true, used: false };
+      if (!walk(body).some((x) => x.k === "new" && x.t.cases[x.c].fields.length && layout(x.t.cases[x.c].fields) === r.fields)) r.alive = false;
+      const was = tokens.map((x) => [x.alive, x.used]);
+      tokens.push(r);
+      let lines = rest(body);
+      tokens.pop();
+      if (r.alive) {
+        tokens.forEach((x, k) => ([x.alive, x.used] = was[k]));
+        r.alive = false;
+        lines = rest(body);
+      }
+      const give = !r.alive && r.used;
+      if (give) decls.push(`  lab_cell * ${r.v};`);
+      return [
+        `${d}if (${local(s)}->rc == 1) {`,
+        ...kept.map((r) => `${d}  ${local(r.i)} = ${at(r.f)};`),
+        ...fields.flatMap((x, k) => (moved.has(k) || !counted(x.t) ? [] : [`${d}  ${drop(x.t, at(k))}`])),
+        give ? `${d}  ${r.v} = ${local(s)};` : `${d}  lab_free(${local(s)});`,
+        `${d}} else {`,
+        ...kept.map((r) => `${d}  ${local(r.i)} = ${dup(f.locals[r.i], at(r.f))};`),
+        `${d}  if (${local(s)}->rc) ${local(s)}->rc--;`,
+        ...(give ? [`${d}  ${r.v} = 0;`] : []),
+        `${d}}`,
+        ...lines,
+      ];
     }
     function block(e: SExpr, to: { set: string } | "return", d: string, after: Set<number>): string[] {
       const pre: string[] = [];
       const give = (x: string) => (to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`);
+      // A label inside may be gone to after a cell given away is used:
+      // it's freed first.
+      if ((e.k === "attempt" || e.k === "budget" || e.k === "handle") && tokens.some((x) => x.alive)) {
+        const gone = letGo(tokens, d);
+        tokens.forEach((x) => (x.alive = false));
+        return [...gone, ...block(e, to, d, after)];
+      }
       if (e.k === "let") {
         const body = free(e.body);
         pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
@@ -679,9 +737,10 @@ int main(int argc, char **argv) {
       if (e.k === "if") {
         const live = union(after, free(e.then), free(e.else));
         const c = ex(e.cond, pre, d, live);
+        const [then, other] = branches([() => block(e.then, to, d + "  ", after), () => block(e.else, to, d + "  ", after)], d + "  ");
         return [
-          ...pre, `${d}if (${c}) {`, ...drops(live, free(e.then), after, d + "  "), ...block(e.then, to, d + "  ", after),
-          `${d}} else {`, ...drops(live, free(e.else), after, d + "  "), ...block(e.else, to, d + "  ", after), `${d}}`,
+          ...pre, `${d}if (${c}) {`, ...drops(live, free(e.then), after, d + "  "), ...then,
+          `${d}} else {`, ...drops(live, free(e.else), after, d + "  "), ...other, `${d}}`,
         ];
       }
       if (e.k === "case") {
@@ -691,11 +750,13 @@ int main(int argc, char **argv) {
         if (s !== local(e.s)) pre.push(`${d}${local(e.s)} = ${s};`);
         const inLive = union(live, isCounted(e.s) ? new Set([e.s]) : new Set());
         pre.push(`${d}switch (${local(e.s)}->tag) {`);
-        e.arms.forEach((a, j) => {
-          if (!a) return;
-          const taken = isCounted(e.s) && !after.has(e.s) ? takeApart(a, e.s, e.t, j, after, d + "  ") : null;
-          const body = taken ? [...taken.lines, ...block(taken.body, to, d + "  ", after)] : block(a, to, d + "  ", after);
-          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...drops(inLive, arms[j], after, d + "  "), ...body, ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
+        const js = e.arms.flatMap((a, j) => (a ? [j] : []));
+        const bodies = branches(js.map((j) => () => {
+          const a = e.arms[j]!, go = (b: SExpr) => block(b, to, d + "  ", after);
+          return (isCounted(e.s) && !after.has(e.s) ? takeApart(a, e.s, e.t, j, after, d + "  ", go) : null) ?? go(a);
+        }), d + "  ");
+        js.forEach((j, k) => {
+          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...drops(inLive, arms[j], after, d + "  "), ...bodies[k], ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
         });
         pre.push(`${d}default: abort();`, `${d}}`);
         return pre;

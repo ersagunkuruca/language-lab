@@ -2,9 +2,10 @@
 // built editor (npm run build-editor) served from the site's root, the
 // guitar pedal opened, and its recording played through the preview. What
 // reaches the speakers is tapped with an analyser, as test/sound-browser.ts
-// does for the built page: it must be sound, driven (as loud as what came in, its
-// peaks squashed), and Clean must reach the audio thread. Fails on any error or
-// warning logged.
+// does for the built page: it must be sound, driven (as loud as what came
+// in, its peaks squashed), Clean must reach the audio thread, and nothing
+// may play once the page is left or Stop sound is pressed. Fails on any
+// error or warning logged.
 //
 //   node editor/sound-smoke.ts
 //
@@ -115,6 +116,23 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const clean = await levels(0);
   check("Clean reaches the audio thread: what came in", clean.intoRms > 0.005 && Math.abs(clean.out - clean.into) < 0.05 * clean.into, clean);
+
+  // Another program: nothing the page started plays any more.
+  const pick = (name: string) => run(`[...document.querySelectorAll('[data-set="program"]')].find((b) => b.textContent.includes(${JSON.stringify(name)})).click()`);
+  await pick("Calculus");
+  const away = await levels(0);
+  check("another program silences the page", away.into < 1e-4 && away.out < 1e-4, away);
+  // Back: it plays again, and the editor's Stop sound ends it.
+  await pick("guitar pedal");
+  for (let i = 0; i < 100 && !(await run<boolean>(`${frame}?.querySelectorAll("button").length === 5`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  await click("A strum");
+  await playing("A strum");
+  const again = await levels(1);
+  check("back on the page, it plays again", again.out > 0.01, again);
+  await run(`document.querySelector('[data-act="page-hush"]').click()`);
+  const hushed = await levels(1);
+  const off = await run<string>(`[...${frame}.querySelectorAll("button")].find((b) => b.textContent === "A strum").dataset.playing`);
+  check("Stop sound stops it", hushed.into < 1e-4 && hushed.out < 1e-4 && off === "false", { ...hushed, playing: off });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

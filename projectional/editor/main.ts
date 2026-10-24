@@ -1855,9 +1855,12 @@ const page = {
   maker: document.implementation.createHTMLDocument("page"),
   for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
   flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
+  // A page with sound: stop everything it plays, whatever its own buttons say.
+  hushBtn: h("button", { class: "btn", type: "button", "data-act": "page-hush", title: "Stop every sound this page is playing" }, "Stop sound") as HTMLButtonElement,
 };
 const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
   h("div", { class: "acts" },
+    page.hushBtn,
     h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
     h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
     h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
@@ -1877,6 +1880,7 @@ function pageSection(info: T.Info | null): HTMLElement | null {
   // So the page goes back to the document that outlives renders first: its
   // buttons keep their handlers.
   if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
+  page.hushBtn.hidden = !page.now?.hush;
   // Put back in the frame once the frame is in the page again.
   queueMicrotask(() => {
     const d = page.frame.contentDocument;
@@ -1893,6 +1897,9 @@ function pageSection(info: T.Info | null): HTMLElement | null {
 const keptPages = new Map<Program, { for: Code; root: globalThis.Node | null; now: Preview | null }>();
 function leavePage() {
   if (page.for && page.program && page.program !== doc.program) {
+    // A page left for another program goes on, but silent: nothing plays
+    // from a page that isn't shown.
+    page.now?.hush?.();
     // Out of the frame before the frame goes, so its buttons keep their handlers.
     if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
     keptPages.get(page.program)?.now?.stop();
@@ -1913,7 +1920,7 @@ function startPage(info: T.Info, main: Id) {
   try {
     page.now = showPage({
       code: doc.code, info, names: pres().names, main, program: titleOf(doc),
-      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME,
+      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME, recordings: "apps/",
       frame: (f) => requestAnimationFrame(f),
       ran: (n: Node_) => {
         if (!page.flashBox.checked) return;
@@ -2431,6 +2438,7 @@ document.addEventListener("click", (e) => {
     if (a === "t-run" && typesOf()) return runTyped();
     if (a === "t-stop") return stopRun("Stopped.");
     if (a === "page-restart") { page.for = null; return render(); }
+    if (a === "page-hush") return page.now?.hush?.();
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;

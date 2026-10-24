@@ -202,9 +202,12 @@ samples as the bundled one.
 
 The editor does this (A4): showPage (src/lang/page.ts) takes `worklet`,
 the guitar pedal is one of the editor's examples, and its preview plays.
-The recordings are copied beside the editor too. `node editor/sound-smoke.ts`
+Recordings are read from apps/, where the build puts them beside the
+pages. A page's sound stops when the page is left, edited or restarted,
+and a Stop sound button ends whatever it plays. `node editor/sound-smoke.ts`
 plays the strum through the built editor's preview and checks that it is
-driven (as loud, peaks squashed) and that Clean reaches the audio thread.
+driven (as loud, peaks squashed), that Clean reaches the audio thread,
+and that nothing plays after leaving the page or pressing Stop sound.
 
 ## Prior art
 
