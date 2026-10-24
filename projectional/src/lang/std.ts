@@ -146,6 +146,15 @@ export const RATIONAL = typedef("std.rational", "Rational", [], [
   ["ratio", [["top", () => tref(INT)], ["bottom", () => tref(INT)]]],
 ]);
 export const RATIO = "std.rational.ratio";
+// Complex numbers (NUMBERS.md, LANGUAGE-REVIEW-2026-10-24 L40): one case of
+// two Numbers, re + im·i. A record of Numbers, so the parts builtins and
+// the vectors module work on it (its magnitude is |z|), but a number type
+// of its own: · is the complex product, which is the prelude's like
+// Rational's, and there is no <. After Rational, so ids above don't move.
+export const COMPLEX = typedef("std.complex", "Complex", [], [
+  ["complex", [["re", () => tref(NUMBER)], ["im", () => tref(NUMBER)]]],
+]);
+export const COMPLEX_V = "std.complex.complex";
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
@@ -425,7 +434,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

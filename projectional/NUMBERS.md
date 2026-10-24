@@ -798,6 +798,20 @@ hierarchy is the map of which structures to name.
    `1/10 + 2/10 = 3/10` holds exactly. Still to do: relate.ts's linear step
    over fractions (running backwards stays at Number), and `lowest terms`
    in the WASM, C and WGSL targets.
+   **Complex done (L40):** `std.complex`, one case `complex(re, im)` of
+   Numbers. Its `+ − · −x` are prelude definitions (`multiply complex` is
+   (ac − bd) + (ad + bc)i) that arith.ts resolves the generic operations
+   to, from the same table as Rational's; it has no `<`, so `smaller` on
+   it is a type error. Being a record of Numbers, it also takes the parts
+   builtins and the vectors module (`magnitude` is |z|), on the GPU it is a
+   `vec2f`, and WebAssembly takes it as two f64s, with nothing new in any
+   back end. The prelude adds `as complex`, `i`, `complex conjugate`,
+   `modulus`, `angle of`, `polar`, `divide complex` (no answer at 0),
+   `complex exp` (Euler's formula) and `show complex` (3 − 4i).
+   Derivatives through it are right: the slope of im((x + i)²) is 2.
+   Still to do: a Mandelbrot or domain-colouring shader, and the
+   multiplication-table form (`algebra(table)`, L40b) that would make
+   Complex, dual numbers and quaternions one definition each.
 
 ### Units
 

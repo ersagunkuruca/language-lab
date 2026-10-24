@@ -46,6 +46,9 @@ export const INT = "type.int";
 // std.ts's Rational (a data type, so its id is std's): exact, ordered,
 // with the prelude's arithmetic.
 export const RATIONAL_TYPE = "std.rational";
+// std.ts's Complex: a record of two Numbers with the prelude's + − · and
+// no <.
+export const COMPLEX_TYPE = "std.complex";
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";
@@ -138,6 +141,7 @@ export class Subst {
       return;
     }
     if (t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE)) return;
+    if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind === "ordered") throw new ArithError(kind); return; }
     if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
     if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
