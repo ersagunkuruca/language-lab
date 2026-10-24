@@ -872,3 +872,88 @@ What got in the way, roughly in order of cost:
 8. **Effects run while editing.** Writing `usage` printed "usage: ledger
    file.csv" to the page's console: the editor evaluated a definition
    with `Console` as soon as it was complete.
+
+## Round 4: the pedal (2026-10-24)
+
+`projectional/examples/pedal` is a guitar pedal (AUDIO.md). Each block of
+128 samples goes through four steps:
+
+1. Haar's split into a slow band and a fast band, written as lifting steps.
+2. Overdrive of the slow band in saturation space: `conjugate(into saturation, y => amount · y)`, which is tanh(amount · atanh x). The way back is atanh run backwards.
+3. The join, which is the split run backwards.
+4. A compressor whose level follows the samples one by one and carries over in a cell.
+
+It is the first program of the rounds that has to keep up with a clock:
+375 blocks a second at 48 kHz.
+
+Files:
+- `compiler/gaps/bench-audio.ts`: the compiled pedal, the evaluator, and
+  the pedal written by hand over arrays, on the same blocks. It first
+  checks that all three give the same samples.
+
+### Results
+
+```
+                 ms a block   blocks/s   × real time
+compiled (A5)        0.069      14 500        39
+compiled (P1)        0.060      16 600        44
+by hand              0.012      84 000       224
+evaluator          122              8          0.02
+```
+
+The compiled pedal was 6× the hand-written one, and is 5× after P1. A
+profile of the compiled pedal before P1 put a third of its time in two
+places. One was `$clean`, the solver's rounding to 12 digits, done
+through a string by `toPrecision`. The other was the key and the set
+that tell a solve's answers apart, even when a solve has only one way to
+an answer (A5 removed those).
+
+### The gaps, ranked
+
+**P1. The solver's rounding goes through a string.** Each answer of a
+solve is rounded to 12 digits, so the compiled code gives exactly the
+evaluator's numbers. Drive runs atanh backwards once a sample, so the
+round trip through a string happens 128 times a block.
+*Fix:* round with arithmetic instead. Take the 12 digits as a whole
+number n, then divide n by a power of ten. Division rounds correctly, the
+same way reading the digits back does. Where n could be off by a half, or
+the power of ten is out of range, fall back to `toPrecision`.
+`test/clean.test.ts` checks it against `toPrecision` on 300,000 values.
+**Done** (C27): rounding is 6× faster, and the pedal went from 6.0× to
+5.1× the hand-written time.
+
+**P2. A solve with one answer comes back as a list of lists.** `drive` is
+`first(() => conjugate(…)(x), () => x)`. Compiled, each sample builds
+`[[x]]` inside a closure, then walks it with `for … of` inside another
+closure.
+*Fix:* when the solve has one way to an answer, have it give the value or
+`$no`, and compile `first` over it as a plain test.
+
+**P3. Mode functions try their arms in closures.** Written out,
+`bands$mode0` (Haar's join):
+- wraps each arm in an `(() => …)()`;
+- returns each answer as a one-item array;
+- tests for an empty list with `$eq(p, $nil)` instead of its tag;
+- keeps the arm that only fails (it builds a nil and returns `$no`).
+
+*Fix:* when the arms build the result with different cases, test the
+tag, write the arms as blocks, and return the value itself. Drop an arm
+whose plan only fails.
+
+**P4. A block is a linked list, made again at every step.** One block
+allocates:
+- 128 cells on the way in, and the same on the way out;
+- 64 pairs and 64 cells in the split;
+- 64 more of each when driving the slow band;
+- 128 cells in the join;
+- 128 cells and 128 pairs in the compressor.
+
+The hand-written pedal changes one array. *Fix:* Wadler's fusion (C11 measured it on lists, G21 has
+arrays), with the AudioWorklet's Float32Array as the representation of a
+block's List Number. This is the biggest gap and the biggest change.
+
+**P5. The compressor returns a pair for every sample.** `following`
+gives back the samples so far and the level, so each level of its
+recursion makes a Pair. It also counts its depth for the heap fallback
+(C21). *Fix:* return the pair's two fields without the record. This is
+tail recursion modulo a constructor, carried through a Pair's first field.

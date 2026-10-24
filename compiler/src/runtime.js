@@ -195,7 +195,23 @@ export function* $solveRuntime({ rel, plan: p }, values, binds) {
 // Same rounding and finiteness rules as invertible/src/relation.js, so a
 // compiled solve gives exactly the numbers the solver gives.
 export const $ok = Number.isFinite;
-export const $clean = (x) => (Math.abs(x) < 1e-12 ? 0 : +x.toPrecision(12));
+// $clean is the solver's +x.toPrecision(12), without the string: 12
+// digits as a whole number n, then n over a power of ten, which division
+// rounds correctly, as reading the digits back would. Where n might be a
+// half away from where the product put it, or out of the powers' range,
+// it asks toPrecision (the pedal's tanh was mostly this string: GAPS.md P1).
+const TENS = Array.from({ length: 23 }, (_, i) => 10 ** i);
+export const $clean = (x) => {
+  const a = Math.abs(x);
+  if (a < 1e-12) return 0;
+  if (!(a < 1e22)) return +x.toPrecision(12);
+  const k = 11 - Math.floor(Math.log10(a));
+  if (k > 22 || k < -22) return +x.toPrecision(12);
+  const t = k >= 0 ? a * TENS[k] : a / TENS[-k];
+  if (Math.abs(t - Math.floor(t) - 0.5) < 1e-3 || t < 1e11 - 1 || t >= 1e12) return +x.toPrecision(12);
+  const n = Math.round(t), r = k >= 0 ? n / TENS[k] : n * TENS[-k];
+  return x < 0 ? -r : r;
+};
 export const $key = (xs) => xs.map((x) => Math.round(x * 1e8)).join();
 export const $close = (l, r) => $ok(l) && $ok(r) && Math.abs(l - r) <= 1e-9 * (1 + Math.abs(l) + Math.abs(r));
 
