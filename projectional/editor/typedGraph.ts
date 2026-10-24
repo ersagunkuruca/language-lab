@@ -325,7 +325,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
     const list = listItems(id);
-    const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || name(f.target)) : "apply";
+    // A field read is labelled .x, so what's wired in reads as p.x.
+    const field = f.kind === "ref" && node(f.target)?.kind === "field";
+    const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
     // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
     // an inner ++ with a dot on it stays its own node.
     const inputs = list ?? chainOperands(code, id, (a) => !!dotOf(a)) ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
@@ -342,7 +344,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       inputs.forEach((a, i) => g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : label });
+    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label });
     const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };

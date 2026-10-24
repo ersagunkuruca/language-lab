@@ -29,11 +29,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 ## E: Editor
 
-Thread "Writing programs in the editor". Current step: the can't-edit list,
-so the next bigger program can be built in the editor.
+Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08:28): the language review's drawing-only rows, moved here from L; the next QA pass's findings come before them.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E59 | A one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre`; drawing only, in the text and the graph | L35, LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | |
+| E60 | Action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2); drawing only, in the text and the graph | L36, LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | |
+| E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | |
+| E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | |
 
 ## C: Compiler and targets
 
@@ -77,13 +80,8 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L60 | **Proposal**: after L54, the audio worklet's run of `main` replays the page's random numbers and clock under a handler, so `main`'s row no longer depends on the page having sound | EFFECTS-REVIEW-2026-10-24 §1.4 | P2 | M | after L54 |
 | L57 | **Proposal**: a handler's case for the normal finish (`\| done(x) → some(x)`), so a handler can change the result's type | EFFECTS-REVIEW-2026-10-24 §2.5 | P2 | S | |
 | L58 | **Proposal**: named rows for the hosts in std (`View`, `Handler`, `Main`, `Sound`), used by `Html` and `Attribute` by name; the ledger lists them | EFFECTS-REVIEW-2026-10-24 §2.6 | P2 | M | |
-| L34 | **Proposal**: field reads drawn as `p.x` | LANGUAGE-REVIEW-2026-10-24 §5 | P2 | S | proposal |
-| L35 | **Proposal**: a one-case match on a one-case type drawn as a destructuring let, `pair(x, y) = centre` | LANGUAGE-REVIEW-2026-10-24 §3 | P2 | M | proposal |
-| L36 | **Proposal**: action parameters drawn by name, `first(queens(8), else nil)` (TUTORIAL open item 2) | LANGUAGE-REVIEW-2026-10-24 §6 | P2 | M | proposal |
-| L37 | **Proposal**: nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first | LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | proposal |
 | L46 | **Proposal**: bounded counting is total (an Int moving towards the bound it is compared against), so raymarch loses `with fuel` | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
 | L47 | **Proposal**: `conjugate` and `inverse` without `Choice` when the mode says one answer (with L29), so `first(() => conjugate(…)(x), () => x)` goes | LANGUAGE-REVIEW-2026-10-24 §7 | P2 | M | proposal |
-| L48 | **Proposal**: a fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`) | LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | proposal |
 | L29 | Function variables' rows checked in any order: a use that fixes a variable's row wider before the use that closes it (a page field's `view` handed to `inverse` before it's shown) still clashes; the closing use should win, as it does in the other order. And the checker typing `inverse(f, …)` from f at the call, as the modes already do, instead of Diverge | L14 | P3 | M | |
 | L11 | Mode analysis through cases and folds (the general fix for backwards search order). Design: projectional/MODES.md. Next: lane E shows the mode on the `solve` node | R2 §3, ROADMAP step 4 open | P2 | L | ▶ L11a to L11e done |
 | L12 | Tutorial and its screenshots brought up to the current editor | ROADMAP 2 | P2 | M | after the editor step |
@@ -138,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E58 | A field read is drawn as p.x in the text and .x in the graph (was L34) | #366 |
 | E55 | The palette reads a typed call, sqrt(x + 1), as one fill; a shared name is tried as each of its meanings | #365 |
 | E53 | Landscape phone: graph 208 to 234 px (one-line status, slimmer panes); tablet top bar fits (names and notation cycle) | #364 |
 | E56 | The status bar says what was done on a page (clicks on it, Stop sound, Restart) | #362 |

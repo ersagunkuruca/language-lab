@@ -114,6 +114,9 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
           const p = nota.prec ?? 9;
           return { text: `${nota.glyph}${paren(args[0], args[0].prec > p)}`, prec: p };
         }
+        // A field read is drawn as p.x: it is still the field's projection
+        // called on p, the way it runs backwards.
+        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(`${paren(args[0], args[0].prec >= 100)}.${nameOf(f.target)}`);
         const head = inline(n.fn);
         return atom(`${paren(head, head.prec >= 100)}(${args.map((a) => a.text).join(", ")})`);
       }

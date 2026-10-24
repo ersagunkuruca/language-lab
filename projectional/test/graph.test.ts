@@ -147,3 +147,14 @@ test("a folded frame is one box where the frame was, with its wires in on the le
   assert.ok(ends.some((e) => on(e.from, b.x + b.w)), "a wire goes out on the right");
   assert.ok(ends.length < open.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "")).length, "wires inside are not drawn");
 });
+
+test("a field read is labelled .field, so what's wired into it reads as p.field", () => {
+  const l = loadProgram(join(root, "examples", "ledger"));
+  const svg = typedGraph(l.code, l.pres, infer(l.code, l.pres.names), l.named("larger"), {
+    selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
+    canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded: new Set(),
+  }).root as unknown as El;
+  const labels = svg.all().filter((e) => e.getAttribute("class") === "cl").map((e) => e.children.length ? "" : e.textContent);
+  assert.ok(labels.includes(".cents") && labels.includes(".name"), labels.join(" "));
+  assert.ok(!labels.includes("cents") && !labels.includes("name"), labels.join(" "));
+});
