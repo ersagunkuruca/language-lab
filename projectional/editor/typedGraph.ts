@@ -70,6 +70,8 @@ export interface GraphHooks {
   fold?: (frame: Id) => void;
   // The + under a list's or a + b + c's inputs: one more, at the end.
   addItem?: (row: Id) => void;
+  // A value (a binding, or a node's output) dropped on a row's +.
+  addFrom?: (row: Id, from: Id, binding: boolean) => void;
   // An input of a list or a chain dropped on another of its inputs: it
   // moves there.
   reorder?: (item: Id, onto: Id) => void;
@@ -1018,9 +1020,13 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     if (!ev.altKey && !(src && mv && picked.has(src)) && (src || out || slot)) {
       ev.preventDefault();
       const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : null;
-      connectDrag(root, ev, "[data-slot]", check && ((t) => check(t.getAttribute("data-slot")!)), (target) => {
+      // A value can also go on a list's or a chain's +: a new item, wired to it.
+      const targets = (src || out) && hooks.addFrom ? "[data-slot], [data-add]" : "[data-slot]";
+      connectDrag(root, ev, targets, check && ((t) => (t.hasAttribute("data-add") ? null : check(t.getAttribute("data-slot")!))), (target) => {
         const to = target?.getAttribute("data-slot");
-        if (src && to) hooks.use(src, to);
+        const row = target?.getAttribute("data-add");
+        if (row && (src || out)) hooks.addFrom?.(row, (src ?? out)!, !!src);
+        else if (src && to) hooks.use(src, to);
         else if (out && to) hooks.share(out, to);
         else if (slot && !to) hooks.clear(slot);
         else if (slot && to && to !== slot) hooks.reorder?.(slot, to);

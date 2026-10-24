@@ -27,7 +27,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E104 | **Bug.** Delete takes everything feeding the node with it (removeSelected calls toHole on the whole subtree): deleting the list `append` needed also deleted the `named(…)` element wired into it. Delete should remove only that node | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M | folded into E117 |
-| E108 | **Bug.** Dropping an output on a list's `+` does nothing (should add the item), and dropping it on a filled input does nothing (the swap, old value loose, is E117) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | S |  |
 | E115 | Loose parts 1: holes drawn as empty inputs in the graph (hollow port, type on hover, click for the palette), no hole nodes | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
 | E116 | Loose parts 2: `drafts.json` per definition beside code.json: load, save, Save file, undo, and a `-- loose, not used yet` section at the end of Blocks | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
 | E117 | Loose parts 3: Delete removes one node and leaves what fed it loose; unwiring leaves the value loose; a drop on a filled input swaps and sets the old value loose (rules 4, 5; fixes E104) | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
@@ -141,6 +140,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E108 | Dropping a value on a list's + adds it as a new item | #432 |
 | E107 | A folded frame is selected, outlined and dragged like a node | #431 |
 | E106 | Tidy everything lays it all out afresh, the same every time, and a fresh graph is drawn that way | #430 |
 | E105 | Choosing a part keeps the text and panels where they were scrolled | #429 |

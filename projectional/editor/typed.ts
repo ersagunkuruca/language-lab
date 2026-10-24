@@ -797,6 +797,17 @@ export function addItem(code: Code, names: Names, info: Info, row: Row, at: numb
   return guardTyped(info, next, names, hole, `A new ${itemWord(row)} ${where}: fill its hole.`);
 }
 
+// A value dropped on a row's +: a new item at the end, wired to that value.
+// From a binding (a dot or a parameter) it's one more use; from a node's
+// output, the value is shared, as a drop on a hole shares it.
+export function addItemFrom(code: Code, names: Names, info: Info, defId: Id, row: Row, from: Id, binding: boolean): TEdit {
+  const a = addItem(code, names, info, row, row.items.length);
+  if (!a.ok) return a;
+  const now = infer(a.code, { ...display, ...a.names });
+  const r = binding ? useVar(a.code, a.names, now, defId, from, a.select!) : share(a.code, a.names, now, defId, from, a.select!);
+  return r.ok ? { ...r, note: `Added it to the ${row.kind === "list" ? "list" : "call"} as a new ${itemWord(row)} at the end.` } : r;
+}
+
 // Take items[at] out of the row.
 export function removeItem(code: Code, names: Names, info: Info, row: Row, at: number): TEdit {
   let next: Code;
