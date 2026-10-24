@@ -210,9 +210,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
-  const call = /^([^\s()[\],"]+)\s*\((.*)\)$/s.exec(t);
+  // A name may be several words, as fraction(3), or quoted as the blocks
+  // draw it, ‹show numbers›(x).
+  const call = /^‹?([^()[\],"‹›]+?)›?\s*\((.*)\)$/s.exec(t);
   const parts = call ? topLevel(call[2]) : undefined;
   if (call && parts) {
+    call[1] = call[1].trim();
     const named = scope.get(call[1]);
     // Out of scope, a binder or a field isn't something to call.
     const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind);

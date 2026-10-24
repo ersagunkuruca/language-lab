@@ -675,3 +675,16 @@ test("a call typed in the palette reads as it prints: sqrt(x + 1) in double(x)",
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "sqrt(x, x)", double).ok, false);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "a(x)", double).ok, false);
 });
+
+test("a call typed in the palette may name a function of several words: as fraction(3)", async () => {
+  const T = await import("../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "half", { kind: "function", params: ["x"] }));
+  const half = s.def("half");
+  const hole = s.holes(half)[0];
+  for (const text of ["as fraction(3)", "‹as fraction›(3)", "show(as fraction(3))", "as fraction(1) + as fraction(2)"]) {
+    const r = T.fillValue(s.code, s.all(), s.info(), hole, text, half);
+    assert.ok(r.ok, `${text}: ${r.ok ? "" : r.reason}`);
+  }
+  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "as nothing(3)", half).ok, false);
+});
