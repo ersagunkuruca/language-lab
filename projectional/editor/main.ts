@@ -2048,15 +2048,27 @@ function pageSection(info: T.Info | null): HTMLElement | null {
       sized.add(d);
       // What's done on the page is said in the status bar too, as an edit
       // is. Only the bar's text changes: the page is left as it is.
-      d.addEventListener("click", (e) => {
-        const b = (e.target as Element).closest?.("button, a, input[type=checkbox]");
-        const label = b?.textContent?.trim() || b?.getAttribute("aria-label");
-        if (!label) return;
-        ui.note = `Clicked “${label}” on the page.`;
+      const say = (note: string) => {
+        ui.note = note;
         ui.touched = [];
         ui.refused = false;
         const bar = document.querySelector<HTMLElement>(".status[role=status]");
         if (bar) { bar.textContent = ui.note; bar.className = "status"; }
+      };
+      d.addEventListener("click", (e) => {
+        const b = (e.target as Element).closest?.("button, a, input[type=checkbox]");
+        const label = b?.textContent?.trim() || b?.getAttribute("aria-label");
+        if (!label) return;
+        say(`Clicked “${label}” on the page.`);
+      });
+      // And what's typed or set in a field, once it's in (Enter, leaving
+      // the field, letting go of a slider).
+      d.addEventListener("change", (e) => {
+        const f = e.target as HTMLInputElement;
+        if (!f.matches?.("input:not([type=checkbox]):not([type=button]), textarea, select")) return;
+        const name = f.labels?.[0]?.textContent?.trim() || f.getAttribute("aria-label") || f.placeholder || f.name;
+        const what = f.value === "" ? "Emptied" : f.type === "range" || f.tagName === "SELECT" ? `Set ${f.value} in` : `Typed ${f.value} in`;
+        say(`${what} ${name ? `“${name}”` : "a field"} on the page.`);
       });
       new ResizeObserver(() => { page.frame.style.height = `${Math.min(Math.max(Math.ceil(d.body.getBoundingClientRect().bottom) + 2, 120), Math.round(innerHeight * 0.7))}px`; }).observe(d.body);
     }
