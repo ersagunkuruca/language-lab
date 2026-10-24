@@ -6,7 +6,9 @@ everything you normally fight about (formatting, operator symbols, infix vs
 prefix, naming style, whether to nest or use temporaries) is a *view* chosen
 per person. No parser exists, on purpose.
 
-New here? Start with [TUTORIAL.md](TUTORIAL.md): an introduction for
+New here? Start with [GUIDE.md](GUIDE.md): a hands-on tour of the editor
+and the language, doing real edits on the dice program. [TUTORIAL.md](TUTORIAL.md)
+is the longer read: an introduction for
 non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 How a program runs (the editor's Run, the command line, and the compiled
