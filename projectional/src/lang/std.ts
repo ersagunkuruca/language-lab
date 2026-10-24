@@ -103,6 +103,18 @@ export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attrib
   "the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run");
 export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM, LOG],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console");
+// A sound (AUDIO.md): a function from a block of samples to the block to
+// play, made by a function that makes its cells. The runtime runs the
+// block function on the audio thread, 375 times a second, so its row is
+// closed and has nothing that waits or prints: its cells (read and
+// written), noise (Random, which the runtime seeds, so a render repeats)
+// and a step budget. The
+// maker runs once, and in the browser once more in the audio thread, so it
+// may only make cells: both runs must make the same ones.
+export const AUDIO_BLOCK: readonly Id[] = discharge("a sound's block function", [CELLS, UPDATE, RANDOM, DIVERGE],
+  "the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence");
+export const AUDIO_MAKER: readonly Id[] = discharge("a sound's maker", [CELLS, DIVERGE],
+  "the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells");
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
