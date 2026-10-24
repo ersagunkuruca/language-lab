@@ -9,7 +9,7 @@ import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, closures, maths, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -502,8 +502,29 @@ test("what isn't in the profile is refused, with the reason", () => {
   assert.match(why("sinc")!, /Choice/);
   assert.match(why("parabola")!, /calls polynomial/);
   assert.match(why("polynomial")!, /other than Number or Bool/);
-  // With no JavaScript host there's no Math yet.
-  assert.throws(() => emitWasm(lowerScalar(p.code, p.info, p.pres.names, p.own.defs), { wasi: true }), /can't use sin.* yet/);
+});
+
+test("Math with no JavaScript host: V8's fdlibm in WebAssembly, the same bits as Node's Math", async () => {
+  const p = maths();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const m = emitWasm(lowered, { wasi: true });
+  assert.ok(!m.wat.includes(`(import "Math"`), "no Math imported");
+  const stub = new Proxy({}, { get: () => () => 0 });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { wasi_snapshot_preview1: stub }) as unknown as { instance: { exports: Exports } };
+  const w = instance.exports;
+  const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 } as Record<string, (x: number, y: number) => number>;
+  let seed = 7n;
+  const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
+  const anyBits = () => new Float64Array(new BigUint64Array([BigInt(Math.floor(next() * 2 ** 32)) << 32n | BigInt(Math.floor(next() * 2 ** 32))]).buffer)[0];
+  // Small, around a period, large (rem_pio2's long path past 2²⁰·π/2), tiny, the edges, and any bits at all.
+  const pick = () => { const k = next(); return k < 0.3 ? (next() - 0.5) * 20 : k < 0.5 ? (next() - 0.5) * 2e7 : k < 0.6 ? next() * 1e-5 : k < 0.65 ? [0, -0, NaN, Infinity, -Infinity, 1, -1, 0.5, 2, 1e22, 1e300, 5e-324][Math.floor(next() * 12)] : anyBits(); };
+  for (const [op, f] of Object.entries(F)) {
+    const fn = lowered.funcs.find((g) => g.def === p.defs[op as keyof typeof p.defs])!.name;
+    for (let i = 0; i < 20000; i++) {
+      const x = pick(), y = op === "pow" && next() < 0.4 ? Math.round(pick() % 20) : pick();
+      assert.ok(Object.is(w[fn](x, y), f(x, y)), `${op}(${x}, ${y}): ${w[fn](x, y)}, not ${f(x, y)}`);
+    }
+  }
 });
 
 test("tail calls are return_call: a million steps of recursion in constant stack", async () => {

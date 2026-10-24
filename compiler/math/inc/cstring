@@ -1,0 +1,4 @@
+// A stand-in for the system header, for gen.ts (no sysroot for WebAssembly).
+#pragma once
+namespace std { inline void* memcpy(void* d, const void* s, unsigned long n) { return __builtin_memcpy(d, s, n); } }
+using std::memcpy;

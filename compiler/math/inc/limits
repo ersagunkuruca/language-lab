@@ -1,0 +1,4 @@
+// A stand-in for the system header, for gen.ts (no sysroot for WebAssembly).
+#pragma once
+namespace std { template <class T> struct numeric_limits; template <> struct numeric_limits<double> {
+  static constexpr double infinity() { return __builtin_inf(); } static constexpr double quiet_NaN() { return __builtin_nan(""); } static constexpr double signaling_NaN() { return __builtin_nans(""); } }; }

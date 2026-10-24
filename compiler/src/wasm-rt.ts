@@ -16,6 +16,8 @@
 // The functions match std.ts and text.ts: slice clamps, split is
 // JavaScript's (non-overlapping, left to right), show is std.ts's show.
 
+import { MATH } from "./wasm-math.ts";
+
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
 // `option` an Optional Text, and `void` a result of nothing.
@@ -44,10 +46,10 @@ export interface RtFn {
 }
 
 // Immediates each instruction takes.
-type Imm = "local" | "func" | "type" | "label" | "i32" | "i64" | "f64" | "bt" | "u" | "global";
+type Imm = "local" | "func" | "type" | "label" | "labels" | "i32" | "i64" | "f64" | "bt" | "u" | "global";
 const OPS: Record<string, [number[], Imm[]]> = {
   "unreachable": [[0x00], []], "block": [[0x02], ["bt"]], "loop": [[0x03], ["bt"]], "if": [[0x04], ["bt"]], "else": [[0x05], []], "end": [[0x0b], []],
-  "br": [[0x0c], ["label"]], "br_if": [[0x0d], ["label"]], "return": [[0x0f], []], "call": [[0x10], ["func"]], "drop": [[0x1a], []], "select": [[0x1b], []],
+  "br": [[0x0c], ["label"]], "br_if": [[0x0d], ["label"]], "br_table": [[0x0e], ["labels"]], "return": [[0x0f], []], "call": [[0x10], ["func"]], "drop": [[0x1a], []], "select": [[0x1b], []],
   "local.get": [[0x20], ["local"]], "local.set": [[0x21], ["local"]], "local.tee": [[0x22], ["local"]],
   "i32.const": [[0x41], ["i32"]], "i64.const": [[0x42], ["i64"]], "f64.const": [[0x44], ["f64"]],
   "i32.eqz": [[0x45], []], "i32.eq": [[0x46], []], "i32.ne": [[0x47], []], "i32.lt_s": [[0x48], []], "i32.lt_u": [[0x49], []], "i32.gt_s": [[0x4a], []], "i32.gt_u": [[0x4b], []],
@@ -58,12 +60,14 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i64.add": [[0x7c], []], "i64.sub": [[0x7d], []], "i64.mul": [[0x7e], []], "i64.div_s": [[0x7f], []], "i64.div_u": [[0x80], []], "i64.rem_s": [[0x81], []], "i64.rem_u": [[0x82], []],
   "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []], "i64.shl": [[0x86], []], "i64.shr_s": [[0x87], []], "i64.shr_u": [[0x88], []],
   "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i64.le_u": [[0x58], []], "i64.ge_u": [[0x5a], []],
-  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []],
+  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []], "i32.shr_s": [[0x75], []], "i32.div_s": [[0x6d], []],
+  "f64.sqrt": [[0x9f], []], "f64.convert_i32_s": [[0xb7], []], "i32.trunc_f64_s": [[0xaa], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
   // Linear memory (WASI's buffers), aligned naturally, at offset 0.
   "i32.load": [[0x28, 0x02, 0x00], []], "i64.load": [[0x29, 0x03, 0x00], []], "i32.load8_u": [[0x2d, 0x00, 0x00], []],
   "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
+  "f64.load": [[0x2b, 0x03, 0x00], []], "f64.store": [[0x39, 0x03, 0x00], []], "i64.store": [[0x37, 0x03, 0x00], []],
   "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "ref.test": [[0xfb, 0x14], ["type"]], "ref.i31": [[0xfb, 0x1c], []], "i31.get_s": [[0xfb, 0x1d], []],
@@ -78,6 +82,8 @@ export interface Resolve {
   func(name: string): number;
   // A global by name (`reason`).
   global(name: string): number;
+  // A memory by name: 0 is WASI's, $math (wasm-math.ts) its own.
+  memory(name: string): number;
   // A block type or local type: bytes and text.
   valtype(t: VT): { bytes: number[]; text: string };
 }
@@ -98,6 +104,12 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
     const [op, ...args] = line.split(/\s+/);
     const spec = OPS[op];
     if (!spec) throw new Error(`${f.name}: no instruction ${op}`);
+    // A load or store naming its memory and offset: `f64.load $math 8`.
+    if (args.length === 2 && /\.(load|store)/.test(op)) {
+      const [code, align] = spec[0], m = r.memory(args[0].slice(1));
+      out.push(code, m ? align | 0x40 : align, ...(m ? u(m) : []), ...u(Number(args[1])));
+      continue;
+    }
     out.push(...spec[0]);
     spec[1].forEach((kind, i) => {
       const a = args[i];
@@ -114,6 +126,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
           break;
         }
         case "label": case "u": out.push(...u(Number(a))); break;
+        case "labels": out.push(...u(args.length - 1), ...args.flatMap((x) => u(Number(x)))); break;
         case "i32": case "i64": out.push(...sLeb(BigInt(a))); break;
         case "f64": out.push(...new Uint8Array(new Float64Array([Number(a)]).buffer)); break;
         case "bt": out.push(...(a === "void" ? [0x40] : r.valtype(a as VT).bytes)); break;
@@ -133,6 +146,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
     `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} ${f.result === "void" ? (f.partial ? " (result i32)" : "") : ` (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})`}${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
     ...lines.map((l) => {
       const [op, ...args] = l.split(/\s+/);
+      if (args.length === 2 && /\.(load|store)/.test(op)) return `    ${op} ${args[0]} offset=${args[1]}`;
       return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z][a-z0-9]*$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : (op === "ref.test" || op === "ref.cast") && !a.startsWith("(") ? `(ref ${a})` : a)).filter(Boolean).join(" ") : ""}`;
     }),
     "  )",
@@ -4615,10 +4629,10 @@ ${drop}
 // int.of) around a call to it. Inside the bodies every call is to the i64
 // one.
 const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
-const raw = (n: string) => { const f = R[n] ?? WASI[n]; return f && hasInt(f) ? `${n}.i64` : n; };
+const raw = (n: string) => { const f = R[n] ?? WASI[n] ?? MATH[n]; return f && hasInt(f) ? `${n}.i64` : n; };
 export const runtime = (name: string): RtFn => {
   const base = name.endsWith(".i64") ? name.slice(0, -4) : name;
-  const f = R[base] ?? WASI[base];
+  const f = R[base] ?? WASI[base] ?? MATH[base];
   if (!f || (base !== name && !hasInt(f))) throw new Error(`no runtime function ${name}`);
   const body = f.body.replace(/call \$([\w.]+)/g, (_, n: string) => `call $${raw(n)}`), uses = f.uses.map(raw);
   if (base !== name) {
