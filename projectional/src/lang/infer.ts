@@ -22,10 +22,14 @@ import { BOOL, S, SET, SIGS } from "./std.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
+  BUILTIN_EFFECTS, CELL, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
+
+// The searches: they run a function on paths they may abandon or repeat, so
+// its row holds no world effect (std.ts searchRow) and is inside the call's.
+const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
 
 discharge("a match on an effect's operations", [DECLARED], "a case for each operation says what it does: the handler");
 
@@ -76,6 +80,31 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
+  const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
+  const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
+  // Rows contained in others (Subst.subs): each one's effects added to the
+  // other's, until nothing changes. A row still open is left for later; a
+  // closed one that can't take an effect, or a search's that can't take the
+  // world, is an error at the call it came from.
+  function settle() {
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const c of s.subs) {
+        const from = s.resolveRow(c.from), to = s.resolveRow(c.to);
+        const missing = from.effs.filter((e) => !to.effs.includes(e));
+        if (!missing.length) continue;
+        changed = true;
+        try {
+          if (to.tail === null) throw new EffectError(missing);
+          s.unifyRow(to, { effs: missing, tail: s.next++ });
+        } catch (e) {
+          if (!(e instanceof EffectError)) throw e;
+          err(c.at ?? current[0], worldOrEffect(e));
+          c.from = { effs: [], tail: null };
+        }
+      }
+    }
+  }
 
   const unifyAt = (id: Id, want: Type, got: Type, what = "") => {
     try {
@@ -306,6 +335,21 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
       }
     }
+    settle();
+    const generalized = new Set<number>();
+    for (const d of group) freeVars(s.zonk(mono.get(d)!), s, new Set(), generalized);
+    // Rows contained in others among the group's own row variables go into
+    // its schemes, and leave the live ones.
+    const kept: [number, number][] = [];
+    s.subs = s.subs.filter((c) => {
+      const f = s.resolveRow(c.from).tail, t = s.resolveRow(c.to).tail;
+      if (f === null || !generalized.has(f)) return true;
+      // (kept live too, for showIn; nothing binds a scheme's own rows)
+      if (t !== null && generalized.has(t)) { kept.push([f, t]); return true; }
+      // contained in something that stays: approximately, the same row
+      try { s.unifyRow(c.from, c.to); } catch (e) { if (e instanceof EffectError) err(c.at ?? group[0], worldOrEffect(e)); else throw e; }
+      return false;
+    });
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
@@ -313,6 +357,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered");
       if (arith.length) sc.arith = arith;
       if (ordered.length) sc.ordered = ordered;
+      const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
+      if (noWorld.length) sc.noWorld = noWorld;
+      const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
+      if (subs.length) sc.subs = subs;
+      // What a definition does while a Choice it doesn't handle is open:
+      // its caller handles the Choice around the whole call, so a world
+      // effect anywhere in it is under the Choice.
+      if (t.t === "fn") {
+        const effs = s.resolveRow(t.eff).effs, w = effs.filter((e) => WORLD.includes(e));
+        if (effs.includes(CHOICE) && w.length) err(d, `${nm(d)} does ${w.map(nm).join(" and ")} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`);
+      }
       // A pinned definition must keep its pin, and its callers see the pin
       // whatever the body says, so a change that breaks it is an error here
       // and nowhere else.
@@ -421,9 +476,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const applied = isGradient(code.nodes[n.fn]) ? n.args.map((a) => expr(a, env, row)) : null;
         if (applied?.length === 1) at.set(n.fn, applied[0]);
         const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
+        const subsBefore = s.subs.length;
         const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
+        for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
         const args = early ?? applied ?? n.args.map((a) => expr(a, env, row));
         const ret = s.fresh();
+        // A search's call does what its function does besides Choice, and
+        // the code beside it may do more: its row goes inside this one.
+        const search = code.nodes[n.fn]?.kind === "ref" && SEARCHES.has((code.nodes[n.fn] as NodeOf<"ref">).target);
+        const callRow = search ? s.freshRow() : row;
+        if (search) s.subs.push({ from: callRow, to: row, at: id });
         const fr = s.resolve(f);
         if (fr.t === "fn" && fr.params.length !== args.length) {
           err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);
@@ -431,9 +493,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           break;
         }
         try {
-          s.unify(f, { t: "fn", params: args, ret, eff: row });
+          s.unify(f, { t: "fn", params: args, ret, eff: callRow });
         } catch (e) {
-          if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
+          if (e instanceof WorldError) {
+            // The callee acting itself, or a function it's given that it
+            // runs under its Choice?
+            const ft = s.resolve(f);
+            const given = ft.t === "fn" ? ft.params.findIndex((p, i) => { const t = s.clone(); try { t.unify(p, args[i]); return false; } catch (x) { return x instanceof WorldError; } }) : -1;
+            if (given >= 0) err(n.args[given], `this does ${effName(e)} while a Choice is open (${callee(n)} runs it under one), so it would act on paths that are later abandoned: handle the Choice first and act on its result`);
+            else err(id, worldMessage(callee(n), e));
+          }
+          else if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
           else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Numbers (Number, or one case whose fields are all Numbers)`);
           else if (e instanceof ArithError) err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
           else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
@@ -674,117 +744,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Units are part of a number's type: a conflict is a type error.
   for (const u of unitProblems(code, names)) err(u.id, u.message);
 
+  settle();
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
-  for (const [id, t] of info.typeOf) {
-    const n = code.nodes[id];
-  }
-  worldUnderChoice(code, info, (id) => isEffect(owner.get(id) ?? ""), owner, nm, err);
   for (const h of info.holes.values()) {
     h.expected = s.zonk(h.expected);
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));
   }
   return info;
-}
-
-// The world and Choice (LANGUAGE.md): a function that does something to
-// the world while a Choice is open would do it on paths that are later
-// abandoned, and on every guess of a search. The Choice must be handled
-// inside, before the world is touched.
-//
-// Types can't say this on their own: a handler's thunk has the type
-// "Choice, and whatever the code around it does", so its type has the
-// world in it whenever the code around it prints. So this works out what
-// each function does itself, from the calls in its body (not in functions
-// it makes): each callee's effects as declared, plus those of the
-// functions it is given and calls right away (its parameters whose effects
-// are its own), minus what it handles of theirs. A function given where
-// the callee calls it under Choice counts too. A function held in a
-// variable other than a let isn't followed, so that case is still open.
-function worldUnderChoice(code: Code, info: Info, isOperation: (id: Id) => boolean, owner: Map<Id, Id>, nm: (id: Id) => string, err: (id: Id, message: string) => void) {
-  const s = info.subst;
-  const concrete = (t: Type | undefined): Id[] => (t && t.t === "fn" ? s.resolveRow(t.eff).effs : []);
-  // A callee's type before this call site's unification: a builtin's
-  // signature, a definition's scheme, an operation's effect.
-  const declared = (callee: Id): Type | undefined => {
-    const f = code.nodes[callee];
-    if (f?.kind !== "ref") return undefined;
-    const t = code.nodes[f.target];
-    if (t?.kind === "builtin") return SIGS[f.target]?.(s.clone());
-    if (t?.kind === "def") return info.schemes.get(f.target)?.type;
-    if (t?.kind === "variant" && isOperation(f.target)) return { t: "fn", params: [], ret: { t: "var", v: -1 }, eff: { effs: [owner.get(f.target)!], tail: null } };
-    return undefined;
-  };
-  // Functions bound by a let: x = (…) ↦ … then x(…).
-  const letBound = new Map<Id, Id>();
-  for (const n of Object.values(code.nodes)) {
-    const head = n.kind === "call" ? code.nodes[n.fn] : null;
-    if (n.kind === "call" && head?.kind === "lambda") head.params.forEach((p, i) => { if (code.nodes[n.args[i]]?.kind === "lambda") letBound.set(p, n.args[i]); });
-  }
-  const doesItself = new Map<Id, Set<Id>>();
-  // What calling the function `arg` stands for does.
-  const effectsOf = (arg: Id): Id[] => {
-    const a = code.nodes[arg];
-    if (a?.kind === "lambda") return [...own(a.id)];
-    if (a?.kind === "ref" && letBound.has(a.target)) return [...own(letBound.get(a.target)!)];
-    return concrete(declared(arg));
-  };
-  function own(lambda: Id): Set<Id> {
-    if (doesItself.has(lambda)) return doesItself.get(lambda)!;
-    const out = new Set<Id>();
-    doesItself.set(lambda, out);
-    const walk = (id: Id) => {
-      const n = code.nodes[id];
-      if (!n) return;
-      if (n.kind === "call") {
-        const head = code.nodes[n.fn];
-        if (head?.kind === "lambda") walk(head.body); // a let runs here
-        else if (head?.kind === "ref" && letBound.has(head.target)) own(letBound.get(head.target)!).forEach((e) => out.add(e));
-        const t = declared(n.fn);
-        if (t?.t === "fn") {
-          const mine = concrete(t);
-          mine.forEach((e) => out.add(e));
-          // Parameters it calls now: their effects are the call's, less the
-          // ones it handles (those its parameter type names).
-          const tail = s.resolveRow(t.eff).tail;
-          t.params.forEach((p, i) => {
-            if (p.t !== "fn" || tail === null || s.resolveRow(p.eff).tail !== tail || !n.args[i]) return;
-            const handled = concrete(p);
-            effectsOf(n.args[i]).filter((e) => !handled.includes(e) || mine.includes(e)).forEach((e) => out.add(e));
-          });
-        }
-      }
-      if (n.kind === "solve") {
-        try { if (!oneAnswer(code, n)) out.add(CHOICE); } catch { /* reported elsewhere */ }
-      }
-      if (n.kind === "lambda") return;
-      for (const c of kids(n)) walk(c);
-    };
-    walk((code.nodes[lambda] as NodeOf<"lambda">).body);
-    return out;
-  }
-  const world = (effs: Iterable<Id>) => [...effs].filter((e) => WORLD.includes(e));
-  const says = (w: Id[]) => `does ${w.map(nm).join(" and ")}`;
-  // A let's lambda is part of the function it is written in.
-  const lets = new Set<Id>();
-  for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda") lets.add(n.fn);
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind === "lambda" && info.typeOf.has(n.id) && !lets.has(n.id)) {
-      const effs = own(n.id), w = world(effs);
-      if (effs.has(CHOICE) && w.length) err(n.id, `this ${says(w)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`);
-    }
-    if (n.kind === "call") {
-      const t = declared(n.fn);
-      if (t?.t !== "fn") continue;
-      t.params.forEach((p, i) => {
-        if (!concrete(p).includes(CHOICE) || !n.args[i]) return;
-        const a = code.nodes[n.args[i]];
-        // a lambda with a Choice of its own is reported as itself
-        if (a?.kind === "lambda" && own(a.id).has(CHOICE)) return;
-        const w = world(effectsOf(n.args[i]));
-        if (w.length) err(n.args[i], `this ${says(w)}, and is run under a Choice here, so it would act on paths that are later abandoned`);
-      });
-    }
-  }
 }
 
 // Children that are expressions or binders (types and variants excluded).
@@ -945,6 +911,15 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // of them down changes what callers see, which may break a caller far
   // away; those fillings are confirmed by checking the whole program.
   const pinned = h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [...sc.vars.map((v) => `t${v}`), ...sc.rows.map((r) => `r${r}`)] : []; });
+  // A row inside one of those (a search's call, first's default) reaches
+  // callers through it.
+  for (let more = true; more; ) {
+    more = false;
+    for (const c of info.subst.subs) {
+      const f = info.subst.resolveRow(c.from).tail, t = info.subst.resolveRow(c.to).tail;
+      if (f !== null && t !== null && pinned.includes(`r${t}`) && !pinned.includes(`r${f}`)) { pinned.push(`r${f}`); more = true; }
+    }
+  }
   const fits = (t: Type, asCall: boolean): Subst | null => {
     const s = info.subst.clone();
     try {

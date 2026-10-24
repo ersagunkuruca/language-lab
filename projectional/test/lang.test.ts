@@ -10,7 +10,7 @@ import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
-import { showType } from "../src/lang/types.ts";
+import { showIn, showType } from "../src/lang/types.ts";
 import { reId, sweep, sweepShare } from "./helpers.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
@@ -19,7 +19,7 @@ const run = (code: Code, info: ReturnType<typeof infer>, main: Id) => {
   runMain(code, info, main, { print: (s) => out.push(s) });
   return out;
 };
-const typeOf = (p: ReturnType<typeof load>, info: ReturnType<typeof infer>, name: string) => showType(info.typeOf.get(p.named(name))!, p.pres.names);
+const typeOf = (p: ReturnType<typeof load>, info: ReturnType<typeof infer>, name: string) => showIn(info.typeOf.get(p.named(name))!, p.pres.names, info.subst);
 
 test("queens: Choice does the search, handlers decide what the answer is", () => {
   const p = load("queens");

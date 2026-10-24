@@ -16,7 +16,7 @@ import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
 import { paramName } from "./refactor.ts";
 import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
-import { showType } from "./types.ts";
+import { showIn, showType } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -288,7 +288,7 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     return out.join("\n");
   }
   const t = info?.typeOf.get(defId);
-  if (t) out.push(`${nameOf(defId)} : ${showType(info!.subst.zonk(t), names, info!.subst.arith)}`);
+  if (t) out.push(`${nameOf(defId)} : ${showIn(t, names, info!.subst)}`);
   if (!body) return [...out, `${nameOf(defId)} = extern`].join("\n");
   if (body.kind === "lambda") {
     enter(body.params);

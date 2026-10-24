@@ -379,16 +379,30 @@ handing a world action to something that runs it under `Choice`
 its result. `Log` isn't the world (it is debugging output), so it may run
 anywhere, searches included.
 
-Types alone can't express this rule: a handler's thunk has the type
-"`Choice`, and whatever the code around it does", so its type mentions
-`Console` whenever the surrounding code prints. The check
-(`worldUnderChoice` in `src/lang/infer.ts`) looks at what each function does
-itself: the declared effects of the calls in its body, plus those of the
-functions it passes to callees that call them right away. That includes a
-printing function passed as a parameter and called under `Choice` inside
-the definition that takes it, which an earlier version of this section
-listed as a gap (test: "a printer passed as a parameter isn't run under a
-Choice either").
+The rule comes from the types. The function a search runs (`all`, `count`,
+`first`, `optional`) has an effect row of its own, and that row may not take
+`Console`, `Files` or `Update`: binding one there is a type error, wherever
+the effect comes from (a call in the thunk, a printer taken out of a list, a
+function passed down from a caller). The search's row is *contained in* the
+row of the call, not equal to it: whatever else the searched function does
+(`Abort`, `Log`) the call does too, but the code beside the call may print
+freely, and `first`'s default, which runs after the search, may act.
+A definition whose own effects include both an unhandled `Choice` and a
+world effect is an error too, since its caller handles the `Choice` around
+the whole call.
+
+A function that runs a search on what it is given says so in its type, and
+its pin keeps it: `keep`'s predicate row may not take the world, and is
+contained in `keep`'s own row (tests: "a printer taken out of a list and
+called under a search is refused", "a pinned library function that searches
+keeps the rule and passes its function's effects on"). This replaced a walk
+over each function's calls (`worldUnderChoice`), which missed a function
+held in a data structure (EFFECTS-REVIEW-2026-10-24 §2.1). Rows contained in
+other rows are Koka's subeffecting and row openness (Daan Leijen, "Type
+directed compilation of row-typed algebraic effects", POPL 2017) used for
+one more constraint, like `plain`; refusing the world inside a search is
+what Verse does for code that may fail (its `<transacts>` effect), here
+written as a row that can't hold the world (influence).
 
 ### The world
 

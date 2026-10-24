@@ -4,10 +4,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Id } from "../src/model.ts";
+import { subtree, type Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { base, baseNames } from "../src/lang/load.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { Aborted, runMain, runProgram, type World } from "../src/lang/run.ts";
 import { ABORT_OP, INT_OPS, IO, LOG_OP, NONE, S, SHOW_ANY, SOME, TEXT_OPS, UNIT } from "../src/lang/std.ts";
 import { CONSOLE, showType, STRING } from "../src/lang/types.ts";
@@ -340,5 +341,68 @@ test("a printer passed as a parameter isn't run under a Choice either", () => {
     const main = k.def("main");
     k.define(main, k.thunk(() => k.call(tryAll, k.fn(["s"], (s) => k.call(S.print, s)))));
   });
-  assert.ok(p.errors.some((m) => /is run under a Choice here/.test(m)), p.errors.join("\n"));
+  assert.ok(p.errors.some((m) => /try all runs it under one/.test(m)), p.errors.join("\n"));
+});
+
+// EFFECTS-REVIEW-2026-10-24 §2.1, BACKLOG L53: the rule comes from the
+// types. A search's function has a row of its own that can't hold the
+// world, inside the row of the call, so a printer reaches it however it is
+// held, and code beside a search may still print.
+test("a printer taken out of a list and called under a search is refused", () => {
+  const p = program((k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, show(k, k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), () =>
+      k.match(k.list(k.fn(["s"], (s) => k.call(S.print, s))), [
+        { variant: "std.list.cons", names: ["f", "rest"], body: ([f]) => k.seq(k.call(f, k.lit("trying")), k.call(S.fail)) },
+        { variant: "std.list.nil", names: [], body: () => k.call(S.fail) },
+      ]))))))));
+    return main;
+  });
+  assert.ok(p.errors.some((m) => /while a Choice is open|is run under a Choice here/.test(m)), p.errors.join("\n"));
+});
+
+test("code beside a search may act, a function that runs one may too, and it says what it may be given", () => {
+  const p = program((k) => {
+    // prints, and runs a pure search: fine
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(S.print, k.lit("searching")), k.call(IO.writeFile, k.lit("log"), k.lit("x")),
+      k.call(S.print, show(k, k.call(S.count, k.thunk(() => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))))));
+    // a function that prints and runs a search on what it is given
+    const report = k.def("report");
+    k.define(report, k.fn(["g"], (g) => k.call(S.print, show(k, k.call(S.count, g)))));
+    const pure = k.def("pure use");
+    k.define(pure, k.thunk(() => k.call(report, k.thunk(() => k.call(S.oneOf, k.list(k.lit(1)))))));
+    const loud = k.def("loud use");
+    k.define(loud, k.thunk(() => k.call(report, k.thunk(() => k.seq(k.call(S.print, k.lit("hi")), k.call(S.oneOf, k.list(k.lit(1))))))));
+    // first's default runs after the search: it may print
+    const fallback = k.def("fallback");
+    k.define(fallback, k.thunk(() => k.call(S.first, k.thunk(() => k.call(S.oneOf, k.x("std.list.nil"))), k.thunk(() => k.seq(k.call(S.print, k.lit("none")), k.lit(0))))));
+    return main;
+  });
+  const at = (name: string) => { const d = p.k.code.defs.find((x) => p.k.names[x] === name)!; const inside = new Set(subtree(p.code, d)); return p.info.errors.filter((e) => inside.has(e.id)).map((e) => e.message); };
+  assert.deepEqual(at("main"), []);
+  assert.deepEqual(at("report"), []);
+  assert.deepEqual(at("pure use"), []);
+  assert.deepEqual(at("fallback"), []);
+  assert.match(at("loud use").join("\n"), /while a Choice is open|is run under a Choice here/);
+  assert.deepEqual(p.run(), ["searching", "2"]);
+});
+
+// A library function's pin says the same: keep's predicate runs under its
+// search (no world), and what else it does is what keep does.
+test("a pinned library function that searches keeps the rule and passes its function's effects on", () => {
+  const keep = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "keep" && LIBRARY.pins[d])!;
+  assert.ok(LIBRARY.pins[keep].noWorld?.length && LIBRARY.pins[keep].subs?.length, JSON.stringify(LIBRARY.pins[keep]));
+  const k = new Lang(LIBRARY.code);
+  const xs = () => k.list(k.lit(1), k.lit(2));
+  const loud = k.def("loud");
+  k.define(loud, k.thunk(() => k.call(keep, xs(), k.fn(["x"], (x) => k.seq(k.call(S.print, k.lit("hi")), k.call(S.less, x, k.lit(2)))))));
+  const aborts = k.def("aborts");
+  k.define(aborts, k.thunk(() => k.call(keep, xs(), k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(ABORT_OP, k.lit("negative")), k.call(S.less, x, k.lit(2)))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const at = (d: Id) => { const inside = new Set(subtree(code, d)); return info.errors.filter((e) => inside.has(e.id)).map((e) => e.message); };
+  assert.match(at(loud).join("\n"), /while a Choice is open|is run under a Choice here/);
+  assert.deepEqual(at(aborts), []);
+  assert.match(showType(info.typeOf.get(aborts)!, names), /Abort/);
 });
