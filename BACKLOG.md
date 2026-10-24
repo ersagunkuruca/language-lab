@@ -27,7 +27,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E104 | **Bug.** Delete takes everything feeding the node with it (removeSelected calls toHole on the whole subtree): deleting the list `append` needed also deleted the `named(…)` element wired into it. Delete should remove only that node | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M | folded into E117 |
-| E106 | **Bug.** Tidy and Reset the layout give two different layouts; Tidy only relaxes from where things are, so it never compacts, never orders inputs, and ignores the room folded frames free. Make Tidy one compact layout of what's shown (folded frames as boxes), the same every time; Reset becomes it | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | M |  |
 | E107 | **Bug.** A folded frame isn't a node: no selection outline, it drags from some places and not others | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | S |  |
 | E108 | **Bug.** Dropping an output on a list's `+` does nothing (should add the item), and dropping it on a filled input does nothing (the swap, old value loose, is E117) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P1 | S |  |
 | E115 | Loose parts 1: holes drawn as empty inputs in the graph (hollow port, type on hover, click for the palette), no hole nodes | NODE-EDITOR.md "Loose parts" (Ersagun 2026-10-24 18:36, #428) | P1 | M | |
@@ -143,6 +142,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E106 | Tidy everything lays it all out afresh, the same every time, and a fresh graph is drawn that way | #430 |
 | E105 | Choosing a part keeps the text and panels where they were scrolled | #429 |
 | E73 | Phone held upright: the top bar fits, links behind More | #427 |
 | E74 | The map starts hidden where it would cover nodes | #426 |

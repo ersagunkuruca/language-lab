@@ -96,6 +96,10 @@ async function visit(saved: string | null, only?: string) {
         if (bb) {
           await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
           await click('.ctx-item[data-menu="tidy-all"]');
+          // Tidy everything is one layout: doing it again moves nothing (BACKLOG E106).
+          await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
+          await click('.ctx-item[data-menu="tidy-all"]');
+          if (!/^Already tidy/.test(await p.locator(".status").innerText())) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
           // The map, when part of the graph is out of the window.
           if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) {
             // Drawn with the graph's own colours: a frame there was once black.

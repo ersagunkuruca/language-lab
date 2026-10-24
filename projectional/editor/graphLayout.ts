@@ -8,6 +8,8 @@
 //                stay together, nodes move off wires that run through them
 //                (unless that crosses others), inputs stay left of what
 //                they feed
+//   arrange      lay out afresh, the same every time: columns from the
+//                inputs to the result, inputs in the order of their ports
 //   crossings    where one wire passes over another (drawn as a bridge, a
 //                small hop, as in Visio's line jumps) or under a node (a
 //                tunnel)
@@ -330,6 +332,108 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
     const x = Math.round(n.x), y = Math.round(n.y);
     if (x !== Math.round(o.x) || y !== Math.round(o.y)) out.set(n.id, { x, y });
   }
+  return out;
+}
+
+// Lay everything out afresh, whatever was where: the same picture every
+// time for the same graph. Each container (the top, or a frame) is laid out
+// on its own, innermost first, its frames as boxes of their contents, like
+// nodes; then in columns by how far each is from the result (longest path,
+// the layering of Sugiyama et al.; what nothing feeds goes just left of
+// what it feeds), the result's column on the right. Each
+// column is placed after the one it feeds: a unit goes level with the
+// inputs it feeds, so a call's inputs come in the order of its ports, and
+// then they're stacked so nothing overlaps.
+export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], gap = 18, colGap = 46): Map<string, Pos> {
+  const parentOf = new Map(frames.map((f) => [f.id, f.parent]));
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const order = new Map<string, number>();
+  nodes.forEach((n, i) => order.set(n.id, i));
+  frames.forEach((f, i) => order.set(f.id, nodes.length + i));
+  const home = (x: string) => (nodeById.has(x) ? nodeById.get(x)!.frame : parentOf.get(x) ?? null);
+  // What stands for x among the units of container c: x itself, or the
+  // frame in c that holds it; null if c doesn't hold it.
+  const unitIn = (x: string, c: string | null): string | null => {
+    for (let u = x, p = home(x); ; u = p, p = parentOf.get(p) ?? null) {
+      if (p === c) return u;
+      if (p === null) return null;
+    }
+  };
+  const depth = (f: string | null): number => (f ? 1 + depth(parentOf.get(f) ?? null) : 0);
+  const size = new Map<string, { w: number; h: number }>();
+  for (const n of nodes) size.set(n.id, { w: n.w, h: n.h });
+  // Each unit's place within its container, from the container's corner.
+  const rel = new Map<string, Pos>();
+  const containers = [...frames.map((f) => f.id), null].sort((a, b) => depth(b) - depth(a));
+  for (const c of containers) {
+    const units = [...nodes.filter((n) => n.frame === c).map((n) => n.id), ...frames.filter((f) => f.parent === c).map((f) => f.id)]
+      .sort((a, b) => order.get(a)! - order.get(b)!);
+    if (!units.length) { if (c) size.set(c, { w: 0, h: 0 }); continue; }
+    const outs = new Map<string, { to: string; at: number; from: number }[]>(units.map((u) => [u, []]));
+    for (const w of wires) {
+      const a = unitIn(w.from, c), b = unitIn(w.to, c);
+      if (!a || !b || a === b) continue;
+      // A frame's ends are taken at its middle: where it is now isn't asked.
+      outs.get(a)!.push({ to: b, at: w.to === b && nodeById.has(b) ? w.ty : size.get(b)!.h / 2, from: w.from === a && nodeById.has(a) ? w.fy : size.get(a)!.h / 2 });
+    }
+    const rank = new Map<string, number>();
+    const rankOf = (u: string, seen = new Set<string>()): number => {
+      if (rank.has(u)) return rank.get(u)!;
+      if (seen.has(u)) return 0;
+      seen.add(u);
+      const r = Math.max(-1, ...outs.get(u)!.map((e) => rankOf(e.to, seen))) + 1;
+      rank.set(u, r);
+      return r;
+    };
+    units.forEach((u) => rankOf(u));
+    // Something nothing feeds (a constant, a cell) sits just left of the
+    // nearest thing it feeds, not as far left as the longest path would put it.
+    const fed = new Set(units.flatMap((u) => outs.get(u)!.map((e) => e.to)));
+    for (const u of units) if (!fed.has(u) && outs.get(u)!.length) rank.set(u, 1 + Math.min(...outs.get(u)!.map((e) => rank.get(e.to)!)));
+    const cols: string[][] = [];
+    for (const u of units) (cols[rank.get(u)!] ??= []).push(u);
+    const y = new Map<string, number>();
+    cols.forEach((col, r) => {
+      const want = (u: string) => {
+        const es = outs.get(u)!.filter((e) => y.has(e.to));
+        if (!es.length) return 0;
+        return es.reduce((s, e) => s + y.get(e.to)! + e.at, 0) / es.length - es[0].from;
+      };
+      const ws = new Map(col.map((u) => [u, r ? want(u) : 0]));
+      const sorted = r ? [...col].sort((a, b) => ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!) : col;
+      let bottom = -Infinity;
+      for (const u of sorted) { const t = r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap); y.set(u, t); bottom = t + size.get(u)!.h; }
+      // Pushed down to make room: move the column back up, half way.
+      if (r) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
+    });
+    // Columns right to left, each as wide as its widest; units meet the
+    // column's right edge, nearer what they feed.
+    const widths = cols.map((col) => Math.max(...col.map((u) => size.get(u)!.w)));
+    let right = 0;
+    const x = new Map<string, number>();
+    for (let r = cols.length - 1; r >= 0; r--) { right += widths[r]; for (const u of cols[r]) x.set(u, right - size.get(u)!.w); right += colGap; }
+    const x0 = Math.min(...units.map((u) => x.get(u)!)), y0 = Math.min(...units.map((u) => y.get(u)!));
+    let w = 0, h = 0;
+    for (const u of units) {
+      // Whole numbers, so a frame drawn round them is where it was laid out.
+      const p = { x: Math.round(x.get(u)! - x0), y: Math.round(y.get(u)! - y0) };
+      rel.set(u, p);
+      w = Math.max(w, p.x + size.get(u)!.w); h = Math.max(h, p.y + size.get(u)!.h);
+    }
+    if (c) { const f = frames.find((g) => g.id === c)!; const [l, t, r, b] = f.pad; size.set(c, { w: w + l + r, h: Math.max(h + t + b, f.minH ?? 0) }); }
+  }
+  // From the corner where the graph starts now, so laying out again moves nothing.
+  const fb = frameBoxes(nodes, frames);
+  const tops: Box[] = [...nodes.filter((n) => n.frame === null), ...frames.filter((f) => f.parent === null).map((f) => fb.get(f.id)!)];
+  const start = { x: Math.round(Math.min(...tops.map((t) => t.x))), y: Math.round(Math.min(...tops.map((t) => t.y))) };
+  const out = new Map<string, Pos>();
+  const abs = (u: string): Pos => {
+    const p = rel.get(u)!, c = home(u);
+    if (!c) return { x: start.x + p.x, y: start.y + p.y };
+    const f = frames.find((g) => g.id === c)!, at = abs(c);
+    return { x: at.x + f.pad[0] + p.x, y: at.y + f.pad[1] + p.y };
+  };
+  for (const n of nodes) { const p = abs(n.id); out.set(n.id, { x: Math.round(p.x), y: Math.round(p.y) }); }
   return out;
 }
 

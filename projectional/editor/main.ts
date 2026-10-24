@@ -1705,8 +1705,8 @@ function toggleFolded(f: Id) {
 //
 // Right-click in the graph: what you can do right there. On a hole, the
 // same palette as the side panel; on empty space, add a value; on a node,
-// a binding or a frame, what applies to it. Tidy and Reset only change
-// layout.json.
+// a binding or a frame, what applies to it. Tidying and putting nodes
+// back only change layout.json.
 
 function graphMenu(info: T.Info): HTMLElement | null {
   const m = ui.menu;
@@ -1759,14 +1759,13 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
-    if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: the layout places them again" : "Forget where it was dragged: the layout places it again"));
+    if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
-    rows.push(item("Tidy everything", "tidy-all", "Space out every node: no overlaps, nodes off wires, inputs left of what they feed"));
-    rows.push(item("Reset the layout", "reset-all", "Forget where every node was dragged"));
+    rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
   const left = Math.max(8, Math.min(m.x + 10, window.innerWidth - 330)), top = Math.max(8, Math.min(m.y + 10, window.innerHeight - (kind === "hole" ? 420 : 280)));
@@ -1839,10 +1838,6 @@ function menuAction(act: string, target: Id | undefined) {
     case "tidy-picked": return graph?.tidy(graph.picked());
     case "tidy-frame": return graph?.tidy([target!]);
     case "reset-one": { const p = graph?.picked() ?? []; return forget(p.length > 1 ? graph!.expand(p) : graph?.expand([target!]) ?? [target!]); }
-    case "reset-all": {
-      const at = Object.fromEntries(Object.entries(doc.layout.at ?? {}).filter(([k]) => !k.startsWith(`${ui.def}/`)));
-      return commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Every node is back where the automatic layout puts it. Only layout.json changed.");
-    }
     case "fit": { render(); graph?.fit(); return; }
   }
   render();

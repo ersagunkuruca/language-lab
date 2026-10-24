@@ -39,7 +39,7 @@ import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel } from "./typed.ts";
-import { crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
+import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { takenApart } from "../src/lang/render.ts";
@@ -110,6 +110,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
   const scene = build(code, pres, info, defId, hooks);
+  autoArrange(scene);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
@@ -124,7 +125,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     tidy: (only) => {
       const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
       const n = Object.keys(moved).length;
-      hooks.moved(moved, n ? `Tidied ${only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : "Already tidy: nothing overlaps.");
+      hooks.moved(moved, n ? `Tidied ${only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : only ? "Already tidy: nothing overlaps." : "Already tidy: laying it out again moves nothing.");
     },
   };
 }
@@ -891,7 +892,8 @@ function expand(scene: Scene, ids: Id[]): Set<Id> {
   return out;
 }
 
-function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Record<Id, Pos> {
+// The scene as tidy and arrange see it: boxes, frames and wires.
+function asLayout(scene: Scene, at: Record<Id, Pos>) {
   const { pos, boxes } = placeAll(scene, at);
   const nodes: TNode[] = [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: it.w, h: it.h, frame: it.frame }));
   const frames: TFrame[] = [...scene.frames.values()].map((f) => ({ id: f.id, parent: f.parent, pad: f.pad, minH: f.minH }));
@@ -900,12 +902,30 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
     const end = (e: End): [string, number, number] | null => {
       if ("item" in e) return [e.item, e.dx, e.dy];
       if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, 0, HEADH + 4 + e.port * 22 + 11] : null; }
-      return null;
+      const b = boxes.get(e.frameOut);
+      return b ? [e.frameOut, b.w, b.h / 2] : null;
     };
     const a = end(w.from), b = end(w.to);
     if (a && b) wires.push({ from: a[0], fx: a[1], fy: a[2], to: b[0], tx: b[1], ty: b[2], flow: w.flow });
   }
-  return Object.fromEntries(tidy(nodes, frames, wires, only));
+  return { pos, nodes, frames, wires };
+}
+
+// A graph nobody has moved is drawn as Tidy everything draws it, so the
+// two are one layout.
+function autoArrange(scene: Scene) {
+  const { nodes, frames, wires } = asLayout(scene, {});
+  for (const [k, p] of arrange(nodes, frames, wires)) scene.items.get(k)!.auto = p;
+}
+
+// Tidy everything lays it all out afresh (arrange), the same every time;
+// tidying some only spaces those out from where they are.
+function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Record<Id, Pos> {
+  const { pos, nodes, frames, wires } = asLayout(scene, at);
+  if (only) return Object.fromEntries(tidy(nodes, frames, wires, only));
+  const moved: Record<Id, Pos> = {};
+  for (const [k, p] of arrange(nodes, frames, wires)) { const o = pos.get(k)!; if (p.x !== o.x || p.y !== o.y) moved[k] = p; }
+  return moved;
 }
 
 // ---------------------------------------------------------------- gestures
