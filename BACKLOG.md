@@ -33,7 +33,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E63 | Bug: the Blocks pane doesn't show E58-E61 steps 1-2 (`p.x`, a let of fields, `first(queens(8), else nil)`, nested patterns, otherwise): they went into `renderBlocks` (src/lang/render.ts), but the pane draws through `renderTyped` (editor/typed.ts); share one walk or port them, and check the pane's own text | QA-2026-10-24b H1 | P1 | M | |
+| E63 | Bug: the Blocks pane doesn't show E58-E61 steps 1-2 (`p.x`, a let of fields, `first(queens(8), else nil)`, nested patterns, otherwise): they went into `renderBlocks` (src/lang/render.ts), but the pane draws through `renderTyped` (editor/typed.ts); share one walk or port them, and check the pane's own text | QA-2026-10-24b H1 | P1 | M | ▶ the pane draws them (#376, a port through src/lang/patterns.ts); next, one printer for the pane and the text |
 | E64 | Bug: one-pane layouts (phone, tablet) open the palette and the New definition form in the Run pane, out of sight; tapping a □ or + New definition should show them | QA-2026-10-24b H2 | P1 | S | |
 | E65 | Blocks pane: no right-click menu, and clicking an operator (`+`) doesn't select its call, so Change the function is graph-only there | QA-2026-10-24b M5 | P2 | S | |
 | E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |

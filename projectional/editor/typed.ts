@@ -7,7 +7,7 @@
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, replace, subtree, swapIn } from "../src/model.ts";
-import type { Names, Presentation } from "../src/presentation.ts";
+import type { Names, Notation, Presentation } from "../src/presentation.ts";
 import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished, resolveRefs } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -19,6 +19,8 @@ import { INT, schemeArith, showIn, showType } from "../src/lang/types.ts";
 import { read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
+import { flattened, matchRows, type Pat } from "../src/lang/patterns.ts";
+import { takenApart } from "../src/lang/render.ts";
 import { portLabel } from "../src/lang/equations.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
@@ -70,6 +72,8 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   };
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
   const isLet = (n: Node) => n.kind === "call" && node(n.fn).kind === "lambda";
+  // A step: a let, or a value of a one-case type taken apart.
+  const isStep = (n: Node) => isLet(n) || (n.kind === "match" && takenApart(code, info, n));
   const tall = (id: Id): boolean => {
     const n = node(id);
     if (n.kind === "match" || n.kind === "fold" || n.kind === "solve" || isLet(n)) return true;
@@ -85,6 +89,27 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       items.push(n.args[0]);
       n = node(n.args[1]);
     }
+  };
+
+  // An action handed to a call, a function of nothing, is drawn as what it
+  // does (render.ts byName): first(queens(8), else nil). The lambda stays
+  // clickable around it.
+  const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? [kw(`${nota.words[i]} `)] : []);
+  const isAction = (a: Id) => { const l = node(a); return l.kind === "lambda" && l.params.length === 0; };
+  const byName = (a: Id, nota: Notation | undefined, i: number): HTMLElement => {
+    const l = node(a);
+    return isAction(a) ? x(a, "lam byname", ...word(nota, i), inline((l as NodeOf<"lambda">).body)[0]) : h("span", {}, ...word(nota, i), inline(a)[0]);
+  };
+  // A pattern, its names selectable (patterns.ts).
+  const patKids = (p: Pat): Kid[] => {
+    if ("v" in p) return [bind(p.v)];
+    if ("any" in p) return [sep("_")];
+    const items: Pat[] = [];
+    let end: Pat = p;
+    while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
+    const ends = "con" in end && end.con === NIL;
+    if (items.length && (ends || items.length > 1)) return [sep("["), ...[...items.map(patKids), ...(ends ? [] : [[sep(".."), ...patKids(end)]])].flatMap((k, i) => (i ? [sep(", "), ...k] : k)), sep("]")];
+    return [h("span", { class: "con" }, name(p.con)), ...(p.args.length ? [sep("("), ...p.args.map(patKids).flatMap((k, i) => (i ? [sep(", "), ...k] : k)), sep(")")] : [])];
   };
 
   // One line, with the precedence it binds at.
@@ -127,8 +152,11 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
           const p = nota.prec ?? 9;
           return [x(id, "call", h("span", { class: "op x", "data-id": n.fn }, nota.glyph), ...paren(args[0], args[0][1] > p)), p];
         }
+        // A field read is p.x (render.ts draws it the same).
+        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return [x(id, "call", ...paren(args[0], args[0][1] >= 100), sep("."), x(n.fn, "ref fn", name(f.target))), 100];
         const head = inline(n.fn);
-        return [x(id, "call", ...paren(head, head[1] >= 100), sep("("), ...args.flatMap((a, i) => (i ? [sep(", "), a[0]] : [a[0]])), sep(")")), 100];
+        const shown = ops ? args.map((a) => a[0]) : n.args.map((a, i) => byName(a, nota, i));
+        return [x(id, "call", ...paren(head, head[1] >= 100), sep("("), ...shown.flatMap((a, i) => (i ? [sep(", "), a] : [a])), sep(")")), 100];
       }
       default: return [block(id), 100];
     }
@@ -142,15 +170,22 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const block = (id: Id): HTMLElement => {
     const n = node(id);
     if (!tall(id)) return line(inline(id)[0]);
-    if (n.kind === "call" && isLet(n)) {
+    if (isStep(n)) {
       // A run of steps is one column, each step its own box: x = …, then
       // the next, not each one nested inside the one before (the right-
       // nested lets are how the tree holds an order, not how it reads).
       const steps: HTMLElement[] = [];
       let rest: Id = id;
-      for (let c = node(rest); c.kind === "call" && isLet(c); c = node(rest)) {
-        const lam = node(c.fn) as NodeOf<"lambda">;
-        const args = c.args;
+      for (let c = node(rest); isStep(c); c = node(rest)) {
+        if (c.kind === "match") {
+          // A value of a one-case type taken apart: pair(x, y) = centre.
+          const arm = node(c.arms[0]) as NodeOf<"arm">;
+          steps.push(x(c.id, "step", ...hang([h("span", { class: `x arm${selected === arm.id ? " sel" : ""}`, "data-id": arm.id }, ...patKids({ con: arm.variant, args: arm.binds.map((v) => ({ v })) })), sep(" = ")], c.scrutinee)));
+          rest = arm.body;
+          continue;
+        }
+        const lam = node((c as NodeOf<"call">).fn) as NodeOf<"lambda">;
+        const args = (c as NodeOf<"call">).args;
         steps.push(x(c.id, "step", ...lam.params.flatMap((p, i) => hang(name(p) === "_" ? [] : [bind(p), sep(" = ")], args[i]))));
         rest = lam.body;
       }
@@ -162,6 +197,15 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       return x(id, "blk", line(kw("if "), inline(n.scrutinee)[0]),
         h("div", { class: `ind x arm${selected === t.id ? " sel" : ""}`, "data-id": t.id }, ...hang([kw("then ")], t.body)),
         h("div", { class: `ind x arm${selected === f.id ? " sel" : ""}`, "data-id": f.id }, ...hang([kw("else ")], f.body)));
+    }
+    // A case whose body only takes one of its fields apart further is one
+    // row per inner case (patterns.ts). Cases that say the same thing stay
+    // separate rows here: each is its own node to edit.
+    const rows = n.kind === "match" && !isBool(n) ? matchRows(code, info, n) : [];
+    if (n.kind === "match" && flattened(rows)) {
+      const arms = rows.map((r) => h("div", { class: `arm x${selected === r.at ? " sel" : ""}`, "data-id": r.at }, ...hang([...patKids(r.pat), sep(" → ")], r.body)));
+      if (n.otherwise) arms.push(h("div", { class: "arm" }, ...hang([kw("otherwise"), sep(" → ")], n.otherwise)));
+      return x(id, "blk", line(kw("match "), inline(n.scrutinee)[0]), indent(...arms));
     }
     if (n.kind === "match" || n.kind === "fold") {
       const arms = n.arms.map((a) => {
@@ -210,7 +254,13 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
       }
       const head = f.kind === "ref" ? x(n.fn, "ref fn", name(f.target)) : inline(n.fn)[0];
       const comma = (i: number) => (i < ops.length - 1 ? sep(",") : null);
-      return x(id, "blk", line(head, sep("(")), indent(...ops.map((a, i) => (tall(a) ? h("div", {}, block(a), comma(i)) : line(inline(a)[0], comma(i))))), line(sep(")")));
+      const arg = (a: Id, i: number) => {
+        const b = ops === n.args && isAction(a) ? (node(a) as NodeOf<"lambda">).body : a;
+        const w = ops === n.args ? word(nota, i) : [];
+        if (!tall(b)) return line(...(b === a ? [...w, inline(a)[0]] : [byName(a, nota, i)]), comma(i));
+        return b === a ? h("div", {}, ...(w.length ? [line(...w)] : []), block(a), comma(i)) : x(a, "lam byname", ...(w.length ? [line(...w)] : []), block(b), comma(i));
+      };
+      return x(id, "blk", line(head, sep("(")), indent(...ops.map(arg)), line(sep(")")));
     }
     return line(inline(id)[0]);
   };
