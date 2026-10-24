@@ -1730,6 +1730,16 @@ function toggleNamed(b: Id) {
       : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only layout.json changed.");
 }
 
+// Every value of the definition (its inputs and its steps' dots) as let and
+// get nodes, or every one as wires (BACKLOG E112). A view.
+const bindersOf = (d: Id) => subtree(doc.code, d).filter((b) => node(b)?.kind === "binder" && pres().names[b] !== "_");
+function allNamed(on: boolean) {
+  const bs = new Set(bindersOf(ui.def)), now = doc.layout.named ?? [];
+  commit({ layout: { ...doc.layout, named: on ? [...new Set([...now, ...bs])] : now.filter((b) => !bs.has(b)) } }, ["layout.json"],
+    on ? "Every value is a let node, with a get node at each use. Same program, another look: only layout.json changed."
+      : "Every value is wires again, from where it's bound to every use. Only layout.json changed.");
+}
+
 // A frame drawn folded into one box, or open. A view.
 function toggleFolded(f: Id) {
   const now = doc.layout.folded ?? [];
@@ -1808,6 +1818,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
+    const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every((b) => (doc.layout.named ?? []).includes(b));
+    rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
+      : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
     rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
@@ -1858,6 +1871,8 @@ function menuAction(act: string, target: Id | undefined) {
       return;
     }
     case "named": return toggleNamed(target!);
+    case "named-all": return allNamed(true);
+    case "named-none": return allNamed(false);
     case "fold": return toggleFolded(target!);
     case "name": { select(target!); document.getElementById("f-name")?.focus(); return; }
     case "undot": return void applyT(T.removeDot(doc.code, doc.names.short, info, ui.def, target!));
@@ -2440,7 +2455,7 @@ function guide(): HTMLElement {
     h("p", { class: "hint" }, "While a definition has a hole, its type is kept as it was, so a fill that would change it (one that does Random where it didn't, say) isn't offered. The hole's panel says so; Let it loosen there lets the type follow the body again."),
     h("p", { class: "hint" }, "Run, above, runs main, or the definition you're looking at backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
-    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
+    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Long wires? Right-click the empty canvas and pick “Show every value as let and get nodes”: each value gets a let node where it's bound and a small get node at each use. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
     h("p", { class: "hint" }, "Delete takes out one node: its place becomes a hole, and whatever was wired into it is kept, loose, in a dashed frame beside the graph and at the end of the text as _1, _2, …. Loose parts are type-checked but never run, and are saved in drafts.json, not code.json. Drag a loose part's output onto an empty input to wire it back in; dragging a wire off an input leaves its value loose too; Delete on a loose part throws it away."),
     h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its comments say so: a definition's, or the program's own (in the Program tab, and above a picture). Credits, in the menu, lists every influence and source of the language itself."));
 }

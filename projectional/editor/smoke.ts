@@ -448,6 +448,33 @@ async function dotOnWire() {
   await p.close();
 }
 
+// Let and get nodes for the whole definition at once, from the canvas's
+// menu (BACKLOG E112); and a call picked in the graph opens or changes the
+// function it calls (E113).
+async function letNodes() {
+  where = "let and get nodes for every value";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const canvas = p.locator(".p-graph svg.tgraph").first();
+  const menu = async () => { const b = (await canvas.boundingBox())!; await canvas.dispatchEvent("contextmenu", { clientX: b.x + b.width - 30, clientY: b.y + b.height - 30 }); };
+  await menu();
+  await p.locator('.ctx-menu [data-menu="named-all"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as let and get nodes`));
+  if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main shows ${await p.locator(".p-graph rect.letn").count()} let nodes`);
+  await menu();
+  await p.locator('.ctx-menu [data-menu="named-none"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to wires`));
+  if (await p.locator(".p-graph rect.letn").count()) errors.push(`${where}: let nodes are left after Show every value as wires`);
+  where = "a call picked in the graph";
+  // A menu opened by a script counts as a long press, whose tap is ignored for a moment.
+  await p.waitForTimeout(900);
+  await p.locator(".p-graph g.items > g:has(text.cl:text-is('die')) rect.cn").first().dispatchEvent("click");
+  const acts = (await p.locator(".side button").allInnerTexts()).join(" | ");
+  if (!acts.includes("Open die") || !acts.includes("Change the function")) errors.push(`${where}: its panel offers ${acts}`);
+  await p.close();
+}
+
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -752,6 +779,7 @@ await looseParts();
 await swapDrop();
 await looseValue();
 await dotOnWire();
+await letNodes();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();
