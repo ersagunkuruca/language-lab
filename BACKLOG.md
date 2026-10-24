@@ -6,7 +6,7 @@ priority order: a lane takes its top item that isn't running.
 
 First gathered 2026-10-23 from projectional/ROADMAP.md, NOTES.md, WEB.md,
 NUMBERS.md, COMPILER.md, REVIEW.md, REVIEW-2026-10-22b.md (R2), QA-2026-10-22.md,
-QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), QA-2026-10-24.md (QA4), compiler/GAPS.md, the editor and compiler threads'
+QA-2026-10-23.md (QA2), QA-2026-10-23b.md (QA3), QA-2026-10-24.md (QA4), QA-2026-10-24b.md (QA5), compiler/GAPS.md, the editor and compiler threads'
 queues, and Ersagun's messages in the project chat.
 
 **Status:** ▶ running (don't disturb) · ⏸ parked · blank = waiting.
@@ -33,6 +33,22 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E63 | Bug: the Blocks pane doesn't show E58-E61 step 1 (`p.x`, a let of fields, `first(queens(8), else nil)`, nested patterns): they went into `renderBlocks` (src/lang/render.ts), but the pane draws through `renderTyped` (editor/typed.ts); share one walk or port them, and check the pane's own text | QA-2026-10-24b H1 | P1 | M | |
+| E64 | Bug: one-pane layouts (phone, tablet) open the palette and the New definition form in the Run pane, out of sight; tapping a □ or + New definition should show them | QA-2026-10-24b H2 | P1 | S | |
+| E65 | Blocks pane: no right-click menu, and clicking an operator (`+`) doesn't select its call, so Change the function is graph-only there | QA-2026-10-24b M5 | P2 | S | |
+| E66 | Palette typed input: read `<`, `−x` / `-x` and `++` (`x < 1`, `s ++ "!"`) | QA-2026-10-24b M3 | P2 | S | |
+| E67 | Palette typed calls: read names of more than one word (`as fraction(3)`, `show fraction(…)`) | QA-2026-10-24b M2 | P2 | S | |
+| E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
+| E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | |
+| E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
+| E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
+| E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
+| E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
+| E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
+| E75 | Opening a program doesn't scroll the navigator to its open definition (pedal, converter `main` below the fold) | QA-2026-10-24b L7 | P3 | S | |
+| E76 | Status bar quiet after typing in a page's field (converter) | QA-2026-10-24b L8 | P3 | S | |
+| E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | |
+| E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
 | E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | design note projectional/PATTERNS.md (#370); step 1 text rows (#372); step 2 shared bodies as otherwise next |
 | E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | |
 
