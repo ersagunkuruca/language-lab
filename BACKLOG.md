@@ -35,7 +35,6 @@ so the next bigger program can be built in the editor.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E53 | Landscape phone: the graph gets 210 of 390 px; tablet: Credits and Cells only by scrolling the top bar | QA-2026-10-24 L2 | P2 | S | |
-| E54 | Change the function takes two undos (hole, then fill) | QA-2026-10-24 L3 | P2 | S | |
 | E55 | The palette reads typed arithmetic but not typed calls: `sqrt(x)` finds nothing | QA-2026-10-24 L4 | P2 | M | |
 | E56 | The status bar says nothing about page actions (A strum, Stop sound) | QA-2026-10-24 L5 | P3 | S | |
 | E57 | The dice page before any roll says "the last 2 s ago" (examples/dice) | QA-2026-10-24 L6 | P3 | S | |
@@ -49,6 +48,12 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 | C30 | Round 4, P4: lists as arrays, OPEN after P4a (#330, pedal at 2.9×; compiler/GAPS.md P4). Measured by hand: (d) the block coming in as an array (a view in the Choice path's split) buys about 8%. (b) the split and (c) the join writing into arrays only pay together, and with (d) they come to about 25%, so about 2.2×. Fusion on top: about 5% more (2.1×). Stopped here by the 10% rule; worth doing as one stage, (b) to (d) together, when lists as arrays is next for another program | compiler/GAPS.md round 4 | P2 | L | |
 | C31 | Round 4, P5: a recursion that gives back a Pair (the compressor's samples and level) returns the two fields without the record. Measured by hand on the compiled pedal: 3%, so it waits for C30, where the compressor's list goes into an array anyway | compiler/GAPS.md round 4 | P3 | M | |
 | C25 | Audio: a sound is a function on blocks of samples with its state in cells, played by a page's `listen` attribute in an AudioWorklet, rendered offline by `lab render`. Design: projectional/AUDIO.md. Stages A1 (blocks offline, the pedal in a file), A2 (live in a page: microphone, file, knobs), A3 (compressor, crossover), A4 (editor Run panel, with lane E), A5 (measure). First program: the conjugation pedal (drive in tanh space, on one band of a Haar split) | coordinator 2026-10-24 03:36, NOTES.md conjugation | P2 | L | ▶ A1 to A5 done (the pedal plays live at apps/pedal.html, 39× real time compiled; A4: the editor's preview plays it, lane E) |
+| C40 | **Proposal**: compiled JS for L54/L60: definitions that perform an answered-later operation get suspendable copies (C21's generators); the world's `await(any of …)` as a promise | LANGUAGE-NEEDS-2026-10-24 | P2 | M | after L60 |
+| C41 | **Proposal**: pure `together` branches on worker_threads / Web Workers past a cost threshold | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after L62 |
+| C42 | **Proposal**: data-parallel `map` and associative folds over arrays on a thread pool, later as compute shaders (NESL, Futhark prior art); associativity from L38's algebra laws | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30, L38 |
+| C43 | **Proposal**: or-parallel `all`/`count` and speculative `first` kept in canonical order, with work stealing (Cilk, Aurora/Muse prior art) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
+| C44 | **Proposal**: fibers in native C (own stacks, an event loop; thread-shared cells get atomic counts, as Koka) and in WASM (JSPI) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
+| C45 | **Proposal**: a persistent vector (RRB trees, Bagwell and Rompf) as a representation of `List` for indexed updates | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after C30 |
 | C34 | WebAssembly and C compile any operation that never returns the way they compile Abort (a status and a reason), found by its shape rather than by `ABORT_OP`'s id | EFFECTS-REVIEW-2026-10-24 §3 | P3 | S | |
 
 ## L: Language and library
@@ -94,6 +99,16 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L21 | Folds: a `build` row for user producers, user representations per value, folds with `Choice` asking the table | ROADMAP 5 open | P3 | L | |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"), instead of a second checker in the compiler | R2 §5, REVIEW.md §5.2 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing, exact reals, Clifford algebras | ROADMAP 8 | P3 | L | |
+| L66 | **Proposal**: a structural order on plain data (cases in order, then fields): `compare`, a generic `sort`, `smaller`/`larger` on any plain data; unblocks L65 | LANGUAGE-NEEDS-2026-10-24 §2 | P2 | S | proposal |
+| L67 | **Proposal**: `Outcome a = done(value) \| refused(reason)` with `attempt(action)` and `value or abort(o)`, the data form of Abort as Optional is of Choice | LANGUAGE-NEEDS-2026-10-24 §4 | P2 | S | proposal |
+| L65 | **Proposal**: `Map k v` and `Set k`: meaning as pairs sorted by key, one spelling (equal, show, hash just work), folds in key order; a balanced tree first, HAMT and in-place hash table as representations; drawn as a table | LANGUAGE-NEEDS-2026-10-24 §1 | P2 | L | proposal |
+| L60 | **Proposal**: L54's design note written with this one, then `together(actions)`, `race`, `within(ms, a)` as prelude handlers over `await` (std's waiting ops as start + await, `Ticket a`): answers in order, an Abort stops the siblings, cancellation is a dropped one-shot rest | LANGUAGE-NEEDS-2026-10-24 Part 1 | P2 | L | after L54, L56 |
+| L63 | **Proposal**: deterministic schedules: under `seeded` the scheduler's choices are seeded; a match answering `await` gives virtual time and a fake network, so an interleaving bug is a seed in a test (FoundationDB prior art) | LANGUAGE-NEEDS-2026-10-24 Part 1 | P2 | M | after L60, L55 |
+| L62 | **Proposal**: branches with no world effects, no Update and no waits marked pure by a row constraint and shown in the editor, so the runtime may run them on another core | LANGUAGE-NEEDS-2026-10-24 Part 1 | P3 | S | after L60, L53 |
+| L69 | **Proposal**: foreign definitions: a typed declaration with its row (trusted) and a body per target, on L7's builtin records (Gleam's `@external`, Elm's ports as influences); for browser and device APIs | LANGUAGE-NEEDS-2026-10-24 §5 | P2 | M | proposal |
+| L70 | **Proposal**: design note: grammars written once as printers and parsed by running them backwards; calc's parser first. Also number formatting, interpolation as a view, `graphemes` | LANGUAGE-NEEDS-2026-10-24 §8 | P3 | M | proposal |
+| L64 | **Proposal**: scoped channels (`Channel a`, `send`, `receive` that wait), when a program needs a pipeline | LANGUAGE-NEEDS-2026-10-24 Part 1 | P3 | M | proposal |
+| L68 | **Proposal**: sharing modules between projects by hash, with a browser of what's published (Unison prior art) | LANGUAGE-NEEDS-2026-10-24 §10 | P3 | L | proposal |
 | T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, results cached by definition hash and re-checked on save (Unison prior art). Design note first | projectional/TESTING.md T7 | P2 | L | |
 
 ## Testing and fast feedback
@@ -126,6 +141,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E54 | Change the function is one step to undo | #357 |
 | E52 | A page has a base look (page.ts PAGE_BASE, in :where) in the editor and saved; the frame grows with the page | #356 |
 | E51 | The map can be put away: Map button beside Fit, off by default on a phone, at most a fifth of the pane | #353 |
 | E50 | A page's main says it is the page above; no Run main printing its Html | #351 |

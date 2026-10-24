@@ -146,6 +146,23 @@ async function deleteAndUndo() {
   await p.close();
 }
 
+// Change the function is one change: one Undo puts the old function back.
+async function swapAndUndo() {
+  where = "change the function, then undo";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  await p.locator(".p-graph g:has(> text:text-is('+')) > rect.cn").first().click({ button: "right" });
+  await p.locator('[data-menu="swap"]').click();
+  await p.locator("button", { hasText: /^subtract/ }).first().click();
+  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
+  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if ((await distance()) !== "distance = drift + drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
+  await p.close();
+}
+
 // A definition made, filled and deleted: the editor draws the program
 // without it (it once drew the deleted one first, and threw).
 async function newAndDeleteDefinition() {
@@ -300,6 +317,7 @@ const fresh = defs;
 await visit(saved, "Relations in programs");
 await visit(edited, "Relations in programs");
 await deleteAndUndo();
+await swapAndUndo();
 await newAndDeleteDefinition();
 await pagePreview();
 await cellsPage();

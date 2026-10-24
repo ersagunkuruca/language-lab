@@ -308,11 +308,17 @@ const redo: Doc[] = [];
 // The program just deleted, until the next edit or switch: Undo brings it
 // back, so a delete needs no "are you sure".
 let deleted: Doc | null = null;
+// Change the function makes the function a hole, then the palette fills
+// it: one change, so one Undo. The fill that comes right after takes the
+// place of the hole's step in the undo list.
+let swapped: { hole: Id; at: number } | null = null;
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
   deleted = null;
-  undo.push(doc);
+  const filled = swapped && undo.length === swapped.at && next.code && next.code.nodes[swapped.hole] && next.code.nodes[swapped.hole].kind !== "hole";
+  swapped = null;
+  if (!filled) undo.push(doc);
   redo.length = 0;
   doc = { ...doc, ...next, edited: true };
   ui.touched = touched;
@@ -1706,6 +1712,7 @@ function menuAction(act: string, target: Id | undefined) {
       const fn = (doc.code.nodes[target!] as NodeOf<"call">).fn;
       const r = T.toHole(doc.code, doc.names.short, info, fn);
       if (!applyT(r.ok ? { ...r, note: "The function is a hole now and its inputs stayed: pick another from the palette." } : r)) return;
+      swapped = { hole: fn, at: undo.length };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
       return;
     }
