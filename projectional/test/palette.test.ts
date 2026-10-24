@@ -10,6 +10,7 @@ import { replace, type NodeOf } from "../src/model.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
+import { showType, type Type } from "../src/lang/types.ts";
 import { fillHole } from "../src/lang/refactor.ts";
 import { sweep } from "./helpers.ts";
 
@@ -84,7 +85,10 @@ test("at a hole in a held definition, the palette offers only what keeps its typ
   const code = replace(p.code, seed, () => ({ kind: "hole" }));
   const info = infer(code, p.pres.names, undefined, opts);
   const offered = fillings(code, info, seed);
-  assert.ok(offered.some((f) => "target" in f && f.target === lam.params[0]), "seed itself is offered");
+  const own = offered.find((f) => "target" in f && f.target === lam.params[0]);
+  assert.ok(own, "seed itself is offered");
+  // and as the Number the held type says, not as any type (E84)
+  assert.equal(showType(info.subst.zonk((own as { type: Type }).type), p.pres.names), "Number");
   assert.ok(!offered.some((f) => "target" in f && f.target === die), "die() would give it Random");
   const bad = offered.filter((f) => infer(fillHole(code, {}, seed, f).code, p.pres.names, undefined, opts).errors.length > info.errors.length);
   assert.deepEqual(bad.map((f) => JSON.stringify(f)), []);
