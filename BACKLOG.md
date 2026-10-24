@@ -26,13 +26,12 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E68 | Create a definition takes 1-4 s (3.8 s in Numbers & physics); find what it checks | QA-2026-10-24b M4 | P2 | M | |
 | E69 | Palette: a typed `1/2` where a Rational fits fills as a fraction (editor half; whole-number literals as fractions are the Language lane's) | QA-2026-10-24b M1 | P2 | S | ready: L75 done (a `lit` with `of: "std.rational"`, value a whole number or "top/bottom"; DSL `k.at`); smaller/larger on every number type is L73 |
 | E70 | Run says "unhandled effect: Choice" on `fraction(1, 2) + fraction(1, 3)` while Show values in the same panel says Gives ratio(5, 6) | QA-2026-10-24b L2 | P3 | S | |
 | E71 | Palette shows the generic operators as `(a, a) -> a`; say a is a number type | QA-2026-10-24b L3 | P3 | S | |
 | E72 | Change the function lists `subtract (a, a) -> a` twice | QA-2026-10-24b L4 | P3 | S | |
 | E73 | Phone portrait top bar overflows (names, notation, Tutorial, Credits, Cells off-screen; "← main" wraps): use #364's cycling buttons there too | QA-2026-10-24b L5 | P3 | S | |
-| E74 | Maps and sets drawn as tables: a `Map` value (and an `as map([...])` literal) as two columns, keys in order; a `Set` as one column. DATA-STRUCTURES.md "The editor" | DATA-STRUCTURES.md | P2 | S | ready: L65 done (#389) |
+| E79 | Maps and sets drawn as tables: a `Map` value (and an `as map([...])` literal) as two columns, keys in order; a `Set` as one column. DATA-STRUCTURES.md "The editor" | DATA-STRUCTURES.md | P2 | S | ready: L65 done (#389) |
 | E74 | Desktop: the map starts on top of nodes (Numbers & physics, pedal and converter `main` at 1280x800) | QA-2026-10-24b L6, QA4 M2 | P3 | S | |
 | E75 | Opening a program doesn't scroll the navigator to its open definition (pedal, converter `main` below the fold) | QA-2026-10-24b L7 | P3 | S | |
 | E76 | Status bar quiet after typing in a page's field (converter) | QA-2026-10-24b L8 | P3 | S | |
@@ -137,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E68 | Create a definition: 3.8 s → 0.85 s; a filling's recheck checks units only in the definitions it can affect | #392 |
 | E67 | The palette reads calls of several-word names: as fraction(3), ‹as fraction›(3) | #390 |
 | E66 | The palette reads < ≤ > ≥ = ++ and -x, from the notation itself | #388 |
 | E65 | Blocks pane: right-click opens the part's menu, clicking an operator selects its call | #387 |
