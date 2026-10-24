@@ -1,10 +1,10 @@
 // Small programs written for the tests and the benchmark, in the DSL.
 
 import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
+import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, ARITH, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { NUMBER } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -424,4 +424,41 @@ export function maths() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
+}
+
+// Fractions (std.rational, the prelude's arithmetic under the one generic
+// + − · <) on Ints given in: each answer shown as text, so every target
+// prints what the evaluator does. `fraction` and `÷` have no answer at a
+// zero bottom; `twice` is one generic definition used at Rational and Int.
+export function fractions() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const [fraction, divide, show] = ["fraction", "divide fractions", "show fraction"].map(lib);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const two = (name: string, op: (x: Id, y: Id) => Id) => d(name, ["a", "b", "c", "e"], (a, b, c, e) => k.call(show, op(k.call(fraction, a, b), k.call(fraction, c, e))));
+  const twice = d("twice", ["x"], (x) => k.call(ARITH.add, x, x));
+  const defs = {
+    lowest: d("lowest", ["a", "b"], (a, b) => k.call(show, k.call(fraction, a, b))),
+    sum: two("sum", (x, y) => k.call(ARITH.add, x, y)),
+    difference: two("difference", (x, y) => k.call(ARITH.sub, x, y)),
+    product: two("product", (x, y) => k.call(ARITH.mul, x, y)),
+    quotient: two("quotient", (x, y) => k.call(divide, x, y)),
+    negated: d("negated", ["a", "b"], (a, b) => k.call(show, k.call(ARITH.neg, k.call(fraction, a, b)))),
+    less: d("less", ["a", "b", "c", "e"], (a, b, c, e) => k.call(ARITH.less, k.call(fraction, a, b), k.call(fraction, c, e))),
+    doubled: d("doubled", ["a", "b"], (a, b) => k.call(show, k.call(twice, k.call(fraction, a, b)))),
+    doubledInt: d("doubled int", ["n"], (n) => k.call(twice, k.call(INT_OPS.add, n, k.int(0)))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+
+// Ints for fractions(): zero, ±1, small, around 2³¹, 2⁵³, 2⁶² and 2⁶⁴ (where
+// each target's Int changes form), and past them; then tuples of n of them.
+export function fractionInputs(n: number, count: number): bigint[][] {
+  const edges = [0n, 1n, -1n, 2n, -3n, 6n, -8n, 10n, 12n, 2n ** 31n, 2n ** 31n - 1n, 2n ** 53n + 1n, -(2n ** 53n), 2n ** 62n - 1n, 2n ** 62n, -(2n ** 62n), 2n ** 63n, 2n ** 64n + 6n, 3n ** 50n, -(10n ** 30n), 2n ** 100n];
+  let seed = 5n;
+  const next = () => (seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n);
+  const pick = () => { const r = next() % 10n; return r < 4n ? edges[Number(next() % BigInt(edges.length))] : r < 8n ? (next() % 200n) - 100n : (next() * next()) * (next() % 2n ? 1n : -1n) * 6n; };
+  return Array.from({ length: count }, () => Array.from({ length: n }, pick));
 }

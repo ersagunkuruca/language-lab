@@ -49,7 +49,7 @@ import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, IO, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT, ABORT_OP, BOOL, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -573,6 +573,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Numbers or Bools");
           const [x, y] = args();
           return same(x, y, t, f, tail);
+        }
+        if (opts.data && target === INT_OPS.lowestTerms) {
+          // int.ts's lowest terms from the runtime's gcd and exact division:
+          // both over their gcd, both negated if the bottom is below 0.
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          const [a, b] = args(), at = (i: number): SExpr => ({ k: "local", i }), rt = (fn: string, ...xs: SExpr[]): SExpr => ({ k: "rt", fn, args: xs });
+          const [x, y, g, p, q] = [0, 0, 0, 0, 0].map(() => f.locals.push("int") - 1);
+          const both = (u: SExpr, v: SExpr) => build(PAIR_V, zonk(id), [u, v]);
+          const lets: [number, SExpr][] = [[x, a], [y, b], [g, rt("int.gcd", at(x), at(y))], [p, rt("int.exact", at(x), at(g))], [q, rt("int.exact", at(y), at(g))]];
+          const body: SExpr = { k: "if", cond: rt("int.less", at(y), { k: "int", v: 0n }), then: both(rt("int.neg", at(p)), rt("int.neg", at(q))), else: both(at(p), at(q)), t };
+          return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), body);
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.

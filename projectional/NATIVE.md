@@ -148,6 +148,12 @@ at them.
   bits, else a pointer to 32-bit limbs (WASM.md W5b's algorithms, written
   again in C).
 - A Text is a counted cell of UTF-8 bytes and its length.
+- A Rational (NUMBERS.md, Backlog L39) is std.rational's data, a cell of
+  two Ints, so nothing new: its arithmetic is the prelude's. The one
+  builtin, `lowest terms`, is lowered (scalar.ts) to the runtime's
+  `int.gcd` (Euclid's algorithm, on int64s once both are small) and
+  `int.exact` (division by a divisor known to divide), with both negated
+  when the bottom is below 0.
 
 **Left to right, said in C.** C doesn't say in which order a call's
 arguments run, and GCC runs them right to left (found in N1's test

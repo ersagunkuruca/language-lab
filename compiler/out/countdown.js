@@ -334,13 +334,13 @@ function valid(op4, x4, y2) {
   const s$113 = op4;
   switch (s$113.tag) {
     case "po7knn9d8k1ql4tu1t24phf6gi" /* plus */: {
-      return !(y2 < x4);
+      return at_least(y2, x4);
     }
     case "t3s371rgvfks4e6tgel7toqm44" /* minus */: {
       return (y2 < x4);
     }
     case "9b16jnlgmuno3soj08126738d0" /* times */: {
-      return (!$sameNumber(x4, 1) && (!$sameNumber(y2, 1) && !(y2 < x4)));
+      return (!$sameNumber(x4, 1) && (!$sameNumber(y2, 1) && at_least(y2, x4)));
     }
     case "un57f8inem1emu6nmkbiod0ktb" /* over */: {
       return (!$sameNumber(y2, 1) && $sameNumber($mod(x4, y2), 0));
@@ -399,6 +399,11 @@ function insert_anywhere$k(x3, items4, k$115) {
     }
   }
   return false;
+}
+
+// at least
+function at_least(a, b) {
+  return !(a < b);
 }
 
 export const defs = {
