@@ -11,8 +11,7 @@
 // order, so comparing is comparing bytes. An Int is an i31, an i64 in a
 // $big, or past that a $huge of 32-bit limbs (W5b); the int64.* functions
 // compute on the i64 and trap when the answer doesn't fit, and the int.*
-// natives take the limbs then. Quotient, remainder and power still trap
-// past 2⁶³ (W5c).
+// natives take the limbs then.
 //
 // The functions match std.ts and text.ts: slice clamps, split is
 // JavaScript's (non-overlapping, left to right), show is std.ts's show.
@@ -1643,6 +1642,413 @@ ${drop}
       end
       local.get $rem
       i32.wrap_i64`,
+  },
+  // a's limbs shifted left by s (0 to 31) into n limbs: Knuth's D1.
+  "mag.scaled": {
+    params: [["a", "mag"], ["s", "i32"], ["n", "i32"]], result: "mag", locals: [["r", "mag"], ["i", "i32"]], uses: ["mag.at"],
+    body: `
+      local.get $n
+      array.new_default $u32s
+      local.set $r
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $r
+          local.get $i
+          local.get $a
+          local.get $i
+          call $mag.at
+          i64.const 32
+          i64.shl
+          local.get $a
+          local.get $i
+          i32.const 1
+          i32.sub
+          call $mag.at
+          i64.or
+          local.get $s
+          i64.extend_i32_u
+          i64.shl
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r`,
+  },
+  // u's quotient by v (rem 0) or its remainder (rem 1), v not 0: Knuth's
+  // algorithm D (TAOCP vol. 2, 4.3.1), as Hacker's Delight's divmnu
+  // writes it, with 32-bit limbs and 64-bit arithmetic. A one-limb v
+  // takes mag.divsmall.
+  "mag.divrem": {
+    params: [["u", "mag"], ["v", "mag"], ["rem", "i32"]], result: "mag",
+    locals: [["m", "i32"], ["n", "i32"], ["s", "i32"], ["j", "i32"], ["i", "i32"], ["un", "mag"], ["vn", "mag"], ["q", "mag"], ["r", "mag"], ["vtop", "i64"], ["vsec", "i64"], ["qhat", "i64"], ["rhat", "i64"], ["p", "i64"], ["t", "i64"], ["k", "i64"]],
+    uses: ["mag.at", "mag.trim", "mag.cmp", "mag.of", "mag.divsmall", "mag.modsmall", "mag.scaled"],
+    body: `
+      local.get $u
+      local.get $v
+      call $mag.cmp
+      i32.const 0
+      i32.lt_s
+      if void
+        local.get $rem
+        if mag
+          local.get $u
+        else
+          i32.const 0
+          array.new_default $u32s
+        end
+        return
+      end
+      local.get $v
+      array.len
+      local.tee $n
+      i32.const 1
+      i32.eq
+      if void
+        local.get $rem
+        if mag
+          local.get $u
+          local.get $v
+          i32.const 0
+          array.get $u32s
+          call $mag.modsmall
+          i64.extend_i32_u
+          call $mag.of
+        else
+          local.get $u
+          local.get $v
+          i32.const 0
+          array.get $u32s
+          call $mag.divsmall
+        end
+        return
+      end
+      local.get $u
+      array.len
+      local.set $m
+      ;; D1: shift so v's top limb has its top bit set.
+      local.get $v
+      local.get $n
+      i32.const 1
+      i32.sub
+      array.get $u32s
+      i32.clz
+      local.set $s
+      local.get $v
+      local.get $s
+      local.get $n
+      call $mag.scaled
+      local.tee $vn
+      local.get $n
+      i32.const 1
+      i32.sub
+      array.get $u32s
+      i64.extend_i32_u
+      local.set $vtop
+      local.get $vn
+      local.get $n
+      i32.const 2
+      i32.sub
+      array.get $u32s
+      i64.extend_i32_u
+      local.set $vsec
+      local.get $u
+      local.get $s
+      local.get $m
+      i32.const 1
+      i32.add
+      call $mag.scaled
+      local.set $un
+      local.get $m
+      local.get $n
+      i32.sub
+      i32.const 1
+      i32.add
+      array.new_default $u32s
+      local.set $q
+      local.get $m
+      local.get $n
+      i32.sub
+      local.set $j
+      block void
+        loop void
+          local.get $j
+          i32.const 0
+          i32.lt_s
+          br_if 1
+          ;; D3: guess q̂ from the top two limbs, then correct it.
+          local.get $un
+          local.get $j
+          local.get $n
+          i32.add
+          array.get $u32s
+          i64.extend_i32_u
+          i64.const 32
+          i64.shl
+          local.get $un
+          local.get $j
+          local.get $n
+          i32.add
+          i32.const 1
+          i32.sub
+          array.get $u32s
+          i64.extend_i32_u
+          i64.or
+          local.tee $t
+          local.get $vtop
+          i64.div_u
+          local.set $qhat
+          local.get $t
+          local.get $qhat
+          local.get $vtop
+          i64.mul
+          i64.sub
+          local.set $rhat
+          block void
+            loop void
+              local.get $qhat
+              i64.const 4294967296
+              i64.ge_u
+              if i32
+                i32.const 1
+              else
+                local.get $qhat
+                local.get $vsec
+                i64.mul
+                local.get $rhat
+                i64.const 32
+                i64.shl
+                local.get $un
+                local.get $j
+                local.get $n
+                i32.add
+                i32.const 2
+                i32.sub
+                array.get $u32s
+                i64.extend_i32_u
+                i64.or
+                i64.gt_u
+              end
+              i32.eqz
+              br_if 1
+              local.get $qhat
+              i64.const 1
+              i64.sub
+              local.set $qhat
+              local.get $rhat
+              local.get $vtop
+              i64.add
+              local.tee $rhat
+              i64.const 4294967296
+              i64.lt_u
+              br_if 0
+            end
+          end
+          ;; D4: multiply and subtract.
+          i64.const 0
+          local.set $k
+          i32.const 0
+          local.set $i
+          block void
+            loop void
+              local.get $i
+              local.get $n
+              i32.ge_u
+              br_if 1
+              local.get $qhat
+              local.get $vn
+              local.get $i
+              array.get $u32s
+              i64.extend_i32_u
+              i64.mul
+              local.set $p
+              local.get $un
+              local.get $i
+              local.get $j
+              i32.add
+              array.get $u32s
+              i64.extend_i32_u
+              local.get $k
+              i64.sub
+              local.get $p
+              i64.const 4294967295
+              i64.and
+              i64.sub
+              local.set $t
+              local.get $un
+              local.get $i
+              local.get $j
+              i32.add
+              local.get $t
+              i32.wrap_i64
+              array.set $u32s
+              local.get $p
+              i64.const 32
+              i64.shr_u
+              local.get $t
+              i64.const 32
+              i64.shr_s
+              i64.sub
+              local.set $k
+              local.get $i
+              i32.const 1
+              i32.add
+              local.set $i
+              br 0
+            end
+          end
+          local.get $un
+          local.get $j
+          local.get $n
+          i32.add
+          array.get $u32s
+          i64.extend_i32_u
+          local.get $k
+          i64.sub
+          local.set $t
+          local.get $un
+          local.get $j
+          local.get $n
+          i32.add
+          local.get $t
+          i32.wrap_i64
+          array.set $u32s
+          local.get $q
+          local.get $j
+          local.get $qhat
+          i32.wrap_i64
+          array.set $u32s
+          ;; D6: q̂ was one too many (rarely): add v back.
+          local.get $t
+          i64.const 0
+          i64.lt_s
+          if void
+            local.get $q
+            local.get $j
+            local.get $qhat
+            i32.wrap_i64
+            i32.const 1
+            i32.sub
+            array.set $u32s
+            i64.const 0
+            local.set $k
+            i32.const 0
+            local.set $i
+            block void
+              loop void
+                local.get $i
+                local.get $n
+                i32.ge_u
+                br_if 1
+                local.get $un
+                local.get $i
+                local.get $j
+                i32.add
+                array.get $u32s
+                i64.extend_i32_u
+                local.get $vn
+                local.get $i
+                array.get $u32s
+                i64.extend_i32_u
+                i64.add
+                local.get $k
+                i64.add
+                local.set $t
+                local.get $un
+                local.get $i
+                local.get $j
+                i32.add
+                local.get $t
+                i32.wrap_i64
+                array.set $u32s
+                local.get $t
+                i64.const 32
+                i64.shr_u
+                local.set $k
+                local.get $i
+                i32.const 1
+                i32.add
+                local.set $i
+                br 0
+              end
+            end
+            local.get $un
+            local.get $j
+            local.get $n
+            i32.add
+            local.get $un
+            local.get $j
+            local.get $n
+            i32.add
+            array.get $u32s
+            local.get $k
+            i32.wrap_i64
+            i32.add
+            array.set $u32s
+          end
+          local.get $j
+          i32.const 1
+          i32.sub
+          local.set $j
+          br 0
+        end
+      end
+      local.get $rem
+      i32.eqz
+      if void
+        local.get $q
+        call $mag.trim
+        return
+      end
+      ;; D8: the remainder is un shifted back right by s.
+      local.get $n
+      array.new_default $u32s
+      local.set $r
+      i32.const 0
+      local.set $i
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $r
+          local.get $i
+          local.get $un
+          local.get $i
+          i32.const 1
+          i32.add
+          call $mag.at
+          i64.const 32
+          i64.shl
+          local.get $un
+          local.get $i
+          call $mag.at
+          i64.or
+          local.get $s
+          i64.extend_i32_u
+          i64.shr_u
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $r
+      call $mag.trim`,
   },
   // a·m + c, for small m and c (unsigned).
   "mag.muladd": {
@@ -3530,8 +3936,8 @@ ${drop}
   // ---- builtins with no answer or one: an answer and a status (0), or a
   // zero and 1. A Choice builtin's status is what wasm.ts branches on.
   // Rounding down, the remainder with the divisor's sign (int.ts).
-  "int.quotient": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["q", "i64"], ["r", "i64"]], uses: [], partial: true,
+  "int64.quotient": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["q", "i64"], ["r", "i64"]], uses: [], partial: true,
     body: `
       local.get $b
       i64.eqz
@@ -3542,7 +3948,7 @@ ${drop}
       end
       local.get $a
       local.get $b
-      i64.div_s ;; the smallest i64 over -1 traps: that needs a big Int
+      i64.div_s ;; the smallest i64 over -1 would trap: int.quotient takes the limbs
       local.set $q
       local.get $a
       local.get $b
@@ -3565,8 +3971,8 @@ ${drop}
       local.get $q
       i32.const 0`,
   },
-  "int.remainder": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["r", "i64"]], uses: [], partial: true,
+  "int64.remainder": {
+    params: [["a", "i64"], ["b", "i64"]], result: "i64", locals: [["r", "i64"]], uses: [], partial: true,
     body: `
       local.get $b
       i64.eqz
@@ -3596,27 +4002,200 @@ ${drop}
       end
       i32.const 0`,
   },
-  // By squaring, each product checked; a is squared only when a higher
-  // power is still to come, so it overflows only when the answer would.
+  // Floor division (int.ts): the i64 way while both fit, but for the
+  // smallest i64 over -1, else the limbs; with the signs apart and a
+  // remainder, the quotient is one further down.
+  "int.quotient": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["st", "i32"], ["na", "i32"], ["nb", "i32"], ["q", "mag"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "int64.quotient", "mag.divrem", "mag.add", "mag.of"], native: true, partial: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        i64.const -9223372036854775808
+        i64.ne
+        local.get $b
+        call $int.small
+        i64.const -1
+        i64.ne
+        i32.or
+        if void
+          local.get $a
+          call $int.small
+          local.get $b
+          call $int.small
+          call $int64.quotient
+          local.set $st
+          call $int.of
+          local.get $st
+          return
+        end
+      end
+      local.get $a
+      call $int.negative
+      local.set $na
+      local.get $b
+      call $int.negative
+      local.set $nb
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.mag
+      i32.const 0
+      call $mag.divrem
+      local.set $q
+      local.get $na
+      local.get $nb
+      i32.ne
+      if void
+        local.get $a
+        call $int.mag
+        local.get $b
+        call $int.mag
+        i32.const 1
+        call $mag.divrem
+        array.len
+        if void
+          local.get $q
+          i64.const 1
+          call $mag.of
+          call $mag.add
+          local.set $q
+        end
+      end
+      local.get $na
+      local.get $nb
+      i32.xor
+      local.get $q
+      call $int.norm
+      i32.const 0`,
+  },
+  // The remainder has b's sign (int.ts).
+  "int.remainder": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["st", "i32"], ["r", "mag"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "int64.remainder", "mag.divrem", "mag.sub"], native: true, partial: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.get $b
+        call $int.small
+        call $int64.remainder
+        local.set $st
+        call $int.of
+        local.get $st
+        return
+      end
+      local.get $a
+      call $int.mag
+      local.get $b
+      call $int.mag
+      i32.const 1
+      call $mag.divrem
+      local.tee $r
+      array.len
+      i32.eqz
+      if void
+        i32.const 0
+        ref.i31
+        i32.const 0
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.get $b
+      call $int.negative
+      i32.ne
+      if void
+        local.get $b
+        call $int.mag
+        local.get $r
+        call $mag.sub
+        local.set $r
+      end
+      local.get $b
+      call $int.negative
+      local.get $r
+      call $int.norm
+      i32.const 0`,
+  },
+  // By squaring; a is squared only when a higher power is still to come.
+  // A power past an i64 has an answer only for 0, 1 and -1 (any other
+  // wouldn't fit in memory: a trap).
   "int.power": {
-    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["r", "i64"]], uses: ["int64.mul"], partial: true,
+    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["e", "i64"], ["r", "int"], ["x", "i64"]], uses: ["int.small", "int.of", "int.negative", "int.mul", "int.limb"], native: true, partial: true,
     body: `
       local.get $n
-      i64.const 0
-      i64.lt_s
+      call $int.negative
       if void
-        i64.const 0
+        ref.null eq
         i32.const 1
         return
       end
-      i64.const 1
+      local.get $n
+      ref.test $huge
+      if void
+        local.get $a
+        ref.test $huge
+        if void
+          unreachable
+        end
+        local.get $a
+        call $int.small
+        local.tee $x
+        i64.const 0
+        i64.eq
+        local.get $x
+        i64.const 1
+        i64.eq
+        i32.or
+        if void
+          local.get $a
+          i32.const 0
+          return
+        end
+        local.get $x
+        i64.const -1
+        i64.ne
+        if void
+          unreachable
+        end
+        local.get $n
+        i32.const 0
+        call $int.limb
+        i32.const 1
+        i32.and
+        if int
+          local.get $a
+        else
+          i32.const 1
+          ref.i31
+        end
+        i32.const 0
+        return
+      end
+      local.get $n
+      call $int.small
+      local.set $e
+      i32.const 1
+      ref.i31
       local.set $r
       block void
       loop void
-        local.get $n
+        local.get $e
         i64.eqz
         br_if 1
-        local.get $n
+        local.get $e
         i64.const 1
         i64.and
         i64.eqz
@@ -3624,18 +4203,18 @@ ${drop}
         if void
           local.get $r
           local.get $a
-          call $int64.mul
+          call $int.mul
           local.set $r
         end
-        local.get $n
+        local.get $e
         i64.const 1
         i64.shr_u
-        local.tee $n
+        local.tee $e
         i64.eqz
         br_if 1
         local.get $a
         local.get $a
-        call $int64.mul
+        call $int.mul
         local.set $a
         br 0
       end
@@ -3659,7 +4238,7 @@ ${drop}
       end
       local.get $x
       f64.floor
-      i64.trunc_f64_s ;; past 2⁶³ traps: that needs a big Int
+      i64.trunc_f64_s ;; int.wholePart takes the limbs past 2⁶³
       i32.const 0`,
   },
   // Only what show writes: -?(0|[1-9][0-9]*), not -0. Kept at or below
