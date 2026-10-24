@@ -62,11 +62,10 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
   numbers and quaternions as particular algebras. A quaternion is really a
   *representation*: four numbers storing a rotor of `Cl(3, 0)`, which in
   general would need eight.
-- **How does `+` work on all of these?** Names are presentation. Many
-  definitions can be displayed as `+`; the palette offers the one that fits
-  the types, and the program stores its id. Generic code takes its
-  operations as an argument, which the editor fills in when exactly one
-  candidate fits. No type classes.
+- **How does `+` work on all of these?** One generic `+` (decided
+  2026-10-24, below): its type says "any number type", and it is resolved
+  to the type's own operation before the program runs. A closed set of
+  structures, not open type classes.
 - **Infinite continued fractions?** Done, through an effect: a data type
   with a cell in a field, `term(whole: Int, rest: Cell CF)`, where the rest
   is a `formula`, computed when first read and then remembered (LANGUAGE.md,
@@ -700,27 +699,86 @@ and a representation decides whether it costs anything at run time.
   three numbers, but adding a position to a color is a mistake. Converting
   is an explicit `coordinates` function.
 
-### `+` for every number system: names are presentation
+### One `+` for every number system (decided 2026-10-24)
 
-The language has no type classes, and the plan doesn't add any. Two
-observations make them unnecessary:
+*This replaces the first plan, "names are presentation", in which each
+type had its own `+` displayed alike, and generic code took a record of
+operations that the editor filled in. Ersagun chose the replacement on
+2026-10-24, after [LANGUAGE-REVIEW-2026-10-24.md](LANGUAGE-REVIEW-2026-10-24.md),
+Part 2, which gives the reasons. The vectors module had already gone this
+way, and Int and Number had shown what two `+`s look like in practice.*
 
-1. **Overloading is a display matter.** References are ids picked from a
-   palette. `+` on rationals and `+` on multivectors are different
-   definitions, and both can be *displayed* as `+`. The palette offers the
-   one whose type fits the hole (it already filters by type). Ambiguity
-   never reaches the program, because the program stores the id.
-2. **Generic code takes its operations as an argument.** `sum of(list,
-   ring)` takes a record `ring(zero, add, multiply)`. When you call it, the
-   editor fills the `ring` argument if exactly one known record fits the
-   types, and hides it in the view. This is Agda's instance arguments or
-   Scala's implicits, resolved once at edit time and stored as an ordinary
-   argument. So there are no resolution rules at run time and nothing to
-   go wrong silently.
+**What the programmer sees.** One `+`, `−`, `·`, `−x` and `<` (and later
+`÷`), offered wherever both sides have the same number type: Number, Int,
+a record whose fields are all one number type (a `Vec`, a `Colour`), and
+later Rational, Complex and the other algebras. A definition written with
+them and no literal, like `smaller(a, b) = if a < b then a else b`, works
+on every such type. Its type says so: `(a, a) -> a, a a number type`.
 
-A ring record is also a meaning with representations, so this composes:
-`sum of` on binary naturals is `sum of` with the Nat ring, rewritten onto
-binary.
+**What the program stores.** Each generic operation is one builtin with a
+constrained type: `(a, a) -> a` where `a` is *arithmetic*. The constraint
+generalises the vectors module's `numbers` variables (types.ts): a variable
+that may only stand for a type that has the operation. Literals pin the
+type, as now, so `x + 1` is a Number unless the hole wants an Int. Stored
+programs that use the per-type builtins (`builtin.add` for Number,
+`builtin.int.add` for Int) keep them. Those builtins are now *the Number
+and Int entries of the table*, the operation `+` resolves to at each type.
+No existing program changes, and no meaning hash moves.
+
+**How it runs: resolved by type, before anything runs it.** A small Int
+and a Number are the same JavaScript value (an Int is a JS number while it
+is safe), so `+` can't choose by looking at the value. It is chosen by the
+type, once, by a code → code pass `resolveArithmetic(code, info)`
+(src/lang/arith.ts), the way `represent` is a code → code pass:
+
+1. Every call of a generic operation whose type is known at the call
+   becomes the type's own operation: `builtin.add` on Number,
+   `builtin.int.add` on Int, `zip parts` of the scalar's operation on a
+   record.
+2. A generic definition, used at Int in one place and at Number in
+   another, is copied once for each type it is used at (as MLton and the
+   compiler's scalar profile already do), and each copy resolves as in 1.
+   Hindley-Milner has no polymorphic recursion, so this always ends.
+3. A definition that is run directly while its type is still open (the
+   Run pane on `smaller` with no caller) defaults to Number, as Haskell
+   defaults `Num` to `Integer`.
+
+The evaluator, relate.ts, derive.ts, modes.ts and every compiler target
+get the resolved program, so none of them sees a generic operation, and
+**nothing dispatches at run time**: Number + Number is one machine add, and
+Int + Int is Int's builtin on every target. The pass is the identity on a
+program with no generic operation, which today is all of them.
+
+**What stays names-are-presentation.** Operations that *mix* types: `2 ·
+v` (a scalar times a vector) is `scale`, a different definition drawn as
+`·`, and matrix times vector will be the same. The palette offers the one
+that fits; the program stores its id.
+
+**What it isn't.** It is a type class, said plainly, but a closed one:
+the language fixes the structures (additive, module, ring, field,
+ordered; LANGUAGE-REVIEW-2026-10-24.md has the table) and each number type
+fills them in. Programmers give a type its arithmetic; they don't declare
+new classes. The closest prior art is Elm's `number` and `comparable`
+type variables; Haskell's `Num` is the open version, and Lean's Mathlib
+hierarchy is the map of which structures to name.
+
+**Steps**, one PR each:
+
+1. *The constraint and the pass.* `arithmetic` variables in types.ts
+   (Number, Int, records of one of them); generic `+ − · −x <` builtins;
+   `resolveArithmetic` with copies and defaulting, run before the
+   evaluator and the compiler; tests that a generic definition gives the
+   same answers as the hand-written Int and Number ones, evaluated and
+   compiled. Not yet offered by the palette.
+2. *The palette and the views* (with the editor lane): the palette offers
+   the generic `+` (and stops offering the per-type ones for new code);
+   types print the constraint.
+3. *The vectors module* written with `+`, `−` and `·`; `plus`, `minus`
+   and `times` kept as names for a release, then removed.
+4. *An example* using one generic definition at two types, for the
+   compiler lane to measure on each target.
+5. Then Rational and Complex (LANGUAGE-REVIEW-2026-10-24 L39, L40), each
+   an entry in the table.
 
 ### Units
 
@@ -765,7 +823,7 @@ In order. Each stage says when to start it.
 |---|---|---|
 | 0 | representations as side tables; `represent` (code → code) and `choose` (declared costs); laws as tests; Peano Nat with binary (this PR) | done |
 | 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **partly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md). Still to do: Int's definition as data (match and fold on it as a view), Nat, Rational |
-| 2 | **Overloading by name.** Several defs displayed as `+`, the palette picks by type; operation records as arguments the editor fills. *2026-10-24: LANGUAGE-REVIEW-2026-10-24.md proposes instead one generic `+` over a closed set of algebraic structures, as the vectors module's `numbers` constraint already does; names-are-presentation stays for operations that mix types* | with stage 1, since Int and Rational need `+` |
+| 2 | **One `+`.** ~~Several defs displayed as `+`, operation records as arguments~~ Decided 2026-10-24: one generic `+ − · −x <` over a closed set of structures, resolved by type before anything runs (above, "One `+` for every number system") | **started** (Backlog L38) |
 | 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations; the editor's representation picker | a program in the editor is slow because of list length or indexing |
 | 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | after 2 (it needs `·` on multivectors to be the same `·`) |
 | 5 | **Infinite data.** ~~Function-typed fields as lazy data~~ `Cell` fields as lazy, remembered data (done, the Cells effect); guarded corecursion in the checker; ~~continued fractions with Gosper's arithmetic~~ (done as a program: `+ − × ÷` of two CFs, √n, e, rationals); exact reals as a representation of `Real`, with `Diverge` comparisons | **partly done**; the rest when anyone wants an exact real as a number type, or a stream |

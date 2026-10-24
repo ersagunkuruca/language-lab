@@ -30,7 +30,7 @@ compiled pedal from 6× to 2.9× the hand-written one: rounding without a
 string, one-answer solves and modes written plainly, and the compressor
 writing its block straight into an array.
 A4 is done: the editor's preview plays the pedal (Editor lane).
-The pedal you can hear (BACKLOG L49): Softer and Harder sounded like
+The pedal you can hear (BACKLOG L30): Softer and Harder sounded like
 volume, because at drive 8 a quiet strum mostly got louder. Now the
 output is brought back to the loudness that came in, sample by sample
 (`as loud as`: two mean squares following over about 2000 samples, in
@@ -42,7 +42,7 @@ before and after the drive. The strum comes out as loud with its crest
 8.8 to 5.4. Compiled 63 times real time, the hand-written pedal 4 times
 quicker (the matching is plain recursion building pairs).
 What goes wrong with a microphone is said under its button, in words
-(BACKLOG L50): not allowed, none found, in use or its driver refused, a
+(BACKLOG L31): not allowed, none found, in use or its driver refused, a
 page without https, or three seconds of silence (a muted headset). The
 microphone is asked for without echo cancelling, noise suppression or
 gain riding, and nothing about its rate or channels; a headset whose rate
