@@ -100,10 +100,13 @@ export class OutOfSteps extends Error {
 }
 export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
+// Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
+// put back after each update, which may have been cut off midway.
+export const depth = { d: 0 };
 export function withSteps<T>(n: number, f: () => T): T {
-  const saved = page;
+  const saved = page, d = depth.d;
   page = { left: n };
-  try { return f(); } finally { page = saved; }
+  try { return f(); } finally { page = saved; depth.d = d; }
 }
 // One step outside any `with fuel`: free, except under a page's budget.
 export const spendStep = () => { if (page && --page.left < 0) throw new OutOfSteps(); };

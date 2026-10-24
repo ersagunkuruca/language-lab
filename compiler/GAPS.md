@@ -123,6 +123,10 @@ recursion:
   calls, the same way the evaluator does it, and only for those (the
   checker knows which they are). **Cheap fix done**: a program
   `lab compile` writes runs `main` in a worker thread with a 1 GB stack.
+  **Full fix done** (C21): a definition in a cycle of calls also gets a
+  generator copy whose calls in the cycle yield, and past 1,000 such calls
+  the call runs it under `$drive` (runtime.js), so pages and modules take
+  100,000 nested parentheses on the default stack.
   20,000 and 100,000 nested parentheses work. It costs about 130 ms of
   start-up for now, because the module, with its heavy runtime, loads
   twice. G8's lazy runtime brings that down.

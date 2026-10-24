@@ -778,7 +778,36 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
 
   // ---- one specialization's body
+  // ---- deep recursion on the heap (C21)
+  // JavaScript's stack holds some thousands of calls, and a call in a
+  // cycle of definitions that isn't a tail call (`h + count(t)`, a parser's
+  // expression inside parentheses) takes one each. Such a definition gets
+  // a second copy, a generator whose calls in the cycle yield what to call
+  // instead; past DEPTH calls of copies like it the call runs that copy,
+  // and $drive's loop keeps the calls in an array (runtime.js). Shallow
+  // calls pay a counter. Prior art: Kotlin's DeepRecursiveFunction, and
+  // trampolined style (Ganz, Friedman and Wand, 1999).
+  const reaches = new Map<Id, Set<Id>>();
+  const refsIn = (def: Id): Id[] => {
+    const b = node<"def">(def).body;
+    return b ? [...new Set(subtree(code, b).map((id) => code.nodes[id]).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && code.nodes[n.target]?.kind === "def").map((n) => n.target))] : [];
+  };
+  function reachable(def: Id): Set<Id> {
+    if (!reaches.has(def)) {
+      const seen = new Set<Id>(), todo = refsIn(def);
+      for (let d; (d = todo.pop()) !== undefined;) if (!seen.has(d)) { seen.add(d); todo.push(...refsIn(d)); }
+      reaches.set(def, seen);
+    }
+    return reaches.get(def)!;
+  }
+  // Is `callee` in `def`'s cycle (calls that can come back to `def`)?
+  const cycles = (callee: Id, def: Id) => reachable(callee).has(def) && (callee === def || reachable(def).has(callee));
+  // The copies that have a heap copy, and those a heap copy calls.
+  const heapCopies = new Set<string>(), heapCalled = new Set<string>();
+
   function body(sp: Spec): string {
+    // The copies this one's heap copy calls with a yield.
+    const yields = new Set<string>();
     const rho = sp.rho;
     const memo = new Map<Id, boolean>();
     const d = node<"def">(sp.def);
@@ -794,7 +823,33 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Function parameters of definitions fused into this one (G16), which
     // are given functions that don't choose.
     const fusePlain = new Set<Id>();
-    const scoped = <T>(on: boolean, f: () => T): T => { const was = cps; cps = on && !reflective; try { return f(); } finally { cps = was; } };
+    // Writing the copy that keeps its stack on the heap (C21, `heapCopy`)?
+    // Then calls of the definitions in this one's cycle yield, outside any
+    // function the compiler makes inside it.
+    let heap = false;
+    const scoped = <T>(on: boolean, f: () => T): T => { const was = cps, wasHeap = heap; cps = on && !reflective; heap = false; try { return f(); } finally { cps = was; heap = wasHeap; } };
+    // A call of a copy: in the heap copy, one in this definition's cycle is
+    // a yield the driver answers ($drive).
+    // The heap copy, if its calls in the cycle can all yield: one inside a
+    // function the compiler makes (an arrow) would be a syntax error, so
+    // then there is none.
+    const heapCopy = (sp: Spec, write: () => string): string | null => {
+      // One not kept leaves the temporaries' numbers as they were.
+      const was = temps;
+      heap = true;
+      let js: string;
+      try { js = write(); } finally { heap = false; }
+      if (!yields.size) { temps = was; return null; }
+      try { new Function(`"use strict";\n${js}`); } catch { temps = was; return null; }
+      heapCopies.add(sp.name);
+      yields.forEach((n) => heapCalled.add(n));
+      return js;
+    };
+    const callOf = (s: Spec, args: string[]): string => {
+      if (!heap || s.streams || s.cps || s.single || s.out || !cycles(s.def, sp.def)) return `${s.name}(${args.join(", ")})`;
+      yields.add(s.name);
+      return `(yield [${s.name}$h, [${args.join(", ")}]])`;
+    };
 
     // The copy of a definition a call needs: by the effects of its
     // arguments' types, and which of its Choice-typed function parameters
@@ -1017,7 +1072,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (code.nodes[target]?.kind === "def" && !streamy(id)) {
           const s = defCall(n);
           if (s.bool) {
-            const c = `${s.name}(${argsOf(n, s).join(", ")})`;
+            const c = callOf(s, argsOf(n, s));
             return spends(target) ? `($spendOrThrow(), ${c})` : c;
           }
         }
@@ -1215,7 +1270,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "field") return field(ex(n.args[0]), f.target);
         if (t.kind === "def") {
           const s = defCall(n);
-          const c = `${s.name}(${argsOf(n, s).join(", ")})`;
+          const c = callOf(s, argsOf(n, s));
           const v = s.bool ? `$bool(${c})` : c;
           return spends(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
@@ -1848,8 +1903,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const t = ty(c.fn);
         return t.t === "fn" && (t.eff.effs.includes(DIVERGE) || t.eff.tail !== null);
       })) return k(js);
-      const v = temp("v");
-      return `let ${v};\ntry {\n${v} = ${js};\n} catch (e) {\nif (!$outOfFuel(e)) throw e;\n${v} = $no;\n}\nif (${v} !== $no) {\n${k(v)}\n}`;
+      const v = temp("v"), d = temp("d");
+      return `let ${v};\nconst ${d} = $rec.d;\ntry {\n${v} = ${js};\n} catch (e) {\nif (!$outOfFuel(e)) throw e;\n$rec.d = ${d};\n${v} = $no;\n}\nif (${v} !== $no) {\n${k(v)}\n}`;
     }
     function st(id: Id, k: K): string {
       if (!streamy(id)) return guarded(id, ex(id), k);
@@ -2096,25 +2151,35 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // A definition that fills holes returns the first cell it made, kept
       // in a field of a cell made up for it; every other answer goes into
       // the last hole.
-      let start = "";
-      let out = sp.bool ? RETURN_BOOL : RETURN;
-      if (!sp.bool && fillsHoles(lam.body)) {
-        const top = temp("top");
-        holes = { at: temp("at"), i: temp("i") };
-        start = `const ${top} = { fields: [undefined] };\nlet ${holes.at} = ${top}, ${holes.i} = 0;\n`;
-        const { at, i } = holes;
-        out = { bool: false, leaf: (js) => `${at}.fields[${i}] = ${js};\nreturn ${top}.fields[0];` };
-      }
-      const stmts = ret(lam.body, true, out);
-      // Self tail calls jump: the parameters become the loop's inputs, and
-      // each pass binds them afresh, so a function made in one pass keeps
-      // that pass's values.
-      if (jumps) {
-        const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
-        const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
-        return `${header}\nfunction ${sp.name}(${ins}) {\n${start}for (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
-      }
-      return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
+      const write = (name: string, star: string) => {
+        jumps = false;
+        holes = null;
+        let start = "";
+        let out = sp.bool ? RETURN_BOOL : RETURN;
+        if (!sp.bool && fillsHoles(lam.body)) {
+          const top = temp("top");
+          holes = { at: temp("at"), i: temp("i") };
+          start = `const ${top} = { fields: [undefined] };\nlet ${holes.at} = ${top}, ${holes.i} = 0;\n`;
+          const { at, i } = holes;
+          out = { bool: false, leaf: (js) => `${at}.fields[${i}] = ${js};\nreturn ${top}.fields[0];` };
+        }
+        const stmts = ret(lam.body, true, out);
+        // Self tail calls jump: the parameters become the loop's inputs, and
+        // each pass binds them afresh, so a function made in one pass keeps
+        // that pass's values.
+        if (jumps) {
+          const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
+          const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
+          return `function${star} ${name}(${ins}) {\n${start}for (;;) {\n${fresh}${stmts}\n}\n}`;
+        }
+        return `function${star} ${name}(${ps}) {\n${stmts}\n}`;
+      };
+      const direct = write(sp.name, "");
+      const deep = !reflective && cycles(sp.def, sp.def) ? heapCopy(sp, () => write(`${sp.name}$h`, "*")) : null;
+      if (!deep) return `${header}\n${direct}${meta}`;
+      // Past DEPTH calls of copies like this one, the call runs its heap
+      // copy instead, whose calls in the cycle are steps of $drive's loop.
+      return `${header} (past ${DEPTH} calls deep, its copy on the heap)\nfunction ${sp.name}(${ps}) {\nif ($rec.d > ${DEPTH}) return $drive(${sp.name}$h(${ps}));\n$rec.d++;\nconst r$ = ${sp.name}$b(${ps});\n$rec.d--;\nreturn r$;\n}\n${direct.replace(`function ${sp.name}(`, `function ${sp.name}$b(`)}\n${deep}${meta}`;
     }
     const cell = temp("value");
     return `${header}\nlet ${cell};\nfunction ${sp.name}() {\nreturn ${cell} ??= ${ex(b)};\n}`;
@@ -2142,11 +2207,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
   };
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
-  for (const [s, b] of made) if (keep.has(s.name)) out.push(b);
+  // A copy in a cycle with no heap copy of its own: called from the heap
+  // as it is.
+  for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
   const helpers = ["$no", "$stream0", "$showAny", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(code)}, ${JSON.stringify([...info.divergent])});`] : [];
@@ -2193,6 +2260,11 @@ function indent(src: string): string {
     return out;
   }).join("\n");
 }
+
+// How many calls of definitions with a heap copy run on JavaScript's own
+// stack before the heap copies take over (C21): well under the stack's
+// size with the other calls between them.
+const DEPTH = 1000;
 
 const RESERVED = new Set(("break case catch class const continue debugger default delete do else export extends false finally for function if " +
   "import in instanceof new null return super switch this throw true try typeof var void while with yield let static enum await implements " +
