@@ -93,3 +93,19 @@ test("pulling a value off its input leaves the input a hole and the value loose"
   assert.ok(part);
   assert.equal(infer(u.code, baseNames(u.names)).errors.length, 0);
 });
+
+test("a drop on a filled input swaps the value in, and the one that was there lies loose", async () => {
+  const T = await import("../editor/typed.ts");
+  const { code, names } = greet();
+  const info = infer(code, baseNames(names));
+  // name, dropped on the input that has name ++ "!".
+  const r = T.over(code, names, info, "greet", {}, {}, "inner", "name", (c, n, i) => T.useVar(c, n, i, "greet", "name", "inner"));
+  if (!r.ok) assert.fail(r.reason);
+  assert.equal((r.code.nodes.inner as NodeOf<"ref">).target, "name");
+  const [part] = looseOf(r.code, r.of!, "greet");
+  assert.ok(part, "the old value is kept");
+  assert.equal(infer(r.code, baseNames(r.names)).errors.length, 0);
+  // Dropping what is there already changes nothing.
+  const again = T.over(r.code, r.names, infer(r.code, baseNames(r.names)), "greet", r.of!, r.home!, "use", "name", () => ({ ok: false, reason: "x" }));
+  assert.equal(again.ok, false);
+});
