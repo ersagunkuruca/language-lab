@@ -87,3 +87,77 @@ checked on the built page (fall, two dice), not just read from the code.
 | Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
 | Long press for the menu (touch) | ✓ | ✓ | |
 | Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |
+
+## Loose parts: editing without keeping the tree whole (proposed, 2026-10-24)
+
+*Proposed after Ersagun's report from editing two dice `main` in the
+graph; not built yet. Waiting on his go-ahead.*
+
+**The problem.** Every gesture in the graph has to leave a whole, typed
+tree behind (pitfall 11). That's why Delete takes everything that feeds
+the node with it, why a wire can't be left hanging, why an empty input is
+a hole *node* you have to find, and why moving one element from an
+`append` into a list took him a dozen steps. The graph is a tree editor
+drawn as a node editor.
+
+**The idea (Ersagun's).** Let pieces lie around unconnected. What is wired
+through to the result is the definition, exactly as today. Everything else
+is a **loose part**: kept and type-checked, but not part of the
+definition's meaning, type or run.
+
+Prior art: Scratch's canvas, where blocks not attached to a script just
+sit there and don't run (Resnick, Maloney et al., MIT); unconnected nodes
+in Blender, Unreal Blueprints and Houdini. Hazel (Omar et al.) is prior art
+for the other half, an editor where every state of the program is
+meaningful because the gaps are holes.
+
+### Rules
+
+1. **The definition is unchanged.** It's the tree from the result back, as
+   now; holes stay holes underneath. code.json, the hash, the type, the
+   compiler and Run don't see loose parts.
+2. **Loose parts live in `drafts.json`**, beside code.json, per definition:
+   each a small tree with its own ids, as a copy is today. Not in
+   layout.json: layout only ever changes how things look. Save file, copy
+   and undo carry drafts like any other file.
+3. **Holes are drawn as empty inputs** in the graph (a hollow port; its type
+   on hover; click it for the palette). No hole nodes. The Blocks text keeps
+   `□`.
+4. **Delete removes one node.** Its slot becomes an empty input; whatever
+   was wired into its inputs becomes loose. Delete on a loose part throws it
+   away (Undo brings it back).
+5. **Unwiring never loses anything.** Dragging a wire off an input leaves the
+   input empty and the value loose. Dropping an output on a *filled* input
+   swaps it in and the old value goes loose. Dropping on a list's `+` adds
+   it as an item.
+6. **Wiring is still checked.** Connecting a loose output to an input of the
+   definition is a typed edit, refused with the reason if it doesn't fit, as
+   now. Inside a loose part the same holds.
+7. **Making something new** on the canvas (right-click, Add a value) makes a
+   loose node, with no dot or let needed; wire it in when it's ready.
+8. **Blocks shows loose parts at the end**, under a line `-- loose, not used
+   yet`, as `_1 = named("random", button(…))`. They're edited there like any
+   other part, and a loose part can be cut and pasted into a hole.
+9. **Graph drawing:** a loose part is drawn faded with a dashed outline, so
+   it's plain at a glance what doesn't count yet.
+
+### Open questions
+
+- **Names that go out of scope.** A part taken out of the body may use a
+  value named by a step of the body (`a` in `a = die()`). Paste today turns
+  such a use into a hole. Better for drafts: keep the reference, show it as
+  unresolved, and resolve it again when the part is wired back where `a` is
+  in scope.
+- **Ill-typed drafts.** Rule 6 keeps drafts well typed. Hazel instead lets a
+  mistake stay, marked in place. Start with rule 6; revisit if it gets in the
+  way.
+
+### Order of PRs (Editor lane)
+
+1. Holes drawn as empty inputs; the `+` and filled-input drops (view and
+   gesture only, no new file).
+2. `drafts.json`: loading, saving, Save file, undo, and the Blocks section.
+3. Delete and unwiring leave loose parts (rules 4 and 5).
+4. New values on the canvas are loose (rule 7); faded drawing (rule 9).
+5. Pitfall 11 rewritten to say what's refused now: wiring that doesn't fit,
+   never removing.
