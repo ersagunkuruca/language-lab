@@ -1048,7 +1048,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const n = node(id);
   const names = p.names;
   const out = h("div", { class: "insp" });
-  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind" }, kindLabel(id)), h("code", { class: "nid" }, id.length > 10 ? id.slice(0, 10) + "…" : id)));
+  // Its id is the program's, not the reader's: kept on hover for whoever
+  // needs to find it in code.json.
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));

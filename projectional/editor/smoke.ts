@@ -206,6 +206,8 @@ async function heldSeed() {
   await p.locator("[data-def]", { hasText: /^a hundred rolls$/ }).click();
   await p.locator(".blocks-wrap .ref.var", { hasText: /^seed$/ }).first().click();
   await p.keyboard.press("Delete");
+  const head = (await p.locator(".insp-head").first().innerText()).trim();
+  if (head !== "Hole") errors.push(`${where}: the Selected panel heads the hole ${JSON.stringify(head)}, not just Hole`);
   const die = p.locator(".palette .opt", { hasText: /^die\(\)/ });
   await p.locator("#f-query").fill("die()");
   if (await die.count()) errors.push(`${where}: die() is offered while the type is held`);
