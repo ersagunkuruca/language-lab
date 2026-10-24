@@ -7,17 +7,21 @@
 // Naming is scope-aware: two binders get a subscript only when both are
 // visible at the same point, since that's the only time they could be
 // confused on screen.
+//
+// One walk draws a definition as lines of pieces in indented groups
+// (blocksOf). The text prints them (renderBlocks), and the editor's Blocks
+// pane draws them as spans you click (editor/typed.ts), so the two read
+// the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { resolveRefs, subtree } from "../model.ts";
 import type { Notation, Presentation } from "../presentation.ts";
-import { atom, type R } from "../render/expr.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
-import { matchRows, patternText, sharedOtherwise } from "./patterns.ts";
+import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
 import { chainOperands, CONS, FALSE, NIL, TRUE } from "./std.ts";
-import { showIn, showType } from "./types.ts";
+import { showIn } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -33,8 +37,65 @@ export function takenApart(code: Code, info: Info | null, n: NodeOf<"match">): b
   return arm.binds.length > 0 && arm.results.every((r) => r === null) && td?.kind === "typedef" && td.variants.length === 1 && !td.effect;
 }
 
+// A piece of a line. `pane` pieces are only drawn in the editor (the type
+// beside a name, a hole's type), not printed.
+export interface Part { id?: Id; cls: string; title?: string; pane?: true; kids: Piece[] }
+export type Piece = string | Part;
+// A line, or a group of them indented `pad` spaces; either can stand for a
+// node.
+export type Blk = { line: Piece[]; id?: Id; cls?: string } | { kids: Blk[]; pad: number; id?: Id; cls?: string };
+
+export const pieceText = (ps: Piece[]): string => ps.map((p) => (typeof p === "string" ? p : p.pane ? "" : pieceText(p.kids))).join("");
+export const blocksText = (bs: Blk[], ind = ""): string[] => bs.flatMap((b) => ("line" in b ? [ind + pieceText(b.line)] : blocksText(b.kids, ind + " ".repeat(b.pad))));
+
 export function renderBlocks(code: Code, pres: Presentation, info: Info | null, defId: Id): string {
+  return blocksText(blocksOf(code, pres, info, defId)).join("\n");
+}
+
+// A literal as drawn in the graph and the blocks pane. A long or multiline
+// text (a page's CSS, say) shows its first line, clipped, and how many
+// lines it has, so it doesn't stretch its view; hovering shows all of it,
+// and the inspector edits all of it. The printed text has all of it.
+const SHORT = 32;
+export function litLabel(v: string | number | boolean): { short: string; full?: string } {
+  if (typeof v !== "string") return { short: String(v) };
+  const lines = v.split("\n");
+  if (lines.length === 1 && v.length <= SHORT) return { short: JSON.stringify(v) };
+  const first = lines.find((l) => l.trim()) ?? "";
+  const clip = first.trim().length > SHORT ? `${first.trim().slice(0, SHORT - 1)}…` : `${first.trim()}${lines.length > 1 ? "…" : ""}`;
+  return { short: `${JSON.stringify(clip).slice(0, -1)}"${lines.length > 1 ? ` · ${lines.length} lines` : ""}`, full: v };
+}
+
+type I = { p: Piece[]; prec: number };
+const ATOM = 100;
+const part = (cls: string, kids: Piece[], id?: Id, title?: string): Part => ({ cls, kids, ...(id ? { id } : {}), ...(title ? { title } : {}) });
+const kw = (s: string) => part("kw", [s]);
+const pn = (s: string) => part("pn", [s]);
+const ln = (...line: Piece[]): Blk => ({ line });
+const grp = (kids: Blk[], pad = 2, id?: Id, cls?: string): Blk => ({ kids, pad, ...(id ? { id } : {}), ...(cls ? { cls } : {}) });
+const commas = (ps: Piece[][]): Piece[] => ps.flatMap((p, i) => (i ? [pn(", "), ...p] : p));
+const trimEnd = (ps: Piece[]): Piece[] => {
+  if (!ps.length) return ps;
+  const last = ps[ps.length - 1];
+  return [...ps.slice(0, -1), typeof last === "string" ? last.trimEnd() : { ...last, kids: trimEnd(last.kids) }];
+};
+// The first line of some blocks, and the rest without it.
+const splitFirst = (bs: Blk[]): [Piece[], Blk[]] => {
+  const [b, ...rest] = bs;
+  if ("line" in b) return [b.line, rest];
+  const [first, inner] = splitFirst(b.kids);
+  return [first, [...(inner.length ? [{ ...b, kids: inner }] : []), ...rest]];
+};
+const appendLast = (bs: Blk[], p: Piece): Blk[] => {
+  const b = bs[bs.length - 1];
+  return [...bs.slice(0, -1), "line" in b ? { ...b, line: [...b.line, p] } : { ...b, kids: appendLast(b.kids, p) }];
+};
+
+// `pane`: drawn for the editor, where a long text is clipped and cases
+// that say the same thing stay separate rows, each its own node to edit.
+export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean } = {}): Blk[] {
   const names = pres.names;
+  const pane = !!opts.pane;
   // A binder nobody named is called for its type (items, x, event), as the
   // editor names a new parameter; only what isn't a binder shows its id.
   const given = new Map<Id, string>();
@@ -53,6 +114,11 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     }
   };
   const leave = (ids: Id[]) => ids.forEach(() => inScope.pop());
+  const typeAt = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst) : null; };
+  // A name, with its type beside it in the pane.
+  const bind = (id: Id): Part => { const t = typeAt(id); return part("bnd", [nameOf(id), ...(t ? [{ cls: "ty", pane: true as const, kids: [`: ${t}`] }] : [])], id); };
+  const con = (id: Id) => part("con", [base(id)]);
+  const pattern = (p: Pat): Piece[] => patternWith<Piece>(p, bind, con, pn);
 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
@@ -72,9 +138,9 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   // An argument that is an action, a function of nothing, is drawn as what
   // it does, as Scala draws a by-name parameter: count(queens(8)), not
   // count(() => queens(8)). The callee still decides when, and whether, it
-  // runs; the tree keeps the lambda.
+  // runs; the tree keeps the lambda, and the pane can still select it.
   const byName = (id: Id): Id => { const n = node(id); return n.kind === "lambda" && n.params.length === 0 ? n.body : id; };
-  const word = (nota: Notation | undefined, i: number) => (nota?.words?.[i] ? `${nota.words[i]} ` : "");
+  const word = (nota: Notation | undefined, i: number): Piece[] => (nota?.words?.[i] ? [kw(`${nota.words[i]} `)] : []);
 
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
@@ -85,7 +151,8 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
     return false;
   };
 
-  const paren = (r: R, ok: boolean) => (ok ? r.text : `(${r.text})`);
+  const paren = (r: I, ok: boolean): Piece[] => (ok ? r.p : [pn("("), ...r.p, pn(")")]);
+  const atom = (...p: Piece[]): I => ({ p, prec: ATOM });
 
   // cons(a, cons(b, nil)) is shown as [a, b]: a list is a notation for
   // nested constructors, nothing more.
@@ -100,85 +167,107 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
   };
 
   // One line.
-  const inline = (id: Id): R => {
+  const inline = (id: Id): I => {
     const n = node(id);
     switch (n.kind) {
-      case "lit": return atom(typeof n.value === "string" && n.of === undefined ? JSON.stringify(n.value) : String(n.value));
-      case "hole": return atom("□");
+      case "lit": {
+        // A number written as text (1/2 at Rational) is a number.
+        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [String(n.value)], id));
+        if (pane) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
+        return atom(part("lit", [JSON.stringify(n.value)], id));
+      }
+      case "hole": {
+        const hi = info?.holes.get(id);
+        return atom(part("hole", ["□", ...(hi ? [{ cls: "ty", pane: true as const, kids: [showIn(hi.expected, names, info!.subst)] }] : [])], id));
+      }
       case "ref": {
         const nota = pres.style.notation[n.target];
-        return atom(nota && nota.fixity === "call" ? nota.glyph : nameOf(n.target));
+        const t = node(n.target);
+        const cls = t?.kind === "binder" ? "var" : t?.kind === "variant" ? "con" : t?.kind === "def" ? "def" : "fn";
+        return atom(part(`ref ${cls}`, [nota && nota.fixity === "call" ? nota.glyph : nameOf(n.target)], id));
       }
       case "lambda": {
         enter(n.params);
-        const body = inline(n.body).text;
+        const params = n.params.map(bind);
+        const body = inline(n.body).p;
         leave(n.params);
-        return { text: `(${n.params.map(nameOf).join(", ")}) => ${body}`, prec: 0 };
+        return { p: [part("lam", [pn("("), ...commas(params.map((b) => [b])), pn(") => "), ...body], id)], prec: 0 };
       }
       case "call": {
         const items = listItems(id);
-        if (items) return atom(`[${items.map((i) => inline(i).text).join(", ")}]`);
+        if (items) return atom(part("call", [pn("["), ...commas(items.map((i) => inline(i).p)), pn("]")], id));
         const f = node(n.fn);
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
         const ops = chainOperands(code, id);
         const args = (ops ?? n.args).map(inline);
+        const op = (s: string) => part("op", [s], n.fn);
         if (nota?.fixity === "infix" && ops) {
           // a ++ b ++ c: one chain, whichever way the pairs nest.
           const p = nota.prec ?? 5;
-          return { text: args.map((a) => paren(a, a.prec > p)).join(` ${nota.glyph} `), prec: p };
+          return { p: [part("call", args.flatMap((a, i) => [...(i ? [op(` ${nota.glyph} `)] : []), ...paren(a, a.prec > p)]), id)], prec: p };
         }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
           const lok = l.prec > p || (l.prec === p && nota.assoc !== "right");
           const rok = r.prec > p || (r.prec === p && nota.assoc !== "left" && nota.assoc !== undefined);
-          return { text: `${paren(l, lok)} ${nota.glyph} ${paren(r, rok)}`, prec: p };
+          return { p: [part("call", [...paren(l, lok), op(` ${nota.glyph} `), ...paren(r, rok)], id)], prec: p };
         }
         if (nota?.fixity === "prefix" && args.length === 1) {
           const p = nota.prec ?? 9;
-          return { text: `${nota.glyph}${paren(args[0], args[0].prec > p)}`, prec: p };
+          return { p: [part("call", [op(nota.glyph), ...paren(args[0], args[0].prec > p)], id)], prec: p };
         }
         // A field read is drawn as p.x: it is still the field's projection
         // called on p, the way it runs backwards.
-        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(`${paren(args[0], args[0].prec >= 100)}.${nameOf(f.target)}`);
+        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(part("call", [...paren(args[0], args[0].prec >= ATOM), pn("."), part("ref fn", [nameOf(f.target)], n.fn)], id));
         const head = inline(n.fn);
-        return atom(`${paren(head, head.prec >= 100)}(${ops ? args.map((a) => a.text).join(", ") : n.args.map((a, i) => word(nota, i) + inline(byName(a)).text).join(", ")})`);
+        const shownArgs = ops ? args.map((a) => a.p) : n.args.map((a, i) => {
+          const b = byName(a), kids = [...word(nota, i), ...inline(b).p];
+          return b === a ? kids : [part("lam byname", kids, a)];
+        });
+        return atom(part("call", [...paren(head, head.prec >= ATOM), pn("("), ...commas(shownArgs), pn(")")], id));
       }
-      default: return atom(`‹${n.kind}›`);
+      default: return atom(part(n.kind, [`‹${n.kind}›`], id));
     }
   };
 
-  // Lines for an expression in a block. `lead` is what goes before it on
-  // its first line ("return ", "x = ", "→ ").
-  const block = (id: Id, ind: string, lead: string): string[] => {
+  // Lines for an expression. `lead` is what goes before it on its first
+  // line ("x = ", "→ ").
+  const block = (id: Id, lead: Piece[]): Blk[] => {
     const n = node(id);
+    // A block you can click.
+    const hold = (kids: Blk[], cls = "blk") => [grp(kids, 0, id, cls)];
     const items = listItems(id);
-    if (items && (tall(id) || inline(id).text.length > 70)) {
-      return [`${ind}${lead}[`, ...items.flatMap((x, i) => {
-        const lines = block(x, ind + "  ", "");
-        if (i < items.length - 1) lines[lines.length - 1] += ",";
-        return lines;
-      }), `${ind}]`];
+    if (items && (tall(id) || pieceText(inline(id).p).length > 70)) {
+      // A list of tall items (a page's elements) is still a list: [ … ],
+      // one item under another, as on one line.
+      const rows = items.flatMap((x, i) => (i < items.length - 1 ? appendLast(block(x, []), pn(",")) : block(x, [])));
+      return hold([ln(...lead, pn("[")), grp(rows), ln(pn("]"))]);
     }
-    if (!tall(id)) return [ind + lead + inline(id).text];
+    if (!tall(id)) return [ln(...lead, ...inline(id).p)];
     if (n.kind === "call" && isLet(n)) {
+      // A run of steps is one column, each step its own line: x = …, then
+      // the next, not each one nested inside the one before (the right-
+      // nested lets are how the tree holds an order, not how it reads).
       const lam = node(n.fn) as NodeOf<"lambda">;
       // The values can't see the names they're bound to, so show them first.
       enter(lam.params);
-      const labels = lam.params.map(nameOf);
+      const labels = lam.params.map(bind);
       leave(lam.params);
       // A step done for what it does, that nothing reads, is just the step.
       const unread = (p: Id) => base(p) === "_" || (!names[p] && !subtree(code, lam.body).some((x) => (node(x) as { target?: Id }).target === p));
-      const lines = lam.params.flatMap((p, i) => block(n.args[i], ind, unread(p) ? "" : `${labels[i]} = `));
+      const steps = lam.params.flatMap((p, i) => block(n.args[i], unread(p) ? [] : [labels[i], pn(" = ")]));
       enter(lam.params);
-      const rest = block(lam.body, ind, lead);
+      const rest = block(lam.body, lead);
       leave(lam.params);
-      return [...lines, ...rest];
+      return [...hold(steps, "step"), ...rest];
     }
     if (n.kind === "match" && isBool(n)) {
       const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
-      const t = arm(TRUE).body, f = arm(FALSE).body;
-      if (!tall(n.scrutinee) && !tall(t) && !tall(f)) return [`${ind}${lead}if ${inline(n.scrutinee).text} then ${inline(t).text} else ${inline(f).text}`];
+      const t = arm(TRUE), f = arm(FALSE);
+      if (!tall(n.scrutinee) && !tall(t.body) && !tall(f.body)) {
+        return [ln(...lead, part("blk", [kw("if "), ...inline(n.scrutinee).p, part("arm", [kw(" then "), ...inline(t.body).p], t.id), part("arm", [kw(" else "), ...inline(f.body).p], f.id)], id))];
+      }
       // A tall condition goes under the if, deeper than then and else, so
       // its own arms can't be read as the branches:
       //   if match t
@@ -186,74 +275,79 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       //       otherwise → false
       //     then …
       // A let would read as a comparison after the if, so it starts below.
-      const below = hasSteps(n.scrutinee);
-      const cond = block(n.scrutinee, ind + (below ? "    " : "  "), "");
-      const head = below ? [`${ind}${lead}if`, ...cond] : [`${ind}${lead}if ${cond[0].trimStart()}`, ...cond.slice(1)];
+      let head: Blk[];
+      if (hasSteps(n.scrutinee)) head = [ln(...lead, kw("if")), grp(block(n.scrutinee, []), 4)];
+      else {
+        const [first, rest] = splitFirst(block(n.scrutinee, []));
+        head = [ln(...lead, kw("if "), ...first), ...(rest.length ? [grp(rest)] : [])];
+      }
       // A branch with steps before its value gets then/else on a line of
       // its own, so the steps are inside the branch, not before the word.
-      const branch = (b: Id, word: string) => (hasSteps(b) ? [`${ind}  ${word}`, ...block(b, ind + "    ", "")] : block(b, ind + "  ", `${word} `));
-      return [...head, ...branch(t, "then"), ...branch(f, "else")];
+      const branch = (a: NodeOf<"arm">, w: string) => grp(hasSteps(a.body) ? [ln(kw(w)), grp(block(a.body, []))] : block(a.body, [kw(`${w} `)]), 2, a.id, "arm");
+      return hold([...head, branch(t, "then"), branch(f, "else")]);
     }
     // A match with one case on a type with one case always matches: it is
     // taking the value apart, drawn as a let, pair(x, y) = centre.
     if (n.kind === "match" && takesApart(n)) {
       const arm = node(n.arms[0]) as NodeOf<"arm">;
       enter(arm.binds);
-      const pat = `${base(arm.variant)}(${arm.binds.map(nameOf).join(", ")}) = `;
+      const pat = [part("arm", pattern({ con: arm.variant, args: arm.binds.map((v) => ({ v })) }), arm.id), pn(" = ")];
       leave(arm.binds);
-      const lines = block(n.scrutinee, ind, pat);
+      const lines = block(n.scrutinee, pat);
       enter(arm.binds);
-      const rest = block(arm.body, ind, lead);
+      const rest = block(arm.body, lead);
       leave(arm.binds);
-      return [...lines, ...rest];
+      return [...hold(lines, "step"), ...rest];
     }
     if (n.kind === "match" || n.kind === "fold") {
-      const out = [`${ind}${lead}${n.kind === "match" && isHandler(n) ? "handle" : n.kind} ${inline(n.scrutinee).text}`];
-      // A case whose body only takes one of its fields apart further reads
-      // as one row per inner case: nested patterns (patterns.ts).
-      if (n.kind === "match" && !isHandler(n)) {
-        const { rows, otherwise } = sharedOtherwise(code, matchRows(code, info, n), n.otherwise ?? undefined);
-        for (const row of rows) {
-          enter(row.binds);
-          out.push(...hang(row.body, ind + "  ", `${patternText(row.pat, nameOf, base)} → `));
-          leave(row.binds);
+      const handles = n.kind === "match" && isHandler(n);
+      const arms: Blk[] = [];
+      const row = (body: Id, head: Piece[], at?: Id) => arms.push(grp(hang(body, [...head, pn(" → ")]), 0, at, "arm"));
+      if (n.kind === "match" && !handles) {
+        // A case whose body only takes one of its fields apart further reads
+        // as one row per inner case: nested patterns (patterns.ts). In the
+        // text, cases that say the same thing read once, as the otherwise.
+        const all = matchRows(code, info, n);
+        const { rows, otherwise } = pane ? { rows: all, otherwise: n.otherwise ?? undefined } : sharedOtherwise(code, all, n.otherwise ?? undefined);
+        for (const r of rows) {
+          enter(r.binds);
+          row(r.body, pattern(r.pat), r.at);
+          leave(r.binds);
         }
-        if (otherwise) out.push(...hang(otherwise, ind + "  ", "otherwise → "));
-        return out;
+        if (otherwise) row(otherwise, [kw("otherwise")]);
+      } else {
+        for (const a of n.arms) {
+          const arm = node(a) as NodeOf<"arm">;
+          const results = arm.results.filter((r): r is Id => r !== null);
+          enter([...arm.binds, ...results]);
+          row(arm.body, [...pattern({ con: arm.variant, args: arm.binds.map((v) => ({ v })) }), ...(results.length ? [kw(" with "), ...commas(results.map((r) => [bind(r)]))] : [])], a);
+          leave([...arm.binds, ...results]);
+        }
+        if (n.kind === "match" && n.otherwise) row(n.otherwise, [kw("otherwise")]);
       }
-      for (const a of n.arms) {
-        const arm = node(a) as NodeOf<"arm">;
-        const results = arm.results.filter((r): r is Id => r !== null);
-        enter([...arm.binds, ...results]);
-        const pat = arm.binds.length ? `${base(arm.variant)}(${arm.binds.map(nameOf).join(", ")})` : base(arm.variant);
-        const head = `${pat}${results.length ? ` with ${results.map(nameOf).join(", ")}` : ""} → `;
-        out.push(...hang(arm.body, ind + "  ", head));
-        leave([...arm.binds, ...results]);
-      }
-      if (n.kind === "match" && n.otherwise) out.push(...hang(n.otherwise, ind + "  ", "otherwise → "));
-      return out;
+      return hold([ln(...lead, kw(`${handles ? "handle" : n.kind} `), ...inline(n.scrutinee).p), grp(arms)]);
     }
     if (n.kind === "solve") {
       // solve polar(x = …, y = …) for length, angle as r, θ
       const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
-      const given = Object.entries(n.given).map(([k, e]) => `${label(k)} = ${inline(e).text}`).join(", ");
+      const givenArgs = commas(Object.entries(n.given).map(([k, e]) => [pn(`${label(k)} = `), ...inline(e).p]));
       const bound = Object.values(n.binds);
       enter(bound);
-      const wanted = Object.entries(n.binds).map(([k, b]) => (nameOf(b) === label(k) ? label(k) : `${label(k)} as ${nameOf(b)}`)).join(", ");
-      const out = [`${ind}${lead}solve ${nameOf(n.fn)}(${given}) for ${wanted}`, ...block(n.body, ind + "  ", "")];
+      const wanted = commas(Object.entries(n.binds).map(([k, b]) => (nameOf(b) === label(k) ? [bind(b)] : [pn(`${label(k)} as `), bind(b)])));
+      const out = hold([ln(...lead, kw("solve "), part("ref fn", [nameOf(n.fn)], n.fn), pn("("), ...givenArgs, pn(")"), kw(" for "), ...wanted), grp(block(n.body, []))]);
       leave(bound);
       return out;
     }
     if (n.kind === "lambda") {
       enter(n.params);
-      const out = [`${ind}${lead}(${n.params.map(nameOf).join(", ")}) =>`, ...block(n.body, ind + "  ", "")];
+      const out = hold([ln(...lead, pn("("), ...commas(n.params.map((p) => [bind(p)])), pn(") =>")), grp(block(n.body, []))]);
       leave(n.params);
       return out;
     }
     if (n.kind === "call") {
       // A call with a tall argument: the tall parts go on their own lines.
       const f = node(n.fn);
-      const head = f.kind === "ref" ? nameOf(f.target) : `(${inline(n.fn).text})`;
+      const head = f.kind === "ref" ? [part("ref fn", [nameOf(f.target)], n.fn)] : [pn("("), ...inline(n.fn).p, pn(")")];
       // An operator's operands one under another, each after the operator:
       //   show(…)
       //   ++ " · "
@@ -262,53 +356,53 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
       const ops = chainOperands(code, id) ?? n.args;
       if (nota?.fixity === "infix" && ops.length >= 2) {
         const p = nota.prec ?? 5;
-        const one = (a: Id, lead: string) => {
-          if (!tall(a)) return [`${ind}${lead}${paren(inline(a), inline(a).prec > p)}`];
-          const lines = block(a, ind, "");
+        const one = (a: Id, lead: Piece[]): Blk[] => {
+          if (!tall(a)) { const r = inline(a); return [ln(...lead, ...paren(r, r.prec > p))]; }
+          const lines = block(a, []);
           // An if on one line takes in everything after its else, so as an
           // operand it is bracketed: (if c < 0 then "-" else "") ++ …
           const an = node(a);
-          return lines.length === 1 && an.kind === "match" && isBool(an) ? [`${ind}${lead}(${lines[0].slice(ind.length)})`] : block(a, ind, lead);
+          return lines.length === 1 && "line" in lines[0] && an.kind === "match" && isBool(an) ? [ln(...lead, pn("("), ...lines[0].line, pn(")"))] : block(a, lead);
         };
-        return ops.flatMap((a, i) => one(a, i ? `${nota.glyph} ` : lead));
+        return hold(ops.flatMap((a, i) => one(a, i ? [part("op", [`${nota.glyph} `], n.fn)] : lead)));
       }
-      if (n.args.every((a) => !tall(a)) && tall(n.fn)) return [...block(n.fn, ind, `${lead}apply `), `${ind}  to (${n.args.map((a) => inline(a).text).join(", ")})`];
+      if (n.args.every((a) => !tall(a)) && tall(n.fn)) return hold([...block(n.fn, [...lead, kw("apply ")]), grp([ln(kw("to "), pn("("), ...commas(n.args.map((a) => inline(a).p)), pn(")"))])]);
       const args = ops.map((a, i) => {
-        const lines = block(ops === n.args ? byName(a) : a, ind + "  ", ops === n.args ? word(nota, i) : "");
-        if (i < ops.length - 1) lines[lines.length - 1] += ",";
-        return lines;
+        const b = ops === n.args ? byName(a) : a;
+        const lines = b === a ? block(a, ops === n.args ? word(nota, i) : []) : [grp(block(b, word(nota, i)), 0, a, "lam byname")];
+        return i < ops.length - 1 ? appendLast(lines, pn(",")) : lines;
       });
-      return [`${ind}${lead}${head}(`, ...args.flat(), `${ind})`];
+      return hold([ln(...lead, ...head, pn("(")), grp(args.flat()), ln(pn(")"))]);
     }
-    return [ind + lead + inline(id).text];
+    return [ln(...lead, ...inline(id).p)];
   };
-  const hang = (id: Id, ind: string, head: string) => (tall(id) ? [ind + head.trimEnd(), ...block(id, ind + "  ", "")] : block(id, ind, head));
+  const hang = (id: Id, head: Piece[]): Blk[] => (tall(id) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
 
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
-  const out: string[] = [];
+  const out: Blk[] = [];
+  const self = () => part("def", [nameOf(defId)], defId);
   const comment = pres.comments[defId];
-  if (comment) out.push(`-- ${resolveRefs(comment, nameOf)}`);
+  if (comment) out.push({ line: [`-- ${resolveRefs(comment, nameOf)}`], cls: "cmt" });
   if (body?.kind === "typedef") {
     enter(body.params);
-    const head = `${body.effect ? "effect" : "type"} ${nameOf(defId)}${body.params.map((p) => " " + nameOf(p)).join("")}`;
-    out.push(head);
-    for (const v of body.variants) {
+    out.push(ln(kw(`${body.effect ? "effect" : "type"} `), self(), ...body.params.flatMap((p) => [" ", bind(p)])));
+    out.push(grp(body.variants.map((v) => {
       const vn = node(v) as NodeOf<"variant">;
-      const fs = vn.fields.map((f) => `${nameOf(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
-      out.push(`  | ${nameOf(v)}${fs.length ? `(${fs.join(", ")})` : ""}${vn.returns ? ` returns ${typeText(vn.returns)}` : ""}`);
-    }
-    return out.join("\n");
+      const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);
+      return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : [])], id: v, cls: "variant" };
+    })));
+    return out;
   }
-  const t = info?.typeOf.get(defId);
-  if (t) out.push(`${nameOf(defId)} : ${showIn(t, names, info!.subst)}`);
-  if (!body) return [...out, `${nameOf(defId)} = extern`].join("\n");
+  const t = typeAt(defId);
+  if (t) out.push(ln(self(), part("ty big", [` : ${t}`])));
+  if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];
   if (body.kind === "lambda") {
     enter(body.params);
-    out.push(...hang(body.body, "", `${nameOf(defId)}(${body.params.map(nameOf).join(", ")}) = `));
+    out.push(...hang(body.body, [self(), pn("("), ...commas(body.params.map((p) => [bind(p)])), pn(") = ")]));
     leave(body.params);
-  } else out.push(...hang(def.body!, "", `${nameOf(defId)} = `));
-  return out.join("\n");
+  } else out.push(...hang(def.body!, [self(), pn(" = ")]));
+  return out;
 
   function typeText(id: Id): string {
     const n = node(id);
