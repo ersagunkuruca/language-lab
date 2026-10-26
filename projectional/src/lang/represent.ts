@@ -71,13 +71,14 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
     }
   };
   // A function some representation implements is one job: don't look
-  // inside it, since its body is what gets replaced.
+  // inside it, since its body is what gets replaced (`add item` builds a
+  // `set of`, which the tree never does).
   const seen = new Set<Id>();
   const visit = (def: Id) => {
     if (seen.has(def)) return;
     seen.add(def);
-    walk(def);
     if (implemented.has(def) && def !== entry) return;
+    walk(def);
     for (const d of directRefs(code, def)) visit(d);
   };
   visit(entry);
