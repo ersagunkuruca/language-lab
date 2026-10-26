@@ -18,13 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I11 | **Bug.** A loose part can't be wired back by its own output: dragging the node's output onto the hole it left is refused ("that isn't inside this definition"); only the loose frame's end dot works, though the status says "drag its output" | QA6 H1 | 2026-10-26 |
-| I12 | Phone: + New program leaves you on Programs; its hole is preselected, so tapping it doesn't bring the palette either | QA6 M1 | 2026-10-26 |
-| I13 | Loose parts read as `_1`, and one that uses inputs reads as a function `_1(length, gravity) = …` | QA6 M2 | 2026-10-26 |
-| I14 | A loose literal pill has no output: dropping it on an input only moves it on top of the node | QA6 L1 | 2026-10-26 |
-| I15 | A loose hole refuses effectful calls (`print("hi")`) that the definition's own hole accepts, without saying why | QA6 L2 | 2026-10-26 |
-| I16 | The graph's palette pop-up covers neighbouring nodes and repeats the side panel's palette | QA6 L3 | 2026-10-26 |
-| I17 | Refusals for units don't mention units (Change the function on `speed · time` → `subtract`: "Nothing that fits matches") | QA6 L4 | 2026-10-26 |
 
 ## E: Editor
 
@@ -32,6 +25,12 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E121 | Phone: + New program leaves you on Programs; its hole is preselected, so tapping it doesn't bring the palette either; was Inbox I12 | QA-2026-10-26 M1 | P1 | S |  |
+| E122 | A loose literal pill has no output: dropping it on an input only moves it on top of the node; was Inbox I14 | QA-2026-10-26 L1 | P2 | S |  |
+| E123 | A loose hole refuses effectful calls (`print("hi")`) that the definition's own hole accepts, without saying why; was Inbox I15 | QA-2026-10-26 L2 | P2 | S |  |
+| E124 | Loose parts read as `_1`, and one that uses inputs reads as a function `_1(length, gravity) = …`; was Inbox I13 | QA-2026-10-26 M2 | P3 | S |  |
+| E125 | The graph's palette pop-up covers neighbouring nodes and repeats the side panel's palette; was Inbox I16 | QA-2026-10-26 L3 | P3 | S |  |
+| E126 | Refusals for units don't mention units (Change the function on `speed · time` → `subtract`: "Nothing that fits matches"); was Inbox I17 | QA-2026-10-26 L4 | P3 | S |  |
 | E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
 | E114 | Taking out an `append` and flattening its lists by hand should be short (follows from E104 and E108; E98 does it for you) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P3 | S |  |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
@@ -138,6 +137,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E120 | A loose part wires back in by its own last node's output, as the status says, not only by its frame's end; the drag also checks the fit as it goes | #440 |
 | E110 | A wire goes round a frame it doesn't start or end in, as round a node, however tall the frame | #439 |
 | E113 | Already so since E92: a call picked in the graph offers Open (its function) and Change the function; now tested in the graph too | #438 |
 | E112 | Let and get nodes for every value at once: Show every value as let and get nodes (and back) on the canvas's menu, and a Guide line | #438 |

@@ -360,11 +360,15 @@ async function looseParts() {
   if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
   if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
-  const out = (await p.locator(".p-graph .ports circle[data-out]").last().boundingBox())!;
+  // By the part's own last node's output, as the status says (BACKLOG E120):
+  // the faded output furthest right.
+  const outs = await p.locator(".p-graph .items > g.faded circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
+  const out = outs.sort((a, b) => b.x - a.x)[0];
+  if (!out) { errors.push(`${where}: the loose part's nodes have no output to drag`); return p.close(); }
   const hole = (await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").first().boundingBox())!;
   await p.mouse.move(out.x + out.width / 2, out.y + out.height / 2); await p.mouse.down();
   await p.mouse.move(hole.x + hole.width / 2, hole.y + hole.height / 2, { steps: 8 }); await p.mouse.up();
-  if (!/^Wired it in/.test(await p.locator(".status").innerText())) errors.push(`${where}: wiring a loose part into the hole: ${await p.locator(".status").innerText()}`);
+  if (!/^Wired it in/.test(await p.locator(".status").innerText())) { errors.push(`${where}: wiring a loose part into the hole: ${await p.locator(".status").innerText()}`); return p.close(); }
   if (loose(await text()) !== loose(after) - 1) errors.push(`${where}: the part wired in is still listed as loose`);
   // Undo, twice, gives main back as it was.
   await p.locator('[data-act="undo"]').click();
