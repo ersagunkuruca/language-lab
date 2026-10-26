@@ -147,8 +147,11 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const todo: { root: Id; env: Env }[] = [];
   const instance = (def: Id, env: Env, sc: Scheme): Id => {
     const vars = constrained(sc);
-    if (vars.every((v) => { const t = env.get(v); return !t || (t.t === "con" && t.id === NUMBER); })) return def;
-    const key = `${def}|${vars.map((v) => JSON.stringify(env.get(v) ?? num)).join(",")}`;
+    // The definition itself is at its own defaults (Int for a whole
+    // literal nothing fixes, else Float64): a use at those needs no copy.
+    const at = (v: number): Type => env.get(v) ?? otherwise(v);
+    if (vars.every((v) => JSON.stringify(at(v)) === JSON.stringify(otherwise(v)))) return def;
+    const key = `${def}|${vars.map((v) => JSON.stringify(at(v))).join(",")}`;
     const done = copies.get(key);
     if (done) return done;
     const d = code.nodes[def] as NodeOf<"def">;
@@ -171,7 +174,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const body = d.body === null ? null : copyTree(d.body, renames, env);
     nodes[id] = { id, kind: "def", body };
     defs.push(id);
-    outNames[id] = `${names[def] ?? def} at ${vars.map((v) => show(env.get(v) ?? num)).join(", ")}`;
+    outNames[id] = `${names[def] ?? def} at ${vars.map((v) => show(at(v))).join(", ")}`;
     const type = close(sc.type, env);
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !env.has(v));
     schemes.set(id, { ...sc, vars: sc.vars.filter((v) => !env.has(v)), type, ...(sc.arith ? { arith: left(sc.arith) } : {}), ...(sc.ordered ? { ordered: left(sc.ordered) } : {}) });
