@@ -461,9 +461,12 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
           if (!w.needs.every((i) => st.known.has(ss[i]))) continue;
           const gives = w.gives.map((i) => ss[i]).filter((s) => !st.known.has(s));
           // Everything known already: a check, which may still match more
-          // than once (one of a list with the item in it twice).
+          // than once (one of a list with the item in it twice). A check
+          // goes before anything else that's ready, so it cuts a branch
+          // before calls in it run: in fib's arm where n isn't 1 or 2, the
+          // check n ≠ 2 is waiting when a guess makes n 2 (BACKLOG L82).
           if (!gives.length) {
-            if (ss.every((s) => st.known.has(s))) return { gives: [], answers: { fail: true, many: w.answers.many }, ends: true, cost: 0 };
+            if (ss.every((s) => st.known.has(s))) return { gives: [], answers: { fail: true, many: w.answers.many }, ends: true, cost: w.answers.many ? 0 : -2 };
             continue;
           }
           const answers = w.answers;
