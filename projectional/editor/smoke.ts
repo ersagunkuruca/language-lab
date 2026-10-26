@@ -416,16 +416,19 @@ async function looseValue() {
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/-- loose, not used yet loose: □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
   if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
-  if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  // Its palette is the side panel's, focused, not a pop-up over the graph
+  // repeating it (BACKLOG E125).
+  if (await p.locator(".ctx-menu").count()) errors.push(`${where}: a pop-up palette covers the graph`);
+  if (!(await p.locator("#f-query").evaluate((e) => e === document.activeElement).catch(() => false))) errors.push(`${where}: the side panel's palette isn't ready to fill it`);
   // It reads as what it is, not as a function named _1 (BACKLOG E124).
   const titles = await p.locator(".p-graph text.rt").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
   if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
-  await p.locator("#m-query").fill('print("hi")');
-  if (!/loose part .* can't have effects/.test(await p.locator(".ctx-menu .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
+  await p.locator("#f-query").fill('print("hi")');
+  if (!/loose part .* can't have effects/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
   // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
-  await p.locator("#m-query").fill("7");
-  await p.locator("#m-query").press("Enter");
+  await p.locator("#f-query").fill("7");
+  await p.locator("#f-query").press("Enter");
   if (!(await p.locator(".p-graph .items > g.faded circle.outp[data-out]").count())) errors.push(`${where}: the loose 7 has no output to wire it in by`);
   await p.keyboard.press("Escape");
   await p.locator('button[data-act="undo"]').first().click();

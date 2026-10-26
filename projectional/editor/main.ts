@@ -1288,6 +1288,20 @@ const SYMBOLS: Record<string, string[]> = {
   "square root": ["√"], sqrt: ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
 };
 
+// A new hole's palette: the side panel's when it shows, not a pop-up over
+// the graph repeating it (BACKLOG E125); a pop-up where you clicked when
+// the panel is out of sight.
+function paletteFor(hole: Id, m: NonNullable<UI["menu"]>) {
+  ui.panel = "node";
+  ui.menu = null;
+  render();
+  const side = document.getElementById("f-query");
+  if (side?.offsetParent && !onePane()) return side.focus();
+  ui.menu = { ...m, target: { kind: "hole", id: hole } };
+  render();
+  document.getElementById("m-query")?.focus();
+}
+
 // What fits a hole, once per check of the code: the right-click menu and
 // the side panel show the same palette, and typing in either redraws both.
 const fitting = new WeakMap<T.Info, Map<Id, T.Filling[]>>();
@@ -1862,10 +1876,7 @@ function menuAction(act: string, target: Id | undefined) {
         revealNext = (id) => id === x.hole || id === x.def;
         commit({ code: x.code, loose: x.of, home: doc.home ?? {}, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(x.def)]: { x: Math.round(m.world.x), y: Math.round(m.world.y) } } } },
           ["drafts.json", "layout.json"], "Added a loose value: fill its hole, then drag its output onto an input. Until then it's kept apart, in drafts.json.");
-        ui.menu = { ...m, target: { kind: "hole", id: x.hole } };
-        render();
-        document.getElementById("m-query")?.focus();
-        return;
+        return paletteFor(x.hole, m);
       }
       const r = T.addStep(doc.code, doc.names.short, info, ui.def, act === "add-before" ? target : undefined);
       if (!r.ok || !m) return void applyT(r);
@@ -1877,10 +1888,7 @@ function menuAction(act: string, target: Id | undefined) {
       const placed = m.blocks ? doc.layout : { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } };
       commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: placed },
         ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "just before this"}: fill its hole, then use it by name.` : r.note);
-      ui.menu = { ...m, target: { kind: "hole", id: hole } };
-      render();
-      document.getElementById("m-query")?.focus();
-      return;
+      return paletteFor(hole, m);
     }
     case "named": return toggleNamed(target!);
     case "named-all": return allNamed(true);
