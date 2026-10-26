@@ -246,6 +246,30 @@ const divisions = [...bigs.flatMap((a, i) => [[a, bigs[(i * 5 + 1) % bigs.length
   [0x800000000000000000000000n * 0x10000n - 1n, 0x800000000000000000000001n]].map((xs) => xs.map(norm));
 const bigPairs = bigs.flatMap((a, i) => [[a, bigs[(i * 7 + 3) % bigs.length]], [a, a], [a, 3n], [-(2n ** 63n), a]].map((xs) => xs.map(norm)));
 
+// BACKLOG C49: a fold over characters named by a let first is fused too.
+test("a fold over characters named by a let first walks the text in WebAssembly, with no list", async () => {
+  const { Lang } = await import("../../projectional/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const { base, baseNames } = await import("../../projectional/src/lang/load.ts");
+  const { infer } = await import("../../projectional/src/lang/infer.ts");
+  const { CONS, INT_OPS, NIL, S, TEXT_OPS } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const count = k.def("count");
+  k.define(count, k.fn(["t"], (t) => k.let("cs", k.call(TEXT_OPS.characters, k.call(S.concat, t, k.lit(""))), (cs) => k.fold(cs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["c", "rest"], results: [null, "r"], body: (_, [, r]) => k.call(INT_OPS.add, r!, k.int(1)) },
+  ]))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  const lowered = lowerScalar(code, info, names, [count], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.match(m.wat, /fold\.characters/);
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(code, info, { print: () => {} });
+  const f = lowered.funcs.find((g) => g.def === count)!;
+  for (const t of ["", "héllo 🎉"]) assert.equal(flat(answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(toWasm(w, t, "text")))), flat(outcome(r, count, [t])));
+});
+
 test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, characters counted, not bytes", async () => {
   const p = texts();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });

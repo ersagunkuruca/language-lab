@@ -928,6 +928,32 @@ test("a fold over range(n) counts down from n − 1, without the list, for Numbe
   assert.match(fn("tails"), /\$range/);
 });
 
+// BACKLOG C49: the same with the list named first, `let xs = range(n)`.
+test("a fold over a range named by a let first is a counted loop too, and a range used twice is still made", async () => {
+  const { INT_OPS: I, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const k = new Lang();
+  const sum = (xs: Id) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.call(I.add, i, r!) },
+  ]);
+  const named = k.def("named"), twice = k.def("twice"), inside = k.def("inside");
+  k.define(named, k.fn(["n"], (n) => k.let("xs", k.call(I.range, n), (xs) => sum(xs))));
+  k.define(twice, k.fn(["n"], (n) => k.let("xs", k.call(I.range, n), (xs) => k.call(I.add, sum(xs), sum(xs)))));
+  // In a branch: still made at most once.
+  k.define(inside, k.fn(["n"], (n) => k.let("xs", k.call(I.range, n), (xs) => k.if(k.call(I.less, n, k.int(3)), k.int(-1), sum(xs)))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...[named, twice, inside].flatMap((d) => [0, 5].map((x) => k.call(d, k.int(x)))))))));
+  const { defs, code, info, source } = await compiledDefs(k, ["main"], "named-range.js");
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want);
+  assert.equal(want[0], "[0, 10, 0, 20, -1, 10]");
+  const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+  assert.doesNotMatch(fn("named"), /range/);
+  assert.doesNotMatch(fn("inside"), /range/);
+  assert.match(fn("twice"), /range/);
+});
+
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
 // Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
 // REVIEW-2026-10-22b.md §2: and one rule for every type, so going through a
