@@ -68,7 +68,9 @@ fields (below).
     back as x (the first precision whose correctly rounded digits do, by
     the C library's printf and strtod), set out as ECMA-262 says;
   - Abort is status 2, with its reason in `lab_reason`; a handler is a
-    label for status 2, as an attempt is for 1.
+    label for status 2, as an attempt is for 1. A program's own effect
+    whose operations never return (C34) is status 2 + its number, with the
+    operation as a cell of the effect's type in `lab_reason`.
 
   A call is now a statement of its own, in order: C may run a call's
   arguments in any order, and a call can drop a cell another argument

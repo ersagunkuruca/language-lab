@@ -109,6 +109,94 @@ DATA-STRUCTURES.md). The chooser decides from the costs of the jobs the
 program uses. Show, equal and compare still see the defined meaning, so
 the output is the same either way.
 
+## How the compiler makes code faster
+
+The compiler doesn't search. It runs a fixed series of passes over the
+checked tree, and each pass recognises some shapes and rewrites them in
+one way. Same program in, same code out, every time. Only one decision is
+made by comparing costs, and it's the representation of a type
+(above): the chooser in `src/lang/represent.ts` looks at which jobs the
+program uses (`put`, `value at`, `match`, …), reads each candidate's
+declared cost per job (`1`, `log n`, `n`, …) and takes the one whose worst
+job is cheapest.
+
+**A worked example: a fold over a range.** Both of these say "add up i²
+for i from 0 to n − 1":
+
+```
+squares(n) =                       squares via let(n) =
+  fold range(n)                      let xs = range(n)
+    nil → 0                          fold xs
+    cons(i) with r → i · i + r         nil → 0
+                                       cons(i) with r → i · i + r
+```
+
+The first compiles to a counted loop, with no list made at all:
+
+```js
+let r = 0;
+for (let i = Math.floor(n) - 1; i >= 0; i--) r = i * i + r;
+```
+
+That's because `foldPlan` (represent.ts) looks at what the fold's input is
+*made by*. `range` has a row in the representation table, `counted`: a
+list 0 … n − 1 stored as just n, whose fold is a loop counting down. The
+rule is the representation's law read backwards: folding `range(n)` gives
+the same answer as running the counted fold on n, so the list in between
+never needs to exist. This is deforestation (Wadler, 1990) in GHC's
+short-cut fusion form (Gill, Launchbury and Peyton Jones, 1993). Here each
+fusion is a row of the table, not a rule of its own, and `characters(t)`
+fuses the same way through the `text` row.
+
+The second one compiles to the same loop. A let whose value is such a
+list (`range`, `characters`), made from names and builtins with no
+effects, and whose name is used once in a place that runs at most once
+(not inside a function or a fold's arm), is first put where its name is
+(compiler/src/inline-lets.ts, BACKLOG C49). So the fold sees what made
+its input. A list used twice is still made once, and walked as a list.
+
+Note that the ordinary fold isn't a generator or an iterator. A fold
+without `Choice` is always a plain loop (COMPILER.md, "Folds are loops").
+Generators are only for code that can give several answers.
+
+**The passes.** Representations are picked before compiling (`src/lang/library-reps.ts`), the rest in `compiler/src/compile.ts`:
+
+| pass | what it recognises | what it does | kind |
+|---|---|---|---|
+| one `+` per type | a generic `+ − · <` at a known type | the type's own operation; a generic definition gets a copy per type (monomorphisation, as MLton does) | fixed rule |
+| representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs | cost-based |
+| derivatives and inverses | `derivative(f)`, `inverse(f, …)` of a known `f` | the derivative's code; a solve | fixed rule |
+| folds | `fold` of `range(n)` or `characters(t)`; a fold that only adds Ints | a counted loop; a loop over the text; an accumulator from the front | fixed rule (the table) |
+| list chains | `keep`- and `map`-shaped steps between `split` and `length` | one loop, no list between | fixed rule |
+| lists as arrays | a list that is only walked whole | kept as a JS array | whole-program analysis |
+| in place | a list nobody else holds | its cells reused (Perceus, PLDI 2021, decided at compile time) | whole-program analysis |
+| calls | a call of itself as the last step | a loop | fixed rule |
+
+The C target adds reference counting with reuse at run time (Perceus;
+Lean 4's reset/reuse), NATIVE.md.
+
+**What about trying many rewrites and keeping the best?** That strategy
+exists. It's called equality saturation: put every way of writing the
+program that the rules allow into one shared structure (an e-graph), then
+extract the cheapest by a cost function (Tate, Stepp, Tatlock and Lerner,
+POPL 2009; the `egg` library, Willsey et al., POPL 2021). Its strength is
+that no rule has to be applied first, so one rewrite can't block a better
+one (the phase-ordering problem). It works well for small algebraic
+rewrites such as `x · 2 → x + x` or loop fusion, and is used in Cranelift
+and in tensor compilers. Its costs are compile time and a cost model,
+since picking the cheapest program when parts are shared is NP-hard.
+
+We don't do that, for two reasons. First, the big wins here come from how
+data is stored (a count instead of a list, a string instead of
+characters, a tree instead of a sorted list), and each of those is one
+representation with laws that the tests check against the evaluator.
+Second, the order problem is small while the passes are few and don't
+compete. Where a real search could pay off later is choosing a
+representation per value instead of per type, since conversions at the
+boundaries make it a small optimisation problem over the data flow
+(NUMBERS.md, "Costs and the chooser"). If that comes, an e-graph is the
+first prior art to try.
+
 ## Where to read more
 
 | about | read |

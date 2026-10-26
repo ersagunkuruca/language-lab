@@ -39,6 +39,7 @@ import { compileSolve } from "./relation.ts";
 import { modeCompiler, type ModeEmit } from "./modes.ts";
 import { INLINE, jsKind } from "./builtins.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
+import { inlineLists } from "./inline-lets.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { expandInverses } from "./inverses.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
@@ -100,6 +101,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   if (inv.expanded.length) {
     code = inv.code;
     names = inv.names;
+    info = infer(code, names);
+  }
+  // A list named first and then walked is put where it's walked, so the
+  // fold or fusion sees what made it (inline-lets.ts, C49).
+  const lets = inlineLists(code, info);
+  if (lets.inlined) {
+    code = lets.code;
     info = infer(code, names);
   }
   // Is this node a text literal below the surrogates? (TEXT_OPS.less)

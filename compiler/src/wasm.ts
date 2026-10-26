@@ -272,6 +272,9 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const fuel = funcs.some((f) => f.spends || budgets(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
   const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0), mspG = pow5G + (ryu ? 1 : 0);
+  // Another operation that never returns (C34) leaves the operation, a
+  // value of its effect's type, in $escape on its way out, as an eqref.
+  const escapes = lowered.escapes.length > 0, escapeG = mspG + (math ? 1 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -340,6 +343,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
     // The math functions' stack pointer, from the end of their page down.
     ...(math ? [[0x7f, 0x01, 0x41, ...s(65536), 0x0b]] : []),
+    ...(escapes ? [[0x6d, 0x01, 0xd0, 0x6d, 0x0b]] : []),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -427,15 +431,15 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, ...on(1, d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b];
       }
       // abort(reason): the reason in its global, then status 2.
-      case "abort": return [...code1(e.reason), 0x24, ...u(reasonG), ...(fl < 0 ? [0x00] : [0x41, 0x02, 0x0c, ...to(d, fl)])];
+      case "abort": return [...code1(e.reason), 0x24, ...u(e.esc ? escapeG : reasonG), ...(fl < 0 ? [0x00] : [0x41, ...s(2 + (e.esc ?? 0)), 0x0c, ...to(d, fl)])];
       case "handle": {
         // As an attempt for status 2, which puts the fuel back as it was
         // when the handler started, as the evaluator does; the reason is the arm's.
         const fuelBack = fuel ? [0x20, ...u(e.save), 0x24, 0x00] : [];
         return [
           ...(fuel ? [0x23, 0x00, 0x21, ...u(e.save)] : []),
-          0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x0c, 0x01, 0x0b, ...on(2, d + 1, fl),
-          ...fuelBack, 0x23, ...u(reasonG), 0x21, ...u(e.reason), ...code(e.arm, d + 1, fl), 0x0b,
+          0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x0c, 0x01, 0x0b, ...on(2 + (e.esc ?? 0), d + 1, fl),
+          ...fuelBack, ...(e.esc ? [0x23, ...u(escapeG), 0xfb, 0x17, ...s(refIndex(lowered.escapes[e.esc - 1]))] : [0x23, ...u(reasonG)]), 0x21, ...u(e.reason), ...code(e.arm, d + 1, fl), 0x0b,
         ];
       }
       case "world": {
@@ -482,7 +486,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, then the math functions' (wasm-math.ts).
     ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
-    ...(fuel || aborts || ryu || math ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -560,13 +564,13 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         ...on(1, d + "  ", ld + 1),
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
-      case "abort": return [w(e.reason), `${d}global.set $reason`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const 2`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
+      case "abort": return [w(e.reason), `${d}global.set $${e.esc ? "escape" : "reason"}`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const ${2 + (e.esc ?? 0)}`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
       case "handle": return [
         ...(fuel ? [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`] : []),
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; aborted`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    br 1)`,
-        ...on(2, d + "  ", ld + 1),
+        ...on(2 + (e.esc ?? 0), d + "  ", ld + 1),
         ...(fuel ? [`${d}  local.get ${local(f, e.save)}`, `${d}  global.set $fuel`] : []),
-        `${d}  global.get $reason`, `${d}  local.set ${local(f, e.reason)}`,
+        ...(e.esc ? [`${d}  global.get $escape`, `${d}  ref.cast ${ty(lowered.escapes[e.esc - 1])}`] : [`${d}  global.get $reason`]), `${d}  local.set ${local(f, e.reason)}`,
         wat(e.arm, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "world": return [
@@ -602,6 +606,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
     ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (memory $math) (i32.const ${MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
+    ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");

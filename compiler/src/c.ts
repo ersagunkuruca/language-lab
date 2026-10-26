@@ -563,10 +563,12 @@ int main(int argc, char **argv) {
           pre.push(`${d}${c};`, ...(e.aborts ? [`${d}if (lab_st) {`, ...out(d + "  ", after), `${d}}`] : []));
           return zero(e.t);
         }
-        // The reason goes in lab_reason, then out with status 2.
+        // The reason goes in lab_reason, then out with status 2; another
+        // operation that never returns (C34) is in lab_reason as a cell of
+        // its effect's type, with status 2 + its number.
         case "abort": {
           const r = ex(e.reason, pre, d, after);
-          pre.push(`${d}lab_reason = ${r};`, `${d}lab_st = 2;`, ...out(d, after));
+          pre.push(`${d}lab_reason = ${r};`, `${d}lab_st = ${2 + (e.esc ?? 0)};`, ...out(d, after));
           return "0";
         }
         case "local": return isCounted(e.i) && after.has(e.i) ? dup(f.locals[e.i], local(e.i)) : local(e.i);
@@ -776,7 +778,7 @@ int main(int argc, char **argv) {
           lines.push(give(ex(e.body, lines, d, keep)));
         });
         if (to !== "return") lines.push(`${d}goto ${done};`);
-        lines.push(`${d}${label}:`, `${d}if (lab_st != 2) {`, ...out(d + "  ", keep), `${d}}`, ...(fuel ? [`${d}lab_fuel = ${local(e.save)};`] : []));
+        lines.push(`${d}${label}:`, `${d}if (lab_st != ${2 + (e.esc ?? 0)}) {`, ...out(d + "  ", keep), `${d}}`, ...(fuel ? [`${d}lab_fuel = ${local(e.save)};`] : []));
         lines.push(`${d}lab_st = 0;`, `${d}${local(e.reason)} = lab_reason;`, `${d}lab_reason = 0;`);
         lines.push(...drops(keep, free(e.arm), after, d), ...block(e.arm, to, d, after));
         if (to !== "return") lines.push(`${d}${done}:;`);
@@ -932,7 +934,7 @@ int main(int argc, char **argv) {
       const ins = f.params.map((t, j) => `${ty(t)} a${j} = ${rd(t)};`);
       const after = counted(f.result) ? drop(f.result, "r") : "";
       const show = f.partial
-        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); ${pr("text", "lab_reason")} lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${pr(f.result, "r")} ${after} }`
+        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); if (lab_st == 2) { ${pr("text", "lab_reason")} } lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${pr(f.result, "r")} ${after} }`
         : `${pr(f.result, "r")} ${after}`;
       return `    case ${i}: { ${ins.join(" ")} ${ty(f.result)} r = ${names.get(i)}(${f.params.map((_, j) => `a${j}`).join(", ")}); ${show} break; }`;
     }).filter(Boolean);

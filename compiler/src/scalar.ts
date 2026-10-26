@@ -50,6 +50,7 @@ import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { ABORT, ABORT_OP, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -72,9 +73,6 @@ const RT: Record<Id, string> = {
   [TEXT_OPS.find]: "text.find", [TEXT_OPS.code]: "text.code", [TEXT_OPS.fromCode]: "text.fromCode",
 };
 
-// What a partial function (`data`) may do besides answer: have no answer,
-// not finish (running out of a budget), or abort.
-const PARTIAL: Id[] = [CHOICE, DIVERGE, ABORT];
 // The world (`data`): the console and files, through the host's World
 // (wasm.ts imports them). `aborts`: it can fail, with a reason.
 export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
@@ -83,8 +81,6 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readFile]: { op: "readFile", aborts: true }, [IO.writeFile]: { op: "writeFile", aborts: true }, [IO.appendFile]: { op: "appendFile", aborts: true },
   [IO.fileExists]: { op: "fileExists", aborts: false }, [IO.listFolder]: { op: "listFolder", aborts: true },
 };
-// Effects a function in WebAssembly may have: the partial ones and the world's.
-const ALLOWED: Id[] = [...PARTIAL, CONSOLE, FILES];
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 export type SType = "f64" | "i32"; // Float64, Bool (0 or 1)
@@ -246,11 +242,14 @@ export type SExpr =
   | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType }
   // abort(reason) (`data`): the computation ends, out to the nearest
   // handler of Abort, which gets the reason in local `reason` and gives
-  // arm's value instead (a match on Abort).
-  | { k: "abort"; reason: SExpr }
+  // arm's value instead (a match on Abort). With `esc`, another operation
+  // that never returns (C34): status 2 + esc, `reason` the operation as a
+  // value of its effect's type (Lowered.escapes[esc - 1]), and the
+  // handler with that `esc` takes it.
+  | { k: "abort"; reason: SExpr; esc?: number }
   // An operation on the world (WORLD_OPS), with its result's type.
   | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType }
-  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number }
+  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
   // once it's known whether it has several answers.
@@ -286,7 +285,7 @@ export const OPS = {
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[] }
 
 class Refused extends Error {}
 
@@ -314,6 +313,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     names = x.names;
     info = infer(code, names);
   }
+  // A list named first and then walked is put where it's walked, so the
+  // fold over `characters` sees it (inline-lets.ts, C49).
+  const lets = inlineLists(code, info);
+  if (lets.inlined) {
+    code = lets.code;
+    info = infer(code, names);
+  }
   // A generic definition (the vectors module's plus, for any record of
   // Float64s) is lowered once per set of types it's called at, the way a
   // C++ template or a Rust generic is: `at` is what its type variables
@@ -333,6 +339,24 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const datas = new Map<string, DType>();
   const fns = new Map<string, FType>();
   const shapes: Shape[] = [];
+  // Effects whose operations all never return (Abort's shape, LANGUAGE.md
+  // "Effects you define"), by their operations: each compiles as Abort does
+  // (C34), with status 2 + its number here (Abort's 0, the rest from 1)
+  // and what it was given in the reason: Abort's reason, or the operation
+  // as a value of the effect's own type (`escapes`, from 1).
+  const opOf = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "def" || !n.body) continue;
+    const td = code.nodes[n.body];
+    if (td?.kind === "typedef" && td.effect && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return !x.returns && !x.later; })) td.variants.forEach((v: Id) => opOf.set(v, n.id));
+  }
+  const escaping = (e: Id) => e === ABORT || [...opOf.values()].includes(e);
+  const escapes: Id[] = [];
+  const escapeOf = (e: Id): number => (e === ABORT ? 0 : (escapes.includes(e) || escapes.push(e), escapes.indexOf(e) + 1));
+  // What a partial function (`data`) may do besides answer: have no answer,
+  // not finish (running out of a budget), or abort; and the world's effects.
+  const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES;
   const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
@@ -341,10 +365,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       // A function that may not finish, have no answer or abort is fine
       // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
-      if (effs.some((e) => !ALLOWED.includes(e))) return null;
+      if (effs.some((e) => !allowedEff(e))) return null;
       const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
       if (params.some((p) => !p) || !result) return null;
-      const partial = effs.some((e) => PARTIAL.includes(e));
+      const partial = effs.some(partialEff);
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
       if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
       return fns.get(key)!;
@@ -362,9 +386,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // another type; one that grows each level (non-regular) never ends.
     if (inside.filter((x) => x === t.id).length >= 8) return null;
     const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
-    if (td?.kind !== "typedef" || td.effect) return null;
+    if (td?.kind !== "typedef" || (td.effect && !(opts.data && escaping(t.id) && t.id !== ABORT))) return null;
     const self = (v: Id) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type, t.id));
-    const many = td.variants.length !== 1 || self(td.variants[0]);
+    const many = td.variants.length !== 1 || self(td.variants[0]) || !!td.effect;
     if (many && !opts.data) return null;
     // The fields' types, with the type's parameters replaced by t's arguments.
     const args = new Map(td.params.map((p, i) => [p, t.args[i]] as const));
@@ -478,8 +502,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = !!opts.data && (all.includes(CHOICE) || all.includes(ABORT) || (!constant && info.divergent.has(def)));
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && PARTIAL.includes(e)) && !(opts.data && (e === CONSOLE || e === FILES)));
+    const partial = !!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES)));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -609,6 +633,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === ABORT_OP && opts.data && n.args.length === 1) return { k: "abort", reason: expr(n.args[0], env, f, false) };
+        if (opts.data && opOf.has(target)) {
+          const e = opOf.get(target)!;
+          return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
+        }
         if (opts.data && WORLD_OPS[target]) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
@@ -657,6 +685,32 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const body = expr(n.scrutinee, env, f, false);
           const arm = expr(arms[0].body, new Map(env).set(arms[0].binds[0], reason), f, false);
           return { k: "handle", body, reason, arm, t, save };
+        }
+        const handled = opts.data && arms.length ? opOf.get(arms[0].variant) : undefined;
+        if (handled && handled !== ABORT && arms.every((a) => opOf.get(a.variant) === handled) && !n.otherwise) {
+          // A handler of another effect whose operations never return (C34):
+          // a case on the operation it was given (the checker wants an arm
+          // for each).
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`handles ${nm(handled)} with a value that is ${OTHER}`);
+          const et = stype({ t: "con", id: handled, args: [] });
+          if (!et || !isData(et)) throw new Refused(`handles ${nm(handled)}, whose operations take ${OTHER}`);
+          if (!et.cases.every((c) => arms.some((a) => a.variant === c.variant))) throw new Refused(`handles only some of ${nm(handled)}'s operations`);
+          const esc = escapeOf(handled);
+          const reason = f.locals.push(et) - 1, save = f.locals.push("f64") - 1, s = f.locals.push(et) - 1;
+          const body = expr(n.scrutinee, env, f, false);
+          const cases = et.cases.map((c, ci): SExpr => {
+            const a = arms.find((x) => x.variant === c.variant)!;
+            let inner = new Map(env);
+            const lets = a.binds.map((b, j) => {
+              const i = f.locals.push(c.fields[j].t) - 1;
+              inner = new Map(inner).set(b, i);
+              return { i, value: { k: "field", rec: { k: "local", i: s }, t: et, c: ci, i: j } as SExpr };
+            });
+            return lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(a.body, inner, f, false));
+          });
+          const arm: SExpr = { k: "case", scrut: { k: "local", i: reason }, s, t: et, arms: cases, result: t };
+          return { k: "handle", body, reason, arm, t, save, esc };
         }
         const st = opts.records ? stype(zonk(n.scrutinee)) : null;
         if (st && isData(st)) {
@@ -1492,5 +1546,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType) };
 }
