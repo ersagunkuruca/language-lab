@@ -20,7 +20,7 @@ node --test test/backwards.test.ts
   have two modes; each node does what the known values allow.
 - **How?** Two pieces of machinery, used together. Data goes through
   **unification**: a constructor run backwards takes its value apart, like
-  Prolog. Float64s become **equations**, handed to the existing solver as
+  Prolog. Numbers become **equations**, handed to the existing solver as
   soon as one can be solved. The search is miniKanren's, a lazy fair
   stream, so an infinite branch can't starve a finite one (miniKanren by
   Friedman, Byrd and Kiselyov, [minikanren.org](http://minikanren.org); the

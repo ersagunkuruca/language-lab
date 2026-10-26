@@ -127,7 +127,7 @@ right-nested (that is its meaning); the view draws a right-nested chain of
 one function as a flat list: a stack of statements, a list literal. No new
 node kind, so the uniformity rule holds (ROADMAP item 1, "Flat sequences").
 
-## Float64 systems and Clifford algebras (2026-10-22)
+## Number systems and Clifford algebras (2026-10-22)
 
 *The idea.* Fractions, big integers, complex numbers, continued fractions
 (including infinite ones), vectors, matrices, tensors, and Clifford algebras
