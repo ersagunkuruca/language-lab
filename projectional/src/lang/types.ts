@@ -111,6 +111,9 @@ export class Subst {
   arith = new Map<number, Arith>();
   // Type variables that may not be Int: a literal's with a fraction part.
   fractional = new Set<number>();
+  // Type variables a whole literal gave: left open, they are Int, not
+  // Float64 (WHAT-NUMBER-MEANS.md, Haskell's defaulting to Integer).
+  whole = new Set<number>();
   // Row tails that may not take a world effect, and rows contained in
   // others (WorldError and Sub above).
   noWorld = new Set<number>();
@@ -127,6 +130,7 @@ export class Subst {
     s.recordFields = this.recordFields;
     s.arith = new Map(this.arith);
     s.fractional = new Set(this.fractional);
+    s.whole = new Set(this.whole);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
     return s;
@@ -234,6 +238,7 @@ export class Subst {
       const kind = this.arith.get(v.v);
       if (kind) this.requireArith(t, kind);
       if (this.fractional.has(v.v)) this.requireFraction(t);
+      if (this.whole.has(v.v) && t.t === "var") this.whole.add(t.v);
       if (this.plain.has(v.v)) this.requirePlain(t);
       return;
     }
@@ -307,7 +312,7 @@ export class WorldError extends EffectError {
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.
 // `fractional` those that may not be Int (a literal's with a fraction part).
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; noWorld?: number[]; subs?: [number, number][] }
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -327,6 +332,7 @@ export function instantiate(sc: Scheme, s: Subst): Type {
   const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
   const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
   for (const v of sc.fractional ?? []) { const t = vm.get(v); if (t?.t === "var") s.fractional.add(t.v); }
+  for (const v of sc.whole ?? []) { const t = vm.get(v); if (t?.t === "var") s.whole.add(t.v); }
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   for (const r of sc.noWorld ?? []) if (rm.has(r)) s.noWorld.add(rm.get(r)!);
   for (const [f, t] of sc.subs ?? []) s.subs.push({ from: { effs: [], tail: rm.get(f) ?? f }, to: { effs: [], tail: rm.get(t) ?? t } });

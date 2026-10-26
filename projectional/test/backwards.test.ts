@@ -13,7 +13,7 @@ import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
 import { bool, fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, HTML_V, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
+import { ARITH, CONS, HTML_V, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -427,5 +427,20 @@ test("waiting equations and checks sleep until what they read is known: a step c
   const answers = [...relate(code, fast, { out: 8 }, { names, spend: () => ++steps < 20000 })];
   assert.deepEqual(answers.map((a) => showTerm(a.values[n])), ["5"]);
   assert.equal(steps, 20000);
+  assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
+});
+
+test("Int sums run backwards asleep too: fibFast over Ints past its first answer (L86b)", () => {
+  const k = new Lang();
+  const fib3 = k.def("fib3"), fast = k.def("fibFast");
+  let n = "";
+  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(ARITH.add, a, b), k.call(ARITH.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (x) => ((n = x), k.call(fib3, k.lit(1), k.lit(1), x))));
+  const code = base(k.code), names = baseNames(k.names);
+  let steps = 0;
+  const started = Date.now();
+  const answers = [...relate(code, fast, { out: 8 }, { names, spend: () => ++steps < 20000 })];
+  // n is found, not left waiting: a check that passes lets what woke with it run.
+  assert.deepEqual(answers.map((a) => [showTerm(a.values[n]), a.residual]), [["5", []]]);
   assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
 });

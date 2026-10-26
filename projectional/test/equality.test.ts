@@ -14,6 +14,7 @@ import { relate } from "../src/lang/relate.ts";
 import { runMain, sameNumber } from "../src/lang/run.ts";
 import { S, SHOW_ANY, STD_IMPL } from "../src/lang/std.ts";
 import { get, type Id } from "../src/model.ts";
+import { NUMBER } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 import { PAIRS } from "./helpers.ts";
 
@@ -21,7 +22,8 @@ test("equal says the same directly, through a generic function, inside data, and
   const k = new Lang();
   const same = k.def("same");
   k.define(same, k.fn(["x", "y"], (x, y) => k.equal(x, y)));
-  const lit = (v: number) => (Number.isFinite(v) ? k.lit(v) : k.call(B.div, k.lit(Number.isNaN(v) ? 0 : 1), k.lit(0)));
+  // At Float64: a whole literal left open would be an Int, compared exactly.
+  const lit = (v: number) => (Number.isFinite(v) ? k.at(NUMBER, v) : k.call(B.div, k.lit(Number.isNaN(v) ? 0 : 1), k.lit(0)));
   const backs: Id[] = [];
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...PAIRS.flatMap(([a, b]) => [

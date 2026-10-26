@@ -12,7 +12,7 @@ import { close, runMain } from "../src/lang/run.ts";
 import { relate, toValue } from "../src/lang/relate.ts";
 import { CONS, INT_OPS as I, NIL, S, SET, SHOW_ANY, TEXT_OPS as T } from "../src/lang/std.ts";
 import * as Int from "../src/lang/int.ts";
-import { INT, STRING } from "../src/lang/types.ts";
+import { INT, NUMBER, STRING } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id) {
@@ -187,7 +187,7 @@ test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Float6
   assert.ok(Int.isInt(5) && Int.isInt(2n ** 30n) && !Int.isInt(2 ** 30) && !Int.isInt(5n));
   const p = program((k) => lines(k, ...[
     k.equal(k.int(1000000000000), k.int(1000000000001)), k.equal(k.int(268435455), k.int(268435456)),
-    k.equal(k.lit(1e12), k.lit(1e12 + 1)), k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(1e17)), k.call(B.sqrt, k.lit(1e17))), k.lit(1e17)),
+    k.equal(k.at(NUMBER, 1e12), k.at(NUMBER, 1e12 + 1)), k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(1e17)), k.call(B.sqrt, k.lit(1e17))), k.lit(1e17)),
   ].map((b) => k.call(SHOW_ANY, b))));
   assert.deepEqual(p.info.errors, []);
   assert.deepEqual(p.run(), ["false", "false", "true", "true"]);

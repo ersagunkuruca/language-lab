@@ -11,7 +11,7 @@ be shown as `Float32` beside it (they already are a representation by that
 name, float32.ts). Plain `Float` would hide the width, and a shader's floats
 are a different width. This note is step 2: what the freed name should mean.
 Ersagun liked it (2026-10-26), and points 1 and 2 of the recommendation are
-built (L86); point 3, a whole literal defaulting to Int, is L86b. See
+built (L86), and so is point 3, a whole literal defaulting to Int (L86b). See
 "What's built" at the end.
 
 ## Where we are
@@ -94,9 +94,12 @@ Credit: Haskell's numeric literals and defaulting (Haskell 2010 report
 - arith.ts turns each literal into its type's own before anything runs:
   an Int literal, a ratio, a complex with 0i, a record with the number in
   every part, or a Float64. The evaluator, running backwards and every
-  compiler target see only literals whose type is fixed. A literal that
-  nothing fixes is still a Float64, as before (L86b changes whole ones to
-  Int).
+  compiler target see only literals whose type is fixed.
+- A number type nothing fixes is Int when a whole literal gave it, and
+  Float64 otherwise (L86b; types.ts `whole`, arith.ts `otherwise`). So
+  `inc(x) = x + 1` on its own is `(Int) -> Int`, and `inc(2.5)` uses a
+  Float64 copy of it. A record of Float64s stays one. Tests that meant
+  Float64 for a bare whole literal now write it at Float64.
 - In the editor, typing `3` where an Int goes gives an Int literal.
 - A GPU program's entry point that is generic over numbers (a plain
   literal makes `halfway(a) = mix(a, 10, 0.5)` one) is lowered at

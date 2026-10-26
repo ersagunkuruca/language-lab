@@ -80,7 +80,8 @@ Together they are the Numbers. One `+ − · <` works on all of them, and
 the checker picks the kind; a type says so as `(a, a) -> a, where a is a
 Number`. A plain literal is some Number too: `3` is an Int where an Int is
 needed, a Float64 where a Float64 is, and so on, while `0.5` can be
-anything but an Int. One that nothing fixes is a Float64. Values don't mix
+anything but an Int. One that nothing fixes is exact where it can be: `2 +
+3` alone is the Int 5, `0.5` alone a Float64. Values don't mix
 by themselves: `as float64`, `whole part`, `as fraction` and `as complex`
 convert. (WHAT-NUMBER-MEANS.md.)
 
@@ -121,7 +122,8 @@ a page's view writing a cell, is a type error, not a surprise at run time.
 
 - **A plain literal is some Number** (2026-10-26): `3` is an Int, a
   Rational, a Float64 or a Complex, whichever its place needs, with no `as
-  float64` in between; `Number` names the family in types and errors.
+  float64` in between; `Number` names the family in types and errors. A
+  whole literal nothing fixes is an Int, so `10^12 · 10^12` is exact.
 - **One `+ − · <` for every kind of number** (it used to be a separate
   set per type), with `Rational` (exact fractions, in lowest terms) and
   `Complex` (re + im·i) as the new kinds. A literal can be written as a

@@ -110,11 +110,15 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const outNames: Names = { ...names };
 
   type Env = Map<number, Type>;
+  // What a number type left open is: Int when a whole literal gave it
+  // (`3`, `n + 1`), else Float64 (Haskell defaults to Integer and Double).
+  const int: Type = { t: "con", id: INT, args: [] };
+  const otherwise = (v: number): Type => (s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v) ? int : num);
   // A type with the definition's variables replaced, and every number-type
-  // variable left open made Float64.
+  // variable left open made its default.
   const close = (t: Type, env: Env): Type => {
     t = s.resolve(t);
-    if (t.t === "var") return env.has(t.v) ? env.get(t.v)! : s.arith.has(t.v) ? num : t;
+    if (t.t === "var") return env.has(t.v) ? env.get(t.v)! : s.arith.has(t.v) ? otherwise(t.v) : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map((a) => close(a, env)) };
     return { t: "fn", params: t.params.map((p) => close(p, env)), ret: close(t.ret, env), eff: s.resolveRow(t.eff) };
   };
@@ -239,7 +243,6 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   };
 
   // A literal at Rational or Complex as its constructor's call.
-  const int: Type = { t: "con", id: INT, args: [] };
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
@@ -308,7 +311,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const n = code.nodes[d];
     if (n?.kind !== "def" || !n.body) continue;
     const sc = schemes.get(d);
-    resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, num])));
+    resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, otherwise(v)])));
   }
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
   // What's left open is Float64 (a definition's own id is its Float64
@@ -318,7 +321,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   // profile lowers those once per record.
   const open = (t: Type): Type => {
     t = s.resolve(t);
-    if (t.t === "var") return s.arith.has(t.v) && !s.numbers.has(t.v) ? num : t;
+    if (t.t === "var") return s.arith.has(t.v) && !s.numbers.has(t.v) ? otherwise(t.v) : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(open) };
     return { t: "fn", params: t.params.map(open), ret: open(t.ret), eff: s.resolveRow(t.eff) };
   };
@@ -326,9 +329,9 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   for (const [d, sc] of schemes) {
     const vars = constrained(sc).filter((v) => !(sc.numbers ?? []).includes(v));
     if (!vars.length) continue;
-    const { arith: _a, ordered: _o, fractional: _f, ...rest } = sc;
+    const { arith: _a, ordered: _o, fractional: _f, whole: _w, ...rest } = sc;
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !vars.includes(v));
-    schemes.set(d, { ...rest, vars: left(sc.vars), type: close(sc.type, new Map(vars.map((v) => [v, num]))),
+    schemes.set(d, { ...rest, vars: left(sc.vars), type: close(sc.type, new Map(vars.map((v) => [v, otherwise(v)]))),
       ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
   }
 

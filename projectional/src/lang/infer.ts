@@ -371,6 +371,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (ordered.length) sc.ordered = ordered;
       const fractional = [...fv.vars].filter((v) => s.fractional.has(v));
       if (fractional.length) sc.fractional = fractional;
+      const whole = [...fv.vars].filter((v) => s.whole.has(v));
+      if (whole.length) sc.whole = whole;
       const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
       if (noWorld.length) sc.noWorld = noWorld;
       const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
@@ -483,6 +485,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (!n.of && typeof n.value === "number") {
           const v = s.fresh(false, false, "arith") as { t: "var"; v: number };
           if (!Number.isInteger(n.value)) s.fractional.add(v.v);
+          else s.whole.add(v.v);
           t = v;
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
         // A literal at Rational is a whole number or top/bottom; at
