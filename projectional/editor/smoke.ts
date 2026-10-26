@@ -361,8 +361,8 @@ async function looseParts() {
   if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
   // By the part's own last node's output, as the status says (BACKLOG E120):
-  // the faded output furthest right.
-  const outs = await p.locator(".p-graph .items > g.faded circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
+  // the faded output furthest right, of a node, not of a lone literal (E122).
+  const outs = await p.locator(".p-graph .items > g.faded:not(:has(rect.pill)) circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
   const out = outs.sort((a, b) => b.x - a.x)[0];
   if (!out) { errors.push(`${where}: the loose part's nodes have no output to drag`); return p.close(); }
   const hole = (await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").first().boundingBox())!;
@@ -417,7 +417,12 @@ async function looseValue() {
   if (!/-- loose, not used yet .*_1 = □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
   if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
   if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
+  await p.locator("#m-query").fill("7");
+  await p.locator("#m-query").press("Enter");
+  if (!(await p.locator(".p-graph .items > g.faded circle.outp[data-out]").count())) errors.push(`${where}: the loose 7 has no output to wire it in by`);
   await p.keyboard.press("Escape");
+  await p.locator('button[data-act="undo"]').first().click();
   await p.locator('button[data-act="undo"]').first().click();
   if ((await p.locator(".p-text .body").innerText()).includes("-- loose")) errors.push(`${where}: Undo left it`);
   await p.close();
