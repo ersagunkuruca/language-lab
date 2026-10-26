@@ -13,6 +13,9 @@ import { pinsOf } from "../src/lang/signatures.ts";
 import { showType, type Type } from "../src/lang/types.ts";
 import { fillHole } from "../src/lang/refactor.ts";
 import { sweep } from "./helpers.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { base } from "../src/lang/load.ts";
+import { B } from "../src/prelude.ts";
 
 for (const name of ["calculus", "backwards", "queens"]) {
   test(`every filling the palette offers in ${name} type-checks`, () => {
@@ -92,4 +95,21 @@ test("at a hole in a held definition, the palette offers only what keeps its typ
   assert.ok(!offered.some((f) => "target" in f && f.target === die), "die() would give it Random");
   const bad = offered.filter((f) => infer(fillHole(code, {}, seed, f).code, p.pres.names, undefined, opts).errors.length > info.errors.length);
   assert.deepEqual(bad.map((f) => JSON.stringify(f)), []);
+});
+
+// A new value's type is open, so a function written in place fits there
+// too: a local helper can be started at a let (BACKLOG E128).
+test("where any type goes, a new function is offered, and fills", () => {
+  const k = new Lang();
+  let hole = "";
+  const f = k.def("f");
+  k.define(f, k.fn(["x"], (x) => k.let("helper", (hole = k.hole()), () => k.call(B.add, x, k.lit(1)))));
+  const code = base(k.code), info = infer(code);
+  const lambdas = fillings(code, info, hole).filter((g) => g.kind === "lambda");
+  assert.deepEqual(lambdas.map((g) => (g as { arity: number }).arity), [1, 2]);
+  for (const g of lambdas) assert.equal(infer(fillHole(code, {}, hole, g).code).errors.length, info.errors.length);
+  // Where the type is fixed, it isn't: x + □ takes a number.
+  const sum = Object.values(code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (code.nodes[n.fn] as NodeOf<"ref">).target === B.add)!;
+  const fixed = replace(code, sum.args[1], () => ({ kind: "hole" }));
+  assert.ok(!fillings(fixed, infer(fixed), sum.args[1]).some((g) => g.kind === "lambda"));
 });

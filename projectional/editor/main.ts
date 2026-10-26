@@ -1336,7 +1336,10 @@ const fitting = new WeakMap<T.Info, Map<Id, T.Filling[]>>();
 function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
   let m = fitting.get(info);
   if (!m) fitting.set(info, (m = new Map()));
-  if (!m.has(hole)) m.set(hole, T.fillings(doc.code, info, hole));
+  // A loose part's own top reads a function there as its inputs (drafts.ts),
+  // so a function written in place goes at a value, not there.
+  const top = Object.keys(doc.loose ?? {}).some((d) => (doc.code.nodes[d] as NodeOf<"def"> | undefined)?.body === hole);
+  if (!m.has(hole)) m.set(hole, T.fillings(doc.code, info, hole).filter((f) => !(top && f.kind === "lambda")));
   return m.get(hole)!;
 }
 
