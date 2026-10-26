@@ -90,7 +90,8 @@ test("the types: reading is Cells, writing is Update (a world effect), and a for
   const reading = k.def("reads in a search");
   k.define(reading, k.fn(["c"], (c) => k.call(S.all, k.thunk(() => k.call(B.add, k.call(CELL_OPS.read, c), k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))));
   const p = check(k);
-  assert.equal(p.type(counter), "() -[Cells]-> Cell Float64");
+  // cell(0): a cell of some Number, which its users say (WHAT-NUMBER-MEANS.md).
+  assert.equal(p.type(counter), "() -[Cells]-> Cell a");
   assert.equal(p.type(bump), "(Cell Float64) -[Cells, Diverge, Update]-> Unit");
   assert.equal(p.type(twice), "(Cell Float64) -[Cells]-> Cell Float64");
   assert.equal(p.type(reading), "(Cell Float64) -[Cells, Diverge]-> List Float64");

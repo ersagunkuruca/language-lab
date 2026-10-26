@@ -6,13 +6,13 @@ How to read a type: `(Float64, Float64) -> Float64` takes two Float64s and gives
 
 ## Numbers
 
-There are four kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Each literal has one kind: 3 is a Float64 unless it is written as an Int, a fraction like 1/2, or a Complex. Kinds never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
+There are four kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int, and one that nothing fixes is a Float64. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
 
-- **add** : `(a, a) -> a`. a + b, at any number type: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).
-- **subtract** : `(a, a) -> a`. a − b, at any number type.
-- **multiply** : `(a, a) -> a`. a · b, at any number type. At Complex it's the complex product.
-- **negate** : `(a) -> a`. −a, at any number type.
-- **less than** : `(a, a) -> Bool`. a < b, at any ordered number type (not Complex).
+- **add** : `(a, a) -> a`. a + b, at any Number: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).
+- **subtract** : `(a, a) -> a`. a − b, at any Number.
+- **multiply** : `(a, a) -> a`. a · b, at any Number. At Complex it's the complex product.
+- **negate** : `(a) -> a`. −a, at any Number.
+- **less than** : `(a, a) -> Bool`. a < b, at any Number with < (not Complex).
 - **at most** : `(a, a) -> Bool`. a ≤ b: not b < a.
 - **more than** : `(a, a) -> Bool`. a > b: b < a.
 - **at least** : `(a, a) -> Bool`. a ≥ b: not a < b.

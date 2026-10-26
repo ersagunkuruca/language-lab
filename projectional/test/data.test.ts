@@ -60,9 +60,17 @@ test("Int division rounds down; dividing by zero and a negative power have no an
   assert.deepEqual(p.run(), ["-4 1", "none", "none", "none"]);
 });
 
-test("Int and Float64 don't mix without a conversion", () => {
-  const bad = program((k) => lines(k, k.call(I.show, k.call(I.add, k.int(1), k.lit(2)))));
-  assert.equal(bad.info.errors.length, 1);
+// WHAT-NUMBER-MEANS.md (L86): a plain 2 is some Number, so it is an Int
+// where an Int goes; 2.5 isn't one, and an Int's value never becomes a
+// Float64 by itself.
+test("Int and Float64 don't mix without a conversion, and a plain whole literal is an Int where one goes", () => {
+  const two = program((k) => lines(k, k.call(I.show, k.call(I.add, k.int(1), k.lit(2)))));
+  assert.deepEqual(two.info.errors, []);
+  assert.deepEqual(two.run(), ["3"]);
+  const bad = program((k) => lines(k, k.call(I.show, k.call(I.add, k.int(1), k.lit(2.5)))));
+  assert.deepEqual(bad.info.errors.map((e) => e.message), ["add needs an Int here, and a number with a fraction part can't be one"]);
+  const mixed = program((k) => lines(k, k.call(S.show, k.call(B.add, k.int(1), k.lit(2)))));
+  assert.equal(mixed.info.errors.length, 1);
   const ok = program((k) => lines(k,
     orNone(k, () => k.call(I.show, k.call(I.add, k.int(1), k.call(I.wholePart, k.lit(2.7))))),
     k.call(S.show, k.call(I.toNumber, k.int(7))),

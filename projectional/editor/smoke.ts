@@ -180,7 +180,7 @@ async function swapAndUndo() {
   await p.locator('[data-menu="swap"]').click();
   // A generic function says what its a stands for (BACKLOG E71), once (E72).
   const subtracts = await p.locator(".ctx-menu .palette .opt", { hasText: /^subtract/ }).allInnerTexts();
-  if (subtracts.length !== 1 || !subtracts[0].includes("where a is a number type")) errors.push(`${where}: the palette lists subtract as ${JSON.stringify(subtracts)}`);
+  if (subtracts.length !== 1 || !subtracts[0].includes("where a is a Number")) errors.push(`${where}: the palette lists subtract as ${JSON.stringify(subtracts)}`);
   await p.locator("button", { hasText: /^subtract/ }).first().click();
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();

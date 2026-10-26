@@ -83,17 +83,17 @@ test("a definition with no literal works on every number type, and its type says
   assert.equal(showType(sc(p.defs.vecTwice).type, p.names), "Vec");
   // Printed, the type says what a may be.
   const shown = (d: Id) => showType(sc(d).type, p.names, schemeArith(sc(d)));
-  assert.equal(shown(p.defs.twice), "(a) -> a where a is a number type");
-  assert.equal(shown(p.defs.smaller), "(a, a) -> a where a is a number type with <");
+  assert.equal(shown(p.defs.twice), "(a) -> a where a is a Number");
+  assert.equal(shown(p.defs.smaller), "(a, a) -> a where a is a Number with <");
   assert.equal(shown(p.defs.intTwice), "Int");
-  assert.equal(showType(p.info.subst.zonk(p.info.typeOf.get(p.defs.spread)!), p.names, p.info.subst.arith), "(a, a) -> a where a is a number type");
+  assert.equal(showType(p.info.subst.zonk(p.info.typeOf.get(p.defs.spread)!), p.names, p.info.subst.arith), "(a, a) -> a where a is a Number");
 });
 
 test("text, a record that isn't all Float64s, and < on a record are type errors", () => {
   const p = program();
-  assert.match(errorAt(p, p.defs.textTwice).join("; "), /Text isn't number types|works only on number types/);
-  assert.match(errorAt(p, p.defs.namedTwice).join("; "), /number types/);
-  assert.match(errorAt(p, p.defs.vecSmaller).join("; "), /Float64s or Ints/);
+  assert.match(errorAt(p, p.defs.textTwice).join("; "), /Text isn.t a Number|works only on a Number/);
+  assert.match(errorAt(p, p.defs.namedTwice).join("; "), /a Number \(/);
+  assert.match(errorAt(p, p.defs.vecSmaller).join("; "), /a Number with </);
 });
 
 test("resolved by type: Int's own operations at Int, Float64's at Float64, part by part on a record", () => {
@@ -110,10 +110,11 @@ test("resolved by type: Int's own operations at Int, Float64's at Float64, part 
   assert.ok(targets(intCopy).includes(INT_OPS.add));
   assert.ok(targets(copies.find((d) => r.names[d] === "twice at Vec")!).includes(S.zipParts));
   assert.ok(targets(p.defs.intTwice).includes(intCopy));
-  // A definition with no generic operation comes back as it was.
+  // A definition with no generic operation, and no literal that is just
+  // some Number, comes back as it was.
   const k = new Lang();
   const d = k.def("plain");
-  k.define(d, k.lit(1));
+  k.define(d, k.at(NUMBER, 1));
   const code = base(k.code);
   const info = infer(code, baseNames(k.names));
   const back = resolveArithmetic(code, info).code;
