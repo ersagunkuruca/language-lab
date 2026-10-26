@@ -14,7 +14,6 @@ import { std } from "../src/lang/std.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { buildVectors } from "../src/lang/vectors-source.ts";
 import { buildHtml } from "../src/lang/html-source.ts";
-import { buildTreesModule } from "../src/lang/trees-source.ts";
 import { verify } from "../src/lang/modules.ts";
 
 const here = import.meta.dirname;
@@ -35,12 +34,6 @@ const hwrong = verify(h, merge(prelude, std, m.code), true);
 if (hwrong) throw new Error(`html: ${hwrong}`);
 save(join(here, "html.json"), h);
 console.log(`html: ${h.code.defs.length} definitions, ${h.exports.length} offered, ${Object.keys(h.code.nodes).length} nodes`);
-
-const t = buildTreesModule(m);
-const twrong = verify(t, merge(prelude, std, m.code), true);
-if (twrong) throw new Error(`trees: ${twrong}`);
-save(join(here, "trees.json"), t);
-console.log(`trees: ${t.code.defs.length} definitions, ${t.representations!.length} representations, ${Object.keys(t.code.nodes).length} nodes`);
 
 // Examples, with the library just written.
 const { adoptLibrary } = await import("../src/lang/library.ts");
