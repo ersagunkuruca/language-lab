@@ -17,29 +17,23 @@ one library function.
 
 ## How a table is written: nothing new
 
-A table is a list of entries, each "this field times that field gives this
-sign of that field". A field is already a value: `(z) => z.im` reads it and
-`set` (std.ts) writes it, finding the field from the function. So a table
-is ordinary data:
+A table is a list of lines, each saying what two basis elements multiply
+to, written as values of the type itself (std.ts `Table entry`):
 
 ```
-type Entry a | entry(left: (a) -> Float64, right: (a) -> Float64,
-                     sign: Float64, gives: (a) -> Float64)
-
-complex table = [entry(re, re, 1, re), entry(re, im, 1, im),
-                 entry(im, re, 1, im), entry(im, im, -1, re)]
+complex table = [times(1, 1, 1), times(1, i, i), times(i, 1, i), times(i, i, −1)]
 ```
 
-and the product is a fold over it, written in the language:
+and the product is a fold over it, written in the language (the prelude's
+`table product`): the sum over the lines of a's part along the left
+element, times b's part along the right one, times what they give. A part
+along a basis element is the two records' parts multiplied pairwise and
+added (`total(zip parts(·, a, e))`), which reads off a coordinate because
+the basis is the records with one part 1. Because a line gives a whole
+element, a product that is a sum of basis elements needs nothing more.
 
-```
-table product(table, a, b) =
-  fold table from zero: r, entry(f, g, s, h) →
-    set(h, r, h(r) + s · f(a) · g(b))
-```
-
-Dual numbers are the same with `ε · ε` left out (a zero product is no
-entry), and quaternions are sixteen entries. `Cl(p, q, r)` is a definition
+Dual numbers are the same with `ε · ε` left out (a zero product needs no
+line), and quaternions are sixteen entries. `Cl(p, q, r)` is a definition
 that builds the table from the signature (blades as bit masks, a sign from
 counting swaps, as ganja.js does). Nothing here is a new node kind.
 
@@ -88,8 +82,9 @@ and wrong for quaternions.
 1. The rule from the answer (for 1: an optional `ops` on typedef nodes,
    which the checker and arith.ts read; PRELUDE_AT becomes Rational's and
    Complex's entries).
-2. `Entry`, `table product`, and Complex's table in the prelude, tested
-   against `multiply complex`.
+2. `Table entry`, `table product`, and Complex's table in the prelude,
+   tested against `multiply complex`, evaluated and compiled. **Built
+   (L40d).**
 3. Dual numbers as a table, tested against derive.ts's derivatives (L45).
 4. Quaternions as a table, then `Cl(p, q, r)` (L42, L43).
 5. L41 with lane C: tables expanded before the GPU, so all of these run in

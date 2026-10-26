@@ -173,3 +173,35 @@ test("the Mandelbrot shader: one + and · at Complex, lowered to WGSL whole", as
   assert.deepEqual(at(-1, -1), [0, 0, 0]);
   assert.ok(at(0, 0.5).some((v) => v > 0.2));
 });
+
+// L40b step 2 (ALGEBRA-TABLES.md): Complex's · is its multiplication table
+// given to table product, which is written in the language.
+test("table product with complex table is the complex product, evaluated and compiled", async () => {
+  const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const z = (re: number, im: number) => k.call(COMPLEX_V, k.lit(re), k.lit(im));
+  const pairs: [number, number, number, number][] = [[1, 2, 3, -4], [0.5, 0, 0, 1], [-2, 1.5, 2, 0.25], [0, 0, 7, 7]];
+  const defs = pairs.map(([a, b, c, d], i) => {
+    const def = k.def(`pair ${i}`);
+    k.define(def, k.thunk(() => k.list(k.call(lib("table product"), k.x(lib("complex table")), z(a, b), z(c, d)), k.call(ARITH.mul, z(a, b), z(c, d)))));
+    return def;
+  });
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.filter((e) => defs.some((d) => subtree(code, d).includes(e.id))).map((e) => e.message), []);
+  assert.equal(showType(info.schemes.get(lib("table product"))?.type ?? info.typeOf.get(lib("table product"))!, names), "(List (Table entry a), a, a) -> a");
+  const r = makeRunner(code, info, { print: () => {} });
+  const items = (v: Value): Value[] => { const out: Value[] = []; let l = v as { fields: Value[] }; while (l.fields.length) { out.push(l.fields[0]); l = l.fields[1] as { fields: Value[] }; } return out; };
+  const run = (v: Value): Value => { if (typeof v !== "function") return v; for (const x of r.call(v)) return x; throw new Error("no value"); };
+  for (const d of defs) {
+    const [table, direct] = items(run(r.value(d))) as { fields: number[] }[];
+    table.fields.forEach((x, i) => assert.ok(Math.abs(x - direct.fields[i]) < 1e-12, `${names[d]}: ${table.fields} vs ${direct.fields}`));
+  }
+  const path = join(mkdtempSync(join(tmpdir(), "table-")), "table.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: defs.map((d) => names[d]) }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
+  for (const d of defs) {
+    const [table, direct] = items(compiled[names[d]]()) as { fields: number[] }[];
+    table.fields.forEach((x, i) => assert.ok(Math.abs(x - direct.fields[i]) < 1e-12, `compiled ${names[d]}`));
+  }
+});

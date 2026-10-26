@@ -23,6 +23,7 @@ export const NOTES: Comments = {
   "std.input": "Where a sound's samples come from: the microphone, or a recording at an address.",
   "std.attribute": "Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.",
   "std.html": "A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.",
+  "std.tableEntry": "One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.",
   "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
   "std.complex": "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
   "std.order": "What compare answers: before, same or after.",
