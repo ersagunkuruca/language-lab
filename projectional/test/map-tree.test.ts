@@ -14,7 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { choose, jobProblem, represent } from "../src/lang/represent.ts";
 import { withMapTree } from "../src/lang/map-tree.ts";
-import { CONS, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { CONS, NIL, PAIR_V, S, SET_TYPE, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -57,7 +57,7 @@ const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, str
 test("each tree job agrees with the definition through meaning, and the tree stays balanced", () => {
   const k = new Lang(LIBRARY.code);
   const code0 = base(k.code), names0 = baseNames(k.names);
-  const w = withMapTree(code0, names0);
+  const w = withMapTree(code0, names0, lib);
   const info = infer(w.code, w.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...w.insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(jobProblem(info, w.rep, w.names), null);
@@ -102,7 +102,7 @@ test("each tree job agrees with the definition through meaning, and the tree sta
 
 test("the chooser takes the tree for a word count; the represented program prints what the definition prints", () => {
   const p = program(300);
-  const w = withMapTree(p.code, p.names);
+  const w = withMapTree(p.code, p.names, lib);
   const pick = choose(w.code, p.main, [w.spec, w.rep]);
   assert.equal(pick.rep.name, "weight-balanced tree");
   const plain = printed(p.code, p.names, p.main);
@@ -113,7 +113,7 @@ test("the chooser takes the tree for a word count; the represented program print
 
 test("on 1200 words, 400 of them different, the tree is faster than the sorted list", () => {
   const p = program(1200);
-  const w = withMapTree(p.code, p.names);
+  const w = withMapTree(p.code, p.names, lib);
   const repd = represent(w.code, p.own, w.rep);
   const time = (f: () => string[]) => { const t = performance.now(); const out = f(); return { out, ms: performance.now() - t }; };
   const a = time(() => printed(p.code, p.names, p.main));
@@ -121,4 +121,55 @@ test("on 1200 words, 400 of them different, the tree is faster than the sorted l
   assert.deepEqual(b.out, a.out);
   console.log(`# sorted list ${a.ms.toFixed(0)} ms, tree ${b.ms.toFixed(0)} ms`);
   assert.ok(b.ms < a.ms, `tree ${b.ms} ms, list ${a.ms} ms`);
+});
+
+test("the library publishes both trees as representation rows, and a program stored on them prints the same", () => {
+  const [mapTree, mapList, setTree, setList] = LIBRARY.reps;
+  assert.deepEqual([mapTree.name, mapList.name, setTree.name, setList.name], ["weight-balanced tree", "sorted list", "weight-balanced tree", "sorted list"]);
+  assert.equal(mapTree.canonical, false);
+  // Every job the rows name is in the library.
+  for (const r of LIBRARY.reps) for (const d of [r.type, r.meaning, ...Object.values(r.impl), ...Object.values(r.byType ?? {})]) if (d) assert.ok(LIBRARY.code.nodes[d], `${r.name} names ${d}`);
+  const k = new Lang(LIBRARY.code);
+  const L = lib;
+  const nums = (xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
+  const a = k.call(L("as set"), nums([5, 1, 4, 1, 3])), b = k.call(L("as set"), nums([4, 9, 1]));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("items of"), k.call(L("set union"), a, b)))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("items of"), k.call(L("set intersection"), a, b)))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("items of"), k.call(L("set difference"), a, b)))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("has item"), k.call(L("remove item"), a, k.lit(4)), k.lit(4)))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("keys of"), k.call(L("put"), k.call(L("as map"), k.list(k.call(PAIR_V, k.lit("b"), k.lit(2)))), k.lit("a"), k.lit(1))))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const plain = printed(code, names, main);
+  assert.deepEqual(plain, ["[1, 3, 4, 5, 9]", "[1, 4]", "[3, 5]", "false", '["a", "b"]']);
+  const stored = represent(represent(code, [main], mapTree), [main], setTree);
+  assert.deepEqual(printed(stored, names, main), plain);
+});
+
+test("byType: equal, show and compare on trees go through the meaning", () => {
+  const [mapTree] = LIBRARY.reps;
+  const info = infer(LIBRARY.code, LIBRARY.names, undefined, checkOptions);
+  const r = makeRunner(LIBRARY.code, info, { print: () => {}, names: LIBRARY.names });
+  const call = (d: Id, ...args: Value[]) => first(r.call(r.value(d), ...args));
+  const put = mapTree.impl[lib("put")];
+  let x = r.value(mapTree.impl[lib("empty map")]), y = x;
+  // Two keys: the first put is the root, so the order shows in the shape.
+  for (const kk of [2, 1]) x = call(put, x, kk, kk * 10)!;
+  for (const kk of [1, 2]) y = call(put, y, kk, kk * 10)!;
+  // Different shapes, one meaning.
+  assert.notDeepEqual(x, y);
+  assert.equal((call(mapTree.byType!.equal, x, y) as Data).tag, "std.bool.true");
+  assert.equal((call(mapTree.byType!.compare, x, y) as Data).tag, "std.order.same");
+  assert.equal(call(mapTree.byType!.show, x), "map of([pair(1, 10), pair(2, 20)])");
+  const setTree = LIBRARY.reps.find((rep) => rep.of === SET_TYPE && rep.byType)!;
+  const add = setTree.impl[lib("add item")];
+  let a = r.value(setTree.impl[lib("empty set")]), b = a;
+  for (const kk of [2, 1]) a = call(add, a, kk)!;
+  for (const kk of [1, 2]) b = call(add, b, kk)!;
+  assert.notDeepEqual(a, b);
+  assert.equal((call(setTree.byType!.equal, a, b) as Data).tag, "std.bool.true");
+  assert.equal((call(setTree.byType!.compare, a, b) as Data).tag, "std.order.same");
+  assert.equal(call(setTree.byType!.show, a), "set of([1, 2])");
 });

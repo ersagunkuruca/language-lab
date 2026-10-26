@@ -13,6 +13,7 @@
 import { freshId, subtree, type Code, type Id, type Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
+import { PRELUDE } from "./library.ts";
 import { withMapTree } from "./map-tree.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { COMPARE, MAP, S, SHOW_ANY } from "./std.ts";
@@ -30,7 +31,7 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = []): Chosen {
   const none = { code, names, chosen: [], insiders: [] };
   if (asked.some((r) => r.of === MAP)) return none;
-  const w = withMapTree(code, names);
+  const w = withMapTree(code, names, (name) => PRELUDE.exports.find((d) => PRELUDE.names[d] === name)!);
   if (!uses(w.code, main, [w.spec, w.rep]).length) return none;
   if (choose(w.code, main, [w.spec, w.rep]).rep !== w.rep || inside(info, defs, code, main)) return none;
   const meaning = w.rep.meaning!;
