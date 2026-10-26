@@ -47,6 +47,17 @@ for (const name of ["queens", "algebra", "relations", "backwards", "calculus", "
   });
 }
 
+// A program that runs relations at run time carries the interpreter's copy
+// of itself: what it reaches, not every library module.
+test("backwards: the compiled program's own copy holds what it reaches, not the html module", async () => {
+  const { HTML_MODULE } = await import("../../projectional/src/lang/library.ts");
+  const source = compileProgram("backwards", ["main"], runtime);
+  assert.match(source, /\$loadProgram\(/);
+  const unused = HTML_MODULE.code.defs.filter((d) => source.includes(JSON.stringify(d)));
+  assert.deepEqual(unused, []);
+  assert.ok(source.length < 150_000, `${source.length} characters`);
+});
+
 test("queens: a Choice function compiles to a generator with the same stream of answers", async () => {
   const p = load("queens");
   const defs = await compiled("queens", ["queens"]);
