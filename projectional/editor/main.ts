@@ -421,6 +421,7 @@ function newProgram() {
   // Its hole selected, with the palette showing, whichever tab was open.
   ui.selected = T.nextHole(doc.code, ui.def, ui.def) ?? null;
   ui.panel = "node";
+  if (onePane()) ui.pane = "side";
   render();
 }
 
@@ -2431,11 +2432,13 @@ function blocksHit(t: EventTarget | null): Id | null {
 function select(id: Id | null) {
   // Re-rendering on a repeat click would detach the element before its
   // dblclick fires, and go-to-definition is a dblclick.
-  if (ui.selected === id) return;
-  if (ui.selected !== id) { ui.mode = null; ui.query = ""; }
+  // One pane at a time: a hole's palette is in the side pane, so show it,
+  // also when the hole was selected already (a new program's is).
+  const toPalette = !!id && doc.code.nodes[id]?.kind === "hole" && onePane() && ui.pane !== "side";
+  if (ui.selected === id) { if (toPalette) { ui.pane = "side"; render(); } return; }
+  ui.mode = null; ui.query = "";
   ui.selected = id;
-  // One pane at a time: a hole's palette is in the side pane, so show it.
-  if (id && doc.code.nodes[id]?.kind === "hole" && onePane()) ui.pane = "side";
+  if (toPalette) ui.pane = "side";
   render();
 }
 
