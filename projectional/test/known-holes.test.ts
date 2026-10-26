@@ -1,19 +1,21 @@
-// Holes found by the reviews (REVIEW.md, then REVIEW-2026-10-22b.md). Each
-// test states what *should* happen. One still open is marked todo, so it
-// runs and reports without failing the suite; when a fix lands, the todo is
-// dropped and the test guards it. Every hole from the first review is
-// fixed; the open ones are the second review's, at the end.
+// Holes found by the reviews (REVIEW.md, REVIEW-2026-10-22b.md, then
+// REVIEW-2026-10-26.md). Each test states what *should* happen. One still
+// open is marked todo, so it runs and reports without failing the suite;
+// when a fix lands, the todo is dropped and the test guards it. Every hole
+// from the first two reviews is fixed; the open ones are the third
+// review's ("R3"), at the end.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get, type Code, type Id, type NodeData } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { base, baseNames } from "../src/lang/load.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { relate } from "../src/lang/relate.ts";
 import { runMain } from "../src/lang/run.ts";
-import { CELL_OPS, CONS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
-import { DIVERGE } from "../src/lang/types.ts";
+import { CELL_OPS, COMPARE, CONS, NIL, RATIO, S, SET_V, SHOW_ANY } from "../src/lang/std.ts";
+import { DIVERGE, RATIONAL_TYPE } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id) {
@@ -183,4 +185,69 @@ test("R2 §2.1 running a one-item `one of` backwards ends", () => {
     [...relate(code, f, { out }, { spend: () => ++steps < 10000 })];
     assert.ok(steps < 10000, `f() = ${out} backwards was still searching after 10,000 steps`);
   }
+});
+
+// ---------------------------------------------------------------- the third review (REVIEW-2026-10-26.md)
+
+// A main over the library (maps, sets, sort, fractions): its type errors and
+// what it prints, one line per step.
+const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+function printed(steps: (k: Lang, L: typeof lib) => Id[]) {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(...steps(k, lib).map((x) => k.call(S.print, k.call(SHOW_ANY, x))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const out: string[] = [];
+  if (!info.errors.length) runMain(code, info, main, { print: (s) => out.push(s) });
+  return { errors: info.errors, out };
+}
+const nums = (k: Lang, xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
+
+test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", { todo: "two Numbers that happen to be whole compare exactly, so the tolerance vanishes above 2^53/1e9" }, () => {
+  const sq = (k: Lang, x: number) => k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(x)), k.call(B.sqrt, k.lit(x))), k.lit(x));
+  // Today: ["true", "false"]. sqrt(1e17)² is 1.0000000000000002e17, a whole
+  // float, so it's compared exactly; sqrt(2)² isn't whole, so it's near.
+  assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["true", "true"]);
+});
+
+test("R3 §1.2 a set of Numbers has the same size whatever order its items come in", { todo: "equal on Numbers isn't transitive, and as set / sort assume it is" }, () => {
+  // Each neighbour is within 1e-9 of the next; the two ends are not.
+  const a = 1000.5, d = 1.5e-6;
+  const size = (k: Lang, L: typeof lib, xs: number[]) => k.call(L("set size"), k.call(L("as set"), nums(k, xs)));
+  const { out } = printed((k, L) => [size(k, L, [a, a + d, a + 2 * d]), size(k, L, [a + d, a, a + 2 * d]), size(k, L, [a, a + 2 * d, a + d])]);
+  // Today: ["2", "2", "1"].
+  assert.equal(new Set(out).size, 1, `sizes by order: ${out.join(", ")}`);
+});
+
+test("R3 §1.3 NaN, which 0/0 and sqrt(−1) make in typed code, doesn't break compare or sets", { todo: "compare(NaN, 1) and compare(1, NaN) are both after; a set can't find the NaN it holds" }, () => {
+  const nan = (k: Lang) => k.call(B.div, k.lit(0), k.lit(0));
+  const { errors, out } = printed((k, L) => [
+    k.call(COMPARE, nan(k), k.lit(1)), k.call(COMPARE, k.lit(1), nan(k)),
+    k.call(L("has item"), k.call(L("as set"), k.list(nan(k), k.lit(1))), nan(k)),
+  ]);
+  assert.deepEqual(errors, []);
+  // Today: ["after", "after", "false"].
+  assert.notEqual(out[0], out[1], "compare isn't antisymmetric on NaN");
+  assert.equal(out[2], "true", "a set doesn't find the NaN put in it");
+});
+
+test("R3 §2.1 a set made with its constructor keeps the set's rule (sorted, no item twice)", { todo: "`set of` is an ordinary public constructor, and the palette offers it" }, () => {
+  const { errors, out } = printed((k, L) => [
+    k.call(L("set size"), k.call(SET_V, k.list(k.lit(3), k.lit(1), k.lit(3)))),
+    k.equal(k.call(SET_V, k.list(k.lit(3), k.lit(1))), k.call(L("as set"), nums(k, [1, 3]))),
+  ]);
+  // Either the checker refuses the raw constructor, or what it makes is a
+  // set. Today: no error, and ["3", "false"].
+  assert.ok(errors.length > 0 || (out[0] === "2" && out[1] === "true"), `printed ${out.join(", ")}`);
+});
+
+test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest terms, bottom not zero)", { todo: "`ratio` is an ordinary public constructor: ratio(2, 4) is unequal to 1/2, and ratio(1, 0) exists" }, () => {
+  const { errors, out } = printed((k) => [
+    k.equal(k.call(RATIO, k.int(2), k.int(4)), k.at(RATIONAL_TYPE, "1/2")),
+    k.call(COMPARE, k.call(RATIO, k.int(1), k.int(0)), k.call(RATIO, k.int(-7), k.int(0))),
+  ]);
+  // Today: no error, and ["false", "same"]: compare says 2/4 is 1/2 and
+  // equal says it isn't, and 1/0 is the same as −7/0.
+  assert.ok(errors.length > 0 || (out[0] === "true" && out[1] !== "same"), `printed ${out.join(", ")}`);
 });
