@@ -215,12 +215,23 @@ backlog):
 
 ### Adding a helper function
 
-`fibFast(n) = fib3(1, 1, n)` needs `fib3` as its own definition (`+ New
-definition`), as above. A function written inside another one can't call
-itself: only definitions can be recursive, which is what lets the checker
-see whether recursion ends. A function written in place is offered by the
-palette only where a function is expected (an input of type `(a) -> b`),
-as "new function".
+`fib3` can be its own definition (`+ New definition`), as above, or live
+inside `fibFast` as a let (since #460, BACKLOG L84):
+
+```
+fibFast(n) = let fib3 = (a, b, k) ↦ if k = 0 then a else fib3(b, a + b, k − 1)
+             in fib3(1, 1, n)
+```
+
+A let's function may call itself by the let's name, and may use `fibFast`'s
+own inputs without being passed them. The checker sees whether that
+recursion ends just as it does for a definition, and before anything runs,
+backwards included, the helper is made a definition of its own
+(`src/lang/lift-lets.ts`), so the search above is unchanged:
+`fibFast(n) = 8` still finds `n = 5` (`test/let-rec.test.ts`). A function
+written in place is offered by the palette only where a function is
+expected (an input of type `(a) -> b`), as "new function", and inside it the
+palette offers the let's name.
 
 ## Things it gets right that the old arithmetic-only relations couldn't
 
