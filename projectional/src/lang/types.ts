@@ -77,8 +77,13 @@ export class NumbersError extends TypeError {}
 export type Arith = "arith" | "ordered";
 export class ArithError extends TypeError {
   kind: Arith;
-  constructor(kind: Arith) { super(kind === "ordered" ? "not a number type with <" : "not a number type"); this.kind = kind; }
+  constructor(kind: Arith) { super(kind === "ordered" ? "not a Number with <" : "not a Number"); this.kind = kind; }
 }
+
+// A literal with a fraction part (0.5) is some Number too, but not an Int
+// (WHAT-NUMBER-MEANS.md; Haskell's Fractional). Carried by type variables
+// like `numbers`.
+export class FractionError extends TypeError {}
 
 // One row contained in another: what a search's function does is in what
 // the call of the search does, without being all of it (Koka's subeffecting
@@ -104,6 +109,8 @@ export class Subst {
   recordFields: (id: Id, args: Type[]) => Type[] | null = () => null;
   // Type variables that may only stand for a number type, and which kind.
   arith = new Map<number, Arith>();
+  // Type variables that may not be Int: a literal's with a fraction part.
+  fractional = new Set<number>();
   // Row tails that may not take a world effect, and rows contained in
   // others (WorldError and Sub above).
   noWorld = new Set<number>();
@@ -119,6 +126,7 @@ export class Subst {
     s.numbers = new Set(this.numbers);
     s.recordFields = this.recordFields;
     s.arith = new Map(this.arith);
+    s.fractional = new Set(this.fractional);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
     return s;
@@ -149,6 +157,13 @@ export class Subst {
       return;
     }
     throw new ArithError(kind);
+  }
+
+  // Require t not to be an Int: a literal with a fraction part's type.
+  requireFraction(t: Type): void {
+    t = this.resolve(t);
+    if (t.t === "var") { this.fractional.add(t.v); return; }
+    if (t.t === "con" && t.id === INT) throw new FractionError("an Int is whole");
   }
 
   // Require t to be a record of Float64s: its fields become Float64s.
@@ -218,6 +233,7 @@ export class Subst {
       if (this.numbers.has(v.v)) this.requireNumbers(t);
       const kind = this.arith.get(v.v);
       if (kind) this.requireArith(t, kind);
+      if (this.fractional.has(v.v)) this.requireFraction(t);
       if (this.plain.has(v.v)) this.requirePlain(t);
       return;
     }
@@ -290,7 +306,8 @@ export class WorldError extends EffectError {
 // `arith` and `ordered` those that may only stand for a number type.
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; noWorld?: number[]; subs?: [number, number][] }
+// `fractional` those that may not be Int (a literal's with a fraction part).
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; noWorld?: number[]; subs?: [number, number][] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -309,6 +326,7 @@ export function instantiate(sc: Scheme, s: Subst): Type {
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
   const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
   const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
+  for (const v of sc.fractional ?? []) { const t = vm.get(v); if (t?.t === "var") s.fractional.add(t.v); }
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   for (const r of sc.noWorld ?? []) if (rm.has(r)) s.noWorld.add(rm.get(r)!);
   for (const [f, t] of sc.subs ?? []) s.subs.push({ from: { effs: [], tail: rm.get(f) ?? f }, to: { effs: [], tail: rm.get(t) ?? t } });
@@ -331,7 +349,7 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // means "and possibly more", which is the default reading anyway. Given
 // which variables stand only for number types (the checker's `arith`, or a
 // scheme's through schemeArith), the type says so after it: `(a) -> a
-// where a is a number type`.
+// where a is a Number` (the family of number types, WHAT-NUMBER-MEANS.md).
 // Rows one inside the other (`links`, from showIn) print as one: a search's
 // call and its function, keep and its test.
 export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = []): string {
@@ -375,8 +393,8 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
   if (!arith?.size) return shown;
   const kinds: Record<Arith, string[]> = { arith: [], ordered: [] };
   for (const [v, letter] of varNames) { const k = arith.get(v); if (k) kinds[k].push(letter); }
-  const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("type", "types")}`);
-  const clauses = [kinds.arith.length && say(kinds.arith, "number type"), kinds.ordered.length && say(kinds.ordered, "number type with <")].filter(Boolean);
+  const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("Number", "Numbers")}`);
+  const clauses = [kinds.arith.length && say(kinds.arith, "Number"), kinds.ordered.length && say(kinds.ordered, "Number with <")].filter(Boolean);
   return clauses.length ? `${shown} where ${clauses.join(", and ")}` : shown;
 }
 

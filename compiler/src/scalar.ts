@@ -1530,9 +1530,17 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), out);
   }
 
+  // A root no call fixes the types of, generic over numbers (a literal is
+  // some Number, WHAT-NUMBER-MEANS.md), is lowered at Float64: the default
+  // Haskell gives an ambiguous number at the top.
+  const defaults = (r: Id): At => {
+    const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
+    const s = info.subst;
+    return new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+  };
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
-    try { func(r); several_(from); modCons(from); } catch (e) {
+    try { func(r, defaults(r)); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
       if (funcs.length > from && index.get(r) !== undefined && index.get(r)! >= from) {
         // Refused making its searches: undo it, and what was lowered with it.

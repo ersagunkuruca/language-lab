@@ -316,7 +316,7 @@ test("a main that doesn't type-check isn't run, and says which definition is wro
     return main;
   });
   assert.notDeepEqual(p.errors, []);
-  assert.throws(() => p.run(), /can't run: main doesn't type-check \(half needs Text here, got Float64\)/);
+  assert.throws(() => p.run(), /can't run: main doesn't type-check \(half needs Text here, and a number isn't one\)/);
   assert.deepEqual(p.printed, [], "nothing ran, not even the first print");
   assert.throws(() => p.exit([]), /can't run: main/);
 });

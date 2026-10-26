@@ -59,6 +59,7 @@ import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { ARITH, FIRST, PAIR_V, S, SECOND } from "./std.ts";
+import { NUMBER } from "./types.ts";
 
 export class NotDifferentiable extends Error {}
 
@@ -109,7 +110,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   const binder = (name: string) => { const id = add({ kind: "binder" }); if (name) outNames[id] = name; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
   const callN = (fn: Id, ...args: Id[]) => add({ kind: "call", fn, args });
-  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v }) : e.k === "none" ? callN(ref(S.fail))
+  const place = (e: E): Id => (e.k === "num" ? add({ kind: "lit", value: e.v, of: NUMBER }) : e.k === "none" ? callN(ref(S.fail))
     : e.k === "rec" ? callN(ref(e.variant), ...e.parts.map(place)) : e.build());
   const cant = (why: string): E => {
     if (!lenient) throw new NotDifferentiable(why);
@@ -246,7 +247,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     const n = nodes[id];
     const fresh = (bs: Id[], sub: Map<Id, () => Id>) => bs.map((b) => { const nb = binder(nm(b)); sub.set(b, () => ref(nb)); return nb; });
     switch (n.kind) {
-      case "lit": return add({ kind: "lit", value: n.value });
+      case "lit": return add({ kind: "lit", value: n.value, ...(n.of ? { of: n.of } : {}) });
       case "hole": return add({ kind: "hole" });
       case "ref": return ctx.sub.has(n.target) ? ctx.sub.get(n.target)!() : ref(n.target);
       case "call": return add({ kind: "call", fn: copy(n.fn, ctx), args: n.args.map((a) => copy(a, ctx)) });

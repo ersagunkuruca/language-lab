@@ -10,7 +10,9 @@ IEEE 754 name of what it is, with its width, so the GPU's 32-bit floats can
 be shown as `Float32` beside it (they already are a representation by that
 name, float32.ts). Plain `Float` would hide the width, and a shader's floats
 are a different width. This note is step 2: what the freed name should mean.
-Nothing here is built yet.
+Ersagun liked it (2026-10-26), and points 1 and 2 of the recommendation are
+built (L86); point 3, a whole literal defaulting to Int, is L86b. See
+"What's built" at the end.
 
 ## Where we are
 
@@ -80,3 +82,23 @@ them leaks into what `Number` means (TWO LANDSCAPES).
 
 Credit: Haskell's numeric literals and defaulting (Haskell 2010 report
 §6.4.1 and §4.3.4), as the generic `+` already credits Haskell's `Num`.
+
+## What's built (L86, 2026-10-26)
+
+- Types, errors and the palette say "a is a Number", and "a Number with <"
+  where `<` is used (Int, Rational or Float64).
+- A plain literal gets a fresh variable with the `arith` constraint, and a
+  literal with a fraction part also the `fractional` one (types.ts), so
+  `0.5` at an Int is the error "a number with a fraction part can't be an
+  Int".
+- arith.ts turns each literal into its type's own before anything runs:
+  an Int literal, a ratio, a complex with 0i, a record with the number in
+  every part, or a Float64. The evaluator, running backwards and every
+  compiler target see only literals whose type is fixed. A literal that
+  nothing fixes is still a Float64, as before (L86b changes whole ones to
+  Int).
+- In the editor, typing `3` where an Int goes gives an Int literal.
+- A GPU program's entry point that is generic over numbers (a plain
+  literal makes `halfway(a) = mix(a, 10, 0.5)` one) is lowered at
+  Float64, the default Haskell gives an ambiguous number at the top
+  (compiler/src/scalar.ts).

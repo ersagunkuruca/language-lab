@@ -31,6 +31,7 @@ import { ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
 import { COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
+import { recordVariant } from "./derive.ts";
 import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
@@ -77,11 +78,29 @@ export const usesGenericArithmetic = (code: Code) =>
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
 // into definitions first (lift-lets.ts), the other rewrite every runner
 // wants before it sees the program.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || hasRecursiveLet(code);
+// A plain number literal is some Number (infer.ts), so a program with one
+// may need resolving too; with the types at hand, only when one isn't
+// already a Float64.
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
+const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
+const someLiteralNotFloat64 = (code: Code, info: Info) => Object.values(code.nodes).some((n) => {
+  if (!plainNumber(n)) return false;
+  const t = info.typeOf.get(n.id), r = t && (info.subst ? info.subst.resolve(t) : t);
+  return !!r && !(r.t === "con" && r.id === NUMBER);
+});
+
+// A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
+function decimal(x: number): string {
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(x));
+  if (!m) return "0";
+  const digits = BigInt(m[2] + (m[3] ?? "")), exp = Number(m[4] ?? 0) - (m[3] ?? "").length;
+  const [top, bottom] = exp >= 0 ? [digits * 10n ** BigInt(exp), 1n] : [digits, 10n ** BigInt(-exp)];
+  return `${m[1]}${top}/${bottom}`;
+}
 
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { code: Code; info: Info; names: Names } {
   ({ code, info, names } = liftLets(code, info, names));
-  if (!usesGenericArithmetic(code)) return { code, info, names };
+  if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
   const s = info.subst;
   const nodes: Record<Id, Node> = { ...code.nodes };
   const defs = [...code.defs];
@@ -202,6 +221,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
         }
         return;
       }
+      if (plainNumber(n)) { numberLiteral(n as NodeOf<"lit">, env); return; }
       if (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT) { literal(n); return; }
       const kids: Id[] = [];
       switch (n.kind) {
@@ -229,6 +249,27 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const ctor = n.of === RATIONAL_TYPE ? RATIO : COMPLEX_V;
     const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
     nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
+    typeOf.set(n.id, t);
+  };
+
+  // A plain number literal at the Number its use needs: an Int, a fraction
+  // (0.25 is 1/4 exactly: the digits as written), a Complex with 0i, a
+  // record with it in every part; a Float64 as it is.
+  const numberLiteral = (n: NodeOf<"lit">, env: Env) => {
+    const t = close(typeOf.get(n.id) ?? num, env), x = n.value as number;
+    // At Float64 it says so, so checking the resolved program again (the
+    // compiler does) finds the same type.
+    if (t.t !== "con" || t.id === NUMBER) {
+      if (t.t !== "var") { nodes[n.id] = { ...n, of: NUMBER }; typeOf.set(n.id, num); }
+      return;
+    }
+    if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
+    if (t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE) { literal({ ...n, of: t.id, value: t.id === RATIONAL_TYPE ? decimal(x) : x }); return; }
+    const variant = recordVariant(code, t.id);
+    if (!variant) return;
+    const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
+    const fn = add({ kind: "ref", target: variant }, { t: "fn", params: fields.map(() => num), ret: t, eff: pure });
+    nodes[n.id] = { id: n.id, kind: "call", fn, args: fields.map(() => add({ kind: "lit", value: x }, num)) };
     typeOf.set(n.id, t);
   };
 
@@ -270,6 +311,26 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, num])));
   }
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
+  // What's left open is Float64 (a definition's own id is its Float64
+  // version, and a literal nothing pins down is one), so every target sees
+  // closed types.
+  // A record-generic variable (the vectors module's) stays: the scalar
+  // profile lowers those once per record.
+  const open = (t: Type): Type => {
+    t = s.resolve(t);
+    if (t.t === "var") return s.arith.has(t.v) && !s.numbers.has(t.v) ? num : t;
+    if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(open) };
+    return { t: "fn", params: t.params.map(open), ret: open(t.ret), eff: s.resolveRow(t.eff) };
+  };
+  for (const [id, t] of typeOf) typeOf.set(id, open(t));
+  for (const [d, sc] of schemes) {
+    const vars = constrained(sc).filter((v) => !(sc.numbers ?? []).includes(v));
+    if (!vars.length) continue;
+    const { arith: _a, ordered: _o, fractional: _f, ...rest } = sc;
+    const left = (xs?: number[]) => (xs ?? []).filter((v) => !vars.includes(v));
+    schemes.set(d, { ...rest, vars: left(sc.vars), type: close(sc.type, new Map(vars.map((v) => [v, num]))),
+      ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
+  }
 
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent }, names: outNames };
 }

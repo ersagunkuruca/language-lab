@@ -23,7 +23,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
+  BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -64,10 +64,12 @@ export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterab
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
-  arith: "number types (Float64, Int, or one case whose fields are all Float64s)",
-  ordered: "Float64s or Ints",
+  arith: "a Number (Int, Rational, Float64, Complex, or one case whose fields are all Float64s)",
+  ordered: "a Number with < (Int, Rational or Float64)",
 };
 const str: Type = { t: "con", id: STRING, args: [] };
+// A number type itself (a pinned variable counts).
+const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id.startsWith("pin."));
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
 const PER_TYPE = new Set(["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]));
 const bool: Type = { t: "con", id: BOOL, args: [] };
@@ -122,6 +124,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (e instanceof EffectError) err(id, `${what || "this"} performs ${effName(e)}, which nothing here handles`);
       else if (e instanceof NumbersError) err(id, `${what ? what + ": " : ""}${show(got)} isn't a record of Float64s (Float64, or one case whose fields are all Float64s)`);
       else if (e instanceof ArithError) err(id, `${what ? what + ": " : ""}${show(got)} isn't ${ARITH_WHAT[e.kind]}`);
+      else if (e instanceof FractionError) err(id, `${what ? what + ": " : ""}a number with a fraction part can't be an Int`);
       else if (e instanceof PlainError) err(id, `${what ? what + ": " : ""}${show(got)} has functions in it, and only plain data can be used here`);
       else if (e instanceof TypeError) err(id, `${what ? what + ": " : ""}expected ${show(want)}, got ${show(got)}`);
       else throw e;
@@ -366,6 +369,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered");
       if (arith.length) sc.arith = arith;
       if (ordered.length) sc.ordered = ordered;
+      const fractional = [...fv.vars].filter((v) => s.fractional.has(v));
+      if (fractional.length) sc.fractional = fractional;
       const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
       if (noWorld.length) sc.noWorld = noWorld;
       const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
@@ -471,7 +476,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     let t: Type;
     switch (n?.kind) {
       case "lit": {
-        t = n.of ? { t: "con", id: n.of, args: [] } : typeof n.value === "number" ? num : str;
+        // A plain number literal is some Number, whichever its use needs
+        // (WHAT-NUMBER-MEANS.md; Haskell's fromInteger and fromRational):
+        // arith.ts writes it at that type, and Float64 when nothing says.
+        // One with a fraction part isn't an Int.
+        if (!n.of && typeof n.value === "number") {
+          const v = s.fresh(false, false, "arith") as { t: "var"; v: number };
+          if (!Number.isInteger(n.value)) s.fractional.add(v.v);
+          t = v;
+        } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
         // A literal at Rational is a whole number or top/bottom; at
         // Complex, a Float64 (its real part). arith.ts spells them out.
         if (n.of === RATIONAL_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
@@ -496,7 +509,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const isGradient = (c: Node | undefined) => c?.kind === "call" && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
         const gradient = isGradient(n);
         const applied = isGradient(code.nodes[n.fn]) ? n.args.map((a) => expr(a, env, row)) : null;
-        if (applied?.length === 1) at.set(n.fn, applied[0]);
+        if (applied?.length === 1) {
+          // gradient(f)(3): a number written there is a Float64 here, so
+          // which record the slope is over is known now.
+          const a = s.resolve(applied[0]);
+          if (a.t === "var" && s.arith.has(a.v) && code.nodes[n.args[0]]?.kind === "lit") s.unify(a, num);
+          at.set(n.fn, applied[0]);
+        }
         const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
         const subsBefore = s.subs.length;
         const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
@@ -532,6 +551,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           t = fr.ret;
           break;
         }
+        // Which inputs are some Number not yet known, for the message if
+        // one is given where something else goes.
+        const someNumber = args.map((a) => { const r = s.resolve(a); return r.t === "var" && s.arith.has(r.v); });
         try {
           s.unify(f, { t: "fn", params: args, ret, eff: callRow });
         } catch (e) {
@@ -545,7 +567,18 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           }
           else if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
           else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Float64s (Float64, or one case whose fields are all Float64s)`);
-          else if (e instanceof ArithError) err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
+          else if (e instanceof ArithError) {
+            // A number given where something else goes, or a function on
+            // numbers given something else.
+            const ft = s.resolve(f);
+            const given = ft.t === "fn" ? ft.params.findIndex((p, i) => {
+              const want = s.resolve(p);
+              return someNumber[i] && want.t === "con" && !isNumberType(want);
+            }) : -1;
+            if (given >= 0 && ft.t === "fn") err(n.args[given], `${callee(n)} needs ${show(ft.params[given])} here, and a number isn't one`);
+            else err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
+          }
+          else if (e instanceof FractionError) err(id, `${callee(n)} needs an Int here, and a number with a fraction part can't be one`);
           else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
           else if (e instanceof TypeError) {
             // Find the argument that's wrong, for a useful message.

@@ -146,12 +146,17 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // and the first that type-checks there is the one meant.
   let first: TEdit | undefined;
   for (const t of readings(r)) {
+    // Whole numbers first at what their places take: a plain literal would
+    // fit an Int's place too (it's some Number), but read as a Float64 it
+    // couldn't hold 12345678901234567890 exactly.
+    if (wholes(t)) {
+      const fit = written(code, names, info, hole, text, t, true, defId);
+      if (fit.ok) return fit;
+      first ??= fit;
+    }
     const plain = written(code, names, info, hole, text, t, false, defId);
     if (plain.ok) return plain;
     first ??= plain;
-    if (!wholes(t)) continue;
-    const fit = written(code, names, info, hole, text, t, true, defId);
-    if (fit.ok) return fit;
   }
   return first!;
 }
