@@ -93,3 +93,18 @@ test("the palette offers a let's name inside the function it names", async () =>
   const offered = fillings(p.code, p.info, hole).flatMap((f) => ("target" in f ? [p.names[f.target]] : []));
   assert.ok(offered.includes("go") && offered.includes("m") && offered.includes("n"), offered.join(", "));
 });
+
+test("a recursive let runs backwards: fast(n) = 8 finds n = 5", async () => {
+  const { relate, showTerm } = await import("../src/lang/relate.ts");
+  const k = new Lang();
+  // fast(n) = let step = (a, b, k) ↦ k = 0 ? a : step(b, a + b, k − 1) in step(1, 1, n)
+  const fast = k.def("fast");
+  let n = "";
+  k.define(fast, k.fn(["n"], (x) => ((n = x), letRec(k, "step",
+    (step) => k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(step, b, k.call(B.add, a, b), k.call(B.sub, i, k.lit(1))))),
+    (step) => k.call(step, k.lit(1), k.lit(1), x)))));
+  const p = program(k, fast);
+  assert.deepEqual(p.info.errors, []);
+  const [first] = relate(p.code, fast, { out: 8 });
+  assert.equal(showTerm(first.values[n]), "5");
+});
