@@ -72,7 +72,7 @@ export function corners() {
   const fuelled = (name: string, body: (m: Id) => Id) => { const w = k.def(name); k.define(w, k.fn(["n"], (m) => within(k, 1000, () => body(m), () => k.lit(0)))); return w; };
   const gcdOf = k.def("gcd of");
   k.define(gcdOf, k.fn(["a", "b"], (a, b) => within(k, 1000, () => k.call(gcd, a, b), () => k.lit(0))));
-  const factOf = fuelled("fact of", (m) => k.call(fact, m)), isEven = fuelled("is even", (m) => k.if(k.call(even, m), k.lit(1), k.lit(-1)));
+  const factOf = fuelled("fact of", (m) => k.call(fact, m)), isEven = fuelled("is even", (m) => k.if(k.call(even, m), k.at(NUMBER, 1), k.at(NUMBER, -1)));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs: { clampish, pick, near, cube, powers, gcd, fact, even, odd, twice, gcdOf, factOf, isEven } };
@@ -167,7 +167,7 @@ export function parts() {
 export function sameLists() {
   const k = new Lang();
   const same = k.def("same");
-  k.define(same, k.fn(["xs", "ys"], (xs, ys) => k.equal(k.call(CONS, k.lit(0), xs), k.call(CONS, k.lit(0), ys))));
+  k.define(same, k.fn(["xs", "ys"], (xs, ys) => k.equal(k.call(CONS, k.at(NUMBER, 0), xs), k.call(CONS, k.at(NUMBER, 0), ys))));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), same };
@@ -181,7 +181,7 @@ export function closures() {
   const twice = k.def("twice"), square = k.def("square"), shifted = k.def("shifted"), squaredTwice = k.def("squared twice"), ten = k.def("ten");
   k.define(twice, k.fn(["f", "x"], (f, x) => k.call(f, k.call(f, x))));
   k.define(square, k.fn(["x"], (x) => k.call(B.mul, x, x)));
-  k.define(ten, k.lit(10));
+  k.define(ten, k.at(NUMBER, 10));
   k.define(shifted, k.fn(["d", "x"], (d, x) => k.call(twice, k.fn(["y"], (y) => k.call(B.add, k.call(B.mul, y, d), ten)), x)));
   k.define(squaredTwice, k.fn(["x"], (x) => k.call(twice, square, x)));
   const code = base(k.code);

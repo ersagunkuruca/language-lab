@@ -391,6 +391,9 @@ function settle(s: State): Stream {
   if (solved !== undefined) return solved; // null: no solution, a failure
   for (let i = 0; i < s.waits.length; i++) {
     const g = wake(s.waits[i], s);
+    // A check that passes changes nothing, so what else woke with it is
+    // looked at again before the state goes on.
+    if (g === succeed) return settle({ ...s, waits: s.waits.filter((_, j) => j !== i) });
     if (g) return g({ ...s, waits: s.waits.filter((_, j) => j !== i) });
   }
   return unit(doze(s));
@@ -874,7 +877,7 @@ export function interpreter(code: Code, opts: Options = {}) {
     if (f.k === "closure" && f.gradient) {
       const g = f;
       return wait({
-        k: "later", text: "gradient", ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
+        k: "later", text: "gradient", on: [args[0]], ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
           const p = walk(args[0], s);
           const lambda = typeof p === "number" ? derivativeLambda(code, { lambda: g.lambda }) : isData(p) ? gradientLambda(code, { lambda: g.lambda }, (p as DataT).tag) : null;
           if (!lambda) throw new NotInvertible("gradient is taken at a record of Float64s");
@@ -951,7 +954,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // Backwards it would have to search the seeds.
       case S.seeded:
         return wait({
-          k: "later", text: "seeded", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
+          k: "later", text: "seeded", on: [a, b], ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
             const gen = seededGenerator(walk(a, s) as number);
             return interpreter(code, { ...opts, spend, plans, random: () => gen.next() }).apply(walk(b, s), [], out)(s);
           },
@@ -960,7 +963,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // Backwards, derivative would be integration: it waits for its function.
       case S.derivative:
         return wait({
-          k: "later", text: "derivative", ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
+          k: "later", text: "derivative", on: [a], ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
             const f = walk(a, s) as Closure | Prim;
             const lambda = derivativeLambda(code, f.k === "closure" ? { lambda: f.lambda } : { prim: f.id });
             return eq(out, { k: "closure", lambda, env: f.k === "closure" ? f.env : new Map() })(s);
@@ -970,7 +973,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // over shows when it's applied to a point (apply, below).
       case S.gradient:
         return wait({
-          k: "later", text: "gradient", ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
+          k: "later", text: "gradient", on: [a], ready: (s) => !(walk(a, s) instanceof LVar), then: (s) => {
             const f = walk(a, s) as Closure | Prim;
             if (f.k !== "closure") return eq(out, f.k === "prim" ? { k: "closure", lambda: derivativeLambda(code, { prim: f.id }), env: new Map() } : f)(s);
             return eq(out, { ...f, gradient: true })(s);
@@ -980,7 +983,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // forever spends one, and when they're gone that branch has no answer.
       case S.fuel:
         return wait({
-          k: "later", text: "with fuel", ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
+          k: "later", text: "with fuel", on: [a, b], ready: (s) => typeof walk(a, s) === "number" && !(walk(b, s) instanceof LVar), then: (s) => {
             let left = walk(a, s) as number;
             const inner = () => left-- > 0 && spend();
             // Inside, the solver spends the action's budget; its answers go
@@ -995,7 +998,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // The path is read off the function's nodes, so only the record and
       // the value need to be known.
       return wait({
-        k: "later", text: "set", ready: (s) => !(walk(a, s) instanceof LVar) && known(b, s) && known(args[2], s), then: (s) => {
+        k: "later", text: "set", on: [a, b, args[2]], ready: (s) => !(walk(a, s) instanceof LVar) && known(b, s) && known(args[2], s), then: (s) => {
           const get = walk(a, s) as Closure | Prim;
           const path = get.k === "prim" ? [get.id] : fieldPath(code, get.lambda);
           if (!path) throw new NotInvertible("set needs a field, or a path of fields");
@@ -1014,7 +1017,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         : [([, o]) => intNeg(o), ([a]) => intNeg(a)];
       const unknown = (s: State) => sides.filter((t) => walk(t, s) instanceof LVar).length;
       return wait({
-        k: "later", text: stdNames[id] ?? id, ready: (s) => unknown(s) <= 1, then: (s) => {
+        k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1, then: (s) => {
           const xs = sides.map((t) => walk(t, s));
           const i = xs.findIndex((x) => x instanceof LVar);
           const at = i < 0 ? sides.length - 1 : i;
@@ -1029,7 +1032,7 @@ export function interpreter(code: Code, opts: Options = {}) {
     if (id === TEXT_OPS.split) {
       const [t, by] = args;
       return wait({
-        k: "later", text: "split", ready: (s) => known(by, s) && (known(t, s) || known(out, s)), then: (s) => {
+        k: "later", text: "split", on: [t, by, out], ready: (s) => known(by, s) && (known(t, s) || known(out, s)), then: (s) => {
           const sep = walk(by, s) as string, split = STD_IMPL[id] as (t: string, by: string) => Value;
           if (known(t, s)) return eq(out, fromValue(split(walk(t, s) as string, sep)))(s);
           const pieces = fromList(toValue(deep(out, s))!) as string[];
@@ -1044,7 +1047,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
     if (many) {
       return wait({
-        k: "later", text: id, ready: (s) => args.every((a) => known(a, s)), then: (s) => {
+        k: "later", text: id, on: args, ready: (s) => args.every((a) => known(a, s)), then: (s) => {
           const xs = args.map((a) => toValue(deep(a, s))!);
           return disj(...many(...xs).map((v: Value) => eq(out, fromValue(v))))(s);
         },
@@ -1166,7 +1169,7 @@ export function interpreter(code: Code, opts: Options = {}) {
 
   function aggregate(id: Id, args: Term[], out: Term): Goal {
     return wait({
-      k: "later", text: id === S.first ? "first" : id === S.all ? "all" : id === S.optional ? "optional" : "count", ready: (s) => known(args[0], s), then: (s) => {
+      k: "later", text: id === S.first ? "first" : id === S.all ? "all" : id === S.optional ? "optional" : "count", on: [args[0]], ready: (s) => known(args[0], s), then: (s) => {
         const body = walk(args[0], s);
         const [[r], inner] = freshVars(s, 1);
         const answers: Term[] = [];

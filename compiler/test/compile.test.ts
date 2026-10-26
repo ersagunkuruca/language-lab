@@ -14,6 +14,7 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { CONS, FALSE, NIL, S, SHOW_ANY, TRUE } from "../../projectional/src/lang/std.ts";
+import { NUMBER } from "../../projectional/src/lang/types.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram, load } from "../src/program.ts";
@@ -981,7 +982,7 @@ test("equal compares Ints exactly and Float64s to float precision, at every type
     k.equal(big(), next()), k.equal(k.list(big()), k.list(next())), k.call(same, big(), next()), k.call(same, k.list(big()), k.list(next())),
     k.equal(big(), big()), k.call(same, big(), big()),
     k.equal(third(), k.lit(0.3)), k.equal(k.list(third()), k.list(k.lit(0.3))), k.call(same, third(), k.lit(0.3)),
-    k.equal(k.lit(1e12), k.lit(1e12 + 1)), k.call(same, k.lit(1e12), k.lit(1e12 + 1)),
+    k.equal(k.at(NUMBER, 1e12), k.at(NUMBER, 1e12 + 1)), k.call(same, k.at(NUMBER, 1e12), k.at(NUMBER, 1e12 + 1)),
     // BACKLOG L81: ∞ isn't −∞, nor near 1e308.
     k.call(same, k.call(B.div, k.lit(1), k.lit(0)), k.call(B.div, k.lit(-1), k.lit(0))), k.call(same, k.lit(1e308), k.call(B.div, k.lit(1), k.lit(0))),
   )))));

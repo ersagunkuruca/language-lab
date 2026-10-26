@@ -163,3 +163,24 @@ test("run backwards, a generic definition is its Float64 version: which x has tw
   assert.equal(answers.length, 1);
   assert.equal(answers[0].values[lam.params[0]], 3.5);
 });
+
+test("a whole literal nothing fixes is an Int, one with a fraction part a Float64 (L86b)", async () => {
+  const { runMain } = await import("../src/lang/run.ts");
+  const { SHOW_ANY } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const inc = k.def("inc");
+  k.define(inc, k.fn(["x"], (x) => k.call(ARITH.add, x, k.lit(1))));
+  const main = k.def("main");
+  const say = (e: Id) => k.call(S.print, k.call(SHOW_ANY, e));
+  k.define(main, k.thunk(() => k.seq(say(k.call(ARITH.add, k.lit(2), k.lit(3))), say(k.call(ARITH.mul, k.lit(1e12), k.lit(1e12))), say(k.call(inc, k.lit(2.5))), say(k.call(ARITH.add, k.lit(0.5), k.lit(1))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(code, info, main, { print: (s) => out.push(s), names });
+  // 10^12 · 10^12 is exact: an Int never overflows.
+  assert.deepEqual(out, ["5", "1000000000000000000000000", "3.5", "1.5"]);
+  // On its own inc is an Int function; inc(2.5) uses a Float64 copy.
+  const r = resolveArithmetic(code, info, names);
+  assert.equal(showType(r.info.subst.zonk(r.info.typeOf.get(inc)!), names), "(Int) -> Int");
+});
