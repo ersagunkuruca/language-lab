@@ -31,6 +31,7 @@ import { ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
 import { COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
+import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -73,7 +74,13 @@ const atPrelude = (type: string, op: Id): Id => {
 export const usesGenericArithmetic = (code: Code) =>
   Object.values(code.nodes).some((n) => (n.kind === "ref" && n.target in AT) || (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT));
 
+// Whether resolveArithmetic changes anything: it also lifts recursive lets
+// into definitions first (lift-lets.ts), the other rewrite every runner
+// wants before it sees the program.
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || hasRecursiveLet(code);
+
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { code: Code; info: Info; names: Names } {
+  ({ code, info, names } = liftLets(code, info, names));
   if (!usesGenericArithmetic(code)) return { code, info, names };
   const s = info.subst;
   const nodes: Record<Id, Node> = { ...code.nodes };

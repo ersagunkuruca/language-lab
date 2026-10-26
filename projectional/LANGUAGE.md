@@ -449,8 +449,24 @@ added later as a hint layer, keyed by node like everything else.
 Because variables are binder ids, there are no shadowing or name-resolution
 rules in the checker. The one scope error left is a *reference that sits
 outside the lambda or arm that binds it*. That can only come from moving a
-subtree, so the checker reports it as "used outside the function or case
-that introduces it".
+subtree, so the checker reports it as "has no value here: it is used
+outside the function or case that introduces it".
+
+**Recursive lets.** A let is `(name ↦ body)(value)`, and when the value is a
+function it may call itself by the name, and use the inputs of the function
+around it (ML's `let rec`, monomorphic inside as there):
+
+    fibonacci(n) = let step = (a, b, k) ↦ k = 0 ? a : step(b, a + b, k − 1)
+                   in step(0, 1, n)
+
+It's checked for termination like a definition (this one counts a Float64
+down, so it carries Diverge; one that takes a list apart doesn't), and
+before anything runs `src/lang/lift-lets.ts` makes it a definition of its own
+that takes what it uses from around it first (lambda lifting), so the
+evaluator, running backwards and every compiler target see ordinary
+recursion. A value that isn't a function still can't use its own name:
+`ones = cons(1, ones)` has no first step to take. The palette offers the
+name inside the function it names.
 
 ## Effects, and why not monads
 

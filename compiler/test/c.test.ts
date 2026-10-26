@@ -435,3 +435,12 @@ test("a program's own effects that never return, in C as Abort is, and every cel
   }
   sameAndFreed(build(lowered), calls, (i, xs) => { try { return first(r.call(r.value(lowered.funcs[i].def), ...xs))!; } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; } }, (i) => lowered.funcs[i].name);
 });
+
+test("a recursive let in C: lifted to a definition, the evaluator's answers, every cell freed (BACKLOG L84)", { skip }, async () => {
+  const { recursiveLets } = await import("../src/fixtures.ts");
+  const p = recursiveLets();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.scaledSum], { data: true });
+  const i = lowered.funcs.findIndex((f) => f.name === "scaled sum" && !f.inner);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  sameAndFreed(build(lowered), [[[1, 2, 3], 2], [[], 5], [[0.5, -1.5], -2]].map(([xs, c]): [number, Value[]] => [i, [toList(xs as number[]), c as number]]), (_, xs) => first(r.call(r.value(p.scaledSum), ...xs))!, () => "scaled sum");
+});
