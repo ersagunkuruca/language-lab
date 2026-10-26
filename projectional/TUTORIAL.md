@@ -23,7 +23,7 @@ comes from.
 Everything here can be tried in the editor:
 https://ersagunkuruca.github.io/language-lab/ (or build it locally with
 `npm run build-editor` in `projectional/` and open `index.html`). The examples ship with it, in the *Programs* list on
-the left: *Float64s & physics* (`discriminant`, `polar`, `rotate`, `fall`),
+the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Insertion sort*, *Eight queens*, *Calculus*, *Run backwards*,
 *Relations in programs*, and two shaders, *Shader: ripples* and *Shader: ray
 marching*. *+ New program* starts an empty one of your own.
@@ -173,7 +173,7 @@ What this buys:
 - **Notation is personal.** The `a · b` / `a * b` / `(* a b)` switch and the
   *Short names* / *Descriptive* switch change only what you see.
 
-**Try it.** Open *Float64s & physics* → `discriminant`. Switch between *Short
+**Try it.** Open *Numbers & physics* → `discriminant`. Switch between *Short
 names* and *Descriptive*, and between the three notations. Watch the *Files*
 tab: `code.json` and the meaning hash never change.
 
