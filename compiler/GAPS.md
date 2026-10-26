@@ -886,6 +886,12 @@ What got in the way, roughly in order of cost:
 It is the first program of the rounds that has to keep up with a clock:
 375 blocks a second at 48 kHz.
 
+Unlike rounds 2 and 3, the pedal was not built in the editor: a script
+wrote it with the TypeScript DSL (`Lang`) and saved it
+(`projectional/gen-pedal.tmp.ts`, committed by accident in #332 and
+removed later; it is in the history). So this round says nothing about
+what the editor makes hard (REVIEW-2026-10-26.md §3).
+
 Files:
 - `compiler/gaps/bench-audio.ts`: the compiled pedal, the evaluator, and
   the pedal written by hand over arrays, on the same blocks. It first
