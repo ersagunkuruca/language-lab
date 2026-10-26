@@ -931,8 +931,10 @@ test("a fold over range(n) counts down from n − 1, without the list, for Numbe
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
 // Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
 // REVIEW-2026-10-22b.md §2: and one rule for every type, so going through a
-// generic function never changes the answer.
-test("equal compares whole numbers exactly and others to float precision, at every type", async () => {
+// generic function never changes the answer. REVIEW-2026-10-26.md §1.2: an
+// Int past 2^28 is a BigInt, so a Number that happens to be whole keeps its
+// tolerance: 1e12 and 1e12 + 1 as Numbers are equal, as Ints they aren't.
+test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {
   const k = new Lang();
   const same = k.def("same"), main = k.def("main");
   k.define(same, k.fn(["a", "b"], (a, b) => k.equal(a, b)));
@@ -947,7 +949,7 @@ test("equal compares whole numbers exactly and others to float precision, at eve
   const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
-  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, false, false]"]);
+  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true]"]);
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
 });
 

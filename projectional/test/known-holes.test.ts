@@ -204,9 +204,9 @@ function printed(steps: (k: Lang, L: typeof lib) => Id[]) {
 }
 const nums = (k: Lang, xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
 
-test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", { todo: "two Numbers that happen to be whole compare exactly, so the tolerance vanishes above 2^53/1e9" }, () => {
+test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", () => {
   const sq = (k: Lang, x: number) => k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(x)), k.call(B.sqrt, k.lit(x))), k.lit(x));
-  // Today: ["true", "false"]. sqrt(1e17)² is 1.0000000000000002e17, a whole
+  // Before L80: ["true", "false"]. sqrt(1e17)² is 1.0000000000000002e17, a whole
   // float, so it's compared exactly; sqrt(2)² isn't whole, so it's near.
   assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["true", "true"]);
 });

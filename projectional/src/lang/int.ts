@@ -1,34 +1,50 @@
 // Int: whole numbers that never overflow (NUMBERS.md, stage 1).
 //
 // The meaning is the mathematical integers. The representation is a JS
-// number while it is a safe integer (|x| < 2^53), and a BigInt beyond, so
-// small numbers are as fast as floats and big ones are exact. It is
-// canonical: every integer has exactly one spelling (a safe integer is never
-// a BigInt), so `===`, `equal` and hashing stay correct.
+// number while it is small (|x| < 2^28), and a BigInt beyond, so small
+// numbers are as fast as floats and big ones are exact. It is canonical:
+// every integer has exactly one spelling (a small integer is never a
+// BigInt, a big one never a number), so `===`, `equal` and hashing stay
+// correct.
+//
+// Why 2^28 and not 2^53 (REVIEW-2026-10-26.md §1.2): a value doesn't say
+// whether it is an Int or a Number, and `equal` is exact on Ints and near
+// (within 1e-9 relative) on Numbers. Below 2^28 the two agree on whole
+// numbers: two different ones are at least 1 apart, more than 1e-9 · (1 +
+// 2^28 + 2^28). So run.ts sameNumber can be near on every JS number, and an
+// Int past 2^28 is a BigInt, which it compares exactly. With the bound at
+// 2^53, two Ints near 10^12 had to be told from two Numbers near 10^12,
+// which it did by wholeness, and a Number that happened to be whole (every
+// float past 2^52 is) lost its tolerance.
+export const SMALL = 2 ** 28;
+const BIG = 2n ** 28n;
+const small = (x: number) => x < SMALL && x > -SMALL;
 
 export type Int = number | bigint;
 
-export const isInt = (x: unknown): x is Int => typeof x === "bigint" || Number.isSafeInteger(x);
+export const isInt = (x: unknown): x is Int => (typeof x === "bigint" ? x >= BIG || x <= -BIG : Number.isInteger(x) && small(x as number));
 
 // The one spelling of a BigInt.
-export const norm = (b: bigint): Int => (b >= -9007199254740991n && b <= 9007199254740991n ? Number(b) : b);
+export const norm = (b: bigint): Int => (b < BIG && b > -BIG ? Number(b) : b);
 const big = (x: Int) => (typeof x === "bigint" ? x : BigInt(x));
 
-// A literal: digits in a string when they don't fit a safe integer.
-export const intLit = (v: number | string): Int => (typeof v === "number" ? v : norm(BigInt(v)));
+// A literal: digits in a string when they don't fit a safe integer, and a
+// number past 2^28 is one too.
+export const intLit = (v: number | string): Int => (typeof v === "number" && small(v) ? v : norm(BigInt(v)));
 
-// The float result is exact whenever it is a safe integer, so the fast path
-// needs only that check.
+// Below 2^28 the float result is exact (each input is under 2^28, so a sum
+// or product is under 2^56, and one under 2^28 in size is exactly right),
+// so the fast path needs only that check.
 export function add(a: Int, b: Int): Int {
-  if (typeof a === "number" && typeof b === "number") { const r = a + b; if (Number.isSafeInteger(r)) return r; }
+  if (typeof a === "number" && typeof b === "number") { const r = a + b; if (small(r)) return r; }
   return norm(big(a) + big(b));
 }
 export function sub(a: Int, b: Int): Int {
-  if (typeof a === "number" && typeof b === "number") { const r = a - b; if (Number.isSafeInteger(r)) return r; }
+  if (typeof a === "number" && typeof b === "number") { const r = a - b; if (small(r)) return r; }
   return norm(big(a) - big(b));
 }
 export function mul(a: Int, b: Int): Int {
-  if (typeof a === "number" && typeof b === "number") { const r = a * b; if (Number.isSafeInteger(r)) return r === 0 ? 0 : r; }
+  if (typeof a === "number" && typeof b === "number") { const r = a * b; if (small(r)) return r === 0 ? 0 : r; }
   return norm(big(a) * big(b));
 }
 export const neg = (a: Int): Int => (typeof a === "number" ? (a === 0 ? 0 : -a) : norm(-a));
@@ -43,7 +59,7 @@ export function quotient(a: Int, b: Int): Int[] {
   if (typeof a === "number" && typeof b === "number") {
     // a − r is an exact multiple of b, so the division is exact.
     const d = a - floorMod(a, b);
-    if (Number.isSafeInteger(d)) { const q = d / b; return [q === 0 ? 0 : q]; }
+    if (small(d)) { const q = d / b; return [q === 0 ? 0 : q]; }
   }
   const x = big(a), y = big(b), q = x / y, r = x % y;
   return [norm(r !== 0n && (r < 0n) !== (y < 0n) ? q - 1n : q)];
@@ -59,7 +75,7 @@ export function remainder(a: Int, b: Int): Int[] {
 // A negative power isn't whole: no answer.
 export function power(a: Int, n: Int): Int[] {
   if (less(n, 0)) return [];
-  if (typeof a === "number" && typeof n === "number") { const r = a ** n; if (Number.isSafeInteger(r)) return [r]; }
+  if (typeof a === "number" && typeof n === "number") { const r = a ** n; if (small(r)) return [r]; }
   return [norm(big(a) ** big(n))];
 }
 
@@ -80,7 +96,7 @@ export const toNumber = (a: Int): number => Number(a);
 export function wholePart(x: number): Int[] {
   if (!Number.isFinite(x)) return [];
   const f = Math.floor(x);
-  return [Number.isSafeInteger(f) ? (f === 0 ? 0 : f) : norm(BigInt(f))];
+  return [small(f) ? (f === 0 ? 0 : f) : norm(BigInt(f))];
 }
 // Only the spelling `show` produces: no leading zeros, no plus sign, no
 // spaces. So reading is `show` run backwards, and it has one answer or none.

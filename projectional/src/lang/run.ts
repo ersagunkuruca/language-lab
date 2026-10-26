@@ -57,19 +57,23 @@ export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-
 
 // How two numbers compare, one rule for every type, whichever way a
 // program runs: the evaluator, backwards (relate.ts unify) and compiled
-// (runtime.js $sameNumber, and scalar.ts for WASM and the GPU). Two whole
-// numbers are equal only when they're the same number, so every Int is
-// exact (an Int is a JS number while it's a safe integer, so a value can't
-// say which it is, and 10^12 and 10^12 + 1 are different counts). Any
-// other pair is equal within `close`, which is what solving equations
-// over floats needs: √2 squared is 2.0000000000000004.
+// (runtime.js $sameNumber, and scalar.ts for WASM and the GPU). Two JS
+// numbers are equal within `close`, which is what solving equations over
+// floats needs: √2 squared is 2.0000000000000004, and √1e17 squared is
+// 1.0000000000000002e17. An Int is exact all the same: it is a JS number
+// only below 2^28, where two different whole numbers are always further
+// apart than `close` allows, and a BigInt beyond, which is compared
+// exactly (int.ts; REVIEW-2026-10-26.md §1.2). So the value says what it
+// is, and no wholeness test is needed.
 //
 // It used to be type-directed (near on Numbers, exact on Ints, this rule on
 // a type variable), so inlining a generic function changed answers, and
-// backwards every number was near (REVIEW-2026-10-22b.md §2). The price of
-// one rule: it isn't transitive (no tolerance is), so it isn't an
-// equivalence on fractional Numbers. NOTES.md "Equality".
-export const sameNumber = (a: number, b: number) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : close(a, b));
+// backwards every number was near (REVIEW-2026-10-22b.md §2). Then it was
+// exact on any two whole floats, which took the tolerance away from big
+// Numbers (every float past 2^52 is whole). The price that stays: no
+// tolerance is transitive, so it isn't an equivalence on Numbers, which is
+// why `compare` orders them exactly. NOTES.md "Equality".
+export const sameNumber = (a: number, b: number) => close(a, b);
 
 // With its own stack, so two long lists can be compared.
 export function equal(a: Value, b: Value): boolean {
