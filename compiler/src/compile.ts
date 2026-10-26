@@ -2513,4 +2513,4 @@ const DEPTH = 1000;
 
 const RESERVED = new Set(("break case catch class const continue debugger default delete do else export extends false finally for function if " +
   "import in instanceof new null return super switch this throw true try typeof var void while with yield let static enum await implements " +
-  "package protected interface private public arguments eval undefined NaN Infinity Math Object Array Float64 String Symbol defs").split(" "));
+  "package protected interface private public arguments eval undefined NaN Infinity Math Object Array Number String Symbol defs").split(" "));

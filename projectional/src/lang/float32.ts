@@ -16,7 +16,7 @@ import type { Representation } from "./represent.ts";
 import { S } from "./std.ts";
 import { NUMBER } from "./types.ts";
 import { infer } from "./infer.ts";
-import { resolveArithmetic, usesGenericArithmetic } from "./arith.ts";
+import { needsResolving, resolveArithmetic } from "./arith.ts";
 
 // The Float64 builtins whose answer on f32 inputs may not be an f32, with
 // how many inputs each takes. negate, abs and floor of an f32 are f32
@@ -31,7 +31,7 @@ export const ROUNDED: [Id, number][] = [
 export function withFloat32(code: Code, names: Names): { code: Code; names: Names; rep: Representation } {
   // The one generic + − · first made each type's own (arith.ts), so the
   // ones at Float64 are Float64's builtins and get rounded below.
-  if (usesGenericArithmetic(code)) ({ code, names } = resolveArithmetic(code, infer(code, names), names));
+  if (needsResolving(code)) ({ code, names } = resolveArithmetic(code, infer(code, names), names));
   const k = new Lang();
   const impl: Record<Id, Id> = {};
   for (const [op, n] of ROUNDED) {

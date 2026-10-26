@@ -1104,7 +1104,7 @@ ${drop}
       end
       local.get $n`,
   },
-  // Digits d times 10^e as JavaScript's Float64::toString lays them out
+  // Digits d times 10^e as JavaScript's Number::toString lays them out
   // (ECMA-262): n = e + the number of digits; whole up to 21 digits, a
   // point inside, 0.000ddd down to n = −5, else d.ddde±x.
   "number.layout": {
@@ -2186,7 +2186,7 @@ ${drop}
       call $mag.trim`,
   },
   // The Float64 nearest a (ties to even, Infinity past the largest), as
-  // JavaScript's Float64 of a BigInt: its top 64 bits, any bit below
+  // JavaScript's Number of a BigInt: its top 64 bits, any bit below
   // kept as the last one, rounded once, then scaled by a power of two.
   "mag.toNumber": {
     params: [["a", "mag"]], result: "f64", locals: [["n", "i32"], ["lz", "i32"], ["i", "i32"], ["top", "i64"], ["lo", "i64"], ["e", "i32"]], uses: ["mag.at"],

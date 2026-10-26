@@ -246,7 +246,7 @@ static lab_int lab__of_double(double f) {
   free(d);
   return r;
 }
-// JavaScript's String(x) for a Float64 (ECMA-262 Float64::toString): the
+// JavaScript's String(x) for a Float64 (ECMA-262 Number::toString): the
 // fewest digits that read back as x (the first precision whose correctly
 // rounded digits do), then whole up to 21 digits, a point inside, 0.000ddd
 // down to 10⁻⁶, else d.ddde±x.

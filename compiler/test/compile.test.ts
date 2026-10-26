@@ -1011,3 +1011,13 @@ test("Bool functions and match conditions compile to JS booleans, and stay Bool 
   assert.doesNotMatch(source, /function small\([^)]*\) \{\n\s*return \$bool/);
   assert.match(source, /break done/);
 });
+
+test("a recursive let compiles: the helper calls itself and uses the inputs around it (BACKLOG L84)", async () => {
+  const { recursiveLets } = await import("../src/fixtures.ts");
+  const p = recursiveLets();
+  const path = join(dir, "let-rec.js");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["scaled sum"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  assert.equal(defs["scaled sum"](toList([1, 2, 3]), 2), 12);
+  assert.equal(defs["scaled sum"](toList([]), 5), 0);
+});
