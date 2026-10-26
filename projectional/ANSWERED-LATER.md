@@ -175,8 +175,11 @@ In the order the BACKLOG wants them:
      in the language.
    - Compiled targets refuse a `later` operation with a clear reason.
    - The text shows the rest as `yield(item) with rest`, the way a fold's
-     folded values read, and the declaration as `returns Unit, later`. The
-     editor's own drawing of it is E80.
+     folded values read, and the declaration as `returns Unit, later`. In
+     the editor (E80, done), an operation's panel has **Answered later**
+     beside Gives back: ticked, every case handling it gets a name for the
+     rest, after its inputs, and the graph draws the case as
+     `(item) with rest =>`.
 2. **C40**, compiled JavaScript by generators. Then pages can use it.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,

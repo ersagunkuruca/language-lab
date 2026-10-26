@@ -562,7 +562,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const params = [...arm.binds, ...results];
       labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : name(arm.variant));
       inputs.push(arm.id);
-      kids.push(region(arm.id, `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm"));
+      // An operation answered later binds the rest after its inputs, read as
+      // the text reads it: (item) with rest (ANSWERED-LATER.md).
+      const op = handles ? node(arm.variant) : null;
+      const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
+      kids.push(region(arm.id, later ? `(${arm.binds.slice(0, -1).map(name).join(", ")}) with ${name(arm.binds.at(-1)!)} =>` : `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm"));
     }
     if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));

@@ -18,6 +18,7 @@ import { CONS, NIL, S, SHOW_ANY, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { B } from "../src/prelude.ts";
+import { addField, setLater } from "../src/lang/toplevel.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -200,4 +201,34 @@ test("an operation answered later inside a search: the rest keeps the search's o
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
+});
+
+// Declared in the editor (BACKLOG E80): Answered later beside Gives back.
+// Every case handling the operation gets a name for the rest, kept after
+// its inputs; answered at once again, it loses it, unless a case uses it.
+test("answered later, set and unset in the editor: each case gets the rest, after its inputs", () => {
+  const p = program((k) => {
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT)]]);
+    const collect = k.def("collect");
+    k.define(collect, k.thunk(() => k.handle(k.seq(k.call(Y.op.yield, k.lit(1)), k.lit(0)), [{ variant: Y.op.yield, names: ["item"], body: () => k.hole() }])));
+    return collect;
+  });
+  assert.deepEqual(p.errors, []);
+  const op = Object.values(p.code.nodes).find((n) => n.kind === "variant" && p.names[n.id] === "yield")!.id;
+  const arm = () => Object.values(on.code.nodes).find((n) => n.kind === "arm" && n.variant === op) as { binds: Id[] };
+  let on = setLater(p.code, p.names, op, true) as Extract<ReturnType<typeof setLater>, { ok: true }>;
+  assert.ok(on.ok);
+  assert.deepEqual(infer(on.code, on.names, undefined, checkOptions).errors.map((e) => e.message), []);
+  assert.deepEqual(arm().binds.map((b) => on.names[b]), ["item", "rest"]);
+  assert.match(renderBlocks(on.code, { names: on.names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as never, infer(on.code, on.names), p.def("collect")), /yield\(item\) with rest →/);
+  // A new input goes before the rest.
+  const typeOf = Object.values(on.code.nodes).find((n) => n.kind === "typedef" && n.variants.includes(op))!;
+  const def = on.code.defs.find((d) => (on.code.nodes[d] as { body?: Id }).body === typeOf.id)!;
+  on = addField(on.code, on.names, def, op, "weight", { target: NUMBER, args: [] }) as typeof on;
+  assert.ok(on.ok);
+  assert.deepEqual(arm().binds.map((b) => on.names[b]), ["item", "weight", "rest"]);
+  const off = setLater(on.code, on.names, op, false);
+  assert.ok(off.ok);
+  assert.deepEqual(((off as typeof on).code.nodes[(arm() as unknown as { id: Id }).id] as { binds: Id[] }).binds.map((b) => on.names[b]), ["item", "weight"]);
+  assert.equal(setLater(p.code, p.names, op, false).ok, false);
 });
