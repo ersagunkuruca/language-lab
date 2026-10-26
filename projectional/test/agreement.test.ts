@@ -50,7 +50,15 @@ const spread = <T,>(xs: T[], n: number) => xs.length <= n ? xs : Array.from({ le
 const take = <T,>(it: Iterable<T>, n: number) => { const out: T[] = []; for (const x of it) if (out.push(x) >= n) break; return out; };
 const key = (v: unknown) => showTerm(v as never);
 // Equal as the language says: whole numbers exactly, other numbers closely.
-const same = (a: Value, b: Value) => typeof a === "number" && typeof b === "number" && !(Number.isInteger(a) && Number.isInteger(b)) ? Math.abs(a - b) <= 1e-9 * (1 + Math.abs(b)) : key(a) === key(b);
+// Float64s within 1e-9, as the language's = has them; a record's or a
+// list's parts the same way, each.
+const same = (a: Value, b: Value): boolean => {
+  if (typeof a === "number" && typeof b === "number" && !(Number.isInteger(a) && Number.isInteger(b))) return Math.abs(a - b) <= 1e-9 * (1 + Math.abs(b));
+  const parts = (v: Value) => (v && typeof v === "object" && "tag" in v && "fields" in v ? v as { tag: string; fields: Value[] } : null);
+  const x = parts(a), y = parts(b);
+  if (x && y) return x.tag === y.tag && x.fields.length === y.fields.length && x.fields.every((f, i) => same(f, y.fields[i]));
+  return key(a) === key(b);
+};
 
 const STEPS = 5000;
 

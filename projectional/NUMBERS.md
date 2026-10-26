@@ -817,8 +817,10 @@ hierarchy is the map of which structures to name.
    Complex (L75: LANGUAGE.md, "Whole numbers and text"); the palette
    making them from what a hole expects is E69.
    Derivatives through it are right: the slope of im((x + i)²) is 2.
-   Still to do: a Mandelbrot or domain-colouring shader, and the
-   multiplication-table form (`algebra(table)`, L40b) that would make
+   `examples/mandelbrot` (L40b) draws the Mandelbrot set on the GPU with
+   the one `+` and `·` at Complex (`z · z + c`), as `vec2f`; it is on
+   shaders.html and in the editor as "Shader: Mandelbrot set". Still to
+   do: the multiplication-table form (`algebra(table)`, L40b) that would make
    Complex, dual numbers and quaternions one definition each.
 
 ### Units

@@ -1,0 +1,7 @@
+{
+  "3h3ehk9gudrrgj856pti99r5vo": "How much red, green and blue, each from 0 to 1.",
+  "257m154mfmiq7jci6usguldic2": "How many steps of z → z · z + c it takes z to leave the circle of radius 2 (re² + im² past 4), from where it is; 100 when it hasn't by then. Those that never leave are the Mandelbrot set. z and c are Complex, so · is the complex product and + the complex sum: the same + and · as for any number.",
+  "pckrrp89t9rkvbbjc5s8b2r896": "A colour for t, going round smoothly as t grows: each channel a cosine wave, the three a third of a turn apart. This is Inigo Quilez's cosine palette, from https://iquilezles.org/articles/palettes/.",
+  "6sdp5rnvo6f7nooifmclue40r3": "The colour of the pixel at (x, y): the point c of the plane under it (near −0.745 + 0.22i, above the gap between the two largest discs of the set, where its edge curls into spirals), black when it's in the Mandelbrot set, else a colour for how fast it escapes, shifting with time. escape counts its steps on a Float64, which the checker can't trust to stop (NaN + 1 is NaN), so with fuel allows 200 calls, twice what a pixel needs.",
+  "program": "Adapted: the cosine palette is Inigo Quilez's formula: https://iquilezles.org/articles/palettes/\nPrior art: the Mandelbrot set (Benoit Mandelbrot, 1980; drawn by counting escape steps, the standard method).\nOur own: written with the one + and · that every number type has, here at Complex, which the GPU runs as vec2f."
+}

@@ -153,3 +153,23 @@ test("show prints a fraction as 1/2 and a complex number as 3 − 4i, in lists t
   assert.deepEqual(items((defs.shown as () => Value)()), ["[1/2, 2]"]);
   assert.equal(typeof defs["shown complex"] === "function" ? (defs["shown complex"] as () => Value)() : defs["shown complex"], "[3 − 4i, 0.5 + 2i]");
 });
+
+// L40b: examples/mandelbrot, z ↦ z · z + c with the one + and · at Complex,
+// goes to the GPU whole (Complex as vec2f), and the evaluator draws the set
+// black and the rest in colour.
+test("the Mandelbrot shader: one + and · at Complex, lowered to WGSL whole", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { lowerScalar } = await import("../../compiler/src/scalar.ts");
+  const { emitWgsl } = await import("../../compiler/src/wgsl.ts");
+  const e = loadProgram(join(import.meta.dirname, "../examples/mandelbrot"));
+  const info = infer(e.code, e.pres.names);
+  assert.deepEqual(info.errors.map((x) => x.message), []);
+  const lowered = lowerScalar(e.code, info, e.pres.names, [e.named("colour")], { records: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.match(emitWgsl(lowered).wgsl, /fn escape_at_Float64_\d+\(a0: vec2f, a1: vec2f, a2: f32\) -> f32 \{\n {2}var p0 = a0;[\s\S]*loop \{/);
+  const r = makeRunner(e.code, info, { print: () => {} });
+  const at = (x: number, y: number) => { for (const v of r.call(r.value(e.named("colour")), x, y, 0)) return (v as { fields: number[] }).fields; return []; };
+  // (−1, −1) is −1.045 − 0.08i, inside the set's second disc; (0, 0.5) is outside it.
+  assert.deepEqual(at(-1, -1), [0, 0, 0]);
+  assert.ok(at(0, 0.5).some((v) => v > 0.2));
+});
