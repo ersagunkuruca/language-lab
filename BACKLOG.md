@@ -18,7 +18,13 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| (empty) | I3 to I10 were triaged into E49 to E57 and are done | | |
+| I11 | **Bug.** A loose part can't be wired back by its own output: dragging the node's output onto the hole it left is refused ("that isn't inside this definition"); only the loose frame's end dot works, though the status says "drag its output" | QA6 H1 | 2026-10-26 |
+| I12 | Phone: + New program leaves you on Programs; its hole is preselected, so tapping it doesn't bring the palette either | QA6 M1 | 2026-10-26 |
+| I13 | Loose parts read as `_1`, and one that uses inputs reads as a function `_1(length, gravity) = …` | QA6 M2 | 2026-10-26 |
+| I14 | A loose literal pill has no output: dropping it on an input only moves it on top of the node | QA6 L1 | 2026-10-26 |
+| I15 | A loose hole refuses effectful calls (`print("hi")`) that the definition's own hole accepts, without saying why | QA6 L2 | 2026-10-26 |
+| I16 | The graph's palette pop-up covers neighbouring nodes and repeats the side panel's palette | QA6 L3 | 2026-10-26 |
+| I17 | Refusals for units don't mention units (Change the function on `speed · time` → `subtract`: "Nothing that fits matches") | QA6 L4 | 2026-10-26 |
 
 ## E: Editor
 
