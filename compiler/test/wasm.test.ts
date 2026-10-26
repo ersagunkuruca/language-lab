@@ -9,7 +9,7 @@ import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -760,5 +760,18 @@ test("compare and sort in WebAssembly: the evaluator's order on every plain type
       const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
       assert.equal(flat(got), flat(outcome(r, def, xs)), name);
     }
+  }
+});
+
+test("a recursive let in WebAssembly: lifted to a definition, the evaluator's answers (BACKLOG L84)", async () => {
+  const p = recursiveLets();
+  assert.deepEqual(p.info.errors, []);
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.scaledSum], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const t = lowered.funcs.find((f) => f.name === "scaled sum")!.params[0];
+  for (const [xs, c] of [[[1, 2, 3], 2], [[], 5], [[0.5, -1.5], -2]] as [number[], number][]) {
+    assert.equal(w["scaled sum"](toWasm(w, toList(xs), t), c), first(r.call(r.value(p.scaledSum), toList(xs), c)), `${xs} · ${c}`);
   }
 });

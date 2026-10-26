@@ -425,7 +425,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     switch (t.kind) {
       case "binder":
         if (env.has(target)) return opened(env.get(target)!);
-        err(id, `${nm(target)} is used outside the function or case that introduces it`);
+        err(id, `${nm(target)} has no value here: it is used outside the function or case that introduces it`);
         return s.fresh();
       case "def":
         if (isTypeDef(target)) { err(id, `${nm(target)} is a type, not a value`); return s.fresh(); }
@@ -501,7 +501,25 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const subsBefore = s.subs.length;
         const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
         for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
-        const args = early ?? applied ?? n.args.map((a) => expr(a, env, row));
+        const args = early ?? applied ?? n.args.map((a, i) => {
+          // A recursive let (BACKLOG L84): a let is `(name ↦ body)(value)`,
+          // and a value that's a function may call itself by the name, as
+          // ML's `let rec` (monomorphic inside, as there). It's checked for
+          // termination like a definition; lift-lets.ts makes it one.
+          // The name is in scope in any function a let names, so the
+          // palette offers it there before the first call is written.
+          const f = code.nodes[n.fn], p = f?.kind === "lambda" && code.nodes[a]?.kind === "lambda" ? f.params[i] : undefined;
+          if (!p) return expr(a, env, row);
+          const self = s.fresh();
+          const t = expr(a, new Map(env).set(p, self), row);
+          unifyAt(a, self, t);
+          if (!terminates(code, [p], () => code.nodes[a] as NodeOf<"lambda">)) {
+            const r = s.resolve(t);
+            try { if (r.t === "fn") s.unifyRow(r.eff, { effs: [DIVERGE], tail: s.next++ }); }
+            catch (e) { if (e instanceof EffectError) err(a, `${nm(p)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
+          }
+          return t;
+        });
         const ret = s.fresh();
         // A search's call does what its function does besides Choice, and
         // the code beside it may do more: its row goes inside this one.
@@ -893,12 +911,23 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 type Arc = [from: number, to: number, strict: boolean];
 interface CallGraph { from: Id; to: Id; arcs: Arc[] }
 
-function terminates(code: Code, group: Id[]): boolean {
+// A let's function that calls itself by its name (BACKLOG L84): the let's
+// binder, when the call's function is a lambda and its i-th input is a
+// lambda that refers to the i-th parameter.
+export function recursiveLet(code: Code, call: NodeOf<"call">, i: number): Id | null {
+  const f = code.nodes[call.fn], a = code.nodes[call.args[i]];
+  if (f?.kind !== "lambda" || a?.kind !== "lambda" || !f.params[i]) return null;
+  const p = f.params[i];
+  return subtree(code, a.id).some((x) => { const n = code.nodes[x]; return n?.kind === "ref" && n.target === p; }) ? p : null;
+}
+
+// `lambdaOf`: the function each member is, a definition's body by default
+// (a recursive let's binder names its lambda).
+function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }): boolean {
   const inGroup = new Set(group);
   const graphs: CallGraph[] = [];
   for (const d of group) {
-    const body = (code.nodes[d] as NodeOf<"def">).body;
-    const lam = body ? code.nodes[body] : null;
+    const lam = lambdaOf(d);
     if (lam?.kind !== "lambda") return false;
     // size.get(b): for each input i that b is (false) or is a piece of (true)
     const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));

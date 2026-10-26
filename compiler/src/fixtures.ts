@@ -570,3 +570,22 @@ export function escapes() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), defs };
 }
+
+// A recursive let (BACKLOG L84): `go` lives inside `scaled sum`, calls
+// itself, and uses `c` from around it. lift-lets.ts makes it a definition
+// before any target sees it.
+export function recursiveLets() {
+  const k = new Lang();
+  const scaledSum = k.def("scaled sum");
+  k.define(scaledSum, k.fn(["xs", "c"], (xs, c) => {
+    let go = "";
+    const scope = k.lambda(["go"], (g) => ((go = g), k.call(g, xs)));
+    return k.call(scope, k.fn(["ys"], (ys) => k.match(ys, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["h", "t"], body: ([h, t]) => k.call(B.add, k.call(B.mul, h, c), k.call(go, t)) },
+    ])));
+  }));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), scaledSum };
+}
