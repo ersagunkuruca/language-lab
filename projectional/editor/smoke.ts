@@ -475,6 +475,34 @@ async function stepOrder() {
   await p.close();
 }
 
+// Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
+// E111): the box names what it holds, unfolds into a frame, and Ungroup
+// takes the frame away. The code is untouched throughout.
+async function groupPicked() {
+  where = "group the picked";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  const was = await text();
+  const muls = p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn");
+  await muls.nth(0).click({ modifiers: ["Shift"] });
+  await muls.nth(1).click({ modifiers: ["Shift"] });
+  await muls.nth(1).click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="group-picked"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Group on the menu of two picked`));
+  const box = p.locator(".p-graph rect.rg.group.folded");
+  if ((await box.count()) !== 1) errors.push(`${where}: ${await box.count()} folded group boxes`);
+  if ((await muls.count()) > 1) errors.push(`${where}: ${await muls.count()} · nodes still drawn outside the box`);
+  if ((await text()) !== was) errors.push(`${where}: grouping changed the code`);
+  await p.locator(".p-graph .items [data-fold]").first().dispatchEvent("click");
+  if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded, there's no group frame`);
+  await p.locator(".p-graph rect.rg.group").first().click({ button: "right", position: { x: 6, y: 6 } });
+  await p.locator('.ctx-menu [data-menu="ungroup"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: a group's menu has no Ungroup`));
+  if (await p.locator(".p-graph rect.rg.group").count()) errors.push(`${where}: ungrouped, the frame is still there`);
+  await p.close();
+}
+
 // An operation answered later is declared in the editor, beside what it
 // gives back, and its case reads the rest the way the text does (BACKLOG
 // E80): ask(question) with rest, in the text and the graph.
@@ -936,6 +964,7 @@ await simplifyAppend();
 await searchGoesOn();
 await helperAtValue();
 await answeredLater();
+await groupPicked();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();

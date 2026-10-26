@@ -122,6 +122,9 @@ interface Layout {
   known: Record<Id, Id[]>;
   // Calls shown with the callee's body in place (editor/inline.ts). A view.
   inline?: Id[];
+  // Picked nodes grouped into a frame of their own, by the group's id, to
+  // fold into one box (typedGraph.ts, BACKLOG E111). A view.
+  groups?: Record<Id, Id[]>;
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
@@ -1805,6 +1808,28 @@ function allNamed(on: boolean) {
       : "Every value is wires again, from where it's bound to every use. Only layout.json changed.");
 }
 
+// Picked nodes grouped into a frame of their own, folded into one box, or
+// the group taken away: a view (BACKLOG E111). The graph draws a group only
+// when everything in it is in one frame.
+function groupable(picked: Id[]): string | undefined {
+  const frameOf = (id: Id): Id | null | undefined => graph?.frameOf(id);
+  const where = picked.map(frameOf);
+  return where.some((w) => w === undefined || w !== where[0]) ? "pick nodes inside one frame" : undefined;
+}
+
+function groupPicked(picked: Id[]) {
+  if (picked.length < 2 || groupable(picked)) return;
+  const g = `group-${freshId()}`;
+  graph?.unpickAll();
+  commit({ layout: { ...doc.layout, groups: { ...(doc.layout.groups ?? {}), [g]: picked }, folded: [...(doc.layout.folded ?? []), g] } }, ["layout.json"],
+    `Grouped ${picked.length} into one box, which names what it holds; wires in end on its left, values out leave on its right. Unfold it (▸) to see them in their frame, or Ungroup from its menu. Only layout.json changed.`);
+}
+
+function ungroup(g: Id) {
+  const { [g]: _, ...groups } = doc.layout.groups ?? {};
+  commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only layout.json changed.");
+}
+
 // A frame drawn folded into one box, or open. A view.
 function toggleFolded(f: Id) {
   const now = doc.layout.folded ?? [];
@@ -1889,12 +1914,14 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (kind === "node") rows.push(...stepRows(id));
     if (kind === "node" && T.simplify(doc.code, doc.names.short, info, id)?.ok) rows.push(item("Simplify", "simplify", "The same meaning, written shorter: one list instead of append"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
+    if (kind === "frame" && doc.layout.groups?.[id]) rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
+    if (picked.length > 1) rows.push(item(`Group the ${picked.length} picked into one box`, "group-picked", "A frame around them, folded: one box naming what it holds. A view only; unfold or ungroup it from its menu", groupable(picked)));
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every((b) => (doc.layout.named ?? []).includes(b));
     rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
       : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
@@ -1983,6 +2010,8 @@ function menuAction(act: string, target: Id | undefined) {
     case "pick": { graph?.pick(target!); ui.menu = null; return render(); }
     case "tidy-all": return graph?.tidy(null);
     case "tidy-picked": return graph?.tidy(graph.picked());
+    case "group-picked": return groupPicked(graph?.picked() ?? []);
+    case "ungroup": return ungroup(target!);
     case "tidy-frame": return graph?.tidy([target!]);
     case "reset-one": { const p = graph?.picked() ?? []; return forget(p.length > 1 ? graph!.expand(p) : graph?.expand([target!]) ?? [target!]); }
     case "fit": { render(); graph?.fit(); return; }
@@ -2072,6 +2101,7 @@ function graphHooks(info: T.Info) {
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
+    groups: doc.layout.groups,
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
     reorder: (item: Id, onto: Id) => {
       const a = T.rowOfItem(doc.code, item), b = T.rowOfItem(doc.code, onto);

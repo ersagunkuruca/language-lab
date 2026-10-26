@@ -69,6 +69,9 @@ export interface GraphHooks {
   named: Set<Id>;
   // Frames drawn folded into one box, and folding or unfolding one.
   folded?: Set<Id>;
+  // Groups of picked nodes (and frames) drawn in a frame of their own, by
+  // the group's id: a view (layout.json), folded like any other frame.
+  groups?: Record<Id, Id[]>;
   fold?: (frame: Id) => void;
   // The + under a list's or a + b + c's inputs: one more, at the end.
   addItem?: (row: Id) => void;
@@ -96,6 +99,10 @@ export interface GraphView extends Canvas {
   pick: (id: Id) => void;
   // The nodes these stand for: themselves, and a frame's contents.
   expand: (ids: Id[]) => Id[];
+  // The frame a node is drawn in, or a frame's own (null: none); undefined
+  // when it isn't drawn.
+  frameOf: (id: Id) => Id | null | undefined;
+  unpickAll: () => void;
   // Where a folded frame's contents go when it unfolds: moved together to
   // the nearest place where the frame overlaps nothing (none if it fits).
   room: (frame: Id) => Record<Id, Pos>;
@@ -125,6 +132,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     scene.faded ??= new Set();
     for (const id of part.items.keys()) scene.faded.add(id);
   }
+  for (const [g, members] of Object.entries(hooks.groups ?? {})) group(scene, g, members);
   autoArrange(scene);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
@@ -135,6 +143,8 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     ...canvas,
     picked: () => [...picked],
     pick: (id) => { if (!picked.delete(id)) picked.add(id); },
+    unpickAll: () => picked.clear(),
+    frameOf: (id) => scene.items.get(id)?.frame ?? (scene.frames.has(id) ? scene.frames.get(id)!.parent : undefined),
     expand: (ids) => [...expand(scene, ids)],
     room: (f) => roomFor(scene, hooks.at, hooks.folded, f),
     tidy: (only) => {
@@ -654,6 +664,26 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   return { items, frames, wires: all, sources, result: body?.kind === "typedef" ? null : top.out, defId, lit, chains, then };
 }
 
+// ---------------------------------------------------------------- groups
+//
+// A group is a frame that holds what was picked: nodes, and frames with
+// what they hold, all from one frame. It is drawn, laid out, moved and
+// folded as a frame is, and changes nothing but the view (BACKLOG E111).
+// A group whose members aren't all here, or aren't all in one frame, isn't
+// drawn.
+
+function group(scene: Scene, g: Id, members: Id[]) {
+  const where = members.map((m) => scene.items.get(m)?.frame ?? (scene.frames.has(m) ? scene.frames.get(m)!.parent : undefined));
+  if (members.length < 2 || where.some((w) => w === undefined || w !== where[0])) return;
+  const parent = where[0] ?? null;
+  scene.frames.set(g, { id: g, parent, title: "group", cls: "group", binders: [], labels: [], out: null, pad: [12, 26, 12, 12], minH: 0, minW: 80 });
+  for (const m of members) {
+    const it = scene.items.get(m);
+    if (it) it.frame = g;
+    else scene.frames.set(m, { ...scene.frames.get(m)!, parent: g });
+  }
+}
+
 // ---------------------------------------------------------------- folding
 //
 // A folded frame is drawn as one box where the frame was: what it holds
@@ -678,9 +708,10 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   // A box says what it holds: the calls inside, the first few by name.
   const holds = (f: Id) => {
     const inside = [...scene.items.values()].filter((it) => hider(it.frame) === f);
-    const names = [...new Set(inside.flatMap((it) => (it.name ? [it.name] : [])))];
-    const more = inside.length - names.length;
-    return names.length ? `${names.slice(0, 3).join(", ")}${names.length > 3 ? ", …" : ""}` : `${more} node${more === 1 ? "" : "s"} inside`;
+    const count = new Map<string, number>();
+    for (const it of inside) if (it.name) count.set(it.name, (count.get(it.name) ?? 0) + 1);
+    const names = [...count].map(([n, k]) => (k > 1 ? `${n} ×${k}` : n));
+    return names.length ? `${names.slice(0, 3).join(", ")}${names.length > 3 ? ", …" : ""}` : `${inside.length} node${inside.length === 1 ? "" : "s"} inside`;
   };
   const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
