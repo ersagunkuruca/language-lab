@@ -500,6 +500,30 @@ async function patternRows() {
   await p.close();
 }
 
+// Cases that say the same thing read once, as the otherwise, and are one
+// row to edit (PATTERNS.md step 4): Conjugation's bands has two cases that
+// give back nil. Changing the otherwise changes both, in one undo step.
+async function sharedRow() {
+  where = "a shared otherwise row";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Conjugation/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^bands$/ }).first().click();
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/otherwise → nil/.test(await text())) errors.push(`${where}: bands reads ${await text()}`);
+  const same = p.locator('.p-text .kw[title^="The same in 2 places"]');
+  if ((await same.count()) !== 1) errors.push(`${where}: the otherwise doesn't say it's the same in 2 places`);
+  await p.locator(".p-text .body [data-id]", { hasText: /^nil$/ }).last().click();
+  await p.keyboard.press("Delete");
+  const after = await text();
+  if (!/otherwise → □/.test(after) || / nil/.test(after)) errors.push(`${where}: after clearing the otherwise, bands reads ${after}`);
+  if (!/2 places/.test(await p.locator(".status").innerText())) errors.push(`${where}: the note doesn't say both places changed`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if (!/otherwise → nil/.test(await text())) errors.push(`${where}: one Undo doesn't bring both back: ${await text()}`);
+  await p.close();
+}
+
 // Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
 // E111): the box names what it holds, unfolds into a frame, and Ungroup
 // takes the frame away. The code is untouched throughout.
@@ -991,6 +1015,7 @@ await helperAtValue();
 await answeredLater();
 await groupPicked();
 await patternRows();
+await sharedRow();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();

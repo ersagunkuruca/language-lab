@@ -341,16 +341,17 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       const row = (body: Id, head: Piece[], at?: Id) => arms.push(grp(hang(body, [...head, pn(" → ")]), 0, at, "arm"));
       if (n.kind === "match" && !handles) {
         // A case whose body only takes one of its fields apart further reads
-        // as one row per inner case: nested patterns (patterns.ts). In the
-        // text, cases that say the same thing read once, as the otherwise.
-        const all = matchRows(code, info, n);
-        const { rows, otherwise } = pane ? { rows: all, otherwise: n.otherwise ?? undefined } : sharedOtherwise(code, all, n.otherwise ?? undefined);
+        // as one row per inner case: nested patterns (patterns.ts). Cases
+        // that say the same thing read once, as the otherwise; in the pane,
+        // editing it edits every copy (sameEverywhere).
+        const { rows, otherwise, folded } = sharedOtherwise(code, matchRows(code, info, n), n.otherwise ?? undefined);
+        const copies = folded.length + (folded.length && n.otherwise ? 1 : 0);
         for (const r of rows) {
           enter(r.binds);
           row(r.body, pattern(r.pat), r.at);
           leave(r.binds);
         }
-        if (otherwise) row(otherwise, [kw("otherwise")]);
+        if (otherwise) row(otherwise, [copies && pane ? part("kw", ["otherwise"], undefined, `The same in ${copies} places: changing it changes every one`) : kw("otherwise")]);
       } else {
         for (const a of n.arms) {
           const arm = node(a) as NodeOf<"arm">;

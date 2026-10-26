@@ -4,7 +4,7 @@
 // else, becomes that match's cases in its place; an inner otherwise is _
 // there. The rows are the leaves of the decision tree, in its order.
 
-import { subtree, type Code, type Id, type NodeOf } from "../model.ts";
+import { children, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
@@ -98,3 +98,57 @@ export function patternWith<T>(p: Pat, name: (id: Id) => T, con: (id: Id) => T, 
 }
 
 export const patternText = (p: Pat, name: (id: Id) => string, con: (id: Id) => string): string => patternWith(p, name, con, (s) => s).join("");
+
+// Where a body the text draws once, as the otherwise, really is: one place
+// per row it stands for, and the match's own otherwise if it has one.
+export interface Place { parent: Id; slot: "body" | "otherwise"; binds: Id[] }
+const inPlace = (code: Code, p: Place): Id | undefined => (code.nodes[p.parent] as { body?: Id; otherwise?: Id | null } | undefined)?.[p.slot] ?? undefined;
+
+export function sharedPlaces(code: Code, info: Info | null, m: NodeOf<"match">): Place[] {
+  const { folded } = sharedOtherwise(code, matchRows(code, info, m), m.otherwise ?? undefined);
+  if (!folded.length) return [];
+  const rows = folded.map((r): Place => ({ parent: r.at, slot: code.nodes[r.at].kind === "arm" ? "body" : "otherwise", binds: r.binds }));
+  return m.otherwise ? [...rows, { parent: m.id, slot: "otherwise", binds: [] }] : rows;
+}
+
+// The copies are one row: an edit that changes one of them, leaving it
+// reading none of its own names, is made to all of them (each a fresh
+// copy of the edited one), in the same step. Gives back the copies' ids,
+// from → to, so their names can go with them, and how many places changed.
+export function sameEverywhere(before: Code, after: Code, info: Info | null): { code: Code; copied: [Id, Id][]; places: number } {
+  const none = { code: after, copied: [], places: 0 };
+  const changed = Object.keys(after.nodes).filter((id) => before.nodes[id] !== after.nodes[id]);
+  if (!changed.length) return none;
+  const up = new Map<Id, Id>();
+  for (const n of Object.values(after.nodes)) for (const c of children(n)) up.set(c, n.id);
+  const matches = new Set<Id>();
+  for (const id of changed) for (let x: Id | undefined = id; x; x = up.get(x)) if (after.nodes[x].kind === "match" && before.nodes[x]?.kind === "match") matches.add(x);
+  // A match drawn as rows of the one around it isn't drawn on its own.
+  const was = new Map<Id, Id>();
+  for (const n of Object.values(before.nodes)) for (const c of children(n)) was.set(c, n.id);
+  const inner = new Set([...matches].flatMap((m) => matchRows(before, info, before.nodes[m] as NodeOf<"match">).map((r) => (before.nodes[r.at].kind === "arm" ? was.get(r.at)! : r.at)).filter((x) => x !== m)));
+  let code = after, places = 0;
+  const copied: [Id, Id][] = [];
+  for (const m of matches) {
+    if (inner.has(m)) continue;
+    const ps = sharedPlaces(before, info, before.nodes[m] as NodeOf<"match">);
+    if (ps.length < 2) continue;
+    const old = shape(before, inPlace(before, ps[0])!);
+    const now = ps.map((p) => inPlace(code, p));
+    if (now.some((x) => !x)) continue;
+    const edited = ps.filter((p, i) => shape(code, now[i]!) !== old);
+    if (edited.length !== 1 || reads(code, inPlace(code, edited[0])!, edited[0].binds)) continue;
+    const from = inPlace(code, edited[0])!, ids = subtree(code, from);
+    const nodes = { ...code.nodes };
+    for (const p of ps) {
+      if (p === edited[0]) continue;
+      const fresh = new Map(ids.map((x) => [x, freshId()]));
+      for (const x of ids) { const c = mapIds(code.nodes[x], (y) => fresh.get(y) ?? y); nodes[c.id] = c; copied.push([x, c.id]); }
+      for (const x of subtree(code, inPlace(code, p)!)) delete nodes[x];
+      nodes[p.parent] = { ...nodes[p.parent], [p.slot]: fresh.get(from)! } as Node;
+    }
+    code = { nodes, defs: code.defs };
+    places += ps.length;
+  }
+  return { code, copied, places };
+}

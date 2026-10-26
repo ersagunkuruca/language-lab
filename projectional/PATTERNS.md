@@ -106,7 +106,7 @@ end is always safe. A row whose body reads its fields keeps its own line.
 
 These are separate nodes in the tree, five copies of `‹bad line›(n)`.
 Editing the shared row edits every copy: one change to the meaning, made
-in five places, in one undo step. The inspector shows "the same in 5
+in five places, in one undo step. The otherwise keyword says "the same in 5
 places". This is the one part that touches editing, so it is the last
 step.
 
@@ -157,5 +157,11 @@ One PR each:
    the tree ("Draw as nested matches", layout.json `tree`), in place of a
    ▸/▾ toggle. Shared bodies aren't merged into one `otherwise` row in the
    graph: until step 4, a frame stands for one copy of a body.
-4. **Editing a shared row** edits every copy, in one undo step. "Match
-   deeper" and "Join cases" named in the menu.
+4. **Editing a shared row. Done for the otherwise.** The pane draws shared
+   bodies as the otherwise too, its keyword titled "The same in N places".
+   An edit that changes one copy, and leaves it reading none of its own
+   row's names, is made to every copy (patterns.ts `sameEverywhere`, each a
+   fresh copy of the edited one), in the same undo step; the note says so.
+   A copy changed to read its row's names becomes that row's own line
+   again. This holds in the graph too, where the copies are drawn apart.
+   Still to do: "Match deeper" and "Join cases" named in the menu.
