@@ -1297,6 +1297,16 @@ function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
   return m.get(hole)!;
 }
 
+// Why nothing with effects goes in a hole that allows none, so a search
+// for print there says so instead of finding nothing (BACKLOG E123).
+function pureHole(info: T.Info, hole: Id): string {
+  const hi = info.holes.get(hole), row = hi && info.subst.resolveRow(hi.row);
+  if (!row || row.effs.length || row.tail !== null) return "";
+  return hi.group.some((d) => doc.loose?.[d])
+    ? "A loose part is a value of its own, and a value can't have effects, so print, die() and the like aren't offered. Fill the hole where the part will be used, or wire it in first."
+    : "This hole can't have effects (its definition is a value, or its type says none), so print, die() and the like aren't offered.";
+}
+
 // How often each thing is referred to in the program, once per version.
 const uses = new WeakMap<Code, Map<Id, number>>();
 function usesIn(code: Code): Map<Id, number> {
@@ -1375,7 +1385,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${q && pureHole(info, hole) ? pureHole(info, hole) : "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
