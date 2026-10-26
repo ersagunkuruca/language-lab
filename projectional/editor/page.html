@@ -464,6 +464,9 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .guide-item p { margin: 2px 0 0; font-size: 13px; line-height: 1.4; }
 .tgraph .reroute { fill: var(--dot); stroke: var(--canvas); stroke-width: 2; cursor: grab; }
 .tgraph .reroute.silent { fill: var(--canvas); stroke: var(--dot); stroke-width: 1.5; cursor: default; }
+.tgraph .stepn { font: 600 9px var(--mono, monospace); fill: var(--dot); pointer-events: none; }
+.tgraph path.then { fill: none; stroke: var(--dot); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.tgraph path.then.head { stroke-dasharray: none; }
 .tgraph .reroute.sel { stroke: var(--accent); stroke-width: 3; }
 .tgraph .dotl { fill: var(--dot); font: 600 11.5px var(--font-ui); pointer-events: none; }
 .field textarea.lit-text { font: 12px var(--font-code); white-space: pre; overflow: auto; resize: vertical; }

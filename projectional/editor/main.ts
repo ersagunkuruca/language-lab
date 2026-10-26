@@ -1302,6 +1302,17 @@ function paletteFor(hole: Id, m: NonNullable<UI["menu"]>) {
   document.getElementById("m-query")?.focus();
 }
 
+// The step a numbered dot stands for: the value its let binds; anything
+// else is its own step.
+function stepAt(id: Id): Id {
+  for (const n of Object.values(doc.code.nodes)) {
+    const f = n.kind === "call" ? doc.code.nodes[n.fn] : undefined;
+    const i = f?.kind === "lambda" ? f.params.indexOf(id) : -1;
+    if (i >= 0) return (n as NodeOf<"call">).args[i];
+  }
+  return id;
+}
+
 // What fits a hole, once per check of the code: the right-click menu and
 // the side panel show the same palette, and typing in either redraws both.
 const fitting = new WeakMap<T.Info, Map<Id, T.Filling[]>>();
@@ -1800,6 +1811,15 @@ function graphMenu(info: T.Info): HTMLElement | null {
   const rows: (HTMLElement | null)[] = [];
   const names = typedPres().names;
   const head = (t: string) => h("div", { class: "ctx-head" }, t);
+  // A step of an action, by its node or its numbered dot: its place in
+  // the order, as the panel's Order of steps.
+  const stepRows = (at: Id) => {
+    const v = stepAt(at), body = defBody(ui.def);
+    const earlier = Top.moveStep(doc.code, doc.names.short, v, -1), later = Top.moveStep(doc.code, doc.names.short, v, 1);
+    const isStep = (r: Top.Top) => r.ok || !/isn't a step/.test(r.reason);
+    if (!isStep(earlier) || body?.kind !== "lambda" || body.params.length) return [];
+    return [item("Do it earlier", "step-earlier", "Swap it with the step before", earlier.ok ? undefined : earlier.reason), item("Do it later", "step-later", "Swap it with the step after", later.ok ? undefined : later.reason)];
+  };
   if (kind === "hole" && id) {
     rows.push(fillPalette(id, info, names, "m-query"));
   } else if (kind === "space") {
@@ -1811,6 +1831,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(head(names[id] ?? "a value"));
     if (names[id] !== "_" && inGraph) rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
     rows.push(item("Name it…", "name"));
+    rows.push(...stepRows(id));
     if (T.isDot(doc.code, ui.def, id) && inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
     if (T.isDot(doc.code, ui.def, id)) { const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", r.ok ? undefined : r.reason)); }
   } else if ((kind === "node" || kind === "frame") && id) {
@@ -1837,6 +1858,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
+    if (kind === "node") rows.push(...stepRows(id));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
@@ -1900,6 +1922,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "inline": return toggleInline(target!);
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
+    case "step-earlier": case "step-later": return runTop(info, Top.moveStep(doc.code, doc.names.short, stepAt(target!), act === "step-earlier" ? -1 : 1));
     case "delete": return void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, target!));
     case "swap": case "replace": {
       // Change the function: the function becomes a hole and the inputs stay
@@ -2493,7 +2516,7 @@ function guide(): HTMLElement {
       "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest (dots, right). A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
   ];
   return h("section", { class: "guide", "aria-label": "Guide" },
-    h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2. Replace with… does both in one step. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. An item of a list, or one input of a + b + c, can be added beside, moved earlier or later, or taken out from its panel; in the graph, the + under a node's inputs adds one at the end. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
+    h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2. Replace with… does both in one step. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. An item of a list, or one input of a + b + c, can be added beside, moved earlier or later, or taken out from its panel; in the graph, the + under a node's inputs adds one at the end. An action's steps (print this, then that) run top to bottom: in the graph they're numbered in one column with a dashed line from each to the next, and Do it earlier or later, on a step's menu or in its panel, moves one. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
     h("p", { class: "hint" }, "While a definition has a hole, its type is kept as it was, so a fill that would change it (one that does Random where it didn't, say) isn't offered. The hole's panel says so; Let it loosen there lets the type follow the body again."),
     h("p", { class: "hint" }, "Run, above, runs main, or the definition you're looking at backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
