@@ -362,7 +362,9 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
 // column is placed after the one it feeds: a unit goes level with the
 // inputs it feeds, so a call's inputs come in the order of its ports, and
 // then they're stacked so nothing overlaps.
-export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], gap = 18, colGap = 46): Map<string, Pos> {
+// `chains`: units that keep one column and this order, top to bottom (an
+// action's steps, in the order they run).
+export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains: string[][] = [], gap = 18, colGap = 46): Map<string, Pos> {
   const parentOf = new Map(frames.map((f) => [f.id, f.parent]));
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const order = new Map<string, number>();
@@ -408,6 +410,17 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], gap = 
     // nearest thing it feeds, not as far left as the longest path would put it.
     const fed = new Set(units.flatMap((u) => outs.get(u)!.map((e) => e.to)));
     for (const u of units) if (!fed.has(u) && outs.get(u)!.length) rank.set(u, 1 + Math.min(...outs.get(u)!.map((e) => rank.get(e.to)!)));
+    // A chain's units share the column of the one furthest left.
+    const chainsIn = chains.map((ch) => [...new Set(ch.map((x) => unitIn(x, c)).filter((u): u is string => !!u && rank.has(u)))]).filter((ch) => ch.length > 1);
+    for (const ch of chainsIn) { const r = Math.max(...ch.map((u) => rank.get(u)!)); for (const u of ch) rank.set(u, r); }
+    const keepOrder = (col: string[]) => {
+      for (const ch of chainsIn) {
+        const slots = col.map((u, i) => (ch.includes(u) ? i : -1)).filter((i) => i >= 0);
+        const inCol = ch.filter((u) => col.includes(u));
+        slots.forEach((i, k) => { col[i] = inCol[k]; });
+      }
+      return col;
+    };
     const cols: string[][] = [];
     for (const u of units) (cols[rank.get(u)!] ??= []).push(u);
     const y = new Map<string, number>();
@@ -418,12 +431,23 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], gap = 
         return es.reduce((s, e) => s + y.get(e.to)! + e.at, 0) / es.length - es[0].from;
       };
       const ws = new Map(col.map((u) => [u, r ? want(u) : 0]));
-      const sorted = r ? [...col].sort((a, b) => ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!) : col;
+      const sorted = keepOrder(r ? [...col].sort((a, b) => ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!) : [...col]);
       let bottom = -Infinity;
       for (const u of sorted) { const t = r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap); y.set(u, t); bottom = t + size.get(u)!.h; }
       // Pushed down to make room: move the column back up, half way.
       if (r) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
     });
+    // What a step leads to and nothing reads (a step's dot, an action's
+    // result) was stacked before the steps had places: it goes level with
+    // the step that feeds it.
+    const stepUnits = new Set(chainsIn.flat());
+    if (stepUnits.size && cols[0]) {
+      const fedBy = (u: string) => units.flatMap((v) => (stepUnits.has(v) ? outs.get(v)!.filter((e) => e.to === u).map((e) => y.get(v)! + e.from - e.at) : []));
+      const sinks = cols[0].filter((u) => !stepUnits.has(u) && fedBy(u).length);
+      const want = new Map(sinks.map((u) => [u, fedBy(u).reduce((a, b) => a + b, 0) / fedBy(u).length]));
+      let bottom = -Infinity;
+      for (const u of [...sinks].sort((a, b) => want.get(a)! - want.get(b)!)) { const t = Math.max(want.get(u)!, bottom + gap / 3); y.set(u, t); bottom = t + size.get(u)!.h; }
+    }
     // Columns right to left, each as wide as its widest; units meet the
     // column's right edge, nearer what they feed.
     const widths = cols.map((col) => Math.max(...col.map((u) => size.get(u)!.w)));

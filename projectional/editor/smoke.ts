@@ -437,6 +437,32 @@ async function looseValue() {
   await p.close();
 }
 
+// An action's steps run top to bottom, and the graph says so: numbered,
+// in one column in that order, and each one's menu moves it (Ersagun
+// 2026-10-26: "are they run in sequence, how are they edited?").
+async function stepOrder() {
+  where = "the order of steps";
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const marks = await p.locator(".p-graph .stepn").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
+  const ys = marks.sort((a, b) => a.n - b.n).map((m) => m.y);
+  if (marks.length < 7 || ys.some((y, i) => i && y <= ys[i - 1])) errors.push(`${where}: steps numbered ${JSON.stringify(marks)}`);
+  const prints = await p.locator(".p-graph g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x)));
+  if (new Set(prints).size !== 1) errors.push(`${where}: the prints aren't in one column: ${prints}`);
+  const first = async () => (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.startsWith("print("));
+  const was = await first();
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  await p.locator(".p-graph circle.reroute.silent").nth(1).click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="step-earlier"]').click({ timeout: 15000 }).catch(async () => errors.push(`${where}: step 2's menu has no Do it earlier: ${await p.locator(".ctx-menu").innerText().catch(() => "no menu")}`));
+  if ((await first()) === was) errors.push(`${where}: Do it earlier on step 2 left ${was} first`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if ((await first()) !== was) errors.push(`${where}: one Undo doesn't put the order back`);
+  await p.close();
+}
+
 // A click on a wire puts a dot where you clicked, and nothing else moves
 // (BACKLOG E109), though the dot's let changes how main would be laid out.
 async function dotOnWire() {
@@ -804,6 +830,7 @@ await plusDrop();
 await looseParts();
 await swapDrop();
 await looseValue();
+await stepOrder();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();

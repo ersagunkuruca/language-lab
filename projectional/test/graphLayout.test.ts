@@ -147,3 +147,27 @@ test("arrange lays out afresh: the same from anywhere, again moves nothing, inpu
   const d = { x: elsewhere.get("h")!.x - p("h").x, y: elsewhere.get("h")!.y - p("h").y };
   for (const n of nodes) assert.deepEqual(elsewhere.get(n.id), { x: p(n.id).x + d.x, y: p(n.id).y + d.y });
 });
+
+test("an action's steps keep one column in the order they run, each step's dot level with it", () => {
+  // Three steps; the first two lead to a dot each, the last is the result.
+  // Without the chain, s1 and s2 would sit left of s3 (they feed the dots,
+  // which share s3's column), and the dots would stack at the top.
+  const nodes = [
+    { id: "s1", x: 0, y: 0, w: 60, h: 30, frame: null },
+    { id: "s2", x: 0, y: 0, w: 60, h: 30, frame: null },
+    { id: "s3", x: 0, y: 0, w: 60, h: 30, frame: null },
+    { id: "d1", x: 0, y: 0, w: 16, h: 16, frame: null },
+    { id: "d2", x: 0, y: 0, w: 16, h: 16, frame: null },
+    { id: "x", x: 0, y: 0, w: 40, h: 120, frame: null },
+  ];
+  const wires = [
+    { from: "s1", fx: 60, fy: 15, to: "d1", tx: 0, ty: 8, flow: true },
+    { from: "s2", fx: 60, fy: 15, to: "d2", tx: 0, ty: 8, flow: true },
+    { from: "x", fx: 40, fy: 60, to: "s2", tx: 0, ty: 15, flow: true },
+  ];
+  const at = arrange(nodes, [], wires, [["s1", "s2", "s3"]]);
+  const p = (id: string) => at.get(id)!;
+  assert.ok(p("s1").x === p("s2").x && p("s2").x === p("s3").x, "one column");
+  assert.ok(p("s1").y < p("s2").y && p("s2").y < p("s3").y, "in the order they run");
+  for (const [d, s] of [["d1", "s1"], ["d2", "s2"]]) assert.equal(p(d).y + 8, p(s).y + 15, `${d} is level with ${s}`);
+});

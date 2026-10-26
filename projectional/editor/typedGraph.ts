@@ -178,6 +178,8 @@ interface Scene {
   defId: Id;
   lit: Set<Id>;              // highlighted with the selection: a binding's uses
   faded?: Set<Id>;           // items of loose parts, drawn faded
+  chains?: Id[][];           // an action's steps, in the order they run
+  then?: [End, End][];       // from each step to the next
 }
 
 // A laid-out piece, in its own coordinates: how far it reaches, where its
@@ -210,6 +212,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const frames = new Map<Id, Frame>();
   const wires: Wire[] = [];
   const sources = new Map<Id, End>();
+  const chains: Id[][] = [], then: [End, End][] = [];
   const usesOf = new Map<Id, Id[]>();
   let frame: Id | null = null;   // the frame being laid out
 
@@ -498,10 +501,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         sources.set(b, { item: b, dx: bw, dy: bh / 2 });
         right = Math.max(right, x + bw);
       } else {
-        const r = silent ? 4 : 6;
-        const t = silent ? "a step done for its effect; nothing reads it" : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
+        const r = silent ? (sequence ? 8 : 4) : 6;
+        const t = silent ? (sequence ? `Step ${i + 1} of ${steps.length + 1}, done for its effect; then step ${i + 2}. Right-click the step to do it earlier or later` : "a step done for its effect; nothing reads it") : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
         item(b, 2 * r, 2 * r, (g) => {
           g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
+          if (silent && sequence) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(i + 1)));
           if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
         }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false, label: silent ? undefined : { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
         at.set(b, { x, y: py - r });
@@ -517,6 +521,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     });
     const valsH = Math.max(0, y - 18);
     const body = lay(rest);
+    // An action's steps run top to bottom: they keep that order in one
+    // column wherever the layout puts them, and a dashed line leads from
+    // each to the next (Ersagun 2026-10-26: "are they run in sequence?").
+    if (sequence && steps.length) {
+      const unit = (e: End) => ("item" in e ? e.item : "frameOut" in e ? e.frameOut : null);
+      chains.push([...vals.map((v) => unit(v.out)), unit(body.out)].filter((u): u is Id => !!u));
+      const dot = (b: Id): [End, End] => [{ item: b, dx: 8, dy: 16 }, { item: b, dx: 8, dy: 0 }];
+      steps.forEach(([b], i) => then.push([dot(b)[0], i + 1 < steps.length ? dot(steps[i + 1][0])[1] : body.out]));
+    }
     const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
     shift(at, body, bx, by);
@@ -634,7 +647,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const lit = new Set<Id>();
   const sb = hooks.selected ? (usesOf.has(hooks.selected) ? hooks.selected : dotOf(hooks.selected)) : null;
   if (sb) { lit.add(sb); for (const u of usesOf.get(sb) ?? []) lit.add(u); }
-  return { items, frames, wires: all, sources, result: body?.kind === "typedef" ? null : top.out, defId, lit };
+  return { items, frames, wires: all, sources, result: body?.kind === "typedef" ? null : top.out, defId, lit, chains, then };
 }
 
 // ---------------------------------------------------------------- folding
@@ -855,6 +868,14 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     }
   }
 
+  // From each step of an action to the next: straight, dashed, under the items.
+  for (const [a0, b0] of scene.then ?? []) {
+    const a = point(a0), b = point(b0);
+    const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l;
+    const head = (k: number) => `${(b.x - ux * 6 + k * uy * 3.5).toFixed(1)},${(b.y - uy * 6 - k * ux * 3.5).toFixed(1)}`;
+    wireG.append(s("path", { d: `M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`, class: "then" }), s("path", { d: `M${head(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)} L${head(-1)}`, class: "then head" }));
+  }
+
   // Items.
   const itemG = s("g", { class: "items" });
   for (const it of scene.items.values()) {
@@ -954,7 +975,7 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
 // two are one layout.
 function autoArrange(scene: Scene) {
   const { nodes, frames, wires } = asLayout(scene, {});
-  for (const [k, p] of arrange(nodes, frames, wires)) scene.items.get(k)!.auto = p;
+  for (const [k, p] of arrange(nodes, frames, wires, scene.chains)) scene.items.get(k)!.auto = p;
 }
 
 // Tidy everything lays it all out afresh (arrange), the same every time;
@@ -963,7 +984,7 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
   const { pos, nodes, frames, wires } = asLayout(scene, at);
   if (only) return Object.fromEntries(tidy(nodes, frames, wires, only));
   const moved: Record<Id, Pos> = {};
-  for (const [k, p] of arrange(nodes, frames, wires)) { const o = pos.get(k)!; if (p.x !== o.x || p.y !== o.y) moved[k] = p; }
+  for (const [k, p] of arrange(nodes, frames, wires, scene.chains)) { const o = pos.get(k)!; if (p.x !== o.x || p.y !== o.y) moved[k] = p; }
   return moved;
 }
 
