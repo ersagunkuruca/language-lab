@@ -25,7 +25,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E127 | Run backwards shows nothing until the whole search ends: show the first answer as soon as it's found and keep looking for others after (`fibFast(n) = 8` waits 26 s for an answer found in 11 steps) | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P2 | S | |
 | E128 | A function written in place is offered only at a hole of function type; at a new value (`Add a value before this`, type `a`) there's no "new function", so a local helper can't be started. Offer it where the type is open | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P3 | S | |
 | E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
@@ -134,6 +133,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E127 | Run backwards shows the first answer at once (a 0.3 s look) and keeps looking in the run worker, a minute at most, with Stop | #472 |
 | E114 | Covered by E98: Simplify flattens an append of written-out lists in one step | #469 |
 | E98 | Simplify on a node's menu: append of written-out lists becomes one list, append with [] drops it; one Undo | #469 |
 | E126 | Change the function with a name typed in full that doesn't fit says why, from the checker: units that don't agree, a type that doesn't match | #468 |
