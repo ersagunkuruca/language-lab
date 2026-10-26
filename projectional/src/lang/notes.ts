@@ -79,7 +79,7 @@ export const NOTES: Comments = {
   "builtin.and": "Both true.",
   "builtin.or": "Either true.",
   "builtin.not": "true becomes false and false true.",
-  "builtin.compare": "How two values are ordered: before, same or after. Numbers by value, text alphabetically, cases in the order their type lists them, then field by field. sort uses it.",
+  "builtin.compare": "How two values are ordered: before, same or after. Numbers by value, exactly (unlike equal, which lets two Numbers within about 1e-9 be equal), with NaN after every other Number; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
   "builtin.showAny": "Any plain value as text, the way it would be written: show([1, 2]) is \"[1, 2]\".",
 
   // --- text

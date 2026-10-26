@@ -85,17 +85,28 @@ export function equal(a: Value, b: Value): boolean {
   return true;
 }
 
+// How two Numbers are ordered: exactly, and totally. Unlike `equal`'s
+// nearness this is an order a sorted list, a set or a map's keys can rely
+// on (REVIEW-2026-10-26.md §1.1): every Number is before, the same as or
+// after every other, and "the same" is transitive. NaN (from 0/0 or
+// sqrt(−1)) is after every other Number and the same as itself, as in
+// IEEE 754's totalOrder; −0 and 0 are the same, unlike totalOrder, because
+// `equal` says so and nothing a program does tells them apart.
+export const numberOrder = (a: number, b: number): number =>
+  a < b ? -1 : a > b ? 1 : a === b ? 0 : Number.isNaN(a) ? (Number.isNaN(b) ? 0 : 1) : -1;
+
 // The order on plain data (L66): numbers by value (Int, Number and
-// fractions; Number by `equal`'s nearness), text by code point, and other
+// fractions; Number exactly, numberOrder), text by code point, and other
 // cases by their declaration order (`order`: a variant's place in its
 // type, variantOrder), then their fields left to right, so lists go
 // lexicographically with [] first. OCaml's `compare` and Erlang's term
-// order (prior art). -1, 0 or 1; it agrees with `equal`.
+// order (prior art). -1, 0 or 1. Where `equal` is near on Numbers, this
+// is exact: 0.1 + 0.2 is after 0.3, and equal to it.
 export function compareValues(a: Value, b: Value, order: Map<Id, number>): number {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
-    if (typeof x === "number" && typeof y === "number") { if (!sameNumber(x, y)) return x < y ? -1 : 1; continue; }
+    if (typeof x === "number" && typeof y === "number") { const c = numberOrder(x, y); if (c) return c; continue; }
     if (typeof x === "bigint" || typeof y === "bigint") { if (x !== y) return (x as bigint) < (y as bigint) ? -1 : 1; continue; }
     if (typeof x === "string" && typeof y === "string") { if (x !== y) return T.less(x, y) ? -1 : 1; continue; }
     if (typeof x !== "object" || typeof y !== "object") continue;

@@ -740,13 +740,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
   }
   // compare's order (run.ts compareValues) as −1, 0 or 1: numbers by
-  // value, Bools and cases in the order their type declares them, text by
+  // value (exactly), Bools and cases in the order their type declares them, text by
   // code point, fractions by value, then fields left to right.
   function compared(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     const num = (v: number): SExpr => ({ k: "num", v });
     const pick = (eq: SExpr, lt: SExpr): SExpr => ({ k: "if", cond: eq, then: num(0), else: { k: "if", cond: lt, then: num(-1), else: num(1), t: "f64" }, t: "f64" });
     if (isFn(t)) throw new Refused("compares functions");
-    if (t === "f64") return pick(same(x, y, t, f, false), { k: "op", op: "less", args: [x, y] });
+    if (t === "f64") {
+      // Exactly, with NaN after every other Number (run.ts numberOrder).
+      const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
+      const nan = (e: SExpr) => op("not", op("equal", e, e));
+      return pick(op("or", op("equal", x, y), op("and", nan(x), nan(y))), op("or", op("less", x, y), op("and", nan(y), op("not", nan(x)))));
+    }
     if (t === "i32") return pick({ k: "op", op: "beq", args: [x, y] }, { k: "op", op: "not", args: [x] });
     if (t === "int") return pick({ k: "rt", fn: "int.equal", args: [x, y] }, { k: "rt", fn: "int.less", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });

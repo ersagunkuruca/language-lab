@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, runMain, equal, type Data, type Value } from "../src/lang/run.ts";
+import { compareValues, makeRunner, runMain, equal, variantOrder, type Data, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { choose, jobProblem, represent } from "../src/lang/represent.ts";
@@ -77,17 +77,25 @@ test("each tree job agrees with the definition through meaning, and the tree sta
   };
   let seed = 7;
   const rand = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  // Whole keys, then Numbers a near step apart (each within equal's 1e-9
+  // of the next) with NaN, −0 and 0: compare's exact order keeps the tree
+  // and the sorted list agreeing on those too (REVIEW-2026-10-26.md §1.1).
+  const order = variantOrder(w.code);
+  const near = [...Array.from({ length: 20 }, (_, j) => 1000.5 + j * 1.5e-6), NaN, -0, 0];
+  for (const keyOf of [(i: number) => i, (i: number) => near[i % near.length]]) {
   let tree = r.value(impl("empty map")), map = r.value(spec("empty map"));
   for (let step = 0; step < 400; step++) {
-    const key = rand(60), op = rand(3);
+    const key = keyOf(rand(60)), op = rand(3);
     if (op < 2) { tree = call(impl("put"), tree, key, step)!; map = call(spec("put"), map, key, step)!; }
     else { tree = call(impl("remove key"), tree, key)!; map = call(spec("remove key"), map, key)!; }
-    assert.ok(equal(means(tree)!, map), `step ${step}`);
+    // compare's "same", not equal: equal(NaN, NaN) is false, as IEEE says.
+    assert.equal(compareValues(means(tree)!, map, order), 0, `step ${step}`);
     balanced(tree);
-    const probe = rand(60);
+    const probe = keyOf(rand(60));
     assert.deepEqual(call(impl("value at"), tree, probe), call(spec("value at"), map, probe));
     assert.ok(equal(call(impl("has key"), tree, probe)!, call(spec("has key"), map, probe)!));
     assert.equal(call(impl("map size"), tree), call(spec("map size"), map));
+  }
   }
 });
 
