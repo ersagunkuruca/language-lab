@@ -93,7 +93,15 @@ quadratic, the tree n log n).
 
 Done as C47 (src/lang/library-reps.ts): `lab` and the editor's Run choose the
 tree when the costs say so, and equal, show and compare on a map are given
-its meaning. Before that, representations were applied
+its meaning. The trees are library data since C51: the trees module
+(src/lang/trees-source.ts, library/trees.json) holds a tree for Map and one
+for Set, and publishes their rows in `LIBRARY.reps`, each with `byType`, the
+equal, show and compare that go through its meaning. Since C48 the chooser
+offers every such row, so a Set gets its tree as a Map does. A map or set
+inside another value, or given to a generic definition, still keeps the
+definition (C52, C53). The trees module isn't part of the library every
+program is checked on, only merged in when a tree is chosen (C53): checking
+it is about 700 ms, and the editor checks after every edit. Before that, representations were applied
 only by `lab run` and `lab compile` with a representations.json (#97). A
 std or library type's representation has to be chosen automatically by the
 evaluator, the compiler and the editor, from the costs of the jobs the
