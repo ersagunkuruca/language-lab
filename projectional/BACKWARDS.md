@@ -205,11 +205,13 @@ pile up equations.
 
 So the fast version is the better program backwards too: it finds the
 answer in a few steps. It's the search for a second answer, which can
-never succeed, that costs more. Two improvements would fix it (both on the
-backlog):
+never succeed, that costs more. Two improvements fix it:
 
 - Show the first answer as soon as it's found, and look for more after.
-- Notice that a known input only grows while the result stays fixed, and
+  Done (BACKLOG E127): the Run pane looks for 0.3 seconds, shows what it
+  found, and goes on looking in the background, for a minute at most,
+  saying "Still looking for other answers…" with a Stop button.
+- (On the backlog.) Notice that a known input only grows while the result stays fixed, and
   stop. That's the size-change check MODES.md already runs, applied to
   values as well as to shapes.
 

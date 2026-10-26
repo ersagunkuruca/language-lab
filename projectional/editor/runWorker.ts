@@ -15,13 +15,20 @@ import { runMain, showValue } from "../src/lang/run.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
+import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 
 export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][] };
 export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][] } | { error: string; files: [string, string][] };
 
-const post = (m: RunSays) => (self as unknown as Worker).postMessage(m);
+const post = (m: RunSays | Found) => (self as unknown as Worker).postMessage(m);
 
-self.onmessage = (e: MessageEvent<RunAsk>) => {
+self.onmessage = (e: MessageEvent<RunAsk | BackAsk>) => {
+  // A function run backwards, searched to the end, or for a minute at
+  // most (backSearch.ts).
+  if ("backwards" in e.data) {
+    const { code, def, values, names } = e.data, until = Date.now() + 60000;
+    return post(searchBackwards(code, def, values, names, () => Date.now() > until));
+  }
   const { code, names, pins, def, title, files } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {

@@ -71,7 +71,7 @@ import { INT } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { relationFor } from "../src/lang/equations.ts";
-import { powers, relate, showTerm } from "../src/lang/relate.ts";
+import { powers } from "../src/lang/relate.ts";
 import { analyze } from "../../invertible/src/index.js";
 import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
@@ -82,6 +82,7 @@ import { CHOICE, DIVERGE, NUMBER, STRING, showIn, type Type } from "../src/lang/
 import { renderBlocks } from "../src/lang/render.ts";
 import { fromList, needsHandling, showValue, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
+import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
 import * as T from "./typed.ts";
@@ -848,13 +849,13 @@ function setKnown(info: T.Info, port: Id, on: boolean) {
     `${on ? "Gave" : "Asked for"} ${name}. Only layout.json changed: same code, same hash, another direction.`);
 }
 
-interface Backwards { answers: { values: Record<string, string>; free: string[]; residual: string[] }[]; more: boolean; error?: string; plan?: { status: string; needMore: number; steps: Step[] } }
+interface Backwards extends Found { stopped?: boolean; plan?: { status: string; needMore: number; steps: Step[] } }
 
 const backwardsCache = new Map<string, Backwards>();
 function runBackwards(info: T.Info, known: Id[]): Backwards {
   const key = JSON.stringify([fnv(JSON.stringify(userCode(doc.code))), ui.def, known, known.map((k) => portText(info, k))]);
   const hit = backwardsCache.get(key);
-  if (hit) return hit;
+  if (hit && !(hit.cut && searchingKey !== key)) return hit;
   const out: Backwards = { answers: [], more: false };
   // A port's value is written the way values print: 3, "text", [1, 2], true.
   const read = known.map((k) => [k, readPort(info, k, portText(info, k))] as const);
@@ -878,24 +879,37 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
       out.plan = a;
     }
   } catch {}
-  let steps = 0;
-  try {
-    // Periodic answers (an angle plus any number of turns) that land on
-    // the same values count once.
-    const seen = new Set<string>();
-    let tries = 0;
-    for (const a of relate(doc.code, ui.def, values, { spend: () => ++steps < 20000, names: pres().names })) {
-      const shown = Object.fromEntries(Object.entries(a.values).map(([k, v]) => [k, showTerm(v)]));
-      const key = JSON.stringify(Object.values(shown).map((v) => (/^-?\d/.test(v) ? fmt(Number(v)) : v)));
-      if (seen.has(key)) { if (++tries > 64) break; continue; }
-      seen.add(key);
-      if (out.answers.length === 6) { out.more = true; break; }
-      out.answers.push({ values: shown, free: a.free, residual: a.residual });
-    }
-    if (steps >= 20000) out.error = "Stopped searching: this direction may go on forever. Give it more known ports.";
-  } catch (e) { out.error = (e as Error).message; }
+  // A short look on the page, so the first answer shows at once; what
+  // that cuts short, the worker searches to the end (BACKLOG E127).
+  const until = Date.now() + 300;
+  Object.assign(out, searchBackwards(doc.code, ui.def, values, pres().names, () => Date.now() > until));
+  if (out.cut) searchOn(key, values, out.plan);
   backwardsCache.set(key, out);
   return out;
+}
+
+// The whole search, in a worker: one at a time, and its answers replace
+// the short look's when it ends, or after a minute.
+let searching: Worker | null = null, searchingKey = "";
+function searchOn(key: string, values: Record<string, unknown>, plan: Backwards["plan"]) {
+  searching?.terminate();
+  searchingKey = key;
+  const w = (searching = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const done = (r: Found) => { w.terminate(); if (searching !== w) return; searching = null; searchingKey = ""; backwardsCache.set(key, { ...r, cut: false, stopped: r.cut, plan }); render(); };
+  w.onmessage = (e: MessageEvent<Found>) => done(e.data);
+  w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
+  const ask: BackAsk = { backwards: true, code: doc.code, names: pres().names, def: ui.def, values };
+  w.postMessage(ask);
+}
+
+// Stop keeps the answers found so far.
+function stopSearch() {
+  const hit = backwardsCache.get(searchingKey);
+  searching?.terminate();
+  searching = null;
+  if (hit) backwardsCache.set(searchingKey, { ...hit, cut: false, stopped: true });
+  searchingKey = "";
+  render();
 }
 
 function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
@@ -929,12 +943,15 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   }
   if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
   else if (r.error) box.append(h("p", { class: "status-line bad" }, r.error));
+  else if (r.cut) box.append(h("p", { class: "status-line" }, r.answers.length ? "Still looking for other answers… " : "Looking for an answer… ",
+    h("button", { class: "btn", type: "button", "data-act": "stop-search", title: "Keep what it has found so far" }, "Stop")));
+  else if (r.stopped) box.append(h("p", { class: "status-line" }, r.answers.length ? "Stopped looking for other answers: Run again to look further." : "Stopped looking before it found an answer: give it more known ports."));
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   else if (!r.answers.length) box.append(h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
   if (r.answers.length > 1 || r.more) {
     const wanted = ports.filter((p) => !known.includes(p));
     const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : namer.name(p)} ${nice(a.values[p])}`).join(", "));
-    box.append(h("details", { class: "alts" }, h("summary", {}, `${r.answers.length - 1}${r.more ? "+" : ""} other answer${r.answers.length > 2 || r.more ? "s" : ""} (other branches)`),
+    box.append(h("details", { class: "alts" }, h("summary", {}, `${r.answers.length - 1}${r.more ? "+" : ""} other answer${r.answers.length > 2 || r.more ? "s" : ""} (other branches)${r.cut ? " so far" : ""}`),
       h("ul", {}, ...alt.map((a) => h("li", {}, a)))));
   }
   const residual = r.answers[0]?.residual ?? [];
@@ -2810,6 +2827,7 @@ document.addEventListener("click", (e) => {
     if (a === "t-novalues") return hideValues();
     if (a === "paste") return pasteIntoSelected();
     if (a === "open-file") return openFile();
+    if (a === "stop-search") return stopSearch();
     if (a === "save-file") return saveFile();
     if (a === "delete-program") return deleteProgram();
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
