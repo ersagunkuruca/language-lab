@@ -821,12 +821,18 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   const all = [...scene.wires];
   // A frame's own result wire: from what it holds to its right edge.
   for (const f of scene.frames.values()) if (f.out) all.push({ from: f.out, to: { frameOut: f.id }, cls: "", flow: false });
+  // Frames a wire neither starts nor ends in are in its way too, however
+  // tall (BACKLOG E110); it doesn't tunnel under one, though: a frame is a
+  // background.
+  const open = [...scene.frames.keys()].map((k) => boxes.get(k)!);
+  const touches = (q: Pos, b: Box) => q.x >= b.x - 2 && q.x <= b.x + b.w + 2 && q.y >= b.y - 2 && q.y <= b.y + b.h + 2;
   for (const w of all) {
     const a = point(w.from), b = point(w.to);
     const ends = new Set([endItem(w.from), endItem(w.to)]);
     const others = solid.filter((x) => !ends.has(x.key)).map((x) => x.box);
     // Around the nodes in the way, where it can; under them (a tunnel) where not.
-    const { pts, bent } = route(a, b, others, drawn.map((d) => d.pts), titles);
+    const walls = open.filter((f) => !touches(a, f) && !touches(b, f)).map((f) => ({ ...f, reach: f.h }));
+    const { pts, bent } = route(a, b, [...others, ...walls], drawn.map((d) => d.pts), titles);
     const hops = crossingsOf(pts, drawn.map((d) => d.pts));
     const d = hops.length || bent ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
     drawn.push({ pts });

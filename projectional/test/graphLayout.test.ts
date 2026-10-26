@@ -108,6 +108,17 @@ test("a wire bends around a node in its way, and keeps its tunnel where it can't
   assert.equal(route({ x: 0, y: 60 }, { x: 260, y: 60 }, [{ x: 100, y: -100, w: 60, h: 400 }]).bent, false);
 });
 
+test("a wire goes round a frame it doesn't start or end in, however tall, even cutting a corner", () => {
+  const frame = { x: 100, y: 0, w: 300, h: 200, reach: 200 };
+  const inside = (q: { x: number; y: number }) => q.x > frame.x && q.x < frame.x + frame.w && q.y > frame.y && q.y < frame.y + frame.h;
+  const through = route({ x: 0, y: 120 }, { x: 500, y: 100 }, [frame]);
+  assert.ok(through.bent && !through.pts.some(inside), "a wire across a frame goes round it");
+  // Its end is over the frame: round the top, on that end's side.
+  const corner = route({ x: 0, y: 150 }, { x: 300, y: -60 }, [frame]);
+  assert.ok(corner.bent && !corner.pts.some(inside), "a wire cutting a frame's corner goes round it");
+  assert.ok(corner.pts.every((q) => q.x <= frame.x || q.y <= frame.y + 1), "over the top, not under");
+});
+
 test("arrange lays out afresh: the same from anywhere, again moves nothing, inputs in port order", () => {
   // f(a, b) inside a frame g, whose result feeds h; a and b start swapped and piled up.
   const nodes: TNode[] = [
