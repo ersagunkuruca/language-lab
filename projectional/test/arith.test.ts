@@ -184,3 +184,25 @@ test("a whole literal nothing fixes is an Int, one with a fraction part a Float6
   const r = resolveArithmetic(code, info, names);
   assert.equal(showType(r.info.subst.zonk(r.info.typeOf.get(inc)!), names), "(Int) -> Int");
 });
+
+// L86d: a definition is at its own defaults, so a use at another type gets
+// a copy. When inc's default became Int (L86b), a use at Float64 kept
+// calling it: inc(2.5) ran Int's +, and 0.5 · inc(0) was refused on the GPU.
+test("a use at Float64 of a definition whose default is Int gets a Float64 copy", () => {
+  const k = new Lang();
+  const inc = k.def("inc");
+  k.define(inc, k.fn(["x"], (x) => k.call(ARITH.add, x, k.lit(1))));
+  const half = k.def("half");
+  k.define(half, k.fn(["y"], () => k.call(ARITH.mul, k.lit(0.5), k.call(inc, k.lit(0)))));
+  const direct = k.def("direct");
+  k.define(direct, k.thunk(() => k.call(inc, k.lit(2.5))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const r = resolveArithmetic(code, info, names);
+  for (const d of [half, direct]) {
+    const called = subtree(r.code, d).map((id) => r.code.nodes[id]).find((n) => n.kind === "ref" && n.target !== inc && r.code.defs.includes(n.target) && !(n.target in code.nodes));
+    assert.ok(called && called.kind === "ref", names[d]);
+    assert.equal(showType(r.info.subst.zonk(r.info.typeOf.get(called.target)!), names), "(Float64) -> Float64", names[d]);
+  }
+});
