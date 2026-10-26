@@ -1,4 +1,4 @@
-# Float64s, and programs that don't say how their data is stored
+# Numbers, and programs that don't say how their data is stored
 
 Two requests that turn out to have one answer:
 
@@ -521,7 +521,7 @@ against 0.09 ms. `lab run` and `lab compile` choose too: a program folder with a
 uses (`lab run examples/numbers` prints 18! instead of running out of
 memory), and `--as-defined` runs the definitions as written.
 
-## Float64 systems, one by one
+## Number systems, one by one
 
 Each row is a meaning, written as ordinary definitions in std, and the
 representations behind it. "Backwards" is what running the arithmetic

@@ -125,7 +125,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Float64s & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,

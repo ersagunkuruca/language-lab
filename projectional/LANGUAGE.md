@@ -74,7 +74,7 @@ missing), `Abort` (stopped with a reason), `Random`, `Time` (the clock),
 `Diverge` (it might not finish). You can declare your own, and handle
 it with a match. See "Effects, and why not monads" below.
 
-**Float64s.** There are four kinds: `Int` (whole, any size), `Float64`
+**Numbers.** There are four kinds: `Int` (whole, any size), `Float64`
 (floating point), `Rational` (exact fractions such as 1/3) and `Complex`.
 One `+ − · <` works on all of them, and the checker picks the kind. Kinds
 don't mix by themselves: `as float64`, `whole part`, `as fraction` and `as
@@ -119,7 +119,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   set per type), with `Rational` (exact fractions, in lowest terms) and
   `Complex` (re + im·i) as the new kinds. A literal can be written as a
   fraction (`1/2`). `smaller`, `larger` and `≤ > ≥` work on every ordered
-  kind. ("Whole numbers and text", LIBRARY.md "Float64s".)
+  kind. ("Whole numbers and text", LIBRARY.md "Numbers".)
 - **`compare` and `sort`** on any plain data: numbers by value, text
   alphabetically, cases in the order the type lists them. ("Order, and
   sort".)
@@ -1488,7 +1488,7 @@ back into the group being hashed is named by its position.
 
 ## What's next
 
-- **Float64s.** Fractions, big integers, continued fractions, Clifford
+- **Numbers.** Fractions, big integers, continued fractions, Clifford
   algebras and tensors, and running a definition like Peano naturals on a
   fast representation chosen by cost: the plan is [NUMBERS.md](NUMBERS.md).
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
