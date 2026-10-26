@@ -795,9 +795,12 @@ hierarchy is the map of which structures to name.
    fractions` and so on, published but not offered) that arith.ts resolves
    the generic operations to; `fraction(top, bottom)` and `divide
    fractions` have no answer at a zero bottom; `show fraction` prints 3/4.
-   `1/10 + 2/10 = 3/10` holds exactly. Still to do: relate.ts's linear step
-   over fractions (running backwards stays at Float64), and `lowest terms`
-   in the WASM, C and WGSL targets.
+   `1/10 + 2/10 = 3/10` holds exactly. **Backwards (L39b):** relate.ts
+   runs each fraction operation as one relation, any two sides giving the
+   third exactly, so `x·(1/3) + 1/2 = 5/6` finds `x = 1`; `0·x = 0` leaves
+   `x` free and `0·x = 1` has no answer. WASM and C have `lowest terms`
+   since C33. The GPU works in f32 and has no Ints, so fractions stay off
+   it.
    **Complex done (L40):** `std.complex`, one case `complex(re, im)` of
    Float64s. Its `+ − · −x` are prelude definitions (`multiply complex` is
    (ac − bd) + (ad + bc)i) that arith.ts resolves the generic operations

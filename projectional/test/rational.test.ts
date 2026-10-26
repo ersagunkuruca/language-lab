@@ -155,3 +155,38 @@ test("literals at Rational and Complex: exact, in lowest terms, checked, and pri
   assert.match(renderBlocks(code, pres, info, sum), /1\/2/);
   assert.doesNotMatch(renderBlocks(code, pres, info, sum), /"1\/2"/);
 });
+
+// L39b: backwards, a fraction operation is one relation (relate.ts), so
+// any two sides give the third exactly. Through its Int steps it couldn't
+// run: undoing lowest terms has every multiple as an answer.
+test("fractions run backwards exactly: any two sides give the third", async () => {
+  const { RATIONAL_TYPE } = await import("../src/lang/types.ts");
+  const { relate, showTerm } = await import("../src/lang/relate.ts");
+  const { RATIO } = await import("../src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const q = (v: number | string) => k.at(RATIONAL_TYPE, v);
+  const fn = (name: string, body: (x: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["x"], body)); return d; };
+  const cases = [
+    { d: fn("third and a half", (a) => k.call(ARITH.add, k.call(ARITH.mul, a, q("1/3")), q("1/2"))), out: [5, 6], want: ["std.rational.ratio(1, 1)"] },
+    { d: fn("half less", (a) => k.call(ARITH.sub, q("1/2"), a)), out: [1, 6], want: ["std.rational.ratio(1, 3)"] },
+    { d: fn("negated", (a) => k.call(ARITH.add, k.call(ARITH.neg, a), q("1/4"))), out: [1, 2], want: ["std.rational.ratio(-1, 4)"] },
+    { d: fn("by three quarters", (a) => k.call(lib("divide fractions"), a, q("3/4"))), out: [2, 1], want: ["std.rational.ratio(3, 2)"] },
+    // 0 · x is 0 for every x, and never 1.
+    { d: fn("nothing", (a) => k.call(ARITH.mul, q(0), a)), out: [1, 1], want: [] },
+  ];
+  const zero = fn("zero times", (a) => k.call(ARITH.mul, q(0), a));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.filter((e) => [...cases.map((c) => c.d), zero].some((d) => subtree(code, d).includes(e.id))).map((e) => e.message), []);
+  const run = (d: Id, out: number[]) => {
+    const param = (code.nodes[(code.nodes[d] as { body: Id }).body] as { params: Id[] }).params[0];
+    const answers = [];
+    for (const a of relate(code, d, { out: { tag: RATIO, fields: out } }, { names, spend: () => true })) answers.push(a);
+    return answers.map((a) => ({ x: showTerm(a.values[param]), residual: a.residual }));
+  };
+  for (const c of cases) assert.deepEqual(run(c.d, c.out).map((a) => a.x), c.want, names[c.d]);
+  // 0 · x = 0: one answer, x left free.
+  const free = run(zero, [0, 1]);
+  assert.equal(free.length, 1);
+  assert.match(free[0].x, /^_/);
+});

@@ -59,11 +59,14 @@ const PRELUDE_AT: Record<string, Record<Id, string>> = {
   },
 };
 const preludeOps = new Map<string, Record<Id, Id>>();
+// A prelude definition's id, by its name.
+export const preludeDef = (name: string): Id | undefined =>
+  Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
 const atPrelude = (type: string, op: Id): Id => {
   let ops = preludeOps.get(type);
   if (!ops) {
     ops = Object.fromEntries(Object.entries(PRELUDE_AT[type]).map(([g, name]) => {
-      const d = Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
+      const d = preludeDef(name);
       if (!d) throw new Error(`the prelude has no ${name}`);
       return [g, d];
     }));

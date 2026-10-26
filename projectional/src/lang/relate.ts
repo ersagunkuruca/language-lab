@@ -63,10 +63,10 @@ import { close, fromList, META, sameNumber, equal as valueEqual, showValue, comp
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
-import { needsResolving, resolveArithmetic } from "./arith.ts";
+import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
 import { infer } from "./infer.ts";
-import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
-import { add as intAdd, intLit, neg as intNeg, sub as intSub, type Int } from "./int.ts";
+import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
+import { add as intAdd, intLit, lowestTerms, mul as intMul, neg as intNeg, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
 import { Subst } from "./types.ts";
@@ -557,6 +557,34 @@ function plansFor(code: Code, names?: Names): ReturnType<typeof analyzer> {
   return a;
 }
 
+// Fractions as (top, bottom) in lowest terms, the sign on top (int.ts).
+type Q = [Int, Int];
+const FRACTION_OPS = ["add fractions", "subtract fractions", "multiply fractions", "divide fractions", "negate fraction"] as const;
+type FractionOp = (typeof FRACTION_OPS)[number];
+const isZero = (a: Q) => a[0] === 0;
+const qAdd = ([p, q]: Q, [r, t]: Q): Q => lowestTerms(intAdd(intMul(p, t), intMul(r, q)), intMul(q, t));
+const qNeg = ([p, q]: Q): Q => [intNeg(p), q];
+const qMul = ([p, q]: Q, [r, t]: Q): Q => lowestTerms(intMul(p, r), intMul(q, t));
+const qDiv = (a: Q, [r, t]: Q): Q | null => (r === 0 ? null : qMul(a, lowestTerms(t, r)));
+// Side `at` of a fraction operation from the others (args, then out);
+// with every side known, `at` is out, and it's checked. Null: no answer.
+// "free": every value fits.
+function solveFraction(op: FractionOp, at: number, xs: (Q | undefined)[]): Q | null | "free" {
+  const [a, b, o] = xs as Q[];
+  // a · b = o for the unknown factor x: x = o / k, and when k = 0 any x
+  // gives 0.
+  const factor = (k: Q, o: Q) => (isZero(k) ? (isZero(o) ? "free" : null) : qDiv(o, k));
+  switch (op) {
+    case "add fractions": return [() => qAdd(o, qNeg(b)), () => qAdd(o, qNeg(a)), () => qAdd(a, b)][at]();
+    case "subtract fractions": return [() => qAdd(o, b), () => qAdd(a, qNeg(o)), () => qAdd(a, qNeg(b))][at]();
+    case "negate fraction": return qNeg(xs[at === 0 ? 1 : 0]!);
+    case "multiply fractions": return [() => factor(b, o), () => factor(a, o), () => qMul(a, b)][at]();
+    // a ÷ b = o, and b isn't 0: a = o · b, b = a ÷ o. With a and o both 0
+    // every b but 0 fits, and b stays unknown.
+    case "divide fractions": return [() => (isZero(b) ? null : qMul(o, b)), () => (isZero(o) ? (isZero(a) ? "free" : null) : qDiv(a, o)), () => qDiv(a, b)][at]();
+  }
+}
+
 export function interpreter(code: Code, opts: Options = {}) {
   // The generic + resolved to each type's own first (arith.ts), as the
   // evaluator does; a program from the evaluator is resolved already.
@@ -565,6 +593,11 @@ export function interpreter(code: Code, opts: Options = {}) {
   const owner = ownerOfTypeParts(code);
   const spend = opts.spend ?? (() => true);
   const recursive = new Map<Id, boolean>();
+  const fractionOps = new Map<Id, FractionOp>();
+  for (const name of FRACTION_OPS) {
+    const d = preludeDef(name), n = d ? nodes[d] : undefined;
+    if (n?.kind === "def" && n.body) fractionOps.set(n.body, name);
+  }
   const isRecursive = (lambda: Id) => {
     if (!recursive.has(lambda)) {
       const def = code.defs.find((d) => (nodes[d] as NodeOf<"def">).body === lambda);
@@ -885,6 +918,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         },
       });
     }
+    if (f.k === "closure" && fractionOps.has(f.lambda)) return fractionGoal(fractionOps.get(f.lambda)!, args, out);
     if (f.k === "closure") {
       const g = invoke(f, args, out, mode);
       return isRecursive(f.lambda) ? step(g) : g;
@@ -903,6 +937,30 @@ export function interpreter(code: Code, opts: Options = {}) {
       };
     }
     return builtin(f.id, args, out);
+  }
+
+  // The prelude's fraction arithmetic, run as one relation instead of
+  // through its Int steps: as with Int add, any two sides give the third,
+  // exactly, so x·(1/3) + 1/2 = 5/6 finds x = 1. Through the steps it
+  // couldn't: undoing lowest terms has every multiple as an answer. Prior
+  // art: Prolog's CLP(Q) (Holzbaur's clpqr), constraints over the rationals.
+  function fractionGoal(op: FractionOp, args: Term[], out: Term): Goal {
+    const sides = [...args, out];
+    const value = (t: Term, s: State): Q | undefined => {
+      const g = ground(t, s);
+      return isData(g) && g.tag === RATIO ? [g.fields[0] as Int, g.fields[1] as Int] : undefined;
+    };
+    const known = (s: State) => sides.map((t) => value(t, s));
+    return wait({
+      k: "later", text: op, on: sides, ready: (s) => known(s).filter((x) => !x).length <= 1, then: (s) => {
+        const xs = known(s);
+        const i = xs.findIndex((x) => !x);
+        const at = i < 0 ? sides.length - 1 : i;
+        const r = solveFraction(op, at, xs);
+        // Free: every value fits (0 · x = 0), so the side stays unknown.
+        return r === "free" ? succeed(s) : r ? eq(sides[at], dataT(RATIO, r))(s) : null;
+      },
+    });
   }
 
   function builtin(id: Id, args: Term[], out: Term): Goal {
