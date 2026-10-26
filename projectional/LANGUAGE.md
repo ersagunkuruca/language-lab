@@ -1078,7 +1078,8 @@ Those are `examples/physics`. The pieces:
 - **`equal` is a wire.** One equation. Numbers are equal when they agree to
   1e-9 relative (`close` in `run.ts`), forward and backwards and compiled,
   because a wire in a network meant "these are the same quantity", and
-  `0.1 + 0.2` should be the same quantity as `0.3`. The cost is that `equal`
+  `0.1 + 0.2` should be the same quantity as `0.3`. Only a finite gap is
+  near: ∞ equals ∞ alone, not −∞, 0 or 1e308 (BACKLOG L81). The cost is that `equal`
   on numbers isn't transitive at the 1e-9 scale. Bit-exact comparison is a
   different question and should get its own name when something needs it.
   Two whole numbers are the exception: they're equal only when they're the

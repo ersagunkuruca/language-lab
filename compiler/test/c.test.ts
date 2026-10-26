@@ -204,7 +204,7 @@ test("equal on data in C, and folds over nested data: a rose tree's List of chil
   const ls = lowerScalar(s.code, s.info, s.names, [s.same], { data: true });
   const same = ls.funcs.findIndex((f) => f.name === "same");
   const rs = makeRunner(s.code, s.info, { print: () => {} });
-  const pairs = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]]];
+  const pairs = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[Infinity], [-Infinity]], [[1e308], [Infinity]], [[Infinity], [Infinity]], [[1e308], [-1e308]]];
   sameAndFreed(build(ls), pairs.map(([a, b]) => [same, [toList(a), toList(b)]]), (_, xs) => first(rs.call(rs.value(s.same), ...xs))!, () => "same");
 
   const p = roses();
@@ -244,9 +244,12 @@ test("one answer or none in C: partial functions say they have none, and the clo
   const es = fromList(a.r.value(a.p.named("samples")));
   const evaluate = a.at("evaluate"), constant = a.at("constant"), simplify = a.at("simplify"), derivative = a.at("derivative"), newton = a.at("newton");
   const derive = (e: Value) => a.want(derivative, [e]);
+  // newton on 1/x (the fourth sample) doubles its guess to ∞ and then runs
+  // on NaN for ever, as it should now that ∞ isn't near 0 (BACKLOG L81):
+  // the program calls it within a budget (`root near`), so this leaves it out.
   const calls: [number, Value[]][] = [
     ...es.flatMap((e) => [0, -1.5, 2, 1e-300, Infinity].map((x): [number, Value[]] => [evaluate, [e, x]])),
-    ...es.flatMap((e): [number, Value[]][] => [[constant, [e]], [simplify, [e]], [simplify, [derive(e)]], [newton, [e, derive(e), 1]], [newton, [e, derive(e), -3]]]),
+    ...es.flatMap((e, n): [number, Value[]][] => [[constant, [e]], [simplify, [e]], [simplify, [derive(e)]], ...(n === 3 ? [] : [[newton, [e, derive(e), 1]], [newton, [e, derive(e), -3]]] as [number, Value[]][])]),
   ];
   sameAndFreed(build(a.lowered), calls, a.want, a.label);
   const c = inC("calculus");

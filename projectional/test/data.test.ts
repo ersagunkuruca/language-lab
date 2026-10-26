@@ -8,7 +8,7 @@ import { type Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { runMain } from "../src/lang/run.ts";
+import { close, runMain } from "../src/lang/run.ts";
 import { relate, toValue } from "../src/lang/relate.ts";
 import { CONS, INT_OPS as I, NIL, S, SET, SHOW_ANY, TEXT_OPS as T } from "../src/lang/std.ts";
 import * as Int from "../src/lang/int.ts";
@@ -183,4 +183,15 @@ test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Number
   ].map((b) => k.call(SHOW_ANY, b))));
   assert.deepEqual(p.info.errors, []);
   assert.deepEqual(p.run(), ["false", "false", "true", "true"]);
+});
+
+// BACKLOG L81: past the largest float the tolerance is itself ∞, so only a
+// finite gap is near: ∞ is equal to ∞ alone, not to −∞, 0 or 1e308.
+test("infinities are equal only to themselves", () => {
+  assert.deepEqual([[Infinity, -Infinity], [Infinity, 0], [1e308, Infinity], [-1e308, -Infinity], [1e308, -1e308], [NaN, NaN], [Infinity, NaN]].map(([a, b]) => close(a, b)), [false, false, false, false, false, false, false]);
+  assert.deepEqual([[Infinity, Infinity], [-Infinity, -Infinity], [1e308, 1e308 * (1 + 1e-12)], [0.1 + 0.2, 0.3]].map(([a, b]) => close(a, b)), [true, true, true, true]);
+  const inf = (k: Lang, s: number) => k.call(B.div, k.lit(s), k.lit(0));
+  const p = program((k) => lines(k, k.call(SHOW_ANY, k.list(k.equal(inf(k, 1), inf(k, -1)), k.equal(k.lit(1e308), inf(k, 1)), k.equal(inf(k, 1), inf(k, 1))))));
+  assert.deepEqual(p.info.errors, []);
+  assert.deepEqual(p.run(), ["[false, false, true]"]);
 });

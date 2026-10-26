@@ -159,7 +159,7 @@ test("equal on data in WebAssembly: the evaluator's rule on each number, two lon
   const w = await instantiate(m) as unknown as Exports;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const t = lowered.funcs.find((f) => f.name === "same")!.params[0];
-  for (const [xs, ys] of [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]]]) {
+  for (const [xs, ys] of [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[Infinity], [-Infinity]], [[1e308], [Infinity]], [[Infinity], [Infinity]], [[1e308], [-1e308]]]) {
     const want = first(r.call(r.value(p.same), toList(xs), toList(ys)));
     assert.deepStrictEqual(fromWasm(w, w.same(toWasm(w, toList(xs), t), toWasm(w, toList(ys), t)), "i32"), want, `${xs} = ${ys}`);
   }
