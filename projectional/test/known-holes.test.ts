@@ -211,43 +211,43 @@ test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", { todo: "tw
   assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["true", "true"]);
 });
 
-test("R3 §1.2 a set of Numbers has the same size whatever order its items come in", { todo: "equal on Numbers isn't transitive, and as set / sort assume it is" }, () => {
+test("R3 §1.2 a set of Numbers has the same size whatever order its items come in", () => {
   // Each neighbour is within 1e-9 of the next; the two ends are not.
   const a = 1000.5, d = 1.5e-6;
   const size = (k: Lang, L: typeof lib, xs: number[]) => k.call(L("set size"), k.call(L("as set"), nums(k, xs)));
   const { out } = printed((k, L) => [size(k, L, [a, a + d, a + 2 * d]), size(k, L, [a + d, a, a + 2 * d]), size(k, L, [a, a + 2 * d, a + d])]);
-  // Today: ["2", "2", "1"].
+  // Before L78 (#443): ["2", "2", "1"].
   assert.equal(new Set(out).size, 1, `sizes by order: ${out.join(", ")}`);
 });
 
-test("R3 §1.3 NaN, which 0/0 and sqrt(−1) make in typed code, doesn't break compare or sets", { todo: "compare(NaN, 1) and compare(1, NaN) are both after; a set can't find the NaN it holds" }, () => {
+test("R3 §1.3 NaN, which 0/0 and sqrt(−1) make in typed code, doesn't break compare or sets", () => {
   const nan = (k: Lang) => k.call(B.div, k.lit(0), k.lit(0));
   const { errors, out } = printed((k, L) => [
     k.call(COMPARE, nan(k), k.lit(1)), k.call(COMPARE, k.lit(1), nan(k)),
     k.call(L("has item"), k.call(L("as set"), k.list(nan(k), k.lit(1))), nan(k)),
   ]);
   assert.deepEqual(errors, []);
-  // Today: ["after", "after", "false"].
+  // Before L78 (#443): ["after", "after", "false"].
   assert.notEqual(out[0], out[1], "compare isn't antisymmetric on NaN");
   assert.equal(out[2], "true", "a set doesn't find the NaN put in it");
 });
 
-test("R3 §2.1 a set made with its constructor keeps the set's rule (sorted, no item twice)", { todo: "`set of` is an ordinary public constructor, and the palette offers it" }, () => {
+test("R3 §2.1 a set made with its constructor keeps the set's rule (sorted, no item twice)", () => {
   const { errors, out } = printed((k, L) => [
     k.call(L("set size"), k.call(SET_V, k.list(k.lit(3), k.lit(1), k.lit(3)))),
     k.equal(k.call(SET_V, k.list(k.lit(3), k.lit(1))), k.call(L("as set"), nums(k, [1, 3]))),
   ]);
   // Either the checker refuses the raw constructor, or what it makes is a
-  // set. Today: no error, and ["3", "false"].
+  // set. Before L79 the checker took it, and it printed ["3", "false"].
   assert.ok(errors.length > 0 || (out[0] === "2" && out[1] === "true"), `printed ${out.join(", ")}`);
 });
 
-test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest terms, bottom not zero)", { todo: "`ratio` is an ordinary public constructor: ratio(2, 4) is unequal to 1/2, and ratio(1, 0) exists" }, () => {
+test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest terms, bottom not zero)", () => {
   const { errors, out } = printed((k) => [
     k.equal(k.call(RATIO, k.int(2), k.int(4)), k.at(RATIONAL_TYPE, "1/2")),
     k.call(COMPARE, k.call(RATIO, k.int(1), k.int(0)), k.call(RATIO, k.int(-7), k.int(0))),
   ]);
-  // Today: no error, and ["false", "same"]: compare says 2/4 is 1/2 and
+  // Before L79: no error, and ["false", "same"]: compare says 2/4 is 1/2 and
   // equal says it isn't, and 1/0 is the same as −7/0.
   assert.ok(errors.length > 0 || (out[0] === "true" && out[1] !== "same"), `printed ${out.join(", ")}`);
 });

@@ -43,7 +43,7 @@ There are four kinds of number. Int is a whole number of any size. Number is a f
 - **abs** : `(Int) -> Int`. The size of an Int without its sign.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
-- **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n).
+- **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.
 - **divide fractions** : `(Rational, Rational) -[Choice]-> Rational`. a ÷ b for fractions, exactly; no answer when b is 0.
@@ -120,7 +120,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 
 A map is kept sorted by key in compare's order, so two maps with the same entries are equal and print the same, whatever order they were built in. Keys are exact: two Number keys are one key only when they are the same Number.
 
-- **Map** (type). A map from keys to values, kept sorted by key with no key twice. Build one with as map or put; read it with value at.
+- **Map** (type). A map from keys to values, kept sorted by key with no key twice. Build one with empty map, as map or put (its constructor map of is private to the library, which keeps the rule); read it with value at.
 - **empty map** : `Map a b`. The map with no entries.
 - **as map** : `(List (Pair a b)) -> Map a b`. The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).
 - **put** : `(Map a b, a, b) -> Map a b`. The map with key holding value, in place of what it held.
@@ -132,7 +132,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **values of** : `(Map a b) -> List b`. The values, in the order of their keys.
 - **entries of** : `(Map a b) -> List (Pair a b)`. The entries as pair(key, value), in key order.
 - **map size** : `(Map a b) -> Int`. How many keys the map holds.
-- **Set** (type). A set of items, kept sorted with none twice. Build one with as set or add item.
+- **Set** (type). A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).
 - **empty set** : `Set a`. The set with no items.
 - **as set** : `(List a) -> Set a`. The set of a list's items: in compare's order, each once.
 - **add item** : `(Set a, a) -> Set a`. The set with item in it.

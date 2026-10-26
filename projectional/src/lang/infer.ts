@@ -18,7 +18,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
-import { BOOL, S, SET, SIGS } from "./std.ts";
+import { BOOL, S, SET, SIGS, SMART } from "./std.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
@@ -57,7 +57,10 @@ export interface Info {
 // pins: signatures that definitions must keep and callers see
 // (signatures.ts). hidden: definitions that can be used where they are
 // but aren't offered for new uses.
-export interface Options { pins?: Pins; hidden?: Iterable<Id> }
+// insiders: the definitions that may call a private constructor (the
+// library that keeps its type's rule). Given, every other definition may
+// not; not given, nothing is checked, as with no pins.
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id> }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -80,6 +83,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A filling tried by the palette adds no types, so their parts' owners
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
+  const insiders = opts.insiders ? new Set(opts.insiders) : null;
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
@@ -441,6 +445,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           const r = (code.nodes[target] as NodeOf<"variant">).returns;
           return { t: "fn", params: fields(target), ret: r ? typeExpr(r, new Map()) : s.fresh(), eff: s.freshRow([def]) };
         }
+        if ((t as NodeOf<"variant">).private && insiders && !current.every((d) => insiders.has(d)))
+          err(id, `${nm(target)} is private to the library, which keeps ${nm(def)}'s rule: build a ${nm(def)} with the library's functions (${SMART[target] ?? "see LIBRARY.md"})`);
         const { self, fields } = dataType(def);
         const fs = fields(target);
         return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
@@ -1105,8 +1111,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // offers the generic arithmetic, not each type's own, which stored
   // programs keep and which is what the generic resolves to.
   for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id)) consider(id, sig(info.subst));
+  // A private constructor only where the checker would take it.
+  const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
+  const outside = !!insiders && !h.group.every((d) => insiders.has(d));
   for (const [part, def] of info.owner) {
-    if (code.nodes[part].kind === "variant") consider(part, constructorType(code, info.subst, def, part));
+    const n = code.nodes[part];
+    if (n.kind === "variant") { if (!(n.private && outside)) consider(part, constructorType(code, info.subst, def, part)); }
     // A field of a one-case type reads it from a value: fst(p), pages(c).
     else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t); }
   }

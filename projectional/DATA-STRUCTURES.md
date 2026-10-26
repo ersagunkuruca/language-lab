@@ -33,8 +33,10 @@ Set k   = set of(items: List k)                -- sorted, no item twice
 `Set k` is its own type rather than `Map k Unit`, so a set reads as
 `set of([1, 2, 3])` and not as a map whose values are all `unit`. The
 constructor is only the spelling; programs build maps with the prelude,
-which keeps the spelling canonical (as `fraction` keeps lowest terms
-rather than `ratio` being called directly).
+which keeps the spelling canonical (as `fraction` keeps lowest terms).
+Since L79 that is enforced: `map of`, `set of` and `ratio` are private
+constructors (LANGUAGE.md "Private constructors"), so only the prelude
+and the representations that stand for them can call them.
 
 Prelude, offered:
 

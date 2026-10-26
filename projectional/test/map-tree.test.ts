@@ -45,8 +45,9 @@ function program(n: number) {
   return { code, names, main, own: [counts, fewer, main] };
 }
 
-const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id) => {
-  const info = infer(code, names, undefined, checkOptions);
+// `insiders`: a representation's definitions, which may build a Map.
+const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
+  const info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const lines: string[] = [];
   runMain(code, info, main, { print: (s) => lines.push(s), names });
@@ -57,7 +58,7 @@ test("each tree job agrees with the definition through meaning, and the tree sta
   const k = new Lang(LIBRARY.code);
   const code0 = base(k.code), names0 = baseNames(k.names);
   const w = withMapTree(code0, names0);
-  const info = infer(w.code, w.names, undefined, checkOptions);
+  const info = infer(w.code, w.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...w.insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(jobProblem(info, w.rep, w.names), null);
   const r = makeRunner(w.code, info, { print: () => {}, names: w.names });
@@ -105,7 +106,7 @@ test("the chooser takes the tree for a word count; the represented program print
   const pick = choose(w.code, p.main, [w.spec, w.rep]);
   assert.equal(pick.rep.name, "weight-balanced tree");
   const plain = printed(p.code, p.names, p.main);
-  const tree = printed(represent(w.code, p.own, w.rep), w.names, p.main);
+  const tree = printed(represent(w.code, p.own, w.rep), w.names, p.main, w.insiders);
   assert.deepEqual(tree, plain);
   assert.equal(plain[3], '["a", "b", "c"]');
 });
@@ -116,7 +117,7 @@ test("on 1200 words, 400 of them different, the tree is faster than the sorted l
   const repd = represent(w.code, p.own, w.rep);
   const time = (f: () => string[]) => { const t = performance.now(); const out = f(); return { out, ms: performance.now() - t }; };
   const a = time(() => printed(p.code, p.names, p.main));
-  const b = time(() => printed(repd, w.names, p.main));
+  const b = time(() => printed(repd, w.names, p.main, w.insiders));
   assert.deepEqual(b.out, a.out);
   console.log(`# sorted list ${a.ms.toFixed(0)} ms, tree ${b.ms.toFixed(0)} ms`);
   assert.ok(b.ms < a.ms, `tree ${b.ms} ms, list ${a.ms} ms`);

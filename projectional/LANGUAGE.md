@@ -1230,6 +1230,34 @@ and kept out of the palette, so a library can have internals without a
 `private` keyword: visibility is one more side table, and the checker's
 `hidden` option is all it takes (tested).
 
+### Private constructors
+
+Some types have a rule their values must keep: a `Set`'s items are sorted
+with none twice, a `Map`'s keys the same, a `Rational` is in lowest terms
+with a bottom that isn't 0. The library keeps the rule, and everything
+else relies on it (`equal`, `show`, `compare` and folds look at the
+spelling). Calling the constructor yourself would skip it:
+`set of([3, 1, 3])` would be a set of size 3, `ratio(2, 4)` would not
+equal 1/2, and `ratio(1, 0)` would exist (REVIEW-2026-10-26.md §2).
+
+So those constructors are **private**: a flag on the variant, as `later`
+is, not a new kind of thing. Only the library that keeps the rule (the
+prelude, and the representations that stand for these types, such as the
+map tree) may call them. Anywhere else the checker refuses with what to
+use instead (`as set`, `as map`, `put`, `fraction`, `as fraction`), and
+the palette doesn't offer them; a saved program that calls one is reported
+when it opens. Taking a value apart is open to everyone: a `match` on
+`set of(items)` reads the items, which keeps the rule. Which definitions
+are the library's is the checker's `insiders` option (`checkOptions`
+gives the prelude's), like its `pins` and `hidden`.
+
+This is the smallest form of an abstract type: the constructor is hidden,
+the type and its pattern are not. OCaml's private types (`type t = private
+…`) are the same idea, and Haskell's smart constructors with an
+unexported constructor the usual practice (prior art). A quotient type,
+equal by the rule rather than by spelling, is the bigger alternative and
+isn't needed yet.
+
 Names stay presentation. A module's names are a layer under the
 program's, like std's: a program can call `map` "transform" and only that
 program sees it, and `adopt` keeps a program's names for adopted code
@@ -1348,6 +1376,7 @@ a row's test is missing or the table here differs from the rows.
 | a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same | "derivative never throws: where a slope can't be read there is none" (`test/guarantees.test.ts`) |
 | a direction nothing pins down | checked | the checker works out each `solve`'s mode (modes.ts): when some port or goal never gets what it needs, the search could only end with unknowns left, so it's an error at the `solve` node | "§1.2 a well-typed backwards solve must not throw NotInvertible at run time" (`test/known-holes.test.ts`) |
 | running something backwards that only runs forward | runtime, but typed | it waits until its inputs are known; an answer that leaves it waiting isn't pinned down, so it isn't an answer. Solving for a function is refused by the checker | "backwards, derivative and with fuel run forward once their function is known" (`test/guarantees.test.ts`) |
+| a value that breaks its type's rule (a set with an item twice, a fraction 2/4 or 1/0) | checked | the constructors of types with a rule (`set of`, `map of`, `ratio`) are private to the library that keeps it: elsewhere the checker refuses them and the palette doesn't offer them; a match can still take the value apart | "a program calling set of, map of or ratio is refused, with what to use instead" (`test/private.test.ts`) |
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error | "scope: a variable moved out of the case that binds it is caught" (`test/lang.test.ts`) |
 | incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
 | integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |

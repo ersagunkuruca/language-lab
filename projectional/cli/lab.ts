@@ -105,7 +105,9 @@ function represented(p: Program, main: Id): Program {
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
   if (!chosen.length) return p;
-  const info = infer(code, names, undefined, p.options as Parameters<typeof infer>[3]);
+  // The library's representations may call the constructors they stand for.
+  const options = p.options as Parameters<typeof infer>[3];
+  const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
   return { ...p, code, names, info };
 }
