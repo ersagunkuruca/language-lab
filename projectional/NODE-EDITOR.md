@@ -143,7 +143,8 @@ meaningful because the gaps are holes.
 
 ### How it's built
 
-A loose part is a definition with no name (the text calls it `_1`), owned
+A loose part is a definition with no name (the text shows it as `loose:`
+and the expression it is; inside, it is `_1`), owned
 by the definition it came from (`editor/drafts.ts`). In the editor it sits
 in the code like any other definition, so every edit, the palette and the
 type checker work on it unchanged; on disk it's split off into drafts.json,

@@ -615,7 +615,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   let top: Sub;
-  if (loose && body) top = region(defId, `${name(defId)} : ${typeOf(defId)} · loose, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
+  if (loose && body) top = region(defId, `loose : ${typeOf(body.kind === "lambda" ? body.body : def.body!)}, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);

@@ -93,7 +93,7 @@ const appendLast = (bs: Blk[], p: Piece): Blk[] => {
 
 // `pane`: drawn for the editor, where a long text is clipped and cases
 // that say the same thing stay separate rows, each its own node to edit.
-export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean } = {}): Blk[] {
+export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: boolean } = {}): Blk[] {
   const names = pres.names;
   const pane = !!opts.pane;
   // A binder nobody named is called for its type (items, x, event), as the
@@ -433,6 +433,15 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);
       return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : []), ...(vn.returns && vn.later ? [kw(", later")] : [])], id: v, cls: "variant" };
     })));
+    return out;
+  }
+  // A loose part (editor/drafts.ts) reads as the expression it is, with the
+  // variables it uses by their names: not as a function named _1.
+  if (opts.loose && body) {
+    const params = body.kind === "lambda" ? body.params : [], expr = body.kind === "lambda" ? body.body : def.body!;
+    enter(params);
+    out.push(...hang(expr, [part("def", ["loose"], defId), pn(": ")]));
+    leave(params);
     return out;
   }
   const t = typeAt(defId);

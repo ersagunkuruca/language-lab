@@ -1110,13 +1110,14 @@ const GRAPH_HINT = TOUCH
   ? "long-press for a menu; drag a node to move it; Pick (in the menu) several to move them together; pinch to zoom; tap a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there"
   : "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
 
-// The definition's loose parts, at the end of its text, as _1, _2, …: kept
+// The definition's loose parts, at the end of its text, each as loose: and
+// the expression it is (inside, they're _1, _2, …): kept
 // and type-checked, edited like the rest, never run (NODE-EDITOR.md, "Loose
 // parts").
 function looseBlocks(info: T.Info): HTMLElement[] {
   const parts = looseOf(doc.code, doc.loose ?? {}, ui.def);
   if (!parts.length) return [];
-  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected)))];
+  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected, true)))];
 }
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {

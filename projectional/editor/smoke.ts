@@ -356,7 +356,7 @@ async function looseParts() {
   await p.locator(".blocks-wrap .head", { hasText: /^named$/ }).first().click();
   await p.keyboard.press("Delete");
   const after = await text();
-  const loose = (t: string) => (t.match(/ _\d+ = | _\d+\(/g) ?? []).length;
+  const loose = (t: string) => (t.match(/ loose: /g) ?? []).length;
   if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
   if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
@@ -414,9 +414,12 @@ async function looseValue() {
   await p.locator(".p-graph svg.tgraph").first().dispatchEvent("contextmenu", { clientX: box.x + box.width - 40, clientY: box.y + box.height - 40 });
   await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 }).catch(() => errors.push(`${where}: no Add a value on the canvas`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!/-- loose, not used yet .*_1 = □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
+  if (!/-- loose, not used yet loose: □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
   if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
   if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  // It reads as what it is, not as a function named _1 (BACKLOG E124).
+  const titles = await p.locator(".p-graph text.rt").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
+  if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
   await p.locator("#m-query").fill('print("hi")');
   if (!/loose part .* can't have effects/.test(await p.locator(".ctx-menu .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
