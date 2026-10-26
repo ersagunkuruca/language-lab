@@ -23,12 +23,12 @@ export const NOTES: Comments = {
   "std.input": "Where a sound's samples come from: the microphone, or a recording at an address.",
   "std.attribute": "Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.",
   "std.html": "A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.",
-  "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n).",
+  "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
   "std.complex": "A complex number re + im·i, a record of two Numbers. The same + − · work on it (· is the complex product); it has no <.",
   "std.order": "What compare answers: before, same or after.",
   "std.outcome": "The result of something that may have been refused: done(value) or refused(reason). The data form of Abort, for keeping it in a list or record.",
-  "std.map": "A map from keys to values, kept sorted by key with no key twice. Build one with as map or put; read it with value at.",
-  "std.set": "A set of items, kept sorted with none twice. Build one with as set or add item.",
+  "std.map": "A map from keys to values, kept sorted by key with no key twice. Build one with empty map, as map or put (its constructor map of is private to the library, which keeps the rule); read it with value at.",
+  "std.set": "A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).",
 
   // --- numbers. add, subtract, multiply, negate and less than work on
   // every number type through the generic ones; the versions at one type

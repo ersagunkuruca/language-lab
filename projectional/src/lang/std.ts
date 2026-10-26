@@ -4,7 +4,7 @@
 // refer to it, exactly like prelude.ts.
 
 import { discharge } from "./ledger.ts";
-import type { Code, Id, Node } from "../model.ts";
+import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
 import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
@@ -180,6 +180,12 @@ export const SET_TYPE = typedef("std.set", "Set", ["k"], [
   ["set of", [["items", ([k]) => tref(LIST, tref(k))]]],
 ]);
 export const MAP_V = "std.map.map of", SET_V = "std.set.set of";
+// The constructors whose types have a rule, private to the library that
+// keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
+// `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
+// for the checker's message.
+export const SMART: Record<Id, string> = { [RATIO]: "fraction or as fraction", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
+for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";

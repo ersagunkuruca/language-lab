@@ -28,7 +28,9 @@ import { INT } from "./types.ts";
 export const TREE_JOBS = ["empty map", "as map", "put", "value at", "remove key", "has key", "merge maps", "keys of", "values of", "entries of", "map size"] as const;
 const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
-export function withMapTree(code: Code, names: Names): { code: Code; names: Names; rep: Representation; tree: Id; spec: Representation } {
+// `insiders`: the tree's definitions, which build a Map with its private
+// constructor (its meaning does), for the checker's options.
+export function withMapTree(code: Code, names: Names): { code: Code; names: Names; rep: Representation; tree: Id; spec: Representation; insiders: Id[] } {
   const k = new Lang(code);
   const T = k.type("Map tree", ["k", "v"], [
     ["tip", []],
@@ -138,5 +140,5 @@ export function withMapTree(code: Code, names: Names): { code: Code; names: Name
     cost: { ...Object.fromEntries([...logn, ...linear, prelude("map size")].map((j) => [j, "n"])), [MAP_V]: "1", [prelude("as map")]: "n²", [prelude("merge maps")]: "n²", [prelude("empty map")]: "1", space: "n" },
   };
   const rep: Representation = { name: "weight-balanced tree", of: MAP, type: T.def, meaning, canonical: false, impl, cost };
-  return { code: merge(code, k.code), names: { ...names, ...k.names }, rep, tree: T.def, spec };
+  return { code: merge(code, k.code), names: { ...names, ...k.names }, rep, tree: T.def, spec, insiders: k.code.defs };
 }

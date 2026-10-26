@@ -37,8 +37,13 @@ export type Node =
   // operation without one never returns (it ends the handled computation).
   // `later`: the handler may answer it later, at most once; its case is
   // given the rest of the computation as a function (ANSWERED-LATER.md).
+  // `private`: a constructor only the library that keeps its type's rule
+  // may call (a set sorted with no item twice, a fraction in lowest
+  // terms); everyone else builds one with the library's functions. Taking
+  // a value apart with a match is open to all (LANGUAGE.md "Private
+  // constructors"; OCaml's private types are the prior art).
   | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true }
-  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true }
+  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
   | { id: Id; kind: "field"; type: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.

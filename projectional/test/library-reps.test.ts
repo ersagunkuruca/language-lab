@@ -45,8 +45,9 @@ function program(n: number, nested = false) {
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, main, own: [counts, ab, ba, main] };
 }
-const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id) => {
-  const info = infer(code, names, undefined, checkOptions);
+// `insiders`: a representation's definitions, which may build a Map.
+const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
+  const info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const lines: string[] = [];
   runMain(code, info, main, { print: (s) => lines.push(s), names });
@@ -59,7 +60,7 @@ test("a word count gets the tree, and prints what the definition prints: equal, 
   const c = withLibraryRepresentations(p.code, info, p.names, p.main, p.own);
   assert.deepEqual(c.chosen, ["Map as weight-balanced tree"]);
   const plain = printed(p.code, p.names, p.main);
-  assert.deepEqual(printed(c.code, c.names, p.main), plain);
+  assert.deepEqual(printed(c.code, c.names, p.main, c.insiders), plain);
   assert.equal(plain[3], "true");
 });
 
@@ -87,7 +88,7 @@ test("the represented program compiles: JavaScript prints the same, and WebAssem
   const { emitWasm } = await import("../../compiler/src/wasm.ts");
   const p = program(300);
   const c = withLibraryRepresentations(p.code, infer(p.code, p.names, undefined, checkOptions), p.names, p.main, p.own);
-  const info = infer(c.code, c.names, undefined, checkOptions);
+  const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
   const path = join(mkdtempSync(join(tmpdir(), "library-reps-")), "p.js");
   writeFileSync(path, compile(c.code, info, c.names, { runtime, exports: ["main"] }));

@@ -21,12 +21,14 @@ import type { Type } from "./types.ts";
 // What equal, show and compare see of a value: these, given a Map, get its meaning.
 const BY_VALUE = new Set<Id>([S.equal, SHOW_ANY, COMPARE]);
 
-export interface Chosen { code: Code; names: Names; chosen: string[] }
+// `insiders`: the representations' definitions, which may call the
+// private constructors they represent (infer.ts Options).
+export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[] }
 
 // `defs`: the program's own definitions, which the rewrite changes;
 // `asked`: rows from a representations.json, whose types are left alone.
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = []): Chosen {
-  const none = { code, names, chosen: [] };
+  const none = { code, names, chosen: [], insiders: [] };
   if (asked.some((r) => r.of === MAP)) return none;
   const w = withMapTree(code, names);
   if (!uses(w.code, main, [w.spec, w.rep]).length) return none;
@@ -47,7 +49,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       return c;
     }) };
   }
-  return { code: represent({ ...w.code, nodes }, defs, w.rep), names: w.names, chosen: [`Map as ${w.rep.name}`] };
+  return { code: represent({ ...w.code, nodes }, defs, w.rep), names: w.names, chosen: [`Map as ${w.rep.name}`], insiders: w.insiders };
 }
 
 const isCon = (t: Type, id: Id) => t.t === "con" && t.id === id;
