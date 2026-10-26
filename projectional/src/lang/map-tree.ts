@@ -1,227 +1,144 @@
-// Maps and sets stored as weight-balanced trees (BACKLOG L76,
-// DATA-STRUCTURES.md step 2): representations of std's Map and Set
-// (NUMBERS.md, represent.ts). The meaning stays the sorted entries or
-// items; the tree does their jobs in log n.
+// Maps stored as a weight-balanced tree (BACKLOG L76, DATA-STRUCTURES.md
+// step 2): a representation of std's Map (NUMBERS.md, represent.ts). The
+// meaning stays the sorted entries; the tree does Map's jobs in log n.
 //
-// A tree is tip, or bin(size, key, value, left, right) (a set's has no
-// value) with every key on the left before `key` and every key on the
-// right after it, by compare. It stays balanced by weight: neither side
-// holds more than three times the other (plus one), restored by single and
-// double rotations after each change. That is Nievergelt and Reingold's
-// weight-balanced trees (1972) as Adams wrote them for functional languages
-// (1993), with the parameters ⟨3, 2⟩ that Hirai and Yamamoto proved correct
-// (2011), as in Haskell's containers.
+// A tree is tip, or bin(size, key, value, left, right) with every key on
+// the left before `key` and every key on the right after it, by compare.
+// It stays balanced by weight: neither side holds more than three times
+// the other (plus one), restored by single and double rotations after each
+// change. That is Nievergelt and Reingold's weight-balanced trees (1972) as
+// Adams wrote them for functional languages (1993), with the parameters
+// ⟨3, 2⟩ that Hirai and Yamamoto proved correct (2011), as in Haskell's
+// containers.
 //
-// A tree's shape depends on the order keys were put in, so it isn't a
+// The tree's shape depends on the order keys were put in, so it isn't a
 // canonical spelling (`canonical: false`): equal, show and compare on maps
-// and sets go through `meaning`, which `byType` names for the rewrite that
-// finds them by type (C47). The library publishes both rows
-// (trees-source.ts, library/trees.json, LIBRARY.reps); `withMapTree` builds
-// them into a program for tests.
+// must go through `meaning`. Choosing this representation without the
+// program asking is C47.
 
 import { merge, type Code, type Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
+import { LIBRARY } from "./library.ts";
 import type { Representation } from "./represent.ts";
-import { COMPARE, CONS, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
+import { COMPARE, CONS, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
 
-export interface Trees { map: Representation; set: Representation; mapSpec: Representation; setSpec: Representation; defs: Id[] }
+// The prelude's map operations the tree does itself, by name.
+export const TREE_JOBS = ["empty map", "as map", "put", "value at", "remove key", "has key", "merge maps", "keys of", "values of", "entries of", "map size"] as const;
+const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
-// The two rows, written into `k`. `prelude` finds a prelude definition by
-// name (the map and set operations the trees do, and map, reverse, keep).
-export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
-  const defs: Id[] = [];
-  const def = (name: string, params: string[], body: (...ps: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); defs.push(d); return d; };
-  const rec = (name: string) => { const d = k.def(name); defs.push(d); return d; };
+// `insiders`: the tree's definitions, which build a Map with its private
+// constructor (its meaning does), for the checker's options.
+export function withMapTree(code: Code, names: Names): { code: Code; names: Names; rep: Representation; tree: Id; spec: Representation; insiders: Id[] } {
+  const k = new Lang(code);
+  const T = k.type("Map tree", ["k", "v"], [
+    ["tip", []],
+    ["bin", [["size", () => k.tref(INT)], ["key", (_, [kk]) => k.tref(kk)], ["value", (_, [, v]) => k.tref(v)], ["left", (self, [kk, v]) => k.tref(self, k.tref(kk), k.tref(v))], ["right", (self, [kk, v]) => k.tref(self, k.tref(kk), k.tref(v))]]],
+  ]);
+  const { tip, bin } = T.v;
+  const def = (name: string, params: string[], body: (...ps: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
   const i = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b), less: (a: Id, b: Id) => k.call(INT_OPS.less, a, b) };
   const order = (a: Id, b: Id, before: () => Id, same: () => Id, after: () => Id) => k.match(k.call(COMPARE, a, b), [
     { variant: ORDER_V.before, names: [], body: before },
     { variant: ORDER_V.same, names: [], body: same },
     { variant: ORDER_V.after, names: [], body: after },
   ]);
-  const pair = (e: Id, f: (a: Id, b: Id) => Id, ns = ["key", "value"]) => k.match(e, [{ variant: PAIR_V, names: ns, body: ([a, b]) => f(a, b) }]);
+  // A tree's parts, or `otherwise` at a tip.
+  const parts = (t: Id, f: (s: Id, key: Id, v: Id, l: Id, r: Id) => Id, otherwise: () => Id, ns = ["size", "key", "value", "left", "right"]) =>
+    k.match(t, [{ variant: tip, names: [], body: otherwise }, { variant: bin, names: ns, body: ([s, key, v, l, r]) => f(s, key, v, l, r) }]);
 
-  // One tree, with or without values. The jobs below are written once on
-  // a node's key, value (null for a set) and two sides.
-  function tree(name: string, withValues: boolean) {
-    const side = (self: Id, ps: Id[]) => k.tref(self, ...ps.map((p) => k.tref(p)));
-    const T = k.type(name, withValues ? ["k", "v"] : ["k"], [
-      ["tip", []],
-      ["bin", [
-        ["size", () => k.tref(INT)],
-        ["key", (_, [kk]) => k.tref(kk)],
-        ...(withValues ? [["value", (_: Id, ps: Id[]) => k.tref(ps[1])] as [string, (self: Id, ps: Id[]) => Id]] : []),
-        ["left", side],
-        ["right", side],
-      ]],
-    ]);
-    defs.push(T.def);
-    const { tip, bin } = T.v;
-    const word = withValues ? "tree" : "set tree";
-    type Parts = (s: Id, key: Id, v: Id | null, l: Id, r: Id) => Id;
-    const parts = (t: Id, f: Parts, otherwise: () => Id, p = "") => k.match(t, [
-      { variant: tip, names: [], body: otherwise },
-      { variant: bin, names: [`${p}size`, `${p}key`, ...(withValues ? [`${p}value`] : []), `${p}left`, `${p}right`], body: (xs) => (withValues ? f(xs[0], xs[1], xs[2], xs[3], xs[4]) : f(xs[0], xs[1], null, xs[2], xs[3])) },
-    ]);
-    const kv = (key: Id, v: Id | null) => (withValues ? [key, v!] : [key]);
-    const size = def(`${word} size`, ["tree"], (t) => parts(t, (s) => s, () => k.int(0)));
-    const ps = withValues ? ["key", "value", "left", "right"] : ["key", "left", "right"];
-    const split = (xs: Id[]) => (withValues ? { key: xs[0], v: xs[1], l: xs[2], r: xs[3] } : { key: xs[0], v: null, l: xs[1], r: xs[2] });
-    const node = def(`${word} node`, ps, (...xs) => { const { key, v, l, r } = split(xs); return k.call(bin, i.add(i.add(k.call(size, l), k.call(size, r)), k.int(1)), ...kv(key, v), l, r); });
-    const N = (key: Id, v: Id | null, l: Id, r: Id) => k.call(node, ...kv(key, v), l, r);
-    const call4 = (d: Id, key: Id, v: Id | null, l: Id, r: Id) => k.call(d, ...kv(key, v), l, r);
-    // The rotations. A side that is too heavy is never a tip, so the tip
-    // cases only keep the types whole.
-    const singleL = def(`${word} single left`, ps, (...xs) => { const { key, v, l, r } = split(xs); return parts(r, (_, rk, rv, rl, rr) => N(rk, rv, N(key, v, l, rl), rr), () => N(key, v, l, r), "r "); });
-    const singleR = def(`${word} single right`, ps, (...xs) => { const { key, v, l, r } = split(xs); return parts(l, (_, lk, lv, ll, lr) => N(lk, lv, ll, N(key, v, lr, r)), () => N(key, v, l, r), "l "); });
-    const doubleL = def(`${word} double left`, ps, (...xs) => { const { key, v, l, r } = split(xs); return parts(r, (_, rk, rv, rl, rr) =>
-      parts(rl, (__, mk, mv, ml, mr) => N(mk, mv, N(key, v, l, ml), N(rk, rv, mr, rr)), () => N(key, v, l, r), "m "), () => N(key, v, l, r), "r "); });
-    const doubleR = def(`${word} double right`, ps, (...xs) => { const { key, v, l, r } = split(xs); return parts(l, (_, lk, lv, ll, lr) =>
-      parts(lr, (__, mk, mv, ml, mr) => N(mk, mv, N(lk, lv, ll, ml), N(key, v, mr, r)), () => N(key, v, l, r), "m "), () => N(key, v, l, r), "l "); });
-    const DELTA = 3, RATIO = 2;
-    const balance = def(`${word} balance`, ps, (...xs) => { const { key, v, l, r } = split(xs); return k.let("left size", k.call(size, l), (sl) => k.let("right size", k.call(size, r), (sr) =>
-      k.if(i.less(i.add(sl, sr), k.int(2)), N(key, v, l, r),
-        k.if(i.less(i.mul(k.int(DELTA), sl), sr),
-          parts(r, (_, __, ___, rl, rr) => k.if(i.less(k.call(size, rl), i.mul(k.int(RATIO), k.call(size, rr))), call4(singleL, key, v, l, r), call4(doubleL, key, v, l, r)), () => N(key, v, l, r), "r "),
-          k.if(i.less(i.mul(k.int(DELTA), sr), sl),
-            parts(l, (_, __, ___, ll, lr) => k.if(i.less(k.call(size, lr), i.mul(k.int(RATIO), k.call(size, ll))), call4(singleR, key, v, l, r), call4(doubleR, key, v, l, r)), () => N(key, v, l, r), "l "),
-            N(key, v, l, r)))))); });
-    const B = (key: Id, v: Id | null, l: Id, r: Id) => call4(balance, key, v, l, r);
+  const size = def("tree size", ["tree"], (t) => parts(t, (s) => s, () => k.int(0)));
+  const node = def("node", ["key", "value", "left", "right"], (key, v, l, r) => k.call(bin, i.add(i.add(k.call(size, l), k.call(size, r)), k.int(1)), key, v, l, r));
+  const N = (key: Id, v: Id, l: Id, r: Id) => k.call(node, key, v, l, r);
+  // The rotations. A side that is too heavy is never a tip, so the tip
+  // cases only keep the types whole.
+  const singleL = def("single left", ["key", "value", "left", "right"], (key, v, l, r) => parts(r, (_, rk, rv, rl, rr) => N(rk, rv, N(key, v, l, rl), rr), () => N(key, v, l, r), ["r size", "r key", "r value", "r left", "r right"]));
+  const singleR = def("single right", ["key", "value", "left", "right"], (key, v, l, r) => parts(l, (_, lk, lv, ll, lr) => N(lk, lv, ll, N(key, v, lr, r)), () => N(key, v, l, r), ["l size", "l key", "l value", "l left", "l right"]));
+  const doubleL = def("double left", ["key", "value", "left", "right"], (key, v, l, r) => parts(r, (_, rk, rv, rl, rr) =>
+    parts(rl, (__, mk, mv, ml, mr) => N(mk, mv, N(key, v, l, ml), N(rk, rv, mr, rr)), () => N(key, v, l, r), ["m size", "m key", "m value", "m left", "m right"]),
+  () => N(key, v, l, r), ["r size", "r key", "r value", "r left", "r right"]));
+  const doubleR = def("double right", ["key", "value", "left", "right"], (key, v, l, r) => parts(l, (_, lk, lv, ll, lr) =>
+    parts(lr, (__, mk, mv, ml, mr) => N(mk, mv, N(lk, lv, ll, ml), N(key, v, mr, r)), () => N(key, v, l, r), ["m size", "m key", "m value", "m left", "m right"]),
+  () => N(key, v, l, r), ["l size", "l key", "l value", "l left", "l right"]));
+  const DELTA = 3, RATIO = 2;
+  const balance = def("balance", ["key", "value", "left", "right"], (key, v, l, r) => k.let("left size", k.call(size, l), (sl) => k.let("right size", k.call(size, r), (sr) =>
+    k.if(i.less(i.add(sl, sr), k.int(2)), N(key, v, l, r),
+      k.if(i.less(i.mul(k.int(DELTA), sl), sr),
+        parts(r, (_, __, ___, rl, rr) => k.if(i.less(k.call(size, rl), i.mul(k.int(RATIO), k.call(size, rr))), k.call(singleL, key, v, l, r), k.call(doubleL, key, v, l, r)), () => N(key, v, l, r), ["r size", "r key", "r value", "r left", "r right"]),
+        k.if(i.less(i.mul(k.int(DELTA), sr), sl),
+          parts(l, (_, __, ___, ll, lr) => k.if(i.less(k.call(size, lr), i.mul(k.int(RATIO), k.call(size, ll))), k.call(singleR, key, v, l, r), k.call(doubleR, key, v, l, r)), () => N(key, v, l, r), ["l size", "l key", "l value", "l left", "l right"]),
+          N(key, v, l, r)))))));
 
-    const insert = rec(withValues ? "tree put" : "set tree add");
-    k.define(insert, k.fn(["tree", "key", ...(withValues ? ["value"] : [])], (t, key, v) => parts(t, (s, tk, tv, l, r) => order(key, tk,
-      () => B(tk, tv, k.call(insert, l, ...kv(key, v)), r),
-      // Putting a key that is there replaces its value; adding an item
-      // that is there changes nothing.
-      () => (withValues ? k.call(bin, s, key, v!, l, r) : t),
-      () => B(tk, tv, l, k.call(insert, r, ...kv(key, v)))),
-    () => N(key, withValues ? v : null, k.x(tip), k.x(tip)))));
-    const has = rec(`${word} has`);
-    k.define(has, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, __, l, r) => order(key, tk, () => k.call(has, l, key), () => k.x(TRUE), () => k.call(has, r, key)), () => k.x(FALSE))));
-    // The leftmost key (and value), and the tree without it: what takes a
-    // removed node's place.
-    const smallest = rec(`${word} smallest`);
-    k.define(smallest, k.fn(["tree", "key", ...(withValues ? ["value"] : [])], (t, key, v) => parts(t, (_, tk, tv, l) => k.call(smallest, l, ...kv(tk, tv)), () => (withValues ? k.call(PAIR_V, key, v) : key))));
-    const dropMin = rec(`${word} without smallest`);
-    k.define(dropMin, k.fn(["tree"], (t) => parts(t, (_, tk, tv, l, r) => parts(l, () => B(tk, tv, k.call(dropMin, l), r), () => r, "l "), () => k.x(tip))));
-    const glue = def(`${word} glue`, ["left", "right"], (l, r) => parts(r, (_, rk, rv) => (withValues
-      ? pair(k.call(smallest, r, rk, rv!), (mk, mv) => B(mk, mv, l, k.call(dropMin, r)), ["min key", "min value"])
-      : k.let("min", k.call(smallest, r, rk), (mk) => B(mk, null, l, k.call(dropMin, r)))), () => l, "r "));
-    const remove = rec(`${word} remove`);
-    k.define(remove, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, tv, l, r) => order(key, tk,
-      () => B(tk, tv, k.call(remove, l, key), r),
-      () => k.call(glue, l, r),
-      () => B(tk, tv, l, k.call(remove, r, key))),
-    () => k.x(tip))));
-    // The entries (items) in order, onto a list: the meaning's list.
-    const onto = rec(`${word} onto`);
-    k.define(onto, k.fn(["tree", "rest"], (t, rest) => parts(t, (_, tk, tv, l, r) => k.call(onto, l, k.call(CONS, withValues ? k.call(PAIR_V, tk, tv!) : tk, k.call(onto, r, rest))), () => rest)));
-    const list = def(`${word} list`, ["tree"], (t) => k.call(onto, t, k.x(NIL)));
-    const emptyTree = k.def(`empty ${word}`);
-    k.define(emptyTree, k.x(tip));
-    defs.push(emptyTree);
-    return { T, tip, size, insert, has, remove, list, emptyTree };
-  }
-
-  // ---- Map
-  const m = tree("Map tree", true);
-  const find = rec("tree value at");
-  k.define(find, k.fn(["tree", "key"], (t, key) => k.match(t, [
-    { variant: m.tip, names: [], body: () => k.call(S.fail) },
-    { variant: m.T.v.bin, names: ["size", "node key", "value", "left", "right"], body: ([, tk, tv, l, r]) => order(key, tk, () => k.call(find, l, key), () => tv, () => k.call(find, r, key)) },
-  ])));
-  const putAll = (ps: Id, t0: Id) => k.fold(ps, [
+  const insert = k.def("tree put");
+  k.define(insert, k.fn(["tree", "key", "value"], (t, key, v) => parts(t, (s, tk, tv, l, r) => order(key, tk,
+    () => k.call(balance, tk, tv, k.call(insert, l, key, v), r),
+    () => k.call(bin, s, key, v, l, r),
+    () => k.call(balance, tk, tv, l, k.call(insert, r, key, v))),
+  () => N(key, v, k.x(tip), k.x(tip)))));
+  const find = k.def("tree value at");
+  k.define(find, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, tv, l, r) => order(key, tk, () => k.call(find, l, key), () => tv, () => k.call(find, r, key)), () => k.call(S.fail))));
+  const has = k.def("tree has key");
+  k.define(has, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, __, l, r) => order(key, tk, () => k.call(has, l, key), () => k.x(TRUE), () => k.call(has, r, key)), () => k.x(FALSE))));
+  // The leftmost entry, and the tree without it: what takes a removed
+  // node's place.
+  const minEntry = k.def("smallest entry");
+  k.define(minEntry, k.fn(["tree", "key", "value"], (t, key, v) => parts(t, (_, tk, tv, l) => k.call(minEntry, l, tk, tv), () => k.call(PAIR_V, key, v))));
+  const dropMin = k.def("without smallest");
+  k.define(dropMin, k.fn(["tree"], (t) => parts(t, (_, tk, tv, l, r) => parts(l, () => k.call(balance, tk, tv, k.call(dropMin, l), r), () => r, ["l size", "l key", "l value", "l left", "l right"]), () => k.x(tip))));
+  const glue = def("glue", ["left", "right"], (l, r) => parts(r, (_, rk, rv) => k.match(k.call(minEntry, r, rk, rv), [
+    { variant: PAIR_V, names: ["min key", "min value"], body: ([mk, mv]) => k.call(balance, mk, mv, l, k.call(dropMin, r)) },
+  ]), () => l, ["r size", "r key", "r value", "r left", "r right"]));
+  const remove = k.def("tree remove key");
+  k.define(remove, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, tv, l, r) => order(key, tk,
+    () => k.call(balance, tk, tv, k.call(remove, l, key), r),
+    () => k.call(glue, l, r),
+    () => k.call(balance, tk, tv, l, k.call(remove, r, key))),
+  () => k.x(tip))));
+  // The entries in key order, onto a list: the meaning.
+  const onto = k.def("entries onto");
+  k.define(onto, k.fn(["tree", "rest"], (t, rest) => parts(t, (_, tk, tv, l, r) => k.call(onto, l, k.call(CONS, k.call(PAIR_V, tk, tv), k.call(onto, r, rest))), () => rest)));
+  const entries = def("tree entries", ["tree"], (t) => k.call(onto, t, k.x(NIL)));
+  const meaning = def("tree meaning", ["tree"], (t) => k.call(MAP_V, k.call(entries, t)));
+  const fromEntries = def("tree of entries", ["entries"], (es) => k.fold(es, [
+    { variant: NIL, names: [], body: () => k.x(tip) },
+    { variant: CONS, names: ["entry", "rest"], results: [null, "tree"], body: ([e], [, t]) => k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([key, v]) => k.call(insert, t!, key, v) }]) },
+  ]));
+  const pairsIn = (ps: Id, t0: Id) => k.fold(ps, [
     { variant: NIL, names: [], body: () => t0 },
-    { variant: CONS, names: ["entry", "rest"], results: [null, "tree"], body: ([e], [, t]) => pair(e, (key, v) => k.call(m.insert, t!, key, v)) },
+    { variant: CONS, names: ["entry", "rest"], results: [null, "tree"], body: ([e], [, t]) => k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([key, v]) => k.call(insert, t!, key, v) }]) },
   ]);
-  const mapMeaning = def("tree meaning", ["tree"], (t) => k.call(MAP_V, k.call(m.list, t)));
-  const mapOf = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(mapMeaning, a), k.call(mapMeaning, b)));
-  // A Map has one case and nothing recursive in it, so its fold is its
-  // match.
-  const matchMap = def("match tree", ["tree", "map of"], (t, f) => k.call(f, k.call(m.list, t)));
-  const mapImpl: Record<Id, Id> = {
-    [MAP_V]: def("tree of entries", ["entries"], (es) => putAll(es, k.x(m.tip))),
-    match: matchMap,
-    fold: matchMap,
-    [prelude("empty map")]: m.emptyTree,
+  const map = prelude("map");
+  const emptyTree = k.def("empty tree");
+  k.define(emptyTree, k.x(tip));
+  const impl: Record<Id, Id> = {
+    [MAP_V]: fromEntries,
+    match: def("match tree", ["tree", "map of"], (t, f) => k.call(f, k.call(entries, t))),
+    fold: def("fold tree", ["tree", "map of"], (t, f) => k.call(f, k.call(entries, t))),
+    [prelude("empty map")]: emptyTree,
     // A later pair wins: put in the order given.
-    [prelude("as map")]: def("tree as map", ["pairs"], (ps) => putAll(k.call(prelude("reverse"), ps), k.x(m.tip))),
-    [prelude("put")]: m.insert,
+    [prelude("as map")]: def("tree as map", ["pairs"], (ps) => pairsIn(k.call(prelude("reverse"), ps), k.x(tip))),
+    [prelude("put")]: insert,
     [prelude("value at")]: find,
-    [prelude("remove key")]: m.remove,
-    [prelude("has key")]: m.has,
-    [prelude("merge maps")]: def("tree merge", ["first", "second"], (a, b) => putAll(k.call(prelude("reverse"), k.call(m.list, b)), a)),
-    [prelude("keys of")]: def("tree keys", ["tree"], (t) => k.call(prelude("map"), k.call(m.list, t), k.fn(["entry"], (e) => pair(e, (key) => key)))),
-    [prelude("values of")]: def("tree values", ["tree"], (t) => k.call(prelude("map"), k.call(m.list, t), k.fn(["entry"], (e) => pair(e, (_, v) => v)))),
-    [prelude("entries of")]: m.list,
-    [prelude("map size")]: m.size,
+    [prelude("remove key")]: remove,
+    [prelude("has key")]: has,
+    [prelude("merge maps")]: def("tree merge", ["first", "second"], (a, b) => pairsIn(k.call(prelude("reverse"), k.call(entries, b)), a)),
+    [prelude("keys of")]: def("tree keys", ["tree"], (t) => k.call(map, k.call(entries, t), k.fn(["entry"], (e) => k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([key]) => key }])))),
+    [prelude("values of")]: def("tree values", ["tree"], (t) => k.call(map, k.call(entries, t), k.fn(["entry"], (e) => k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([, v]) => v }])))),
+    [prelude("entries of")]: entries,
+    [prelude("map size")]: size,
   };
-  const mapByType = {
-    equal: mapOf((a, b) => k.call(S.equal, a, b), "tree equal"),
-    compare: mapOf((a, b) => k.call(COMPARE, a, b), "tree compare"),
-    show: def("tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(mapMeaning, t))),
+  const logn = ["put", "value at", "remove key", "has key"].map(prelude);
+  const linear = ["keys of", "values of", "entries of", "match", "fold"].map((n) => (n === "match" || n === "fold" ? n : prelude(n)));
+  const cost: Record<string, string> = {
+    ...Object.fromEntries(logn.map((j) => [j, "log n"])), ...Object.fromEntries(linear.map((j) => [j, "n"])),
+    [MAP_V]: "n log n", [prelude("as map")]: "n log n", [prelude("merge maps")]: "n log n", [prelude("empty map")]: "1", [prelude("map size")]: "1", space: "n",
   };
-
-  // ---- Set
-  const s = tree("Set tree", false);
-  const addAll = (xs: Id, t0: Id) => k.fold(xs, [
-    { variant: NIL, names: [], body: () => t0 },
-    { variant: CONS, names: ["item", "rest"], results: [null, "tree"], body: ([x], [, t]) => k.call(s.insert, t!, x) },
-  ]);
-  const setMeaning = def("set tree meaning", ["tree"], (t) => k.call(SET_V, k.call(s.list, t)));
-  // The items of a's list that `keep` says, as a tree again.
-  const filtered = (name: string, keep: (inB: Id) => Id) => def(name, ["a", "b"], (a, b) => addAll(k.call(prelude("keep"), k.call(s.list, a), k.fn(["item"], (x) => keep(k.call(s.has, b, x)))), k.x(s.tip)));
-  const setOf = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(setMeaning, a), k.call(setMeaning, b)));
-  const matchSet = def("match set tree", ["tree", "set of"], (t, f) => k.call(f, k.call(s.list, t)));
-  const ofItems = def("set tree of items", ["items"], (xs) => addAll(xs, k.x(s.tip)));
-  const setImpl: Record<Id, Id> = {
-    [SET_V]: ofItems,
-    match: matchSet,
-    fold: matchSet,
-    [prelude("empty set")]: s.emptyTree,
-    [prelude("as set")]: ofItems,
-    [prelude("add item")]: s.insert,
-    [prelude("remove item")]: s.remove,
-    [prelude("has item")]: s.has,
-    [prelude("set union")]: def("set tree union", ["a", "b"], (a, b) => addAll(k.call(s.list, b), a)),
-    [prelude("set intersection")]: filtered("set tree intersection", (inB) => inB),
-    [prelude("set difference")]: filtered("set tree difference", (inB) => k.call(S.not, inB)),
-    [prelude("items of")]: s.list,
-    [prelude("set size")]: s.size,
+  // The definition itself: every job walks the sorted list.
+  const spec: Representation = {
+    name: "sorted entries", of: MAP, type: MAP, meaning: null, canonical: true, impl: {},
+    cost: { ...Object.fromEntries([...logn, ...linear, prelude("map size")].map((j) => [j, "n"])), [MAP_V]: "1", [prelude("as map")]: "n²", [prelude("merge maps")]: "n²", [prelude("empty map")]: "1", space: "n" },
   };
-  const setByType = {
-    equal: setOf((a, b) => k.call(S.equal, a, b), "set tree equal"),
-    compare: setOf((a, b) => k.call(COMPARE, a, b), "set tree compare"),
-    show: def("set tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(setMeaning, t))),
-  };
-
-  const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
-  const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
-  const mapLog = ["put", "value at", "remove key", "has key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
-  const setLog = ["add item", "remove item", "has item"], setLin = ["items of", "match", "fold"];
-  // The definitions themselves: every job walks the sorted list.
-  const spec = (of: Id, cons: Id, linear: string[], quadratic: string[], one: string[]): Representation => ({
-    name: "sorted list", of, type: of, meaning: null, canonical: true, impl: {},
-    cost: { ...at(linear, "n"), ...at(quadratic, "n²"), ...at(one, "1"), [cons]: "1", space: "n" },
-  });
-  return {
-    map: { name: "weight-balanced tree", of: MAP, type: m.T.def, meaning: mapMeaning, canonical: false, impl: mapImpl, byType: mapByType,
-      cost: { ...at(mapLog, "log n"), ...at(mapLin, "n"), ...at(["as map", "merge maps"], "n log n"), ...at(["empty map", "map size"], "1"), [MAP_V]: "n log n", space: "n" } },
-    set: { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType,
-      cost: { ...at(setLog, "log n"), ...at(setLin, "n"), ...at(["as set", "set union", "set intersection", "set difference"], "n log n"), ...at(["empty set", "set size"], "1"), [SET_V]: "n log n", space: "n" } },
-    mapSpec: spec(MAP, MAP_V, [...mapLog, ...mapLin, "map size"], ["as map", "merge maps"], ["empty map"]),
-    setSpec: spec(SET_TYPE, SET_V, [...setLog, ...setLin, "set size", "set union", "set intersection", "set difference"], ["as set"], ["empty set"]),
-    defs,
-  };
-}
-
-// The trees written into a program, for tests (the library's published
-// rows are LIBRARY.reps). `prelude` finds a prelude definition by name.
-// `insiders`: the trees' definitions, whose meanings build a Map and a
-// Set with their private constructors, for the checker's options.
-export function withMapTree(code: Code, names: Names, prelude: (name: string) => Id) {
-  const k = new Lang(code);
-  const t = buildTrees(k, prelude);
-  return { code: merge(code, k.code), names: { ...names, ...k.names }, rep: t.map, spec: t.mapSpec, set: t.set, setSpec: t.setSpec, insiders: t.defs };
+  const rep: Representation = { name: "weight-balanced tree", of: MAP, type: T.def, meaning, canonical: false, impl, cost };
+  return { code: merge(code, k.code), names: { ...names, ...k.names }, rep, tree: T.def, spec, insiders: k.code.defs };
 }

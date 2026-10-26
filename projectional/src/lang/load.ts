@@ -8,7 +8,7 @@ import { merge, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
 import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
-import { LIBRARY, PRELUDE, TREES } from "./library.ts";
+import { LIBRARY, PRELUDE } from "./library.ts";
 
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
 
@@ -17,9 +17,8 @@ export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.nam
 // What the checker is given with every program: the modules' pins, and
 // which of their definitions are helpers.
 // The prelude keeps the rules of the types whose constructors are private
-// (std.ts SMART), and the trees module stands in for Map and Set, so their
-// definitions are the insiders.
-export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs] };
+// (std.ts SMART), so its definitions are the insiders.
+export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: PRELUDE.code.defs };
 
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });
