@@ -421,6 +421,7 @@ function newProgram() {
   // Its hole selected, with the palette showing, whichever tab was open.
   ui.selected = T.nextHole(doc.code, ui.def, ui.def) ?? null;
   ui.panel = "node";
+  if (onePane()) ui.pane = "side";
   render();
 }
 
@@ -1109,13 +1110,14 @@ const GRAPH_HINT = TOUCH
   ? "long-press for a menu; drag a node to move it; Pick (in the menu) several to move them together; pinch to zoom; tap a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there"
   : "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
 
-// The definition's loose parts, at the end of its text, as _1, _2, …: kept
+// The definition's loose parts, at the end of its text, each as loose: and
+// the expression it is (inside, they're _1, _2, …): kept
 // and type-checked, edited like the rest, never run (NODE-EDITOR.md, "Loose
 // parts").
 function looseBlocks(info: T.Info): HTMLElement[] {
   const parts = looseOf(doc.code, doc.loose ?? {}, ui.def);
   if (!parts.length) return [];
-  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected)))];
+  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected, true)))];
 }
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
@@ -1296,6 +1298,16 @@ function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
   return m.get(hole)!;
 }
 
+// Why nothing with effects goes in a hole that allows none, so a search
+// for print there says so instead of finding nothing (BACKLOG E123).
+function pureHole(info: T.Info, hole: Id): string {
+  const hi = info.holes.get(hole), row = hi && info.subst.resolveRow(hi.row);
+  if (!row || row.effs.length || row.tail !== null) return "";
+  return hi.group.some((d) => doc.loose?.[d])
+    ? "A loose part is a value of its own, and a value can't have effects, so print, die() and the like aren't offered. Fill the hole where the part will be used, or wire it in first."
+    : "This hole can't have effects (its definition is a value, or its type says none), so print, die() and the like aren't offered.";
+}
+
 // How often each thing is referred to in the program, once per version.
 const uses = new WeakMap<Code, Map<Id, number>>();
 function usesIn(code: Code): Map<Id, number> {
@@ -1374,7 +1386,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  if (!shown.length && !value) list.append(h("p", { class: "hint" }, "Nothing that fits matches. Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."));
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${q && pureHole(info, hole) ? pureHole(info, hole) : "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
@@ -2431,11 +2443,13 @@ function blocksHit(t: EventTarget | null): Id | null {
 function select(id: Id | null) {
   // Re-rendering on a repeat click would detach the element before its
   // dblclick fires, and go-to-definition is a dblclick.
-  if (ui.selected === id) return;
-  if (ui.selected !== id) { ui.mode = null; ui.query = ""; }
+  // One pane at a time: a hole's palette is in the side pane, so show it,
+  // also when the hole was selected already (a new program's is).
+  const toPalette = !!id && doc.code.nodes[id]?.kind === "hole" && onePane() && ui.pane !== "side";
+  if (ui.selected === id) { if (toPalette) { ui.pane = "side"; render(); } return; }
+  ui.mode = null; ui.query = "";
   ui.selected = id;
-  // One pane at a time: a hole's palette is in the side pane, so show it.
-  if (id && doc.code.nodes[id]?.kind === "hole" && onePane()) ui.pane = "side";
+  if (toPalette) ui.pane = "side";
   render();
 }
 

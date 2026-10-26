@@ -356,13 +356,13 @@ async function looseParts() {
   await p.locator(".blocks-wrap .head", { hasText: /^named$/ }).first().click();
   await p.keyboard.press("Delete");
   const after = await text();
-  const loose = (t: string) => (t.match(/ _\d+ = | _\d+\(/g) ?? []).length;
+  const loose = (t: string) => (t.match(/ loose: /g) ?? []).length;
   if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
   if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
   // By the part's own last node's output, as the status says (BACKLOG E120):
-  // the faded output furthest right.
-  const outs = await p.locator(".p-graph .items > g.faded circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
+  // the faded output furthest right, of a node, not of a lone literal (E122).
+  const outs = await p.locator(".p-graph .items > g.faded:not(:has(rect.pill)) circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
   const out = outs.sort((a, b) => b.x - a.x)[0];
   if (!out) { errors.push(`${where}: the loose part's nodes have no output to drag`); return p.close(); }
   const hole = (await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").first().boundingBox())!;
@@ -414,10 +414,21 @@ async function looseValue() {
   await p.locator(".p-graph svg.tgraph").first().dispatchEvent("contextmenu", { clientX: box.x + box.width - 40, clientY: box.y + box.height - 40 });
   await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 }).catch(() => errors.push(`${where}: no Add a value on the canvas`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!/-- loose, not used yet .*_1 = □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
+  if (!/-- loose, not used yet loose: □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
   if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
   if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  // It reads as what it is, not as a function named _1 (BACKLOG E124).
+  const titles = await p.locator(".p-graph text.rt").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
+  if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
+  // Its hole takes no effects, and a search for one says why (BACKLOG E123).
+  await p.locator("#m-query").fill('print("hi")');
+  if (!/loose part .* can't have effects/.test(await p.locator(".ctx-menu .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
+  // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
+  await p.locator("#m-query").fill("7");
+  await p.locator("#m-query").press("Enter");
+  if (!(await p.locator(".p-graph .items > g.faded circle.outp[data-out]").count())) errors.push(`${where}: the loose 7 has no output to wire it in by`);
   await p.keyboard.press("Escape");
+  await p.locator('button[data-act="undo"]').first().click();
   await p.locator('button[data-act="undo"]').first().click();
   if ((await p.locator(".p-text .body").innerText()).includes("-- loose")) errors.push(`${where}: Undo left it`);
   await p.close();
@@ -638,6 +649,14 @@ async function phone() {
   await p.locator('[data-act="new-def"]').first().tap();
   if (!(await p.locator("#f-def-name").isVisible())) errors.push(`${where}: + New definition opened its form out of sight`);
   await p.locator('[data-act="new-def"]').first().evaluate((b) => (b as HTMLElement).click()).catch(() => {});
+  // + New program fills its hole from the palette: the palette shows, and
+  // tapping the hole, already picked, in Text brings it back (BACKLOG E121).
+  await p.locator('.panes [data-pane="nav"]').tap();
+  await p.locator('[data-act="new-program"]').first().tap();
+  if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: + New program left the palette out of sight`);
+  await p.locator('.panes [data-pane="text"]').tap();
+  await p.locator(".blocks-wrap .hole").first().tap({ timeout: 2000 }).catch(() => errors.push(`${where}: no hole to tap in the new program`));
+  if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: tapping the new program's hole didn't bring the palette`);
   await p.locator('.panes [data-pane="graph"]').tap();
   // The map would cover a phone's graph: it starts put away, and Map
   // brings it out.

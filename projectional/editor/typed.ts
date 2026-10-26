@@ -45,7 +45,7 @@ export const typeOf = (info: Info | null, id: Id, names: Names): string | null =
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
 // two can't drift apart: a piece that stands for a node is a span you can
 // click, with its type on hover; a group of lines is a box.
-export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null): HTMLElement {
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose = false): HTMLElement {
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
@@ -73,7 +73,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     const c = [b.pad ? "ind" : "", cls(b.id, b.cls) ?? ""].filter(Boolean).join(" ");
     return h("div", { class: c || undefined, "data-id": b.id, style: b.pad && b.pad !== 2 ? `padding-left: ${b.pad * 11}px` : undefined }, ...b.kids.map(draw));
   };
-  return h("div", { class: "typed" }, ...blocksOf(code, pres, info, defId, { pane: true }).map(draw));
+  return h("div", { class: "typed" }, ...blocksOf(code, pres, info, defId, { pane: true, loose }).map(draw));
 }
 
 // ---------------------------------------------------------------- edits

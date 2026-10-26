@@ -198,6 +198,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return n?.kind === "ref" && node(n.target)?.kind === "binder" ? n.target : null;
   };
   const named = (b: Id) => hooks.named.has(b) && name(b) !== "_";
+  // A loose part's own result: its output wires the part back in, even
+  // when it is a lone pill (a literal has no other output).
+  const looseTop = (() => {
+    const b = loose ? (node(defId) as NodeOf<"def">).body : undefined;
+    return b && node(b)?.kind === "lambda" ? (node(b) as NodeOf<"lambda">).body : b;
+  })();
   const titled = (el: SVGElement, t: string) => { if (t) el.append(s("title", {}, t)); return el; };
 
   const items = new Map<Id, Item>();
@@ -243,6 +249,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       if (src) r.setAttribute("data-src", src);
       if (cls.includes("hole")) r.setAttribute("data-slot", id);
       else r.setAttribute("data-move", id);
+      if (id === looseTop && !cls.includes("hole")) g.append(titled(s("circle", { cx: w, cy: h / 2, r: 5, class: "outp", "data-out": id }), "Drag onto an empty input to wire this part in"));
     // A literal says its value already; a hole has none.
     }, { value: cls.includes("hole") || cls === "lit" ? undefined : id, out: { x: w, y: h / 2 } });
   };
@@ -608,7 +615,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   let top: Sub;
-  if (loose && body) top = region(defId, `${name(defId)} : ${typeOf(defId)} · loose, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
+  if (loose && body) top = region(defId, `loose : ${typeOf(body.kind === "lambda" ? body.body : def.body!)}, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);
