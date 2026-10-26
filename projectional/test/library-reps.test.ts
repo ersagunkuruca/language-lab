@@ -64,6 +64,35 @@ test("a word count gets the tree, and prints what the definition prints: equal, 
   assert.equal(plain[3], "true");
 });
 
+// C48: a Set gets its tree too, from LIBRARY.reps.
+test("a program that adds and tests many items gets the tree for Set, and prints what the definition prints", () => {
+  const k = new Lang(LIBRARY.code);
+  const seen = k.def("seen");
+  k.define(seen, k.fold(k.call(S.range, k.lit(300)), [
+    { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "s"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(S.mod, k.call(B.mul, i, k.lit(7919)), k.lit(100))) },
+  ]));
+  const ab = k.def("ab"), ba = k.def("ba");
+  k.define(ab, k.call(L("add item"), k.call(L("add item"), k.x(L("empty set")), k.lit("a")), k.lit("b")));
+  k.define(ba, k.call(L("add item"), k.call(L("add item"), k.x(L("empty set")), k.lit("b")), k.lit("a")));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(k.call(L("set size"), k.x(seen))),
+    show(k.call(L("has item"), k.x(seen), k.lit(42))),
+    show(k.x(ab)),
+    show(k.call(S.equal, k.x(ab), k.x(ba))),
+    show(k.call(COMPARE, k.x(ab), k.x(ba))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const c = withLibraryRepresentations(code, info, names, main, [seen, ab, ba, main]);
+  assert.deepEqual(c.chosen, ["Set as weight-balanced tree"]);
+  const plain = printed(code, names, main);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), plain);
+  assert.deepEqual(plain.slice(3), ["true", "same"]);
+});
+
 test("a program with a map inside another value keeps the definition", () => {
   const p = program(30, true);
   const info = infer(p.code, p.names, undefined, checkOptions);

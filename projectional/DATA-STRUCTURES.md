@@ -96,7 +96,9 @@ tree when the costs say so, and equal, show and compare on a map are given
 its meaning. The trees are library data since C51: the trees module
 (src/lang/trees-source.ts, library/trees.json) holds a tree for Map and one
 for Set, and publishes their rows in `LIBRARY.reps`, each with `byType`, the
-equal, show and compare that go through its meaning. Before that, representations were applied
+equal, show and compare that go through its meaning. Since C48 the chooser
+offers every such row, so a Set gets its tree as a Map does. A map or set
+inside another value still keeps the definition (C52). Before that, representations were applied
 only by `lab run` and `lab compile` with a representations.json (#97). A
 std or library type's representation has to be chosen automatically by the
 evaluator, the compiler and the editor, from the costs of the jobs the
