@@ -417,6 +417,9 @@ async function looseValue() {
   if (!/-- loose, not used yet .*_1 = □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
   if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
   if (!(await p.locator("#m-query").count())) errors.push(`${where}: the palette didn't open to fill it`);
+  // Its hole takes no effects, and a search for one says why (BACKLOG E123).
+  await p.locator("#m-query").fill('print("hi")');
+  if (!/loose part .* can't have effects/.test(await p.locator(".ctx-menu .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
   // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
   await p.locator("#m-query").fill("7");
   await p.locator("#m-query").press("Enter");
