@@ -27,7 +27,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 |---|---|---|---|---|---|
 | E127 | Run backwards shows nothing until the whole search ends: show the first answer as soon as it's found and keep looking for others after (`fibFast(n) = 8` waits 26 s for an answer found in 11 steps) | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P2 | S | |
 | E128 | A function written in place is offered only at a hole of function type; at a new value (`Add a value before this`, type `a`) there's no "new function", so a local helper can't be started. Offer it where the type is open | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P3 | S | |
-| E124 | Loose parts read as `_1`, and one that uses inputs reads as a function `_1(length, gravity) = …`; was Inbox I13 | QA-2026-10-26 M2 | P3 | S |  |
 | E125 | The graph's palette pop-up covers neighbouring nodes and repeats the side panel's palette; was Inbox I16 | QA-2026-10-26 L3 | P3 | S |  |
 | E126 | Refusals for units don't mention units (Change the function on `speed · time` → `subtract`: "Nothing that fits matches"); was Inbox I17 | QA-2026-10-26 L4 | P3 | S |  |
 | E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
@@ -138,6 +137,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E124 | Loose parts read as loose: and the expression they are (loose: length / gravity), not as a function _1(…); the frame reads loose : Number | #452 |
 | E123 | A search that finds nothing in a hole that takes no effects says why: a loose part is a value, and a value can't print or roll | #450 |
 | E122 | A loose literal (or lone name) has an output on its pill, so it can be dragged onto an input like any node | #448 |
 | E121 | On a phone, + New program shows the palette for its hole, and tapping a hole already selected brings it too | #447 |
