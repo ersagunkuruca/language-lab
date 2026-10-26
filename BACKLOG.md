@@ -138,6 +138,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E129 | The graph shows an action's steps in the order they run (numbered, one column, a dashed line from each to the next), and a step's menu moves it earlier or later; was Ersagun 2026-10-26 "print statements on top of each other" | #467 |
 | E125 | Add a value focuses the side panel's palette when it shows, instead of a pop-up over the graph repeating it; on a phone the pop-up stays | #456 |
 | E124 | Loose parts read as loose: and the expression they are (loose: length / gravity), not as a function _1(…); the frame reads loose : Number | #452 |
 | E123 | A search that finds nothing in a hole that takes no effects says why: a loose part is a value, and a value can't print or roll | #450 |
