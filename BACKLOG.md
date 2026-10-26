@@ -137,7 +137,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| E120 | A loose part wires back in by its own last node's output, as the status says, not only by its frame's end; the drag also checks the fit as it goes | #440 |
+| E120 | A loose part wires back in by its own last node's output, as the status says, not only by its frame's end; the drag also checks the fit as it goes | #445 |
 | E110 | A wire goes round a frame it doesn't start or end in, as round a node, however tall the frame | #439 |
 | E113 | Already so since E92: a call picked in the graph offers Open (its function) and Change the function; now tested in the graph too | #438 |
 | E112 | Let and get nodes for every value at once: Show every value as let and get nodes (and back) on the canvas's menu, and a Guide line | #438 |
