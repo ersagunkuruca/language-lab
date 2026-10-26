@@ -185,6 +185,14 @@ async function swapAndUndo() {
   if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await distance()) !== "distance = drift + drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
+  // A function that doesn't fit, named in full, says why: speed · time is
+  // m/s by s, and subtract would take two of one unit (BACKLOG E126).
+  await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
+  await p.locator('[data-menu="swap"]').click();
+  await p.locator("#m-query").fill("subtract");
+  const refusal = await p.locator(".ctx-menu .palette").innerText();
+  if (!/subtract doesn't fit here: .*(m\/s|s\b)/s.test(refusal)) errors.push(`${where}: subtract over speed · time is refused with ${JSON.stringify(refusal)}`);
+  await p.keyboard.press("Escape");
   // The same from the Blocks pane: right-click its +, which stands for the
   // call as the graph's node does.
   where = "change the function from the Blocks pane";

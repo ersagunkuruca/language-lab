@@ -1411,7 +1411,8 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${q && pureHole(info, hole) ? pureHole(info, hole) : "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."}`));
+  const why = !shown.length && !value && q ? T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query) ?? pureHole(info, hole) : "";
+  if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 
