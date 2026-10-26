@@ -177,14 +177,14 @@ Two things keep this from getting lost down one path forever:
   waits. Once a guess fixes `x`, it gives `y`, or checks it.
 
 How the work grows: for `fib(n) = 8` the search takes 70 steps, for 13 it
-takes 114, for 144 it takes 1,035. Each next Fibonacci number costs about
+takes 114, for 144 it takes 1,047. Each next Fibonacci number costs about
 1.6 times as many steps as the last. That's the same growth as running
 `fib` forward, because it builds the same trees.
 
 ### Why the fast version did worse
 
 Backwards, `fib3` and `fibFast` find the answer much faster. `fibFast(n)
-= 8` is found in 11 steps (70 for `fib`), and 144 in 23 steps (1,035 for
+= 8` is found in 11 steps (70 for `fib`), and 144 in 23 steps (1,047 for
 `fib`): two steps per level. With `a` and `b` known, `fib3` backwards is a
 straight walk: `fib3(1, 1, n) = 8` becomes `fib3(1, 2, n − 1) = 8`, then
 `fib3(2, 3, n − 2) = 8`, and so on, until the `then` arm finds `a = 8`.
@@ -197,18 +197,21 @@ that search ends. For `fib3` that second search is the slow part:
   is already past 8, but nothing tells the search that `a` only grows, so
   it doesn't stop.
 - `n` is still unknown at every level. Each level adds one more waiting
-  equation (`n = n₁ + 1`, `n₁ = n₂ + 1`, …), and each step re-reads all of
-  them. After 200 levels there are 198 waiting equations. After 1,400 there
-  are 1,398, and `a` is about 10²⁹². Each step costs more than the last.
+  equation (`n = n₁ + 1`, `n₁ = n₂ + 1`, …) and one more waiting check
+  (`n₁ ≠ 0`). After 1,400 levels there are 1,398 of each, and `a` is about
+  10²⁹².
 
-In the editor that takes about 26 seconds before the stack runs out and
-the pane shows `n = 5` with "Maximum call stack size exceeded". The slow
-`fib` runs out after about 1 second, because its extra search doesn't
-pile up equations.
+Until 2026-10-26 each step re-read every waiting equation and check, so
+each step cost more than the last: in the editor about 26 seconds before
+the stack ran out and the pane showed `n = 5` with "Maximum call stack
+size exceeded". Now a waiting equation or check sleeps until one of the
+unknowns it reads gets a value (BACKLOG L83), so a step costs the same at
+any depth. The Run pane's 20,000 steps take under a second, and then it
+shows `n = 5` with "Stopped searching: this direction may go on forever".
 
 So the fast version is the better program backwards too: it finds the
 answer in a few steps. It's the search for a second answer, which can
-never succeed, that costs more. Two improvements fix it:
+never succeed, that goes on until the budget ends. Two improvements help:
 
 - Show the first answer as soon as it's found, and look for more after.
   Done (BACKLOG E127): the Run pane looks for 0.3 seconds, shows what it
