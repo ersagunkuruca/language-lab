@@ -1188,6 +1188,15 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   lit("int", { t: "con", id: INT, args: [] });
   const ex = info.subst.resolve(h.expected);
   if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length, params: ex.params.map((t) => info.subst.zonk(t)) });
+  // Where any type goes (a new value, say), a function is one too: of one
+  // input or two, so a local helper can be started there (BACKLOG E128).
+  else if (ex.t === "var") for (const arity of [1, 2]) {
+    const s = info.subst.clone();
+    const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
+    try { s.unify(h.expected, t); } catch (e) { if (e instanceof TypeError) continue; throw e; }
+    const f: Filling = { kind: "lambda", arity };
+    if (safe(s, f, false)) out.push(f);
+  }
   const dataTypes = [...new Set(info.owner.values())].filter((d) => !(code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect);
   // The standard library's types that are data you write programs about;
   // the rest (Unit, Html, Event…) would only crowd the palette.

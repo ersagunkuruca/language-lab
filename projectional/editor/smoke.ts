@@ -475,6 +475,22 @@ async function stepOrder() {
   await p.close();
 }
 
+// A new value's type is open, so a function written in place is offered
+// there, to start a local helper (BACKLOG E128).
+async function helperAtValue() {
+  where = "a new function at a new value";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  await p.locator(".p-graph g:has(> text:text-is('+')) > rect.cn").first().click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="add-before"]').click({ timeout: 15000 });
+  await p.locator(".palette .opt", { hasText: /^\(□\) => □/ }).first().click({ timeout: 5000 }).catch(() => errors.push(`${where}: the palette offers no (□) => □`));
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/= \(\w+\) => □/.test(text)) errors.push(`${where}: no new function at the value: ${text.slice(-160)}`);
+  await p.close();
+}
+
 // Run backwards shows the first answer it finds at once, and looks for
 // others in the background, which Stop ends (BACKLOG E127): fibFast(n) = 8
 // is found in 11 steps, and the search for a second answer goes on.
@@ -896,6 +912,7 @@ await looseValue();
 await stepOrder();
 await simplifyAppend();
 await searchGoesOn();
+await helperAtValue();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();
