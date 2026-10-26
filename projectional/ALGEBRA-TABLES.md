@@ -57,29 +57,37 @@ on (arith.ts PRELUDE_AT). A type you write yourself can't join. For tables
 to be more than a prelude detail, a type has to be able to say "my `·` is
 this". Three ways:
 
-1. **By name in the type's module (recommended).** A type's `+ − · −x <`
-   are the definitions in its own module called `plus`, `minus`, `times`,
-   `negate` and `less`, when they are there with the right types. Then
-   `times(a, b) = table product(quaternion table, a, b)` makes `a · b` work
-   on quaternions, and so does any other way of writing `times`: a
-   polynomial type, intervals, units. PRELUDE_AT becomes this rule applied
-   to the prelude. It is what Haskell's `instance Num` says, without a new
-   kind of declaration: the checker looks the names up where it already
-   looks types up. Cost: a few names become special inside a module.
+1. **A field on the type's definition (recommended).** The typedef node
+   gets an optional entry, "its operations", naming the definitions that
+   are its `+ − · −x <`. Then `times = table product(quaternion table)` and
+   the quaternion type pointing at it makes `a · b` work on quaternions,
+   and so does any other way of writing it: a polynomial type, intervals.
+   PRELUDE_AT becomes Rational's and Complex's own entries. It is what
+   Haskell's `instance Num` says, held by id, so renaming or translating a
+   definition changes nothing. Cost: one more optional field on a node
+   kind, and the editor needs a way to set it (lane E), the way it sets a
+   field's type.
 
-2. **A field on the type's definition.** The typedef node gets an optional
-   "its operations" entry pointing at the definitions. Explicit, no special
-   names, but it is a new field on a node kind, and the editor needs a way
-   to set it.
+2. **By name in the type's module.** A type's `+ − ·` would be the
+   definitions beside it called `plus`, `minus`, `times`, `negate` and
+   `less`. Nothing new in the model, but it breaks a rule the project
+   keeps: names are presentation (a side table the editor can rename or
+   translate), and identity is the id. Renaming `times` would quietly
+   change what `·` means.
 
 3. **Prelude only.** Tables stay an internal way to write the prelude's
    number types (Complex, then dual numbers and quaternions). Smallest, but
    a programmer's own algebra (PGA for geometry, say) can't use `·`.
 
+Whichever it is, a type's own operations come before the record rule: a
+record of Float64s gets `·` part by part today, which is right for colours
+and wrong for quaternions.
+
 ## What would be built, in order
 
-1. The rule from the answer (for 1: arith.ts finds a type's operations by
-   name in its module; PRELUDE_AT becomes that rule).
+1. The rule from the answer (for 1: an optional `ops` on typedef nodes,
+   which the checker and arith.ts read; PRELUDE_AT becomes Rational's and
+   Complex's entries).
 2. `Entry`, `table product`, and Complex's table in the prelude, tested
    against `multiply complex`.
 3. Dual numbers as a table, tested against derive.ts's derivatives (L45).
