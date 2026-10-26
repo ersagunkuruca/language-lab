@@ -148,7 +148,7 @@ are unknowns):
 |---|---|---|
 | 1 | `fib(_0) = 5` | the question |
 | 2 | `fib(_17) = _15` | the else arm's first call, nothing known |
-| 3 | `fib(0)`, `fib(1)` | guesses `n = 2` and `n = 3` from the base case; the second call runs forward |
+| 3 | `fib(1)` | guesses `n = 2` and `n = 3` from the base case. `n = 2` is dropped at once, since this is the arm where `n` isn't 1 or 2; for `n = 3` the second call runs forward |
 | 4 | `fib(_41) = _39` | one level deeper: `n − 1` is itself a sum |
 | 5 | `fib(2)` | guess `n = 4`: 3 + 2 = 5. **Answer: n = 4** |
 
@@ -156,8 +156,7 @@ So the search builds possible trees from the bottom up, shallowest first,
 and checks each against the result. The first tree whose sum is 5 gives
 `n`. That's why non-Fibonacci numbers fail: no tree adds up to them, and
 the search can't tell that a deeper tree would only make bigger numbers,
-so it goes on until it runs out of steps (the Run pane allows 20,000) or
-stack. Planning which goal runs first, before the search starts, follows
+so it goes on until it runs out of steps (the Run pane allows 20,000). Planning which goal runs first, before the search starts, follows
 Mercury's modes (prior art, MODES.md).
 
 Two things keep this from getting lost down one path forever:
@@ -167,21 +166,25 @@ Two things keep this from getting lost down one path forever:
   starve the others. (`fib(0)` is one: it recurses into negative numbers
   forever, so a branch that reaches it never ends, but the others still
   get their turn.) This is miniKanren's search (prior art, credited
-  above). The guess `n = 2` shouldn't have been tried at all, since this
-  arm is the one where `n` isn't 1 or 2. The check waits and doesn't cut
-  the branch before `fib(0)` starts. That's a known waste, on the backlog.
+  above).
+- **Checks go first.** In the `else` arm, `n ≠ 1` and `n ≠ 2` are posted
+  before the calls, and they wait until `n` is known. So when a guess one
+  level down makes `n` 2, the branch is dropped right there, and `fib(0)`
+  never starts. (Until 2026-10-26 the second check was planned after the
+  calls, and every non-Fibonacci input ended in a stack overflow; BACKLOG
+  L82.)
 - **Equations wait.** `x + y = 5` with both unknown can't be solved, so it
   waits. Once a guess fixes `x`, it gives `y`, or checks it.
 
-How the work grows: for `fib(n) = 8` the search takes 85 steps, for 13 it
-takes 145, for 144 it takes 1,610. Each next Fibonacci number costs about
+How the work grows: for `fib(n) = 8` the search takes 70 steps, for 13 it
+takes 114, for 144 it takes 1,035. Each next Fibonacci number costs about
 1.6 times as many steps as the last. That's the same growth as running
 `fib` forward, because it builds the same trees.
 
 ### Why the fast version did worse
 
 Backwards, `fib3` and `fibFast` find the answer much faster. `fibFast(n)
-= 8` is found in 11 steps (85 for `fib`), and 144 in 23 steps (1,610 for
+= 8` is found in 11 steps (70 for `fib`), and 144 in 23 steps (1,035 for
 `fib`): two steps per level. With `a` and `b` known, `fib3` backwards is a
 straight walk: `fib3(1, 1, n) = 8` becomes `fib3(1, 2, n − 1) = 8`, then
 `fib3(2, 3, n − 2) = 8`, and so on, until the `then` arm finds `a = 8`.

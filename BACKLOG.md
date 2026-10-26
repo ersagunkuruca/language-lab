@@ -58,7 +58,6 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L82 | **Bug.** Backwards, an arm's checks don't cut the branch before its calls run: `fib(n) = 5` tries `n = 2` in the arm where `n` isn't 1 or 2 and starts `fib(0)`, which recurses forever (fairness keeps the search alive; every non-Fibonacci input ends in a stack overflow) | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P2 | M | |
 | L83 | Backwards search past the first answer piles up: `fib3(1, 1, n) = 8` keeps unfolding with `a` past 8 and one more waiting equation per level (1,398 at depth 1,400), each step re-reading all of them: about 26 s to a stack overflow in the editor. Stop when a known input only grows while the result is fixed (size-change on values), and don't re-read every equation each step | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P2 | M | |
 | L86b | **A whole literal left open defaults to Int** (WHAT-NUMBER-MEANS.md step 3): today a plain literal that nothing fixes is a Float64; Haskell defaults a whole one to `Integer`. Changes `show(2 + 3)` alone from the Float64 5 to the Int 5 (they print the same), and the tests that pin Float64 for an open literal | Ersagun 2026-10-26 | P2 | S | |
 | L87 | **Currying only when asked** (Ersagun 2026-10-26: "underlying representation should be non curried. Non curried is easier to reason about, easier to shuffle the order and simplify, extends to variadic functions more seamlessly"). Today the core is already uncurried: a lambda has a list of params and a call a list of args on every target and backwards (model.ts); what's left is an explicit `curry`/partial-application operation for when it's wanted | Ersagun 2026-10-26 | P3 | S | |
@@ -344,6 +343,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| L82 | Backwards, an arm's checks run before its calls (modes.ts: a check of a builtin with everything known goes first), so `fib(n) = 5` drops the guess `n = 2` in the arm where `n` isn't 1 or 2 before `fib(0)` starts; a non-Fibonacci input runs out of budget instead of stack, and 144 takes 1,035 steps (was 1,610) | #471 |
 | L86 | `Number` is the family: Int, Rational, Float64, Complex and records of Float64s; types say "a is a Number" (or "a Number with <"), and a plain literal is some Number, so `3` is an Int where an Int is needed (Haskell's numeric literals); `0.5` can't be an Int; open ones are Float64 (Int is L86b) | #470 |
 | L66 | `compare(a, b)` on all plain data (std `Order`: before, same, after): numbers by value, text by code point, cases in declared order, then fields; `sort` in the prelude, a bottom-up merge sort with no Diverge; evaluator, compiled JS (`$order`), relate forwards; WASM and C are C46 | #382 |
 | L67 | `Outcome a = done(value) \| refused(reason)` in std, the data form of Abort; prelude `attempt(action)` and `value or abort(o)`, plain matches; LANGUAGE.md "`Outcome`: the data form of Abort" | #385 |

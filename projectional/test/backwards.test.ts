@@ -390,3 +390,24 @@ test("a search's step budget bounds the equation solver's work too", () => {
   // Once the budget is gone, each open branch asks once more and stops.
   assert.ok(steps < 3000, `${steps} steps`);
 });
+
+test("an arm's checks cut it before its calls run: fib(n) = 4 runs out of budget, not stack (L82)", () => {
+  // fib(n) = if n = 1 or n = 2 then n else fib(n − 1) + fib(n − 2). In the
+  // else arm, n ≠ 1 and n ≠ 2 wait before the calls, so a guess of n = 2
+  // there is dropped before fib(0), which would recurse forever, starts.
+  const k = new Lang();
+  const fib = k.def("fib");
+  let n = "";
+  k.define(fib, k.fn(["n"], (x) => ((n = x), k.if(k.call(S.or, k.equal(x, k.lit(1)), k.equal(x, k.lit(2))), x,
+    k.call(B.add, k.call(fib, k.call(B.sub, x, k.lit(1))), k.call(fib, k.call(B.sub, x, k.lit(2))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  assert.deepEqual(infer(code, names).errors, []);
+  let steps = 0;
+  const spend = () => ++steps <= 5000;
+  const [first] = relate(code, fib, { out: 8 }, { names, spend });
+  assert.equal(showTerm(first.values[n]), "5");
+  assert.ok(steps < 85, `${steps} steps`);
+  // No tree adds up to 4: the search goes on until its budget ends.
+  steps = 0;
+  assert.deepEqual([...relate(code, fib, { out: 4 }, { names, spend })], []);
+});
