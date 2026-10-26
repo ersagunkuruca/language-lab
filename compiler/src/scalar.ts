@@ -734,7 +734,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const num = (v: number): SExpr => ({ k: "num", v });
     // Near on every Number, whole or not: an Int is its own type here.
     const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
-    const near = op("or", op("equal", a, b), op("or", op("less", diff, tol), op("equal", diff, tol)));
+    // Only a finite gap is near (run.ts close): diff − diff is NaN for ∞.
+    const finite = op("equal", op("sub", diff, diff), num(0));
+    const near = op("or", op("equal", a, b), op("and", finite, op("or", op("less", diff, tol), op("equal", diff, tol))));
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
   }
   // compare's order (run.ts compareValues) as −1, 0 or 1: numbers by

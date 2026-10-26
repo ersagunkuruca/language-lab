@@ -945,11 +945,13 @@ test("equal compares Ints exactly and Numbers to float precision, at every type"
     k.equal(big(), big()), k.call(same, big(), big()),
     k.equal(third(), k.lit(0.3)), k.equal(k.list(third()), k.list(k.lit(0.3))), k.call(same, third(), k.lit(0.3)),
     k.equal(k.lit(1e12), k.lit(1e12 + 1)), k.call(same, k.lit(1e12), k.lit(1e12 + 1)),
+    // BACKLOG L81: ∞ isn't −∞, nor near 1e308.
+    k.call(same, k.call(B.div, k.lit(1), k.lit(0)), k.call(B.div, k.lit(-1), k.lit(0))), k.call(same, k.lit(1e308), k.call(B.div, k.lit(1), k.lit(0))),
   )))));
   const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
-  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true]"]);
+  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true, false, false]"]);
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
 });
 

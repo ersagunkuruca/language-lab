@@ -53,7 +53,12 @@ export function fromList(v: Value): Value[] {
 // are equal when they agree to the precision floats carry. Otherwise a
 // predicate like distance = speed·time + ½·g·time² would be false for the
 // very values the solver found for it. `sameNumber` below says where.
-export const close = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
+// Only a finite gap is near: past the largest float the tolerance itself is
+// ∞, which would make ∞ equal to −∞, and 1e308 to ∞ (BACKLOG L81).
+export const close = (a: number, b: number) => {
+  const gap = Math.abs(a - b);
+  return a === b || (gap < Infinity && gap <= 1e-9 * (1 + Math.abs(a) + Math.abs(b)));
+};
 
 // How two numbers compare, one rule for every type, whichever way a
 // program runs: the evaluator, backwards (relate.ts unify) and compiled

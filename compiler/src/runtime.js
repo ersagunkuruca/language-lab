@@ -65,7 +65,11 @@ export function $range(n) {
 }
 
 // Numbers are equal to the precision floats carry, as in the evaluator.
-export const $near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
+// Only a finite gap is near (run.ts close): ∞ isn't −∞.
+export const $near = (a, b) => {
+  const gap = Math.abs(a - b);
+  return a === b || (gap < Infinity && gap <= 1e-9 * (1 + Math.abs(a) + Math.abs(b)));
+};
 
 // `equal` on two numbers, one rule on every type, as in the evaluator
 // (run.ts `sameNumber`): whole numbers exactly, others near.

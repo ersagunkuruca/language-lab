@@ -173,8 +173,8 @@ test("an if inside an expression is a var set by an if statement; pow of a negat
   const s = emitWgsl(lowerScalar(c.code, c.info, c.names, Object.values(c.defs)));
   assert.match(s.wgsl, /var t0: f32;\n {2}if \(p0 < 0\.0\) \{\n {4}t0 = 0\.0;\n {2}\} else \{\n {4}let l1 = p0 \* p0;\n {4}t0 = l1 - p0;\n {2}\}\n {2}return 1\.0 \+ t0;/);
   assert.match(s.wgsl, /fn pick_\d+\(p0: bool, p1: f32\) -> f32/);
-  // equal on Numbers is the evaluator's: within 1e-9, whole or not.
-  assert.match(s.wgsl, /-> bool \{\n {2}return \(\(p0 == p1\) \|\| \(\(abs\(p0 - p1\) < \(1e-9 \* \(\(1\.0 \+ abs\(p0\)\) \+ abs\(p1\)\)\)\) \|\| \(abs\(p0 - p1\) == \(1e-9 \* \(\(1\.0 \+ abs\(p0\)\) \+ abs\(p1\)\)\)\)\)\) \|\| \(abs\(p0 - p1\) < 0\.5\);/);
+  // equal on Numbers is the evaluator's: a finite gap within 1e-9, whole or not.
+  assert.ok(s.wgsl.includes("-> bool {\n  return ((p0 == p1) || (((abs(p0 - p1) - abs(p0 - p1)) == 0.0) && ((abs(p0 - p1) < (1e-9 * ((1.0 + abs(p0)) + abs(p1)))) || (abs(p0 - p1) == (1e-9 * ((1.0 + abs(p0)) + abs(p1))))))) || (abs(p0 - p1) < 0.5);"), s.wgsl);
   // x³ of a variable is a product; of anything else, lab_pow.
   assert.match(s.wgsl, /return \(p0 \* p0 \* p0\) \+ lab_pow\(p0 - 2\.0, 3\.0\);/);
   assert.match(s.wgsl, /fn lab_pow/);
