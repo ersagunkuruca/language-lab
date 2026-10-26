@@ -1,5 +1,7 @@
 # Review: where the language stands, and what it would take to be serious
 
+*Superseded (2026-10-26):* the latest whole-project review is [REVIEW-2026-10-26.md](REVIEW-2026-10-26.md), which says what of this one is fixed. This one stays as written.
+
 Written 2026-10-22, after PR #30. Everything here was checked against the
 code: the docs were read, the tests and examples were run, and the holes
 below were found by trying to break things. The ones that can be shown in a
