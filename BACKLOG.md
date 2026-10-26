@@ -25,7 +25,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E121 | Phone: + New program leaves you on Programs; its hole is preselected, so tapping it doesn't bring the palette either; was Inbox I12 | QA-2026-10-26 M1 | P1 | S |  |
 | E122 | A loose literal pill has no output: dropping it on an input only moves it on top of the node; was Inbox I14 | QA-2026-10-26 L1 | P2 | S |  |
 | E123 | A loose hole refuses effectful calls (`print("hi")`) that the definition's own hole accepts, without saying why; was Inbox I15 | QA-2026-10-26 L2 | P2 | S |  |
 | E124 | Loose parts read as `_1`, and one that uses inputs reads as a function `_1(length, gravity) = …`; was Inbox I13 | QA-2026-10-26 M2 | P3 | S |  |
@@ -136,6 +135,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E121 | On a phone, + New program shows the palette for its hole, and tapping a hole already selected brings it too | #447 |
 | E120 | A loose part wires back in by its own last node's output, as the status says, not only by its frame's end; the drag also checks the fit as it goes | #445 |
 | E110 | A wire goes round a frame it doesn't start or end in, as round a node, however tall the frame | #439 |
 | E113 | Already so since E92: a call picked in the graph offers Open (its function) and Change the function; now tested in the graph too | #438 |
