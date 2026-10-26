@@ -343,7 +343,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| L82 | Backwards, an arm's checks run before its calls (modes.ts: a check of a builtin with everything known goes first), so `fib(n) = 5` drops the guess `n = 2` in the arm where `n` isn't 1 or 2 before `fib(0)` starts; a non-Fibonacci input runs out of budget instead of stack, and 144 takes 1,035 steps (was 1,610) | #PR |
+| L82 | Backwards, an arm's checks run before its calls (modes.ts: a check of a builtin with everything known goes first), so `fib(n) = 5` drops the guess `n = 2` in the arm where `n` isn't 1 or 2 before `fib(0)` starts; a non-Fibonacci input runs out of budget instead of stack, and 144 takes 1,035 steps (was 1,610) | #471 |
 | L86 | `Number` is the family: Int, Rational, Float64, Complex and records of Float64s; types say "a is a Number" (or "a Number with <"), and a plain literal is some Number, so `3` is an Int where an Int is needed (Haskell's numeric literals); `0.5` can't be an Int; open ones are Float64 (Int is L86b) | #470 |
 | L66 | `compare(a, b)` on all plain data (std `Order`: before, same, after): numbers by value, text by code point, cases in declared order, then fields; `sort` in the prelude, a bottom-up merge sort with no Diverge; evaluator, compiled JS (`$order`), relate forwards; WASM and C are C46 | #382 |
 | L67 | `Outcome a = done(value) \| refused(reason)` in std, the data form of Abort; prelude `attempt(action)` and `value or abort(o)`, plain matches; LANGUAGE.md "`Outcome`: the data form of Abort" | #385 |
