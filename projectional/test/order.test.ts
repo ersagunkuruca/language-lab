@@ -18,6 +18,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { COMPARE, NONE, SHOW_ANY, SOME } from "../src/lang/std.ts";
 import { NUMBER, RATIONAL_TYPE, STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
+import { B } from "../src/prelude.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -33,8 +34,9 @@ function program() {
   const show = (x: Id) => k.call(SHOW_ANY, x);
   const cmp = (a: Id, b: Id) => show(k.call(COMPARE, a, b));
   const p = (x: number, l: string) => k.call(Point.v.point, k.lit(x), k.lit(l));
+  const nan = () => k.call(B.div, k.lit(0), k.lit(0));
   const defs = {
-    numbers: def("numbers", () => k.list(cmp(k.lit(1), k.lit(2)), cmp(k.lit(2), k.lit(2)), cmp(k.int("9007199254740993"), k.int(3)), cmp(k.lit(0.1 + 0.2), k.lit(0.3)))),
+    numbers: def("numbers", () => k.list(cmp(k.lit(1), k.lit(2)), cmp(k.lit(2), k.lit(2)), cmp(k.int("9007199254740993"), k.int(3)), cmp(k.lit(0.1 + 0.2), k.lit(0.3)), cmp(nan(), k.lit(1)), cmp(k.lit(1), nan()), cmp(nan(), nan()), cmp(k.lit(-0), k.lit(0)))),
     texts: def("texts", () => k.list(cmp(k.lit("apple"), k.lit("banana")), cmp(k.lit("b"), k.lit("ab")), cmp(k.lit("ab"), k.lit("abc")))),
     fractions: def("fractions", () => k.list(cmp(k.at(RATIONAL_TYPE, "1/2"), k.at(RATIONAL_TYPE, "1/3")), cmp(k.at(RATIONAL_TYPE, "2/4"), k.at(RATIONAL_TYPE, "1/2")))),
     cases: def("cases", () => k.list(cmp(k.x(Level.v.high), k.x(Level.v.low)), cmp(k.x(NONE), k.call(SOME, k.lit(0))), cmp(p(1, "b"), p(1, "a")))),
@@ -60,7 +62,9 @@ test("compare: numbers by value, text by code point, cases in declared order, th
   assert.ok(errs(p.defs.functions).length > 0);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const v = (d: Id) => r.value(d);
-  assert.deepEqual(items(v(p.defs.numbers)), ["before", "same", "after", "same"]);
+  // Numbers exactly (0.1 + 0.2 is after 0.3, though equal to it), NaN after
+  // every other Number and the same as itself, −0 the same as 0.
+  assert.deepEqual(items(v(p.defs.numbers)), ["before", "same", "after", "after", "after", "before", "same", "same"]);
   assert.deepEqual(items(v(p.defs.texts)), ["before", "after", "before"]);
   assert.deepEqual(items(v(p.defs.fractions)), ["after", "same"]);
   assert.deepEqual(items(v(p.defs.cases)), ["after", "before", "after"]);
@@ -89,4 +93,24 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
     const c = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n];
     assert.deepEqual(c, r.value(p.code.defs.find((d) => p.names[d] === n)!), n);
   }
+});
+
+// REVIEW-2026-10-26.md §1.1: an order a set relies on has to be one. With
+// nearness, a, a + d and a + 2d (each within 1e-9 of the next, the ends
+// not) made a set of 2 or of 1 depending on the order they came in.
+test("a set of Numbers is the same whatever order its items come in, NaN included", () => {
+  const k = new Lang(LIBRARY.code);
+  const a = 1000.5, d = 1.5e-6;
+  const nan = () => k.call(B.div, k.lit(0), k.lit(0));
+  const set = (xs: Id[]) => k.call(lib("as set"), k.list(...xs));
+  const show = (x: Id) => k.call(SHOW_ANY, x);
+  const defs = [
+    ...[[a, a + d, a + 2 * d], [a + d, a, a + 2 * d], [a, a + 2 * d, a + d]].map((xs, i) => { const x = k.def(`order ${i}`); k.define(x, show(k.call(lib("set size"), set(xs.map((n) => k.lit(n)))))); return x; }),
+    ...[() => k.call(lib("has item"), set([nan(), k.lit(1)]), nan()), () => k.call(lib("set size"), set([nan(), nan(), k.lit(1)])), () => k.call(lib("sort"), k.list(k.lit(3), nan(), k.lit(1), k.lit(2)))]
+      .map((body, i) => { const x = k.def(`nan ${i}`); k.define(x, show(body())); return x; }),
+  ];
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  assert.deepEqual(defs.map((x) => r.value(x)), ["3", "3", "3", "true", "2", "[1, 2, 3, NaN]"]);
 });

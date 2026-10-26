@@ -77,7 +77,7 @@ There are four kinds of number. Int is a whole number of any size. Number is a f
 - **or** : `(Bool, Bool) -> Bool`. Either true.
 - **not** : `(Bool) -> Bool`. true becomes false and false true.
 - **equal** : `(a, a) -> Bool`. Whether two values are the same: numbers, text, and data made of them. Functions can't be compared.
-- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Numbers by value, text alphabetically, cases in the order their type lists them, then field by field. sort uses it.
+- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Numbers by value, exactly (unlike equal, which lets two Numbers within about 1e-9 be equal), with NaN after every other Number; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
 - **Order** (type). What compare answers: before, same or after.
 - **show** : `(a) -> Text`. Any plain value as text, the way it would be written: show([1, 2]) is "[1, 2]".
 
@@ -118,7 +118,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 
 ## Maps and sets
 
-A map is kept sorted by key, so two maps with the same entries are equal and print the same, whatever order they were built in.
+A map is kept sorted by key in compare's order, so two maps with the same entries are equal and print the same, whatever order they were built in. Keys are exact: two Number keys are one key only when they are the same Number.
 
 - **Map** (type). A map from keys to values, kept sorted by key with no key twice. Build one with as map or put; read it with value at.
 - **empty map** : `Map a b`. The map with no entries.

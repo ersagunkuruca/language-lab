@@ -277,8 +277,7 @@ in its runtime) and forward in the relational interpreter.
 
 `compare(a, b)` answers `before`, `same` or `after` (the std type `Order`)
 for any two values of one plain type, the way `equal` answers for any
-two: numbers by value (Int, Number and fractions; Numbers as near as
-`equal` counts them are the same), text by code point, cases in the order
+two: numbers by value (Int, Number and fractions), text by code point, cases in the order
 their type declares them (`low` before `medium` before `high`, `none`
 before `some`, `[]` before any other list), then fields left to right, so
 lists go lexicographically. Functions and cells can't be compared, as
@@ -290,8 +289,20 @@ sorted runs (Okasaki's bottom-up mergesort), so every step is a fold or a
 recursion the termination check accepts and its type, `(List a) -> List
 a`, has no Diverge. Both run in the evaluator, compiled JavaScript (the
 cases' order is written into the program as `$order`) and forward in the
-relational interpreter (`run.ts compareValues`). Map keys and set elements
-will use the same order (L65).
+relational interpreter (`run.ts compareValues`), and in WebAssembly and C.
+
+**Numbers are ordered exactly, where `equal` is near.** `equal` lets two
+Numbers within about 1e-9 of each other be equal, which an equation over
+floats needs (√2 squared is 2.0000000000000004). An order can't do that: if
+a is the same as b and b as c, a has to be the same as c, or a sorted list
+and a set fall apart (with nearness, three Numbers a step of 1.5e-6 apart
+near 1000 made a set of 2 or of 1 depending on the order they came in;
+REVIEW-2026-10-26.md §1.1). So `compare` is exact: `compare(0.1 + 0.2,
+0.3)` is `after`, though `equal` says they are equal. NaN (from `0 / 0` or
+`sqrt(−1)`) comes after every other Number and is the same as itself, as
+in IEEE 754's totalOrder; −0 is the same as 0, as `equal` says. A map's
+keys and a set's items are told apart this exact way, and `equal` on two
+maps compares their entries with its own nearness.
 
 ### Maps and sets
 
@@ -302,7 +313,9 @@ Map k v = map of(entries: List (Pair k v))   -- sorted by key, no key twice
 Set k   = set of(items: List k)              -- sorted, no item twice
 ```
 
-The order is `compare`'s, so any plain data can be a key. The prelude
+The order is `compare`'s, so any plain data can be a key, and keys are
+exact: two Number keys are the same key only when they are the same
+Number. The prelude
 builds them and keeps the spelling: `empty map`, `as map(pairs)` (a later
 pair wins), `put`, `remove key`, `value at` (a `Choice`: no answer when the
 key isn't there), `has key`, `merge maps`, `keys of`, `values of`,

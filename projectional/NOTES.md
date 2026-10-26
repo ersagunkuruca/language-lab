@@ -75,6 +75,14 @@ decimals is off by at most 5·10^-10, inside the 10^-9, so reading the text
 back always gives an equal number, forward and backwards (test/equality.test.ts),
 and outputs don't show "0.30000000000000004".
 
+*Order is not equality (2026-10-26).* Maps, sets and `sort` came after
+this trade, and they need a real order, which a tolerance can't give
+(REVIEW-2026-10-26.md §1.1). So `compare` orders Numbers exactly, with NaN
+after the rest and the same as itself, and `equal` keeps its tolerance for
+equations. `compare` and `equal` disagree on near Numbers on purpose:
+"same key" and "equal value" are two questions (LANGUAGE.md "Order, and
+sort").
+
 ## Peano naturals, linked lists, and the stack (2026-10-22)
 
 *The idea.* `zero | succ(Nat)` and `nil | cons(List)` are the mathematical
