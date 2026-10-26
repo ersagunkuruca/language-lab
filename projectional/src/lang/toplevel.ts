@@ -312,7 +312,9 @@ export function addField(code: Code, names: Names, type: Id, variant: Id, rawNam
     const inFold = Object.values(code.nodes).some((m) => m.kind === "fold" && m.arms.includes(n.id));
     let r: Id | null = null;
     if (inFold && recursive) { r = add({ kind: "binder" }); nn[r] = `${name}′`; }
-    nodes[n.id] = { ...n, binds: [...n.binds, b], results: [...n.results, r] };
+    // An operation answered later keeps the rest last (ANSWERED-LATER.md).
+    const at = v.later && v.returns && n.binds.length === v.fields.length + 1 ? n.binds.length - 1 : n.binds.length;
+    nodes[n.id] = { ...n, binds: n.binds.toSpliced(at, 0, b), results: n.results.toSpliced(at, 0, r) };
     arms++;
   }
   const parts = [made && `${made} place${made === 1 ? "" : "s"} making ${nameOf(names, variant)} got a hole for it`, arms && `${arms} arm${arms === 1 ? "" : "s"} got a name for it`].filter(Boolean);
@@ -347,10 +349,47 @@ export function removeField(code: Code, names: Names, variant: Id, field: Id): T
 export function setReturns(code: Code, names: Names, variant: Id, t: TypeSpec | null): Top {
   const v = code.nodes[variant];
   if (v?.kind !== "variant") return { ok: false, reason: "that isn't an operation" };
+  if (!t && v.later) return { ok: false, reason: `${nameOf(names, variant)} is answered later: make it answered at once first` };
   const { nodes, add } = builder(code);
   const { returns: _, ...rest } = v;
   nodes[variant] = t ? { ...rest, returns: buildType(add, t) } : rest;
   return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: variant, note: t ? `${nameOf(names, variant)} now gives back what its handler answers.` : `${nameOf(names, variant)} now never returns: it ends what performs it.` };
+}
+
+// An operation answered later, or at once (ANSWERED-LATER.md): later, a
+// handler's case also gets the rest of the computation, after the
+// operation's inputs, to resume once, now or later, or drop. Every case
+// that handles it gets a name for the rest, or loses it; one that uses its
+// rest keeps the operation later.
+export function setLater(code: Code, names: Names, variant: Id, on: boolean): Top {
+  const v = code.nodes[variant];
+  if (v?.kind !== "variant") return { ok: false, reason: "that isn't an operation" };
+  if (on && !v.returns) return { ok: false, reason: `${nameOf(names, variant)} never returns, so there is no rest to answer later` };
+  if (!!v.later === on) return { ok: false, reason: `${nameOf(names, variant)} is answered ${on ? "later" : "at once"} already` };
+  const nodes = { ...code.nodes };
+  const nn: Names = { ...names };
+  const { later: _, ...now } = v;
+  nodes[variant] = on ? { ...v, later: true } : now;
+  let arms = 0;
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "arm" || n.variant !== variant) continue;
+    if (on) {
+      const b = freshId();
+      nodes[b] = { id: b, kind: "binder" };
+      nn[b] = "rest";
+      nodes[n.id] = { ...n, binds: [...n.binds, b], results: [...n.results, null] };
+    } else {
+      const rest = n.binds.at(-1)!;
+      if (n.binds.length !== v.fields.length + 1) continue;
+      if (Object.values(code.nodes).some((m) => m.kind === "ref" && m.target === rest)) return { ok: false, reason: `a case of ${nameOf(names, variant)} uses its rest: take that out first` };
+      delete nodes[rest];
+      nodes[n.id] = { ...n, binds: n.binds.slice(0, -1), results: n.results.slice(0, -1) };
+    }
+    arms++;
+  }
+  const cases = arms ? ` ${arms} case${arms === 1 ? "" : "s"} handling it ${on ? "got a name for the rest" : "lost the rest"}.` : "";
+  return { ok: true, code: { nodes, defs: code.defs }, names: nn, select: variant,
+    note: on ? `${nameOf(names, variant)} is answered later now: its handler's case gets the rest of the computation, to resume once, now or later, or drop, and gives what the handler gives.${cases}` : `${nameOf(names, variant)} is answered at once now.${cases}` };
 }
 
 export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): Top {

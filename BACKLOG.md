@@ -28,7 +28,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E130 | A loose part can't be a function: its top-level lambda is read as its inputs (drafts.ts, render.ts, typedGraph.ts), so the palette leaves "new function" out at a loose part's top (E128). Mark the inputs wrapper apart (say, by `home`) so a loose part may be a function | found doing E128 | P3 | S | |
 | E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440) | found doing E100 | P3 | M | |
-| E80 | Operations answered later in the editor: declare one (`returns T, later`, toplevel.ts beside the returns toggle) and draw a handler case's rest binder as `yield(item) with rest`, the way the text does (ANSWERED-LATER.md, L54a) | ANSWERED-LATER.md | P2 | S | ready: L54a done (#396) |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
 | E61 | Nested patterns as a view over nested matches (ledger's `parse`, the `main`s); design note first; drawing only, in the text and the graph | L37, LANGUAGE-REVIEW-2026-10-24 §4 | P2 | L | design note projectional/PATTERNS.md (#370); step 1 text rows (#372); step 2 shared bodies as otherwise (#373); step 3 graph rows next |
@@ -130,6 +129,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E80 | Answered later on an operation's panel (Top.setLater): each case gets the rest after its inputs; the graph draws (item) with rest | #480 |
 | E128 | A new function (one input or two) is offered where a value's type is open; not at a loose part's top (E130) | #474 |
 | E127 | Run backwards shows the first answer at once (a 0.3 s look) and keeps looking in the run worker, a minute at most, with Stop | #472 |
 | E114 | Covered by E98: Simplify flattens an append of written-out lists in one step | #469 |

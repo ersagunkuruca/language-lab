@@ -1629,6 +1629,13 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       }, "nothing: it never returns");
       out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r.el),
         h("p", { class: "hint" }, now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with.` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead.`));
+      // Answered later (ANSWERED-LATER.md): the case gets the rest too.
+      if (n.returns) {
+        const cb = h("input", { id: "f-later", type: "checkbox", checked: !!n.later }) as HTMLInputElement;
+        cb.addEventListener("change", () => runTop(info, Top.setLater(code, sh, sel, cb.checked)));
+        out.append(h("label", { class: "field check", for: "f-later" }, cb, h("span", {}, "Answered later")),
+          h("p", { class: "hint" }, n.later ? `Its handler's case also gets the rest of the computation, written ${names[sel] ?? "it"}(…) with rest: it may resume it once, now or later, or drop it. A generator's yield, a page's fetch.` : "Tick it to let the handler answer later: its case also gets the rest of the computation, to resume once, now or later, or drop."));
+      }
     }
     out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
     return out;

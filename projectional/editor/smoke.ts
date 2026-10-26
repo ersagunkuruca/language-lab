@@ -475,6 +475,28 @@ async function stepOrder() {
   await p.close();
 }
 
+// An operation answered later is declared in the editor, beside what it
+// gives back, and its case reads the rest the way the text does (BACKLOG
+// E80): ask(question) with rest, in the text and the graph.
+async function answeredLater() {
+  where = "answered later";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /^Effects/ }).click();
+  await p.locator("[data-def]", { hasText: /Ask/ }).first().click();
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  await p.locator(".p-text .body .variant .con", { hasText: /^ask$/ }).first().click();
+  await p.locator("#f-later").check({ timeout: 5000 }).catch(() => errors.push(`${where}: ask's panel has no Answered later`));
+  if (!(await text()).includes("returns Float64, later")) errors.push(`${where}: ticked, Ask reads ${(await text()).slice(-80)}`);
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  if (!(await text()).includes("ask(question) with rest →")) errors.push(`${where}: main's handler reads ${(await text()).slice(0, 300)}`);
+  if (!(await p.locator(".p-graph text", { hasText: "(question) with rest =>" }).count())) errors.push(`${where}: the graph doesn't draw the case as (question) with rest`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if ((await text()).includes("with rest")) errors.push(`${where}: one Undo leaves the rest`);
+  await p.close();
+}
+
 // A new value's type is open, so a function written in place is offered
 // there, to start a local helper (BACKLOG E128).
 async function helperAtValue() {
@@ -913,6 +935,7 @@ await stepOrder();
 await simplifyAppend();
 await searchGoesOn();
 await helperAtValue();
+await answeredLater();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();
