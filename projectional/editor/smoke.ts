@@ -638,6 +638,14 @@ async function phone() {
   await p.locator('[data-act="new-def"]').first().tap();
   if (!(await p.locator("#f-def-name").isVisible())) errors.push(`${where}: + New definition opened its form out of sight`);
   await p.locator('[data-act="new-def"]').first().evaluate((b) => (b as HTMLElement).click()).catch(() => {});
+  // + New program fills its hole from the palette: the palette shows, and
+  // tapping the hole, already picked, in Text brings it back (BACKLOG E121).
+  await p.locator('.panes [data-pane="nav"]').tap();
+  await p.locator('[data-act="new-program"]').first().tap();
+  if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: + New program left the palette out of sight`);
+  await p.locator('.panes [data-pane="text"]').tap();
+  await p.locator(".blocks-wrap .hole").first().tap({ timeout: 2000 }).catch(() => errors.push(`${where}: no hole to tap in the new program`));
+  if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: tapping the new program's hole didn't bring the palette`);
   await p.locator('.panes [data-pane="graph"]').tap();
   // The map would cover a phone's graph: it starts put away, and Map
   // brings it out.
