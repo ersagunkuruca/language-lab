@@ -444,3 +444,26 @@ test("Int sums run backwards asleep too: fibFast over Ints past its first answer
   assert.deepEqual(answers.map((a) => [showTerm(a.values[n]), a.residual]), [["5", []]]);
   assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
 });
+
+// A whole literal is an Int (L86b), so x · 3 + 1 = 13 runs on Int multiply:
+// a factor from the other and out when it divides exactly, x · x from its
+// whole square roots.
+test("Int products run backwards: x · 3 + 1 = 13, x · x = 16, and none when it doesn't divide", () => {
+  const k = new Lang();
+  const one = (name: string, body: (x: Id) => Id) => { const d = k.def(name); let p = ""; k.define(d, k.fn(["x"], (x) => ((p = x), body(x)))); return () => ({ d, p }); };
+  const linear = one("linear", (x) => k.call(ARITH.add, k.call(ARITH.mul, x, k.lit(3)), k.lit(1)));
+  // + 0 makes it Int's; x · x alone is a Float64's, as nothing fixes it.
+  const square = one("square", (x) => k.call(ARITH.add, k.call(ARITH.mul, x, x), k.lit(0)));
+  const zero = one("zero", (x) => k.call(ARITH.mul, k.lit(0), x));
+  const code = base(k.code), names = baseNames(k.names);
+  const solve = (f: () => { d: Id; p: Id }, out: number) => {
+    const { d, p } = f();
+    return [...relate(code, d, { out }, { names, spend: () => true })].map((a) => [showTerm(a.values[p]), a.residual.length]);
+  };
+  assert.deepEqual(solve(linear, 13), [["4", 0]]);
+  assert.deepEqual(solve(linear, 12), []);
+  assert.deepEqual(solve(square, 16), [["4", 0], ["-4", 0]]);
+  assert.deepEqual(solve(square, 15), []);
+  assert.deepEqual(solve(zero, 5), []);
+  assert.equal(solve(zero, 0).length, 1);
+});

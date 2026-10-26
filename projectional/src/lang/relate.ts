@@ -66,7 +66,7 @@ import { seededGenerator } from "./random.ts";
 import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
 import { infer } from "./infer.ts";
 import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
-import { add as intAdd, intLit, lowestTerms, mul as intMul, neg as intNeg, sub as intSub, type Int } from "./int.ts";
+import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
 import { Subst } from "./types.ts";
@@ -1080,6 +1080,27 @@ export function interpreter(code: Code, opts: Options = {}) {
           const i = xs.findIndex((x) => x instanceof LVar);
           const at = i < 0 ? sides.length - 1 : i;
           return eq(sides[at], solve[at](xs as Int[]))(s);
+        },
+      });
+    }
+    // Whole-number multiply: out from both factors; a factor from the other
+    // and out when it divides exactly (none when it doesn't, any when both
+    // are 0); x · x from out, its whole square roots. Since a whole literal
+    // is an Int (L86b), x · 3 + 1 = 13 runs here.
+    if (id === INT_OPS.mul) {
+      const sides = [a, b, out];
+      const same = (s: State) => { const x = walk(a, s); return x instanceof LVar && x === walk(b, s); };
+      const unknown = (s: State) => sides.filter((t) => walk(t, s) instanceof LVar).length;
+      return wait({
+        k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1 || (same(s) && !(walk(out, s) instanceof LVar)), then: (s) => {
+          const [x, y, o] = sides.map((t) => walk(t, s));
+          if (x instanceof LVar && x === y) return disj(...squareRoots(o as Int).map((r) => eq(x, r)))(s);
+          if (!(o instanceof LVar) && (x instanceof LVar || y instanceof LVar)) {
+            const [unknownSide, k] = x instanceof LVar ? [x, y as Int] : [y as LVar, x as Int];
+            const q = divides(o as Int, k);
+            return q === null ? succeed(s) : disj(...q.map((v) => eq(unknownSide, v)))(s);
+          }
+          return eq(out, intMul(x as Int, y as Int))(s);
         },
       });
     }
