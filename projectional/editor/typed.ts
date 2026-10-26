@@ -17,7 +17,7 @@ import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../src/lang/std.ts";
-import { INT, RATIONAL_TYPE, schemeArith, showIn, showType } from "../src/lang/types.ts";
+import { INT, RATIONAL_TYPE, schemeArith, showIn, showType} from "../src/lang/types.ts";
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -154,6 +154,18 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     if (fit.ok) return fit;
   }
   return first!;
+}
+
+// Why a function named in full doesn't go where a call's function goes
+// (Change the function…): what the checker says, a unit that doesn't
+// match, say, rather than nothing (BACKLOG E126). Null when it fits, or
+// isn't a name.
+export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text: string): string | null {
+  const all = { ...display, ...names };
+  const target = Object.keys(all).find((d) => all[d] === text.trim() && code.nodes[d]);
+  if (!target || !Object.values(code.nodes).some((n) => n.kind === "call" && n.fn === hole)) return null;
+  const r = fill(code, names, info, hole, { kind: "ref", target, type: { t: "var", v: -1 } }, text.trim());
+  return r.ok ? null : `${text.trim()} doesn't fit here: ${r.reason}`;
 }
 
 // Each way to read what's typed, one id per called name: at most 16.
