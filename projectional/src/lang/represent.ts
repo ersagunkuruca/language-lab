@@ -43,7 +43,7 @@ export interface Representation {
 export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
 const rank = (c: string | undefined) => (c === undefined ? LADDER.length : LADDER.indexOf(c));
 
-// A builtin type such as Number has no cases: its jobs are its builtins.
+// A builtin type such as Float64 has no cases: its jobs are its builtins.
 const variantsOf = (code: Code, type: Id) => {
   const d = code.nodes[type];
   return d?.kind === "def" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : [];

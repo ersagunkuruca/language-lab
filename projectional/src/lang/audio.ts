@@ -16,17 +16,17 @@ import { NUMBER, type Type } from "./types.ts";
 export const BLOCK = 128;
 
 // Why `def` can't be a sound, or null: it takes nothing, may only make
-// cells, and returns a function from a List Number to a List Number whose
+// cells, and returns a function from a List Float64 to a List Float64 whose
 // effects are a sound's block function's.
 export function audioProblem(info: Info, def: Id, names: Names = {}): string | null {
   const t = info.typeOf.get(def);
-  const say = "a sound takes nothing and returns its block function, from a List Number to a List Number";
+  const say = "a sound takes nothing and returns its block function, from a List Float64 to a List Float64";
   if (!t || t.t !== "fn" || t.params.length) return say;
   const extra = (row: Type & { t: "fn" }, allowed: readonly Id[]) => row.eff.effs.filter((e) => !allowed.includes(e)).map((e) => names[e] ?? e);
   const made = extra(t, AUDIO_MAKER);
   if (made.length) return `a sound's maker may only make cells (it also runs in the audio thread), and this one has ${made.join(", ")}`;
   const f = info.subst.zonk(t.ret);
-  // A List Number, or a type that could be one (`(block) => block`).
+  // A List Float64, or a type that could be one (`(block) => block`).
   const numbers = (x: Type) => {
     const z = info.subst.zonk(x);
     if (z.t === "var") return true;

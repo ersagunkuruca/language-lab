@@ -50,12 +50,12 @@ test("a generator: each yield's rest is resumed once, so the items come out in o
   });
   assert.deepEqual(p.errors, []);
   assert.match(p.type(p.def("three")), /^\(\) -\[(Console, Yield|Yield, Console)\]-> List a$/);
-  assert.equal(p.type(p.def("collect")), "() -[Console]-> List Number");
+  assert.equal(p.type(p.def("collect")), "() -[Console]-> List Float64");
   assert.deepEqual(p.run(), ["start", "got 1", "got 2", "got 3", "end", "[1, 2, 3]"]);
   // The text reads the rest as it reads a fold's folded values.
   const pres = { names: p.names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as unknown as Parameters<typeof renderBlocks>[1];
   assert.match(renderBlocks(p.code, pres, p.info, p.def("collect")), /yield\(item\) with rest →/);
-  assert.match(renderBlocks(p.code, pres, p.info, p.def("Yield")), /yield\(item: Number\) returns Unit, later/);
+  assert.match(renderBlocks(p.code, pres, p.info, p.def("Yield")), /yield\(item: Float64\) returns Unit, later/);
 });
 
 test("a case that drops the rest: nothing after the operation runs, and the case's value is the match's", () => {

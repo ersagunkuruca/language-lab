@@ -56,7 +56,7 @@ test("vectors module: on a GPU, each definition is the vector operation it descr
   one("clamp", "p0: vec3f, p1: f32, p2: f32", "return clamp(p0, vec3f(p1), vec3f(p2))");
   assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}let l1 = magnitude_\d+\(p0\);\n {2}return p0 \/ l1;/);
   // One copy per type it's used at: scale for Vec and for Colour (both
-  // vec3f), mix for Colour and for Number.
+  // vec3f), mix for Colour and for Float64.
   assert.equal(s.funcs.filter((f) => f.name === "scale").length, 2);
   const mixes = s.funcs.filter((f) => f.name === "mix").map((f) => f.result);
   assert.equal(mixes.length, 2);

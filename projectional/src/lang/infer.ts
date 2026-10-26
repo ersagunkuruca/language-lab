@@ -64,8 +64,8 @@ export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterab
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
-  arith: "number types (Number, Int, or one case whose fields are all Numbers)",
-  ordered: "Numbers or Ints",
+  arith: "number types (Float64, Int, or one case whose fields are all Float64s)",
+  ordered: "Float64s or Ints",
 };
 const str: Type = { t: "con", id: STRING, args: [] };
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
@@ -120,7 +120,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       s.unify(want, got);
     } catch (e) {
       if (e instanceof EffectError) err(id, `${what || "this"} performs ${effName(e)}, which nothing here handles`);
-      else if (e instanceof NumbersError) err(id, `${what ? what + ": " : ""}${show(got)} isn't a record of Numbers (Number, or one case whose fields are all Numbers)`);
+      else if (e instanceof NumbersError) err(id, `${what ? what + ": " : ""}${show(got)} isn't a record of Float64s (Float64, or one case whose fields are all Float64s)`);
       else if (e instanceof ArithError) err(id, `${what ? what + ": " : ""}${show(got)} isn't ${ARITH_WHAT[e.kind]}`);
       else if (e instanceof PlainError) err(id, `${what ? what + ": " : ""}${show(got)} has functions in it, and only plain data can be used here`);
       else if (e instanceof TypeError) err(id, `${what ? what + ": " : ""}expected ${show(want)}, got ${show(got)}`);
@@ -220,7 +220,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   };
   s.plainArgs = (id, args) => { const need = plainShape(id); return need && args.filter((_, i) => need.has(i)); };
   // The fields of a one-case data type at these args, for "a record of
-  // Numbers". A pin's rigid record-of-Numbers variable is one already.
+  // Float64s". A pin's rigid record-of-Float64s variable is one already.
   s.recordFields = (id, args) => {
     if (id.startsWith(`${RIGID}numbers.`)) return [{ t: "con", id: NUMBER, args: [] }];
     const td = typedefOf(id);
@@ -231,7 +231,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // --- strict positivity
   // A data type may not take itself as an input in its own fields, directly
-  // or through another type. With `knot = wrap(f: knot → Number)`,
+  // or through another type. With `knot = wrap(f: knot → Float64)`,
   // `apply(x) = match x | wrap(f) → f(x)` calls itself through the data
   // with no recursion anywhere, and `apply(wrap(apply))` never ends. As an
   // output it's fine: `() → Stream` is how lazy data is written.
@@ -385,7 +385,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const p = fresh(pin, s);
         if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${show(p.type)}, and this makes it ${show(t)}`);
         // Inside, the body's types are the pin's too: an input whose only
-        // use was cleared is still the Number the pin says, and a hole
+        // use was cleared is still the Float64 the pin says, and a hole
         // there expects what the pin does.
         else try { s.unify(t, fresh(pin, s).type); } catch (e) { if (!(e instanceof TypeError)) throw e; }
         sc = p;
@@ -473,7 +473,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "lit": {
         t = n.of ? { t: "con", id: n.of, args: [] } : typeof n.value === "number" ? num : str;
         // A literal at Rational is a whole number or top/bottom; at
-        // Complex, a Number (its real part). arith.ts spells them out.
+        // Complex, a Float64 (its real part). arith.ts spells them out.
         if (n.of === RATIONAL_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
         if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
         break;
@@ -526,7 +526,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             else err(id, worldMessage(callee(n), e));
           }
           else if (e instanceof EffectError) err(id, `${callee(n)} performs ${effName(e)}, which nothing here handles`);
-          else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Numbers (Number, or one case whose fields are all Numbers)`);
+          else if (e instanceof NumbersError) err(id, `${callee(n)} works only on records of Float64s (Float64, or one case whose fields are all Float64s)`);
           else if (e instanceof ArithError) err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
           else if (e instanceof PlainError) err(id, `${callee(n)} works only on plain data (no functions inside), and this has functions in it`);
           else if (e instanceof TypeError) {
@@ -575,8 +575,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // gradient(f) the same way, once f's type says which record it takes:
-  // over a record of Numbers, every part's slope must be readable; over a
-  // Number, it's derivative.
+  // over a record of Float64s, every part's slope must be readable; over a
+  // Float64, it's derivative.
   function smoothGradient(n: NodeOf<"call">, ft: Type): Type | null {
     const point = at.get(n.id);
     if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.clone().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
@@ -1047,7 +1047,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     if (risky || (solves.length && !samePlans(f))) return whole(f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
-    // one can carry a constraint, records of Numbers say.)
+    // one can carry a constraint, records of Float64s say.)
     const touches = pinned.some((k) => {
       const v = +k.slice(1);
       if (k[0] === "t") return s.types.has(v);

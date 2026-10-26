@@ -62,7 +62,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     const own = info.schemes.get(n.target)?.type ?? SIGS[n.target]?.(info.subst.clone());
     const here = typeOf(info, id, pres.names);
     if (!own) return here;
-    // A generic one (+ on Numbers) says what it is here too.
+    // A generic one (+ on Float64s) says what it is here too.
     const mine = showType(own, pres.names), bare = (t: string | null) => t?.replace(/ -\[[^\]]*\]->/g, " ->");
     return here && bare(here) !== bare(mine) ? `${mine}\nhere: ${bare(here)}` : mine;
   };
@@ -262,7 +262,7 @@ function topLevel(text: string): string[] | undefined {
 }
 
 // `fit`: each whole number is written at the number type its place
-// expects, Int or Rational (or a Number where nothing says): as fraction(1)
+// expects, Int or Rational (or a Float64 where nothing says): as fraction(1)
 // + 1/2 is an Int, then a fraction. One whole number over another is one
 // value, a fraction where a Rational goes. Found by checking the filling
 // with those places left open, then filling each as its hole expects.

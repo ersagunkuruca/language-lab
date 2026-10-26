@@ -1,5 +1,5 @@
 // C for the lowering wasm.ts, wgsl.ts and js-scalar.ts print (scalar.ts),
-// printed as C: native programs (projectional/NATIVE.md). Number is
+// printed as C: native programs (projectional/NATIVE.md). Float64 is
 // `double`, Bool is an `int32_t` 0 or 1, a record is a struct passed by
 // value, a let is a local, and `if` and a match are statements. Lower with
 // `{ records: true }` to have records, `{ data: true }` for data too.
@@ -149,12 +149,12 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // `harness`: a main that reads calls from standard input, one a line (the
 // function's index, then its inputs), and prints each answer the same way,
 // then how many cells are left: how the tests compare with the evaluator.
-// A Number is its bits in hex, a Bool 0 or 1, a record its fields, data
+// A Float64 is its bits in hex, a Bool 0 or 1, a record its fields, data
 // its case's number then its fields; a function with one answer or none
 // prints `?` first when it has none.
 // `main`: the definition to run as the program, with the arguments (a
 // List Text) if it takes them, on a thread with a big stack (1 GiB of
-// address space, used only as deep as the program goes); its Int or Number
+// address space, used only as deep as the program goes); its Int or Float64
 // is the exit code, and an Abort's reason goes to standard error, with 1.
 export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
@@ -179,7 +179,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return n;
   };
 
-  // What can be printed: the kinds above, on Numbers, Bools, records,
+  // What can be printed: the kinds above, on Float64s, Bools, records,
   // data and functions, calling only what can be printed.
   const refused = new Map<number, string>();
   const why = (t: LType): string | null =>

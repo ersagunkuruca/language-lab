@@ -1,7 +1,7 @@
-// Float32: Number, with every job rounded to the nearest binary32 value, as
+// Float32: Float64, with every job rounded to the nearest binary32 value, as
 // a GPU computes (NUMBERS.md, "Float32"). An approximate representation:
-// the representing type is Number itself and `meaning` is the identity,
-// since every f32 value is a Number. Each job is an ordinary definition,
+// the representing type is Float64 itself and `meaning` is the identity,
+// since every f32 value is a Float64. Each job is an ordinary definition,
 // `x op y` rounded by `round to Float32`, made for the program that asks
 // for it; literals are rounded once. So the evaluator, the compiled JS and
 // the CPU fallback for pictures give the GPU's answers for + − × and
@@ -18,7 +18,7 @@ import { NUMBER } from "./types.ts";
 import { infer } from "./infer.ts";
 import { resolveArithmetic, usesGenericArithmetic } from "./arith.ts";
 
-// The Number builtins whose answer on f32 inputs may not be an f32, with
+// The Float64 builtins whose answer on f32 inputs may not be an f32, with
 // how many inputs each takes. negate, abs and floor of an f32 are f32
 // already, so they keep their own definitions.
 export const ROUNDED: [Id, number][] = [
@@ -30,7 +30,7 @@ export const ROUNDED: [Id, number][] = [
 // them (give it to `represent`).
 export function withFloat32(code: Code, names: Names): { code: Code; names: Names; rep: Representation } {
   // The one generic + − · first made each type's own (arith.ts), so the
-  // ones at Number are Number's builtins and get rounded below.
+  // ones at Float64 are Float64's builtins and get rounded below.
   if (usesGenericArithmetic(code)) ({ code, names } = resolveArithmetic(code, infer(code, names), names));
   const k = new Lang();
   const impl: Record<Id, Id> = {};

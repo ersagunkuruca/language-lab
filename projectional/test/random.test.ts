@@ -23,7 +23,7 @@ function program(build: (k: Lang) => Id, random = () => 0.5) {
   const run = () => { runMain(code, info, main, { print: (s) => printed.push(s), names, world: { random } }); return printed; };
   return { run, info, names, main, errors: info.errors.map((e) => e.message) };
 }
-// A draw as a whole number, exactly: every bit of the Number shows.
+// A draw as a whole number, exactly: every bit of the Float64 shows.
 const bits = (k: Lang, x: Id) => k.call(S.show, k.call(B.mul, x, k.lit(2 ** 53)));
 const draw = (k: Lang) => k.call(RANDOM_OP);
 

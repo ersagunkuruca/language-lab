@@ -23,13 +23,13 @@ and a body that computes its answer. Here are three from the two dice
 program, as the editor's text view shows them:
 
 ```
-die : () -[Random]-> Number
+die : () -[Random]-> Float64
 die() = add(floor(multiply(random(), 6)), 1)
 
-two dice : () -[Random]-> Number
+two dice : () -[Random]-> Float64
 two dice() = add(die(), die())
 
-a hundred rolls : (Number) -> List Number
+a hundred rolls : (Float64) -> List Float64
 a hundred rolls(seed) = seeded(seed, map(range(100), (i) => two dice()))
 ```
 
@@ -40,9 +40,9 @@ value you can use below that line.
 **Reading a type.** The line above each definition is its type. You never
 write it: the checker works it out and the editor shows it.
 
-- `(Number) -> List Number` takes a Number and gives a list of Numbers.
-- `() -[Random]-> Number` takes nothing, may draw random numbers, and gives
-  a Number. What's in the square brackets is the definition's *effects*,
+- `(Float64) -> List Float64` takes a Float64 and gives a list of Float64s.
+- `() -[Random]-> Float64` takes nothing, may draw random numbers, and gives
+  a Float64. What's in the square brackets is the definition's *effects*,
   what it may do besides compute. A plain arrow `->` has none: same inputs,
   same answer, every time.
 - A small letter is any type: `(List a) -> Int` works on a list of
@@ -63,7 +63,7 @@ Two edits show how types follow what you do. Put `die()` where the Roll
 any type: the button's handler is allowed `Random`, and the seed is now
 different on every click. Put `die()` in place of `seed` *inside* `a
 hundred rolls`, as `seeded(die(), …)`, and its type becomes `(a) -[Random]->
-List Number`. The input is no longer used, so it can be anything (`a`). The
+List Float64`. The input is no longer used, so it can be anything (`a`). The
 `die()` runs before `seeded` takes over, so `Random` leaks out. Both are
 fine programs; the type tells you which one you wrote.
 
@@ -74,18 +74,18 @@ missing), `Abort` (stopped with a reason), `Random`, `Time` (the clock),
 `Diverge` (it might not finish). You can declare your own, and handle
 it with a match. See "Effects, and why not monads" below.
 
-**Numbers.** There are four kinds: `Int` (whole, any size), `Number`
+**Float64s.** There are four kinds: `Int` (whole, any size), `Float64`
 (floating point), `Rational` (exact fractions such as 1/3) and `Complex`.
 One `+ − · <` works on all of them, and the checker picks the kind. Kinds
-don't mix by themselves: `as number`, `whole part`, `as fraction` and `as
+don't mix by themselves: `as float64`, `whole part`, `as fraction` and `as
 complex` convert.
 
 **Data.** You make a type by listing its cases, each with named fields:
 
 ```
 type Shape
-  | circle(radius: Number)
-  | rectangle(width: Number, height: Number)
+  | circle(radius: Float64)
+  | rectangle(width: Float64, height: Float64)
 ```
 
 `circle(2)` makes one. A `match` looks at which case a value is and gives
@@ -119,7 +119,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   set per type), with `Rational` (exact fractions, in lowest terms) and
   `Complex` (re + im·i) as the new kinds. A literal can be written as a
   fraction (`1/2`). `smaller`, `larger` and `≤ > ≥` work on every ordered
-  kind. ("Whole numbers and text", LIBRARY.md "Numbers".)
+  kind. ("Whole numbers and text", LIBRARY.md "Float64s".)
 - **`compare` and `sort`** on any plain data: numbers by value, text
   alphabetically, cases in the order the type lists them. ("Order, and
   sort".)
@@ -154,7 +154,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
 - **Types?** Yes, inferred (Hindley-Milner) and never written down. The type
   is a view: the block view prints it above each definition.
 - **Monads?** No. Effects are part of a function's type as a *row*, e.g.
-  `evaluate : (expression, Number) -[Choice]-> Number`. Built in are
+  `evaluate : (expression, Float64) -[Choice]-> Float64`. Built in are
   `Choice` (Verse-style failure and multiple answers), `Diverge`, the
   world's `Console` and `Files`, `Network`, and `Cells` and `Update` for
   reactive values; std declares `Abort`, `Log`, `Random`, `Time` and
@@ -177,7 +177,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
 
 ```
 type expression
-  | number(value: Number)
+  | number(value: Float64)
   | x
   | sum(left: expression, right: expression)
   | ...
@@ -206,8 +206,8 @@ fields written in place, so an update always has exactly one answer. A
 general function there (`(p) ↦ p.width · 2`) is the next step: it would
 run backwards through the relational interpreter, with `Choice`.
 
-**Records of Numbers, part by part.** A point, a direction or a colour is
-an ordinary one-case type whose fields are all Numbers (`vec(x, y, z)`,
+**Records of Float64s, part by part.** A point, a direction or a colour is
+an ordinary one-case type whose fields are all Float64s (`vec(x, y, z)`,
 `colour(red, green, blue)`). Three builtins take any such record part by
 part, so the arithmetic on it is written once for all of them:
 
@@ -215,13 +215,13 @@ part, so the arithmetic on it is written once for all of them:
 - `zip parts(f, a, b)`: `f` on each pair of parts;
 - `total(r)`: the parts added up.
 
-`f` must be pure (it runs once per part). A Number counts as a record of
-one part, so the same code works on plain Numbers. The checker types them
+`f` must be pure (it runs once per part). A Float64 counts as a record of
+one part, so the same code works on plain Float64s. The checker types them
 with a constraint that type variables carry, like `equal`'s plain data:
 `plus(a, b) = zip parts(add, a, b)` is `(r, r) → r` for every record of
-Numbers `r`. Both inputs are the same `r`, so adding a colour to a point is
+Float64s `r`. Both inputs are the same `r`, so adding a colour to a point is
 still a type error (NUMBERS.md: "adding a position to a color is a
-mistake"), and a record with a field that isn't a Number is refused with
+mistake"), and a record with a field that isn't a Float64 is refused with
 that reason. Run backwards, each part is one call that runs backwards on its
 own: the point that `plus(p, vec(1, 1, 1))` takes to `vec(5, 0, 2)` is
 `vec(4, -1, 1)`.
@@ -232,10 +232,10 @@ The **vectors module** (`library/vectors.json`, built from
 and `reflect`, the operations GLSL and WGSL have built in. On a GPU each is
 the vector operation it describes (COMPILER.md "Vectors").
 
-`derivative` reads slopes through records of Numbers too: a record's
+`derivative` reads slopes through records of Float64s too: a record's
 derivative is a record, each part's derivative, so the slope of
 `(t) ↦ magnitude(vec(t, 3, 4))` is read through the Vec. And
-`gradient(f)`, for a function of one record of Numbers, is the record of
+`gradient(f)`, for a function of one record of Float64s, is the record of
 its derivatives along each part: `gradient((q) ↦ dot(q, q))(vec(1, 2, 3))`
 is `vec(2, 4, 6)`, and the normal of a surface `scene(p) = 0` is
 `unit(gradient(scene)(p))` (`examples/raymarch`). Like `derivative`, its
@@ -249,8 +249,8 @@ A value is a JS number while it is small (below 2^28 in size) and a BigInt
 beyond, with exactly one spelling per number, so `equal` and hashing stay
 right. The bound is that low so a value says whether it is an Int: below
 2^28 two different whole numbers are always further apart than `equal`'s
-tolerance for Numbers, so `equal` can be near on every JS number, and a
-bigger Int is a BigInt, compared exactly. A Number that happens to be
+tolerance for Float64s, so `equal` can be near on every JS number, and a
+bigger Int is a BigInt, compared exactly. A Float64 that happens to be
 whole keeps its tolerance: `√1e17 · √1e17` equals `1e17`, as `√2 · √2`
 equals 2 (REVIEW-2026-10-26.md §1.2). This is
 NUMBERS.md's stage 1: the meaning is the integers, the representation is
@@ -258,13 +258,13 @@ machine numbers with a BigInt fallback. Int literals are ordinary `lit`
 nodes with `of: "type.int"` (digits in a string past 2^53). A literal can
 be at the other number types the same way: `of: "std.rational"` with a
 whole number or `"top/bottom"` (`"6/8"` is 3/4; a zero bottom is an error
-the checker names), and `of: "std.complex"` with a Number, its real part.
+the checker names), and `of: "std.complex"` with a Float64, its real part.
 They're drawn as written (`1/2`), and before anything runs they become
 their constructor's call (`ratio(1, 2)`, `complex(2.5, 0)`; arith.ts), so
 `ratio(1, 2) + 1` needs no `as fraction` once the 1 is at Rational. Its operations
-have Number's names (`add`, `multiply`, `less than`, `show`, `range`),
+have Float64's names (`add`, `multiply`, `less than`, `show`, `range`),
 because names are presentation; the types tell them apart, and Int and
-Number never mix without `as number` or `whole part`. Where there is no
+Float64 never mix without `as float64` or `whole part`. Where there is no
 whole answer there is no answer: `quotient` and `remainder` by zero, a
 negative `power`, `whole part` of infinity and `read whole number` of
 "007" are `Choice`, not a crash or a NaN. Division rounds down, so
@@ -283,7 +283,7 @@ in its runtime) and forward in the relational interpreter.
 
 `compare(a, b)` answers `before`, `same` or `after` (the std type `Order`)
 for any two values of one plain type, the way `equal` answers for any
-two: numbers by value (Int, Number and fractions), text by code point, cases in the order
+two: numbers by value (Int, Float64 and fractions), text by code point, cases in the order
 their type declares them (`low` before `medium` before `high`, `none`
 before `some`, `[]` before any other list), then fields left to right, so
 lists go lexicographically. Functions and cells can't be compared, as
@@ -297,15 +297,15 @@ a`, has no Diverge. Both run in the evaluator, compiled JavaScript (the
 cases' order is written into the program as `$order`) and forward in the
 relational interpreter (`run.ts compareValues`), and in WebAssembly and C.
 
-**Numbers are ordered exactly, where `equal` is near.** `equal` lets two
-Numbers within about 1e-9 of each other be equal, which an equation over
+**Float64s are ordered exactly, where `equal` is near.** `equal` lets two
+Float64s within about 1e-9 of each other be equal, which an equation over
 floats needs (√2 squared is 2.0000000000000004). An order can't do that: if
 a is the same as b and b as c, a has to be the same as c, or a sorted list
-and a set fall apart (with nearness, three Numbers a step of 1.5e-6 apart
+and a set fall apart (with nearness, three Float64s a step of 1.5e-6 apart
 near 1000 made a set of 2 or of 1 depending on the order they came in;
 REVIEW-2026-10-26.md §1.1). So `compare` is exact: `compare(0.1 + 0.2,
 0.3)` is `after`, though `equal` says they are equal. NaN (from `0 / 0` or
-`sqrt(−1)`) comes after every other Number and is the same as itself, as
+`sqrt(−1)`) comes after every other Float64 and is the same as itself, as
 in IEEE 754's totalOrder; −0 is the same as 0, as `equal` says. A map's
 keys and a set's items are told apart this exact way, and `equal` on two
 maps compares their entries with its own nearness.
@@ -320,8 +320,8 @@ Set k   = set of(items: List k)              -- sorted, no item twice
 ```
 
 The order is `compare`'s, so any plain data can be a key, and keys are
-exact: two Number keys are the same key only when they are the same
-Number. The prelude
+exact: two Float64 keys are the same key only when they are the same
+Float64. The prelude
 builds them and keeps the spelling: `empty map`, `as map(pairs)` (a later
 pair wins), `put`, `remove key`, `value at` (a `Choice`: no answer when the
 key isn't there), `has key`, `merge maps`, `keys of`, `values of`,
@@ -401,7 +401,7 @@ smaller piece keeps it the smaller piece.
 
 Two rules make "a piece is smaller" true. Data types are strictly
 positive: a type may not take itself as an input in its own fields
-(`knot = wrap(f: knot → Number)` is refused, since through it a function
+(`knot = wrap(f: knot → Float64)` is refused, since through it a function
 could call itself without any recursion), while taking itself as an output
 is fine (`rest: () → Stream` is lazy data). And only functions can be
 recursive: `ones = cons(1, ones)` is refused, so all data is finite.
@@ -419,7 +419,7 @@ Anything else gets the **`Diverge` effect** in its type. Newton's method
 carries it, because nothing in it gets smaller:
 
 ```
-newton : (expression, expression, Number) -[Choice, Diverge]-> Number
+newton : (expression, expression, Float64) -[Choice, Diverge]-> Float64
 ```
 
 Change `for each` to recurse on `list` itself and its type, and the type of
@@ -518,14 +518,14 @@ its *operations*, and each case's fields are what the operation is given.
 An operation either returns a value of a declared type, or never returns:
 
 ```
-effect Ask   = ask(question: Text) returns Number
+effect Ask   = ask(question: Text) returns Float64
 effect Abort = abort(reason: Text)                  -- never returns (std)
 effect Log   = log(line: Text) returns Unit          -- std
 ```
 
 Calling an operation performs it: `ask("width")` has type
-`Number` and adds `Ask` to the caller's row, so a function that asks is
-`() -[Ask]-> Number`. Handling it is a **match on the operations**, with the
+`Float64` and adds `Ask` to the caller's row, so a function that asks is
+`() -[Ask]-> Float64`. Handling it is a **match on the operations**, with the
 computation that performs them as the value examined:
 
 ```
@@ -567,7 +567,7 @@ why: Text)`), which also makes the type say *which* error a function can
 raise.
 
 **Answered later** (ANSWERED-LATER.md) is the third shape, for waiting:
-`effect Yield = yield(item: Number) returns Unit, later`. Its case is given
+`effect Yield = yield(item: Float64) returns Unit, later`. Its case is given
 the rest of the computation as a function, `| yield(item) with rest → …`,
 which it may resume once, now or later (it can be stored, say in a list of
 parked fibers), or drop. The rest has the type `(answer) -[the match's
@@ -660,7 +660,7 @@ error and exits with 1. Command-line arguments aren't an effect: they're
 ### Random
 
 `Random` is an effect declared in std like any other, with one operation:
-`random()`, a Number in [0, 1). There are three ways to answer it:
+`random()`, a Float64 in [0, 1). There are three ways to answer it:
 
 - `seeded(seed, action)` runs `action` with numbers that are the same on
   every run for the same seed (xoshiro128** by Blackman and Vigna, seeded
@@ -686,7 +686,7 @@ doesn't do.
 ### Time
 
 `Time` is a std effect with one operation, `now()`: milliseconds since
-1970 (UTC), as a Number. `Wait` is another, `wait(ms)`, which pauses the
+1970 (UTC), as a Float64. `Wait` is another, `wait(ms)`, which pauses the
 program. Like Random, neither is the world: reading the clock or pausing
 changes nothing outside the program, so both may run under `Choice`, and
 a match can answer them (a test fixes the clock with `match … | now() →
@@ -936,7 +936,7 @@ type Html      = element(tag: Text, attributes: List Attribute, children: List H
                | part(view: () -[Cells, Diverge, Time, Network]-> Html)
 type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
                | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random]-> Unit)
-               | listen(to: Input, play: (List Number) -[Cells, Update, Random, Diverge]-> List Number)
+               | listen(to: Input, play: (List Float64) -[Cells, Update, Random, Diverge]-> List Float64)
 type Event     = event(value: Text, key: Text)
 type Input     = microphone | recording(address: Text)
 ```
@@ -1006,12 +1006,12 @@ outputs stay consistent with each other (`src/lang/solve.ts`,
 `examples/relations`):
 
 ```
-‹to polar› : (Number, Number) -[Choice]-> Pair Number Number
+‹to polar› : (Float64, Float64) -[Choice]-> Pair Float64 Float64
 ‹to polar›(x, y) =
   solve polar(x = x, y = y) for length, angle
     pair(length, angle)
 
-‹square roots› : (Number) -> List Number
+‹square roots› : (Float64) -> List Float64
 ‹square roots›(y) = all(() => solve square(result = y) for x → x)
 ```
 
@@ -1075,7 +1075,7 @@ rotate(x, y, turn, x′, y′) =
 
 Those are `examples/physics`. The pieces:
 
-- **`equal` is a wire.** One equation. Numbers are equal when they agree to
+- **`equal` is a wire.** One equation. Float64s are equal when they agree to
   1e-9 relative (`close` in `run.ts`), forward and backwards and compiled,
   because a wire in a network meant "these are the same quantity", and
   `0.1 + 0.2` should be the same quantity as `0.3`. Only a finite gap is
@@ -1209,7 +1209,7 @@ checker inferred for a definition (`signatures.ts`), and makes it an
 interface:
 
 - an edit inside the definition must keep the pin, and if it doesn't, the
-  error is at the definition: "area is pinned to (Number) -> Number, and
+  error is at the definition: "area is pinned to (Float64) -> Float64, and
   this makes it (a) -> Text". Without the pin the same edit is an error at
   some caller far away (tested both ways);
 - callers are checked against the pin, not the body;
@@ -1289,15 +1289,15 @@ generic `<`, so they work on every ordered number type, run backwards and
 differentiate with no rules of their own) and Text's `not after`, `comes
 after`, `not before` (over `comes before`), `smaller` and `larger` (min and
 max, on every ordered number type too, which a shader compiles to `min` and
-`max`; the Number-only versions published before stay in the prelude,
+`max`; the Float64-only versions published before stay in the prelude,
 hidden, so a program saved with them still opens), the
 fractions `fraction`, `as fraction`, `divide fractions`, `show fraction` and
-`fraction as number` (a Rational is exact and in lowest terms, and the one
+`fraction as float64` (a Rational is exact and in lowest terms, and the one
 `+ − · <` works on it through the published, unoffered `add fractions`,
 `subtract fractions`, `multiply fractions`, `negate fraction` and `fraction
 less than`), the complex numbers `as complex`, `i`, `complex conjugate`,
 `modulus`, `angle of`, `polar`, `divide complex`, `complex exp` and `show
-complex` (a Complex is `complex(re, im)`, a record of two Numbers, so the
+complex` (a Complex is `complex(re, im)`, a record of two Float64s, so the
 parts builtins and the vectors module work on it and a shader holds it as a
 `vec2f`; the one `+ − · −x` works on it through the unoffered `add
 complex`, `subtract complex`, `multiply complex` and `negate complex`, ·
@@ -1378,7 +1378,7 @@ a row's test is missing or the table here differs from the rows.
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects, and a program that doesn't type-check | "effects: a definition's value must be pure, and run refuses unhandled Choice" (`test/lang.test.ts`) |
 | effects hidden where a function waits | checked | a function kept in a field, a list, a cell, a formula or a page keeps its effects: they reach the type, are refused, or are the page runtime's on purpose (`test/containers.test.ts` checks 40 cases) | "a function in a field can't hide its effects" (`test/effects.test.ts`) |
 | non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards is `Diverge` only when its mode may not end (the same size-change check on the known ports, modes.ts), and spends a step budget, solver answers included | "size-change: a call that keeps every argument the same size is Diverge" (`test/guarantees.test.ts`) |
-| arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Numbers, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add | "adding a colour to a point, or taking the parts of text, is a type error" (`test/parts.test.ts`) |
+| arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Float64s, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add | "adding a colour to a point, or taking the parts of text, is a type error" (`test/parts.test.ts`) |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only | "§1.3 equal on functions should be refused, not compare by identity" (`test/known-holes.test.ts`) |
 | a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same | "derivative never throws: where a slope can't be read there is none" (`test/guarantees.test.ts`) |
 | a direction nothing pins down | checked | the checker works out each `solve`'s mode (modes.ts): when some port or goal never gets what it needs, the search could only end with unknowns left, so it's an error at the `solve` node | "§1.2 a well-typed backwards solve must not throw NotInvertible at run time" (`test/known-holes.test.ts`) |
@@ -1387,7 +1387,7 @@ a row's test is missing or the table here differs from the rows.
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error | "scope: a variable moved out of the case that binds it is caught" (`test/lang.test.ts`) |
 | incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
 | integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |
-| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Number's `/` is IEEE (Infinity/NaN) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
+| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` is IEEE (Infinity/NaN) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
 | other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix | no test: not addressed beyond IEEE |
 | unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one | "units: declared on parameters and numbers, inferred through predicates and functions" (`test/oneworld.test.ts`) |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) | no test: not addressed |
@@ -1406,7 +1406,7 @@ the type-level version of "changing a function's signature".
 `examples/queens` (search with `Choice`):
 
 ```
-queens : (Number) -[Choice]-> List Number
+queens : (Float64) -[Choice]-> List Float64
 queens(size) =
   fold range(size)
     nil → nil
@@ -1472,7 +1472,7 @@ back into the group being hashed is named by its position.
 
 ## What's next
 
-- **Numbers.** Fractions, big integers, continued fractions, Clifford
+- **Float64s.** Fractions, big integers, continued fractions, Clifford
   algebras and tensors, and running a definition like Peano naturals on a
   fast representation chosen by cost: the plan is [NUMBERS.md](NUMBERS.md).
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
@@ -1484,7 +1484,7 @@ back into the group being hashed is named by its position.
   and handlers for `Console`/`Files` written in the program (to mock IO in
   tests).
 - **Units written in types.** Units are inferred and checked as part of
-  the type now; what's missing is writing them in a type (`Number m/s`) and
+  the type now; what's missing is writing them in a type (`Float64 m/s`) and
   a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)

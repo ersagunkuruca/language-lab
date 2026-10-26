@@ -333,7 +333,7 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
 // Ryū's shortest digits (wasm-rt.ts number.js), which show uses past the
 // plain decimals, so no host is asked: JavaScript's own String, on every
 // binary exponent, the decimal powers, and random bit patterns.
-test("a Number's text in WebAssembly is JavaScript's String: the shortest digits that read back, with no host", async () => {
+test("a Float64's text in WebAssembly is JavaScript's String: the shortest digits that read back, with no host", async () => {
   const p = texts();
   const m = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.shown], { data: true }));
   assert.deepEqual(WebAssembly.Module.imports(new WebAssembly.Module(m.bytes)), []);
@@ -543,7 +543,7 @@ test("what isn't in the profile is refused, with the reason", () => {
   const why = (n: string) => refused.get(p.named(n));
   assert.match(why("sinc")!, /Choice/);
   assert.match(why("parabola")!, /calls polynomial/);
-  assert.match(why("polynomial")!, /other than Number or Bool/);
+  assert.match(why("polynomial")!, /other than Float64 or Bool/);
 });
 
 test("Math with no JavaScript host: V8's fdlibm in WebAssembly, the same bits as Node's Math", async () => {

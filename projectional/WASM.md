@@ -10,10 +10,10 @@ W4c: Abort, W4d: searches with several answers anywhere, below). wc,
 ledger, chapters, calc, queens and Countdown run whole in WebAssembly,
 main included, and as WASI commands they run under wasmtime with no
 JavaScript (`npm run wasi -- wc` in compiler/), Countdown too since W3c
-wrote mod (from musl's fmod) in WebAssembly, and W3d a Number's show:
+wrote mod (from musl's fmod) in WebAssembly, and W3d a Float64's show:
 plain decimals directly, anything else as JavaScript's String, with
 Ryū's shortest digits (its tables, about 10 KB, are in a module only
-when it shows a Number). So a module asks its host for nothing but the
+when it shows a Float64). So a module asks its host for nothing but the
 world. Countdown's search runs as fast as the hand-written ideal
 JavaScript. With no JavaScript host, sin and the other Math functions
 are V8's fdlibm compiled to WebAssembly (W3e: `compiler/math/gen.ts`
@@ -23,7 +23,7 @@ past 64 bits as the evaluator's does (W5b, W5c), and folds go through
 nested data (W1d). All five stages are done; one cast per arm (W1)
 was measured and left, since skipping every cast gains nothing measurable. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
-Numbers, Bools, records of them as immutable structs (W1a), data with
+Float64s, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression
 trees (W1b), matches, folds, calls, tail calls as `return_call`, and a
 budget. The host builds and reads values through exported makers and
@@ -150,7 +150,7 @@ length walk the bytes (the "all ASCII" flag that would make them O(1) is
 left for when a profile asks). The text builtins are a small runtime,
 `compiler/src/wasm-rt.ts`, written in WebAssembly's own text format one
 instruction per line, which a few lines of assembler there turn into
-bytes; a module prints exactly the runtime it carries. `show` of a Number
+bytes; a module prints exactly the runtime it carries. `show` of a Float64
 writes plain decimals of up to 15 digits itself, which is then exactly
 what JavaScript writes, and asks the host for the rest (1e21, 1.5e-7,
 more than 15 digits), an import a WASI build will have to replace with
@@ -240,7 +240,7 @@ program with fewer things allowed, not a different language.
 
 **One representation first, specialized later.** As in the JS backend's
 first version, every value of an unknown or polymorphic type is an
-`anyref`. A Number in a polymorphic position is boxed in a one-field
+`anyref`. A Float64 in a polymorphic position is boxed in a one-field
 struct, a Bool and a small Int are `i31ref`. Where the type is known
 (most code after specialization), values stay unboxed: `f64`, `i32`, and
 a struct reference of the exact variant type. The JS backend's
@@ -250,7 +250,7 @@ as they are needed, one at a time, each with a measurement.
 
 | language | WebAssembly |
 |---|---|
-| Number | `f64` (boxed `(struct f64)` where polymorphic) |
+| Float64 | `f64` (boxed `(struct f64)` where polymorphic) |
 | Bool | `i32`; `i31ref` where polymorphic |
 | Int | an `i31ref` while it fits in 31 bits, else a `$big` struct (an i64), else a `$huge` (sign and 32-bit limbs; see Int below) |
 | a type's cases | one struct type per variant, all subtypes of the type's base struct, which holds the tag as an `i32` field; a match is a `br_table` on the tag |

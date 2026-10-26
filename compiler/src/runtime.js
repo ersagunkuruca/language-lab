@@ -64,7 +64,7 @@ export function $range(n) {
   return l;
 }
 
-// Numbers are equal to the precision floats carry, as in the evaluator.
+// Float64s are equal to the precision floats carry, as in the evaluator.
 // Only a finite gap is near (run.ts close): ∞ isn't −∞.
 export const $near = (a, b) => {
   const gap = Math.abs(a - b);
@@ -110,7 +110,7 @@ export const $compare = (a, b, order) => ORDER_VALUES[compareValues(a, b, order)
 
 export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));
 export const $mod = (a, b) => ((a % b) + b) % b;
-// A record of Numbers part by part (std.ts); a Number is one part.
+// A record of Float64s part by part (std.ts); a Float64 is one part.
 export const $mapParts = (f, r) => (typeof r === 'number' ? f(r) : { tag: r.tag, fields: r.fields.map((x) => f(x)) });
 export const $zipParts = (f, a, b) => (typeof a === 'number' ? f(a, b) : { tag: a.tag, fields: a.fields.map((x, i) => f(x, b.fields[i])) });
 export const $total = (r) => (typeof r === 'number' ? r : r.fields.reduce((x, y) => x + y));

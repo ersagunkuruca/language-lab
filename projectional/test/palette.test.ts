@@ -45,10 +45,10 @@ test("a call's function as a hole: every function of the right type is offered, 
   for (const target of offered) assert.equal(infer(fillHole(code, {}, mul.fn, { kind: "ref", target, type: null as never }).code).errors.length, info.errors.length, target);
 });
 
-// One + for every number type (NUMBERS.md, "One `+`"): where a Number or
+// One + for every number type (NUMBERS.md, "One `+`"): where a Float64 or
 // an Int is added, the palette offers the generic arithmetic and not each
 // type's own, and a program with the generic one means what it did.
-test("the palette offers one + − · for Numbers and Ints alike, and a program with it runs the same", async () => {
+test("the palette offers one + − · for Float64s and Ints alike, and a program with it runs the same", async () => {
   const { ARITH } = await import("../src/lang/std.ts");
   const { runMain } = await import("../src/lang/run.ts");
   const own = /^builtin\.(int\.)?(add|sub|mul|neg|less)$/;
@@ -87,8 +87,8 @@ test("at a hole in a held definition, the palette offers only what keeps its typ
   const offered = fillings(code, info, seed);
   const own = offered.find((f) => "target" in f && f.target === lam.params[0]);
   assert.ok(own, "seed itself is offered");
-  // and as the Number the held type says, not as any type (E84)
-  assert.equal(showType(info.subst.zonk((own as { type: Type }).type), p.pres.names), "Number");
+  // and as the Float64 the held type says, not as any type (E84)
+  assert.equal(showType(info.subst.zonk((own as { type: Type }).type), p.pres.names), "Float64");
   assert.ok(!offered.some((f) => "target" in f && f.target === die), "die() would give it Random");
   const bad = offered.filter((f) => infer(fillHole(code, {}, seed, f).code, p.pres.names, undefined, opts).errors.length > info.errors.length);
   assert.deepEqual(bad.map((f) => JSON.stringify(f)), []);

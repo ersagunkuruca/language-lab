@@ -61,7 +61,7 @@ example, about 2.2 s each, most of it waiting out 500 ms click timeouts.
 | Run backwards | 19 | 12 |
 | Shader: ripples | 18 | 6 |
 | Conjugation | 17 | 10 |
-| Numbers & physics | 17 | 8 |
+| Float64s & physics | 17 | 8 |
 | the other five | 49 | 26 |
 
 `smoke-shaders` takes 34 s and the GPU check 5 s.
@@ -160,7 +160,7 @@ passed), used by CI and by every thread before pushing:
 4. Each changed `examples/<name>/`: the example tests for **that example
    only**. Tests that loop over examples read a list from `EXAMPLES=`
    (all when unset), so `palette.test.ts` with `EXAMPLES=physics` checks
-   physics alone. `npm run smoke -- --only "Numbers & physics"` already
+   physics alone. `npm run smoke -- --only "Float64s & physics"` already
    exists inside smoke.ts (`visit(saved, only)`); it gets a flag.
 5. A change to the language core reaches every example, so it runs every
    test, but the sweeps in their per-change size (T3).

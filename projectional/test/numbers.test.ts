@@ -126,7 +126,7 @@ function toData(t: unknown): Data {
   throw new Error(`not data: ${JSON.stringify(t)}`);
 }
 
-test("a builtin type can be represented too: Number with every job rounded, as Float32 will be", async () => {
+test("a builtin type can be represented too: Float64 with every job rounded, as Float32 will be", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
   const { S } = await import("../src/lang/std.ts");
@@ -145,9 +145,9 @@ test("a builtin type can be represented too: Number with every job rounded, as F
   k.define(f, k.fn(["x"], (x) => k.call(B.add, k.call(B.mul, x, k.lit(0.1)), k.call(B.div, k.lit(1), k.lit(3)))));
   const code = base(k.code), names = baseNames(k.names);
   const rep: Representation = { name: "rounded", of: NUMBER, type: NUMBER, meaning: null, canonical: true, approximate: true, literal: round, impl: { [B.add]: add32, [B.mul]: mul32, [B.div]: div32 }, cost: {} };
-  const spec: Representation = { name: "Number", of: NUMBER, type: NUMBER, meaning: null, canonical: true, impl: {}, cost: {} };
+  const spec: Representation = { name: "Float64", of: NUMBER, type: NUMBER, meaning: null, canonical: true, impl: {}, cost: {} };
   // Never picked by cost, though it costs the same.
-  assert.equal(choose(code, f, [rep, spec]).rep.name, "Number");
+  assert.equal(choose(code, f, [rep, spec]).rep.name, "Float64");
   const out = represent(code, [f], rep);
   const i = infer(out, names);
   assert.deepEqual(i.errors, []);

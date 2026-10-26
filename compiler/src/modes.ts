@@ -191,7 +191,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       if (id === INT_OPS.sub && a !== undefined) return bind(sc, n.args[1], `$int.sub(${a}, ${res})`);
       if (id === INT_OPS.sub && b !== undefined) return bind(sc, n.args[0], `$int.add(${res}, ${b})`);
       if (id === INT_OPS.neg) return bind(sc, n.args[0], `$int.neg(${res})`);
-      // Numbers the same way, one unknown at a time (Haar's join written as
+      // Float64s the same way, one unknown at a time (Haar's join written as
       // lifting steps); a product or quotient only by a number written in
       // the program that isn't 0, so there is one answer.
       const literal = (js: string | undefined) => (js !== undefined && /^\(?-?\d+(\.\d+)?(e[-+]?\d+)?\)?$/.test(js) && Number(js.replace(/[()]/g, "")) !== 0);

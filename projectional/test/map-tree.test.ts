@@ -78,7 +78,7 @@ test("each tree job agrees with the definition through meaning, and the tree sta
   };
   let seed = 7;
   const rand = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
-  // Whole keys, then Numbers a near step apart (each within equal's 1e-9
+  // Whole keys, then Float64s a near step apart (each within equal's 1e-9
   // of the next) with NaN, −0 and 0: compare's exact order keeps the tree
   // and the sorted list agreeing on those too (REVIEW-2026-10-26.md §1.1).
   const order = variantOrder(w.code);

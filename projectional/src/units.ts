@@ -58,7 +58,7 @@ const ZERO: Vec = BASE.map(() => 0);
 function rules(op: string, port: (k: string) => string, why: string, node: Id): Constraint[] {
   const eq = (a: string, b: string): Constraint => ({ terms: [[a, 1], [b, -1]], rhs: ZERO, why, node });
   const is = (a: string, v: Vec): Constraint => ({ terms: [[a, 1]], rhs: v, why, node });
-  // The generic + − · −x < (arith.add…) keep units as Number's own do.
+  // The generic + − · −x < (arith.add…) keep units as Float64's own do.
   switch (op.replace(/^arith\./, "")) {
     case "add": case "sub": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
     case "neg": case "abs": case "floor": case "float32": return [eq(port("0"), port("out"))];

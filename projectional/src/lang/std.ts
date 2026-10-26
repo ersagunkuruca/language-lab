@@ -17,7 +17,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Number"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
@@ -65,7 +65,7 @@ export const NONE = "std.optional.none", SOME = "std.optional.some";
 export const ABORT = typedef("std.abort", "Abort", [], [["abort", [["reason", () => tref(STRING)]]]], true);
 export const LOG = typedef("std.log", "Log", [], [["log", [["line", () => tref(STRING)]], () => tref(UNIT)]], true);
 export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
-// Random: `random()` is a Number in [0, 1). Like Log it isn't a world
+// Random: `random()` is a Float64 in [0, 1). Like Log it isn't a world
 // effect: drawing a number changes nothing outside the program, so a search
 // may draw. `seeded(seed, action)` answers it with the same numbers every
 // run (random.ts); a match can answer it too (a test's fixed value), and
@@ -147,7 +147,7 @@ export const RATIONAL = typedef("std.rational", "Rational", [], [
 ]);
 export const RATIO = "std.rational.ratio";
 // Complex numbers (NUMBERS.md, LANGUAGE-REVIEW-2026-10-24 L40): one case of
-// two Numbers, re + im·i. A record of Numbers, so the parts builtins and
+// two Float64s, re + im·i. A record of Float64s, so the parts builtins and
 // the vectors module work on it (its magnitude is |z|), but a number type
 // of its own: · is the complex product, which is the prelude's like
 // Rational's, and there is no <. After Rational, so ids above don't move.
@@ -258,7 +258,7 @@ export const S = {
   abs: builtin("abs", "abs", pure([num], num), Math.abs),
   floor: builtin("floor", "floor", pure([num], num), Math.floor),
   // The nearest binary32 value (ties to even): what a GPU holds. The job
-  // of every Number operation in the Float32 representation (NUMBERS.md).
+  // of every Float64 operation in the Float32 representation (NUMBERS.md).
   float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
   mod: builtin("mod", "mod", pure([num, num], num), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
@@ -286,7 +286,7 @@ export const S = {
     const e = s.freshRow();
     return fn([fn([num], num, e)], fn([num], num, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
-  // A function of a point's (or any record of Numbers') gradient: the
+  // A function of a point's (or any record of Float64s') gradient: the
   // record of its derivatives along each part, so the normal of a surface
   // f(p) = 0 is unit(gradient(f)(p)). Choice as for derivative, and
   // dropped the same way when the checker can read every slope.
@@ -294,8 +294,8 @@ export const S = {
     const r = s.fresh(false, true), e = s.freshRow();
     return fn([fn([r], num, e)], fn([r], r, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
-  // Parts: a record of Numbers (Number itself, or one case whose fields are
-  // all Numbers: a point, a colour) taken part by part, so arithmetic on
+  // Parts: a record of Float64s (Float64 itself, or one case whose fields are
+  // all Float64s: a point, a colour) taken part by part, so arithmetic on
   // points and colours is written once, for all of them (the prelude's
   // vector operations). The function must be pure: it runs once per part.
   // On a GPU these are vector operations (compiler/src/wgsl.ts).
@@ -384,7 +384,7 @@ discharge("with fuel", [DIVERGE], "at most n calls that may not end, then no ans
 discharge("seeded", [RANDOM], "the same numbers for the same seed, from a generator in the program", [S.seeded]);
 discharge("formula, each", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula, CELL_OPS.each]);
 
-// Int: whole numbers that never overflow. Same names as Number's, because
+// Int: whole numbers that never overflow. Same names as Float64's, because
 // names are presentation (NUMBERS.md stage 2): the palette offers the one
 // whose types fit. Division and powers can have no answer, so they're
 // Choice rather than a crash or a NaN.
@@ -406,7 +406,7 @@ export const INT_OPS = {
   }),
   show: builtin("int.show", "show", pure([int], str), I.show),
   read: choice("int.read", "read whole number", [str], int, I.read),
-  toNumber: builtin("int.toNumber", "as number", pure([int], num), I.toNumber),
+  toNumber: builtin("int.toNumber", "as float64", pure([int], num), I.toNumber),
   wholePart: choice("int.wholePart", "whole part", [num], int, I.wholePart),
   // 0, 1, …, n − 1. A list of a billion items is a billion cells, so this
   // is for sizes that fit in memory, like everything else.
@@ -418,8 +418,8 @@ export const INT_OPS = {
 };
 
 // One + for every number type (NUMBERS.md, "One `+` for every number
-// system"): each of these works on any number type (Number, Int, or a
-// record of Numbers; `less than` on Number or Int), and the program is
+// system"): each of these works on any number type (Float64, Int, or a
+// record of Float64s; `less than` on Float64 or Int), and the program is
 // resolved to the type's own operation before anything runs it
 // (src/lang/arith.ts), so they have no implementation of their own: the
 // one here says so if a caller forgot to resolve.
@@ -452,7 +452,7 @@ export const TEXT_OPS = {
 
 // show for any plain value: [1, 2, 3], circle(2), "text". Cases print
 // with the program's names, which the runtime is given (names are
-// presentation, so they're an input to the run, like the console). Number's
+// presentation, so they're an input to the run, like the console). Float64's
 // own show stays: run backwards, it is what reads numbers.
 export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
 // The order on plain data (L66, run.ts compareValues): numbers by value,

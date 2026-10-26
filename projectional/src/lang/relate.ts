@@ -777,7 +777,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         k: "later", text: "gradient", ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
           const p = walk(args[0], s);
           const lambda = typeof p === "number" ? derivativeLambda(code, { lambda: g.lambda }) : isData(p) ? gradientLambda(code, { lambda: g.lambda }, (p as DataT).tag) : null;
-          if (!lambda) throw new NotInvertible("gradient is taken at a record of Numbers");
+          if (!lambda) throw new NotInvertible("gradient is taken at a record of Float64s");
           return apply({ k: "closure", lambda, env: g.env }, args, out)(s);
         },
       });
@@ -1023,7 +1023,7 @@ export function interpreter(code: Code, opts: Options = {}) {
   // An answer of the action that still has unknowns in it isn't pinned
   // down, so it doesn't count (as in the evaluator's solve).
   // The parts builtins are their function, part by part: once any side's
-  // shape is known (Number, or which record), every side gets that shape
+  // shape is known (Float64, or which record), every side gets that shape
   // and each part is one call, which runs backwards like any other.
   // `total` is the parts added up.
   function parts(id: Id, args: Term[], out: Term): Goal {

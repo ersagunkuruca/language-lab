@@ -211,7 +211,7 @@ test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", () => {
   assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["true", "true"]);
 });
 
-test("R3 §1.2 a set of Numbers has the same size whatever order its items come in", () => {
+test("R3 §1.2 a set of Float64s has the same size whatever order its items come in", () => {
   // Each neighbour is within 1e-9 of the next; the two ends are not.
   const a = 1000.5, d = 1.5e-6;
   const size = (k: Lang, L: typeof lib, xs: number[]) => k.call(L("set size"), k.call(L("as set"), nums(k, xs)));

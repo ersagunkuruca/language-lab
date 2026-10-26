@@ -1,6 +1,6 @@
 // The scalar profile: the part of the language that needs no heap.
 //
-// A definition is in it when its inputs and result are Number or Bool, and
+// A definition is in it when its inputs and result are Float64 or Bool, and
 // its body uses only arithmetic, comparisons, `if`, lets, and calls to other
 // definitions in the profile. No data, no closures, no Choice, no world
 // effects, and nothing that might not finish. That's exactly what a GPU or
@@ -9,7 +9,7 @@
 // shader backend would print it as WGSL (see projectional/COMPILER.md).
 //
 // With `records`, the profile also takes records of those: a data type
-// with one case whose fields are Numbers, Bools or records again (a
+// with one case whose fields are Float64s, Bools or records again (a
 // point, a colour, a ray). They need no heap either, since their size is
 // known; a shader has them as structs (or vectors, wgsl.ts). A record is built by its case,
 // read by its fields or by a match with one arm. WebAssembly has them as
@@ -83,7 +83,7 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 };
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
-export type SType = "f64" | "i32"; // Number, Bool (0 or 1)
+export type SType = "f64" | "i32"; // Float64, Bool (0 or 1)
 // A record: a data type with one case, at particular type arguments.
 // `mutable`: a box the lowering makes (W4d), whose one field a search sets.
 export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true }
@@ -230,7 +230,7 @@ export type SExpr =
   // runs (null: no arm, which the checker rules out).
   | { k: "case"; scrut: SExpr; s: number; t: DType; arms: (SExpr | null)[]; result: LType }
   // first(() => with fuel(n, () => body), () => otherwise): body with n
-  // calls to spend, or otherwise if it ran out. `save` is a Number local
+  // calls to spend, or otherwise if it ran out. `save` is a Float64 local
   // for the budget around this one, `res` one for body's value.
   | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number }
   // No answer here (Choice, `data`): the nearest attempt gives its
@@ -321,7 +321,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     info = infer(code, names);
   }
   // A generic definition (the vectors module's plus, for any record of
-  // Numbers) is lowered once per set of types it's called at, the way a
+  // Float64s) is lowered once per set of types it's called at, the way a
   // C++ template or a Rust generic is: `at` is what its type variables
   // stand for in the one being lowered, and what its effect rows do (keep
   // with a test that may have no answer is a search itself).
@@ -357,7 +357,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES;
-  const OTHER = opts.data ? "something other than Number, Bool or data of them" : opts.records ? "something other than Number, Bool or a record of them" : "something other than Number or Bool";
+  const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
   function stype(t: Type, inside: Id[] = []): LType | null {
@@ -443,13 +443,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (td?.kind !== "typedef" || td.effect) return nm(t.id);
     if (opts.data) {
       const arg = t.args.find((a) => !stype(a));
-      return arg ? `${nm(t.id)} of ${whyNot(arg, [...inside, t.id])}` : `${nm(t.id)}, which has a field that isn't a Number, Bool or data of them`;
+      return arg ? `${nm(t.id)} of ${whyNot(arg, [...inside, t.id])}` : `${nm(t.id)}, which has a field that isn't a Float64, Bool or data of them`;
     }
     if (inside.includes(t.id)) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     if (td.variants.length !== 1) return `${nm(t.id)}, which has ${td.variants.length} cases (only one-case records fit)`;
     const ft = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => code.nodes[(code.nodes[f] as NodeOf<"field">).type]);
     if (ft.some((n) => n?.kind === "tref" && (n.target === t.id || inside.includes(n.target)))) return `${nm(t.id)}, which contains itself (that needs a heap)`;
-    return `${nm(t.id)}, which has a field that isn't a Number, Bool or record`;
+    return `${nm(t.id)}, which has a field that isn't a Float64, Bool or record`;
   }
   // Whether a type written in the program mentions `target`.
   const mentions = (tid: Id, target: Id): boolean => {
@@ -490,7 +490,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
     // An input that can be anything is one the body never looks at (∂f/∂x
     // of a function that has an input the slope doesn't depend on, say).
-    // It's taken as a Number, and calls must pass one.
+    // It's taken as a Float64, and calls must pass one.
     const free = new Set(vars(ft.ret));
     const params = ft.params.map((p) => (p.t === "var" && !free.has(p.v) ? "f64" : stype(p))), result = stype(ft.ret);
     if (params.some((p) => !p) || !result) {
@@ -549,7 +549,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const t = stype(zonk(id));
         if (t === "int") return { k: "int", v: BigInt(n.value) };
         if (t === "text" && typeof n.value === "string") return { k: "text", v: n.value };
-        if (typeof n.value !== "number" || t !== "f64") throw new Refused(opts.data ? "uses a value that isn't a Number, Int or Text" : "uses a value that isn't a Number");
+        if (typeof n.value !== "number" || t !== "f64") throw new Refused(opts.data ? "uses a value that isn't a Float64, Int or Text" : "uses a value that isn't a Float64");
         return { k: "num", v: n.value };
       }
       case "ref": {
@@ -598,7 +598,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const target = head.target;
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
-          if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Numbers or Bools");
+          if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Float64s or Bools");
           const [x, y] = args();
           return same(x, y, t, f, tail);
         }
@@ -669,7 +669,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
             const c = r.cases.findIndex((x) => (code.nodes[x.variant] as NodeOf<"variant">).fields.includes(target));
             return { k: "field", rec: expr(n.args[0], env, f, false), t: r, c, i: fieldIndex(code, target) };
           }
-          if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Numbers and Bools`);
+          if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Float64s and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
         const why = TARGETS[target]?.scalar;
@@ -775,7 +775,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
-    // Two Numbers within 1e-9 relative to their size (run.ts sameNumber).
+    // Two Float64s within 1e-9 relative to their size (run.ts sameNumber).
     // Each side once: a local if it isn't one already.
     const lets: { i: number; value: SExpr }[] = [];
     const [a, b] = [x, y].map((value): SExpr => {
@@ -786,7 +786,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     });
     const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
     const num = (v: number): SExpr => ({ k: "num", v });
-    // Near on every Number, whole or not: an Int is its own type here.
+    // Near on every Float64, whole or not: an Int is its own type here.
     const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
     // Only a finite gap is near (run.ts close): diff − diff is NaN for ∞.
     const finite = op("equal", op("sub", diff, diff), num(0));
@@ -801,7 +801,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const pick = (eq: SExpr, lt: SExpr): SExpr => ({ k: "if", cond: eq, then: num(0), else: { k: "if", cond: lt, then: num(-1), else: num(1), t: "f64" }, t: "f64" });
     if (isFn(t)) throw new Refused("compares functions");
     if (t === "f64") {
-      // Exactly, with NaN after every other Number (run.ts numberOrder).
+      // Exactly, with NaN after every other Float64 (run.ts numberOrder).
       const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
       const nan = (e: SExpr) => op("not", op("equal", e, e));
       return pick(op("or", op("equal", x, y), op("and", nan(x), nan(y))), op("or", op("less", x, y), op("and", nan(y), op("not", nan(x)))));
@@ -1137,7 +1137,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       if (c >= 0) return { k: "new", t: r, c, args };
     }
     if (r && isRecord(r) && r.variant === variant) return { k: "make", t: r, args };
-    throw new Refused(`builds ${nm(variant)}, which isn't ${opts.data ? "data" : "a record"} of Numbers and Bools`);
+    throw new Refused(`builds ${nm(variant)}, which isn't ${opts.data ? "data" : "a record"} of Float64s and Bools`);
   }
 
   // Whether a call of first is first(() => with fuel(…), …), a budget.
@@ -1496,7 +1496,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const recs = target === S.total ? n.args : n.args.slice(1);
     const t = stype(zonk(recs[0]));
-    if (t !== "f64" && (!t || !isRecord(t) || t.fields.some((x) => x.t !== "f64"))) throw new Refused(`takes the parts of something that isn't a record of Numbers`);
+    if (t !== "f64" && (!t || !isRecord(t) || t.fields.some((x) => x.t !== "f64"))) throw new Refused(`takes the parts of something that isn't a record of Float64s`);
     const lets: { i: number; value: SExpr }[] = [];
     const partsOf = (id: Id): SExpr[] => {
       const e = expr(id, env, f, false);

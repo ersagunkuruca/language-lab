@@ -51,7 +51,7 @@ function program() {
     // The operation itself, passed as a value.
     intNegated: def("int negated", () => k.call(LIBRARY_MAP(), k.list(k.int(1), k.int(-2)), k.x(ARITH.neg))),
     vecsNegated: def("vecs negated", () => k.call(LIBRARY_MAP(), k.list(vec(1, 0, -1)), k.x(ARITH.neg))),
-    // The slope of x·x + x at 3: the generic ops differentiate as Number's.
+    // The slope of x·x + x at 3: the generic ops differentiate as Float64's.
     slope: def("slope", () => k.call(k.call(S.derivative, k.fn(["x"], (x) => k.call(ARITH.add, k.call(ARITH.mul, x, x), x))), k.lit(3))),
     // Mistakes the checker catches.
     textTwice: def("text twice", () => k.call(twice, k.lit("ab"))),
@@ -89,20 +89,20 @@ test("a definition with no literal works on every number type, and its type says
   assert.equal(showType(p.info.subst.zonk(p.info.typeOf.get(p.defs.spread)!), p.names, p.info.subst.arith), "(a, a) -> a where a is a number type");
 });
 
-test("text, a record that isn't all Numbers, and < on a record are type errors", () => {
+test("text, a record that isn't all Float64s, and < on a record are type errors", () => {
   const p = program();
   assert.match(errorAt(p, p.defs.textTwice).join("; "), /Text isn't number types|works only on number types/);
   assert.match(errorAt(p, p.defs.namedTwice).join("; "), /number types/);
-  assert.match(errorAt(p, p.defs.vecSmaller).join("; "), /Numbers or Ints/);
+  assert.match(errorAt(p, p.defs.vecSmaller).join("; "), /Float64s or Ints/);
 });
 
-test("resolved by type: Int's own operations at Int, Number's at Number, part by part on a record", () => {
+test("resolved by type: Int's own operations at Int, Float64's at Float64, part by part on a record", () => {
   const p = program();
   assert.ok(usesGenericArithmetic(p.code));
   const r = resolveArithmetic(p.code, p.info, p.names);
   assert.ok(!usesGenericArithmetic(r.code), "no generic operation is left");
   const targets = (d: Id) => subtree(r.code, d).map((id) => r.code.nodes[id]).filter((n) => n.kind === "ref").map((n) => (n as NodeOf<"ref">).target);
-  // twice itself is its Number version; Int's and Vec's are copies.
+  // twice itself is its Float64 version; Int's and Vec's are copies.
   const copies = r.code.defs.filter((d) => r.names[d]?.startsWith("twice at"));
   // (and at Text and Named, for the two definitions that are type errors)
   assert.deepEqual(copies.map((d) => r.names[d]).sort(), ["twice at Int", "twice at Named", "twice at Text", "twice at Vec"]);
@@ -155,7 +155,7 @@ test("compiled JavaScript gives the evaluator's values", async () => {
   for (const n of names) assert.deepEqual(plain((compiled[n] as () => unknown)()), plain(evaluated[n]), n);
 });
 
-test("run backwards, a generic definition is its Number version: which x has twice(x) = 7?", () => {
+test("run backwards, a generic definition is its Float64 version: which x has twice(x) = 7?", () => {
   const p = program();
   const lam = p.code.nodes[(p.code.nodes[p.defs.twice] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   const answers = [...relate(p.code, p.defs.twice, { out: 7 })];

@@ -1,4 +1,4 @@
-// Complex numbers (NUMBERS.md, BACKLOG L40): a record of two Numbers with
+// Complex numbers (NUMBERS.md, BACKLOG L40): a record of two Float64s with
 // the one generic + − · −x (arith.ts resolves them to the prelude's
 // complex arithmetic, · the complex product), no <, and the vectors
 // module's part-by-part operations still fit. Evaluated and compiled the
@@ -130,7 +130,7 @@ test("on the GPU a Complex is a vec2f, and WebAssembly gives the evaluator's num
   assert.equal(w.step(1, 2), Math.hypot(1 - 4 + 1, 4 + 2));
 });
 
-// QA-2026-10-24b: show of a fraction printed ratio(1, 2). Number types show
+// QA-2026-10-24b: show of a fraction printed ratio(1, 2). Float64 types show
 // as numbers, evaluated and compiled (the compiled runtime shows with the
 // same function).
 test("show prints a fraction as 1/2 and a complex number as 3 − 4i, in lists too", async () => {

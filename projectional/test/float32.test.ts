@@ -1,4 +1,4 @@
-// Float32 (src/lang/float32.ts): Number with every job rounded to binary32,
+// Float32 (src/lang/float32.ts): Float64 with every job rounded to binary32,
 // an approximate representation, so its laws hold to within the rounding.
 
 import { test } from "node:test";
@@ -17,7 +17,7 @@ import { NUMBER } from "../src/lang/types.ts";
 const fr = Math.fround;
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x as number; throw new Error("no answer"); };
 
-test("every Float32 job is its Number builtin rounded: equal to within half a step of binary32", () => {
+test("every Float32 job is its Float64 builtin rounded: equal to within half a step of binary32", () => {
   const k = new Lang();
   const code = base(k.code), names = baseNames(k.names);
   const f = withFloat32(code, names);
@@ -39,15 +39,15 @@ test("every Float32 job is its Number builtin rounded: equal to within half a st
   assert.equal(STD_IMPL[S.float32], Math.fround);
 });
 
-test("a program on Number runs in Float32 when asked, and the chooser never asks on its own", () => {
+test("a program on Float64 runs in Float32 when asked, and the chooser never asks on its own", () => {
   const k = new Lang();
   // A tenth of x, plus a third, plus sin x: none of them exact in binary.
   const f = k.def("f");
   k.define(f, k.fn(["x"], (x) => k.call(B.add, k.call(B.add, k.call(B.mul, x, k.lit(0.1)), k.call(B.div, k.lit(1), k.lit(3))), k.call(B.sin, x))));
   const code = base(k.code), names = baseNames(k.names);
   const w = withFloat32(code, names);
-  const spec: Representation = { name: "Number", of: NUMBER, type: NUMBER, meaning: null, canonical: true, impl: {}, cost: {} };
-  assert.equal(choose(w.code, f, [w.rep, spec]).rep.name, "Number");
+  const spec: Representation = { name: "Float64", of: NUMBER, type: NUMBER, meaning: null, canonical: true, impl: {}, cost: {} };
+  assert.equal(choose(w.code, f, [w.rep, spec]).rep.name, "Float64");
   const out = represent(w.code, [f], w.rep);
   const info = infer(out, w.names);
   assert.deepEqual(info.errors, []);
@@ -60,7 +60,7 @@ test("a program on Number runs in Float32 when asked, and the chooser never asks
   }
 });
 
-test("Float32 rewrites Number functions passed as values too (vectors' zip parts of add)", () => {
+test("Float32 rewrites Float64 functions passed as values too (vectors' zip parts of add)", () => {
   const k = new Lang();
   const twice = k.def("twice");
   k.define(twice, k.fn(["x"], (x) => k.call(k.fn(["g"], (g) => k.call(g, x, k.lit(0.1))), k.x(B.add as Id))));

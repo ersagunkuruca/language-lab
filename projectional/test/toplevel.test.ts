@@ -83,7 +83,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   s.fill(area, ref(binds(sq.variant)[0]));
   s.fill(area, ref(binds(sq.variant)[0]));
   assert.equal(s.holes(area).length, 0);
-  assert.equal(showType(s.info().typeOf.get(area)!, s.all()), "(Shape) -> Number");
+  assert.equal(showType(s.info().typeOf.get(area)!, s.all()), "(Shape) -> Float64");
 
   s.ok(Top.newDefinition(s.code, s.names, "main", { kind: "function", params: [] }));
   const main = s.def("main");
@@ -190,7 +190,7 @@ test("a function written inside a body gets inputs added, moved and removed, as 
   assert.deepEqual((s.code.nodes[hole] as NodeOf<"lambda">).params, [b, "p_a"]);
   s.ok(Top.removeParameter(s.code, s.names, hole, "p_a"));
   assert.deepEqual((s.code.nodes[hole] as NodeOf<"lambda">).params, [b]);
-  // Passed to map parts, it has to stay a function of one Number.
+  // Passed to map parts, it has to stay a function of one Float64.
   s.ok(Top.newDefinition(s.code, s.names, "w", { kind: "value" }));
   const w = s.def("w");
   s.fill(w, call(S.mapParts));
@@ -336,7 +336,7 @@ test("insertion sort, the textbook algorithm, written with palette picks and a t
   assert.equal(T.nextHole(s.code, insert, m.scrutinee), then);
   const r = T.fillValue(s.code, s.names, s.info(), then, "[0]", insert);
   assert.ok(r.ok);
-  assert.equal(T.fillValue(s.code, s.names, s.info(), then, '"text"', insert).ok, false, "a Text doesn't fit a List Number");
+  assert.equal(T.fillValue(s.code, s.names, s.info(), then, '"text"', insert).ok, false, "a Text doesn't fit a List Float64");
 });
 
 test("the sort example, written in the editor, type-checks and runs", async () => {
@@ -404,7 +404,7 @@ test("an effect of your own: declared, given back a type, and handled by a match
   s.number(answer, 30);
   const info = s.info();
   assert.deepEqual(info.errors, []);
-  assert.equal(showType(info.typeOf.get(answer)!, s.all()), "Number");
+  assert.equal(showType(info.typeOf.get(answer)!, s.all()), "Float64");
 });
 
 test("the effects example: a declared effect and Abort, each handled; values show through a handler", async () => {
@@ -414,7 +414,7 @@ test("the effects example: a declared effect and Abort, each handled; values sho
   const p = loadProgram(join(import.meta.dirname, "../examples/effects"));
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
-  assert.equal(showType(info.typeOf.get(p.named("area"))!, p.pres.names), "() -[Ask]-> Number");
+  assert.equal(showType(info.typeOf.get(p.named("area"))!, p.pres.names), "() -[Ask]-> Float64");
   const out: string[] = [];
   runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
   assert.deepEqual(out, ["360 · can't: nobody to share with"]);
@@ -690,7 +690,7 @@ test("where a fraction goes, a typed 1/2 is one half and a typed 1 is one: as fr
   // Each whole number at what its place takes: as fraction takes an Int.
   assert.deepEqual(lits("as fraction(1) + 1/2"), [[1, INT], ["1/2", RATIONAL_TYPE]]);
   assert.deepEqual(lits("as fraction(2) · 3"), [[2, INT], [3, RATIONAL_TYPE]]);
-  // Where a Number goes, 1/2 is still 1 divided by 2.
+  // Where a Float64 goes, 1/2 is still 1 divided by 2.
   assert.deepEqual(lits("1/2 + x · 0.5"), [[1, undefined], [2, undefined], [0.5, undefined]]);
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "as fraction(1) + 1/0", f).ok, false);
 });

@@ -11,7 +11,7 @@ moves its fields out, and the cell becomes the arm's next cell of the same
 fields (below).
 
 - **N1.** The scalar profile and its records print as C
-  (`compiler/src/c.ts`): Numbers, Bools, records as structs passed by
+  (`compiler/src/c.ts`): Float64s, Bools, records as structs passed by
   value, lets, ifs, calls, self tail calls as loops, and budgets. calculus,
   physics, the ray marcher's colours and the strip integral give the
   evaluator's bits, built with GCC and with clang
@@ -64,7 +64,7 @@ fields (below).
   - a Text is a counted cell of UTF-8 bytes. Positions count characters,
     and since UTF-8's byte order is the code points' order, `less` compares
     bytes;
-  - a Number shown is JavaScript's String(x): the fewest digits that read
+  - a Float64 shown is JavaScript's String(x): the fewest digits that read
     back as x (the first precision whose correctly rounded digits do, by
     the C library's printf and strtod), set out as ECMA-262 says;
   - Abort is status 2, with its reason in `lab_reason`; a handler is a
@@ -141,7 +141,7 @@ at them.
 
 **Values.**
 
-- A Number is a `double` and a Bool an `int32_t`.
+- A Float64 is a `double` and a Bool an `int32_t`.
 - A record is a struct passed by value. Its counted fields are dup'd and
   dropped with it.
 - A data value is a pointer to a cell: a count, a case, then fields. A

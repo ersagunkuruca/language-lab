@@ -6,7 +6,7 @@
 
 import type { Comments } from "../presentation.ts";
 
-const n = "Number";
+const n = "Float64";
 export const NOTES: Comments = {
   // --- std types
   "std.bool": "true or false. `if c then a else b` is a match on a Bool.",
@@ -16,7 +16,7 @@ export const NOTES: Comments = {
   "std.optional": "A value that may be missing: none, or some(value). The data form of Choice, for keeping an answer that may not be there.",
   "std.abort": "An effect: abort(reason) stops the computation with a reason. A match with an abort(reason) case catches it, and attempt keeps it as an Outcome.",
   "std.log": "An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).",
-  "std.random": "An effect: random() is a Number from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.",
+  "std.random": "An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.",
   "std.time": "An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.",
   "std.wait": "An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.",
   "std.event": "What a page's handler is given when its event comes: the field's value and the key pressed.",
@@ -24,7 +24,7 @@ export const NOTES: Comments = {
   "std.attribute": "Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.",
   "std.html": "A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.",
   "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
-  "std.complex": "A complex number re + im·i, a record of two Numbers. The same + − · work on it (· is the complex product); it has no <.",
+  "std.complex": "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
   "std.order": "What compare answers: before, same or after.",
   "std.outcome": "The result of something that may have been refused: done(value) or refused(reason). The data form of Abort, for keeping it in a list or record.",
   "std.map": "A map from keys to values, kept sorted by key with no key twice. Build one with empty map, as map or put (its constructor map of is private to the library, which keeps the rule); read it with value at.",
@@ -33,7 +33,7 @@ export const NOTES: Comments = {
   // --- numbers. add, subtract, multiply, negate and less than work on
   // every number type through the generic ones; the versions at one type
   // are what they turn into once the type is known.
-  "builtin.arith.add": "a + b, at any number type: Int, Number, Rational, Complex (and records of Numbers through the vectors module).",
+  "builtin.arith.add": "a + b, at any number type: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).",
   "builtin.arith.sub": "a − b, at any number type.",
   "builtin.arith.mul": "a · b, at any number type. At Complex it's the complex product.",
   "builtin.arith.neg": "−a, at any number type.",
@@ -43,7 +43,7 @@ export const NOTES: Comments = {
   "builtin.mul": `a · b for ${n}s: what the generic · is at ${n}.`,
   "builtin.neg": `−a for a ${n}: what the generic − is at ${n}.`,
   "builtin.less": `a < b for ${n}s: what the generic < is at ${n}.`,
-  "builtin.div": "a ÷ b for Numbers (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.",
+  "builtin.div": "a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.",
   "builtin.sqrt": "The square root.",
   "builtin.pow": "a to the power b.",
   "builtin.sin": "Sine of an angle in radians.",
@@ -52,12 +52,12 @@ export const NOTES: Comments = {
   "builtin.atan2": "The angle of the point (x, y) from the x axis, in radians: atan2(y, x).",
   "builtin.exp": "e to the power x.",
   "builtin.log": "The natural logarithm (the debugging effect is Log, a different thing).",
-  "builtin.abs": "The size of a Number without its sign.",
-  "builtin.floor": "The Number rounded down to a whole one, still a Number. whole part gives an Int.",
-  "builtin.float32": "The nearest Number a GPU can hold (32-bit floating point).",
+  "builtin.abs": "The size of a Float64 without its sign.",
+  "builtin.floor": "The Float64 rounded down to a whole one, still a Float64. whole part gives an Int.",
+  "builtin.float32": "The nearest Float64 a GPU can hold (32-bit floating point).",
   "builtin.mod": "The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.",
-  "builtin.show": "A Number as text: show(2.5) is \"2.5\".",
-  "builtin.range": "The Numbers 0, 1, … up to n − 1, as a list.",
+  "builtin.show": "A Float64 as text: show(2.5) is \"2.5\".",
+  "builtin.range": "The Float64s 0, 1, … up to n − 1, as a list.",
   "builtin.int.add": "a + b for Ints: what the generic + is at Int. Ints never overflow.",
   "builtin.int.sub": "a − b for Ints: what the generic − is at Int.",
   "builtin.int.mul": "a · b for Ints: what the generic · is at Int.",
@@ -70,8 +70,8 @@ export const NOTES: Comments = {
   "builtin.int.lowestTerms": "Both divided by their greatest common divisor, the second made positive: how a fraction is kept.",
   "builtin.int.show": "An Int as text.",
   "builtin.int.read": "The Int a text spells, like \"42\". No answer when it isn't one.",
-  "builtin.int.toNumber": "The Int as a Number.",
-  "builtin.int.wholePart": "The Number rounded down, as an Int: whole part(2.7) is 2. No answer for infinity or not-a-number.",
+  "builtin.int.toNumber": "The Int as a Float64.",
+  "builtin.int.wholePart": "The Float64 rounded down, as an Int: whole part(2.7) is 2. No answer for infinity or not-a-number.",
   "builtin.int.range": "The Ints 0, 1, … up to n − 1, as a list.",
 
   // --- true and false, equality, order
@@ -79,7 +79,7 @@ export const NOTES: Comments = {
   "builtin.and": "Both true.",
   "builtin.or": "Either true.",
   "builtin.not": "true becomes false and false true.",
-  "builtin.compare": "How two values are ordered: before, same or after. Numbers by value, exactly (unlike equal, which lets two Numbers within about 1e-9 be equal), with NaN after every other Number; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
+  "builtin.compare": "How two values are ordered: before, same or after. Float64s by value, exactly (unlike equal, which lets two Float64s within about 1e-9 be equal), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
   "builtin.showAny": "Any plain value as text, the way it would be written: show([1, 2]) is \"[1, 2]\".",
 
   // --- text
@@ -109,12 +109,12 @@ export const NOTES: Comments = {
   // --- randomness
   "builtin.seeded": "Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.",
 
-  // --- calculus and records of Numbers
-  "builtin.derivative": "The slope of a function of one Number, as a function. Where a slope can't be read there's no answer (Choice).",
-  "builtin.gradient": "For a function of a record of Numbers (a point, a colour), the record of its slopes along each part.",
-  "builtin.mapParts": "A function applied to each part of a record of Numbers: map parts(f, vec(x, y)) is vec(f(x), f(y)).",
+  // --- calculus and records of Float64s
+  "builtin.derivative": "The slope of a function of one Float64, as a function. Where a slope can't be read there's no answer (Choice).",
+  "builtin.gradient": "For a function of a record of Float64s (a point, a colour), the record of its slopes along each part.",
+  "builtin.mapParts": "A function applied to each part of a record of Float64s: map parts(f, vec(x, y)) is vec(f(x), f(y)).",
   "builtin.zipParts": "A function applied to each pair of parts of two records of the same type.",
-  "builtin.total": "The parts of a record of Numbers added up.",
+  "builtin.total": "The parts of a record of Float64s added up.",
   "builtin.set": "The record with one field changed and the others kept: set((p) => p.x, point, 3). The field can be a path, like (p) => p.home.city.",
 
   // --- the world

@@ -1,6 +1,6 @@
 // A program drawn as a picture: its `colour` of (x, y, time), giving a
-// record of three Numbers, or its `red`, `green` and `blue` of (x, y, time),
-// each giving one Number (red, green, blue each from 0 to 1). x and y run
+// record of three Float64s, or its `red`, `green` and `blue` of (x, y, time),
+// each giving one Float64 (red, green, blue each from 0 to 1). x and y run
 // from −1 to 1 across the shorter side of the picture.
 //
 // The compiler lowers them to the scalar profile with records
@@ -93,7 +93,7 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
   let helper = "", toVec = "";
   if (keys.length === 1) {
     const r = fn("colour").result;
-    if (typeof r === "string" || r.fields.length !== 3 || r.fields.some((g) => g.t !== "f64")) throw new Error("colour must give a record of three Numbers");
+    if (typeof r === "string" || r.fields.length !== 3 || r.fields.some((g) => g.t !== "f64")) throw new Error("colour must give a record of three Float64s");
     const { name, fields } = shader.structs.get(r.key)!;
     toVec = `${name}_rgb`;
     helper = `fn ${toVec}(c: ${name}) -> vec3f { return vec3f(${fields.map((f) => `c.${f}`).join(", ")}); }\n`;

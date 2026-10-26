@@ -115,7 +115,7 @@ test("a definition's name hovers as its own type", () => {
   const titles: Record<string, string> = {};
   const walk = (e: El) => { if (/\bref\b/.test(e.attrs.get("class") ?? "")) titles[e.text] = e.attrs.get("title") ?? ""; for (const k of e.kids) if (typeof k !== "string") walk(k); };
   walk(el);
-  assert.equal(titles.range, "(Number) -> List Number");
+  assert.equal(titles.range, "(Float64) -> List Float64");
   assert.doesNotMatch(titles.map, /Random/);
 });
 

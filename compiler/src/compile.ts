@@ -145,7 +145,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     for (let d = todo.pop(); d !== undefined; d = todo.pop()) reach(d);
   }
   const spends = (def: Id) => info.divergent.has(def) && (opts.steps !== false || underFuel.has(def));
-  // `equal`, one rule on every type (run.ts `sameNumber`). A Number, an Int
+  // `equal`, one rule on every type (run.ts `sameNumber`). A Float64, an Int
   // or a text on its own is compared without the general loop: an Int is
   // always whole, so === is the rule for it.
   // A generic definition that the program uses at one type only compares
@@ -1373,7 +1373,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
       const b = code.nodes[n.body].kind;
       const plainJs = b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda") ? `((${ps}) => {\n${ret(n.body)}\n})` : `((${ps}) => ${ex(n.body)})`;
-      // A block function (List Number to List Number, AUDIO.md) that builds
+      // A block function (List Float64 to List Float64, AUDIO.md) that builds
       // its block also has a version that writes it into an array, for the
       // audio runtimes ($arrayOf).
       const t = ty(n.id);
@@ -1754,7 +1754,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // (`item + rest`, `rest + item`, or × instead), maybe only when a test
     // holds (`if test then rest + 1 else rest`), and whose other case, items
     // and tests have no effects: Int + and × are associative and
-    // commutative (exact, unlike Number's), so the items can be combined
+    // commutative (exact, unlike Float64's), so the items can be combined
     // from the front.
     const ORDERLESS = new Set<Id>([INT_OPS.add, INT_OPS.mul]);
     function pure(id: Id): boolean {
@@ -2022,7 +2022,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     // A fold over `range(n)`, run on n: the cons arm for n − 1 down to 0,
-    // as many as `range` makes (the whole part of n for a Number, none for
+    // as many as `range` makes (the whole part of n for a Float64, none for
     // NaN or below 1). No list.
     function foldCount(n: NodeOf<"fold">, input: string, int: boolean): string {
       const f = foldArms(n), i = temp("i");
@@ -2513,4 +2513,4 @@ const DEPTH = 1000;
 
 const RESERVED = new Set(("break case catch class const continue debugger default delete do else export extends false finally for function if " +
   "import in instanceof new null return super switch this throw true try typeof var void while with yield let static enum await implements " +
-  "package protected interface private public arguments eval undefined NaN Infinity Math Object Array Number String Symbol defs").split(" "));
+  "package protected interface private public arguments eval undefined NaN Infinity Math Object Array Float64 String Symbol defs").split(" "));

@@ -1,4 +1,4 @@
-// WebAssembly for the scalar profile (scalar.ts): Number is f64, Bool is
+// WebAssembly for the scalar profile (scalar.ts): Float64 is f64, Bool is
 // i32, a let is a local, `if` is `if … else … end`, and a call in tail
 // position is `return_call`, so recursion as deep as you like runs in
 // constant stack. Functions the host has and WebAssembly doesn't (sin,
@@ -42,7 +42,7 @@ const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
 };
-// Number arithmetic the runtime writes itself (mod, from musl's fmod): it
+// Float64 arithmetic the runtime writes itself (mod, from musl's fmod): it
 // alone doesn't make a module need texts.
 const small = (v: bigint) => v >= -(2n ** 30n) && v < 2n ** 30n;
 // float32: to f32 and back, which rounds to the nearest binary32 value.
@@ -121,7 +121,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Number" : t === "i32" ? "Bool" : t === "int" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
   };
 
   // ---- binary
@@ -289,7 +289,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   // _start: main, given the arguments; an abort's reason to standard
-  // error and exit 1, else the exit code from an Int or a Number, or 0.
+  // error and exit 1, else the exit code from an Int or a Float64, or 0.
   if (wasi) {
     const m = main!, r = m.result;
     rts.push({
@@ -678,7 +678,7 @@ export function textList(ex: Record<string, (...xs: never[]) => unknown>, xs: st
 
 // A program's main in WebAssembly, as run.ts runProgram runs it: given
 // the arguments (a list of texts) or nothing, it gives the exit code (an
-// Int or a Number), or anything else for 0; an Abort nothing handled
+// Int or a Float64), or anything else for 0; an Abort nothing handled
 // writes its reason to standard error and exits with 1.
 export async function runMain(lowered: Lowered, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
   const f = lowered.funcs.find((g) => g.name === name && !g.inner && !g.budgeted);

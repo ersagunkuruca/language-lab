@@ -20,7 +20,7 @@ node --test test/backwards.test.ts
   have two modes; each node does what the known values allow.
 - **How?** Two pieces of machinery, used together. Data goes through
   **unification**: a constructor run backwards takes its value apart, like
-  Prolog. Numbers become **equations**, handed to the existing solver as
+  Prolog. Float64s become **equations**, handed to the existing solver as
   soon as one can be solved. The search is miniKanren's, a lazy fair
   stream, so an infinite branch can't starve a finite one (miniKanren by
   Friedman, Byrd and Kiselyov, [minikanren.org](http://minikanren.org); the
@@ -291,7 +291,7 @@ derivatives of data), calls of builtins that aren't arithmetic (`floor`),
 and `solve` nodes (implicit differentiation would do it). `differentiate`,
 the editor's gesture, refuses those with `NotDifferentiable`. At run time
 `derivative` can't refuse, so it puts `fail()` where it can't read a slope:
-its result may fail, `(Number) -[Choice]-> Number`, and only the pieces
+its result may fail, `(Float64) -[Choice]-> Float64`, and only the pieces
 that need the missing slope fail. `derivative(sqrt)` works too: a builtin
 is read as `x ↦ sqrt(x)`.
 

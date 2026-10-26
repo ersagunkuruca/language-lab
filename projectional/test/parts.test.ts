@@ -1,6 +1,6 @@
-// Records of Numbers taken part by part: `map parts`, `zip parts` and
+// Records of Float64s taken part by part: `map parts`, `zip parts` and
 // `total` (std.ts), the constraint that types them (types.ts, "a record of
-// Numbers"), and the vectors module written on them (library/vectors.json).
+// Float64s"), and the vectors module written on them (library/vectors.json).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -54,7 +54,7 @@ const errorAt = (p: ReturnType<typeof program>, d: Id) => {
 test("the vectors module is published as built: rebuilding gives the same ids", () => {
   assert.deepEqual(buildVectors(), VECTORS);
   assert.equal(verify(VECTORS, LIBRARY.code, true), null);
-  // Every definition is generic over a record of Numbers, and its pin says
+  // Every definition is generic over a record of Float64s, and its pin says
   // so; plus, minus and times are the one + − ·, so over any number type.
   for (const d of VECTORS.exports) {
     const old = ["plus", "minus", "times"].includes(VECTORS.names[d]);
@@ -62,7 +62,7 @@ test("the vectors module is published as built: rebuilding gives the same ids", 
   }
 });
 
-test("one definition for points, colours and Numbers", () => {
+test("one definition for points, colours and Float64s", () => {
   const p = program();
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const fields = (v: Value) => (v as { fields: number[] }).fields;
@@ -75,8 +75,8 @@ test("one definition for points, colours and Numbers", () => {
 test("adding a colour to a point, or taking the parts of text, is a type error", () => {
   const p = program();
   assert.match(errorAt(p, p.defs.colourPlusPoint).join("; "), /needs Vec here, got Colour/);
-  assert.match(errorAt(p, p.defs.textParts).join("; "), /total works only on records of Numbers/);
-  assert.match(errorAt(p, p.defs.notAllNumbers).join("; "), /total works only on records of Numbers/);
+  assert.match(errorAt(p, p.defs.textParts).join("; "), /total works only on records of Float64s/);
+  assert.match(errorAt(p, p.defs.notAllNumbers).join("; "), /total works only on records of Float64s/);
   // The function runs once per part, so it may not do anything else.
   assert.match(errorAt(p, p.defs.printing).join("; "), /Console/);
   for (const d of [p.defs.moved, p.defs.brighter, p.defs.across, p.defs.number, p.defs.shift]) assert.deepEqual(errorAt(p, d), [], p.names[d]);
@@ -95,7 +95,7 @@ test("part by part runs backwards: which point, shifted by (1, 1, 1), is (5, 0, 
   assert.equal(by.values[sl.params[0]], 3);
 });
 
-// gradient: a function of a record of Numbers differentiated along each
+// gradient: a function of a record of Float64s differentiated along each
 // part (derive.ts), and derivative through records on the way.
 function gradients() {
   const k = new Lang(LIBRARY.code);
@@ -108,7 +108,7 @@ function gradients() {
   const square = fn("square", ["p"], (p) => k.call(lib("dot"), p, p));
   const grad = (f: Id, at: Id) => k.call(k.call(S.gradient, f), at);
   const defs = {
-    // square is generic (any record of Numbers): the point says which.
+    // square is generic (any record of Float64s): the point says which.
     ofSquare: def("of square", () => grad(k.x(square), lits(1, 2, 3))),
     ofProduct: def("of product", () => grad(k.fn(["q"], (q) => k.call(B.mul, k.call(Vec.f["vec.x"], q), k.call(Vec.f["vec.y"], q))), lits(3, 5, 7))),
     ofDistance: def("of distance", () => grad(k.fn(["q"], (q) => k.call(lib("distance"), q, lits(1, 0, 0))), lits(1, 2, 2))),

@@ -25,7 +25,7 @@ test("queens: Choice does the search, handlers decide what the answer is", () =>
   const p = load("queens");
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
-  assert.equal(typeOf(p, info, "queens"), "(Number) -[Choice]-> List Number");
+  assert.equal(typeOf(p, info, "queens"), "(Float64) -[Choice]-> List Float64");
   assert.equal(typeOf(p, info, "keep"), "(List a, (a) -[Choice, e]-> Bool) -[e]-> List a");
   assert.equal(typeOf(p, info, "main"), "() -[Console]-> Unit");
   const out = run(p.code, info, p.named("main"));
@@ -40,10 +40,10 @@ test("algebra: folds are total, Newton's method carries Diverge until fuel turns
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
   assert.equal(typeOf(p, info, "derivative"), "(expression) -> expression");
-  assert.equal(typeOf(p, info, "evaluate"), "(expression, Number) -[Choice]-> Number");
+  assert.equal(typeOf(p, info, "evaluate"), "(expression, Float64) -[Choice]-> Float64");
   assert.equal(typeOf(p, info, "for each"), "(List a, (a) -[e]-> b) -[e]-> Unit");
-  assert.equal(typeOf(p, info, "newton"), "(expression, expression, Number) -[Choice, Diverge]-> Number");
-  assert.equal(typeOf(p, info, "root near"), "(expression, Number) -[Choice]-> Number");
+  assert.equal(typeOf(p, info, "newton"), "(expression, expression, Float64) -[Choice, Diverge]-> Float64");
+  assert.equal(typeOf(p, info, "root near"), "(expression, Float64) -[Choice]-> Float64");
   const out = run(p.code, info, p.named("main"));
   assert.deepEqual(out.slice(0, 4), ["f(x)  = x·x − 2", "f′(x) = x + x", "f(2)  = 2", "root near 1: 1.414213562"]);
   assert.ok(out.includes("root near 1: none found"));
@@ -88,12 +88,12 @@ test("the palette leaves out what would be a type error, and the checker catches
   const info = infer(holed, p.pres.names);
   const offered = fillings(holed, info, sumArm.body).map((f) => ("target" in f ? p.pres.names[f.target] : f.kind));
   assert.ok(offered.includes("l′") && offered.includes("at") && offered.includes("add"));
-  assert.ok(!offered.includes("display"), "display returns Text, not Number");
+  assert.ok(!offered.includes("display"), "display returns Text, not Float64");
   assert.ok(!offered.includes("print"), "print returns Unit");
   const forced = fillHole(holed, p.pres.names, sumArm.body, { kind: "call", target: p.named("display"), arity: 1, type: info.holes.get(sumArm.body)!.expected });
   const errors = infer(forced.code, forced.names).errors;
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /expected Number, got Text/);
+  assert.match(errors[0].message, /expected Float64, got Text/);
 });
 
 test("a case analysis is created with every case, and a new case reaches every analysis", () => {
@@ -190,13 +190,13 @@ test("the block view shows if, folds and lets, with the inferred type on top", (
   const info = infer(p.code, p.pres.names);
   const text = renderBlocks(p.code, p.pres, info, p.named("newton"));
   assert.equal(text.split("\n").slice(-4).join("\n"), [
-    "newton : (expression, expression, Number) -[Choice, Diverge]-> Number",
+    "newton : (expression, expression, Float64) -[Choice, Diverge]-> Float64",
     "newton(f, slope, guess) =",
     "  next = guess − evaluate(f, guess) / evaluate(slope, guess)",
     "  if abs(next − guess) < 1e-12 then next else newton(f, slope, next)",
   ].join("\n"));
   const type = renderBlocks(p.code, p.pres, info, p.named("expression"));
-  assert.match(type, /^type expression\n {2}\| number\(value: Number\)\n {2}\| x\n/);
+  assert.match(type, /^type expression\n {2}\| number\(value: Float64\)\n {2}\| x\n/);
   void baseNames;
 });
 
@@ -211,10 +211,10 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   const p = load("relations");
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
-  assert.equal(typeOf(p, info, "split"), "(Number, Number) -> Pair Number Number");
-  assert.equal(typeOf(p, info, "missing addend"), "(Number, Number) -> Number");
-  assert.equal(typeOf(p, info, "to polar"), "(Number, Number) -[Choice]-> Pair Number Number");
-  assert.equal(typeOf(p, info, "square roots"), "(Number) -> List Number");
+  assert.equal(typeOf(p, info, "split"), "(Float64, Float64) -> Pair Float64 Float64");
+  assert.equal(typeOf(p, info, "missing addend"), "(Float64, Float64) -> Float64");
+  assert.equal(typeOf(p, info, "to polar"), "(Float64, Float64) -[Choice]-> Pair Float64 Float64");
+  assert.equal(typeOf(p, info, "square roots"), "(Float64) -> List Float64");
   assert.deepEqual(run(p.code, info, p.named("main")), [
     "split(10, 4) = 7, 3",
     "missing addend(3, 10) = 7",

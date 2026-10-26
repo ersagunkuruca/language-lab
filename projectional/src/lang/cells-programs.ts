@@ -68,7 +68,7 @@ function widgets(k: Lang) {
         k.seq(k.call(enter, read(draft)), k.call(C.write, draft, k.lit(""))),
         k.unitValue)),
     ], []))));
-  // A slider for a cell holding a whole Number; a value that doesn't read
+  // A slider for a cell holding a whole Float64; a value that doesn't read
   // as one changes nothing.
   const slider = k.def("slider");
   k.define(slider, k.fn(["name", "low", "high", "value"], (name, low, high, c) => {
@@ -193,7 +193,7 @@ export function fractionsProgram() {
     ], k.text(k.lit("; "), k.call(TEXT_OPS.joinAll, k.call(map, t, I.show), k.lit(", ")))), k.lit("]")) },
   ])));
 
-  // The value of the terms read so far (a convergent), as a Number.
+  // The value of the terms read so far (a convergent), as a Float64.
   const value = k.def("value");
   k.define(value, k.fn(["terms"], (ts) => k.fold(ts, [
     { variant: NIL, names: [], body: () => k.lit(0) },

@@ -98,7 +98,7 @@ export function vectors() {
   // v over its length, field by field: normalize(v) on a GPU.
   const unit = k.def("unit");
   k.define(unit, k.fn(["v"], (v) => k.call(vec, k.call(B.div, k.call(X, v), k.call(length, v)), k.call(B.div, k.call(Y, v), k.call(length, v)), k.call(B.div, k.call(Z, v), k.call(length, v)))));
-  // The same Number in every part: vec3f(x).
+  // The same Float64 in every part: vec3f(x).
   const diagonal = k.def("diagonal");
   k.define(diagonal, k.fn(["x"], (x) => k.call(vec, x, x, x)));
   const farther = k.def("farther");
@@ -119,7 +119,7 @@ export function vectors() {
   const orZero = k.def("or zero");
   k.define(orZero, k.fn(["o"], (o) => k.match(o, [{ variant: SOME, names: ["x"], body: ([x]) => x }, { variant: NONE, names: [], body: () => n(0) }])));
   // An input never looked at can be anything; the profile takes it at
-  // whatever each call passes (a Number, a Vec).
+  // whatever each call passes (a Float64, a Vec).
   const twice = k.def("twice ignoring");
   k.define(twice, k.fn(["x", "ignored"], (x) => k.call(B.mul, n(2), x)));
   const numbers = k.def("twice a number");
@@ -132,8 +132,8 @@ export function vectors() {
 }
 
 // The vectors module (projectional/src/lang/vectors-source.ts) on a
-// program's own point and colour types, and on plain Numbers: each module
-// definition is written once, for every record of Numbers.
+// program's own point and colour types, and on plain Float64s: each module
+// definition is written once, for every record of Float64s.
 export function parts() {
   const k = new Lang(LIBRARY.code);
   const num = () => k.tref(NUMBER);
@@ -152,7 +152,7 @@ export function parts() {
     // Colours.
     fade: def("fade", ["r", "g", "b", "t"], (r, g, b, t) => k.call(lib("mix"), rgb(r, g, b), rgb(k.lit(0.55), k.lit(0.68), k.lit(0.85)), t)),
     light: def("light", ["r", "g", "b", "by"], (r, g, b, by) => k.call(lib("clamp"), k.call(lib("times"), k.call(lib("scale"), by, rgb(r, g, b)), rgb(k.lit(1), k.lit(0.9), k.lit(0.8))), k.lit(0), k.lit(1))),
-    // A Number is a record of one part.
+    // A Float64 is a record of one part.
     halfway: def("halfway", ["a"], (a) => k.call(lib("mix"), a, k.lit(10), k.lit(0.5))),
     size: def("size", ["x"], (x) => k.call(lib("magnitude"), k.call(B.neg, x))),
   };
@@ -161,8 +161,8 @@ export function parts() {
   return { code, names, info: infer(code, names), defs, Vec, Colour };
 }
 
-// Structural equal on lists of Numbers: `same` compares two lists with
-// one more number in front of each (which makes them lists of Numbers),
+// Structural equal on lists of Float64s: `same` compares two lists with
+// one more number in front of each (which makes them lists of Float64s),
 // by the evaluator's rule for each number.
 export function sameLists() {
   const k = new Lang();
@@ -464,7 +464,7 @@ export function fractionInputs(n: number, count: number): bigint[][] {
 }
 
 // compare (L66) at each kind of plain type, and the prelude's sort, which
-// is written with it: Numbers, Ints, Text, Bools, lists, pairs, an
+// is written with it: Float64s, Ints, Text, Bools, lists, pairs, an
 // Optional's cases and fractions by value.
 export function ordered() {
   const k = new Lang(LIBRARY.code);
@@ -500,7 +500,7 @@ export function ordered() {
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
 }
 
-// Inputs for ordered(), by function: near and equal Numbers, Ints past
+// Inputs for ordered(), by function: near and equal Float64s, Ints past
 // 2⁶⁴, texts by code point (é after z, emoji after both), lists that share
 // a start, fractions with zero bottoms.
 export function orderedInputs(): Record<string, unknown[][]> {

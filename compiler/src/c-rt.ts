@@ -228,7 +228,7 @@ static char *lab__show(lab_int x, size_t *len) {
   *len = k;
   return s;
 }
-// A whole Number (finite) as an Int.
+// A whole Float64 (finite) as an Int.
 static lab_int lab__of_double(double f) {
   if (f > -4611686018427387904.0 && f < 4611686018427387904.0) return LAB_SMALL((int64_t)f);
   int e;
@@ -246,7 +246,7 @@ static lab_int lab__of_double(double f) {
   free(d);
   return r;
 }
-// JavaScript's String(x) for a Number (ECMA-262 Number::toString): the
+// JavaScript's String(x) for a Float64 (ECMA-262 Float64::toString): the
 // fewest digits that read back as x (the first precision whose correctly
 // rounded digits do), then whole up to 21 digits, a point inside, 0.000ddd
 // down to 10⁻⁶, else d.ddde±x.
@@ -352,7 +352,7 @@ const FNS: Record<string, Fn> = {
   return r;
 }` },
   "int.show": { uses: [], c: `static lab_cell *lab_int_show(lab_int a) { size_t n; char *s = lab__show(a, &n); lab_cell *t = lab__text_of(s, n); free(s); lab_int_drop(a); return t; }` },
-  // The nearest Number: exact while it fits 53 bits, else strtod's
+  // The nearest Float64: exact while it fits 53 bits, else strtod's
   // correct rounding of the digits.
   "int.toNumber": { uses: [], c: `static double lab_int_toNumber(lab_int a) { if (LAB_IS_SMALL(a)) return (double)LAB_VAL(a); size_t n; char *s = lab__show(a, &n); double d = strtod(s, 0); free(s); lab_int_drop(a); return d; }` },
   "int.wholePart": { uses: [], c: `static lab_int lab_int_wholePart(double x) { if (!isfinite(x)) { lab_st = 1; return LAB_SMALL(0); } return lab__of_double(floor(x)); }` },
@@ -380,7 +380,7 @@ const FNS: Record<string, Fn> = {
 }` },
   "number.show": {
     uses: [],
-    // A whole Number as it is, any other rounded to 9 places
+    // A whole Float64 as it is, any other rounded to 9 places
     // (Math.round(x · 1e9) / 1e9: the nearest whole number, halves up).
     c: `static lab_cell *lab_number_show(double x) {
   if (!(isfinite(x) && floor(x) == x)) {

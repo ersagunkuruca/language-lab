@@ -27,7 +27,7 @@ is an error the runtime reports, as in OCaml 5. Nothing else changes:
   runtime is a plain program.
 
 ```
-effect Yield = yield(item: Number) returns Unit, later
+effect Yield = yield(item: Float64) returns Unit, later
 
 match count up(3)                         -- yields 1, 2, 3
 | yield(item) with rest → cons(item, rest(unit))

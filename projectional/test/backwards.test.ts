@@ -139,11 +139,11 @@ test("backwards: types say Choice, Diverge when the search may not end, and prin
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
   const typeOf = (n: string) => showType(info.typeOf.get(p.named(n))!, p.pres.names);
-  assert.equal(typeOf("magnitudes to"), "(Number) -> List Number");
+  assert.equal(typeOf("magnitudes to"), "(Float64) -> List Float64");
   assert.equal(typeOf("who was greeted"), "(Text) -> Text");
   assert.equal(typeOf("cuts"), "(Text) -> List Text");
-  assert.equal(typeOf("read numbers"), "(Text) -[Choice]-> List Number");
-  assert.equal(typeOf("height on the ray"), "(Number, Number) -[Choice]-> Number");
+  assert.equal(typeOf("read numbers"), "(Text) -[Choice]-> List Float64");
+  assert.equal(typeOf("height on the ray"), "(Float64, Float64) -[Choice]-> Float64");
   // Without fuel it's still only Choice: reading text back unfolds a fold,
   // but each step reads a shorter text, so it ends (modes.ts). It was
   // typed Diverge before the mode analysis.
@@ -151,7 +151,7 @@ test("backwards: types say Choice, Diverge when the search may not end, and prin
   const fuel = get(p.code, read.body, "call");
   const thunk = get(p.code, fuel.args[1], "lambda");
   const bare = replace(p.code, read.body, (c) => ({ ...c.nodes[thunk.body] } as never));
-  assert.equal(showType(infer(bare, p.pres.names).typeOf.get(p.named("read numbers"))!, p.pres.names), "(Text) -[Choice]-> List Number");
+  assert.equal(showType(infer(bare, p.pres.names).typeOf.get(p.named("read numbers"))!, p.pres.names), "(Text) -[Choice]-> List Float64");
   // A search that may not end is Diverge, and says why: a list from how
   // many items it has counts down whole numbers, which don't get smaller.
   const c = program((k) => {
@@ -239,7 +239,7 @@ test("a function in a variable, closed where it was first used, can be used wher
       k.call(shown, view))));
   }, LIBRARY.code);
   assert.deepEqual(c.info.errors, []);
-  assert.equal(showType(c.info.typeOf.get(c.named("both"))!, c.names), "((Number) -[Cells, Diverge, Network, Log, Time]-> Text, Text) -[Cells, Console, Diverge, Network, Log, Time]-> Html");
+  assert.equal(showType(c.info.typeOf.get(c.named("both"))!, c.names), "((Float64) -[Cells, Diverge, Network, Log, Time]-> Text, Text) -[Cells, Console, Diverge, Network, Log, Time]-> Html");
 });
 
 test("backwards: main prints what each function run backwards gives", () => {
@@ -285,9 +285,9 @@ test("calculus: derivatives are generated as ordinary definitions and agree with
   // Where sinc has no value, neither has its derivative.
   assert.equal(at("sinc′", 0), undefined);
   const typeOf = (n: string) => showType(info.typeOf.get(p.named(n))!, p.pres.names);
-  assert.equal(typeOf("cubic′"), "(Number) -> Number");
-  assert.equal(typeOf("sinc′"), "(Number) -[Choice]-> Number");
-  assert.equal(typeOf("∂polynomial/∂x"), "(List Number, Number) -> Number");
+  assert.equal(typeOf("cubic′"), "(Float64) -> Float64");
+  assert.equal(typeOf("sinc′"), "(Float64) -[Choice]-> Float64");
+  assert.equal(typeOf("∂polynomial/∂x"), "(List Float64, Float64) -> Float64");
 });
 
 test("calculus: derivative(f) at run time, Newton on real functions, zeros by running backwards", () => {

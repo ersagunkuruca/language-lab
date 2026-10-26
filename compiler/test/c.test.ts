@@ -330,7 +330,7 @@ test("Text in C: parsing, words, slugs and tallies give the evaluator's texts", 
   sameAndFreed(build(b.lowered), [[b.at("greet"), ["Ada"]], [b.at("words"), [toList(["a", "bb", ""])]]], b.want, b.label);
 });
 
-test("Numbers shown in C: JavaScript's shortest digits, rounded as the evaluator rounds", { skip }, () => {
+test("Float64s shown in C: JavaScript's shortest digits, rounded as the evaluator rounds", { skip }, () => {
   const v = inC("converter");
   let seed = 3n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;

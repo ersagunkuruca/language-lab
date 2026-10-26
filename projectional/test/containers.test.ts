@@ -29,7 +29,7 @@ const C = CELL_OPS;
 type Effect = "Console" | "Choice" | "Diverge" | "Update";
 const ID: Record<Effect, Id> = { Console: CONSOLE, Choice: CHOICE, Diverge: DIVERGE, Update: UPDATE };
 
-// A body of type Number that does the effect.
+// A body of type Float64 that does the effect.
 function doing(k: Lang, eff: Effect, spin: Id): Id {
   switch (eff) {
     case "Console": return k.seq(k.call(S.print, k.lit("hi")), k.lit(1));
@@ -41,7 +41,7 @@ function doing(k: Lang, eff: Effect, spin: Id): Id {
 
 const el = (k: Lang, tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
 
-// Each container: given a definition `f : () -[eff]-> Number`, the body of
+// Each container: given a definition `f : () -[eff]-> Float64`, the body of
 // `main`, which keeps f somewhere and then runs it (or hands it to whoever
 // runs it).
 const containers: Record<string, (k: Lang, f: Id, eff: Effect) => Id> = {

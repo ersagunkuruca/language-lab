@@ -121,7 +121,7 @@ export function buildHtml(): Module {
     [rule]: "A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.",
     [media]: "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
     [stylesheet]: "A style element holding these rules.",
-    [px]: "A length in pixels, from a Number or an Int.",
+    [px]: "A length in pixels, from a Float64 or an Int.",
     [joined]: "The texts with between between each two of them.",
   };
   const p = publish(merge(known, k.code), k.names, offered, known);

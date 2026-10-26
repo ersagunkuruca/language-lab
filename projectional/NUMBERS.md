@@ -1,4 +1,4 @@
-# Numbers, and programs that don't say how their data is stored
+# Float64s, and programs that don't say how their data is stored
 
 Two requests that turn out to have one answer:
 
@@ -75,7 +75,7 @@ cd ../compiler && npm test          # includes the rewritten program, compiled
   Comparing two exact reals might never finish: √2 · √2 never gives its
   first term, and `with fuel` turns that into "undecided".
 - **Derivatives?** Dual numbers (`Cl(0, 0, 1)`, ε² = 0) are a
-  representation of `Number` that carries a slope. Running a function on
+  representation of `Float64` that carries a slope. Running a function on
   them is forward-mode automatic differentiation: a second implementation
   of `derivative`, to test `derive.ts` against.
 
@@ -258,7 +258,7 @@ folds.
 reals, but `meaning(a ⊕ b) ≠ meaning(a) + meaning(b)` exactly. So a
 representation can be marked approximate, its laws are tested with a
 tolerance, and the chooser never picks an approximate representation for a
-type the program declared exact. Today's `Number` is the real numbers
+type the program declared exact. Today's `Float64` is the real numbers
 represented approximately by float64. That stays the default for decimals,
 and now it's said out loud.
 
@@ -267,15 +267,15 @@ and now it's said out loud.
 thing in the evaluator (float64) and another on the GPU, and the GPU test
 can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
 
-- **A representation of `Number`, not a new type.** The program is written
-  on `Number` as now, and `Float32` is chosen for it in
+- **A representation of `Float64`, not a new type.** The program is written
+  on `Float64` as now, and `Float32` is chosen for it in
   `representations.json`, as Binary is for `Nat`. Uniformity: no second
   number type to convert to and from, and no node that looks different.
   It is marked approximate, so the chooser never picks it by cost alone;
   a program (or the shader page) asks for it.
-- **What it does:** every `Number` job rounds its result to the nearest
+- **What it does:** every `Float64` job rounds its result to the nearest
   binary32 value (round to nearest, ties to even: JS `Math.fround`), and
-  literals are rounded once. The representing type is `Number` itself, and
+  literals are rounded once. The representing type is `Float64` itself, and
   `meaning` is the identity: every f32 value is a float64 value. So the
   rewrite only swaps each builtin for its rounded copy (`add` becomes
   `round32(a + b)`), with one new builtin, `round to Float32`. That needs
@@ -290,7 +290,7 @@ can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
 - **What it doesn't:** no f16, no fused multiply-add choice (WGSL may fuse
   `a·b + c`; the representation rounds twice and says so), and WASM stays
   f64. The WGSL printer is unchanged: under `Float32` it prints what it
-  prints now, and its comment that "Number is f32" becomes a fact of the
+  prints now, and its comment that "Float64 is f32" becomes a fact of the
   program instead of the target's choice.
 
 The steps, one PR each: the builtin and represent.ts taking a builtin type
@@ -298,8 +298,8 @@ The steps, one PR each: the builtin and represent.ts taking a builtin type
 slope of what it rounds, and a representation may have `literal`, a
 function given each literal, and `approximate`, which the chooser skips);
 the `Float32` representation with its laws tested with a tolerance against
-`Number` (done: `withFloat32` in src/lang/float32.ts adds a rounded job for
-each Number builtin whose answer may not be an f32, and
+`Float64` (done: `withFloat32` in src/lang/float32.ts adds a rounded job for
+each Float64 builtin whose answer may not be an f32, and
 test/float32.test.ts checks each to within half a step); js-scalar's
 `Math.fround` and gpu.ts checking `+ − ×` exactly (done: a function made
 only of those, negate, abs, floor and comparisons is checked exactly
@@ -357,7 +357,7 @@ Other representations run the same fold differently:
 |---|---|---|---|---|---|
 | `cells` | any data type | one object per case | itself | spine loop (chains), explicit stack (trees), `parts` (nested) | today's loops |
 | `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | built |
-| `counted` | `List Number` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
+| `counted` | `List Float64` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
 | `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program |
 | `array` | `List a` | a JS array and a start | `items` | an index loop | built in the compiler for lists walked whole, and for lists consed onto then walked (kept from the other end); the start, for matches, is next (GAPS.md G21) |
@@ -432,7 +432,7 @@ text, characters outside the basic plane, `range(0)`.
    about 31 ms (best of 40 runs, the ideal takes about 21 ms). The rest
    of the tokenizer's cost is the token list it builds and `keep`'s second
    one, which is the `build` row's job.
-3. `counted`: a fold over `range(n)`. **Done**, for `range` on Number
+3. `counted`: a fold over `range(n)`. **Done**, for `range` on Float64
    and on Int, without `Choice`. `queens` folds over `range` with
    `Choice`, which is a generator and still builds the list; a fold with
    `Choice` asking the table too is a later step.
@@ -521,7 +521,7 @@ against 0.09 ms. `lab run` and `lab compile` choose too: a program folder with a
 uses (`lab run examples/numbers` prints 18! instead of running out of
 memory), and `--as-defined` runs the definitions as written.
 
-## Number systems, one by one
+## Float64 systems, one by one
 
 Each row is a meaning, written as ordinary definitions in std, and the
 representations behind it. "Backwards" is what running the arithmetic
@@ -706,10 +706,10 @@ type had its own `+` displayed alike, and generic code took a record of
 operations that the editor filled in. Ersagun chose the replacement on
 2026-10-24, after [LANGUAGE-REVIEW-2026-10-24.md](LANGUAGE-REVIEW-2026-10-24.md),
 Part 2, which gives the reasons. The vectors module had already gone this
-way, and Int and Number had shown what two `+`s look like in practice.*
+way, and Int and Float64 had shown what two `+`s look like in practice.*
 
 **What the programmer sees.** One `+`, `−`, `·`, `−x` and `<` (and later
-`÷`), offered wherever both sides have the same number type: Number, Int,
+`÷`), offered wherever both sides have the same number type: Float64, Int,
 a record whose fields are all one number type (a `Vec`, a `Colour`), and
 later Rational, Complex and the other algebras. A definition written with
 them and no literal, like `smaller(a, b) = if a < b then a else b`, works
@@ -719,33 +719,33 @@ on every such type. Its type says so: `(a, a) -> a, a a number type`.
 constrained type: `(a, a) -> a` where `a` is *arithmetic*. The constraint
 generalises the vectors module's `numbers` variables (types.ts): a variable
 that may only stand for a type that has the operation. Literals pin the
-type, as now, so `x + 1` is a Number unless the hole wants an Int. Stored
-programs that use the per-type builtins (`builtin.add` for Number,
-`builtin.int.add` for Int) keep them. Those builtins are now *the Number
+type, as now, so `x + 1` is a Float64 unless the hole wants an Int. Stored
+programs that use the per-type builtins (`builtin.add` for Float64,
+`builtin.int.add` for Int) keep them. Those builtins are now *the Float64
 and Int entries of the table*, the operation `+` resolves to at each type.
 No existing program changes, and no meaning hash moves.
 
 **How it runs: resolved by type, before anything runs it.** A small Int
-and a Number are the same JavaScript value (an Int is a JS number while it
+and a Float64 are the same JavaScript value (an Int is a JS number while it
 is safe), so `+` can't choose by looking at the value. It is chosen by the
 type, once, by a code → code pass `resolveArithmetic(code, info)`
 (src/lang/arith.ts), the way `represent` is a code → code pass:
 
 1. Every call of a generic operation whose type is known at the call
-   becomes the type's own operation: `builtin.add` on Number,
+   becomes the type's own operation: `builtin.add` on Float64,
    `builtin.int.add` on Int, `zip parts` of the scalar's operation on a
    record.
-2. A generic definition, used at Int in one place and at Number in
+2. A generic definition, used at Int in one place and at Float64 in
    another, is copied once for each type it is used at (as MLton and the
    compiler's scalar profile already do), and each copy resolves as in 1.
    Hindley-Milner has no polymorphic recursion, so this always ends.
 3. A definition that is run directly while its type is still open (the
-   Run pane on `smaller` with no caller) defaults to Number, as Haskell
+   Run pane on `smaller` with no caller) defaults to Float64, as Haskell
    defaults `Num` to `Integer`.
 
 The evaluator, relate.ts, derive.ts, modes.ts and every compiler target
 get the resolved program, so none of them sees a generic operation, and
-**nothing dispatches at run time**: Number + Number is one machine add, and
+**nothing dispatches at run time**: Float64 + Float64 is one machine add, and
 Int + Int is Int's builtin on every target. The pass is the identity on a
 program with no generic operation, which today is all of them.
 
@@ -765,16 +765,16 @@ hierarchy is the map of which structures to name.
 **Steps**, one PR each:
 
 1. *The constraint and the pass.* `arithmetic` variables in types.ts
-   (Number, Int, records of one of them); generic `+ − · −x <` builtins;
+   (Float64, Int, records of one of them); generic `+ − · −x <` builtins;
    `resolveArithmetic` with copies and defaulting, run before the
    evaluator and the compiler; tests that a generic definition gives the
-   same answers as the hand-written Int and Number ones, evaluated and
+   same answers as the hand-written Int and Float64 ones, evaluated and
    compiled. Not yet offered by the palette.
 2. *The palette and the views* (with the editor lane): the palette offers
    the generic `+` (and stops offering the per-type ones for new code);
    types print the constraint: `twice : (a) -> a where a is a number
    type`, and `smaller`'s a "is a number type with <". Done, with
-   derivatives of the generic operations taken as Number's.
+   derivatives of the generic operations taken as Float64's.
 3. *The vectors module* written with `+`, `−` and `·`; `plus`, `minus`
    and `times` kept as names for a release, then removed. Done: they are the
    generic operations under their old names, and `distance`, `reflect`
@@ -783,8 +783,8 @@ hierarchy is the map of which structures to name.
    compiler lane to measure on each target. Done: `examples/generic`, a
    polynomial by Horner's rule with no literal in it (`x − x` is its
    zero), so its type is `(List a, a) -> a where a is a number type`;
-   `main` evaluates it at an Int, a Number and a fraction, and `walk` adds
-   up 100,000 of its values at Int and Number (300 at fractions), the loop
+   `main` evaluates it at an Int, a Float64 and a fraction, and `walk` adds
+   up 100,000 of its values at Int and Float64 (300 at fractions), the loop
    to measure. The compiled JavaScript prints what the evaluator prints
    (compiler/test/compile.test.ts).
 5. Then Rational and Complex (LANGUAGE-REVIEW-2026-10-24 L39, L40), each
@@ -796,13 +796,13 @@ hierarchy is the map of which structures to name.
    the generic operations to; `fraction(top, bottom)` and `divide
    fractions` have no answer at a zero bottom; `show fraction` prints 3/4.
    `1/10 + 2/10 = 3/10` holds exactly. Still to do: relate.ts's linear step
-   over fractions (running backwards stays at Number), and `lowest terms`
+   over fractions (running backwards stays at Float64), and `lowest terms`
    in the WASM, C and WGSL targets.
    **Complex done (L40):** `std.complex`, one case `complex(re, im)` of
-   Numbers. Its `+ − · −x` are prelude definitions (`multiply complex` is
+   Float64s. Its `+ − · −x` are prelude definitions (`multiply complex` is
    (ac − bd) + (ad + bc)i) that arith.ts resolves the generic operations
    to, from the same table as Rational's; it has no `<`, so `smaller` on
-   it is a type error. Being a record of Numbers, it also takes the parts
+   it is a type error. Being a record of Float64s, it also takes the parts
    builtins and the vectors module (`magnitude` is |z|), on the GPU it is a
    `vec2f`, and WebAssembly takes it as two f64s, with nothing new in any
    back end. The prelude adds `as complex`, `i`, `complex conjugate`,
@@ -822,7 +822,7 @@ hierarchy is the map of which structures to name.
 
 Units become a type index on any number system: `Rational m`,
 `Multivector Cl3 m/s`. The dimension vectors in `src/units.ts` stay as they
-are, and the typed core's `Number` gains them as a parameter (the "units as
+are, and the typed core's `Float64` gains them as a parameter (the "units as
 a type parameter" item in LANGUAGE.md). Clifford coefficients share one
 unit per multivector, except that grades can carry different units in
 physics (`Cl(3, 0)` electromagnetism). That's a later refinement, and the

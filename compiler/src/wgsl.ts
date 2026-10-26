@@ -1,10 +1,10 @@
 // WGSL for the scalar profile (scalar.ts): the same lowering wasm.ts
-// prints, printed a second time for the GPU. Number is `f32` (GPUs have no
+// prints, printed a second time for the GPU. Float64 is `f32` (GPUs have no
 // f64 to speak of, so results are close to the evaluator's, not equal),
 // Bool is `bool`, a record is a `struct`, a let is a `let`, and `if` is an
 // `if` statement. Lower with `{ records: true }` to have records.
 //
-// A record of two to four Numbers (a point, a direction, a colour) is
+// A record of two to four Float64s (a point, a direction, a colour) is
 // stored as a WGSL vector instead, `vec2f` to `vec4f`, its fields in order
 // as .x .y .z .w. The program doesn't say "vector": that's how this target
 // stores such a record, the way Peano naturals are stored as Ints
@@ -19,7 +19,7 @@
 // `min`/`max`/`clamp`. On today's GPUs the speed-up is small (each thread
 // is scalar, and drivers split vector maths into parts again); what it
 // buys is the built-ins (dot, normalize, mix) and a shader that reads like
-// the maths. A record whose fields aren't all Numbers is still a struct.
+// the maths. A record whose fields aren't all Float64s is still a struct.
 //
 // The one rule a shader adds: no recursion, because a GPU has no call
 // stack (WGSL forbids a function that reaches itself). A call to itself as
@@ -55,7 +55,7 @@ export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, st
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||",
 };
-// Records of 2 to 4 Numbers are vectors; their fields are these.
+// Records of 2 to 4 Float64s are vectors; their fields are these.
 const XYZW = ["x", "y", "z", "w"];
 export function vectorWidth(t: LType): number {
   return isRecord(t) && t.fields.length >= 2 && t.fields.length <= 4 && t.fields.every((f) => f.t === "f64") ? t.fields.length : 0;
@@ -65,7 +65,7 @@ export function vectorWidth(t: LType): number {
 type VOp = Op | "min" | "max";
 type V =
   | { k: "whole"; e: SExpr }        // an expression whose value is a vector
-  | { k: "splat"; e: SExpr }        // one Number for every part
+  | { k: "splat"; e: SExpr }        // one Float64 for every part
   | { k: "lit"; vs: number[] }      // a number for each part
   | { k: "op"; op: VOp; args: V[] };
 const ELEMENTWISE = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "sin", "cos", "tan", "exp", "log", "atan2"]);
@@ -114,7 +114,7 @@ export function emitWgsl(lowered: Lowered): Shader {
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
 
-  // Numbers a shader can't write down.
+  // Float64s a shader can't write down.
   funcs.forEach((f, i) => {
     const n = numbers(f.body).find((v) => !Number.isFinite(v) || Math.abs(v) > 3.4e38);
     if (n !== undefined) bad.set(i, `uses ${n}, which a shader's f32 can't hold`);
@@ -188,7 +188,7 @@ export function emitWgsl(lowered: Lowered): Shader {
   for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) tname(t);
 
   // The parts of a vector, each doing the same thing to the same part of
-  // other vectors (or to one Number shared by all), as one vector
+  // other vectors (or to one Float64 shared by all), as one vector
   // expression; null if they don't.
   function lift(cs: SExpr[], depth = 0): V | null {
     cs = cs.map(unlet);
@@ -316,7 +316,7 @@ export function emitWgsl(lowered: Lowered): Shader {
         }
         case "make": {
           const v = vectorWidth(e.t) ? lift(e.args) : null;
-          // wide: a record whose parts are all one Number is that Number spread.
+          // wide: a record whose parts are all one Float64 is that Float64 spread.
           if (v) return vtext(v, e.args.length, pre, d, true);
           return `${tname(e.t)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
@@ -376,7 +376,7 @@ export function emitWgsl(lowered: Lowered): Shader {
     }
 
     // A vector expression's text. `wide` where a function needs a vector
-    // (min, mix, …): a single Number is then spread over the parts.
+    // (min, mix, …): a single Float64 is then spread over the parts.
     function vtext(v: V, n: number, pre: string[], d: string, wide = false): string {
       const vec = `vec${n}f`;
       switch (v.k) {
