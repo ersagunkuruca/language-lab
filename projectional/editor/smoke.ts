@@ -471,6 +471,31 @@ async function stepOrder() {
   await p.close();
 }
 
+// A simplification that keeps the meaning is offered on the node's menu:
+// append of two lists written out is one list (BACKLOG E98).
+async function simplifyAppend() {
+  where = "simplify append";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  const box = (await p.locator(".p-graph svg.tgraph").first().boundingBox())!;
+  await p.locator(".p-graph svg.tgraph").first().dispatchEvent("contextmenu", { clientX: box.x + box.width - 40, clientY: box.y + box.height - 40 });
+  await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 });
+  await p.keyboard.type("append([1, 2], [3])");
+  await p.keyboard.press("Enter");
+  await p.keyboard.press("Escape");
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!(await text()).includes("append([1, 2], [3])")) { errors.push(`${where}: couldn't write the append: ${(await text()).slice(-120)}`); return p.close(); }
+  await p.waitForTimeout(900);
+  await p.locator(".p-graph g:has(> text:text-is('append')) > rect.cn").first().click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="simplify"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: append's menu offers no Simplify`));
+  if (!(await text()).includes("[1, 2, 3]") || (await text()).includes("append(")) errors.push(`${where}: simplified, it reads ${(await text()).slice(-120)}`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if (!(await text()).includes("append([1, 2], [3])")) errors.push(`${where}: one Undo doesn't bring the append back`);
+  await p.close();
+}
+
 // A click on a wire puts a dot where you clicked, and nothing else moves
 // (BACKLOG E109), though the dot's let changes how main would be laid out.
 async function dotOnWire() {
@@ -839,6 +864,7 @@ await looseParts();
 await swapDrop();
 await looseValue();
 await stepOrder();
+await simplifyAppend();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();

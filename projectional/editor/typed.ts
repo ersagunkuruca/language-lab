@@ -168,6 +168,41 @@ export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text:
   return r.ok ? null : `${text.trim()} doesn't fit here: ${r.reason}`;
 }
 
+// Simplifications that keep the meaning, offered on a node's menu when
+// they apply (BACKLOG E98): append of two lists written out is the one list
+// [a, b, c], and appending [] changes nothing. One edit, one Undo. (A cons
+// onto a list written out needs none: it already reads [x, a].)
+export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | null {
+  const n = code.nodes[id];
+  if (n?.kind !== "call" || n.args.length !== 2) return null;
+  const f = code.nodes[n.fn];
+  if (f?.kind !== "ref" || !isPublished(f.target) || ({ ...display, ...names })[f.target] !== "append") return null;
+  // A list written out: its cons cells, and the nil that ends them.
+  const cells = (l: Id): { cells: Id[]; nil: Id } | null => {
+    const out: Id[] = [];
+    for (let at = l; ; ) {
+      const c = code.nodes[at];
+      if (c?.kind === "ref" && c.target === NIL) return { cells: out, nil: at };
+      if (c?.kind !== "call" || (code.nodes[c.fn] as NodeOf<"ref">)?.target !== CONS) return null;
+      out.push(at);
+      at = c.args[1];
+    }
+  };
+  const [front, back] = n.args, a = cells(front), b = cells(back);
+  if (!a && !(b && !b.cells.length)) return null;
+  let next: Code, root: Id, gone: Id[];
+  if (a && !a.cells.length) { root = back; gone = [front]; next = code; }
+  else if (b && !b.cells.length) { root = front; gone = [back]; next = code; }
+  else if (a && b) {
+    const last = code.nodes[a.cells.at(-1)!] as NodeOf<"call">;
+    next = { ...code, nodes: { ...code.nodes, [last.id]: { ...last, args: [last.args[0], back] } } };
+    root = front; gone = [a.nil];
+  } else return null;
+  next = swapIn(next, id, root);
+  for (const g of [id, n.fn, ...gone]) delete next.nodes[g];
+  return guardTyped(info, next, names, root, a && b && a.cells.length && b.cells.length ? "Simplified: one list, written out." : "Simplified: appending an empty list changes nothing.");
+}
+
 // Each way to read what's typed, one id per called name: at most 16.
 function readings(t: Typed): Typed[] {
   if (!("op" in t)) return [t];

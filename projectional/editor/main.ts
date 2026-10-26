@@ -1860,6 +1860,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "node") rows.push(...stepRows(id));
+    if (kind === "node" && T.simplify(doc.code, doc.names.short, info, id)?.ok) rows.push(item("Simplify", "simplify", "The same meaning, written shorter: one list instead of append"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
@@ -1924,6 +1925,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
     case "step-earlier": case "step-later": return runTop(info, Top.moveStep(doc.code, doc.names.short, stepAt(target!), act === "step-earlier" ? -1 : 1));
+    case "simplify": return void applyT(T.simplify(doc.code, doc.names.short, info, target!) ?? { ok: false, reason: "nothing to simplify" });
     case "delete": return void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, target!));
     case "swap": case "replace": {
       // Change the function: the function becomes a hole and the inputs stay
