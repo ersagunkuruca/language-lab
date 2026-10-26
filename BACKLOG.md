@@ -27,7 +27,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 |---|---|---|---|---|---|
 | E127 | Run backwards shows nothing until the whole search ends: show the first answer as soon as it's found and keep looking for others after (`fibFast(n) = 8` waits 26 s for an answer found in 11 steps) | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P2 | S | |
 | E128 | A function written in place is offered only at a hole of function type; at a new value (`Add a value before this`, type `a`) there's no "new function", so a local helper can't be started. Offer it where the type is open | BACKWARDS.md "A worked example: Fibonacci" (Learn thread, 2026-10-26) | P3 | S | |
-| E126 | Refusals for units don't mention units (Change the function on `speed · time` → `subtract`: "Nothing that fits matches"); was Inbox I17 | QA-2026-10-26 L4 | P3 | S |  |
 | E111 | Group a selection into one box: a view-only fold of picked nodes, like a frame's fold | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P2 | M | feature, waits for resume |
 | E114 | Taking out an `append` and flattening its lists by hand should be short (follows from E104 and E108; E98 does it for you) | Ersagun 2026-10-24 18:33 (editor-findings 16–26) | P3 | S |  |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test | found doing E100 | P3 | M | |
@@ -137,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E126 | Change the function with a name typed in full that doesn't fit says why, from the checker: units that don't agree, a type that doesn't match | #468 |
 | E129 | The graph shows an action's steps in the order they run (numbered, one column, a dashed line from each to the next), and a step's menu moves it earlier or later; was Ersagun 2026-10-26 "print statements on top of each other" | #467 |
 | E125 | Add a value focuses the side panel's palette when it shows, instead of a pop-up over the graph repeating it; on a phone the pop-up stays | #456 |
 | E124 | Loose parts read as loose: and the expression they are (loose: length / gravity), not as a function _1(…); the frame reads loose : Number | #452 |
