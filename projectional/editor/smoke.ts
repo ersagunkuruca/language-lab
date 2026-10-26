@@ -475,6 +475,31 @@ async function stepOrder() {
   await p.close();
 }
 
+// A match whose case only takes a field apart further draws as rows of
+// patterns, the way the text reads it, and its menu switches to the nested
+// matches it is stored as and back (PATTERNS.md, BACKLOG E61 step 3).
+async function patternRows() {
+  where = "pattern rows in the graph";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Countdown/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^results$/ }).first().click();
+  const ports = async () => p.locator(".p-graph .portl").allTextContents();
+  if (!(await ports()).includes("[head, second, ..others]")) errors.push(`${where}: results' match has ports ${(await ports()).join(" ")}`);
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  const was = await text();
+  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
+  await p.locator(".p-graph g:has(> text:text-is('match List')) > rect.cn").first().click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="tree"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: the match's menu can't draw it as nested matches`));
+  const tree = await ports();
+  if (tree.includes("[head, second, ..others]") || !tree.includes("cons")) errors.push(`${where}: as nested matches, the ports are ${tree.join(" ")}`);
+  if ((await text()) !== was) errors.push(`${where}: switching the drawing changed the text`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if (!(await ports()).includes("[head, second, ..others]")) errors.push(`${where}: Undo doesn't bring the rows back`);
+  await p.close();
+}
+
 // Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
 // E111): the box names what it holds, unfolds into a frame, and Ungroup
 // takes the frame away. The code is untouched throughout.
@@ -965,6 +990,7 @@ await searchGoesOn();
 await helperAtValue();
 await answeredLater();
 await groupPicked();
+await patternRows();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();
