@@ -117,30 +117,45 @@ type Wait =
   | { k: "test"; args: Term[]; f: (...xs: Value[]) => boolean; text: string }
   | { k: "compute"; args: Term[]; out: Term; f: (...xs: Value[]) => Value; text: string }
   | { k: "range"; n: Term; out: Term }
-  // Runs `then` once `ready` says enough is known.
-  | { k: "later"; ready: (s: State) => boolean; then: Goal; text: string };
+  // Runs `then` once `ready` says enough is known. `on`, when given, is
+  // what `ready` reads, so the wait can sleep until one of them changes.
+  | { k: "later"; ready: (s: State) => boolean; then: Goal; text: string; on?: Term[] };
 
 // `spend` is the search's step budget, carried in the state so the
 // equation solver, which runs outside the interpreter, spends from it too.
-interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean }
+interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean; asleep?: Asleep }
+
+// Equations and waits that nothing new is known about sleep, each under
+// the unknowns it reads, and wake when one of them gets a value (in
+// bindVar). Without this, every step re-read every one of them: a search
+// that leaves one waiting equation and one waiting check per level (n = n₁
+// + 1 and n₁ ≠ 0, … in fibFast(n) = 8 past its first answer) got slower
+// with every level, about a minute for 2,000 steps (BACKLOG L83). An item
+// sleeps under all its unknowns, so ids say which ones are still asleep.
+// This is Prolog's coroutining (freeze/2, when/2: a goal suspended on
+// variables wakes when one is bound; Holzbaur's attributed variables,
+// PLILP 1992), here for the solver's equations and the waits below.
+type Sleeper = { eq: Eq } | { wait: Wait };
+interface Asleep { items: Sub<Sleeper>; watch: Sub<number[]>; eqs: number; waits: number }
+let sleeperIds = 0;
 
 // The substitution: logic variable number to term. Persistent, as a 32-way
 // trie on the number, so binding a variable copies one short path instead
 // of the whole map. (Copying the map was what made reading text back
 // cubic.) Variables are numbered densely from 0, so the trie stays shallow.
-type Trie = (Trie | Term | undefined)[];
-class Sub {
+type Trie = unknown[];
+class Sub<T = Term> {
   root: Trie;
   depth: number;
   constructor(root: Trie = [], depth = 0) { this.root = root; this.depth = depth; }
-  get(n: number): Term | undefined {
+  get(n: number): T | undefined {
     if (n >= 2 ** (5 * (this.depth + 1))) return undefined;
     let node: Trie | undefined = this.root;
     for (let d = this.depth; d > 0; d--) {
       node = node[(n >>> (5 * d)) & 31] as Trie | undefined;
       if (!node) return undefined;
     }
-    return node[n & 31] as Term | undefined;
+    return node[n & 31] as T | undefined;
   }
   has(n: number) { return this.get(n) !== undefined; }
   // The variables bound, in order.
@@ -154,7 +169,7 @@ class Sub {
     }
     yield* go(this.root, this.depth, 0);
   }
-  set(n: number, t: Term): Sub {
+  set(n: number, t: T | undefined): Sub<T> {
     let root = this.root, depth = this.depth;
     while (n >= 2 ** (5 * (depth + 1))) { root = [root]; depth++; }
     const put = (node: Trie | undefined, d: number): Trie => {
@@ -163,7 +178,7 @@ class Sub {
       copy[i] = d === 0 ? t : put(copy[i] as Trie | undefined, d - 1);
       return copy;
     };
-    return new Sub(put(root, depth), depth);
+    return new Sub<T>(put(root, depth), depth);
   }
 }
 
@@ -209,7 +224,82 @@ function unify(a: Term, b: Term, s: State): State | null {
 }
 
 function bindVar(s: State, v: LVar, t: Term): State {
-  return { ...s, sub: s.sub.set(v.n, t) };
+  const sub = s.sub.set(v.n, t);
+  const z = s.asleep, ids = z?.watch.get(v.n);
+  if (!z || !ids) return { ...s, sub };
+  // What was waiting on v wakes.
+  let items = z.items, eqsAsleep = z.eqs, waitsAsleep = z.waits;
+  const eqs = s.eqs.slice(), waits = s.waits.slice();
+  for (const id of ids) {
+    const it = items.get(id);
+    if (!it) continue;
+    items = items.set(id, undefined);
+    if ("eq" in it) { eqs.push(it.eq); eqsAsleep--; } else { waits.push(it.wait); waitsAsleep--; }
+  }
+  return { ...s, sub, eqs, waits, asleep: { items, watch: z.watch.set(v.n, undefined), eqs: eqsAsleep, waits: waitsAsleep } };
+}
+
+// Every equation and wait, asleep or not: for what an answer leaves open.
+function* asleepItems(s: State): Generator<Sleeper> {
+  const z = s.asleep;
+  if (!z || !(z.eqs + z.waits)) return;
+  for (const id of z.items.keys()) { const it = z.items.get(id); if (it) yield it; }
+}
+const everyEq = (s: State): Eq[] => [...s.eqs, ...[...asleepItems(s)].flatMap((it) => ("eq" in it ? [it.eq] : []))];
+const everyWait = (s: State): Wait[] => [...s.waits, ...[...asleepItems(s)].flatMap((it) => ("wait" in it ? [it.wait] : []))];
+
+// What a wait reads, or null when it can't say (a `later` without `on`).
+function waitReads(w: Wait): Term[] | null {
+  switch (w.k) {
+    case "concat": return [w.a, w.b, w.c];
+    case "show": return [w.n, w.s];
+    case "test": case "compute": return w.args;
+    case "range": return [w.n, w.out];
+    case "later": return w.on ?? null;
+  }
+}
+function unknownsIn(ts: Term[], s: State): number[] {
+  const out = new Set<number>();
+  const go = (t: Term) => { t = walk(t, s); if (t instanceof LVar) out.add(t.n); else if (isData(t)) t.fields.forEach(go); };
+  ts.forEach(go);
+  return [...out];
+}
+
+// Past a handful, the equations and waits settle couldn't use go to sleep.
+// A few stay awake, so a small search runs as it always did, and the
+// solver can still take up to six equations together.
+const AWAKE = 6;
+function doze(s: State): State {
+  const z = s.asleep ?? { items: new Sub<Sleeper>(), watch: new Sub<number[]>(), eqs: 0, waits: 0 };
+  const sleepEqs = s.eqs.length + z.eqs > AWAKE, sleepWaits = s.waits.length + z.waits > AWAKE;
+  if (!sleepEqs && !sleepWaits) return s;
+  let { items, watch, eqs: eqsAsleep, waits: waitsAsleep } = z;
+  const put = (it: Sleeper, on: number[]) => {
+    const id = sleeperIds++;
+    items = items.set(id, it);
+    for (const v of on) watch = watch.set(v, [...(watch.get(v) ?? []), id]);
+  };
+  const eqs: Eq[] = [], waits: Wait[] = [];
+  for (const e of s.eqs) {
+    const on = [...new Set([...varsOf(e.lhs), ...varsOf(e.rhs)])].filter((x) => x.startsWith("?")).map((x) => +x.slice(1));
+    if (sleepEqs && on.length) { put({ eq: e }, on); eqsAsleep++; } else eqs.push(e);
+  }
+  for (const w of s.waits) {
+    const reads = sleepWaits ? waitReads(w) : null;
+    const on = reads && unknownsIn(reads, s);
+    if (on?.length) { put({ wait: w }, on); waitsAsleep++; } else waits.push(w);
+  }
+  return { ...s, eqs, waits, asleep: { items, watch, eqs: eqsAsleep, waits: waitsAsleep } };
+}
+
+// Every equation awake again, for the solver to take together.
+function wakeEqs(s: State): State {
+  const z = s.asleep;
+  if (!z?.eqs) return s;
+  let items = z.items;
+  const eqs = s.eqs.slice();
+  for (const id of z.items.keys()) { const it = items.get(id); if (it && "eq" in it) { eqs.push(it.eq); items = items.set(id, undefined); } }
+  return { ...s, eqs, asleep: { ...z, items, eqs: 0 } };
 }
 
 const freshVars = (s: State, n: number): [LVar[], State] =>
@@ -279,6 +369,9 @@ const evalExpr = evaluateSolverExpr as unknown as (e: Expr, env: Record<string, 
 // fully known, solve one that the solver can, wake a waiting constraint.
 // Each of these may branch, so this returns a stream.
 function settle(s: State): Stream {
+  // The solver may take up to six equations together: with that few in
+  // all, they're all at hand.
+  if (s.asleep?.eqs && s.eqs.length + s.asleep.eqs <= AWAKE) s = wakeEqs(s);
   let eqs: Eq[];
   try {
     eqs = s.eqs.map((e) => ({ lhs: substExpr(e.lhs, s), rhs: substExpr(e.rhs, s) }));
@@ -300,7 +393,7 @@ function settle(s: State): Stream {
     const g = wake(s.waits[i], s);
     if (g) return g({ ...s, waits: s.waits.filter((_, j) => j !== i) });
   }
-  return unit(s);
+  return unit(doze(s));
 }
 
 const PERIODS = 64;
@@ -422,7 +515,7 @@ function fits(t: Term, s: State, depth: number): ((text: string) => boolean) | n
   t = walk(t, s);
   if (typeof t === "string") return (x) => x === t;
   if (!(t instanceof LVar) || depth === 0) return null;
-  for (const w of s.waits) {
+  for (const w of everyWait(s)) {
     if (w.k === "show" && walk(w.s, s) === t) return (x) => x.trim() === x && x !== "" && showNumber(Number(x)) === x;
     if (w.k !== "concat" || walk(w.c, s) !== t) continue;
     const a = walk(w.a, s), b = walk(w.b, s);
@@ -610,7 +703,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       // When it runs, it runs in the mode it's in then.
       const g = exec({ ...e, waits: undefined, ...("callee" in e ? { callee: undefined } : {}) }, f);
       const ready = needs(e, f);
-      return wait({ k: "later", text: waitText(e), ready, then: g });
+      return wait({ k: "later", text: waitText(e), ready, then: g, on: reads(e, f) });
     }
     switch (e.k) {
       case "given": {
@@ -648,6 +741,13 @@ export function interpreter(code: Code, opts: Options = {}) {
     }
     if (e.k === "unfold") { const p = sl(f, e.part), r = sl(f, e.result); return (s) => known(p, s) || known(r, s); }
     return () => true;
+  }
+  // What needs reads.
+  function reads(e: Exec, f: Frame): Term[] | undefined {
+    if (e.k === "call") { const n = nodes[e.node] as NodeOf<"call">; return [...n.args.map((a) => sl(f, a)), sl(f, n.id)]; }
+    if (e.k === "solve") return Object.values((nodes[e.node] as NodeOf<"solve">).given).map((x) => sl(f, x));
+    if (e.k === "unfold") return [sl(f, e.part), sl(f, e.result)];
+    return undefined;
   }
   const waitText = (e: Exec): string => {
     if (e.k === "call") { const h = nodes[(nodes[e.node] as NodeOf<"call">).fn]; return h.kind === "ref" ? opts.names?.[h.target] ?? stdNames[h.target] ?? "call" : "call"; }
@@ -764,7 +864,7 @@ export function interpreter(code: Code, opts: Options = {}) {
   // mode: the mode the plan says the function runs in, when it says.
   function apply(f: Term, args: Term[], out: Term, mode?: Mode): Goal {
     // Functions can't be guessed: wait until it's known which one this is.
-    if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out, mode)(s), text: "call" });
+    if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out, mode)(s), text: "call", on: [f] });
     if (isData(f) && f.tag === RANDOM_OP && !args.length) {
       if (!opts.random) throw new NotInvertible("random() outside seeded answers from the world, which only runs forward");
       const next = opts.random;
@@ -1010,7 +1110,7 @@ export function interpreter(code: Code, opts: Options = {}) {
   function member(xs: Term, out: Term): Goal {
     return (s) => {
       const l = walk(xs, s);
-      if (l instanceof LVar) return wait({ k: "later", text: "one of", ready: (st) => !(walk(xs, st) instanceof LVar), then: member(xs, out) })(s);
+      if (l instanceof LVar) return wait({ k: "later", text: "one of", ready: (st) => !(walk(xs, st) instanceof LVar), then: member(xs, out), on: [xs] })(s);
       if (isData(l)) return l.tag === CONS ? disj(eq(out, l.fields[0]), step(member(l.fields[1], out)))(s) : null;
       return null;
     };
@@ -1071,7 +1171,7 @@ export function interpreter(code: Code, opts: Options = {}) {
         const [[r], inner] = freshVars(s, 1);
         const answers: Term[] = [];
         for (const t of pull(apply(body, [], r)(inner))) {
-          if (t.waits.length) continue;
+          if (t.waits.length || t.asleep?.waits) continue;
           const v = ground(r, t);
           if (v === undefined) continue;
           answers.push(v);
@@ -1182,8 +1282,8 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     for (const p of ports) { const v = values[p]; if (v instanceof LVar && !portOf.has(v.n)) portOf.set(v.n, p === "out" ? "result" : opts.names?.[p] ?? p); }
     const named = (t: string) => powers(t.replace(/(\d)(_\d+)/g, "$1 · $2").replace(/_(\d+)/g, (m, n) => portOf.get(+n) ?? m));
     const residual = [
-      ...tidy(st.eqs, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
-      ...st.waits.map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
+      ...tidy(everyEq(st), values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
+      ...everyWait(st).map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
     ].map(named);
     yield { values, free: ports.filter((p) => hasVars(values[p])), residual };
   }

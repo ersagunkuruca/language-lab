@@ -411,3 +411,21 @@ test("an arm's checks cut it before its calls run: fib(n) = 4 runs out of budget
   steps = 0;
   assert.deepEqual([...relate(code, fib, { out: 4 }, { names, spend })], []);
 });
+
+test("waiting equations and checks sleep until what they read is known: a step costs the same at any depth (L83)", () => {
+  // fibFast(n) = 8 past its first answer walks on forever, leaving one
+  // waiting equation (n = n₁ + 1) and one waiting check (n₁ ≠ 0) per level.
+  // Re-reading them all at every step made 2,000 steps take about a minute.
+  const k = new Lang();
+  const fib3 = k.def("fib3"), fast = k.def("fibFast");
+  let n = "";
+  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(B.add, a, b), k.call(B.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (x) => ((n = x), k.call(fib3, k.lit(1), k.lit(1), x))));
+  const code = base(k.code), names = baseNames(k.names);
+  let steps = 0;
+  const started = Date.now();
+  const answers = [...relate(code, fast, { out: 8 }, { names, spend: () => ++steps < 20000 })];
+  assert.deepEqual(answers.map((a) => showTerm(a.values[n])), ["5"]);
+  assert.equal(steps, 20000);
+  assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
+});
