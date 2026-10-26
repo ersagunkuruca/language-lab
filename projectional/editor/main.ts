@@ -1929,6 +1929,17 @@ function toggleInline(call: Id) {
     on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
 }
 
+// The loose part `id` stands for: the part itself, or the node that is its
+// result (what its frame's end is wired from).
+function loosePart(id: Id): Id | undefined {
+  const of = doc.loose ?? {};
+  if (of[id]) return id;
+  return Object.keys(of).find((d) => {
+    const b = (node(d) as NodeOf<"def"> | undefined)?.body, n = b ? node(b) : undefined;
+    return (n?.kind === "lambda" ? n.body : b) === id;
+  });
+}
+
 // A drop on an input wires it, and a value already there is set loose.
 const useOver = (info: T.Info, b: Id, slot: Id) =>
   T.over(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot, b, (c, n, i) => T.useVar(c, n, i, ui.def, b, slot));
@@ -1950,8 +1961,14 @@ function graphHooks(info: T.Info) {
       void applyT(e, undefined, at && e.ok && e.select ? { ...at.keep, [e.select]: at.dot } : undefined);
     },
     canShare: (from: Id) => {
-      // A loose part goes into an empty input.
-      if (doc.loose?.[from]) return (slot: Id) => (node(slot)?.kind === "hole" ? null : "drop it on an empty input");
+      // A loose part goes into an empty input, by its frame's end or by its
+      // own last node's output (BACKLOG E120).
+      const part = loosePart(from);
+      if (part) return (slot: Id) => {
+        if (node(slot)?.kind !== "hole") return "drop it on an empty input";
+        const r = T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot);
+        return r.ok ? null : r.reason;
+      };
       const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
       if ("reason" in p) return () => p.reason;
       return (slot: Id) => {
@@ -1961,9 +1978,12 @@ function graphHooks(info: T.Info) {
         return r.ok ? null : r.reason;
       };
     },
-    share: (from: Id, slot: Id) => void applyT(doc.loose?.[from]
-      ? T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose, doc.home ?? {}, from, slot)
-      : shareOver(info, from, slot)),
+    share: (from: Id, slot: Id) => {
+      const part = loosePart(from);
+      void applyT(part
+        ? T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot)
+        : shareOver(info, from, slot));
+    },
     values: (() => {
       const tr = traced(info);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;
