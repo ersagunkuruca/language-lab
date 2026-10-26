@@ -44,6 +44,9 @@ import shadersComments from "../examples/shaders/comments.json" with { type: "js
 import raymarchCode from "../examples/raymarch/code.json" with { type: "json" };
 import raymarchNames from "../examples/raymarch/names.default.json" with { type: "json" };
 import raymarchComments from "../examples/raymarch/comments.json" with { type: "json" };
+import mandelbrotCode from "../examples/mandelbrot/code.json" with { type: "json" };
+import mandelbrotNames from "../examples/mandelbrot/names.default.json" with { type: "json" };
+import mandelbrotComments from "../examples/mandelbrot/comments.json" with { type: "json" };
 import diceCode from "../examples/dice/code.json" with { type: "json" };
 import diceNames from "../examples/dice/names.default.json" with { type: "json" };
 import diceComments from "../examples/dice/comments.json" with { type: "json" };
@@ -126,7 +129,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -215,6 +218,7 @@ const initialFor = (program: Program): Doc =>
   : program === "effects" ? typedDoc("effects", effectsCode as Code, effectsNames, effectsComments, { examples: effectsExamples })
   : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
   : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
+  : program === "mandelbrot" ? typedDoc("mandelbrot", mandelbrotCode as Code, mandelbrotNames, mandelbrotComments)
   : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }

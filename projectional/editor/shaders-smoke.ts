@@ -25,7 +25,7 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   await page.goto(url);
   await page.waitForSelector("body[data-ready]", { timeout: 120_000 });
   if ((await page.locator("body").getAttribute("data-ready")) !== "true") errors.push(`${label}: the page stopped with an error`);
-  for (const section of ["raymarch", "ripples"]) {
+  for (const section of ["raymarch", "mandelbrot", "ripples"]) {
     const where = `${label}, ${section}`;
     const $ = (c: string) => page.locator(`#${section} .${c}`);
     const status = await $("status").innerText();
@@ -56,7 +56,7 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   }
   // The editor draws the same pictures above Run (editor/picture.ts).
   await page.goto(new URL("../../index.html", import.meta.url).href);
-  for (const program of ["Shader: ripples", "Shader: ray marching"]) {
+  for (const program of ["Shader: ripples", "Shader: ray marching", "Shader: Mandelbrot set"]) {
     await page.locator(".nav-row:not([data-def])", { hasText: program }).first().click();
     const said = page.locator(".picture-box .pic-status");
     await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box .pic-status")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});

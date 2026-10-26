@@ -16,6 +16,9 @@ import ripplesComments from "../examples/shaders/comments.json" with { type: "js
 import marchCode from "../examples/raymarch/code.json" with { type: "json" };
 import marchNames from "../examples/raymarch/names.default.json" with { type: "json" };
 import marchComments from "../examples/raymarch/comments.json" with { type: "json" };
+import mandelCode from "../examples/mandelbrot/code.json" with { type: "json" };
+import mandelNames from "../examples/mandelbrot/names.default.json" with { type: "json" };
+import mandelComments from "../examples/mandelbrot/comments.json" with { type: "json" };
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { renderBlocks } from "../src/lang/render.ts";
@@ -49,6 +52,7 @@ async function show(where: string, p: Program) {
 Promise.all([
   show("ripples", { code: ripplesCode, names: ripplesNames, comments: ripplesComments }),
   show("raymarch", { code: marchCode, names: marchNames, comments: marchComments }),
+  show("mandelbrot", { code: mandelCode, names: mandelNames, comments: mandelComments }),
 ]).then(() => { document.body.dataset.ready = "true"; }, (e) => {
   for (const s of document.querySelectorAll(".status")) if (s.textContent === "Starting…") s.textContent = `Error: ${e.message}`;
   document.body.dataset.ready = "error";
