@@ -59,6 +59,9 @@ There are four kinds of number. Int is a whole number of any size. Float64 is a 
 - **divide complex** : `(Complex, Complex) -[Choice]-> Complex`. z ÷ w for complex numbers; no answer when w is 0.
 - **complex exp** : `(Complex) -> Complex`. e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
 - **show complex** : `(Complex) -> Text`. A complex number as 3 + 4i or 3 − 4i.
+- **table product** : `(List (Table entry a), a, a) -> a`. a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).
+- **complex table** : `List (Table entry Complex)`. Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.
+- **Table entry** (type). One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.
 - **add** : `(Float64, Float64) -> Float64`. a + b for Float64s: what the generic + is at Float64.
 - **subtract** : `(Float64, Float64) -> Float64`. a − b for Float64s: what the generic − is at Float64.
 - **multiply** : `(Float64, Float64) -> Float64`. a · b for Float64s: what the generic · is at Float64.

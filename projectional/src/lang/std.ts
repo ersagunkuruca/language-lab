@@ -180,6 +180,14 @@ export const SET_TYPE = typedef("std.set", "Set", ["k"], [
   ["set of", [["items", ([k]) => tref(LIST, tref(k))]]],
 ]);
 export const MAP_V = "std.map.map of", SET_V = "std.set.set of";
+// One line of an algebra's multiplication table (ALGEBRA-TABLES.md): two
+// basis elements and their product, as values of the type itself, so
+// Complex's i · i = −1 is times(i, i, −1). The prelude's `table product`
+// multiplies by a list of them.
+export const TABLE_ENTRY = typedef("std.tableEntry", "Table entry", ["a"], [
+  ["times", [["left", ([a]) => tref(a)], ["right", ([a]) => tref(a)], ["gives", ([a]) => tref(a)]]],
+]);
+export const TIMES_V = "std.tableEntry.times";
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -469,7 +477,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

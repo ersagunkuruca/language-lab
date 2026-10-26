@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TRUE, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRUE, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -147,6 +147,26 @@ export function buildPrelude(): Module {
   const showC = k.def("show complex");
   k.define(showC, k.fn(["z"], (z) => cx(z, (a, b) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
     k.if(k.call(S.less, b, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, b)), k.lit("i")))))));
+
+  // An algebra's product from its multiplication table (ALGEBRA-TABLES.md):
+  // a and b are records of Float64s, each line says what two basis
+  // elements multiply to, and the product is the sum over the lines of
+  // (a's part along the left one) · (b's part along the right one) · what
+  // they give. The part along a basis element is the parts multiplied
+  // pairwise and added, so the basis must be the records with one part 1.
+  // This is the algebra's structure constants, the textbook construction.
+  const along = (x: Id, e: Id) => k.call(S.total, k.call(S.zipParts, B.mul, x, e));
+  const tableProduct = k.def("table product");
+  k.define(tableProduct, k.fn(["table", "a", "b"], (table, a, b) => k.fold(table, [
+    { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), a) },
+    { variant: CONS, names: ["line", "rest"], results: [null, "the rest's sum"], body: ([line], [, rest]) => k.match(line, [
+      { variant: TIMES_V, names: ["left", "right", "gives"], body: ([e, f, g]) => k.let("weight", n.mul(along(a, e), along(b, f)), (w) =>
+        k.call(S.zipParts, B.add, k.call(S.mapParts, k.fn(["part"], (x) => n.mul(w, x)), g), rest!)) },
+    ]) },
+  ])));
+  const complexTable = k.def("complex table");
+  k.define(complexTable, k.list(...([[1, 0, 1, 0, 1, 0], [1, 0, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1], [0, 1, 0, 1, -1, 0]] as const).map(([a, b, c, d, e, f]) =>
+    k.call(TIMES_V, C(k.lit(a), k.lit(b)), C(k.lit(c), k.lit(d)), C(k.lit(e), k.lit(f))))));
 
   // Sorting by the order on plain data (`compare`, L66): a merge sort
   // written bottom-up, so every step is a fold or a recursion the
@@ -331,7 +351,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -401,6 +421,8 @@ export function buildPrelude(): Module {
     [showC]: "A complex number as 3 + 4i or 3 − 4i.",
     [addC]: "What + is at Complex. Not offered on its own: + is.",
     [subC]: "What − is at Complex. Not offered on its own: − is.",
+    [tableProduct]: "a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).",
+    [complexTable]: "Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.",
     [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
     [negC]: "What −x is at Complex. Not offered on its own: − is.",
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
