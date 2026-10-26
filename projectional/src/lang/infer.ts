@@ -1096,9 +1096,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     try {
       const p = planSolve(c, n);
       // A search's Diverge, and whether it can run at all, are its mode's.
-      // (Running up to the hole being filled isn't a difference.)
+      // (Running up to a hole isn't a difference: while one is left, what
+      // waits on it, such as a call given holes, is stuck for that reason
+      // alone, so a call filled in with holes leaves the plan as it was:
+      // BACKLOG E103.)
       const v = p.mode === "relational" ? solveMode(c, n, {}) : null;
-      return [p.mode, p.status, p.needMore, p.many, p.canFail, p.unique, p.predicate, p.rel?.ports.join(","), v ? `${v.ends}/${determinism(v.answers)}/${v.stuck.filter((x) => x !== "a hole").join(",")}` : ""].join("|");
+      return [p.mode, p.status, p.needMore, p.many, p.canFail, p.unique, p.predicate, p.rel?.ports.join(","), v ? `${v.ends}/${determinism(v.answers)}/${v.stuck.includes("a hole") ? "" : v.stuck.join(",")}` : ""].join("|");
     }
     catch (e) { return `!${(e as Error).message}`; }
   }).join(";");
