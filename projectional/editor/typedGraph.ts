@@ -43,6 +43,7 @@ import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { takenApart } from "../src/lang/render.ts";
+import { flattened, matchRows, patternText } from "../src/lang/patterns.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
@@ -72,6 +73,9 @@ export interface GraphHooks {
   // Groups of picked nodes (and frames) drawn in a frame of their own, by
   // the group's id: a view (layout.json), folded like any other frame.
   groups?: Record<Id, Id[]>;
+  // Matches drawn as the nested tree they are, not as rows of patterns
+  // (PATTERNS.md). A view.
+  tree?: Set<Id>;
   fold?: (frame: Id) => void;
   // The + under a list's or a + b + c's inputs: one more, at the end.
   addItem?: (row: Id) => void;
@@ -567,7 +571,17 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
-    for (const arm of armNodes) {
+    // A case that only takes one of its fields apart further draws as one
+    // row per inner case, the way the text reads it: one port and one frame
+    // per row, its names all on that frame's left (PATTERNS.md).
+    const all = n.kind === "match" && !handles && !isIf && !apart && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
+    const rows = all && flattened(all) ? all : null;
+    for (const r of rows ?? []) {
+      labels.push(patternText(r.pat, name, name));
+      inputs.push(r.at);
+      kids.push(region(r.at, `(${r.binds.map(name).join(", ")}) =>`, r.binds, r.body, "arm"));
+    }
+    for (const arm of rows ? [] : armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
       const params = [...arm.binds, ...results];
       labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : name(arm.variant));

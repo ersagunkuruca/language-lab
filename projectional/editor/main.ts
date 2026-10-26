@@ -90,6 +90,7 @@ import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
+import { flattened, matchRows } from "../src/lang/patterns.ts";
 import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
@@ -125,6 +126,9 @@ interface Layout {
   // Picked nodes grouped into a frame of their own, by the group's id, to
   // fold into one box (typedGraph.ts, BACKLOG E111). A view.
   groups?: Record<Id, Id[]>;
+  // Matches drawn as the nested tree they are, not as rows of patterns
+  // (PATTERNS.md). A view.
+  tree?: Id[];
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
@@ -1914,6 +1918,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (kind === "node") rows.push(...stepRows(id));
     if (kind === "node" && T.simplify(doc.code, doc.names.short, info, id)?.ok) rows.push(item("Simplify", "simplify", "The same meaning, written shorter: one list instead of append"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
+    if (kind === "node" && n?.kind === "match" && (doc.layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
+    else if (kind === "node" && n?.kind === "match" && flattened(matchRows(doc.code, info, n))) rows.push(item("Draw as nested matches", "tree", "The decision tree as it is stored: one match per level, to see the order it decides in"));
     if (kind === "frame" && doc.layout.groups?.[id]) rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
@@ -2012,6 +2018,11 @@ function menuAction(act: string, target: Id | undefined) {
     case "tidy-picked": return graph?.tidy(graph.picked());
     case "group-picked": return groupPicked(graph?.picked() ?? []);
     case "ungroup": return ungroup(target!);
+    case "tree": {
+      const now = doc.layout.tree ?? [], on = now.includes(target!);
+      return commit({ layout: { ...doc.layout, tree: on ? now.filter((x) => x !== target) : [...now, target!] } }, ["layout.json"],
+        on ? "Drawn as rows of patterns, as the text reads it. Only layout.json changed." : "Drawn as the nested matches it is stored as. Only layout.json changed.");
+    }
     case "tidy-frame": return graph?.tidy([target!]);
     case "reset-one": { const p = graph?.picked() ?? []; return forget(p.length > 1 ? graph!.expand(p) : graph?.expand([target!]) ?? [target!]); }
     case "fit": { render(); graph?.fit(); return; }
@@ -2102,6 +2113,7 @@ function graphHooks(info: T.Info) {
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
     groups: doc.layout.groups,
+    tree: new Set(doc.layout.tree ?? []),
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
     reorder: (item: Id, onto: Id) => {
       const a = T.rowOfItem(doc.code, item), b = T.rowOfItem(doc.code, onto);

@@ -152,7 +152,10 @@ One PR each:
    from the text, the rows' patterns are disjoint and cover the type).
 2. **Text: shared bodies as `otherwise`.** Ledger's `parse` reads as two
    rows, and the mains as two or three.
-3. **Graph: rows.** One node with the flattened ports, the fold toggle
-   between rows and tree.
+3. **Graph: rows. Done.** One node with the flattened ports, each row's
+   names on its frame's left. The match's menu switches between rows and
+   the tree ("Draw as nested matches", layout.json `tree`), in place of a
+   ▸/▾ toggle. Shared bodies aren't merged into one `otherwise` row in the
+   graph: until step 4, a frame stands for one copy of a body.
 4. **Editing a shared row** edits every copy, in one undo step. "Match
    deeper" and "Join cases" named in the menu.
