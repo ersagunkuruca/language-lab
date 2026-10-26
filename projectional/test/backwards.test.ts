@@ -467,3 +467,17 @@ test("Int products run backwards: x · 3 + 1 = 13, x · x = 16, and none when it
   assert.deepEqual(solve(zero, 5), []);
   assert.equal(solve(zero, 0).length, 1);
 });
+
+// L90: with two sides unknown an Int operation is also an equation for the
+// solver, its unknowns whole, so Int polynomials run backwards as Float64's
+// do; an answer that isn't whole is none.
+test("Int polynomials run backwards: x · x + x = 12 gives 3 and −4, and = 11 gives none", () => {
+  const k = new Lang();
+  const poly = k.def("poly");
+  let p = "";
+  k.define(poly, k.fn(["x"], (x) => ((p = x), k.call(ARITH.add, k.call(ARITH.add, k.call(ARITH.mul, x, x), x), k.lit(0)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const solve = (out: number) => [...relate(code, poly, { out }, { names, spend: () => true })].map((a) => [showTerm(a.values[p]), a.residual.length]);
+  assert.deepEqual(solve(12).sort(), [["-4", 0], ["3", 0]]);
+  assert.deepEqual(solve(11), []);
+});
