@@ -100,6 +100,128 @@ The interpreter returns them with the leftover equations
 constraints. Inside a typed program an answer must be fully known, so free
 answers are skipped (the same rule `solve` already had for `0·x = 0`).
 
+## A worked example: Fibonacci, backwards
+
+Ersagun asked this on 2026-10-26: how can `fib` run backwards at all, and
+why did the fast version do worse backwards than the slow one? The
+numbers below are from the editor's Run pane and from `relate` on the same
+code, at #447.
+
+The two functions, as he wrote them in the editor:
+
+```
+fib(n) = if n = 1 or n = 2 then n else fib(n − 1) + fib(n − 2)
+fib3(a, b, n) = if n = 0 then a else fib3(b, a + b, n − 1)
+fibFast(n) = fib3(1, 1, n)
+```
+
+`fib` counts 1, 2, 3, 5, 8, 13, …: `fib(4) = 5`.
+
+### It doesn't unwind the tree. It guesses it, smallest first.
+
+Nothing works out a recursion's tree from its result. The search knows
+two things, and the rest follows from them:
+
+- **An `if` run backwards is a choice of its two arms.** The answer came
+  from the `then` arm or from the `else` arm, so try both.
+- **A sum with an unknown is an equation.** It's kept until enough is
+  known to solve it.
+
+Asked for `fib(n) = 5`:
+
+1. **`then` arm:** `n` would be 5, but 5 isn't 1 or 2. Rejected.
+2. **`else` arm:** `fib(n − 1) + fib(n − 2) = 5`. Two calls, nothing
+   known about either. The equation `x + y = 5` waits. The search starts
+   on `fib(n − 1) = x` with **both sides unknown**. That's the same
+   question one level down, so it is again a choice of arms:
+   - `then` arm: `n − 1` is 1 or 2, and `x` is the same. That's a
+     **guess**. From it, `n` is 2 or 3. Now `fib(n − 2)` has a known input,
+     so it simply runs forward, and the waiting sum checks the total.
+     `n = 3` gives 2 + 1 = 3, not 5.
+   - `else` arm: `n − 1` is itself a recursive case. Go one level deeper
+     and guess there.
+
+The trace of the calls the search makes for `fib(n) = 5` (`_17` and so on
+are unknowns):
+
+| step | call | what's happening |
+|---|---|---|
+| 1 | `fib(_0) = 5` | the question |
+| 2 | `fib(_17) = _15` | the else arm's first call, nothing known |
+| 3 | `fib(0)`, `fib(1)` | guesses `n = 2` and `n = 3` from the base case; the second call runs forward |
+| 4 | `fib(_41) = _39` | one level deeper: `n − 1` is itself a sum |
+| 5 | `fib(2)` | guess `n = 4`: 3 + 2 = 5. **Answer: n = 4** |
+
+So the search builds possible trees from the bottom up, shallowest first,
+and checks each against the result. The first tree whose sum is 5 gives
+`n`. That's why non-Fibonacci numbers fail: no tree adds up to them, and
+the search can't tell that a deeper tree would only make bigger numbers,
+so it goes on until it runs out of steps (the Run pane allows 20,000) or
+stack. Planning which goal runs first, before the search starts, follows
+Mercury's modes (prior art, MODES.md).
+
+Two things keep this from getting lost down one path forever:
+
+- **Fair interleaving.** Each recursive call is a point where the search
+  may switch to another branch. A branch that goes on forever doesn't
+  starve the others. (`fib(0)` is one: it recurses into negative numbers
+  forever, so a branch that reaches it never ends, but the others still
+  get their turn.) This is miniKanren's search (prior art, credited
+  above). The guess `n = 2` shouldn't have been tried at all, since this
+  arm is the one where `n` isn't 1 or 2. The check waits and doesn't cut
+  the branch before `fib(0)` starts. That's a known waste, on the backlog.
+- **Equations wait.** `x + y = 5` with both unknown can't be solved, so it
+  waits. Once a guess fixes `x`, it gives `y`, or checks it.
+
+How the work grows: for `fib(n) = 8` the search takes 85 steps, for 13 it
+takes 145, for 144 it takes 1,610. Each next Fibonacci number costs about
+1.6 times as many steps as the last. That's the same growth as running
+`fib` forward, because it builds the same trees.
+
+### Why the fast version did worse
+
+Backwards, `fib3` and `fibFast` find the answer much faster. `fibFast(n)
+= 8` is found in 11 steps (85 for `fib`), and 144 in 23 steps (1,610 for
+`fib`): two steps per level. With `a` and `b` known, `fib3` backwards is a
+straight walk: `fib3(1, 1, n) = 8` becomes `fib3(1, 2, n − 1) = 8`, then
+`fib3(2, 3, n − 2) = 8`, and so on, until the `then` arm finds `a = 8`.
+
+What makes it look worse is what happens **after** the first answer. The
+Run pane keeps looking for other answers, and only shows anything when
+that search ends. For `fib3` that second search is the slow part:
+
+- It goes on walking: `fib3(8, 13, _) = 8`, `fib3(13, 21, _) = 8`, … `a`
+  is already past 8, but nothing tells the search that `a` only grows, so
+  it doesn't stop.
+- `n` is still unknown at every level. Each level adds one more waiting
+  equation (`n = n₁ + 1`, `n₁ = n₂ + 1`, …), and each step re-reads all of
+  them. After 200 levels there are 198 waiting equations. After 1,400 there
+  are 1,398, and `a` is about 10²⁹². Each step costs more than the last.
+
+In the editor that takes about 26 seconds before the stack runs out and
+the pane shows `n = 5` with "Maximum call stack size exceeded". The slow
+`fib` runs out after about 1 second, because its extra search doesn't
+pile up equations.
+
+So the fast version is the better program backwards too: it finds the
+answer in a few steps. It's the search for a second answer, which can
+never succeed, that costs more. Two improvements would fix it (both on the
+backlog):
+
+- Show the first answer as soon as it's found, and look for more after.
+- Notice that a known input only grows while the result stays fixed, and
+  stop. That's the size-change check MODES.md already runs, applied to
+  values as well as to shapes.
+
+### Adding a helper function
+
+`fibFast(n) = fib3(1, 1, n)` needs `fib3` as its own definition (`+ New
+definition`), as above. A function written inside another one can't call
+itself: only definitions can be recursive, which is what lets the checker
+see whether recursion ends. A function written in place is offered by the
+palette only where a function is expected (an input of type `(a) -> b`),
+as "new function".
+
 ## Things it gets right that the old arithmetic-only relations couldn't
 
 - `show numbers` run backwards on `"10 20 30"` is `[10, 20, 30]`, and on
