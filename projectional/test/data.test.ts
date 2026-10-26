@@ -10,7 +10,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { relate, toValue } from "../src/lang/relate.ts";
-import { CONS, INT_OPS as I, NIL, S, SET, TEXT_OPS as T } from "../src/lang/std.ts";
+import { CONS, INT_OPS as I, NIL, S, SET, SHOW_ANY, TEXT_OPS as T } from "../src/lang/std.ts";
+import * as Int from "../src/lang/int.ts";
 import { INT, STRING } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -143,7 +144,6 @@ test("the relational interpreter runs Int, text and set forward", () => {
 });
 
 test("show prints any plain value: lists, cases with the program's names, text, Int", async () => {
-  const { SHOW_ANY } = await import("../src/lang/std.ts");
   const k = new Lang();
   const shape = k.type("shape", [], [["circle", [["r", () => k.tref(INT)]]], ["dot", []]]);
   const main = lines(k,
@@ -163,4 +163,24 @@ test("show prints any plain value: lists, cases with the program's names, text, 
   const c2 = base(k2.code);
   assert.equal(infer(c2, baseNames(k2.names)).errors.length, 1);
   void m2;
+});
+
+// REVIEW-2026-10-26.md §1.2 (L80): an Int is a JS number only below 2^28
+// and a BigInt beyond, one spelling each, so `equal` can be near on every
+// JS number and still exact on Ints.
+test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Numbers, whole or not", () => {
+  assert.equal(Int.norm(2n ** 28n - 1n), 2 ** 28 - 1);
+  assert.equal(Int.norm(2n ** 28n), 2n ** 28n);
+  assert.equal(Int.norm(-(2n ** 28n) + 1n), -(2 ** 28) + 1);
+  assert.equal(Int.add(2 ** 28 - 1, 1), 2n ** 28n);
+  assert.equal(Int.sub(2n ** 28n, 1), 2 ** 28 - 1);
+  assert.equal(Int.mul(2 ** 14, 2 ** 14), 2n ** 28n);
+  assert.equal(Int.intLit(1e12), 10n ** 12n);
+  assert.ok(Int.isInt(5) && Int.isInt(2n ** 30n) && !Int.isInt(2 ** 30) && !Int.isInt(5n));
+  const p = program((k) => lines(k, ...[
+    k.equal(k.int(1000000000000), k.int(1000000000001)), k.equal(k.int(268435455), k.int(268435456)),
+    k.equal(k.lit(1e12), k.lit(1e12 + 1)), k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(1e17)), k.call(B.sqrt, k.lit(1e17))), k.lit(1e17)),
+  ].map((b) => k.call(SHOW_ANY, b))));
+  assert.deepEqual(p.info.errors, []);
+  assert.deepEqual(p.run(), ["false", "false", "true", "true"]);
 });

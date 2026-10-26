@@ -97,7 +97,7 @@ function fromWasm(w: Exports, x: unknown, t: LType): Value {
   if (t === "f64") return x as number;
   if (t === "text") return fromText(w, x);
   // An Int is a JS number while it's safe, as in the evaluator (int.ts).
-  if (t === "int") { const n = fromInt(w, x); return n >= -(2n ** 53n) + 1n && n <= 2n ** 53n - 1n ? Number(n) : n; }
+  if (t === "int") return norm(fromInt(w, x));
   if (t === "i32") return bool(x === 1);
   if (isFn(t)) throw new Error("no readers for functions");
   if (!isData(t)) return { tag: t.variant, fields: t.fields.map((f) => fromWasm(w, helper(w, `${t.name}.${f.name}`, t.key)(x), f.t)) };
@@ -335,7 +335,8 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   assert.match(m.wat, /return_call \$index\d+/);
   const w = await instantiate(m) as unknown as Exports;
   const r = makeRunner(p.code, p.info, { print: () => {} });
-  const ints = [0, 1, -1, 2, -2, 3, 7, -7, 10, 2 ** 31, -(2 ** 31), 2 ** 40 + 3];
+  // Ints in their one spelling (int.ts): past 2^28 a BigInt.
+  const ints = [0, 1, -1, 2, -2, 3, 7, -7, 10, 2 ** 31, -(2 ** 31), 2 ** 40 + 3].map((x) => norm(BigInt(x)));
   const texts = ["", "0", "-0", "00", "007", "42", "-42", "+5", "4 2", "-", "9223372036854775807", "-9223372036854775808", "12a", "a", "é", "日", "🎉", "ab", "héllo wörld", "a🎉b"];
   const codes = [-1, 0, 65, 127, 128, 233, 2047, 2048, 0xd7ff, 0xd800, 0xdfff, 0xe000, 0xffff, 0x10000, 0x1f389, 0x10ffff, 0x110000];
   const lists = [[], ["1", "2", "3"], ["4", "x", "5"], ["-0"], Array.from({ length: 1e4 }, (_, i) => String(i))].map((xs) => toList(xs));

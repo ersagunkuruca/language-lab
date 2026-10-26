@@ -721,9 +721,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
-    // Two whole numbers exactly, any other pair within 1e-9 relative to
-    // their size (run.ts sameNumber). Each side once: a local if it isn't
-    // one already.
+    // Two Numbers within 1e-9 relative to their size (run.ts sameNumber).
+    // Each side once: a local if it isn't one already.
     const lets: { i: number; value: SExpr }[] = [];
     const [a, b] = [x, y].map((value): SExpr => {
       if (value.k === "local" || value.k === "num") return value;
@@ -733,10 +732,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     });
     const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
     const num = (v: number): SExpr => ({ k: "num", v });
-    // Whole: as Number.isInteger, so not ±∞ (whose floor is itself; ∞ − ∞ isn't 0).
-    const whole = (e: SExpr) => op("and", op("equal", op("floor", e), e), op("equal", op("sub", e, e), num(0)));
+    // Near on every Number, whole or not: an Int is its own type here.
     const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
-    const near = op("or", op("equal", a, b), op("and", op("not", op("and", whole(a), whole(b))), op("or", op("less", diff, tol), op("equal", diff, tol))));
+    const near = op("or", op("equal", a, b), op("or", op("less", diff, tol), op("equal", diff, tol)));
     return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
   }
   // compare's order (run.ts compareValues) as −1, 0 or 1: numbers by

@@ -69,7 +69,8 @@ export const $near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.ab
 
 // `equal` on two numbers, one rule on every type, as in the evaluator
 // (run.ts `sameNumber`): whole numbers exactly, others near.
-export const $sameNumber = (a, b) => (Number.isInteger(a) && Number.isInteger(b) ? a === b : $near(a, b));
+// run.ts sameNumber: near on every JS number; an Int past 2^28 is a BigInt.
+export const $sameNumber = (a, b) => $near(a, b);
 
 // With its own stack, so two long lists can be compared.
 export function $eq(a, b) {

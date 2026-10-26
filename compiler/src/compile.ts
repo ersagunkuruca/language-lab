@@ -26,6 +26,7 @@
 // search fall back to the solver at run time, with the plan made once.
 
 import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
+import { intLit } from "../../projectional/src/lang/int.ts";
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -71,6 +72,10 @@ const oneOf = (id: Id) => (jsKind(id) === "partial" ? `$partial[${JSON.stringify
 // Where a `$fields` copy leaves its answer's fields.
 const GOT = "const $got = [];";
 const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
+
+// An Int literal in its one spelling (int.ts): a number while it's small,
+// a BigInt beyond.
+const intJs = (v: number | string): string => { const x = intLit(v); return typeof x === "bigint" ? `${x}n` : x < 0 ? `(${x})` : String(x); };
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
   // The generic + resolved to each type's own operation first
@@ -233,7 +238,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const modeEmit = (real: boolean): ModeEmit => ({
     value(id) {
       const n = code.nodes[id];
-      if (n.kind === "lit") return n.of === INT && typeof n.value === "string" ? `${n.value}n` : typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
+      if (n.kind === "lit") return n.of === INT ? intJs(n.value as number | string) : typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
       if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "variant" || effectOf(n.target) || node<"variant">(n.target).fields.length) return null;
       return n.target === TRUE ? "$T" : n.target === FALSE ? "$F" : n.target === NIL ? "$nil" : n.target === UNIT_V ? "$unit" : `({ tag: ${tag(n.target)}, fields: [] })`;
     },
@@ -1166,7 +1171,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const n = code.nodes[id];
       switch (n.kind) {
         case "lit":
-          if (n.of === INT && typeof n.value === "string") return `${n.value}n`;
+          if (n.of === INT) return intJs(n.value as number | string);
           return typeof n.value === "number" && n.value < 0 ? `(${n.value})` : JSON.stringify(n.value);
         case "ref": return refValue(n);
         case "hole": return `$hole(${JSON.stringify(id)})`;

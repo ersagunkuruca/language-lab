@@ -339,7 +339,7 @@ There's no new construct behind it: it's the field read run backwards with
 the rest of the record given.
 
 **Whole numbers and text.** `Int` is the whole numbers and never overflows
-(it switches to big integers past 2⁵³). `Number` is floating point. They
+(it switches to big integers past 2²⁸). `Number` is floating point. They
 don't mix without `as number` or `whole part`. Where there's no whole
 answer there's no answer: `quotient` by zero is `Choice` (see 3.9), not a
 crash. Text has `length`, `slice`, `split`, `join all`, `find` and friends,

@@ -108,7 +108,7 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.each]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $listArrays)`), scalar: CELLS },
   [CELL_OPS.read]: { js: op(([c]) => `$cells().read(${c})`), scalar: CELLS },
   [CELL_OPS.write]: { js: op(([c, v]) => `($cells().write(${c}, ${v}), $unit)`), scalar: CELLS },
-  // Int: a number while it's a safe integer, a BigInt beyond (int.ts), so
+  // Int: a number while it's small (under 2^28), a BigInt beyond (int.ts), so
   // comparisons are plain JS ones.
   [INT_OPS.add]: { js: op(([a, b]) => `$int.add(${a}, ${b})`), scalar: INT },
   [INT_OPS.sub]: { js: op(([a, b]) => `$int.sub(${a}, ${b})`), scalar: INT },

@@ -75,6 +75,16 @@ decimals is off by at most 5·10^-10, inside the 10^-9, so reading the text
 back always gives an equal number, forward and backwards (test/equality.test.ts),
 and outputs don't show "0.30000000000000004".
 
+*Whole Numbers keep their tolerance (2026-10-26).* The wholeness test was
+the value standing in for the type, and at 1e17 every float is whole, so
+`√1e17 · √1e17 = 1e17` was false while `√2 · √2 = 2` was true
+(REVIEW-2026-10-26.md §1.2). Now an Int is a JS number only below 2^28,
+where `close` can't confuse two whole numbers anyway, and a BigInt beyond
+(int.ts). So `sameNumber` is `close` on every JS number and exact on
+BigInts, with no wholeness test: 10^12 and 10^12 + 1 are different Ints
+and equal Numbers. The cost is BigInt arithmetic for Ints between 2^28 and
+2^53.
+
 *Order is not equality (2026-10-26).* Maps, sets and `sort` came after
 this trade, and they need a real order, which a tolerance can't give
 (REVIEW-2026-10-26.md §1.1). So `compare` orders Numbers exactly, with NaN

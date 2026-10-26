@@ -245,8 +245,14 @@ drops the Choice when it can see `f` and read every slope.
 ### Whole numbers and text, at real sizes
 
 `Int` is the whole numbers, and it **never overflows** (`src/lang/int.ts`).
-A value is a JS number while it is a safe integer and a BigInt beyond, with
-exactly one spelling per number, so `equal` and hashing stay right. This is
+A value is a JS number while it is small (below 2^28 in size) and a BigInt
+beyond, with exactly one spelling per number, so `equal` and hashing stay
+right. The bound is that low so a value says whether it is an Int: below
+2^28 two different whole numbers are always further apart than `equal`'s
+tolerance for Numbers, so `equal` can be near on every JS number, and a
+bigger Int is a BigInt, compared exactly. A Number that happens to be
+whole keeps its tolerance: `√1e17 · √1e17` equals `1e17`, as `√2 · √2`
+equals 2 (REVIEW-2026-10-26.md §1.2). This is
 NUMBERS.md's stage 1: the meaning is the integers, the representation is
 machine numbers with a BigInt fallback. Int literals are ordinary `lit`
 nodes with `of: "type.int"` (digits in a string past 2^53). A literal can
