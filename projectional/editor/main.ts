@@ -1213,6 +1213,17 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "named", "data-target": id }, on ? "Show as wires" : "Show as let and get nodes")));
   }
 
+  // Nested patterns: a case's field opens into its type's cases, and a
+  // match whose cases all say the same thing closes up (PATTERNS.md).
+  const caseField = n.kind === "binder" && Object.values(doc.code.nodes).some((a) => a.kind === "arm" && a.binds.includes(id)) && T.dataTypeOf(doc.code, info, id);
+  const joinable = n.kind === "match" ? id : n.kind === "arm" ? Object.values(doc.code.nodes).find((m) => m.kind === "match" && m.arms.includes(id))?.id : undefined;
+  const join = joinable ? T.joinCases(doc.code, doc.names.short, info, joinable) : null;
+  if (caseField || join?.ok) {
+    const deeper = caseField ? T.matchDeeper(doc.code, doc.names.short, info, id) : null;
+    out.append(h("div", { class: "sub-head" }, "Pattern · code.json"), h("div", { class: "acts" },
+      deeper ? edit("Match deeper", `Open ${names[id] ?? "it"} into its cases, each row a copy of this one`, deeper, () => applyT(deeper)) : null,
+      join?.ok ? edit("Join cases", "Its cases all give the same value: put that value back in their place", join, () => applyT(join)) : null));
+  }
   if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
   if (hole && held[ui.def] && !doc.signatures?.[ui.def]) {
     const dname = pres().names[ui.def] ?? "This definition";

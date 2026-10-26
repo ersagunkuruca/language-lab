@@ -22,6 +22,7 @@ import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
 import { blocksOf, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
+import { shape } from "../src/lang/patterns.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -660,6 +661,31 @@ export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id):
   const scrutinee = mk({ kind: "ref", target: on });
   const next = replace({ nodes, defs: code.defs }, expr, () => ({ kind: "match", scrutinee, arms, otherwise: null }));
   return guardTyped(info, next, nn, expr, `Split on ${names[on] ?? "it"}: one case per ${display[type] ?? names[type] ?? "variant"}, each a copy to change.`);
+}
+
+// Nested patterns (PATTERNS.md "Editing"). Match deeper: a field in a
+// row's pattern opens into its type's cases, each row starting as a copy
+// of the row's body. Split on it, from the field.
+export function matchDeeper(code: Code, names: Names, info: Info, field: Id): TEdit {
+  const arm = Object.values(code.nodes).find((n): n is NodeOf<"arm"> => n.kind === "arm" && n.binds.includes(field));
+  if (!arm) return { ok: false, reason: "it isn't a field of a case" };
+  if (subtree(code, arm.body).some((x) => (code.nodes[x] as { target?: Id }).target === field)) return { ok: false, reason: `its row reads ${names[field] ?? "it"} whole, so it can't open into its cases` };
+  const r = splitOn(code, names, info, arm.body, field);
+  return r.ok ? { ...r, note: `Matched deeper on ${names[field] ?? "it"}: its place in the pattern opens into its cases, each a copy to change.` } : r;
+}
+
+// Join cases, its inverse: a match whose cases all give the same value,
+// reading none of their own fields, is that value.
+export function joinCases(code: Code, names: Names, info: Info, match: Id): TEdit {
+  const m = code.nodes[match];
+  if (m?.kind !== "match") return { ok: false, reason: "it isn't a match" };
+  const arms = m.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+  const bodies = [...arms.map((a) => a.body), ...(m.otherwise ? [m.otherwise] : [])];
+  if (!bodies.length || !parentOf(code, match)) return { ok: false, reason: "it has nothing to join" };
+  const reads = (root: Id, binds: Id[]) => subtree(code, root).some((x) => binds.includes((code.nodes[x] as { target?: Id }).target!));
+  if (arms.some((a) => reads(a.body, a.binds))) return { ok: false, reason: "a case reads its own fields" };
+  if (new Set(bodies.map((b) => shape(code, b))).size > 1) return { ok: false, reason: "its cases give different values" };
+  return guardTyped(info, collect(swapIn(code, match, bodies[0])), names, bodies[0], `Joined the cases: they all gave ${bodies.length > 1 ? "the same value" : "one value"}, so the match is gone and its place in the pattern closes up.`);
 }
 
 // Use a variable in an input: the input's current contents are replaced by
