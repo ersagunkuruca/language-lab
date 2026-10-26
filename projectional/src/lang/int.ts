@@ -72,6 +72,24 @@ export function remainder(a: Int, b: Int): Int[] {
   return [norm(r !== 0n && (r < 0n) !== (y < 0n) ? r + y : r)];
 }
 
+// a = b · x for a whole x: none when b doesn't divide a; for b = 0, x is
+// anything when a is 0 (null), else there is none.
+export function divides(a: Int, b: Int): Int[] | null {
+  if (b === 0) return a === 0 ? null : [];
+  const r = big(a) % big(b);
+  return r === 0n ? [norm(big(a) / big(b))] : [];
+}
+// The whole x with x · x = a: two, one (0) or none. Newton's method on
+// BigInts, from above.
+export function squareRoots(a: Int): Int[] {
+  const n = big(a);
+  if (n < 0n) return [];
+  if (n < 2n) return [norm(n)];
+  let x = n, y = (x + 1n) / 2n;
+  while (y < x) [x, y] = [y, (y + n / y) / 2n];
+  return x * x === n ? [norm(x), norm(-x)] : [];
+}
+
 // A negative power isn't whole: no answer.
 export function power(a: Int, n: Int): Int[] {
   if (less(n, 0)) return [];
