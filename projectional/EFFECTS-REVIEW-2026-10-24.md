@@ -329,7 +329,7 @@ None of these changes what a program means. Each is fine where it is.
   (`ABORT_OP` in `compiler/src/scalar.ts`). A program's own effect whose
   operation never returns has the same shape and could compile the same
   way; recognising the shape instead of the id is a small target item
-  (C34, for the Compiler lane). Answered effects, Random, Time, Network and
+  (C34, for the Compiler lane; done). Answered effects, Random, Time, Network and
   Cells are refused with a reason, which is the right way for a target to
   be smaller than the language.
 - **WGSL:** no effects but `Diverge` under a literal `with fuel`. Right.

@@ -9,7 +9,7 @@ import { norm } from "../../projectional/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, closures, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../projectional/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -395,6 +395,23 @@ function answer(w: Exports, f: { partial?: boolean; result: LType }, got: unknow
 function outcome(r: ReturnType<typeof makeRunner>, def: string, xs: Value[]): Value | { aborted: string } | undefined {
   try { return first(r.call(r.value(def), ...xs)); } catch (e) { if (e instanceof Aborted) return { aborted: e.reason }; throw e; }
 }
+
+test("a program's own effects that never return, in WebAssembly as Abort is: handled, through other handlers and first, an arm performing its sibling", async () => {
+  const p = escapes();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = await instantiate(m) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const def of Object.values(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const t of ["", "x", "a", "y", "q", "b"]) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(toWasm(w, t, "text")));
+      assert.equal(flat(got), flat(outcome(r, def, [t])), `${p.names[def]}(${JSON.stringify(t)})`);
+    }
+  }
+});
 
 test("choosing one of a list in WebAssembly: a loop per choice, keep with a test that may have none, chapters' and calc's functions", async () => {
   const p = searches();

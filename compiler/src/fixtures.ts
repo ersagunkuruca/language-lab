@@ -5,7 +5,7 @@ import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import { ABORT_OP, ARITH, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
-import { NUMBER } from "../../projectional/src/lang/types.ts";
+import { INT, NUMBER, STRING } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
 
@@ -526,4 +526,47 @@ export function orderedInputs(): Record<string, unknown[][]> {
     counted: [[[]], [texts], [many(100, () => of(texts))]],
     unique: many(30, () => [list(next() % 8), list(next() % 8)]),
   };
+}
+
+// A program's own effects whose operations never return (C34), compiled as
+// Abort is: handled, one going on out through a handler of another (and
+// through a handler of Abort, and first), and an arm that performs its
+// sibling operation, which reaches the next handler out.
+export function escapes() {
+  const k = new Lang(LIBRARY.code);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const txt = (x: Id) => k.call(S.concat, x, k.lit(""));
+  const cat = (...xs: Id[]) => xs.reduceRight((b, a) => k.call(S.concat, a, b));
+  const bad = k.effect("Bad", [["invalid", [["line", () => k.tref(INT)], ["why", () => k.tref(STRING)]], null], ["stop", [], null]]);
+  const { invalid, stop } = bad.op;
+  const quit = k.effect("Quit", [["quit", [["code", () => k.tref(INT)]], null]]);
+  const is = (t: Id, v: string) => k.equal(txt(t), k.lit(v));
+  const check = d("check", ["t"], (t) => k.if(is(t, ""), k.call(stop), k.if(is(t, "x"), k.call(invalid, k.int(1), k.lit("an x")),
+    k.if(is(t, "a"), k.call(ABORT_OP, k.lit("an a")), cat(t, k.lit("!"))))));
+  const through = d("through", ["t"], (t) => k.let("s", k.call(check, t), (s) => cat(k.lit("<"), s, k.lit(">"))));
+  const defs = {
+    handled: d("handled", ["t"], (t) => k.match(k.call(through, t), [
+      { variant: invalid, names: ["line", "why"], body: ([l, w]) => cat(k.call(INT_OPS.show, l), k.lit(": "), w) },
+      { variant: stop, names: [], body: () => k.lit("stopped") },
+    ])),
+    twoEffects: d("two effects", ["t"], (t) => k.match(k.match(k.if(is(t, "q"), k.call(quit.op.quit, k.int(7)), k.call(check, t)), [
+      { variant: invalid, names: ["line", "why"], body: ([, w]) => w },
+      { variant: stop, names: [], body: () => k.lit("stop") },
+    ]), [{ variant: quit.op.quit, names: ["code"], body: ([c]) => cat(k.lit("quit "), k.call(INT_OPS.show, c)) }])),
+    pastAbort: d("past abort", ["t"], (t) => k.match(k.match(k.call(check, t), [{ variant: ABORT_OP, names: ["reason"], body: ([r]) => cat(k.lit("abort: "), r) }]), [
+      { variant: invalid, names: ["line", "why"], body: ([, w]) => w },
+      { variant: stop, names: [], body: () => k.lit("stop") },
+    ])),
+    inFirst: d("in first", ["t"], (t) => k.match(k.call(S.first, k.thunk(() => k.if(is(t, "y"), k.call(S.fail), k.call(check, t))), k.thunk(() => k.lit("none"))), [
+      { variant: invalid, names: ["line", "why"], body: ([, w]) => w },
+      { variant: stop, names: [], body: () => k.lit("stop") },
+    ])),
+    armRaises: d("arm raises", ["t"], (t) => k.match(k.match(k.call(check, t), [
+      { variant: invalid, names: ["line", "why"], body: () => k.call(stop) },
+      { variant: stop, names: [], body: () => k.lit("inner") },
+    ]), [{ variant: invalid, names: ["line", "why"], body: () => k.lit("outer invalid") }, { variant: stop, names: [], body: () => k.lit("outer") }])),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), defs };
 }

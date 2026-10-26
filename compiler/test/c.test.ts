@@ -19,7 +19,7 @@ import { TRUE } from "../../projectional/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, worldly } from "../src/fixtures.ts";
+import { area, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -71,7 +71,8 @@ function decode(ws: string[], t: LType): Value {
 const compile = (c: string) => {
   const src = join(dir, `p${builds}.c`), exe = join(dir, `p${builds++}`);
   writeFileSync(src, c);
-  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
+  // GCC can't see that a cell freed at count 1 is never a static one (whose count is 0): -Wno-free-nonheap-object.
+  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
   return exe;
 };
 function build(lowered: Lowered) {
@@ -417,4 +418,17 @@ test("compare and sort in C: the evaluator's order on every plain type, and ever
     for (const xs of inputs[name]) calls.push([i, xs.map(value)]);
   }
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
+});
+
+test("a program's own effects that never return, in C as Abort is, and every cell freed", { skip }, () => {
+  const p = escapes();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const calls: [number, Value[]][] = [];
+  for (const def of Object.values(p.defs)) {
+    const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
+    assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${p.names[def]} is in C`);
+    for (const t of ["", "x", "a", "y", "q", "b"]) calls.push([i, [t]]);
+  }
+  sameAndFreed(build(lowered), calls, (i, xs) => { try { return first(r.call(r.value(lowered.funcs[i].def), ...xs))!; } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; } }, (i) => lowered.funcs[i].name);
 });

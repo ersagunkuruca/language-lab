@@ -98,7 +98,12 @@ out. `first`, `optional`, `all`, `count` and budgets let a 2 go on out
 in turn. One not handled is the function's status, and the host reads
 the reason with `Abort.reason`. calc's parser, which aborts on what it
 can't read, and ledger's `entries` and `report` give the evaluator's
-answers and reasons.
+answers and reasons. Since C34 a program's own effect whose operations
+all never return (`effect Bad = invalid(line: Int, why: Text) | stop`)
+compiles the same way, found by that shape: status 2 + its number, the
+operation as a value of the effect's type in an `eqref` global
+`$escape`, and its handler a case on that value. Every other handler and
+attempt lets it go on out, as they do an Abort.
 
 How W4b came out. Inside `first`, `optional`, `all` and `count`, lets
 whose value is `one of` a list (keep: let item = one of list, item if
