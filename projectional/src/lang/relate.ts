@@ -110,7 +110,8 @@ export function fromValue(x: unknown): Term {
 
 // Equations for the solver use variables named "?n" for logic variable n.
 interface Expr { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: Expr[] }
-interface Eq { lhs: Expr; rhs: Expr }
+// whole: an Int operation's, so its unknowns take only whole answers.
+interface Eq { lhs: Expr; rhs: Expr; whole?: boolean }
 type Wait =
   | { k: "concat"; a: Term; b: Term; c: Term }
   | { k: "show"; n: Term; s: Term }
@@ -345,13 +346,15 @@ const eq = (a: Term, b: Term): Goal => (s) => { const t = unify(a, b, s); return
 const toExpr = (t: Term, s: State): Expr | null => {
   t = walk(t, s);
   if (t instanceof LVar) return evar(`?${t.n}`) as Expr;
-  return typeof t === "number" ? enum_(t) as Expr : null;
+  // A big Int, near enough: an Int equation's answers are checked exactly
+  // by its operation too.
+  return typeof t === "number" ? enum_(t) as Expr : typeof t === "bigint" ? enum_(Number(t)) as Expr : null;
 };
 
 function substExpr(e: Expr, s: State): Expr {
   if (e.k === "var" && e.name!.startsWith("?")) {
     const t = walk(new LVar(+e.name!.slice(1)), s);
-    return typeof t === "number" ? enum_(t) as Expr : t instanceof LVar ? evar(`?${t.n}`) as Expr : (() => { throw new TypeMismatch(); })();
+    return typeof t === "number" || typeof t === "bigint" ? enum_(Number(t)) as Expr : t instanceof LVar ? evar(`?${t.n}`) as Expr : (() => { throw new TypeMismatch(); })();
   }
   if (e.k === "call") return { ...e, args: e.args!.map((a) => substExpr(a, s)) };
   return e;
@@ -374,7 +377,7 @@ function settle(s: State): Stream {
   if (s.asleep?.eqs && s.eqs.length + s.asleep.eqs <= AWAKE) s = wakeEqs(s);
   let eqs: Eq[];
   try {
-    eqs = s.eqs.map((e) => ({ lhs: substExpr(e.lhs, s), rhs: substExpr(e.rhs, s) }));
+    eqs = s.eqs.map((e) => ({ ...e, lhs: substExpr(e.lhs, s), rhs: substExpr(e.rhs, s) }));
   } catch (e) {
     if (e instanceof TypeMismatch) return null;
     throw e;
@@ -418,6 +421,9 @@ function solveSome(s: State): Stream | undefined {
     const ports = [...new Set(group.flatMap((e) => [...varsOf(e.lhs), ...varsOf(e.rhs)]))];
     const rel = relation({ name: "here", ports, eqs: group } as never) as { ports: string[] };
     const p = plan(rel as never, [] as never) as { steps: { type: string; x?: string; xs?: string[] }[] };
+    // An Int equation's unknowns are whole: an answer near one is it, and
+    // one that isn't near one is no answer.
+    const whole = new Set(group.filter((e) => e.whole).flatMap(vars));
     const determined = p.steps.flatMap((st) => st.type === "solve" ? [st.x!] : st.type === "check" ? [] : st.xs ?? []).filter((x) => x.startsWith("?"));
     if (!determined.length) continue;
     const sols = stream(rel as never, p as never, {} as never) as Iterable<{ values: Record<string, number | null> }>;
@@ -444,7 +450,9 @@ function solveSome(s: State): Stream | undefined {
       for (const x of determined) {
         const val = r.value.values[x];
         if (val === null || val === undefined) continue; // the equations leave it free
-        t = t && unify(new LVar(+x.slice(1)), val, t);
+        const n = whole.has(x) ? Math.round(val) : val;
+        if (n !== val && !close(n, val)) { t = null; break; }
+        t = t && unify(new LVar(+x.slice(1)), whole.has(x) ? intLit(n) : n, t);
       }
       return t ? mplus(settle(t), next) : next();
     };
@@ -963,6 +971,20 @@ export function interpreter(code: Code, opts: Options = {}) {
     });
   }
 
+  // With two or more sides unknown, an Int add, subtract, negate or
+  // multiply is also given to the equation solver, its unknowns whole, so
+  // x · x + x = 12 finds 3 and −4 as at Float64 (L90). The operation's own
+  // wait still checks each answer exactly.
+  function intEquation(id: Id, args: Term[], out: Term, g: Goal): Goal {
+    const op = id === INT_OPS.add ? "add" : id === INT_OPS.sub ? "sub" : id === INT_OPS.mul ? "mul" : "neg";
+    return (s) => {
+      if ([...args, out].filter((t) => walk(t, s) instanceof LVar).length < 2) return g(s);
+      const es = args.map((a) => toExpr(a, s)), o = toExpr(out, s);
+      if (!o || es.some((e) => !e)) return g(s);
+      return g({ ...s, eqs: [...s.eqs, { lhs: o, rhs: ecall(op, ...es) as Expr, whole: true }] });
+    };
+  }
+
   function builtin(id: Id, args: Term[], out: Term): Goal {
     if (NUMERIC[id]) {
       const op = NUMERIC[id];
@@ -1074,14 +1096,14 @@ export function interpreter(code: Code, opts: Options = {}) {
         : id === INT_OPS.sub ? [([, b, o]) => intAdd(o, b), ([a, , o]) => intSub(a, o), ([a, b]) => intSub(a, b)]
         : [([, o]) => intNeg(o), ([a]) => intNeg(a)];
       const unknown = (s: State) => sides.filter((t) => walk(t, s) instanceof LVar).length;
-      return wait({
+      return intEquation(id, args, out, wait({
         k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1, then: (s) => {
           const xs = sides.map((t) => walk(t, s));
           const i = xs.findIndex((x) => x instanceof LVar);
           const at = i < 0 ? sides.length - 1 : i;
           return eq(sides[at], solve[at](xs as Int[]))(s);
         },
-      });
+      }));
     }
     // Whole-number multiply: out from both factors; a factor from the other
     // and out when it divides exactly (none when it doesn't, any when both
@@ -1091,7 +1113,7 @@ export function interpreter(code: Code, opts: Options = {}) {
       const sides = [a, b, out];
       const same = (s: State) => { const x = walk(a, s); return x instanceof LVar && x === walk(b, s); };
       const unknown = (s: State) => sides.filter((t) => walk(t, s) instanceof LVar).length;
-      return wait({
+      return intEquation(id, args, out, wait({
         k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1 || (same(s) && !(walk(out, s) instanceof LVar)), then: (s) => {
           const [x, y, o] = sides.map((t) => walk(t, s));
           if (x instanceof LVar && x === y) return disj(...squareRoots(o as Int).map((r) => eq(x, r)))(s);
@@ -1102,7 +1124,7 @@ export function interpreter(code: Code, opts: Options = {}) {
           }
           return eq(out, intMul(x as Int, y as Int))(s);
         },
-      });
+      }));
     }
     // split, backwards: the pieces joined by the separator, if splitting
     // that gives the same pieces (no piece holds the separator). Waiting
