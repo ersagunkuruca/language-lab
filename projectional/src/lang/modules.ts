@@ -25,6 +25,7 @@ import { children, collect, isPublished, mapIds, merge, subtree, type Code, type
 import { defGroups, hashes } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
+import type { Representation } from "./represent.ts";
 import { pinKey, pinsOf, type Pins } from "./signatures.ts";
 import { schemeArith, showType } from "./types.ts";
 
@@ -43,6 +44,9 @@ export interface Module {
   exports: Id[];
   // Updates: a new definition and the one it replaces (upgrade, below).
   replaces?: Record<Id, Id>;
+  // Ways to store a type, in its definitions (represent.ts): the trees
+  // module's rows for Map and Set.
+  representations?: Representation[];
 }
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -136,7 +140,10 @@ export function verify(m: Module, base: Code, checkPins = false): string | null 
     if (missing) return `node ${n.id} points at ${missing}, which isn't in the module or the base`;
   }
   for (const e of m.exports) if (!m.code.defs.includes(e)) return `it offers ${e}, which it doesn't have`;
-  for (const d of m.code.defs) if (!m.pins[d]) return `${m.names[d] ?? d} has no pin`;
+  // A data type has no type of its own to pin; its constructors are typed
+  // from it.
+  const isType = (d: Id) => { const b = (m.code.nodes[d] as { body?: Id | null }).body; return !!b && m.code.nodes[b]?.kind === "typedef"; };
+  for (const d of m.code.defs) if (!m.pins[d] && !isType(d)) return `${m.names[d] ?? d} has no pin`;
   if (checkPins) {
     const info = infer(code);
     const own = new Set(m.code.defs.flatMap((d) => nodeIds(code, d)));
@@ -164,7 +171,8 @@ export function pointsAt(n: Node): Id[] {
 // What a program is checked and shown with: the base, the modules on top,
 // their names under the program's, their pins, and their helpers hidden.
 // The same definition in two modules is one definition.
-export interface Library { code: Code; names: Names; comments: Comments; pins: Pins; hidden: Set<Id>; modules: Module[] }
+// reps: every module's representation rows (the trees for Map and Set).
+export interface Library { code: Code; names: Names; comments: Comments; pins: Pins; hidden: Set<Id>; modules: Module[]; reps: Representation[] }
 
 export function library(base: Code, baseNames: Names, modules: Module[]): Library {
   const exported = new Set(modules.flatMap((m) => m.exports));
@@ -175,6 +183,7 @@ export function library(base: Code, baseNames: Names, modules: Module[]): Librar
     pins: Object.assign({}, ...modules.map((m) => m.pins)),
     hidden: new Set(modules.flatMap((m) => m.code.defs).filter((d) => !exported.has(d))),
     modules,
+    reps: modules.flatMap((m) => m.representations ?? []),
   };
 }
 
