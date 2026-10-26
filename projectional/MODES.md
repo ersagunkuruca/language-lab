@@ -135,7 +135,7 @@ flow through constructors **both ways**. Taking apart a known value gives
 strictly smaller parts, which is what makes `map` backwards end: the
 recursive call's `out` is the tail of a known `out`. A mode ends when
 every cycle of calls has a known port that strictly decreases, and every
-choice on the way is finite. Numbers don't count as decreasing, as in
+choice on the way is finite. Float64s don't count as decreasing, as in
 the forward check.
 
 Termination analysis of logic programs per query mode is prior art:

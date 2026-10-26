@@ -229,7 +229,7 @@ copy needed at each call follows from the instantiated type. There are two
 details:
 
 - A row variable that appears only as a definition's own effect, and not
-  inside a parameter, is compiled as pure. `safe : (Number, List Number)
+  inside a parameter, is compiled as pure. `safe : (Float64, List Float64)
   -[e]-> Bool` is called from inside `queens`, which has `Choice`, but
   `safe` can't start choosing because its caller does.
 - Where a parameter's row already lists `Choice` (as in `keep`'s test
@@ -331,7 +331,7 @@ no spine: when the recursive case adds an item to the rest with Int `+`
 then rest + 1 else rest`), and the items, tests and other case have no
 effects, it runs from the front into an accumulator. Exact Int `+` and `×`
 don't care about order, and nothing can see the order of effect-free
-items. Number `+` keeps the spine: floating point isn't associative. This
+items. Float64 `+` keeps the spine: floating point isn't associative. This
 is how `length`, sums and counts compile (compiler/GAPS.md, G15).
 
 A fold whose answer is a record (a type with one case, such as chapters'
@@ -384,7 +384,7 @@ transforming programs to eliminate trees", 1990) and short-cut fusion
 deforestation", FPCA 1993) where the steps are known definitions, done by
 inlining.
 
-A block function (List Number to List Number, AUDIO.md) whose list is
+A block function (List Float64 to List Float64, AUDIO.md) whose list is
 built by definitions that make it front to back also gets a version that
 writes the list into an array it is handed (destination passing, GAPS.md
 P4). The audio runtimes call that version through `$arrayOf`, so a block
@@ -458,7 +458,7 @@ Swierstra, ICFP 2023), which find the same reuse with reference counts at
 run time; here it's decided at compile time.
 
 `equal` compiles by the type of what it compares: `===` for Text and Int,
-`$sameNumber` for Number, the runtime's `$eq` for anything else. A generic
+`$sameNumber` for Float64, the runtime's `$eq` for anything else. A generic
 definition that the whole program uses at one type only, and doesn't
 export, compares as that type, so `times in` on Text uses `===` (GAPS.md
 G17). Specializing a generic function once for each type it's used at, as
@@ -488,7 +488,7 @@ backend.
 | text | JS strings | **no** | **no** | JS strings via imports | our own strings |
 | the solver fallback, `relate.ts` | linked as JS | **no**, closed-form plans only | **no**, closed-form plans only | call back into JS | port it, or refuse |
 
-The first three columns are the **scalar profile**: Number and Bool,
+The first three columns are the **scalar profile**: Float64 and Bool,
 arithmetic, `if`, lets, and calls between such definitions. It needs no
 heap, no closures and no runtime, which is exactly what a GPU and plain
 WebAssembly can run. A shader adds one rule (no recursion, because GPUs
@@ -501,7 +501,7 @@ tiny expression tree (numbers, locals, operations, `if`, let, call).
 `compiler/src/wasm.ts` prints that tree as a WebAssembly module, binary
 and text, with no dependencies. Each part maps directly:
 
-- Number is `f64` and Bool is `i32`.
+- Float64 is `f64` and Bool is `i32`.
 - A let is a local, and `if` is `if … else … end`.
 - `sin`, `pow` and friends are imported from the host's `Math`, so results
   are bit-for-bit the evaluator's.
@@ -512,7 +512,7 @@ and text, with no dependencies. Each part maps directly:
 
 A definition outside the profile is **refused with the reason**, the way
 a type error is reported: `sinc` "has effects (Choice)", `parabola` "calls
-polynomial, which takes or gives something other than Number or Bool". So
+polynomial, which takes or gives something other than Float64 or Bool". So
 "can this run on the GPU / in WASM" becomes a question with a visible
 answer in the editor (REVIEW.md §5.2, targets as profiles).
 
@@ -538,12 +538,12 @@ right.
 The same lowering has a second printer, `compiler/src/wgsl.ts`, and the
 programs run live at
 [shaders.html](https://ersagunkuruca.github.io/language-lab/shaders.html).
-A shader is `colour(x, y, time)`, which gives a record of three Numbers,
+A shader is `colour(x, y, time)`, which gives a record of three Float64s,
 or `red`, `green` and `blue`. The parts map like this:
 
-- Number is `f32` and Bool is `bool`. A record of them (a data type with
-  one case, such as a `Ray`) is a `struct`; a record of two to four Numbers
-  (a `Vec`, a `Colour`, a `Pair` of Numbers) is a vector, `vec2f` to
+- Float64 is `f32` and Bool is `bool`. A record of them (a data type with
+  one case, such as a `Ray`) is a `struct`; a record of two to four Float64s
+  (a `Vec`, a `Colour`, a `Pair` of Float64s) is a vector, `vec2f` to
   `vec4f`, fields in order as `.x .y .z .w` (see "Vectors" below). The lowering takes
   records only with `{ records: true }`, because WebAssembly would need
   multiple results for them, so it still refuses them.
@@ -578,7 +578,7 @@ or `red`, `green` and `blue`. The parts map like this:
   calls). n must be a number written down, from 0 to 2²⁴, so the bound is
   fixed when the shader is built. `first` or `with fuel` in any other
   shape is refused. A step counter inside the loop (march's 120 steps)
-  still decides the picture, but it can't be the guarantee: on a Number,
+  still decides the picture, but it can't be the guarantee: on a Float64,
   NaN + 1 is NaN and `less than(120, NaN)` is false, so the checker is
   right not to trust it.
 - `pow` goes through a small function, because WGSL's `pow` is undefined
@@ -607,11 +607,11 @@ gets exact derivatives instead of six extra scene evaluations, and editing
 Inigo Quilez's, credited where they are used.
 
 **Vectors.** The language has no vector type and doesn't need one for
-this: a record of two to four Numbers is *stored* as a WGSL vector, the way
+this: a record of two to four Float64s is *stored* as a WGSL vector, the way
 `examples/numbers` stores Peano naturals as Ints (NUMBERS.md). The program
 keeps saying `colour(red(a) + t · (red(b) − red(a)), …)`; the printer
 notices when the parts of a record being built each do the same thing to the
-same part of other vectors (or to one Number shared by all) and prints one
+same part of other vectors (or to one Float64 shared by all) and prints one
 vector expression instead. That is superword-level parallelism (Larsen and
 Amarasinghe, PLDI 2000), done on the expression tree. On top of it, the
 GPU's built-ins are recognised from what they mean:
@@ -632,17 +632,17 @@ don't line up stay parts: `vec3f(p.x + s, p.y, p.z)`. `npm run gpu` checks
 every function against the evaluator as before.
 
 **Written once, in the source.** The language side is three builtins,
-`map parts`, `zip parts` and `total` (LANGUAGE.md, "Records of Numbers,
+`map parts`, `zip parts` and `total` (LANGUAGE.md, "Records of Float64s,
 part by part"), and the vectors module written on them. The lowering
 writes `map parts(f, v)` out as one call of `f` per field, which is the
 field-by-field code above, so the same recognition turns it back into one
 vector operation: `plus` is `p0 + p1`, `scale` is `p0 * p1`, `dot` is
 `dot(p0, p1)`, `magnitude` is `length(p0)`, `mix` is `mix(p0, p1, p2)`,
 `clamp` is `clamp(p0, vec3f(p1), vec3f(p2))`. The module's definitions are
-generic (any record of Numbers), and a GPU has no generic functions, so the
+generic (any record of Float64s), and a GPU has no generic functions, so the
 lowering makes one copy of a definition per set of types it is called at
 (monomorphisation, as C++ templates and Rust generics do): `scale` at `Vec`
-and at `Colour`, `mix` at `Colour` and at `Number`. The JavaScript compiler
+and at `Colour`, `mix` at `Colour` and at `Float64`. The JavaScript compiler
 needs no copies: `$mapParts` maps over the fields.
 
 Honestly, about speed: today's desktop and phone GPUs run each thread as a
@@ -653,11 +653,11 @@ it faster. What the GPU does gain is its built-ins (`dot`, `normalize`,
 `mix` is computed as `a·(1−t) + b·t`, and `min`/`max` of a NaN may give
 either side. The bigger cost was in the source, which had to spell out
 each channel; the language side of that (elementwise operations over any
-record of Numbers, written once in a module) is described just above.
+record of Float64s, written once in a module) is described just above.
 
 Still to do for shaders: matrix types, `Float32` so f32 is in the
 program rather than a target's choice (designed in NUMBERS.md, as an
-approximate representation of `Number`), and a live preview in the
+approximate representation of `Float64`), and a live preview in the
 editor.
 
 ### JavaScript for the scalar profile: the CPU's fallback for pictures
@@ -665,7 +665,7 @@ editor.
 Without WebGPU, a picture is drawn on the CPU. WebAssembly takes no
 records yet, so a `colour` that gives one (the ray marcher's) goes
 through a third printer of the same lowering, `compiler/src/js-scalar.ts`:
-Number is a JavaScript number, Bool a boolean, a record an array of its
+Float64 is a JavaScript number, Bool a boolean, a record an array of its
 fields, and a call to itself as the last step a loop. It gives the
 evaluator's numbers exactly (`compiler/test/js-scalar.test.ts`), and it is
 fast enough to animate the ray marcher at about 150×150 (a 96×96 frame

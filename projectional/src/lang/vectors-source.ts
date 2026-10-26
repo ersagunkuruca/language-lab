@@ -1,7 +1,7 @@
 // The vectors module: arithmetic on points, directions and colours,
-// written once for every record of Numbers. A program's own `Vec` or
-// `Colour` (one case, every field a Number) gets all of it, and so does a
-// plain Number; adding a colour to a position is still a type error, since
+// written once for every record of Float64s. A program's own `Vec` or
+// `Colour` (one case, every field a Float64) gets all of it, and so does a
+// plain Float64; adding a colour to a position is still a type error, since
 // both inputs must be the same record. Each definition is the parts
 // builtins (std.ts: map parts, zip parts, total) and nothing else, so it
 // runs backwards like any other function, and on a GPU it is the vector
@@ -22,7 +22,7 @@ export function buildVectors(): Module {
   const k = new Lang();
   const zip = (op: Id, a: Id, b: Id) => k.call(S.zipParts, op, a, b);
 
-  // + − · on a record of Numbers are the one generic + − · (arith.ts makes
+  // + − · on a record of Float64s are the one generic + − · (arith.ts makes
   // them zip parts), so plus, minus and times are only those under their
   // old names, kept for a release (NUMBERS.md, "One `+`", step 3).
   const plus = k.def("plus");
@@ -51,7 +51,7 @@ export function buildVectors(): Module {
 
   const offered: Id[] = [plus, minus, times, scale, dot, magnitude, distance, unit, mix, clamp, reflect];
   const comments: Record<Id, string> = {
-    [plus]: "a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Numbers; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
+    [plus]: "a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Float64s; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
     [minus]: "a − b: the old name of −, kept for a release. The direction from b to a.",
     [times]: "a · b: the old name of ·, kept for a release. A colour tinted by another.",
     [scale]: "Every part of v times by: a direction made longer, a colour made brighter.",

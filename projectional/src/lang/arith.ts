@@ -2,24 +2,24 @@
 // (NUMBERS.md, "One `+` for every number system").
 //
 // The program stores one generic `+` (std.ts ARITH), whose type says "any
-// number type". A small Int and a Number are the same JavaScript value, so
+// number type". A small Int and a Float64 are the same JavaScript value, so
 // the operation can't be chosen by looking at the value: it is chosen by
 // the type, here, once. This is a code → code pass, like `represent`:
 //
-//   - a call whose type is known becomes the type's own operation: Number's
-//     builtin, Int's builtin, or `zip parts` / `map parts` of Number's on a
-//     record of Numbers;
+//   - a call whose type is known becomes the type's own operation: Float64's
+//     builtin, Int's builtin, or `zip parts` / `map parts` of Float64's on a
+//     record of Float64s;
 //   - a generic definition used at another type gets a copy for that type
 //     (monomorphisation, as MLton does for every definition and the
 //     compiler's scalar profile already does), and its uses point at it.
 //     Hindley-Milner has no polymorphic recursion, so this always ends;
-//   - a type still open where the operation is used is Number, as Haskell
+//   - a type still open where the operation is used is Float64, as Haskell
 //     defaults Num (the Run pane on `smaller`, with no caller to say).
 //
 // The evaluator, relate.ts and the compiler get the resolved program, so
 // none of them sees a generic operation and nothing dispatches at run
 // time. A program with no generic operation comes back as it was. The
-// definition's own id stays its Number version, so entry points and names
+// definition's own id stays its Float64 version, so entry points and names
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
@@ -35,7 +35,7 @@ import { ratioParts } from "./int.ts";
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
 
-// Each generic operation's own operation at Number and at Int.
+// Each generic operation's own operation at Float64 and at Int.
 const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
   [ARITH.add]: { number: B.add, int: INT_OPS.add, arity: 2 },
   [ARITH.sub]: { number: B.sub, int: INT_OPS.sub, arity: 2 },
@@ -85,7 +85,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
 
   type Env = Map<number, Type>;
   // A type with the definition's variables replaced, and every number-type
-  // variable left open made Number.
+  // variable left open made Float64.
   const close = (t: Type, env: Env): Type => {
     t = s.resolve(t);
     if (t.t === "var") return env.has(t.v) ? env.get(t.v)! : s.arith.has(t.v) ? num : t;
@@ -235,7 +235,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
       typeOf.set(id, t);
       return;
     }
-    // A record of Numbers (the checker allows nothing else here): Number's
+    // A record of Float64s (the checker allows nothing else here): Float64's
     // operation part by part.
     const each: Type = { t: "fn", params: at.arity === 1 ? [num] : [num, num], ret: num, eff: pure };
     const parts = at.arity === 1 ? S.mapParts : S.zipParts;
@@ -254,7 +254,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     typeOf.set(id, t);
   };
 
-  // Every definition at its own types, its number-type variables Number;
+  // Every definition at its own types, its number-type variables Float64;
   // then each copy that made, until none is new.
   for (const d of code.defs) {
     const n = code.nodes[d];

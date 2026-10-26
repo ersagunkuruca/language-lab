@@ -49,7 +49,7 @@ export function fromList(v: Value): Value[] {
   return out;
 }
 
-// Numbers stand for reals and floats only approximate them, so two numbers
+// Float64s stand for reals and floats only approximate them, so two numbers
 // are equal when they agree to the precision floats carry. Otherwise a
 // predicate like distance = speed·time + ½·g·time² would be false for the
 // very values the solver found for it. `sameNumber` below says where.
@@ -71,12 +71,12 @@ export const close = (a: number, b: number) => {
 // exactly (int.ts; REVIEW-2026-10-26.md §1.2). So the value says what it
 // is, and no wholeness test is needed.
 //
-// It used to be type-directed (near on Numbers, exact on Ints, this rule on
+// It used to be type-directed (near on Float64s, exact on Ints, this rule on
 // a type variable), so inlining a generic function changed answers, and
 // backwards every number was near (REVIEW-2026-10-22b.md §2). Then it was
 // exact on any two whole floats, which took the tolerance away from big
-// Numbers (every float past 2^52 is whole). The price that stays: no
-// tolerance is transitive, so it isn't an equivalence on Numbers, which is
+// Float64s (every float past 2^52 is whole). The price that stays: no
+// tolerance is transitive, so it isn't an equivalence on Float64s, which is
 // why `compare` orders them exactly. NOTES.md "Equality".
 export const sameNumber = (a: number, b: number) => close(a, b);
 
@@ -94,22 +94,22 @@ export function equal(a: Value, b: Value): boolean {
   return true;
 }
 
-// How two Numbers are ordered: exactly, and totally. Unlike `equal`'s
+// How two Float64s are ordered: exactly, and totally. Unlike `equal`'s
 // nearness this is an order a sorted list, a set or a map's keys can rely
-// on (REVIEW-2026-10-26.md §1.1): every Number is before, the same as or
+// on (REVIEW-2026-10-26.md §1.1): every Float64 is before, the same as or
 // after every other, and "the same" is transitive. NaN (from 0/0 or
-// sqrt(−1)) is after every other Number and the same as itself, as in
+// sqrt(−1)) is after every other Float64 and the same as itself, as in
 // IEEE 754's totalOrder; −0 and 0 are the same, unlike totalOrder, because
 // `equal` says so and nothing a program does tells them apart.
 export const numberOrder = (a: number, b: number): number =>
   a < b ? -1 : a > b ? 1 : a === b ? 0 : Number.isNaN(a) ? (Number.isNaN(b) ? 0 : 1) : -1;
 
-// The order on plain data (L66): numbers by value (Int, Number and
-// fractions; Number exactly, numberOrder), text by code point, and other
+// The order on plain data (L66): numbers by value (Int, Float64 and
+// fractions; Float64 exactly, numberOrder), text by code point, and other
 // cases by their declaration order (`order`: a variant's place in its
 // type, variantOrder), then their fields left to right, so lists go
 // lexicographically with [] first. OCaml's `compare` and Erlang's term
-// order (prior art). -1, 0 or 1. Where `equal` is near on Numbers, this
+// order (prior art). -1, 0 or 1. Where `equal` is near on Float64s, this
 // is exact: 0.1 + 0.2 is after 0.3, and equal to it.
 export function compareValues(a: Value, b: Value, order: Map<Id, number>): number {
   const todo: [Value, Value][] = [[a, b]];
@@ -238,7 +238,7 @@ export interface World {
   appendFile(path: string, text: string): void;
   fileExists(path: string): boolean;
   listFolder(path: string): string[];
-  // Random's answer when the program has no handler: a Number in [0, 1).
+  // Random's answer when the program has no handler: a Float64 in [0, 1).
   random(): number;
   // Time's and Wait's: milliseconds since 1970, and pausing.
   now(): number;
@@ -291,7 +291,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.exists]: (f) => one(bool(satisfiable(code, f))),
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
-    // A record of Numbers, part by part. Number is a record of one part.
+    // A record of Float64s, part by part. Float64 is a record of one part.
     [S.mapParts]: (f, r) => one(typeof r === "number" ? only(f as Fn, r) : { ...(r as Data), fields: (r as Data).fields.map((x) => only(f as Fn, x)) }),
     [S.zipParts]: (f, a, b) => one(typeof a === "number" ? only(f as Fn, a, b) : { ...(a as Data), fields: (a as Data).fields.map((x, i) => only(f as Fn, x, (b as Data).fields[i])) }),
     [S.total]: (r) => one(typeof r === "number" ? r : ((r as Data).fields as number[]).reduce((x, y) => x + y)),
@@ -347,7 +347,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
     // The record a gradient is over is known once there's a point to take
-    // it at; over a Number it's the derivative.
+    // it at; over a Float64 it's the derivative.
     [S.gradient]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
       const env = fromMap("env" in m ? m.env : new Map());
@@ -898,7 +898,7 @@ export function pageProblem(info: Info, def: Id, names: Names = {}): string | nu
 
 // A program run from the command line (cli/lab.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an
-// Int or a Number), or anything else for 0. An Abort that nothing handles
+// Int or a Float64), or anything else for 0. An Abort that nothing handles
 // prints its reason to standard error and exits with 1.
 export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: Runtime): number {
   const t = info.typeOf.get(def);
@@ -919,7 +919,7 @@ export function showValue(v: Value, code: Code, names: Names): string {
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names)).join(", ")}]`;
-  // Number types show as numbers, as `show fraction` and `show complex` do.
+  // Float64 types show as numbers, as `show fraction` and `show complex` do.
   if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names)); return bottom === "1" ? top : `${top}/${bottom}`; }
   if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names)}i`; }
   const name = names[v.tag] ?? v.tag;

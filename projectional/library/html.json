@@ -3029,7 +3029,7 @@
     "@l1ibnd69fhv5j8j3reredg1ar1": "A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.",
     "@sv3q3ae9pssb720vsoff6784sc": "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
     "@cnpegsqmsbsshfllkudv1d264h": "A style element holding these rules.",
-    "@v4m3u10hkehjb5097mejohqi5p": "A length in pixels, from a Number or an Int.",
+    "@v4m3u10hkehjb5097mejohqi5p": "A length in pixels, from a Float64 or an Int.",
     "@htgmkjadvd8b5m17uvfn9s7hc0": "The texts with between between each two of them."
   },
   "exports": [

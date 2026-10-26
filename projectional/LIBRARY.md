@@ -2,13 +2,13 @@
 
 Everything a program can use without writing it, by topic: its type and what it does. Printed by `node library/reference.ts` from the notes in src/lang/notes.ts and the modules' comments; LANGUAGE.md explains the ideas.
 
-How to read a type: `(Number, Number) -> Number` takes two Numbers and gives one. Effects go in the arrow: `() -[Random]-> Number` takes nothing, may draw random numbers, and gives a Number. A small letter (`a`, `b`) is any type, the same one wherever the letter appears in that type; `List a` is a list of anything. A name with no arrow (`i : Complex`) is a value.
+How to read a type: `(Float64, Float64) -> Float64` takes two Float64s and gives one. Effects go in the arrow: `() -[Random]-> Float64` takes nothing, may draw random numbers, and gives a Float64. A small letter (`a`, `b`) is any type, the same one wherever the letter appears in that type; `List a` is a list of anything. A name with no arrow (`i : Complex`) is a value.
 
 ## Numbers
 
-There are four kinds of number. Int is a whole number of any size. Number is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Each literal has one kind: 3 is a Number unless it is written as an Int, a fraction like 1/2, or a Complex. Kinds never mix by themselves: as number turns an Int into a Number, whole part goes back, and as fraction and as complex turn into the others. The versions "at Number" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
+There are four kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Each literal has one kind: 3 is a Float64 unless it is written as an Int, a fraction like 1/2, or a Complex. Kinds never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
 
-- **add** : `(a, a) -> a`. a + b, at any number type: Int, Number, Rational, Complex (and records of Numbers through the vectors module).
+- **add** : `(a, a) -> a`. a + b, at any number type: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).
 - **subtract** : `(a, a) -> a`. a − b, at any number type.
 - **multiply** : `(a, a) -> a`. a · b, at any number type. At Complex it's the complex product.
 - **negate** : `(a) -> a`. −a, at any number type.
@@ -18,28 +18,28 @@ There are four kinds of number. Int is a whole number of any size. Number is a f
 - **at least** : `(a, a) -> Bool`. a ≥ b: not a < b.
 - **smaller** : `(a, a) -> a`. The smaller of two numbers (min); a shader's min.
 - **larger** : `(a, a) -> a`. The larger of two numbers (max); a shader's max.
-- **divide** : `(Number, Number) -> Number`. a ÷ b for Numbers (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
-- **sqrt** : `(Number) -> Number`. The square root.
-- **power** : `(Number, Number) -> Number`. a to the power b.
-- **sin** : `(Number) -> Number`. Sine of an angle in radians.
-- **cos** : `(Number) -> Number`. Cosine of an angle in radians.
-- **tan** : `(Number) -> Number`. Tangent of an angle in radians.
-- **atan2** : `(Number, Number) -> Number`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
-- **exp** : `(Number) -> Number`. e to the power x.
-- **log** : `(Number) -> Number`. The natural logarithm (the debugging effect is Log, a different thing).
-- **abs** : `(Number) -> Number`. The size of a Number without its sign.
-- **floor** : `(Number) -> Number`. The Number rounded down to a whole one, still a Number. whole part gives an Int.
-- **mod** : `(Number, Number) -> Number`. The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.
-- **round to Float32** : `(Number) -> Number`. The nearest Number a GPU can hold (32-bit floating point).
-- **show** : `(Number) -> Text`. A Number as text: show(2.5) is "2.5".
-- **range** : `(Number) -> List Number`. The Numbers 0, 1, … up to n − 1, as a list.
+- **divide** : `(Float64, Float64) -> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
+- **sqrt** : `(Float64) -> Float64`. The square root.
+- **power** : `(Float64, Float64) -> Float64`. a to the power b.
+- **sin** : `(Float64) -> Float64`. Sine of an angle in radians.
+- **cos** : `(Float64) -> Float64`. Cosine of an angle in radians.
+- **tan** : `(Float64) -> Float64`. Tangent of an angle in radians.
+- **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
+- **exp** : `(Float64) -> Float64`. e to the power x.
+- **log** : `(Float64) -> Float64`. The natural logarithm (the debugging effect is Log, a different thing).
+- **abs** : `(Float64) -> Float64`. The size of a Float64 without its sign.
+- **floor** : `(Float64) -> Float64`. The Float64 rounded down to a whole one, still a Float64. whole part gives an Int.
+- **mod** : `(Float64, Float64) -> Float64`. The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.
+- **round to Float32** : `(Float64) -> Float64`. The nearest Float64 a GPU can hold (32-bit floating point).
+- **show** : `(Float64) -> Text`. A Float64 as text: show(2.5) is "2.5".
+- **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
 - **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
 - **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
 - **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
 - **lowest terms** : `(Int, Int) -> Pair Int Int`. Both divided by their greatest common divisor, the second made positive: how a fraction is kept.
 - **read whole number** : `(Text) -[Choice]-> Int`. The Int a text spells, like "42". No answer when it isn't one.
-- **as number** : `(Int) -> Number`. The Int as a Number.
-- **whole part** : `(Number) -[Choice]-> Int`. The Number rounded down, as an Int: whole part(2.7) is 2. No answer for infinity or not-a-number.
+- **as float64** : `(Int) -> Float64`. The Int as a Float64.
+- **whole part** : `(Float64) -[Choice]-> Int`. The Float64 rounded down, as an Int: whole part(2.7) is 2. No answer for infinity or not-a-number.
 - **abs** : `(Int) -> Int`. The size of an Int without its sign.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
@@ -48,22 +48,22 @@ There are four kinds of number. Int is a whole number of any size. Number is a f
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.
 - **divide fractions** : `(Rational, Rational) -[Choice]-> Rational`. a ÷ b for fractions, exactly; no answer when b is 0.
 - **show fraction** : `(Rational) -> Text`. A fraction as 3/4, or 3 when it is whole.
-- **fraction as number** : `(Rational) -> Number`. The nearest Number.
-- **Complex** (type). A complex number re + im·i, a record of two Numbers. The same + − · work on it (· is the complex product); it has no <.
-- **as complex** : `(Number) -> Complex`. The Number x as a complex number, x + 0i.
+- **fraction as float64** : `(Rational) -> Float64`. The nearest Float64.
+- **Complex** (type). A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.
+- **as complex** : `(Float64) -> Complex`. The Float64 x as a complex number, x + 0i.
 - **i** : `Complex`. i, the square root of −1: i · i is −1.
 - **complex conjugate** : `(Complex) -> Complex`. a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².
-- **modulus** : `(Complex) -> Number`. |z|, how far z is from 0 (the vectors module's magnitude says the same).
-- **angle of** : `(Complex) -> Number`. The angle from the positive real line to z, in radians, between −π and π (atan2).
-- **polar** : `(Number, Number) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
+- **modulus** : `(Complex) -> Float64`. |z|, how far z is from 0 (the vectors module's magnitude says the same).
+- **angle of** : `(Complex) -> Float64`. The angle from the positive real line to z, in radians, between −π and π (atan2).
+- **polar** : `(Float64, Float64) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
 - **divide complex** : `(Complex, Complex) -[Choice]-> Complex`. z ÷ w for complex numbers; no answer when w is 0.
 - **complex exp** : `(Complex) -> Complex`. e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
 - **show complex** : `(Complex) -> Text`. A complex number as 3 + 4i or 3 − 4i.
-- **add** : `(Number, Number) -> Number`. a + b for Numbers: what the generic + is at Number.
-- **subtract** : `(Number, Number) -> Number`. a − b for Numbers: what the generic − is at Number.
-- **multiply** : `(Number, Number) -> Number`. a · b for Numbers: what the generic · is at Number.
-- **negate** : `(Number) -> Number`. −a for a Number: what the generic − is at Number.
-- **less than** : `(Number, Number) -> Bool`. a < b for Numbers: what the generic < is at Number.
+- **add** : `(Float64, Float64) -> Float64`. a + b for Float64s: what the generic + is at Float64.
+- **subtract** : `(Float64, Float64) -> Float64`. a − b for Float64s: what the generic − is at Float64.
+- **multiply** : `(Float64, Float64) -> Float64`. a · b for Float64s: what the generic · is at Float64.
+- **negate** : `(Float64) -> Float64`. −a for a Float64: what the generic − is at Float64.
+- **less than** : `(Float64, Float64) -> Bool`. a < b for Float64s: what the generic < is at Float64.
 - **add** : `(Int, Int) -> Int`. a + b for Ints: what the generic + is at Int. Ints never overflow.
 - **subtract** : `(Int, Int) -> Int`. a − b for Ints: what the generic − is at Int.
 - **multiply** : `(Int, Int) -> Int`. a · b for Ints: what the generic · is at Int.
@@ -77,7 +77,7 @@ There are four kinds of number. Int is a whole number of any size. Number is a f
 - **or** : `(Bool, Bool) -> Bool`. Either true.
 - **not** : `(Bool) -> Bool`. true becomes false and false true.
 - **equal** : `(a, a) -> Bool`. Whether two values are the same: numbers, text, and data made of them. Functions can't be compared.
-- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Numbers by value, exactly (unlike equal, which lets two Numbers within about 1e-9 be equal), with NaN after every other Number; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
+- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Float64s by value, exactly (unlike equal, which lets two Float64s within about 1e-9 be equal), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
 - **Order** (type). What compare answers: before, same or after.
 - **show** : `(a) -> Text`. Any plain value as text, the way it would be written: show([1, 2]) is "[1, 2]".
 
@@ -110,15 +110,15 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **for each** : `(List a, (a) -[e]-> b) -[e]-> Unit`. Runs the action on each item of the list in turn, for what it does (prints, writes a cell).
 - **keep** : `(List a, (a) -[Choice]-> Bool) -> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
 - **length** : `(List a) -> Int`. How many items the list has.
-- **sum** : `(List Number) -> Number`. The Numbers of the list added up; 0 for an empty list.
+- **sum** : `(List Float64) -> Float64`. The Float64s of the list added up; 0 for an empty list.
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
-- **show numbers** : `(List Number) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
+- **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 
 ## Maps and sets
 
-A map is kept sorted by key in compare's order, so two maps with the same entries are equal and print the same, whatever order they were built in. Keys are exact: two Number keys are one key only when they are the same Number.
+A map is kept sorted by key in compare's order, so two maps with the same entries are equal and print the same, whatever order they were built in. Keys are exact: two Float64 keys are one key only when they are the same Float64.
 
 - **Map** (type). A map from keys to values, kept sorted by key with no key twice. Build one with empty map, as map or put (its constructor map of is private to the library, which keeps the rule); read it with value at.
 - **empty map** : `Map a b`. The map with no entries.
@@ -152,11 +152,11 @@ A computation with the Choice effect may have no answer, one, or several, like a
 - **fail** : `() -[Choice]-> a`. No answer. In a search it drops this path.
 - **all** : `(() -[Choice, e]-> a) -[e]-> List a`. Every answer a search gives, as a list. The search's Choice ends here.
 - **first** : `(() -[Choice]-> a, () -[e]-> a) -[e]-> a`. The first answer a search gives, or the default when it gives none.
-- **count** : `(() -[Choice, e]-> a) -[e]-> Number`. How many answers a search gives.
+- **count** : `(() -[Choice, e]-> a) -[e]-> Float64`. How many answers a search gives.
 - **optional** : `(() -[Choice, e]-> a) -[e]-> Optional a`. The first answer as some(answer), or none.
 - **value of** : `(Optional a) -[Choice]-> a`. The value in some(value); no answer for none. optional run backwards.
 - **Optional** (type). A value that may be missing: none, or some(value). The data form of Choice, for keeping an answer that may not be there.
-- **with fuel** : `(Number, () -[Diverge, e]-> a) -[Choice, e]-> a`. Runs something that might not finish, allowing it n steps; if it hasn't finished by then, there's no answer. That turns Diverge into Choice.
+- **with fuel** : `(Float64, () -[Diverge, e]-> a) -[Choice, e]-> a`. Runs something that might not finish, allowing it n steps; if it hasn't finished by then, there's no answer. That turns Diverge into Choice.
 - **hence** : `(Bool, Bool) -> Bool`. a hence b is a and b, read as "b follows from a": the solver uses b to find answers but doesn't count it as a separate condition.
 - **for some** : `((a) -[e]-> Bool) -[e]-> Bool`. Whether some value makes the function true: the solver looks for one. Used in relations, where a value has no name outside.
 - **inverse** : `((a) -[e]-> b, b) -[Choice, Diverge, e]-> a`. The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.
@@ -173,10 +173,10 @@ abort(reason) stops with a reason, and its type says so (Abort). attempt catches
 
 ## Effects from outside the program
 
-Each of these puts its effect in the type of every function that uses it, so `die : () -[Random]-> Number` says die draws random numbers. Something around it handles the effect: seeded handles Random, a page's button handles what its handler does, and what nothing handles, the world answers when the program runs.
+Each of these puts its effect in the type of every function that uses it, so `die : () -[Random]-> Float64` says die draws random numbers. Something around it handles the effect: seeded handles Random, a page's button handles what its handler does, and what nothing handles, the world answers when the program runs.
 
-- **Random** (type). An effect: random() is a Number from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.
-- **seeded** : `(Number, () -[Random, e]-> a) -[e]-> a`. Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.
+- **Random** (type). An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.
+- **seeded** : `(Float64, () -[Random, e]-> a) -[e]-> a`. Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.
 - **Time** (type). An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.
 - **Wait** (type). An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
@@ -228,27 +228,27 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **rule** : `(Text, Text) -> Text` (html module). A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.
 - **media** : `(Text, List Text) -> Text` (html module). Rules that apply only when the query holds, such as (prefers-color-scheme: dark).
 - **style sheet** : `(List Text) -> Html` (html module). A style element holding these rules.
-- **px** : `(a) -> Text` (html module). A length in pixels, from a Number or an Int.
+- **px** : `(a) -> Text` (html module). A length in pixels, from a Float64 or an Int.
 - **joined** : `(List Text, Text) -> Text` (html module). The texts with between between each two of them.
 
 ## Points, colours and slopes
 
-A record whose fields are all Numbers (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.
+A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.
 
-- **map parts** : `((Number) -> Number, a) -> a`. A function applied to each part of a record of Numbers: map parts(f, vec(x, y)) is vec(f(x), f(y)).
-- **zip parts** : `((Number, Number) -> Number, a, a) -> a`. A function applied to each pair of parts of two records of the same type.
-- **total** : `(a) -> Number`. The parts of a record of Numbers added up.
+- **map parts** : `((Float64) -> Float64, a) -> a`. A function applied to each part of a record of Float64s: map parts(f, vec(x, y)) is vec(f(x), f(y)).
+- **zip parts** : `((Float64, Float64) -> Float64, a, a) -> a`. A function applied to each pair of parts of two records of the same type.
+- **total** : `(a) -> Float64`. The parts of a record of Float64s added up.
 - **set** : `((a) -> b, a, b) -> a`. The record with one field changed and the others kept: set((p) => p.x, point, 3). The field can be a path, like (p) => p.home.city.
-- **derivative** : `((Number) -[e]-> Number) -> (Number) -[Choice, e]-> Number`. The slope of a function of one Number, as a function. Where a slope can't be read there's no answer (Choice).
-- **gradient** : `((a) -[e]-> Number) -> (a) -[Choice, e]-> a`. For a function of a record of Numbers (a point, a colour), the record of its slopes along each part.
-- **plus** : `(a, a) -> a` (vectors module). a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Numbers; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.
+- **derivative** : `((Float64) -[e]-> Float64) -> (Float64) -[Choice, e]-> Float64`. The slope of a function of one Float64, as a function. Where a slope can't be read there's no answer (Choice).
+- **gradient** : `((a) -[e]-> Float64) -> (a) -[Choice, e]-> a`. For a function of a record of Float64s (a point, a colour), the record of its slopes along each part.
+- **plus** : `(a, a) -> a` (vectors module). a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Float64s; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.
 - **minus** : `(a, a) -> a` (vectors module). a − b: the old name of −, kept for a release. The direction from b to a.
 - **times** : `(a, a) -> a` (vectors module). a · b: the old name of ·, kept for a release. A colour tinted by another.
-- **scale** : `(Number, a) -> a` (vectors module). Every part of v times by: a direction made longer, a colour made brighter.
-- **dot** : `(a, a) -> Number` (vectors module). The parts' products added up: how much a and b point the same way.
-- **magnitude** : `(a) -> Number` (vectors module). How long v is: √(v · v).
-- **distance** : `(a, a) -> Number` (vectors module). How far a is from b.
+- **scale** : `(Float64, a) -> a` (vectors module). Every part of v times by: a direction made longer, a colour made brighter.
+- **dot** : `(a, a) -> Float64` (vectors module). The parts' products added up: how much a and b point the same way.
+- **magnitude** : `(a) -> Float64` (vectors module). How long v is: √(v · v).
+- **distance** : `(a, a) -> Float64` (vectors module). How far a is from b.
 - **unit** : `(a) -> a` (vectors module). v scaled to length 1 (normalize on a GPU).
-- **mix** : `(a, a, Number) -> a` (vectors module). a when amount is 0, b when it is 1, and in between, part by part.
-- **clamp** : `(a, Number, Number) -> a` (vectors module). Every part of v kept between low and high.
+- **mix** : `(a, a, Float64) -> a` (vectors module). a when amount is 0, b when it is 1, and in between, part by part.
+- **clamp** : `(a, Float64, Float64) -> a` (vectors module). Every part of v kept between low and high.
 - **reflect** : `(a, a) -> a` (vectors module). A ray going this direction, bounced off a surface facing normal (normal of length 1).

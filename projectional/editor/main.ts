@@ -125,7 +125,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Float64s & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["dice", "Page: two dice"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -564,7 +564,7 @@ const node = (id: Id) => doc.code.nodes[id];
 
 // A definition's type doesn't loosen while a hole is open in it. Clearing
 // the √ in period would leave its inputs unused, so its type would become
-// (a, b) -> Number. Until its holes are filled, the type it had stays, as a
+// (a, b) -> Float64. Until its holes are filled, the type it had stays, as a
 // pin the editor holds for the session (not signatures.json); "Let it
 // loosen" in its Type section drops it.
 let held: Pins = {};
@@ -865,7 +865,7 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
     const t = bad[0] !== "out" ? info.typeOf.get(bad[0]) : undefined;
     const z = t ? info.subst.zonk(t) : null;
     const number = z?.t === "con" && z.id === NUMBER;
-    return { answers: [], more: false, error: number ? `${who} needs a Number, like 3 or 2.5.` : `${who}: ${(bad[1] as { error: string }).error}.` };
+    return { answers: [], more: false, error: number ? `${who} needs a Float64, like 3 or 2.5.` : `${who}: ${(bad[1] as { error: string }).error}.` };
   }
   const values = Object.fromEntries(read.map(([k, r]) => [k, (r as { value: Value }).value]));
   // When it reads as equations, the solver's plan for this direction is
@@ -1046,7 +1046,7 @@ const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { 
 function unitSection(info: T.Info, id: Id): HTMLElement | null {
   const n = node(id);
   const declarable = n.kind === "binder" || (n.kind === "lit" && typeof n.value === "number");
-  const numeric = T.typeOf(info, id, {}) === "Number";
+  const numeric = T.typeOf(info, id, {}) === "Float64";
   if (!declarable && !numeric) return null;
   const u = (() => { try { return unitInfer(doc.code, ui.def).unit(id); } catch { return undefined; } })();
   const declared = (n as { unit?: Unit }).unit;
@@ -1204,7 +1204,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       commit();
       toProgram();
     });
-    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Number" : "Text"} · code.json`), input));
+    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text"} · code.json`), input));
   }
 
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
@@ -1274,7 +1274,7 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
   switch (f.kind) {
     case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
-    case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Number" : f.of === "int" ? "Int" : "Text", "literals"];
+    case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
     default: return words(f.type).effect
       ? [`handle ${nm(f.type)} in □`, `one case per operation of ${nm(f.type)}, on the computation you give next`, "case analysis"]
@@ -1335,7 +1335,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
   const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
-  // Rows that would read the same (show(□) for a Number, an Int, anything)
+  // Rows that would read the same (show(□) for a Float64, an Int, anything)
   // say what each of their holes takes: show(□: Int).
   const seen = new Map<string, number>();
   for (const { l } of all) seen.set(l[0], (seen.get(l[0]) ?? 0) + 1);
@@ -1436,7 +1436,7 @@ const typeText = (tid: Id, names: Names): string => {
   return [names[r.target] ?? r.target, ...r.args.map((a) => { const s = typeText(a, names); return s.includes(" ") ? `(${s})` : s; })].join(" ");
 };
 
-// A type, picked the way it's written: what it starts with (Number, Int, a
+// A type, picked the way it's written: what it starts with (Float64, Int, a
 // data type, one of the type's own parameters) and, for one that takes
 // arguments, a picker for each, nested: Pair, then Int and Text. `none`
 // adds a first choice of no type at all; a type the pickers can't show
@@ -2480,7 +2480,7 @@ function guide(): HTMLElement {
     ["Hole", pic(80, svg("rect", { x: 10, y: 8, width: 56, height: 24, rx: 12, class: "pill hole" }), text(38, 24, "□", "pl")),
       "A value not filled in yet. It knows its type; select it and the side panel lists only what fits. The program runs until it reaches one."],
     ["Badge", pic(80, svg("rect", { x: 12, y: 2, width: 56, height: 36, rx: 7, class: "cn eff" }), text(40, 13, "Choice", "badge"), text(40, 31, "fail", "cl")),
-      "The effects a node has; a definition's type lists them too, between the arrows: (Number) -[Random]-> Number. Choice: several answers, or none. Random: draws numbers (die). Time: reads the clock. Abort: stops with a reason. Log: debugging output. Console: reads and prints. Files: reads and writes files. Network: reads from the web. Cells and Update: a page's state. Diverge: might not finish. And effects you declare (+ New definition, Effect). “handles …” marks a node that takes care of one, so it stops there: first or all for Choice, seeded for Random, a handle match for Abort, Log and yours."],
+      "The effects a node has; a definition's type lists them too, between the arrows: (Float64) -[Random]-> Float64. Choice: several answers, or none. Random: draws numbers (die). Time: reads the clock. Abort: stops with a reason. Log: debugging output. Console: reads and prints. Files: reads and writes files. Network: reads from the web. Cells and Update: a page's state. Diverge: might not finish. And effects you declare (+ New definition, Effect). “handles …” marks a node that takes care of one, so it stops there: first or all for Choice, seeded for Random, a handle match for Abort, Log and yours."],
     ["Solve", pic(80, ...box(12, "polar", "cn rel"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 6, class: "reroute" })),
       "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest (dots, right). A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
   ];

@@ -62,8 +62,8 @@ test("compare: numbers by value, text by code point, cases in declared order, th
   assert.ok(errs(p.defs.functions).length > 0);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const v = (d: Id) => r.value(d);
-  // Numbers exactly (0.1 + 0.2 is after 0.3, though equal to it), NaN after
-  // every other Number and the same as itself, −0 the same as 0.
+  // Float64s exactly (0.1 + 0.2 is after 0.3, though equal to it), NaN after
+  // every other Float64 and the same as itself, −0 the same as 0.
   assert.deepEqual(items(v(p.defs.numbers)), ["before", "same", "after", "after", "after", "before", "same", "same"]);
   assert.deepEqual(items(v(p.defs.texts)), ["before", "after", "before"]);
   assert.deepEqual(items(v(p.defs.fractions)), ["after", "same"]);
@@ -98,7 +98,7 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
 // REVIEW-2026-10-26.md §1.1: an order a set relies on has to be one. With
 // nearness, a, a + d and a + 2d (each within 1e-9 of the next, the ends
 // not) made a set of 2 or of 1 depending on the order they came in.
-test("a set of Numbers is the same whatever order its items come in, NaN included", () => {
+test("a set of Float64s is the same whatever order its items come in, NaN included", () => {
   const k = new Lang(LIBRARY.code);
   const a = 1000.5, d = 1.5e-6;
   const nan = () => k.call(B.div, k.lit(0), k.lit(0));

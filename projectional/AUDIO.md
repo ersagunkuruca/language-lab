@@ -63,7 +63,7 @@ real program.
 - **What is a sound program?** A function
 
   ```
-  pedal : (List Number) -[Cells, Update, Random]-> List Number
+  pedal : (List Float64) -[Cells, Update, Random]-> List Float64
   ```
 
   that takes a block of samples (mono, each in -1 to 1, 128 of them) and
@@ -115,7 +115,7 @@ real program.
     crossover in place of Haar, and a compressor with an envelope cell in
     place of the drive, make it a real multiband compressor.
 - **How does it play in the browser?** One more `Attribute` variant,
-  `listen(to: Input, play: (List Number) -[AUDIO_BLOCK]-> List Number)`,
+  `listen(to: Input, play: (List Float64) -[AUDIO_BLOCK]-> List Float64)`,
   on any element: the page runtime makes an `AudioContext` when that
   element is first clicked (browsers start audio only on a gesture),
   opens the input (`microphone`, or `file(name)` for a sample the page

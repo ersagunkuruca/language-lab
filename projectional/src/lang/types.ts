@@ -46,7 +46,7 @@ export const INT = "type.int";
 // std.ts's Rational (a data type, so its id is std's): exact, ordered,
 // with the prelude's arithmetic.
 export const RATIONAL_TYPE = "std.rational";
-// std.ts's Complex: a record of two Numbers with the prelude's + − · and
+// std.ts's Complex: a record of two Float64s with the prelude's + − · and
 // no <.
 export const COMPLEX_TYPE = "std.complex";
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
@@ -62,16 +62,16 @@ export class TypeError extends Error {}
 // (a, a) → Bool for every plain a.
 export class PlainError extends TypeError {}
 
-// A type that must be a record of Numbers: Number itself, or data with one
-// case whose fields are all Numbers (a point, a colour). The parts-wise
+// A type that must be a record of Float64s: Float64 itself, or data with one
+// case whose fields are all Float64s (a point, a colour). The parts-wise
 // builtins (`map parts`, `zip parts`, `total`) work on any of them, so
 // vector arithmetic is written once for every such record. Carried by type
 // variables like plain data is. Such a record is plain data too.
 export class NumbersError extends TypeError {}
 
 // A number type, for the generic arithmetic (NUMBERS.md, "One `+` for every
-// number system"): `arith` is a type that has + − · and −x (Number, Int, or
-// a record of Numbers), `ordered` one that also has < (Number or Int). A
+// number system"): `arith` is a type that has + − · and −x (Float64, Int, or
+// a record of Float64s), `ordered` one that also has < (Float64 or Int). A
 // type variable can carry either, like `numbers` above, and the program is
 // resolved to each type's own operations before it runs (arith.ts).
 export type Arith = "arith" | "ordered";
@@ -97,7 +97,7 @@ export class Subst {
   // whole to be plain, or null if it holds a function whatever its args.
   // Set by the checker, which can see the data types' fields.
   plainArgs: (id: Id, args: Type[]) => Type[] | null = (_, args) => args;
-  // Type variables that may only stand for a record of Numbers.
+  // Type variables that may only stand for a record of Float64s.
   numbers = new Set<number>();
   // For a data type applied to args: its fields' types, if it has one
   // case, or null. Set by the checker.
@@ -131,7 +131,7 @@ export class Subst {
     return { t: "var", v: this.next++ };
   }
 
-  // Require t to be a number type of this kind. A record of Numbers has
+  // Require t to be a number type of this kind. A record of Float64s has
   // + − · and −x part by part, but no <.
   requireArith(t: Type, kind: Arith): void {
     t = this.resolve(t);
@@ -151,15 +151,15 @@ export class Subst {
     throw new ArithError(kind);
   }
 
-  // Require t to be a record of Numbers: its fields become Numbers.
+  // Require t to be a record of Float64s: its fields become Float64s.
   requireNumbers(t: Type): void {
     t = this.resolve(t);
     if (t.t === "var") { this.numbers.add(t.v); this.plain.add(t.v); return; }
     if (t.t === "con" && t.id === NUMBER) return;
     const fields = t.t === "con" ? this.recordFields(t.id, t.args) : null;
-    if (!fields?.length) throw new NumbersError("not a record of Numbers");
+    if (!fields?.length) throw new NumbersError("not a record of Float64s");
     try { for (const f of fields) this.unify(f, { t: "con", id: NUMBER, args: [] }); }
-    catch (e) { if (e instanceof TypeError && !(e instanceof NumbersError)) throw new NumbersError("a field isn't a Number"); throw e; }
+    catch (e) { if (e instanceof TypeError && !(e instanceof NumbersError)) throw new NumbersError("a field isn't a Float64"); throw e; }
   }
 
   // Require t to be plain data, now (for what's known of it) and later (its
@@ -286,7 +286,7 @@ export class WorldError extends EffectError {
 
 // A type scheme: a type with its own variables, copied fresh at each use.
 // `plain` lists the variables that may only stand for plain data.
-// `numbers` lists those that may only stand for a record of Numbers;
+// `numbers` lists those that may only stand for a record of Float64s;
 // `arith` and `ordered` those that may only stand for a number type.
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.

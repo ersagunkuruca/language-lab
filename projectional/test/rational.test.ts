@@ -26,7 +26,7 @@ function program() {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
-  const [fraction, divide, show, asNumber, whole] = ["fraction", "divide fractions", "show fraction", "fraction as number", "as fraction"].map(lib);
+  const [fraction, divide, show, asNumber, whole] = ["fraction", "divide fractions", "show fraction", "fraction as float64", "as fraction"].map(lib);
   // Every answer, as a list: [] when there is none.
   const all = (body: () => Id) => k.call(S.all, k.thunk(body));
   const f = (a: number, b: number) => k.call(fraction, k.int(a), k.int(b));
@@ -35,7 +35,7 @@ function program() {
   const defs = {
     twice,
     total: def("total", () => all(() => k.call(show, k.call(ARITH.add, f(1, 2), f(1, 3))))),
-    // 1/10 + 2/10 is 3/10 exactly, where Numbers give 0.30000000000000004.
+    // 1/10 + 2/10 is 3/10 exactly, where Float64s give 0.30000000000000004.
     tenths: def("tenths", () => all(() => k.call(S.equal, k.call(ARITH.add, f(1, 10), f(2, 10)), f(3, 10)))),
     lowest: def("lowest", () => all(() => k.call(show, f(6, -8)))),
     product: def("product", () => all(() => k.call(show, k.call(ARITH.mul, f(2, 3), k.call(ARITH.neg, f(9, 4)))))),
@@ -99,10 +99,10 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
   for (const n of NAMES) assert.deepEqual(plain(compiled[n]), plain(evaluated[n]), n);
 });
 
-// QA-2026-10-24b: smaller, larger and ≤ > ≥ were Number's only while + − · <
-// were generic. They're over the one < now, and the Number-only versions
+// QA-2026-10-24b: smaller, larger and ≤ > ≥ were Float64's only while + − · <
+// were generic. They're over the one < now, and the Float64-only versions
 // stay published (hidden) so programs saved before still open.
-test("smaller, larger and at most work on Int and fractions too; the old Number-only ones are kept", () => {
+test("smaller, larger and at most work on Int and fractions too; the old Float64-only ones are kept", () => {
   const k = new Lang(LIBRARY.code);
   const [smaller, larger, atMost, fraction, show] = ["smaller", "larger", "at most", "fraction", "show fraction"].map((n) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };

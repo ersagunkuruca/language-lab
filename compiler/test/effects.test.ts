@@ -204,7 +204,7 @@ test("Cells: a formula follows a write to the cell it reads", async () => {
   assert.deepEqual(r.lines, ["4", "4", "10"]);
 });
 
-// A draw as a whole number, exactly: every bit of the Number shows.
+// A draw as a whole number, exactly: every bit of the Float64 shows.
 const bits = (k: Lang, x: Id) => show(k, k.call(B.mul, x, k.lit(2 ** 53)));
 
 test("Random: seeded draws are the evaluator's bit for bit, with and without Choice", async () => {

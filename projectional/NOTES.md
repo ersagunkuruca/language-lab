@@ -24,21 +24,21 @@ everything in the repo, not only shaders.
 
 *The finding.* Round 1 of the compiler gaps (compiler/GAPS.md, G0) found
 that `equal(1000000000000, 1000000000001)` was `true`, in the evaluator and
-in compiled code alike. Numbers compare to within 1e-9 relative, and an
+in compiled code alike. Float64s compare to within 1e-9 relative, and an
 `Int` is a JS number while it's a safe integer, so at run time it got the
 same tolerance. The differential tests couldn't see it, because both sides
 had the same bug.
 
 *Current answer.* Equality is type-directed. The checker records, for each
 use of `equal`, whether the type compared holds only Ints (exact), only
-Numbers (to within 1e-9), or both or a type variable (whole numbers exactly,
+Float64s (to within 1e-9), or both or a type variable (whole numbers exactly,
 others to within 1e-9). The evaluator and the compiler both follow it. The
 test "equal compares Ints exactly…" in compiler/test/compile.test.ts checks
 every case both ways. No example's output changed.
 
 *Superseded (second review, REVIEW-2026-10-22b.md §2).* Type-directed made
 three meanings, and the third caught people out: `equal(10^12, 10^12 + 1)`
-on Numbers was `true`, and the same comparison through a generic
+on Float64s was `true`, and the same comparison through a generic
 `same(x, y) = equal(x, y)` was `false`, so inlining a definition changed a
 program's output. Backwards, relate.ts still compared every number near,
 Ints too.
@@ -64,32 +64,32 @@ answer as a direct comparison. `test/equality.test.ts` and
 10^12 + 1, 2^53, 0.1 + 0.2, −0, NaN, ∞).
 
 *What it costs.* It isn't transitive on fractional numbers (no tolerance
-is), so it isn't an equivalence there. And two Numbers that both happen to
+is), so it isn't an equivalence there. And two Float64s that both happen to
 be whole compare exactly: 10^12 and 10^12 + 1 are different, while 10^12
 and 10^12 + 0.5 are within the tolerance. Doubles near 10^12 are spaced
 1.2·10^-4 apart, so whole numbers that differ really are different
 numbers. `show(0.1 + 0.2)` prints "0.3", so `show` isn't one to one on
-Numbers (the converter's "show run backwards is the parser" accepts only
+Float64s (the converter's "show run backwards is the parser" accepts only
 rounded spellings). Settled (Ersagun, 2026-10-23): it stays. Rounding to 9
 decimals is off by at most 5·10^-10, inside the 10^-9, so reading the text
 back always gives an equal number, forward and backwards (test/equality.test.ts),
 and outputs don't show "0.30000000000000004".
 
-*Whole Numbers keep their tolerance (2026-10-26).* The wholeness test was
+*Whole Float64s keep their tolerance (2026-10-26).* The wholeness test was
 the value standing in for the type, and at 1e17 every float is whole, so
 `√1e17 · √1e17 = 1e17` was false while `√2 · √2 = 2` was true
 (REVIEW-2026-10-26.md §1.2). Now an Int is a JS number only below 2^28,
 where `close` can't confuse two whole numbers anyway, and a BigInt beyond
 (int.ts). So `sameNumber` is `close` on every JS number and exact on
 BigInts, with no wholeness test: 10^12 and 10^12 + 1 are different Ints
-and equal Numbers. The cost is BigInt arithmetic for Ints between 2^28 and
+and equal Float64s. The cost is BigInt arithmetic for Ints between 2^28 and
 2^53.
 
 *Order is not equality (2026-10-26).* Maps, sets and `sort` came after
 this trade, and they need a real order, which a tolerance can't give
-(REVIEW-2026-10-26.md §1.1). So `compare` orders Numbers exactly, with NaN
+(REVIEW-2026-10-26.md §1.1). So `compare` orders Float64s exactly, with NaN
 after the rest and the same as itself, and `equal` keeps its tolerance for
-equations. `compare` and `equal` disagree on near Numbers on purpose:
+equations. `compare` and `equal` disagree on near Float64s on purpose:
 "same key" and "equal value" are two questions (LANGUAGE.md "Order, and
 sort").
 
@@ -127,7 +127,7 @@ right-nested (that is its meaning); the view draws a right-nested chain of
 one function as a flat list: a stack of statements, a list literal. No new
 node kind, so the uniformity rule holds (ROADMAP item 1, "Flat sequences").
 
-## Number systems and Clifford algebras (2026-10-22)
+## Float64 systems and Clifford algebras (2026-10-22)
 
 *The idea.* Fractions, big integers, complex numbers, continued fractions
 (including infinite ones), vectors, matrices, tensors, and Clifford algebras
@@ -223,18 +223,18 @@ compiled shader?
 
 *Current answer.* They didn't: every part was its own `f32`, and `Vec` and
 `Colour` were structs. Now (COMPILER.md "Vectors") a record of two to four
-Numbers is stored as `vec2f`–`vec4f`, and parts that each do the same thing
+Float64s is stored as `vec2f`–`vec4f`, and parts that each do the same thing
 are printed as one vector operation, with `dot`, `length`, `normalize`,
 `mix`, `clamp`, `min` and `max` recognised. On modern GPUs that is mostly
 for the GPU's built-ins and for readability, since each thread is scalar
 anyway. The real fix is in the source, one PR each: elementwise operations
-over any record of Numbers as ordinary built-ins, a prelude vector module
+over any record of Float64s as ordinary built-ins, a prelude vector module
 written once on them (usable on `Vec` and on `Colour`, while adding a
 colour to a position stays a type error), and the ray marcher rewritten to
 use them.
 
 Built so far: the printer (PR #121), then `map parts`, `zip parts` and
-`total`, typed by a "record of Numbers" constraint that type variables carry
+`total`, typed by a "record of Float64s" constraint that type variables carry
 the way `equal`'s plain data does, and the vectors module (`plus`, `scale`,
 `dot`, `magnitude`, `unit`, `mix`, `clamp`, `reflect`, …) written on them.
 Considered and not taken: a `Vec3` type in std (Colour and Vec would have to
@@ -247,7 +247,7 @@ there, just generated).
 Then the ray marcher itself (step 3): its normals were three
 `derivative((x) ↦ scene(x, y, z, time))(x)`, one per axis. Now `gradient(f)`
 gives the three as one Vec, and derive.ts reads slopes through records of
-Numbers: a record's derivative is a record, part by part (forward mode
+Float64s: a record's derivative is a record, part by part (forward mode
 with a record of tangents), and a definition that takes or returns a
 record is differentiated where it's called. Considered and not taken: a
 gradient written in the vectors module (it would need "this record with

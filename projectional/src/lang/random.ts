@@ -30,7 +30,7 @@ export function seededGenerator(seed: number): Generator {
     d = rotl(d, 11);
     return r;
   };
-  // A Number in [0, 1) with all 53 bits of a double: 27 bits from one word
+  // A Float64 in [0, 1) with all 53 bits of a double: 27 bits from one word
   // and 26 from the next.
   return { next: () => ((word() >>> 5) * 67108864 + (word() >>> 6)) / 9007199254740992 };
 }

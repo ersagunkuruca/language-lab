@@ -626,7 +626,7 @@ test("a fold that only adds Int items runs from the front, with no spine (GAPS.m
     { variant: NIL, names: [], body: () => k.int(0) },
     { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.if(k.call(I.less, h, k.int(3)), k.call(I.add, r!, k.int(1)), r!) },
   ])));
-  // Number + is not associative in floating point, so this one keeps its order.
+  // Float64 + is not associative in floating point, so this one keeps its order.
   const sum = k.def("sum");
   k.define(sum, k.fn(["xs"], (xs) => k.fold(xs, [
     { variant: NIL, names: [], body: () => k.lit(0) },
@@ -645,7 +645,7 @@ test("a fold that only adds Int items runs from the front, with no spine (GAPS.m
 
 test("a generic function used at one type only compares as that type (GAPS.md G17)", async () => {
   // same(x, y) = x = y, generic. `texts` uses it on Text only; `either` is
-  // used on Text and on Number, so it keeps the general $eq.
+  // used on Text and on Float64, so it keeps the general $eq.
   const k = new Lang();
   const same = k.def("same"), either = k.def("either");
   k.define(same, k.fn(["x", "y"], (x, y) => k.call(S.equal, x, y)));
@@ -898,7 +898,7 @@ test("a fold over characters(t) runs on the text, and splits it as characters do
   assert.match(fn("tails"), /builtin\.text\.characters/);
 });
 
-test("a fold over range(n) counts down from n − 1, without the list, for Number and Int", async () => {
+test("a fold over range(n) counts down from n − 1, without the list, for Float64 and Int", async () => {
   const { INT_OPS: I, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
   const k = new Lang();
   const marks = (name: string, range: Id, raw: boolean) => {
@@ -929,12 +929,12 @@ test("a fold over range(n) counts down from n − 1, without the list, for Numbe
 });
 
 // GAPS.md G0: an Int is a JS number while it's small, so it used to get
-// Number's tolerance and 10^12 = 10^12 + 1 was true, both ways.
+// Float64's tolerance and 10^12 = 10^12 + 1 was true, both ways.
 // REVIEW-2026-10-22b.md §2: and one rule for every type, so going through a
 // generic function never changes the answer. REVIEW-2026-10-26.md §1.2: an
-// Int past 2^28 is a BigInt, so a Number that happens to be whole keeps its
-// tolerance: 1e12 and 1e12 + 1 as Numbers are equal, as Ints they aren't.
-test("equal compares Ints exactly and Numbers to float precision, at every type", async () => {
+// Int past 2^28 is a BigInt, so a Float64 that happens to be whole keeps its
+// tolerance: 1e12 and 1e12 + 1 as Float64s are equal, as Ints they aren't.
+test("equal compares Ints exactly and Float64s to float precision, at every type", async () => {
   const k = new Lang();
   const same = k.def("same"), main = k.def("main");
   k.define(same, k.fn(["a", "b"], (a, b) => k.equal(a, b)));

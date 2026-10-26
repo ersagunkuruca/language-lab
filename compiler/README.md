@@ -9,12 +9,12 @@ answer is its mode plan written out (`src/modes.ts`), and the rest run
 in the relational interpreter. Why it's built this way, and what comes next, is
 in [`projectional/COMPILER.md`](../projectional/COMPILER.md).
 
-The scalar profile (Number and Bool functions: arithmetic, `if`, lets,
+The scalar profile (Float64 and Bool functions: arithmetic, `if`, lets,
 calls) also compiles to WebAssembly (`src/scalar.ts`, `src/wasm.ts`), with
 tail calls as `return_call`. `out/calculus.wat` shows the output. The same
 lowering prints as WGSL for the GPU (`src/wgsl.ts`, `out/calculus.wgsl`):
 `f32`, no recursion except a call to itself as the last step, which is
-printed as a loop. For the GPU the profile also takes records of Numbers
+printed as a loop. For the GPU the profile also takes records of Float64s
 and Bools (a point, a colour), printed as structs. `npm run gpu` runs it
 with WebGPU in headless Chromium and compares it with the evaluator.
 

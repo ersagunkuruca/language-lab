@@ -28,7 +28,7 @@
 //                                (forward-mode AD written in the language
 //                                itself), then takes the derivative part
 //   fail                         fail: where f has no value, neither has f′
-//   a record of Numbers          a record: each part's derivative (a point
+//   a record of Float64s          a record: each part's derivative (a point
 //                                moving has a velocity); reading a part,
 //                                or taking the record apart, reads that
 //                                part's; map parts, zip parts and total
@@ -36,7 +36,7 @@
 //                                returns one is differentiated where it's
 //                                called, as if written there
 //
-// gradient(f), for f of one record of Numbers, is f's derivative along
+// gradient(f), for f of one record of Float64s, is f's derivative along
 // each part in turn, as a record: one forward pass per part, seeded with
 // that direction (the way forward-mode AD computes a gradient).
 //
@@ -66,7 +66,7 @@ export class NotDifferentiable extends Error {}
 // fresh nodes each time it is placed (a node can't have two parents).
 // `neg` and `recip` remember −y and 1/y, so a + (−y) prints as a − y and
 // a · (1/y) as a / y.
-// A record of Numbers has a derivative part by part: `rec` holds each
+// A record of Float64s has a derivative part by part: `rec` holds each
 // part's, and a `build` whose `variant` is set builds a whole record.
 type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id } | { k: "none" }
   | { k: "rec"; variant: Id; parts: E[] };
@@ -80,7 +80,7 @@ interface Ctx {
   sub: Map<Id, () => Id>;
   // binder → its derivative, for binders that depend on the variable
   d: Map<Id, E>;
-  // binder → its record's variant, for binders holding a record of Numbers
+  // binder → its record's variant, for binders holding a record of Float64s
   shape: Map<Id, Id>;
 }
 
@@ -88,8 +88,8 @@ interface SolverTree { k: "num" | "var" | "call"; v?: number; name?: string; f?:
 const PRIMS = FN as unknown as Record<string, { d: ((args: SolverTree[]) => SolverTree)[] }>;
 const NUMBER_OPS: Record<Id, string> = { ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs" };
 const BUILTIN: Record<string, Id> = Object.fromEntries(Object.entries(NUMBER_OPS).map(([id, op]) => [op, id]));
-// The one generic + − · −x < (std.ts ARITH) differentiate as Number's: a
-// slope is a Number, and arith.ts resolves them only after this.
+// The one generic + − · −x < (std.ts ARITH) differentiate as Float64's: a
+// slope is a Float64, and arith.ts resolves them only after this.
 const OPS: Record<Id, string> = { ...NUMBER_OPS, ...Object.fromEntries(Object.entries(ARITH).filter(([op]) => op in impl).map(([op, id]) => [id, op])) };
 
 // lenient: put `fail` where the slope can't be read, instead of refusing.
@@ -116,7 +116,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     return NONE;
   };
 
-  // Records of Numbers. A record's derivative is a record: each part's
+  // Records of Float64s. A record's derivative is a record: each part's
   // derivative, so a point moving along a curve has a velocity, and the
   // gradient of a function of a point is its derivative along each part
   // in turn. Only records (one case); data with several cases has no
@@ -141,7 +141,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     return e;
   }
   // The variant of the record expression `id` evaluates to, when it is
-  // one of Numbers, read off the code (no types here): a record built
+  // one of Float64s, read off the code (no types here): a record built
   // right there, a binder known to hold one, or what a function returns.
   function shapeOf(id: Id, ctx: Ctx, seen = new Set<Id>()): Id | null {
     const n = nodes[id];
@@ -181,8 +181,8 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     const records = which === S.total ? n.args : n.args.slice(1);
     const variant = shapeOf(records[0], ctx);
     if (!variant) {
-      // A Number is a record of one part, itself: map parts(f, x) is f(x).
-      // A Number's slope is a Number; a record's would be one.
+      // A Float64 is a record of one part, itself: map parts(f, x) is f(x).
+      // A Float64's slope is a Float64; a record's would be one.
       const ds = records.map((r) => D(r, ctx));
       if (ds.every((d) => isNum(d, 0)) || ds.some(variantOf)) return cant("can't tell which record these parts are of");
       return D(which === S.total ? records[0] : add({ kind: "call", fn: n.args[0], args: records }), ctx);
@@ -315,7 +315,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         if (head.kind === "lambda") return letD(n, head, ctx);
         if (head.kind === "ref") {
           const t = nodes[head.target];
-          // A generic + − · −x on records is Number's part by part, as
+          // A generic + − · −x on records is Float64's part by part, as
           // arith.ts resolves it: differentiated as that.
           if (Object.values(ARITH).includes(head.target) && OPS[head.target] && shapeOf(n.args[0], ctx)) {
             const parts = n.args.length === 1 ? S.mapParts : S.zipParts;
@@ -360,7 +360,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     args.forEach((a, i) => {
       const da = D(a, ctx);
       if (isNum(da, 0)) return;
-      if (variantOf(da)) { sum = cant("arithmetic is on Numbers, not records"); return; }
+      if (variantOf(da)) { sum = cant("arithmetic is on Float64s, not records"); return; }
       sum = op("add", sum, op("mul", fromTree(PRIMS[name].d[i](holes)), da));
     });
     return sum;
@@ -461,7 +461,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 
   function matchD(n: NodeOf<"match">, ctx: Ctx): E {
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
-    // Taking apart a record of Numbers built from the variable: each part
+    // Taking apart a record of Float64s built from the variable: each part
     // has its derivative.
     let ds: E = numE(0);
     if (depends(n.scrutinee, new Set(ctx.d.keys())) && arms.some((a) => a.binds.length)) {
@@ -537,7 +537,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     return add({ kind: "lambda", params, body: placeAs(D(lam.body, ctx), shapeOf(lam.body, ctx)) });
   }
 
-  // The gradient of a function of one record of Numbers, as a new lambda:
+  // The gradient of a function of one record of Float64s, as a new lambda:
   // the record of its derivatives along each part, one forward pass per
   // part (forward-mode AD, seeded with each direction in turn).
   function gradient(lamId: Id, variant: Id): Id {
@@ -550,7 +550,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       const seed: E = { k: "rec", variant, parts: fields.map((_, i) => numE(i === j ? 1 : 0)) };
       return D(lam.body, { sub, d: new Map([[p, seed]]), shape: new Map([[p, variant]]) });
     });
-    if (parts.some(variantOf)) throw new NotDifferentiable("gradient needs a function whose result is a Number");
+    if (parts.some(variantOf)) throw new NotDifferentiable("gradient needs a function whose result is a Float64");
     return add({ kind: "lambda", params: [np], body: place({ k: "rec", variant, parts }) });
   }
 

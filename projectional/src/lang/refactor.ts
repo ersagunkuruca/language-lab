@@ -58,7 +58,7 @@ function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, v
 }
 
 // `name`, or `name 2`, `name 3`… if a binder in view has it already.
-// A new function's parameter, named for what it takes: x for a Number, n
+// A new function's parameter, named for what it takes: x for a Float64, n
 // for an Int, the type's own name for the rest (event, chapter), so a
 // handler reads (event) => □ instead of (input 1) => □.
 export function paramName(t: Type | undefined, names: Names): string {

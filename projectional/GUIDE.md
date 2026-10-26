@@ -50,7 +50,7 @@ click **Roll 100 with seed 7** twice and watch the bars.
 Click **die** in the list. The Blocks text says:
 
 ```
-die : () -[Random]-> Number
+die : () -[Random]-> Float64
 die() = floor(random() · 6) + 1
 ```
 
@@ -93,9 +93,9 @@ write(rolls, append(‹a hundred rolls›(7), read(rolls)))
 ```
 
 1. Click the `7`. The inspector says **Literal** (a written-out value) of
-   type `Number`.
+   type `Float64`.
 2. Press **Delete** (or **Clear to a hole** in the inspector). The `7`
-   becomes `□Number`, and the palette opens on the right.
+   becomes `□Float64`, and the palette opens on the right.
 3. Type `die` in the palette's search and click `die()`.
 
 ![A hole and its palette](guide/hole-palette.png)
@@ -123,8 +123,8 @@ gives …":
 
 | type | read it as |
 |---|---|
-| `die : () -[Random]-> Number` | takes nothing, gives a Number, and uses **Random** on the way |
-| `a hundred rolls : (Number) -> List Number` | takes a Number, gives a list of Numbers, and does nothing else |
+| `die : () -[Random]-> Float64` | takes nothing, gives a Float64, and uses **Random** on the way |
+| `a hundred rolls : (Float64) -> List Float64` | takes a Float64, gives a list of Float64s, and does nothing else |
 | `times rolled : (List a, a) -> Int` | takes a list of anything and one more of the same kind, gives a whole number |
 | `main : () -[Cells, Time]-> Html` | takes nothing, gives a page, and uses cells and the clock |
 
@@ -172,13 +172,13 @@ Make a loaded die that always rolls 6:
 ![A handler that answers Random with 0.99](guide/loaded-die.png)
 
 ```
-loaded die : () -> Number
+loaded die : () -> Float64
 loaded die() =
   handle die()
     random → 0.99
 ```
 
-Press **Run loaded die**: always 6. Its type says `() -> Number`, no
+Press **Run loaded die**: always 6. Its type says `() -> Float64`, no
 Random, because the handler answered every question.
 
 **The clock** is the effect `Time`, with `now()`. In `main`, the status
@@ -288,8 +288,8 @@ filled, so the rest of the program keeps working meanwhile. A fill that
 would change the type is refused, even one the palette offered. That's
 the die-as-seed case:
 
-> Refused: a hundred rolls is pinned to (Number) -> List Number, and this
-> makes it (a) -[Random]-> List Number. Nothing changed.
+> Refused: a hundred rolls is pinned to (Float64) -> List Float64, and this
+> makes it (a) -[Random]-> List Float64. Nothing changed.
 
 Two ways on:
 

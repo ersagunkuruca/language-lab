@@ -1397,7 +1397,7 @@
     "@t00b0t42fe9h0rreh10m9k0s9p:3": "normal"
   },
   "comments": {
-    "@bdqjtggr1grfn66h946dhjh0ft": "a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Numbers; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
+    "@bdqjtggr1grfn66h946dhjh0ft": "a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Float64s; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.",
     "@0l0fl1nj40vcvh8bp2u5sb51cr": "a − b: the old name of −, kept for a release. The direction from b to a.",
     "@dfqk15d2jbh7gn0g057ofmf4tn": "a · b: the old name of ·, kept for a release. A colour tinted by another.",
     "@gpr2icg8543tmnss26ricahd08": "Every part of v times by: a direction made longer, a colour made brighter.",

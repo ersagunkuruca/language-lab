@@ -611,7 +611,7 @@ const R: Record<string, Omit<RtFn, "name">> = {
         local.get $a
       end`,
   },
-  // JavaScript's String of any Number: the shortest digits that read back
+  // JavaScript's String of any Float64: the shortest digits that read back
   // as it, laid out as JavaScript lays them out (number.layout). The
   // digits are Ryū's (Ulf Adams, "Ryū: fast float-to-string conversion",
   // PLDI 2018; d2s.c, Apache 2.0 or Boost licence), adapted: its tables
@@ -1104,7 +1104,7 @@ ${drop}
       end
       local.get $n`,
   },
-  // Digits d times 10^e as JavaScript's Number::toString lays them out
+  // Digits d times 10^e as JavaScript's Float64::toString lays them out
   // (ECMA-262): n = e + the number of digits; whole up to 21 digits, a
   // point inside, 0.000ddd down to n = −5, else d.ddde±x.
   "number.layout": {
@@ -2185,8 +2185,8 @@ ${drop}
       local.get $r
       call $mag.trim`,
   },
-  // The Number nearest a (ties to even, Infinity past the largest), as
-  // JavaScript's Number of a BigInt: its top 64 bits, any bit below
+  // The Float64 nearest a (ties to even, Infinity past the largest), as
+  // JavaScript's Float64 of a BigInt: its top 64 bits, any bit below
   // kept as the last one, rounded once, then scaled by a power of two.
   "mag.toNumber": {
     params: [["a", "mag"]], result: "f64", locals: [["n", "i32"], ["lz", "i32"], ["i", "i32"], ["top", "i64"], ["lo", "i64"], ["e", "i32"]], uses: ["mag.at"],
@@ -3008,7 +3008,7 @@ ${drop}
       local.get $v
       array.set $u32s`,
   },
-  // std.ts's show of a Number: a whole number as its digits, any other
+  // std.ts's show of a Float64: a whole number as its digits, any other
   // rounded to 9 places, written as JavaScript writes it: plain decimals
   // of at most 15 digits directly (which is then exactly what JavaScript
   // writes), otherwise by number.js.
@@ -3607,7 +3607,7 @@ ${drop}
   },
   "text.size": { params: [["t", "text"]], result: "i32", locals: [], uses: [], body: "local.get $t\narray.len" },
   "text.byte": { params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nlocal.get $i\narray.get_u $bytes" },
-  // range(n): 0, 1, …, n − 1 (std.ts, run.ts), built from the end. Int's and Number's.
+  // range(n): 0, 1, …, n − 1 (std.ts, run.ts), built from the end. Int's and Float64's.
   "int.range": {
     params: [["n", "int"]], result: "list", locals: [["acc", "list"]], uses: ["int.of"], list: "std.list<type.int<>>",
     body: `

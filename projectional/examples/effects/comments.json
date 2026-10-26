@@ -1,6 +1,6 @@
 {
-  "9ag6v0vtlg8mqhgonhdd1h7ilv": "An effect of our own. Ask has one operation, ask: it takes a question and gives back a Number. It says nothing about where the answer comes from; whoever handles it decides.",
-  "e2528ifmt1rbq4kg1176s7d4gr": "Asks twice and multiplies. Its type, () -[Ask]-> Number, says it needs someone to answer Ask before it can run.",
+  "9ag6v0vtlg8mqhgonhdd1h7ilv": "An effect of our own. Ask has one operation, ask: it takes a question and gives back a Float64. It says nothing about where the answer comes from; whoever handles it decides.",
+  "e2528ifmt1rbq4kg1176s7d4gr": "Asks twice and multiplies. Its type, () -[Ask]-> Float64, says it needs someone to answer Ask before it can run.",
   "q96mq0eg9ue7p4oqrf7orptm3f": "Abort, from the standard library: sharing among nobody stops with a reason instead of dividing by zero. Its type says it might abort.",
   "7qsv6i9nll42fpdckdrqu0rf93": "Two handlers. The first answers each ask (30 for the width, 12 otherwise), so area gives 360. The second turns an abort into a message. Each handler is a match whose arms are the effect's operations; once both are handled, main needs nothing but Console. Written in the editor with clicks only.",
   "program": "Influence: algebraic effects and handlers (Plotkin and Pretnar, 2009; the Eff language by Bauer and Pretnar), and effect rows in types as in Koka (Daan Leijen, 2014): https://koka-lang.github.io\nAdapted: a handler is a match whose cases are the effect's operations, as OCaml 5.3 writes effect cases in match."

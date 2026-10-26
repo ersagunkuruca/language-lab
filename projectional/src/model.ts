@@ -8,7 +8,7 @@ export type Id = string;
 export type Node =
   // A number may carry a unit (9.81 m/s²); without one it is a plain number.
   // `of` names the literal's type when it isn't the usual one for its value
-  // (Number for a number, Text for a string): an Int is `of: "type.int"`,
+  // (Float64 for a number, Text for a string): an Int is `of: "type.int"`,
   // with its digits in a string when they don't fit a safe integer.
   | { id: Id; kind: "lit"; value: number | string; unit?: Unit; of?: Id }
   // A binder is the identity of a variable. It has no name; names live in the

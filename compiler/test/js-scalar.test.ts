@@ -1,5 +1,5 @@
 // The scalar profile printed as JavaScript: the CPU's way to draw a picture
-// whose colour is a record. Numbers are f64 there too, so it must give the
+// whose colour is a record. Float64s are f64 there too, so it must give the
 // evaluator's numbers exactly.
 
 import { test } from "node:test";

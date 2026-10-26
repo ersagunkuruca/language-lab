@@ -1,5 +1,5 @@
 // JavaScript for the scalar profile (scalar.ts): the lowering wasm.ts and
-// wgsl.ts print, printed a third time, for a CPU without WebGPU. Number is
+// wgsl.ts print, printed a third time, for a CPU without WebGPU. Float64 is
 // a JavaScript number (f64, so results are the evaluator's), Bool is a
 // boolean, and a record is an array of its fields. Unlike WebAssembly here,
 // it takes records, so a picture whose colour is a record can still be

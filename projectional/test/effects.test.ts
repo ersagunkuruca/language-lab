@@ -63,8 +63,8 @@ test("abort ends the computation a match handles, with its reason", () => {
     return main;
   });
   assert.deepEqual(p.errors, []);
-  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "check")!), "(Number) -[Abort]-> Number");
-  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "safe")!), "(Number) -> Text");
+  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "check")!), "(Float64) -[Abort]-> Float64");
+  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "safe")!), "(Float64) -> Text");
   assert.deepEqual(p.run(), ["3", "refused: negative"]);
 });
 
@@ -113,7 +113,7 @@ test("an operation that returns is answered by its case, and the computation car
     return main;
   });
   assert.deepEqual(p.errors, []);
-  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "sum")!), "() -[Ask]-> Number");
+  assert.equal(p.type(p.k.code.defs.find((d) => p.k.names[d] === "sum")!), "() -[Ask]-> Float64");
   assert.deepEqual(p.run(), ["42"]);
 });
 
@@ -316,7 +316,7 @@ test("a main that doesn't type-check isn't run, and says which definition is wro
     return main;
   });
   assert.notDeepEqual(p.errors, []);
-  assert.throws(() => p.run(), /can't run: main doesn't type-check \(half needs Text here, got Number\)/);
+  assert.throws(() => p.run(), /can't run: main doesn't type-check \(half needs Text here, got Float64\)/);
   assert.deepEqual(p.printed, [], "nothing ran, not even the first print");
   assert.throws(() => p.exit([]), /can't run: main/);
 });

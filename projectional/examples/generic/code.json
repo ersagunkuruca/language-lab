@@ -749,7 +749,7 @@
     "8i1nc7jaeg0s0o7o08sake21hi": {
       "id": "8i1nc7jaeg0s0o7o08sake21hi",
       "kind": "lit",
-      "value": "at Number 0.1: "
+      "value": "at Float64 0.1: "
     },
     "32m85ujpk1t6mtnjn2hhano508": {
       "id": "32m85ujpk1t6mtnjn2hhano508",
@@ -1351,7 +1351,7 @@
     "dgdopem6h44saao8b582icrp98": {
       "id": "dgdopem6h44saao8b582icrp98",
       "kind": "lit",
-      "value": "summed at Number 0 to 10 by 0.0001: "
+      "value": "summed at Float64 0 to 10 by 0.0001: "
     },
     "t8bsi8gfg0oqjes4n22r4ptjq2": {
       "id": "t8bsi8gfg0oqjes4n22r4ptjq2",

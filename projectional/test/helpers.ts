@@ -9,7 +9,7 @@ export function reId(own: Code): { code: Code; ids: Map<Id, Id> } {
   return { code: JSON.parse(text), ids };
 }
 
-// Number pairs where tolerance, wholeness or size made equal's old meanings
+// Float64 pairs where tolerance, wholeness or size made equal's old meanings
 // differ (test/equality.test.ts, compiler/test/equality.test.ts).
 export const PAIRS: [number, number][] = [
   [1e12, 1e12 + 1], [1e12, 1e12], [2 ** 53, 2 ** 53 + 2], [0.1 + 0.2, 0.3], [1, 1 + 1e-12], [1e-12, 0],

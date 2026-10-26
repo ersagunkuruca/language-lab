@@ -1,5 +1,5 @@
 // equal's one meaning (projectional run.ts sameNumber), compiled: JavaScript
-// for a Number, a type variable and a list, and the scalar profile in
+// for a Float64, a type variable and a list, and the scalar profile in
 // WebAssembly, against the evaluator's rule on the boundary values in
 // projectional/test/equality.test.ts.
 
@@ -23,7 +23,7 @@ import { emitWasm, instantiate } from "../src/wasm.ts";
 test("compiled equal gives the evaluator's answer on every boundary pair, at every type", async () => {
   const k = new Lang();
   const num = k.def("numbers"), same = k.def("same"), generic = k.def("generic"), lists = k.def("lists");
-  // add(a, 0) makes a a Number.
+  // add(a, 0) makes a a Float64.
   k.define(num, k.fn(["a", "b"], (a, b) => k.equal(k.call(B.add, a, k.lit(0)), b)));
   k.define(same, k.fn(["x", "y"], (x, y) => k.equal(x, y)));
   k.define(generic, k.fn(["a", "b"], (a, b) => k.call(same, k.call(B.add, a, k.lit(0)), b)));

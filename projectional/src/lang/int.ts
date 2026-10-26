@@ -8,13 +8,13 @@
 // correct.
 //
 // Why 2^28 and not 2^53 (REVIEW-2026-10-26.md §1.2): a value doesn't say
-// whether it is an Int or a Number, and `equal` is exact on Ints and near
-// (within 1e-9 relative) on Numbers. Below 2^28 the two agree on whole
+// whether it is an Int or a Float64, and `equal` is exact on Ints and near
+// (within 1e-9 relative) on Float64s. Below 2^28 the two agree on whole
 // numbers: two different ones are at least 1 apart, more than 1e-9 · (1 +
 // 2^28 + 2^28). So run.ts sameNumber can be near on every JS number, and an
 // Int past 2^28 is a BigInt, which it compares exactly. With the bound at
-// 2^53, two Ints near 10^12 had to be told from two Numbers near 10^12,
-// which it did by wholeness, and a Number that happened to be whole (every
+// 2^53, two Ints near 10^12 had to be told from two Float64s near 10^12,
+// which it did by wholeness, and a Float64 that happened to be whole (every
 // float past 2^52 is) lost its tolerance.
 export const SMALL = 2 ** 28;
 const BIG = 2n ** 28n;

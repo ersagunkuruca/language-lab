@@ -33,7 +33,7 @@ const op = (f: Inline): Target["js"] => ({ op: f });
 const test = (f: Inline, boolArgs?: true): Target["js"] => ({ op: f, bool: true, ...(boolArgs ? { boolArgs } : {}) });
 const written = (where: string) => ({ written: where });
 const no = (why: string) => ({ no: why });
-const DATA = no("works on text, lists or other data: the scalar profile is Numbers, Bools and records of them");
+const DATA = no("works on text, lists or other data: the scalar profile is Float64s, Bools and records of them");
 const WORLD = no("acts on the world: a shader has none (WebAssembly imports it from the host)");
 const CHOOSES = no("has Choice: the scalar profile has one answer per call");
 const LOOKS = no("looks inside a function at run time; `derivative` written in place is expanded before lowering");
@@ -63,7 +63,7 @@ export const TARGETS: Record<Id, Target> = {
   [S.hence]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: no("a predicate's `hence` is `and` run forward; not in the profile yet") },
   [S.or]: { js: test(([a, b]) => `(${a} || ${b})`, true), scalar: "or" },
   [S.not]: { js: test(([a]) => `!${a}`, true), scalar: "not" },
-  [S.equal]: { js: written("equality(): one rule on every type, specialized by type"), scalar: written("the same rule on Numbers, inline") },
+  [S.equal]: { js: written("equality(): one rule on every type, specialized by type"), scalar: written("the same rule on Float64s, inline") },
   // Part by part; the function is pure, so a plain JS function.
   [S.mapParts]: { js: op(([f, r]) => `$mapParts(${f}, ${r})`), scalar: written("parts(): one op per field") },
   [S.zipParts]: { js: op(([f, a, b]) => `$zipParts(${f}, ${a}, ${b})`), scalar: written("parts(): one op per field") },

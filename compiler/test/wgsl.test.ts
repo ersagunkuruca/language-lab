@@ -173,7 +173,7 @@ test("an if inside an expression is a var set by an if statement; pow of a negat
   const s = emitWgsl(lowerScalar(c.code, c.info, c.names, Object.values(c.defs)));
   assert.match(s.wgsl, /var t0: f32;\n {2}if \(p0 < 0\.0\) \{\n {4}t0 = 0\.0;\n {2}\} else \{\n {4}let l1 = p0 \* p0;\n {4}t0 = l1 - p0;\n {2}\}\n {2}return 1\.0 \+ t0;/);
   assert.match(s.wgsl, /fn pick_\d+\(p0: bool, p1: f32\) -> f32/);
-  // equal on Numbers is the evaluator's: a finite gap within 1e-9, whole or not.
+  // equal on Float64s is the evaluator's: a finite gap within 1e-9, whole or not.
   assert.ok(s.wgsl.includes("-> bool {\n  return ((p0 == p1) || (((abs(p0 - p1) - abs(p0 - p1)) == 0.0) && ((abs(p0 - p1) < (1e-9 * ((1.0 + abs(p0)) + abs(p1)))) || (abs(p0 - p1) == (1e-9 * ((1.0 + abs(p0)) + abs(p1))))))) || (abs(p0 - p1) < 0.5);"), s.wgsl);
   // x³ of a variable is a product; of anything else, lab_pow.
   assert.match(s.wgsl, /return \(p0 \* p0 \* p0\) \+ lab_pow\(p0 - 2\.0, 3\.0\);/);
@@ -184,10 +184,10 @@ test("records are structs (or vectors): built by their case, read by fields or a
   const v = vectors();
   const roots = Object.values(v.defs);
   const s = emitWgsl(lowerScalar(v.code, v.info, v.names, roots, { records: true }));
-  // Two to four Numbers are a vector; anything else is a struct.
+  // Two to four Float64s are a vector; anything else is a struct.
   assert.match(s.wgsl, /\/\/ Vec is a vec3f: x is \.x, y is \.y, z is \.z\./);
   assert.match(s.wgsl, /struct Ray_1 \{\n {2}origin: vec3f,\n {2}direction: vec3f,\n\}/);
-  // The standard library's Pair, at Number and Number.
+  // The standard library's Pair, at Float64 and Float64.
   assert.match(s.wgsl, /\/\/ Pair is a vec2f: fst is \.x, snd is \.y\./);
   // origin + t · direction, written field by field, is one vector expression.
   assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
@@ -201,14 +201,14 @@ test("records are structs (or vectors): built by their case, read by fields or a
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
   // An input that can be anything is lowered at what each call passes:
-  // one copy of twice ignoring takes a Number there, one a Vec.
+  // one copy of twice ignoring takes a Float64 there, one a Vec.
   assert.match(s.wgsl, /fn twice_ignoring_\d+\(p0: f32, p1: f32\) -> f32/);
   assert.match(s.wgsl, /fn twice_ignoring_\d+\(p0: f32, p1: vec3f\) -> f32/);
   assert.ok(!s.refused.has(v.defs.numbers));
   assert.ok(!s.refused.has(v.defs.vecs));
   // Without records (what WebAssembly takes), they're refused as before.
   const plain = lowerScalar(v.code, v.info, v.names, roots);
-  assert.match(why(plain.refused, v.defs.length), /other than Number or Bool/);
+  assert.match(why(plain.refused, v.defs.length), /other than Float64 or Bool/);
 });
 
 test("every example: what a shader can start from has no Diverge, and every loop under a budget spends from it", () => {

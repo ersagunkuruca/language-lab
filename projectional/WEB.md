@@ -173,8 +173,8 @@ one way to make a page.
 
 ```
 celsius = cell(20)
-as fahrenheit(c: Number) : Text = show(c × 9 / 5 + 32)
-as celsius(c: Number) : Text    = show(c)
+as fahrenheit(c: Float64) : Text = show(c × 9 / 5 + 32)
+as celsius(c: Float64) : Text    = show(c)
 
 field(shows: () -[Cells]-> Text, edit: (Text) -[Cells, Update]-> Bool) : Html
   -- an <input>: its value property shows `shows`; on "input" it calls

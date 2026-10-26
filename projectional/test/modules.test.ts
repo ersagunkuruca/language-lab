@@ -157,7 +157,7 @@ test("a pin holds a definition's type: a change that breaks it is an error there
   const pinned = infer(changed, baseNames(k.names), undefined, { pins });
   assert.equal(pinned.errors.length, 1);
   assert.equal(pinned.errors[0].id, area);
-  assert.match(pinned.errors[0].message, /area is pinned to \(Number\) -> Number, and this makes it \(a\) -> Text/);
+  assert.match(pinned.errors[0].message, /area is pinned to \(Float64\) -> Float64, and this makes it \(a\) -> Text/);
   // A body more general than its pin is fine: the pin promises less.
   const id: Code = { nodes: { ...code.nodes, [lam.body]: { id: lam.body, kind: "ref", target: (code.nodes[body] as { params: Id[] }).params[0] } }, defs: code.defs };
   assert.deepEqual(infer(id, k.names, undefined, { pins }).errors, []);
@@ -243,7 +243,7 @@ test("upgrade moves a program to a new version only when the type is the same", 
     assert.deepEqual(out, ["3"]);
   }
   const no = upgrade(p.code, prelude("sum"), p.rename.get(half)!, pins, baseNames(p.names));
-  assert.ok(!no.ok && /type changed from \(List Number\) -> Number to \(Number\) -> Number/.test(no.reason));
+  assert.ok(!no.ok && /type changed from \(List Float64\) -> Float64 to \(Float64\) -> Float64/.test(no.reason));
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {

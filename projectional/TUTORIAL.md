@@ -23,7 +23,7 @@ comes from.
 Everything here can be tried in the editor:
 https://ersagunkuruca.github.io/language-lab/ (or build it locally with
 `npm run build-editor` in `projectional/` and open `index.html`). The examples ship with it, in the *Programs* list on
-the left: *Numbers & physics* (`discriminant`, `polar`, `rotate`, `fall`),
+the left: *Float64s & physics* (`discriminant`, `polar`, `rotate`, `fall`),
 *Insertion sort*, *Eight queens*, *Calculus*, *Run backwards*,
 *Relations in programs*, and two shaders, *Shader: ripples* and *Shader: ray
 marching*. *+ New program* starts an empty one of your own.
@@ -140,7 +140,7 @@ finishing are called **effects**. Instead of being hidden, they're listed in
 the function's type:
 
 ```
-queens : (Number) -[Choice]-> List Number
+queens : (Float64) -[Choice]-> List Float64
 main   : () -[Console]-> Unit
 ```
 
@@ -173,7 +173,7 @@ What this buys:
 - **Notation is personal.** The `a · b` / `a * b` / `(* a b)` switch and the
   *Short names* / *Descriptive* switch change only what you see.
 
-**Try it.** Open *Numbers & physics* → `discriminant`. Switch between *Short
+**Try it.** Open *Float64s & physics* → `discriminant`. Switch between *Short
 names* and *Descriptive*, and between the three notations. Watch the *Files*
 tab: `code.json` and the meaning hash never change.
 
@@ -245,8 +245,8 @@ in `layout.json`); the code is the same dot. *Show as wires* turns it back.
 
 A **frame** is a function as a value. Its inputs are dots on its left; what
 it gives back leaves on its right. A whole definition is a frame too: its
-title shows its name and inferred type, e.g. `queens : (Number) -[Choice]->
-List Number`.
+title shows its name and inferred type, e.g. `queens : (Float64) -[Choice]->
+List Float64`.
 
 Frames nest, and a node can't leave the frame its inputs come from. If you
 drag a node out, the frame grows to keep it inside.
@@ -261,7 +261,7 @@ A program with holes runs until it reaches one.
 
 **Try it.** Open *Insertion sort* → `insert`. In the blocks, click the body of
 the `else` case of the `if` and press *Clear to a hole*. The hole needs a
-`List Number`. The palette offers `items`, `tail`, `tail′`, `nil`,
+`List Float64`. The palette offers `items`, `tail`, `tail′`, `nil`,
 `cons(□, □)`, `append(□, □)`, `insert(□, □)`, `sort(□)` and other things that
 make lists, but not `x` or `head`, which are numbers. That's the whole idea
 of "type errors prevented by the editor": you can't pick what doesn't fit.
@@ -280,7 +280,7 @@ of "type errors prevented by the editor": you can't pick what doesn't fit.
 - **+ New definition** makes a function (give its inputs, or none for an
   action you can run), a value, or a data type (give its first case).
 - Select a case of a data type to add fields to it. A field's type is
-  picked the way it's written: first what it is (Number, Int, Text, Bool, a
+  picked the way it's written: first what it is (Float64, Int, Text, Bool, a
   data type of the standard library or your own, or the type itself), then,
   for one that takes arguments, each of those the same way: *Pair*, then
   *Int* and *Text*.
@@ -308,8 +308,8 @@ fields:
 
 ```
 type Shape
-  | circle(radius: Number)
-  | rectangle(width: Number, height: Number)
+  | circle(radius: Float64)
+  | rectangle(width: Float64, height: Float64)
 ```
 
 A variant used as a function is its constructor: `circle(2)`. The standard
@@ -339,8 +339,8 @@ There's no new construct behind it: it's the field read run backwards with
 the rest of the record given.
 
 **Whole numbers and text.** `Int` is the whole numbers and never overflows
-(it switches to big integers past 2²⁸). `Number` is floating point. They
-don't mix without `as number` or `whole part`. Where there's no whole
+(it switches to big integers past 2²⁸). `Float64` is floating point. They
+don't mix without `as float64` or `whole part`. Where there's no whole
 answer there's no answer: `quotient` by zero is `Choice` (see 3.9), not a
 crash. Text has `length`, `slice`, `split`, `join all`, `find` and friends,
 and an emoji counts as one character.
@@ -419,7 +419,7 @@ catches it. Rule of thumb: `Choice` for search and "no answer", `Abort` for
 errors someone should read, `Optional` to keep an absence in data.
 
 **Effects you define** are declared like a data type whose cases are
-operations: `effect Ask = ask(question: Text) returns Number`. Calling
+operations: `effect Ask = ask(question: Text) returns Float64`. Calling
 `ask("width")` performs it. Handling it is a `match` on the computation that
 performs it, with one case per operation:
 
@@ -586,7 +586,7 @@ you can reach light up and the others say why not.
 | name clash, shadowing, capture | impossible | binders are ids; equal names get a subscript on screen |
 | wrong number of arguments | prevented | a call is made with one hole per input; adding an input adds a hole to every call |
 | type mismatch | prevented | holes only offer what fits; edits that add one are refused |
-| unit mismatch | prevented | units are part of `Number`'s type |
+| unit mismatch | prevented | units are part of `Float64`'s type |
 | missing case | prevented | cases come from the type; *Add a case* adds hole cases everywhere |
 | null / undefined | impossible | there is no null; absence is `Choice` or `Optional` |
 | integer overflow | impossible | `Int` is unbounded |
@@ -596,7 +596,7 @@ you can reach light up and the others say why not.
 | comparing functions | checked | `equal` needs plain data |
 | non-termination | inferred | it shows up as `Diverge` in the type |
 | unfinished program | allowed | holes have types; it runs until it reaches one |
-| `sqrt` of a negative, `÷ 0` on `Number` | runtime | `Number` follows IEEE (NaN, Infinity); `Int` division by zero has no answer |
+| `sqrt` of a negative, `÷ 0` on `Float64` | runtime | `Float64` follows IEEE (NaN, Infinity); `Int` division by zero has no answer |
 | logic errors | not prevented | running backwards gives round-trip laws to test against |
 
 The *Checks* tab lists these live for whatever program is open.
@@ -746,8 +746,8 @@ What's left is the three ways to say "no answer" (`Choice`, `Abort`,
 
 **Today.** Types like `(List a, (a) -[e]-> b) -[e]-> List b` show `e`, a row
 variable meaning "whatever effects the function you pass has". `root near`'s
-type is `((Number) -[Choice, Diverge, e]-> Number, Number) -[Choice, e]->
-Number`.
+type is `((Float64) -[Choice, Diverge, e]-> Float64, Float64) -[Choice, e]->
+Float64`.
 
 **Proposal.** Show it in words on hover ("has the effects of `f`") and hide
 `e` by default. The badges already say what a node does.
@@ -768,7 +768,7 @@ couldn't see", and fuel as "recursion with a budget".
 - `+` is still three built-ins in tree code (`add`, `subtract`, `negate`), each
   with its own equation, where one sum `a + b = total` read in different
   directions would do.
-- `Int` and `Number` share every operation's name. The types tell them apart
+- `Int` and `Float64` share every operation's name. The types tell them apart
   and the palette only offers the right one, but a reader of the blocks can't
   see which `+` it is.
 - `equal` on numbers is approximate (1e-9). That's the right default for a
@@ -836,7 +836,7 @@ So the list above isn't read as "everything is wrong":
   `+`s.)
 - ~~**Relations only cover arithmetic.**~~ Every node runs backwards
   (BACKWARDS.md), and pattern matching *is* a constructor run backwards.
-- ~~**Units only exist in networks.**~~ Units are part of `Number`'s type in
+- ~~**Units only exist in networks.**~~ Units are part of `Float64`'s type in
   every program.
 - ~~**`equal` works on functions; `show` only on numbers.**~~ `equal` needs plain
   data; `show` prints any plain value.
@@ -854,7 +854,7 @@ So the list above isn't read as "everything is wrong":
 - This file: `projectional/TUTORIAL.md`. The editor build also turns it into
   `tutorial.html` at the site's root, linked from the editor's menu bar.
 - The language reference: [LANGUAGE.md](LANGUAGE.md). Running backwards:
-  [BACKWARDS.md](BACKWARDS.md). Numbers and representations:
+  [BACKWARDS.md](BACKWARDS.md). Float64s and representations:
   [NUMBERS.md](NUMBERS.md). The compiler: [COMPILER.md](COMPILER.md). The
   review: [REVIEW.md](REVIEW.md). What's next: [ROADMAP.md](ROADMAP.md), and
   the discussion behind it: [NOTES.md](NOTES.md). The prototype and editor:

@@ -34,9 +34,9 @@ test("a network is a predicate: its type is Bool and main prints what it says", 
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
   const type = (n: string) => showType(info.typeOf.get(p.named(n))!, p.pres.names);
-  assert.equal(type("fall"), "(Number, Number, Number, Number) -> Bool");
-  assert.equal(type("rotate"), "(Number, Number, Number, Number, Number) -> Bool");
-  assert.equal(type("landing times"), "(Number, Number) -> List Number");
+  assert.equal(type("fall"), "(Float64, Float64, Float64, Float64) -> Bool");
+  assert.equal(type("rotate"), "(Float64, Float64, Float64, Float64, Float64) -> Bool");
+  assert.equal(type("landing times"), "(Float64, Float64) -> List Float64");
   const lines: string[] = [];
   runMain(p.code, info, p.named("main"), { print: (s) => lines.push(s) });
   assert.deepEqual(lines, [

@@ -37,8 +37,8 @@ const define = defineRelation as unknown as (spec: { name: string; ports: string
 export class NotEquations extends Error {}
 
 // Numeric builtins, by the name the solver knows them under.
-// The generic + − · −x solve as Number's do: on Numbers, which is where
-// equations are solved, they are Number's own.
+// The generic + − · −x solve as Float64's do: on Float64s, which is where
+// equations are solved, they are Float64's own.
 export const NUMERIC: Record<Id, string> = {
   ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs",
   [ARITH.add]: "add", [ARITH.sub]: "sub", [ARITH.mul]: "mul", [ARITH.neg]: "neg",

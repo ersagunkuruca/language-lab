@@ -60,7 +60,7 @@ test("Int division rounds down; dividing by zero and a negative power have no an
   assert.deepEqual(p.run(), ["-4 1", "none", "none", "none"]);
 });
 
-test("Int and Number don't mix without a conversion", () => {
+test("Int and Float64 don't mix without a conversion", () => {
   const bad = program((k) => lines(k, k.call(I.show, k.call(I.add, k.int(1), k.lit(2)))));
   assert.equal(bad.info.errors.length, 1);
   const ok = program((k) => lines(k,
@@ -168,7 +168,7 @@ test("show prints any plain value: lists, cases with the program's names, text, 
 // REVIEW-2026-10-26.md §1.2 (L80): an Int is a JS number only below 2^28
 // and a BigInt beyond, one spelling each, so `equal` can be near on every
 // JS number and still exact on Ints.
-test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Numbers, whole or not", () => {
+test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Float64s, whole or not", () => {
   assert.equal(Int.norm(2n ** 28n - 1n), 2 ** 28 - 1);
   assert.equal(Int.norm(2n ** 28n), 2n ** 28n);
   assert.equal(Int.norm(-(2n ** 28n) + 1n), -(2 ** 28) + 1);

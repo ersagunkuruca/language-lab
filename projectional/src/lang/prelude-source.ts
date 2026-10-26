@@ -71,7 +71,7 @@ export function buildPrelude(): Module {
   const atLeast = compare("at least", ARITH.less, (lt, a, b) => k.call(S.not, lt(a, b)));
   const smaller = compare("smaller", ARITH.less, (lt, a, b) => k.if(lt(a, b), a, b));
   const larger = compare("larger", ARITH.less, (lt, a, b) => k.if(lt(a, b), b, a));
-  // The same five over Number's own <, as they were published before the
+  // The same five over Float64's own <, as they were published before the
   // one generic < reached them: kept, hidden, so a program saved before
   // still opens and runs (its references are by hash). Not offered.
   const numberOnly = ["at most", "more than", "at least", "smaller", "larger"].map((name, i) => compare(name, S.less, [
@@ -109,10 +109,10 @@ export function buildPrelude(): Module {
   const divF = two("divide fractions", (p, q, r, t) => k.if(k.call(S.equal, r, k.int(0)), k.call(S.fail), reduced(i.mul(p, t), i.mul(q, r))));
   const showF = k.def("show fraction");
   k.define(showF, k.fn(["a"], (a) => ratio(a, (p, q) => k.if(k.call(S.equal, q, k.int(1)), k.call(INT_OPS.show, p), k.call(S.concat, k.call(INT_OPS.show, p), k.call(S.concat, k.lit("/"), k.call(INT_OPS.show, q)))))));
-  const toNum = k.def("fraction as number");
+  const toNum = k.def("fraction as float64");
   k.define(toNum, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(B.div, k.call(INT_OPS.toNumber, p), k.call(INT_OPS.toNumber, q)))));
 
-  // Complex numbers: a record of two Numbers (std.ts), re + im·i. + − ·
+  // Complex numbers: a record of two Float64s (std.ts), re + im·i. + − ·
   // and −x at Complex are these (arith.ts), so they aren't offered on
   // their own; · is (a + bi)(c + di) = (ac − bd) + (ad + bc)i.
   const cx = (v: Id, f: (re: Id, im: Id) => Id, names = ["re", "im"]) => k.match(v, [{ variant: COMPLEX_V, names, body: ([a, b]) => f(a, b) }]);
@@ -337,7 +337,7 @@ export function buildPrelude(): Module {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     [map]: "The list of f(item) for each item, in the same order.",
     [length]: "How many items the list has.",
-    [sum]: "The Numbers of the list added up; 0 for an empty list.",
+    [sum]: "The Float64s of the list added up; 0 for an empty list.",
     [append]: "The items of the first list, then the items of the second.",
     [reverse]: "The list back to front.",
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
@@ -357,7 +357,7 @@ export function buildPrelude(): Module {
     [whole]: "The whole number n as a fraction, n/1.",
     [divF]: "a ÷ b for fractions, exactly; no answer when b is 0.",
     [showF]: "A fraction as 3/4, or 3 when it is whole.",
-    [toNum]: "The nearest Number.",
+    [toNum]: "The nearest Float64.",
     [addF]: "What + is at Rational. Not offered on its own: + is.",
     [subF]: "What − is at Rational. Not offered on its own: − is.",
     [mulF]: "What · is at Rational. Not offered on its own: · is.",
@@ -390,7 +390,7 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
-    [asC]: "The Number x as a complex number, x + 0i.",
+    [asC]: "The Float64 x as a complex number, x + 0i.",
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
@@ -403,7 +403,7 @@ export function buildPrelude(): Module {
     [subC]: "What − is at Complex. Not offered on its own: − is.",
     [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
     [negC]: "What −x is at Complex. Not offered on its own: − is.",
-    ...Object.fromEntries(numberOnly.map((d) => [d, "The Number-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
+    ...Object.fromEntries(numberOnly.map((d) => [d, "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
