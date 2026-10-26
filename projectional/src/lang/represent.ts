@@ -38,6 +38,10 @@ export interface Representation {
   approximate?: boolean;
   // The same keys, plus "space". Values are on the ladder below.
   cost: Record<string, string>;
+  // A representation that isn't canonical: equal, show and compare where
+  // an argument's type is T, done through `meaning` (map-tree.ts). The
+  // rewrite finds those calls by type (C47).
+  byType?: { equal: Id; show: Id; compare: Id };
 }
 
 export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
@@ -67,13 +71,14 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
     }
   };
   // A function some representation implements is one job: don't look
-  // inside it, since its body is what gets replaced.
+  // inside it, since its body is what gets replaced (`add item` builds a
+  // `set of`, which the tree never does).
   const seen = new Set<Id>();
   const visit = (def: Id) => {
     if (seen.has(def)) return;
     seen.add(def);
-    walk(def);
     if (implemented.has(def) && def !== entry) return;
+    walk(def);
     for (const d of directRefs(code, def)) visit(d);
   };
   visit(entry);

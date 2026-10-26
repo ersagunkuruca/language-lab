@@ -1,0 +1,34 @@
+// The trees module: maps and sets stored as weight-balanced trees
+// (map-tree.ts), published like the prelude (library/build.ts writes
+// library/trees.json). Nothing in it is offered: a program says Map and
+// Set, and the representation rows it carries (LIBRARY.reps) let the
+// chooser store them as trees (DATA-STRUCTURES.md, C47).
+
+import { merge, type Id } from "../model.ts";
+import { prelude } from "../prelude.ts";
+import { Lang } from "./dsl.ts";
+import { buildTrees } from "./map-tree.ts";
+import { makeModule, publish, type Module } from "./modules.ts";
+import type { Representation } from "./represent.ts";
+import { std } from "./std.ts";
+
+export function buildTreesModule(preludeModule: Module): Module {
+  const base = merge(prelude, std, preludeModule.code);
+  const k = new Lang(base);
+  const byName = (name: string) => preludeModule.code.defs.find((d) => preludeModule.names[d] === name)!;
+  const t = buildTrees(k, byName);
+  const p = publish(merge(base, k.code), k.names, t.defs, base);
+  if (!p.ok) throw new Error(`the trees can't be published: ${p.reason}`);
+  const at = (d: Id) => p.rename.get(d) ?? d;
+  const renamed = (r: Representation): Representation => ({
+    ...r, type: at(r.type), meaning: r.meaning && at(r.meaning),
+    impl: Object.fromEntries(Object.entries(r.impl).map(([job, d]) => [job, at(d)])),
+    ...(r.byType ? { byType: { equal: at(r.byType.equal), show: at(r.byType.show), compare: at(r.byType.compare) } } : {}),
+  });
+  const m = makeModule("trees", p.code, p.names, [], p.pins, {}, t.defs.map(at));
+  // makeModule takes in what the trees use, the prelude's map, keep and
+  // reverse among it; those stay the prelude's.
+  const own = (id: Id) => !base.nodes[id];
+  const code = { nodes: Object.fromEntries(Object.entries(m.code.nodes).filter(([id]) => own(id))), defs: m.code.defs.filter(own) };
+  return { ...m, code, pins: Object.fromEntries(Object.entries(m.pins).filter(([d]) => own(d))), representations: [renamed(t.map), t.mapSpec, renamed(t.set), t.setSpec] };
+}
