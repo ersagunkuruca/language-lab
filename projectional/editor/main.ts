@@ -93,7 +93,7 @@ import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "./files.ts";
-import { flattened, matchRows } from "../src/lang/patterns.ts";
+import { flattened, matchRows, sameEverywhere } from "../src/lang/patterns.ts";
 import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
@@ -543,6 +543,14 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>): boo
     return false;
   }
   if (e.select) ui.selected = e.select;
+  // A row the text draws once as the otherwise is a copy in each place it
+  // stands for; an edit to it is made in all of them (patterns.ts).
+  const same = sameEverywhere(doc.code, e.code, typesOf());
+  if (same.places) {
+    const names = { ...e.names };
+    for (const [x, y] of same.copied) if (names[x]) names[y] = names[x];
+    e = { ...e, code: same.code, names, note: `${e.note} Made in all ${same.places} places it stands for.` };
+  }
   const note = holdType(e.code);
   then?.();
   // A node an edit removed takes its names with it, in every layer.
