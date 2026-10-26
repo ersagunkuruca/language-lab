@@ -148,11 +148,12 @@ short-cut fusion form (Gill, Launchbury and Peyton Jones, 1993). Here each
 fusion is a row of the table, not a rule of its own, and `characters(t)`
 fuses the same way through the `text` row.
 
-The second one gets the general fold: `range` builds the list, the fold
-walks down it into an array, then runs the arms back up. That's correct
-but much slower. Naming the list with a let hides the shape, because the
-check only looks at the fold's input node directly. That's a gap, not a
-design choice (BACKLOG C49): a let used once should be looked through.
+The second one compiles to the same loop. A let whose value is such a
+list (`range`, `characters`), made from names and builtins with no
+effects, and whose name is used once in a place that runs at most once
+(not inside a function or a fold's arm), is first put where its name is
+(compiler/src/inline-lets.ts, BACKLOG C49). So the fold sees what made
+its input. A list used twice is still made once, and walked as a list.
 
 Note that the ordinary fold isn't a generator or an iterator. A fold
 without `Choice` is always a plain loop (COMPILER.md, "Folds are loops").

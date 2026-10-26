@@ -50,6 +50,7 @@ import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { ABORT, ABORT_OP, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
@@ -310,6 +311,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   if (x.expanded.length) {
     code = x.code;
     names = x.names;
+    info = infer(code, names);
+  }
+  // A list named first and then walked is put where it's walked, so the
+  // fold over `characters` sees it (inline-lets.ts, C49).
+  const lets = inlineLists(code, info);
+  if (lets.inlined) {
+    code = lets.code;
     info = infer(code, names);
   }
   // A generic definition (the vectors module's plus, for any record of

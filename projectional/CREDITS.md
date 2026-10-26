@@ -166,6 +166,7 @@ Proposed in [LANGUAGE-NEEDS-2026-10-24.md](LANGUAGE-NEEDS-2026-10-24.md); the fu
 |---|---|---|
 | Folds as the one way to consume data | Influence | Catamorphisms: Meijer, Fokkinga and Paterson, "Functional programming with bananas, lenses, envelopes and barbed wire" (FPCA 1991). |
 | How a fold runs is a job of the representation of what it folds; no intermediate list | Prior art | Deforestation (Wadler, 1990); short-cut fusion, `foldr`/`build` (Gill, Launchbury and Peyton Jones, 1993); stream fusion (Coutts, Leshchinskiy and Stewart, 2007). Credited in NUMBERS.md and ROADMAP.md. |
+| A list named by a let and used once is put where it is walked, so the fold sees what made it (compiler/src/inline-lets.ts, C49) | Prior art | Inlining a binding that occurs once in a place that runs at most once: GHC's occurrence analysis (Peyton Jones and Marlow, "Secrets of the Glasgow Haskell Compiler inliner", JFP 2002). |
 
 ## Evaluator and compiler
 
