@@ -444,6 +444,34 @@ export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
   return guardTyped(info, replace(code, id, () => ({ kind: "hole" })), names, id, "Cleared to a hole. It knows its type: pick from the palette to fill it.");
 }
 
+// Wrap in…: a part was made a hole (`kept` is the program from before),
+// and the hole has just been filled with a call or a function. The part
+// goes back into the first of its empty inputs where it type-checks; where
+// a function of nothing goes, as () => the part. One edit with the fill.
+export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: Code): TEdit {
+  const wrapper = code.nodes[at];
+  const slots = wrapper?.kind === "call" ? wrapper.args : wrapper?.kind === "lambda" ? [wrapper.body] : [];
+  const open = slots.filter((x) => code.nodes[x]?.kind === "hole");
+  if (!open.length) return { ok: false, reason: "that has no empty input to put it in" };
+  const part = freshId();
+  const base: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  for (const x of subtree(kept, at)) base.nodes[x] = kept.nodes[x];
+  base.nodes[at] = code.nodes[at];
+  const { id: _, ...was } = kept.nodes[at];
+  base.nodes[part] = { ...was, id: part } as Node;
+  let last: TEdit | null = null;
+  for (const slot of open) {
+    for (const thunk of [false, true]) {
+      const next = replace(base, slot, () => (thunk ? { kind: "lambda", params: [], body: part } : was as NodeData));
+      if (!thunk) delete next.nodes[part];
+      const r = guardTyped(before, next, names, at, wrapper.kind === "lambda" ? "Wrapped it in a function: it is the body." : `Wrapped it in the call: it is one of its inputs${thunk ? ", as () => it, since a function of nothing goes there" : ""}.`);
+      if (r.ok) return r;
+      last ??= r;
+    }
+  }
+  return { ok: false, reason: `it doesn't go in any of its inputs (${last && !last.ok ? last.reason : "none fits"})` };
+}
+
 // What's wired into a node: the parts that would be left lying if it were
 // taken out. A call's inputs (and a step's body), a function's body, what a
 // case looks at and what each case gives, a relation's givens and body.

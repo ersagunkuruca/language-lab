@@ -362,6 +362,9 @@ let deleted: Doc | null = null;
 // hole, then the palette fills it: one change, so one Undo. The fill that comes right after takes the
 // place of the hole's step in the undo list.
 let swapped: { hole: Id; at: number } | null = null;
+// Wrap in… makes the part a hole the same way; the fill that comes next
+// takes it back as one of its inputs (typed.ts wrapInto).
+let wrapping: { hole: Id; kept: Code; info: T.Info } | null = null;
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
@@ -539,6 +542,9 @@ function pasteIntoSelected() {
 // open, what's selected) before it's drawn.
 // `place`: where new nodes go in the graph (layout.json), by id.
 function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>): boolean {
+  const w = wrapping;
+  wrapping = null;
+  if (w && e.ok && e.code.nodes[w.hole] && e.code.nodes[w.hole].kind !== "hole") e = T.wrapInto(e.code, e.names, w.info, w.hole, w.kept);
   if (!e.ok) {
     ui.menu = null;
     ui.note = `Refused: ${heldReason(e.reason)}. Nothing changed.`;
@@ -1309,6 +1315,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn", type: "button", "data-act": "t-replace", title: "Pick what goes here instead, from the palette" }, "Replace with…"),
+      wrappable(id) ? h("button", { class: "btn", type: "button", "data-act": "t-wrap", title: "Put it inside a call or a function from the palette: it becomes one of its inputs" }, "Wrap in…") : null,
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
       n.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
       splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
@@ -1510,6 +1517,13 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const why = !shown.length && !value && q ? T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query) ?? pureHole(info, hole) : "";
   if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
+}
+
+// What Wrap in… applies to: a value in an expression, not a definition's
+// whole body's lambda or a step's own let.
+function wrappable(id: Id): boolean {
+  const n = doc.code.nodes[id];
+  return !!n && ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id) && !(n.kind === "call" && doc.code.nodes[n.fn]?.kind === "lambda") && defBody(ui.def)?.id !== id;
 }
 
 // ---------------------------------------------------------------- structure
@@ -1980,6 +1994,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     }
     if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
+    if (wrappable(id)) rows.push(item("Wrap in…", "wrap", "Put it inside a call or a function from the palette: it becomes one of its inputs"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
@@ -2056,6 +2071,16 @@ function menuAction(act: string, target: Id | undefined) {
     case "step-earlier": case "step-later": return runTop(info, Top.moveStep(doc.code, doc.names.short, stepAt(target!), act === "step-earlier" ? -1 : 1));
     case "simplify": return void applyT(T.simplify(doc.code, doc.names.short, info, target!) ?? { ok: false, reason: "nothing to simplify" });
     case "delete": return void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, target!));
+    case "wrap": {
+      const kept = doc.code;
+      const r = T.toHole(doc.code, doc.names.short, info, target!);
+      if (!applyT(r.ok ? { ...r, note: "Pick what to wrap it in: a call takes it as one of its inputs, a new function as its body. Undo puts it back." } : r)) return;
+      swapped = { hole: target!, at: undo.length };
+      wrapping = { hole: target!, kept, info };
+      if (m) { ui.menu = { ...m, target: { kind: "hole", id: target! } }; render(); document.getElementById("m-query")?.focus(); }
+      else { ui.selected = target!; render(); document.getElementById("f-query")?.focus(); }
+      return;
+    }
     case "swap": case "replace": {
       // Change the function: the function becomes a hole and the inputs stay
       // where they are, so the palette offers what takes them. Replace with:
@@ -2954,6 +2979,7 @@ document.addEventListener("click", (e) => {
     if (a === "delete-program") return deleteProgram();
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
     if (a === "t-replace" && ui.selected) return menuAction("replace", ui.selected);
+    if (a === "t-wrap" && ui.selected) return menuAction("wrap", ui.selected);
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "more") { const open = !!document.querySelector(".bar")?.classList.toggle("more-open"); act.setAttribute("aria-expanded", String(open)); return; }
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
