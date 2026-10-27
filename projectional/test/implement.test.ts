@@ -97,3 +97,25 @@ test("typed text calls an interface's operation", () => {
     assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, op, text);
   }
 });
+
+// A use at a type with no implementation is refused with the reason, and
+// the refusal names the interface and the type, for Implement (BACKLOG E140).
+test("a call at a type without the interface says which it lacks", () => {
+  const k = new Lang(LIBRARY.code);
+  const D = k.interface("Doubling", "a", [["double", (a: Id) => k.tfun([k.tref(a)], k.tref(a))]]);
+  const impl = k.def("doubling at float64");
+  k.define(impl, k.call(D.v, k.fn(["x"], (x) => k.call(B.add, x, x))));
+  const four = k.def("four times");
+  k.define(four, k.fn(["x"], (x) => k.call(D.op.double, k.call(D.op.double, x))));
+  const use = k.def("use");
+  let hole = "";
+  k.define(use, (hole = k.hole()));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const r = fillValue(code, names, info, hole, "four times(true)", use);
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.match(r.reason, /Bool has no Doubling/);
+  assert.equal(r.missing?.iface, D.def);
+  assert.equal(r.missing && showIn(r.missing.type, names, info.subst), "Bool");
+});
