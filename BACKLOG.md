@@ -25,7 +25,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E150 | Bug: a function that reads or writes files (unit converter's quantity) offered Run backwards, whose search stopped in red ("file exists touches the world"); full smoke on main failed on it | coordinator 2026-10-27 | P0 | S | |
 | E149 | Make it a function on a group with several values out: they leave as a record, taken apart where each was used (E146's first step takes one value out) | E146 | P2 | M | |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440). Step two (#491): each filling built once, ownerOfTypeParts reads the defs list, fall's holes 48 s → 39 s in all; what's left is per-candidate whole-program passes (modes.ts analyzer union-find, unit inference, the node copy). Step three (#502): units solved once per hole, 44 s → 28 s. Step four (#503): a solve's verdict kept per program, 28 s → 21 s. Step five (#504): the unit scan skipped per filling, 21 s → 18.5 s, about 0.8 s a palette. Stopped there: each stage left buys under 10% except sharing nodes between fillings instead of copying ~3000 per filling (about 20%), which needs a persistent node store | found doing E100 | P3 | M | |
 | E133 | **Design, held** (coordinator 2026-10-27). Fillings share the program's nodes instead of each copying them (~3000 in physics): a persistent node store under `Code` (a HAMT or an overlay map), which every module reads. E103's last stage over 10%: about 20% off a palette (fall 18.5 s → ~15 s for 23 holes). Write the design note before building | E103 | P3 | L | held |
@@ -122,6 +121,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E150 | A function that reads or writes files or the console says it doesn't run backwards, instead of a search that stopped in red (unit converter's quantity) | #538 |
 | E146 | Make it a function on a group: part = (inputs) => its nodes, called where they were; one value out (several: E149; shaders: C54). | #536 |
 | E143 | Implement offers Text and List Float64/Int/Text (the checker takes any closed type; one for every List a isn't in the language). | #535 |
 | E142 | An operation's panel changes what it takes and gives; implementations get a hole for it again. | #534 |
