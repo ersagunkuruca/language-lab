@@ -60,10 +60,12 @@ function rules(op: string, port: (k: string) => string, why: string, node: Id): 
   const is = (a: string, v: Vec): Constraint => ({ terms: [[a, 1]], rhs: v, why, node });
   // The generic + − · −x < (arith.add…) keep units as Float64's own do.
   switch (op.replace(/^arith\./, "")) {
-    case "add": case "sub": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
+    // The two sides first, so a clash between them is named as theirs
+    // (speed is m/s, time is s) rather than one side's against the answer.
+    case "add": case "sub": return [eq(port("0"), port("1")), eq(port("0"), port("out"))];
     case "neg": case "abs": case "floor": case "float32": return [eq(port("0"), port("out"))];
     // mod(7 m, 3 m) is 1 m: both sides and the answer share a unit.
-    case "mod": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
+    case "mod": return [eq(port("0"), port("1")), eq(port("0"), port("out"))];
     case "mul": return [{ terms: [[port("out"), 1], [port("0"), -1], [port("1"), -1]], rhs: ZERO, why, node }];
     case "div": return [{ terms: [[port("out"), 1], [port("0"), -1], [port("1"), 1]], rhs: ZERO, why, node }];
     case "sqrt": return [{ terms: [[port("out"), 2], [port("0"), -1]], rhs: ZERO, why, node }];
