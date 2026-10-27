@@ -2909,6 +2909,14 @@ function render() {
   shownSelected = ui.selected;
   try { draw(); revealDrawn(); } catch (e) {
     console.error(e);
+    // A right-click menu that can't be built takes only itself away: the
+    // program is drawn again without it, and the status line says what broke.
+    if (ui.menu) {
+      ui.menu = null;
+      ui.note = `That menu failed to open (${e instanceof Error ? e.message : String(e)}). It's a bug in the editor; the program is untouched.`;
+      ui.refused = true;
+      return render();
+    }
     document.getElementById("app")!.replaceChildren(
       h("header", { class: "bar" }, h("div", { class: "controls" },
         seg("program", doc.program, [...EXAMPLES, ...Object.values({ ...docs, [doc.program]: doc }).filter((d) => d.program.startsWith(MINE)).map((d): [string, string] => [d.program, titleOf(d)])]),

@@ -1161,7 +1161,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     if (!e.isTrusted || (e as PointerEvent).pointerType === "touch") menuAt = Date.now();
     const el = e.target as Element;
     const hole = el.closest(".pill.hole, circle.inp.empty")?.getAttribute("data-slot");
-    const src = el.closest("[data-src]")?.getAttribute("data-src");
+    // A let node is its value's name: the same menu as a dot's.
+    const src = el.closest("[data-src]")?.getAttribute("data-src") ?? el.closest("rect.letn")?.getAttribute("data-id");
     const fr = el.closest("[data-frame]")?.getAttribute("data-frame");
     const id = el.closest("[data-id]")?.getAttribute("data-id");
     const slot = el.closest("[data-slot]")?.getAttribute("data-slot");

@@ -849,6 +849,12 @@ async function letNodes() {
   await menu();
   await p.locator('.ctx-menu [data-menu="named-all"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as let and get nodes`));
   if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main shows ${await p.locator(".p-graph rect.letn").count()} let nodes`);
+  // A let node's menu is its value's: name it, or back to wires.
+  const letn = p.locator(".p-graph rect.letn").first(), lb = (await letn.boundingBox())!;
+  await letn.dispatchEvent("contextmenu", { clientX: lb.x + 5, clientY: lb.y + 5 });
+  const offers = (await p.locator(".ctx-menu .ctx-item").allInnerTexts()).join(" | ");
+  if (!offers.includes("Show as wires") || offers.includes("Put a dot")) errors.push(`${where}: a let node's menu offers ${offers}`);
+  await p.keyboard.press("Escape");
   await menu();
   await p.locator('.ctx-menu [data-menu="named-none"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to wires`));
   if (await p.locator(".p-graph rect.letn").count()) errors.push(`${where}: let nodes are left after Show every value as wires`);
