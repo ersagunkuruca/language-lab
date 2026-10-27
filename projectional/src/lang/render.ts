@@ -20,6 +20,7 @@ import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
 import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
+import { isOperation } from "./records.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, SET_TYPE, TRUE } from "./std.ts";
 import { showIn } from "./types.ts";
 
@@ -246,7 +247,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         }
         // A field read is drawn as p.x: it is still the field's projection
         // called on p, the way it runs backwards.
-        if (f.kind === "ref" && node(f.target)?.kind === "field" && args.length === 1) return atom(part("call", [...paren(args[0], args[0].prec >= ATOM), pn("."), part("ref fn", [nameOf(f.target)], n.fn)], id));
+        if (f.kind === "ref" && node(f.target)?.kind === "field" && !isOperation(code, f.target) && args.length === 1) return atom(part("call", [...paren(args[0], args[0].prec >= ATOM), pn("."), part("ref fn", [nameOf(f.target)], n.fn)], id));
         // A named function's name stands for its call, as an operator's
         // glyph does: clicking it picks the whole call (the editor's
         // Change the function is how the name itself is replaced).

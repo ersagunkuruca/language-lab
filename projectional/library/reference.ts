@@ -15,7 +15,7 @@ import { HTML_MODULE, LIBRARY, PRELUDE, VECTORS } from "../src/lang/library.ts";
 import { checkOptions } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
 import { SIGS, std } from "../src/lang/std.ts";
-import { showType, Subst } from "../src/lang/types.ts";
+import { showType, Subst, type Type } from "../src/lang/types.ts";
 
 // A module's definition by its name, so the sections below can list them.
 const of = (m: Module) => (...names: string[]): Id[] => names.map((name) => {
@@ -31,12 +31,13 @@ interface Section { title: string; intro: string; ids: Id[] }
 export const SECTIONS: Section[] = [
   { title: "Numbers", intro: "There are five kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Algebraic is an exact root of a polynomial, like √2, so √2 · √2 is exactly 2. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says \"where a is a Number\" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions \"at Float64\" and \"at Int\" are what the one + turns into once the kind is known, so the palette offers the one +.",
     ids: [...b("arith.add", "arith.sub", "arith.mul", "arith.neg", "arith.less"), ...prelude("at most", "more than", "at least", "smaller", "larger"),
-      ...b("div", "sqrt", "pow", "sin", "cos", "tan", "atan2", "exp", "log", "abs", "floor", "mod", "float32", "show", "range"),
+      ...t("trig"), ...["sin", "cos", "tan", "exp", "log"].map((op) => `std.trig.trig.${op}`),
+      ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"),
       ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.show", "int.range"),
       ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
       ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "polar", "divide complex", "complex exp", "show complex", "table product", "complex table"), ...t("tableEntry"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
-      ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
+      ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
   { title: "True and false, sameness and order", intro: "", ids: [...t("bool"), ...b("and", "or", "not", "equal", "compare"), ...t("order"), ...b("showAny")] },
   { title: "Text", intro: "Text is a string of characters. Positions count from 0.",
     ids: [...b("concat", "text.length", "text.slice", "text.characters", "text.split", "text.joinAll", "text.find", "text.less", "text.code", "text.fromCode"), ...prelude("not after", "comes after", "not before")] },
@@ -70,6 +71,14 @@ export function reference(): string {
   const info = infer(LIBRARY.code, LIBRARY.names, undefined, checkOptions);
   const typeOf = (d: Id): string => {
     if (SIGS[d]) return showType(SIGS[d](new Subst()), LIBRARY.names);
+    // An interface's operation, at any type that has the interface.
+    const field = LIBRARY.code.nodes[d];
+    const iface = field?.kind === "field" ? info.owner.get(d) : undefined;
+    if (iface) {
+      const s = new Subst(), a = s.fresh();
+      const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
+      return showType(te((field as { type: Id }).type), LIBRARY.names, undefined, [], new Map([[(a as { v: number }).v, [iface]]]));
+    }
     const ty = info.typeOf.get(d);
     return ty ? showType(ty, LIBRARY.names) : "";
   };

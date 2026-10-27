@@ -80,7 +80,8 @@ const str: Type = { t: "con", id: STRING, args: [] };
 // A number type itself (a pinned variable counts).
 const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id === ALGEBRAIC_TYPE || t.id.startsWith("pin."));
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
-const PER_TYPE = new Set(["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]));
+// And Float64's sin, cos, tan, exp and log, which Trig's are at Float64.
+const PER_TYPE = new Set([...["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]), ...["sin", "cos", "tan", "exp", "log"].map((op) => `builtin.${op}`)]);
 const bool: Type = { t: "con", id: BOOL, args: [] };
 
 // `reuse` rechecks only the definitions in `only` and takes the others'
@@ -1126,15 +1127,23 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       if (f !== null && t !== null && pinned.includes(`r${t}`) && !pinned.includes(`r${f}`)) { pinned.push(`r${f}`); more = true; }
     }
   }
+  // A type it pins an interface's variable to must have an
+  // implementation (INTERFACES.md): sin fits where a Float64 goes, not
+  // where Text does.
+  const implemented = (s: Subst, from: number) => s.wanted.slice(from).every((w) => {
+    const t = s.zonk(w.t);
+    return t.t !== "con" || !!info.implementations?.has(implementationKey(w.iface, t));
+  });
   const fits = (t: Type, asCall: boolean): Subst | null => {
     const s = info.subst.clone();
+    const from = s.wanted.length;
     try {
-      if (!asCall) { s.unify(h.expected, t); return s; }
+      if (!asCall) { s.unify(h.expected, t); return implemented(s, from) ? s : null; }
       const r = s.resolve(t);
       if (r.t !== "fn") return null;
       s.unify(h.expected, r.ret);
       s.unifyRow(r.eff, h.row);
-      return s;
+      return implemented(s, from) ? s : null;
     } catch (e) {
       if (e instanceof TypeError) return null;
       throw e;
@@ -1255,7 +1264,9 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     const n = code.nodes[part];
     if (n.kind === "variant") { if (!(n.private && outside)) consider(part, constructorType(code, info.subst, def, part)); }
     // A field of a one-case type reads it from a value: fst(p), pages(c).
-    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t); }
+    // An interface's operation is checked whole: what its type ends up
+    // as decides whether there is an implementation.
+    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, !!(code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">).interface); }
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);
@@ -1372,6 +1383,8 @@ function fieldType(code: Code, s: Subst, def: Id, field: Id): Type | null {
   const made = constructorType(code, s, def, td.variants[0]);
   if (made.t !== "fn") return null;
   const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(field);
+  // An interface's field is its operation (refType).
+  if (td.interface) { s.requireInterface(made.ret.t === "con" ? made.ret.args[0] : made.ret, def, ""); const op = s.resolve(made.params[i]); return op.t === "fn" ? { ...op, eff: s.freshRow(s.resolveRow(op.eff).effs) } : op; }
   return { t: "fn", params: [made.ret], ret: made.params[i], eff: s.freshRow() };
 }
 

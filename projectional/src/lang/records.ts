@@ -27,6 +27,19 @@ export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
   return path.length && e?.kind === "ref" && e.target === n.params[0] ? path : null;
 }
 
+// Whether a field is an interface's operation (INTERFACES.md): `sin(x)`,
+// not a field read `x.sin`.
+const operations = new WeakMap<Code, Set<Id>>();
+export function isOperation(code: Code, field: Id): boolean {
+  let ops = operations.get(code);
+  if (!ops) {
+    ops = new Set();
+    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) ops.add(f);
+    operations.set(code, ops);
+  }
+  return ops.has(field);
+}
+
 // Where each field sits in its record.
 const indexes = new WeakMap<Code, Map<Id, number>>();
 export function fieldIndex(code: Code, field: Id): number {

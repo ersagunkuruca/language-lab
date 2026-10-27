@@ -6677,6 +6677,53 @@
           "@lpgbkpl5cvmfold4ma5a9k9on4:17"
         ]
       },
+      "@dfoj8ob4ospo06alm3ihlr8u3i": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i",
+        "kind": "def",
+        "body": "@dfoj8ob4ospo06alm3ihlr8u3i:1"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:3": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:3",
+        "kind": "ref",
+        "target": "builtin.sin"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:4": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:4",
+        "kind": "ref",
+        "target": "builtin.cos"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:5": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:5",
+        "kind": "ref",
+        "target": "builtin.tan"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:6": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:6",
+        "kind": "ref",
+        "target": "builtin.exp"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:7": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:7",
+        "kind": "ref",
+        "target": "builtin.log"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:2": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:2",
+        "kind": "ref",
+        "target": "std.trig.trig"
+      },
+      "@dfoj8ob4ospo06alm3ihlr8u3i:1": {
+        "id": "@dfoj8ob4ospo06alm3ihlr8u3i:1",
+        "kind": "call",
+        "fn": "@dfoj8ob4ospo06alm3ihlr8u3i:2",
+        "args": [
+          "@dfoj8ob4ospo06alm3ihlr8u3i:3",
+          "@dfoj8ob4ospo06alm3ihlr8u3i:4",
+          "@dfoj8ob4ospo06alm3ihlr8u3i:5",
+          "@dfoj8ob4ospo06alm3ihlr8u3i:6",
+          "@dfoj8ob4ospo06alm3ihlr8u3i:7"
+        ]
+      },
       "@v53dcuo5olrbvtgve59t594n5r": {
         "id": "@v53dcuo5olrbvtgve59t594n5r",
         "kind": "def",
@@ -12183,7 +12230,8 @@
       "@b98gg61sq5voof01qmqpqmdt7d",
       "@2dilt1b3f9hjpds2aonqamb6h8",
       "@jicapf5pqmv60o38snigitpipg",
-      "@2bsqu5k0de084n0uo4u01gsahq"
+      "@2bsqu5k0de084n0uo4u01gsahq",
+      "@dfoj8ob4ospo06alm3ihlr8u3i"
     ]
   },
   "pins": {
@@ -15914,6 +15962,22 @@
         }
       },
       "plain": []
+    },
+    "@dfoj8ob4ospo06alm3ihlr8u3i": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.trig",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
     }
   },
   "names": {
@@ -16162,6 +16226,7 @@
     "@ilortmfvkbjt9bs8q02goksirf:26": "weight",
     "@ilortmfvkbjt9bs8q02goksirf:33": "part",
     "@lpgbkpl5cvmfold4ma5a9k9on4": "complex table",
+    "@dfoj8ob4ospo06alm3ihlr8u3i": "trig at float64",
     "@v53dcuo5olrbvtgve59t594n5r": "merge sorted",
     "@v53dcuo5olrbvtgve59t594n5r:2": "xs",
     "@v53dcuo5olrbvtgve59t594n5r:3": "ys",
@@ -16444,6 +16509,7 @@
     "@2dilt1b3f9hjpds2aonqamb6h8": "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is.",
     "@jicapf5pqmv60o38snigitpipg": "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is.",
     "@2bsqu5k0de084n0uo4u01gsahq": "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is.",
+    "@dfoj8ob4ospo06alm3ihlr8u3i": "How Float64 does Trig: its builtin sin, cos, tan, exp and log. Found by its type, so not offered: sin is.",
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [

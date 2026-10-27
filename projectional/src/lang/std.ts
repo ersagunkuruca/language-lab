@@ -26,14 +26,14 @@ for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "D
 // variants are operations, and an operation's third entry is the type it
 // returns (none: it never returns).
 type TypeOf = (p: Id[], self: Id) => Id;
-function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false) {
+function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false, iface = false) {
   const ps = params.map((p) => named(node({ id: `${id}.${p}`, kind: "binder" }), p));
   const vs = variants.map(([vname, fields, returns]) => {
     const vid = `${id}.${vname}`;
     const fs = fields.map(([fname, ty]) => named(node({ id: `${vid}.${fname}`, kind: "field", type: ty(ps, id) }), fname));
     return named(node({ id: vid, kind: "variant", fields: fs, ...(returns ? { returns: returns(ps, id) } : {}) }), vname);
   });
-  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}) });
+  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}), ...(iface ? { interface: true as const } : {}) });
   return named(node({ id, kind: "def", body: `${id}.type` }), name);
 }
 let tn = 0;
@@ -198,6 +198,16 @@ export const ALGEBRAIC = typedef("std.algebraic", "Algebraic", [], [
   ["algebraic", [["polynomial", () => tref(LIST, tref(INT))], ["root", () => tref(INT)]]],
 ]);
 export const ALGEBRAIC_V = "std.algebraic.algebraic";
+// Trig, the first interface (INTERFACES.md, BACKLOG L40f): sin, cos, tan,
+// exp and log at any type that has them. Float64's implementation is the
+// prelude's `trig at float64`, its builtins; dual numbers are next. A use
+// is resolved to the type's own function before anything runs (arith.ts).
+const TRIG_NAMES = ["sin", "cos", "tan", "exp", "log"] as const;
+export const TRIG = typedef("std.trig", "Trig", ["a"], [
+  ["trig", TRIG_NAMES.map((op): [string, TypeOf] => [op, ([a]) => tfun([tref(a)], tref(a), [])])],
+], false, true);
+export const TRIG_V = "std.trig.trig";
+export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -520,7 +530,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
