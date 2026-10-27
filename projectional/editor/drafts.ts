@@ -93,7 +93,8 @@ export function wireIn(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def
   const d = code.nodes[def];
   if (d?.kind !== "def" || !d.body || code.nodes[hole]?.kind !== "hole") return null;
   const body = code.nodes[d.body];
-  const lam = body.kind === "lambda" ? body : null;
+  // Its inputs, if it has any: a function it is itself goes in whole.
+  const lam = body.kind === "lambda" && body.params.length && body.params.every((p) => home[p]) ? body : null;
   const root = lam ? lam.body : d.body;
   const reach = new Set(scope);
   const nodes = { ...code.nodes };

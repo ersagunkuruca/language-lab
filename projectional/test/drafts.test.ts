@@ -109,3 +109,23 @@ test("a drop on a filled input swaps the value in, and the one that was there li
   const again = T.over(r.code, r.names, infer(r.code, baseNames(r.names)), "greet", r.of!, r.home!, "use", "name", () => ({ ok: false, reason: "x" }));
   assert.equal(again.ok, false);
 });
+
+test("a loose part may be a function: a lambda at its top that isn't its inputs is the part (BACKLOG E130)", async () => {
+  const { looseParts } = await import("../src/lang/render.ts");
+  const { wireIn } = await import("../editor/drafts.ts");
+  const { code, names } = greet();
+  // greet's whole function set loose: it uses nothing of greet's, so it has no inputs.
+  const r = setLoose(code, {}, {}, "greet", "lam", []);
+  const parts = looseParts(r.code, r.def, r.home)!;
+  assert.deepEqual(parts, { params: [], expr: "lam" });
+  // One that took inputs reads them apart from what it is.
+  const withInputs = setLoose(code, {}, {}, "greet", "inner", ["name"]);
+  assert.equal(looseParts(withInputs.code, withInputs.def, withInputs.home)!.params.length, 1);
+  // Wired into a hole, it goes in whole: the lambda, its parameter and all.
+  const holed: Code = { ...r.code, nodes: { ...r.code.nodes, gap: { id: "gap", kind: "hole" }, greet: { id: "greet", kind: "def", body: "gap" } } };
+  const w = wireIn(holed, r.of, r.home, r.def, "gap", [])!;
+  const n = w.code.nodes.gap as NodeOf<"lambda">;
+  assert.equal(n.kind, "lambda");
+  assert.deepEqual(n.params, ["name"]);
+  assert.deepEqual(infer(w.code, baseNames(names)).errors.map((e) => e.message), []);
+});

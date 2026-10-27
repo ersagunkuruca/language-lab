@@ -42,7 +42,7 @@ import { litLabel } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
-import { takenApart } from "../src/lang/render.ts";
+import { looseParts, takenApart } from "../src/lang/render.ts";
 import { flattened, matchRows, patternText } from "../src/lang/patterns.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
@@ -84,6 +84,8 @@ export interface GraphHooks {
   // The definition's loose parts (drafts.ts), drawn beside it, each in a
   // dashed frame whose output can be wired into an empty input.
   loose?: Id[];
+  // Their inputs that stand for a variable of the definition (drafts.ts).
+  home?: Record<Id, Id>;
   // An input of a list or a chain dropped on another of its inputs: it
   // moves there.
   reorder?: (item: Id, onto: Id) => void;
@@ -216,10 +218,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const named = (b: Id) => hooks.named.has(b) && name(b) !== "_";
   // A loose part's own result: its output wires the part back in, even
   // when it is a lone pill (a literal has no other output).
-  const looseTop = (() => {
-    const b = loose ? (node(defId) as NodeOf<"def">).body : undefined;
-    return b && node(b)?.kind === "lambda" ? (node(b) as NodeOf<"lambda">).body : b;
-  })();
+  const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
+  const looseTop = lp?.expr;
   const titled = (el: SVGElement, t: string) => { if (t) el.append(s("title", {}, t)); return el; };
 
   const items = new Map<Id, Item>();
@@ -656,7 +656,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
   let top: Sub;
-  if (loose && body) top = region(defId, `loose : ${typeOf(body.kind === "lambda" ? body.body : def.body!)}, not used yet`, body.kind === "lambda" ? body.params : [], body.kind === "lambda" ? body.body : def.body!, "loose");
+  if (lp) top = region(defId, `loose : ${typeOf(lp.expr)}, not used yet`, lp.params, lp.expr, "loose");
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);

@@ -1153,7 +1153,7 @@ const GRAPH_HINT = TOUCH
 function looseBlocks(info: T.Info): HTMLElement[] {
   const parts = looseOf(doc.code, doc.loose ?? {}, ui.def);
   if (!parts.length) return [];
-  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected, true)))];
+  return [h("div", { class: "loose-head" }, "-- loose, not used yet"), ...parts.map((x) => h("div", { class: "loose" }, T.renderTyped(doc.code, typedPres(), info, x, ui.selected, doc.home ?? {})))];
 }
 
 function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElement {
@@ -1366,10 +1366,7 @@ const fitting = new WeakMap<T.Info, Map<Id, T.Filling[]>>();
 function fillingsAt(info: T.Info, hole: Id): T.Filling[] {
   let m = fitting.get(info);
   if (!m) fitting.set(info, (m = new Map()));
-  // A loose part's own top reads a function there as its inputs (drafts.ts),
-  // so a function written in place goes at a value, not there.
-  const top = Object.keys(doc.loose ?? {}).some((d) => (doc.code.nodes[d] as NodeOf<"def"> | undefined)?.body === hole);
-  if (!m.has(hole)) m.set(hole, T.fillings(doc.code, info, hole).filter((f) => !(top && f.kind === "lambda")));
+  if (!m.has(hole)) m.set(hole, T.fillings(doc.code, info, hole));
   return m.get(hole)!;
 }
 
@@ -2133,6 +2130,7 @@ function graphHooks(info: T.Info) {
     },
     named: new Set(doc.layout.named ?? []),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
+    home: doc.home ?? {},
     folded: new Set(doc.layout.folded ?? []),
     fold: toggleFolded,
     groups: doc.layout.groups,

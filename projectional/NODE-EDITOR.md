@@ -153,7 +153,10 @@ of its definition that it used becomes an input of its own, called the
 same (`_2(said) = p([text(read(said))])`), so it stays well typed out of
 place; wired back where that variable is in reach, the input is the
 variable again, and elsewhere it becomes a hole. That settles the first
-open question below for now.
+open question below for now. Those inputs are a lambda at the part's top
+whose parameters all stand for a variable (drafts.json's `home`); any
+other lambda there is the part itself, so a loose part may be a function,
+`loose: (x) => …`, and wires in whole (BACKLOG E130).
 
 ### Open questions
 
