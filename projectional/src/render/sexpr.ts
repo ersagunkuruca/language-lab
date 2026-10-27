@@ -28,7 +28,7 @@ export function renderSexpr(code: Code, pres: Presentation, defId: Id): string {
         return `(${n.kind} ${expr(n.scrutinee)} ${arms.join(" ")})`;
       }
       case "solve":
-        return `(solve ${namer.name(n.fn)} (${Object.entries(n.given).map(([k, e]) => `(${k} ${expr(e)})`).join(" ")}) (${Object.entries(n.binds).map(([k, b]) => `(${k} ${namer.name(b)})`).join(" ")}) ${expr(n.body)})`;
+        return `(solve ${namer.name(n.fn)} (${Object.entries(n.given).map(([k, e]) => `(${k === "out" ? "out" : namer.name(k)} ${expr(e)})`).join(" ")}) (${Object.entries(n.binds).map(([k, b]) => `(${k === "out" ? "out" : namer.name(k)} ${namer.name(b)})`).join(" ")}) ${expr(n.body)})`;
       default: throw new Error(`unexpected ${n.kind} in expression`);
     }
   };

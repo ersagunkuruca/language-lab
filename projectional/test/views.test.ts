@@ -17,5 +17,16 @@ test("the steps of an action read as steps, not as unused names", () => {
   assert.match(steps, /^ {2}t1 = first\(/m);
   const nested = renderNested(q.code, q.pres, q.named("main"));
   assert.doesNotMatch(nested, /_₁|\(_/);
-  assert.match(nested, /\); print\("all solutions for 6:"\); ‹for each›/);
+  // At the top of the definition, one step a line (QA-2026-10-24b L9).
+  assert.match(nested, /^main = \(\) =>\n {2}print\(/);
+  assert.match(nested, /\);\n {2}print\("all solutions for 6:"\);\n {2}‹for each›/);
+});
+
+// A solve names the callee's ports as the callee does, not by their ids.
+test("a solve's ports read as the callee's parameter names", () => {
+  const p = loadProgram(join(root, "examples", "physics"));
+  for (const text of [renderLet(p.code, p.pres, p.named("main")), renderNested(p.code, p.pres, p.named("main"))]) {
+    assert.match(text, /solve rotate\(turn = 1\.5707963267948966, y = 0, out = true, x = 1\)/);
+    assert.doesNotMatch(text, /[a-z0-9]{26} =/);
+  }
 });
