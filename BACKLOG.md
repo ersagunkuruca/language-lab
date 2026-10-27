@@ -120,6 +120,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E153 | A hole in an implementation says which operation it is and for which type | #542 |
 | E152 | The graph draws an implementation as the interface at its type (Shape at Circle), a named input per operation | #541 |
 | E151 | An interface and its implementations read by their operations (area : (a) -> Float64; area: □), and the panel says Operation and Implementation | #540 |
 | E149 | Make it a function on a group with several values out: they leave as a record (Part results), called once and read where each was used | #539 |

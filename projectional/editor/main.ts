@@ -69,7 +69,7 @@ import mathStyle from "../styles/math.json" with { type: "json" };
 import plainStyle from "../styles/plain.json" with { type: "json" };
 import lispStyle from "../styles/lisp.json" with { type: "json" };
 import { hashDef } from "../src/hash.ts";
-import { children, freshId, get, ID_PATTERN, isPublished, merge, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { children, freshId, get, ID_PATTERN, isPublished, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { INT } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
@@ -1238,6 +1238,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
+  // A hole in an implementation is one operation at its type: say which,
+  // since the hole's type alone doesn't (BACKLOG E153).
+  const up = hole ? parentOf(doc.code, id) : null;
+  const upn = up?.slot === "args" ? node(up.parent) : null;
+  const ops = upn?.kind === "call" ? implementationOps(doc.code, upn.fn) : null;
+  const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
+  if (ops && at && up?.index !== undefined) out.append(h("p", { class: "hint" }, `This is ${names[ops[up.index]] ?? "an operation"} at ${at[2]}: what ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}. Write it as a function, or pick one that fits.`));
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
   const err = info.errors.find((e) => e.id === id);
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));

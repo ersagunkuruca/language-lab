@@ -259,6 +259,7 @@ async function implementInterface() {
   const impl = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
   if (!impl.includes("Trig at Wave") || !impl.includes("sin") || /\btrig\b/.test(impl)) errors.push(`${where}: the graph draws the implementation as ${impl.slice(0, 160)}`);
   await p.locator(".p-text .hole").first().click();
+  if (!(await p.locator(".side .hint", { hasText: "This is sin at Wave" }).count())) errors.push(`${where}: sin's hole doesn't say it is sin at Wave`);
   if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
   // A new interface of the program's own (BACKLOG E138).
   await p.locator(".nav-row", { hasText: "+ New definition" }).click();
