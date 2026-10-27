@@ -47,7 +47,9 @@ test checks it equals the table's product.
 
 **Answered (Ersagun, 2026-10-27):** by a separate implementation, found by
 its type, resolved before running so it costs nothing. INTERFACES.md has
-the design. The three options below are kept as the question was asked.
+the design. Built in L40h: a type gives its `+ − · −x` with a definition
+of type `Arithmetic T`, and the PRELUDE_AT list below is gone. The three
+options below are kept as the question was asked.
 
 Today arith.ts has a fixed list: at Rational and Complex, the generic
 `+ − · −x <` are the prelude's `add fractions`, `multiply complex` and so
