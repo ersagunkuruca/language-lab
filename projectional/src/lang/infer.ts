@@ -13,7 +13,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { unitProblems } from "../units.ts";
+import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
@@ -77,7 +77,7 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
-export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id> }, opts: Options = {}): Info {
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore }, opts: Options = {}): Info {
   // gradient(f)(p): p's type, for gradient(f) (smoothGradient, below).
   const at = new Map<Id, Type>();
   const s = new Subst();
@@ -839,7 +839,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // Units are part of a number's type: a conflict is a type error.
-  for (const u of unitProblems(code, names, reuse?.only)) err(u.id, u.message);
+  for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
   settle();
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
@@ -1088,7 +1088,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   let last: [Filling, Code] | undefined;
   const filled = (f: Filling) => (last?.[0] === f ? last[1] : (last = [f, fillHole(code, {}, hole, f).code])[1]);
   let before: number | undefined;
-  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }, info.options).errors.length;
+  const units = new UnitsBefore(code);
+  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors.length;
   const whole = (f: Filling) => recheck(filled(f)) <= (before ??= recheck(code));
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge, a square

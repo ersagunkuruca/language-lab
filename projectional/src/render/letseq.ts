@@ -10,7 +10,7 @@ import { get } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { nestedExpr } from "./nested.ts";
 import { Namer } from "./namer.ts";
-import { atom, callText, comment, Footnotes, lambdaText, type R } from "./expr.ts";
+import { atom, callText, comment, Footnotes, lambdaText, unread, type R } from "./expr.ts";
 
 export function renderLet(code: Code, pres: Presentation, defId: Id): string {
   const namer = new Namer(code, pres, defId);
@@ -22,9 +22,10 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
   if (def.body === null) return [...out, `${namer.name(defId)} = extern`].join("\n");
 
   let indent = "";
-  const emit = (lhs: string, r: R, id: Id) => {
+  // A step nothing reads (print this) has no name: lhs null.
+  const emit = (lhs: string | null, r: R, id: Id) => {
     const c = comment(pres, namer, id);
-    out.push(`${indent}${lhs} = ${r.text}${c ? `   -- ${c}` : ""}`);
+    out.push(`${indent}${lhs === null ? "" : `${lhs} = `}${r.text}${c ? `   -- ${c}` : ""}`);
   };
 
   // One operation whose operands are all atoms. Emits lines for the operands.
@@ -47,7 +48,7 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
       case "call": {
         const fn = code.nodes[n.fn];
         if (fn.kind === "lambda") {
-          n.args.forEach((arg, i) => emit(namer.name(fn.params[i]), step(arg), arg));
+          n.args.forEach((arg, i) => emit(unread(code, fn.params[i], fn.body) ? null : namer.name(fn.params[i]), step(arg), arg));
           return step(fn.body);
         }
         const args = n.args.map(operand);

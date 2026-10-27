@@ -459,10 +459,11 @@ async function stepOrder() {
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  const marks = await p.locator(".p-graph .stepn").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
+  // The graph itself, not the map's copy of it.
+  const marks = await p.locator(".p-graph svg.canvas > g.world .stepn").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
   const ys = marks.sort((a, b) => a.n - b.n).map((m) => m.y);
   if (marks.length < 7 || ys.some((y, i) => i && y <= ys[i - 1])) errors.push(`${where}: steps numbered ${JSON.stringify(marks)}`);
-  const prints = await p.locator(".p-graph g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x)));
+  const prints = await p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x)));
   if (new Set(prints).size !== 1) errors.push(`${where}: the prints aren't in one column: ${prints}`);
   const first = async () => (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.startsWith("print("));
   const was = await first();
@@ -545,6 +546,69 @@ async function matchDeeper() {
   await deeper.click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Match deeper on more once its row is a hole`));
   if (!/^Matched deeper/.test(await p.locator(".status").innerText())) errors.push(`${where}: ${await p.locator(".status").innerText()}`);
   if (!/\[a, b\] →/.test(await text())) errors.push(`${where}: after Match deeper bands reads ${await text()}`);
+  await p.close();
+}
+
+// A fold to a function, applied to its start, draws as one fold node with
+// a port for the start, as the text reads it (BACKLOG E62): queens' safe.
+// A main opens on its steps (BACKLOG I18): at 1280×720 the first view of
+// Numbers & physics' main shows the column they run down, numbered.
+async function firstSteps() {
+  where = "a main opens on its steps";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".p-graph svg.canvas > g.world text.stepn").first().waitFor({ state: "attached" });
+  await p.waitForTimeout(300);
+  const [seen, all] = await p.evaluate(() => {
+    const cv = document.querySelector(".p-graph svg.canvas")!.getBoundingClientRect();
+    const ns = [...document.querySelectorAll(".p-graph svg.canvas > g.world text.stepn")].map((t) => t.getBoundingClientRect());
+    return [ns.filter((q) => q.left >= cv.left && q.right <= cv.right && q.top >= cv.top && q.bottom <= cv.bottom).length, ns.length];
+  });
+  if (seen < Math.min(all, 6)) errors.push(`${where}: ${seen} of ${all} numbered steps in the first view`);
+  await p.close();
+}
+
+// A definition's Run starts with what main passes it (BACKLOG I19): cuts
+// is called as cuts("abc") inside a print, and opens with "abc".
+async function seededRun() {
+  where = "a Run seeded from main";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Run backwards/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^cuts$/ }).first().click();
+  const vals = await p.locator(".side input").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
+  if (!vals.includes('"abc"')) errors.push(`${where}: cuts opens with ${JSON.stringify(vals)}`);
+  await p.close();
+}
+
+// A shader opens on the definition its picture draws, not on a data type
+// (BACKLOG I22).
+async function shaderOpens() {
+  where = "a shader's first definition";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  for (const prog of ["Shader: ray marching", "Shader: Mandelbrot set"]) {
+    await p.locator('[data-set="program"]', { hasText: prog }).first().click();
+    const tabs = (await p.locator("[data-tab]").allInnerTexts()).map((t) => t.trim());
+    if (!tabs.includes("colour")) errors.push(`${where}: ${prog} opens on ${tabs.join(", ")}`);
+  }
+  await p.close();
+}
+
+async function foldFrom() {
+  where = "a fold from a start";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Eight queens/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^safe$/ }).first().click();
+  const titles = await p.locator(".p-graph text.cl").allTextContents();
+  if (!titles.includes("fold List from distance")) errors.push(`${where}: safe's graph has ${titles.join(" | ")}`);
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/fold placed from distance = 1/.test(text)) errors.push(`${where}: safe reads ${text}`);
   await p.close();
 }
 
@@ -1043,6 +1107,10 @@ await groupPicked();
 await patternRows();
 await sharedRow();
 await matchDeeper();
+await foldFrom();
+await shaderOpens();
+await seededRun();
+await firstSteps();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();

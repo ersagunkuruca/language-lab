@@ -885,8 +885,19 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 
 // The verdict for one solve node, or null when it isn't run by the
 // relational interpreter's kind of search (a builtin's own equation).
-export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, string> = {}): Verdict | null {
-  return analyzer(code, names).ofSolve(n);
+// Kept per program (and names, which only the messages use): the palette
+// asks it for each filling twice, for the plan and for the type check, and
+// each time it would build the analyzer over the whole program again.
+const NO_NAMES: Record<Id, string> = {};
+const verdicts = new WeakMap<Code, WeakMap<Record<Id, string>, Map<Id, Verdict | null>>>();
+export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, string> = NO_NAMES): Verdict | null {
+  let byNames = verdicts.get(code);
+  if (!byNames) verdicts.set(code, (byNames = new WeakMap()));
+  const key = Object.keys(names).length ? names : NO_NAMES;
+  let m = byNames.get(key);
+  if (!m) byNames.set(key, (m = new Map()));
+  if (!m.has(n.id)) m.set(n.id, analyzer(code, names).ofSolve(n));
+  return m.get(n.id)!;
 }
 
 // Does this solve always give exactly one answer, so its type has no

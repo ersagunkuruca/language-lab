@@ -42,7 +42,7 @@ import { litLabel } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
-import { looseParts, takenApart } from "../src/lang/render.ts";
+import { foldFrom, looseParts, takenApart } from "../src/lang/render.ts";
 import { flattened, matchRows, patternText } from "../src/lang/patterns.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
@@ -126,10 +126,15 @@ const pickedBy = new Map<string, Set<Id>>();
 
 // `key` names the window onto this graph, so redrawing keeps where you were.
 export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
-  const canvas = infiniteCanvas(key, "tgraph");
+  const scene = build(code, pres, info, defId, hooks);
+  // An action opens on its steps, the column they run down: the
+  // definition's own, not those of an action inside it.
+  const depth = (u: Id) => { let n = 0; for (let f = scene.items.get(u)?.frame ?? scene.frames.get(u)?.parent ?? null; f; f = scene.frames.get(f)?.parent ?? null) n++; return n; };
+  const top = Math.min(...[...scene.items.keys()].map(depth));
+  const steps = (scene.chains ?? []).find((c) => c.every((u) => depth(u) === top)) ?? [];
+  const canvas = infiniteCanvas(key, "tgraph", () => steps.map((id) => canvas.world.querySelector(`[data-id="${CSS.escape(id)}"]`)).filter((e): e is Element => !!e));
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
-  const scene = build(code, pres, info, defId, hooks);
   for (const l of hooks.loose ?? []) {
     const part = build(code, pres, info, l, hooks, true);
     for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
@@ -324,7 +329,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         return region(id, params.length ? `(${params.map(name).join(", ")}) =>` : "action", params, body, "lam");
       }
       case "match": case "fold": return cases(id, n);
-      case "call": return node(n.fn).kind === "lambda" ? letRegion(n) : call(id, n);
+      case "call": {
+        if (node(n.fn).kind === "lambda") return letRegion(n);
+        // A fold to a function, applied to its starts: one fold node with
+        // a port per start, each case's frame given them by name, as the
+        // text reads it (fold placed from distance = 1).
+        const from = foldFrom(code, n, name);
+        return from ? cases(id, from.fold, { args: n.args, lams: new Map(from.arms.map((x) => [x.arm.id, x.lam])) }) : call(id, n);
+      }
       case "solve": return solve(id, n);
       default: return pill(id, n.kind, "lit");
     }
@@ -554,7 +566,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // function per case, each drawn as a frame whose parameters are that
   // case's fields (and, for a fold, the parts already folded). Only the
   // chosen case's function runs.
-  const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">): Sub => {
+  const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">, from?: { args: Id[]; lams: Map<Id, NodeOf<"lambda">> }): Sub => {
     let armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
     const isIf = n.kind === "match" && armNodes.length === 2 && armNodes.every((a) => [TRUE, FALSE].includes(a.variant));
     // An if reads then, else, whatever order the arms were stored in.
@@ -567,10 +579,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // One case on a one-case type only takes the value apart, as the text's
     // halves(front, back) = split(tail) does; its function runs next.
     const apart = n.kind === "match" && takenApart(code, info, n);
-    const title = isIf ? "if" : apart ? `${name(armNodes[0].variant)}(${armNodes[0].binds.map(name).join(", ")}) =` : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
+    const starts = from ? from.lams.get(armNodes[0].id)!.params : [];
+    const title = from ? `fold${type ? ` ${name(type)}` : ""} from ${starts.map(name).join(", ")}` : isIf ? "if" : apart ? `${name(armNodes[0].variant)}(${armNodes[0].binds.map(name).join(", ")}) =` : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
+    from?.args.forEach((a, i) => { labels.push(name(starts[i])); inputs.push(a); kids.push(arg(a)); });
+    const values = inputs.length;
     // A case that only takes one of its fields apart further draws as one
     // row per inner case, the way the text reads it: one port and one frame
     // per row, its names all on that frame's left (PATTERNS.md).
@@ -583,14 +598,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
     for (const arm of rows ? [] : armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
-      const params = [...arm.binds, ...results];
+      const lam = from?.lams.get(arm.id);
+      const params = [...arm.binds, ...results, ...(lam?.params ?? [])];
       labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : name(arm.variant));
       inputs.push(arm.id);
       // An operation answered later binds the rest after its inputs, read as
       // the text reads it: (item) with rest (ANSWERED-LATER.md).
       const op = handles ? node(arm.variant) : null;
       const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
-      kids.push(region(arm.id, later ? `(${arm.binds.slice(0, -1).map(name).join(", ")}) with ${name(arm.binds.at(-1)!)} =>` : `(${params.map(name).join(", ")}) =>`, params, arm.body, "arm"));
+      kids.push(region(arm.id, later ? `(${arm.binds.slice(0, -1).map(name).join(", ")}) with ${name(arm.binds.at(-1)!)} =>` : `(${params.map(name).join(", ")}) =>`, params, lam ? lam.body : arm.body, "arm"));
     }
     if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
@@ -601,12 +617,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn case${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, title));
       labels.forEach((l, i) => {
-        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: i ? "inp fn" : "inp", ...(i === 0 || (n.kind === "match" && n.otherwise === inputs[i]) ? { "data-slot": inputs[i] } : {}) }), i ? `the function for ${l}` : typeOf(n.scrutinee)));
+        const value = i < values;
+        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: value ? "inp" : "inp fn", ...(value || (n.kind === "match" && n.otherwise === inputs[i]) ? { "data-slot": inputs[i] } : {}) }), value ? (i ? `${l} starts as this` : typeOf(n.scrutinee)) : `the function for ${l}`));
         g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l));
       });
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), typeOf(id)));
     }, { value: id, out: { x: bw, y: bh / 2 }, name: title });
-    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i ? "fn" : ""));
+    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i < values ? "" : "fn"));
     // Only the value's wire can take a dot: a case's function isn't a value.
     for (const wr of wires) if (wr.to && "item" in wr.to && wr.to.item === id && wr.cls === "fn") wr.edge = undefined;
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
