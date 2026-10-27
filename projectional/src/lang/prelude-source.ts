@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, ARITHMETIC_V, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -225,6 +225,22 @@ export function buildPrelude(): Module {
     k.call(TIMES_V, D(k.lit(a), k.lit(b)), D(k.lit(c), k.lit(d)), D(k.lit(e), k.lit(f))))));
   const showD = oneD("show dual", (a, a1) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
     k.if(k.call(S.less, a1, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, a1)), k.lit("ε")))));
+
+  // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
+  // at a type is its Arithmetic's, found by the type. Not offered: + is.
+  const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
+  const arithmetics = [
+    impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
+    impl("arithmetic at int", ARITHMETIC_V, [INT_OPS.add, INT_OPS.sub, INT_OPS.mul, INT_OPS.neg]),
+    impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
+    impl("arithmetic at complex", ARITHMETIC_V, [addC, subC, mulC, negC]),
+    impl("arithmetic at dual", ARITHMETIC_V, [addD, subD, mulD, negD]),
+    impl("arithmetic at algebraic", ARITHMETIC_V, [ALGEBRAIC_OPS.add, ALGEBRAIC_OPS.sub, ALGEBRAIC_OPS.mul, ALGEBRAIC_OPS.neg]),
+    impl("ordered at float64", ORDERED_V, [S.less]),
+    impl("ordered at int", ORDERED_V, [INT_OPS.less]),
+    impl("ordered at rational", ORDERED_V, [lessF]),
+    impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
+  ];
 
   // Sorting by the order on plain data (`compare`, L66): a merge sort
   // written bottom-up, so every step is a fold or a recursion the
@@ -503,11 +519,12 @@ export function buildPrelude(): Module {
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",
+    ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD].map(at));
 }

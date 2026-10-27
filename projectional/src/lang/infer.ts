@@ -512,7 +512,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // Infers the type of expression `id`. `row` is the effect row of the
   // enclosing function body: every call adds its effects to it.
+  // What a want for an interface is reported at (Subst.site): the
+  // expression being checked, put back once its parts have been.
   function expr(id: Id, env: Map<Id, Type>, row: Row): Type {
+    const was = s.site;
+    s.site = id;
+    try { return exprAt(id, env, row); } finally { s.site = was; }
+  }
+  function exprAt(id: Id, env: Map<Id, Type>, row: Row): Type {
     const n = code.nodes[id];
     let t: Type;
     switch (n?.kind) {
@@ -897,7 +904,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const w of s.wanted) {
       const t = s.zonk(w.t);
       if (table.has(implementationKey(w.iface, t))) continue;
-      err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${show({ t: "con", id: w.iface, args: [t] })}`);
+      const of = show({ t: "con", id: w.iface, args: [t] });
+      // + − · and < say what a Number is first, as they always have.
+      if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {
+        const ordered = w.iface === "std.ordered";
+        err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "ordered" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`);
+      } else err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${of}`);
     }
   }
 
@@ -1266,6 +1278,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // A field of a one-case type reads it from a value: fst(p), pages(c).
     // An interface's operation is checked whole: what its type ends up
     // as decides whether there is an implementation.
+    // Arithmetic's and Ordered's operations are offered as the one + − · <.
+    else if (code.nodes[part].kind === "field" && (def === "std.arithmetic" || def === "std.ordered")) continue;
     else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, !!(code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">).interface); }
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };

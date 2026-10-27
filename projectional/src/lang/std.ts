@@ -218,6 +218,20 @@ export const DUAL = typedef("std.dual", "Dual", [], [
 // the same shape as Complex, so it says it is its own type
 ], false, false, "dual numbers");
 export const DUAL_V = "std.dual.dual";
+// The one + − · −x and < as interfaces (INTERFACES.md step 4, BACKLOG L40h):
+// the generic builtins (ARITH) are these fields' operations, so a type of
+// your own joins them with an implementation, `arithmetic at quaternion =
+// arithmetic(…)`. Each number type's own are the prelude's implementations;
+// a record of Float64s with none does + − part by part, as before.
+const binary = ([a]: Id[]) => tfun([tref(a), tref(a)], tref(a), []);
+export const ARITHMETIC = typedef("std.arithmetic", "Arithmetic", ["a"], [
+  ["arithmetic", [["add", binary], ["subtract", binary], ["multiply", binary], ["negate", ([a]) => tfun([tref(a)], tref(a), [])]]],
+], false, true);
+export const ARITHMETIC_V = "std.arithmetic.arithmetic";
+export const ORDERED = typedef("std.ordered", "Ordered", ["a"], [
+  ["ordered", [["less", ([a]) => tfun([tref(a), tref(a)], tref(BOOL), [])]]],
+], false, true);
+export const ORDERED_V = "std.ordered.ordered";
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -474,6 +488,14 @@ export const ARITH = {
   neg: generic("neg", "negate", 1),
   less: generic("less", "less than", 2, "ordered"),
 };
+// Which interface's field each generic operation is (INTERFACES.md step 4).
+export const ARITH_FIELD: Record<Id, { iface: Id; field: Id }> = {
+  [ARITH.add]: { iface: ARITHMETIC, field: `${ARITHMETIC_V}.add` },
+  [ARITH.sub]: { iface: ARITHMETIC, field: `${ARITHMETIC_V}.subtract` },
+  [ARITH.mul]: { iface: ARITHMETIC, field: `${ARITHMETIC_V}.multiply` },
+  [ARITH.neg]: { iface: ARITHMETIC, field: `${ARITHMETIC_V}.negate` },
+  [ARITH.less]: { iface: ORDERED, field: `${ORDERED_V}.less` },
+};
 
 // Text at real sizes (src/lang/text.ts). Positions count characters.
 export const TEXT_OPS = {
@@ -540,7 +562,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

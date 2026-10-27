@@ -27,7 +27,7 @@ import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationKey, type Info } from "./infer.ts";
-import { ALGEBRAIC_OPS, ARITH, COMPLEX_V, DUAL_V, INT_OPS, RATIO, S } from "./std.ts";
+import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
@@ -46,44 +46,15 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
   [ARITH.less]: { number: S.less, int: INT_OPS.less, arity: 2 },
 };
 
-// And at the number types that are data (std.ts): the prelude's
-// definitions, found by name when first needed (their ids are their
-// content's hashes). Complex has no <.
-const PRELUDE_AT: Record<string, Record<Id, string>> = {
-  [RATIONAL_TYPE]: {
-    [ARITH.add]: "add fractions", [ARITH.sub]: "subtract fractions", [ARITH.mul]: "multiply fractions",
-    [ARITH.neg]: "negate fraction", [ARITH.less]: "fraction less than",
-  },
-  [COMPLEX_TYPE]: {
-    [ARITH.add]: "add complex", [ARITH.sub]: "subtract complex", [ARITH.mul]: "multiply complex", [ARITH.neg]: "negate complex",
-  },
-  [DUAL_TYPE]: {
-    [ARITH.add]: "add duals", [ARITH.sub]: "subtract duals", [ARITH.mul]: "multiply duals", [ARITH.neg]: "negate dual",
-  },
-};
-// And at Algebraic: builtins (src/lang/algebraic.ts).
-const BUILTIN_AT: Record<string, Record<Id, Id>> = {
-  [ALGEBRAIC_TYPE]: {
-    [ARITH.add]: ALGEBRAIC_OPS.add, [ARITH.sub]: ALGEBRAIC_OPS.sub, [ARITH.mul]: ALGEBRAIC_OPS.mul,
-    [ARITH.neg]: ALGEBRAIC_OPS.neg, [ARITH.less]: ALGEBRAIC_OPS.less,
-  },
-};
-const preludeOps = new Map<string, Record<Id, Id>>();
+// The number types that are data (std.ts), whose literals are their
+// constructors' calls. Their + − · −x < are the prelude's implementations
+// of Arithmetic and Ordered (INTERFACES.md step 4), found by type like any
+// other: Rational's `add fractions`, Complex's `multiply complex`, Dual's
+// product rule, Algebraic's builtins.
+const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBRAIC_TYPE]);
 // A prelude definition's id, by its name.
 export const preludeDef = (name: string): Id | undefined =>
   Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
-const atPrelude = (type: string, op: Id): Id => {
-  let ops = preludeOps.get(type);
-  if (!ops) {
-    ops = Object.fromEntries(Object.entries(PRELUDE_AT[type]).map(([g, name]) => {
-      const d = preludeDef(name);
-      if (!d) throw new Error(`the prelude has no ${name}`);
-      return [g, d];
-    }));
-    preludeOps.set(type, ops);
-  }
-  return ops[op];
-};
 
 // The operations of the program's interfaces (INTERFACES.md): each field
 // of an interface typedef, and the interface it belongs to.
@@ -99,7 +70,7 @@ function interfaceOps(code: Code): Map<Id, Id> {
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)));
+  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -280,6 +251,13 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   // Resolve every use under `root`, at these types.
   const resolve = (root: Id, env: Env) => {
     const walk = (id: Id, parent: Id | null) => {
+      // The one + − · −x < at a type with an implementation of its own
+      // (Arithmetic, Ordered): that implementation's operation.
+      if (nodes[id].kind === "ref" && (nodes[id] as NodeOf<"ref">).target in ARITH_FIELD) {
+        const t = typeOf.get(id), c = t && close(t, env), x = c?.t === "fn" ? c.params[0] : null;
+        const f = ARITH_FIELD[(nodes[id] as NodeOf<"ref">).target];
+        if (x?.t === "con" && info.implementations?.has(implementationKey(f.iface, x))) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
+      }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {
@@ -297,7 +275,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
         return;
       }
       if (plainNumber(n)) { numberLiteral(n as NodeOf<"lit">, env); return; }
-      if (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)) { literal(n); return; }
+      if (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)) { literal(n); return; }
       const kids: Id[] = [];
       switch (n.kind) {
         case "call": kids.push(n.fn, ...n.args); break;
@@ -352,9 +330,11 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const operation = (id: Id, t: Type, parent: Id | null) => {
     const at = AT[(nodes[id] as NodeOf<"ref">).target];
     const x = t.t === "fn" ? t.params[0] : num;
-    if (x.t === "con" && (x.id === NUMBER || x.id === INT || x.id in PRELUDE_AT || x.id in BUILTIN_AT)) {
-      const target = (nodes[id] as NodeOf<"ref">).target;
-      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : x.id in PRELUDE_AT ? atPrelude(x.id, target) : x.id in BUILTIN_AT ? BUILTIN_AT[x.id][target] : at.number };
+    // Their own are their implementations (above); one they don't have
+    // (< at Complex) is a type error, and the generic is left as it is.
+    if (x.t === "con" && DATA_NUMBERS.has(x.id)) return;
+    if (x.t === "con" && (x.id === NUMBER || x.id === INT)) {
+      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : at.number };
       typeOf.set(id, t);
       return;
     }

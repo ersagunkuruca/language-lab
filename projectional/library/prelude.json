@@ -8956,6 +8956,344 @@
         ],
         "body": "@0qulvgbca1hm6dngmbf0eqldf8:3"
       },
+      "@gqaqevodbqvkve52jflltfe15j": {
+        "id": "@gqaqevodbqvkve52jflltfe15j",
+        "kind": "def",
+        "body": "@gqaqevodbqvkve52jflltfe15j:1"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:3": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:3",
+        "kind": "ref",
+        "target": "builtin.add"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:4": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:4",
+        "kind": "ref",
+        "target": "builtin.sub"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:5": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:5",
+        "kind": "ref",
+        "target": "builtin.mul"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:6": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:6",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:2": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@gqaqevodbqvkve52jflltfe15j:1": {
+        "id": "@gqaqevodbqvkve52jflltfe15j:1",
+        "kind": "call",
+        "fn": "@gqaqevodbqvkve52jflltfe15j:2",
+        "args": [
+          "@gqaqevodbqvkve52jflltfe15j:3",
+          "@gqaqevodbqvkve52jflltfe15j:4",
+          "@gqaqevodbqvkve52jflltfe15j:5",
+          "@gqaqevodbqvkve52jflltfe15j:6"
+        ]
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4",
+        "kind": "def",
+        "body": "@brbvg0sr9iq5iaavff80b7jag4:1"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:3": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:3",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:4": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:4",
+        "kind": "ref",
+        "target": "builtin.int.sub"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:5": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:5",
+        "kind": "ref",
+        "target": "builtin.int.mul"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:6": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:6",
+        "kind": "ref",
+        "target": "builtin.int.neg"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:2": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@brbvg0sr9iq5iaavff80b7jag4:1": {
+        "id": "@brbvg0sr9iq5iaavff80b7jag4:1",
+        "kind": "call",
+        "fn": "@brbvg0sr9iq5iaavff80b7jag4:2",
+        "args": [
+          "@brbvg0sr9iq5iaavff80b7jag4:3",
+          "@brbvg0sr9iq5iaavff80b7jag4:4",
+          "@brbvg0sr9iq5iaavff80b7jag4:5",
+          "@brbvg0sr9iq5iaavff80b7jag4:6"
+        ]
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg",
+        "kind": "def",
+        "body": "@jdr0cbak0dr75q00ui5q25nhmg:1"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:3": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:3",
+        "kind": "ref",
+        "target": "@fbbi4qvo7d58s98tv0etifnllv"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:4": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:4",
+        "kind": "ref",
+        "target": "@g68h67scr0eirikv8og762j6u3"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:5": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:5",
+        "kind": "ref",
+        "target": "@qvk73gc0r0qv7a38j4oc5nrsjc"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:6": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:6",
+        "kind": "ref",
+        "target": "@idiaof7f0r6jhar1phf6uup59c"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:2": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@jdr0cbak0dr75q00ui5q25nhmg:1": {
+        "id": "@jdr0cbak0dr75q00ui5q25nhmg:1",
+        "kind": "call",
+        "fn": "@jdr0cbak0dr75q00ui5q25nhmg:2",
+        "args": [
+          "@jdr0cbak0dr75q00ui5q25nhmg:3",
+          "@jdr0cbak0dr75q00ui5q25nhmg:4",
+          "@jdr0cbak0dr75q00ui5q25nhmg:5",
+          "@jdr0cbak0dr75q00ui5q25nhmg:6"
+        ]
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47",
+        "kind": "def",
+        "body": "@6cbk868k7fijjoi1dkdf3glu47:1"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:3": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:3",
+        "kind": "ref",
+        "target": "@erjqmni7ivj8ajc7tfnnhvlki8"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:4": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:4",
+        "kind": "ref",
+        "target": "@5qcutt1hdu2hjlgvrja609ighr"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:5": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:5",
+        "kind": "ref",
+        "target": "@vcmh7o2v0ms3pqmkt7lrhrb176"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:6": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:6",
+        "kind": "ref",
+        "target": "@jb907f4tbjb70755s5eempgnb9"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:2": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@6cbk868k7fijjoi1dkdf3glu47:1": {
+        "id": "@6cbk868k7fijjoi1dkdf3glu47:1",
+        "kind": "call",
+        "fn": "@6cbk868k7fijjoi1dkdf3glu47:2",
+        "args": [
+          "@6cbk868k7fijjoi1dkdf3glu47:3",
+          "@6cbk868k7fijjoi1dkdf3glu47:4",
+          "@6cbk868k7fijjoi1dkdf3glu47:5",
+          "@6cbk868k7fijjoi1dkdf3glu47:6"
+        ]
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3",
+        "kind": "def",
+        "body": "@0vl7tje7dvbp2l5f62629h4br3:1"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:3": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:3",
+        "kind": "ref",
+        "target": "@5ph2d9mlvfoo0ihvgkkg1fjdci"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:4": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:4",
+        "kind": "ref",
+        "target": "@fvtcucip47b7co9332j0mopvp7"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:5": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:5",
+        "kind": "ref",
+        "target": "@grvbt5fchcar1hj5vksu8uu8lt"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:6": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:6",
+        "kind": "ref",
+        "target": "@r9dj6i0hoik8u191v7lmgbq2k6"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:2": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@0vl7tje7dvbp2l5f62629h4br3:1": {
+        "id": "@0vl7tje7dvbp2l5f62629h4br3:1",
+        "kind": "call",
+        "fn": "@0vl7tje7dvbp2l5f62629h4br3:2",
+        "args": [
+          "@0vl7tje7dvbp2l5f62629h4br3:3",
+          "@0vl7tje7dvbp2l5f62629h4br3:4",
+          "@0vl7tje7dvbp2l5f62629h4br3:5",
+          "@0vl7tje7dvbp2l5f62629h4br3:6"
+        ]
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb",
+        "kind": "def",
+        "body": "@ll92c157aj0pu5tnsqs486kbhb:1"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:3": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:3",
+        "kind": "ref",
+        "target": "builtin.algebraic.add"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:4": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:4",
+        "kind": "ref",
+        "target": "builtin.algebraic.sub"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:5": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:5",
+        "kind": "ref",
+        "target": "builtin.algebraic.mul"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:6": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:6",
+        "kind": "ref",
+        "target": "builtin.algebraic.neg"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:2": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@ll92c157aj0pu5tnsqs486kbhb:1": {
+        "id": "@ll92c157aj0pu5tnsqs486kbhb:1",
+        "kind": "call",
+        "fn": "@ll92c157aj0pu5tnsqs486kbhb:2",
+        "args": [
+          "@ll92c157aj0pu5tnsqs486kbhb:3",
+          "@ll92c157aj0pu5tnsqs486kbhb:4",
+          "@ll92c157aj0pu5tnsqs486kbhb:5",
+          "@ll92c157aj0pu5tnsqs486kbhb:6"
+        ]
+      },
+      "@97q50g89nacapmnib7kalnqo87": {
+        "id": "@97q50g89nacapmnib7kalnqo87",
+        "kind": "def",
+        "body": "@97q50g89nacapmnib7kalnqo87:1"
+      },
+      "@97q50g89nacapmnib7kalnqo87:3": {
+        "id": "@97q50g89nacapmnib7kalnqo87:3",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@97q50g89nacapmnib7kalnqo87:2": {
+        "id": "@97q50g89nacapmnib7kalnqo87:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@97q50g89nacapmnib7kalnqo87:1": {
+        "id": "@97q50g89nacapmnib7kalnqo87:1",
+        "kind": "call",
+        "fn": "@97q50g89nacapmnib7kalnqo87:2",
+        "args": [
+          "@97q50g89nacapmnib7kalnqo87:3"
+        ]
+      },
+      "@srad4s61so2phrf9ftlmq68l43": {
+        "id": "@srad4s61so2phrf9ftlmq68l43",
+        "kind": "def",
+        "body": "@srad4s61so2phrf9ftlmq68l43:1"
+      },
+      "@srad4s61so2phrf9ftlmq68l43:3": {
+        "id": "@srad4s61so2phrf9ftlmq68l43:3",
+        "kind": "ref",
+        "target": "builtin.int.less"
+      },
+      "@srad4s61so2phrf9ftlmq68l43:2": {
+        "id": "@srad4s61so2phrf9ftlmq68l43:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@srad4s61so2phrf9ftlmq68l43:1": {
+        "id": "@srad4s61so2phrf9ftlmq68l43:1",
+        "kind": "call",
+        "fn": "@srad4s61so2phrf9ftlmq68l43:2",
+        "args": [
+          "@srad4s61so2phrf9ftlmq68l43:3"
+        ]
+      },
+      "@pckjpbojm3g0g9tt70q866flvp": {
+        "id": "@pckjpbojm3g0g9tt70q866flvp",
+        "kind": "def",
+        "body": "@pckjpbojm3g0g9tt70q866flvp:1"
+      },
+      "@pckjpbojm3g0g9tt70q866flvp:3": {
+        "id": "@pckjpbojm3g0g9tt70q866flvp:3",
+        "kind": "ref",
+        "target": "@becso7bpuoumte8afa0eurkp1r"
+      },
+      "@pckjpbojm3g0g9tt70q866flvp:2": {
+        "id": "@pckjpbojm3g0g9tt70q866flvp:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@pckjpbojm3g0g9tt70q866flvp:1": {
+        "id": "@pckjpbojm3g0g9tt70q866flvp:1",
+        "kind": "call",
+        "fn": "@pckjpbojm3g0g9tt70q866flvp:2",
+        "args": [
+          "@pckjpbojm3g0g9tt70q866flvp:3"
+        ]
+      },
+      "@npfuqr2dqv51c03jq24qe7s9fu": {
+        "id": "@npfuqr2dqv51c03jq24qe7s9fu",
+        "kind": "def",
+        "body": "@npfuqr2dqv51c03jq24qe7s9fu:1"
+      },
+      "@npfuqr2dqv51c03jq24qe7s9fu:3": {
+        "id": "@npfuqr2dqv51c03jq24qe7s9fu:3",
+        "kind": "ref",
+        "target": "builtin.algebraic.less"
+      },
+      "@npfuqr2dqv51c03jq24qe7s9fu:2": {
+        "id": "@npfuqr2dqv51c03jq24qe7s9fu:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@npfuqr2dqv51c03jq24qe7s9fu:1": {
+        "id": "@npfuqr2dqv51c03jq24qe7s9fu:1",
+        "kind": "call",
+        "fn": "@npfuqr2dqv51c03jq24qe7s9fu:2",
+        "args": [
+          "@npfuqr2dqv51c03jq24qe7s9fu:3"
+        ]
+      },
       "@v53dcuo5olrbvtgve59t594n5r": {
         "id": "@v53dcuo5olrbvtgve59t594n5r",
         "kind": "def",
@@ -14467,11 +14805,21 @@
       "@2dilt1b3f9hjpds2aonqamb6h8",
       "@jicapf5pqmv60o38snigitpipg",
       "@2bsqu5k0de084n0uo4u01gsahq",
-      "@dfoj8ob4ospo06alm3ihlr8u3i",
-      "@5ph2d9mlvfoo0ihvgkkg1fjdci",
-      "@fvtcucip47b7co9332j0mopvp7",
-      "@grvbt5fchcar1hj5vksu8uu8lt",
+      "@gqaqevodbqvkve52jflltfe15j",
+      "@brbvg0sr9iq5iaavff80b7jag4",
+      "@jdr0cbak0dr75q00ui5q25nhmg",
+      "@6cbk868k7fijjoi1dkdf3glu47",
       "@r9dj6i0hoik8u191v7lmgbq2k6",
+      "@grvbt5fchcar1hj5vksu8uu8lt",
+      "@fvtcucip47b7co9332j0mopvp7",
+      "@5ph2d9mlvfoo0ihvgkkg1fjdci",
+      "@0vl7tje7dvbp2l5f62629h4br3",
+      "@ll92c157aj0pu5tnsqs486kbhb",
+      "@97q50g89nacapmnib7kalnqo87",
+      "@srad4s61so2phrf9ftlmq68l43",
+      "@pckjpbojm3g0g9tt70q866flvp",
+      "@npfuqr2dqv51c03jq24qe7s9fu",
+      "@dfoj8ob4ospo06alm3ihlr8u3i",
       "@4betk70u782q0vlc8ppqp9sc54",
       "@7h8gf14bhngv3pb06nv9dd7rae",
       "@mquht8gs0hl378f6ujpa2ghin9",
@@ -18335,12 +18683,12 @@
       },
       "plain": []
     },
-    "@dfoj8ob4ospo06alm3ihlr8u3i": {
+    "@gqaqevodbqvkve52jflltfe15j": {
       "vars": [],
       "rows": [],
       "type": {
         "t": "con",
-        "id": "std.trig",
+        "id": "std.arithmetic",
         "args": [
           {
             "t": "con",
@@ -18351,7 +18699,81 @@
       },
       "plain": []
     },
-    "@5ph2d9mlvfoo0ihvgkkg1fjdci": {
+    "@brbvg0sr9iq5iaavff80b7jag4": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@jdr0cbak0dr75q00ui5q25nhmg": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@6cbk868k7fijjoi1dkdf3glu47": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@r9dj6i0hoik8u191v7lmgbq2k6": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.dual",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.dual",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@grvbt5fchcar1hj5vksu8uu8lt": {
       "vars": [],
       "rows": [
         0
@@ -18413,7 +18835,7 @@
       },
       "plain": []
     },
-    "@grvbt5fchcar1hj5vksu8uu8lt": {
+    "@5ph2d9mlvfoo0ihvgkkg1fjdci": {
       "vars": [],
       "rows": [
         0
@@ -18444,29 +18866,115 @@
       },
       "plain": []
     },
-    "@r9dj6i0hoik8u191v7lmgbq2k6": {
+    "@0vl7tje7dvbp2l5f62629h4br3": {
       "vars": [],
-      "rows": [
-        0
-      ],
+      "rows": [],
       "type": {
-        "t": "fn",
-        "params": [
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
           {
             "t": "con",
             "id": "std.dual",
             "args": []
           }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.dual",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
+        ]
+      },
+      "plain": []
+    },
+    "@ll92c157aj0pu5tnsqs486kbhb": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.algebraic",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@97q50g89nacapmnib7kalnqo87": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@srad4s61so2phrf9ftlmq68l43": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@pckjpbojm3g0g9tt70q866flvp": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@npfuqr2dqv51c03jq24qe7s9fu": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.algebraic",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@dfoj8ob4ospo06alm3ihlr8u3i": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.trig",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ]
       },
       "plain": []
     },
@@ -18929,6 +19437,16 @@
     "@0qulvgbca1hm6dngmbf0eqldf8:2": "x",
     "@0qulvgbca1hm6dngmbf0eqldf8:6": "value",
     "@0qulvgbca1hm6dngmbf0eqldf8:7": "slope",
+    "@gqaqevodbqvkve52jflltfe15j": "arithmetic at float64",
+    "@brbvg0sr9iq5iaavff80b7jag4": "arithmetic at int",
+    "@jdr0cbak0dr75q00ui5q25nhmg": "arithmetic at rational",
+    "@6cbk868k7fijjoi1dkdf3glu47": "arithmetic at complex",
+    "@0vl7tje7dvbp2l5f62629h4br3": "arithmetic at dual",
+    "@ll92c157aj0pu5tnsqs486kbhb": "arithmetic at algebraic",
+    "@97q50g89nacapmnib7kalnqo87": "ordered at float64",
+    "@srad4s61so2phrf9ftlmq68l43": "ordered at int",
+    "@pckjpbojm3g0g9tt70q866flvp": "ordered at rational",
+    "@npfuqr2dqv51c03jq24qe7s9fu": "ordered at algebraic",
     "@v53dcuo5olrbvtgve59t594n5r": "merge sorted",
     "@v53dcuo5olrbvtgve59t594n5r:2": "xs",
     "@v53dcuo5olrbvtgve59t594n5r:3": "ys",
@@ -19226,6 +19744,16 @@
     "@l5hrsq9348beg0fck4pcmk92uh": "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
     "@5p7andlhmptbt2ovbrcsfl8e0s": "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     "@0qulvgbca1hm6dngmbf0eqldf8": "A dual number as 3 + 2ε.",
+    "@gqaqevodbqvkve52jflltfe15j": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@brbvg0sr9iq5iaavff80b7jag4": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@jdr0cbak0dr75q00ui5q25nhmg": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@6cbk868k7fijjoi1dkdf3glu47": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@0vl7tje7dvbp2l5f62629h4br3": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@ll92c157aj0pu5tnsqs486kbhb": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@97q50g89nacapmnib7kalnqo87": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@srad4s61so2phrf9ftlmq68l43": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@pckjpbojm3g0g9tt70q866flvp": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@npfuqr2dqv51c03jq24qe7s9fu": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [

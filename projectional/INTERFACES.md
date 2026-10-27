@@ -187,8 +187,20 @@ and a colour keeps the rule. Literals at a type need one more operation,
    rule. A literal at Dual is a constant, so `3` is `dual(3, 0)`. `slope
    by duals(f, x)` matches derive.ts's `derivative` at every point
    tested, evaluated and compiled.
-4. **`+ − · <` move onto `Arithmetic` and `Ordered`.** AT, PRELUDE_AT
-   and BUILTIN_AT become implementations. Quaternions join (L42, L43).
+4. **`+ − · <` move onto `Arithmetic` and `Ordered`. Built** (L40h).
+   `std.arithmetic` is `arithmetic(add, subtract, multiply, negate)` and
+   `std.ordered` is `ordered(less)`. The prelude's hidden `arithmetics`
+   are their implementations at Float64, Int, Rational, Complex, Dual and
+   Algebraic, so arith.ts's PRELUDE_AT and BUILTIN_AT are gone: the one
+   `+` at a type with an implementation is that implementation's `add`,
+   resolved as Trig's are. A type of the program's own joins the same way,
+   and its own `·` comes before the part-by-part rule for records:
+   test/own-arithmetic.test.ts gives a quaternion record Hamilton's
+   product and a version number an order, so `smaller` works on it. A
+   type with neither is told where it is used ("Version isn't a Number,
+   and has no + − · of its own"). Not yet: a literal at a type of your
+   own (`3` as a quaternion), which needs a "from a fraction" field;
+   quaternions as a table (L42, L43).
 5. **The editor** (lane E): the "interface" toggle on a type, as the
    "effect" one, and `where a has Trig` in types.
 6. **A value packed with its implementation**, when a program needs it.

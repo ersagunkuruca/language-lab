@@ -133,6 +133,9 @@ export class Subst {
   // asked for one, checked once every implementation is known (infer).
   needs = new Map<number, Map<Id, Id>>();
   wanted: { t: Type; iface: Id; at: Id }[] = [];
+  // The node being checked, for a want that comes from unifying (infer's
+  // unifyAt sets it).
+  site: Id = "";
 
   clone(): Subst {
     const s = new Subst();
@@ -173,6 +176,15 @@ export class Subst {
     if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind === "ordered") throw new ArithError(kind); return; }
     if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
     if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
+    // A type of the program's own may have its own + − · or <: whether it
+    // does is known once every implementation is (infer). A record whose
+    // fields are or can be Float64s does + − · −x part by part when it has
+    // none of its own (arith.ts), so for + it is one now, as before.
+    if (t.t === "con" && !t.id.startsWith("std.") && !t.id.startsWith("type.")) {
+      const fields = this.recordFields(t.id, t.args);
+      const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
+      if (!numeric) { this.wanted.push({ t, iface: kind === "ordered" ? "std.ordered" : "std.arithmetic", at: this.site }); return; }
+    }
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
       try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
       return;
@@ -190,7 +202,7 @@ export class Subst {
       if (!m.has(iface)) m.set(iface, at);
       return;
     }
-    this.wanted.push({ t, iface, at });
+    this.wanted.push({ t, iface, at: at || this.site });
   }
 
   // Require t not to be an Int: a literal with a fraction part's type.
