@@ -889,24 +889,29 @@ export const usesOf = (code: Code, b: Id): Id[] => Object.values(code.nodes).fil
 // The innermost body around `slot` (a function's, a case's, a let's): a
 // let put there sees what `slot` sees, since only bodies bind names.
 function bodyAround(code: Code, defId: Id, slot: Id): Id | null {
-  const walk = (n: Id, r: Id): Id | null => {
+  return bodiesAround(code, defId, slot)?.at(-1) ?? null;
+}
+
+// Every body on the way down to `slot`, outermost first.
+function bodiesAround(code: Code, defId: Id, slot: Id): Id[] | null {
+  const walk = (n: Id, r: Id[]): Id[] | null => {
     if (n === slot) return r;
     const x = code.nodes[n];
     switch (x?.kind) {
-      case "lambda": return walk(x.body, x.body);
+      case "lambda": return walk(x.body, [...r, x.body]);
       case "call": for (const c of [x.fn, ...x.args]) { const f = walk(c, r); if (f) return f; } return null;
       case "match": case "fold": {
         const f = walk(x.scrutinee, r);
         if (f) return f;
-        for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, ab); if (g) return g; }
-        return x.kind === "match" && x.otherwise ? walk(x.otherwise, x.otherwise) : null;
+        for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, [...r, ab]); if (g) return g; }
+        return x.kind === "match" && x.otherwise ? walk(x.otherwise, [...r, x.otherwise]) : null;
       }
-      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, x.body);
+      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, [...r, x.body]);
       default: return null;
     }
   };
   const def = code.nodes[defId] as NodeOf<"def">;
-  return def?.body ? walk(def.body, def.body) : null;
+  return def?.body ? walk(def.body, [def.body]) : null;
 }
 
 // Put a dot on the wire out of `slot`: its value moves to a dot at the start
@@ -937,7 +942,8 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
 // innermost body around them (where it sees what they saw), and called in
 // their place. What's wired into the group from outside becomes the
 // call's inputs, in reading order. Undo puts it back.
-// For now a group gives one value out: one node of it whose value leaves.
+// Several values out (E149) leave together as a record of their own type,
+// Part results, made at the end of part; where each was, its field is read.
 export function makeFunction(code: Code, names: Names, info: Info, defId: Id, members: Id[]): TEdit & { fn?: Id } {
   const inDef = new Set(subtree(code, defId));
   const kinds = ["lit", "ref", "call", "lambda", "match", "fold", "hole"];
@@ -947,39 +953,96 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   // A frame in the group (a function, a match) brings all it holds.
   const region = new Set(own.flatMap((m) => (["lambda", "match", "fold"].includes(code.nodes[m].kind) ? subtree(code, m) : [m])));
   const parent = (id: Id) => parentOf(code, id)?.parent;
-  const roots = [...region].filter((m) => kinds.includes(code.nodes[m].kind) && !region.has(parent(m) ?? ""));
-  if (roots.length !== 1) return { ok: false, reason: `${roots.length} values leave the group: for now a function made from a group gives one value, so group the nodes that feed a single one` };
-  const root = roots[0];
-  if (code.nodes[root].kind === "lambda" && region.size === subtree(code, root).length) return { ok: false, reason: "it's a function already" };
+  // In the order the text reads: a let's value before what follows it.
+  const order: Id[] = [];
+  const walk = (id: Id) => {
+    const n = code.nodes[id];
+    if (!n) return;
+    order.push(id);
+    const cs = children(n);
+    (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda" ? [...n.args, n.fn] : cs).forEach(walk);
+  };
+  walk(defId);
+  const roots = [...region].filter((m) => kinds.includes(code.nodes[m].kind) && !region.has(parent(m) ?? "")).sort((x, y) => order.indexOf(x) - order.indexOf(y));
+  const one = roots.length === 1;
+  if (one && code.nodes[roots[0]].kind === "lambda" && region.size === subtree(code, roots[0]).length) return { ok: false, reason: "it's a function already" };
   // What comes in: each child of the group's nodes that isn't in it.
   // A literal, a called function and a definition's name stay in: they're
   // drawn on the node, not wired to it.
   const wire = (x: Id) => { const n = code.nodes[x]; return kinds.includes(n?.kind) && n.kind !== "lit" && !(n.kind === "ref" && code.nodes[n.target]?.kind !== "binder") && parentOf(code, x)?.slot !== "fn"; };
-  const inputs = readingOrder(code, root).filter((x) => !region.has(x) && region.has(parent(x) ?? "") && wire(x));
-  const at = bodyAround(code, defId, root);
+  const inputs = roots.flatMap((r) => readingOrder(code, r)).filter((x) => !region.has(x) && region.has(parent(x) ?? "") && wire(x));
+  // Where part goes: the innermost body around every value out.
+  const paths = roots.map((r) => bodiesAround(code, defId, r));
+  if (paths.some((p) => !p)) return { ok: false, reason: "that isn't inside this definition" };
+  let at: Id | null = null;
+  for (let i = 0; paths.every((p) => p![i] !== undefined && p![i] === paths[0]![i]); i++) at = paths[0]![i];
   if (!at) return { ok: false, reason: "that isn't inside this definition" };
+  // What comes in must be there already where part is called.
+  const seen = new Set(scopeAt(code, defId, at));
+  const late = inputs.flatMap((x) => subtree(code, x)).map((x) => code.nodes[x]).find((n) => n.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !seen.has(n.target) && !subtree(code, inputs.find((i) => subtree(code, i).includes(n.id))!).includes(n.target));
+  if (late) return { ok: false, reason: `${names[(late as NodeOf<"ref">).target] ?? "a value"} comes in, but it's worked out after the first value going out: put it in the group, or group less` };
+  // Each value out's type, for the record's fields.
+  const spec = (t: Type): { target: Id; args: unknown[] } | null => { const r = info.subst.resolve(t); if (r.t !== "con") return null; const as = r.args.map(spec); return as.every(Boolean) ? { target: r.id, args: as } : null; };
+  const types = one ? [] : roots.map((r) => { const t = info.typeOf.get(r); return t ? spec(t) : null; });
+  if (types.some((t) => !t)) return { ok: false, reason: "a value going out is a function, or of no one type yet: for now several values out each hold a plain type" };
   const fn = freshId(), lam = freshId(), call = freshId(), fref = freshId(), outer = freshId(), let_ = freshId();
   // The same variable wired in twice (time · time) is one input.
   const keyOf = (x: Id) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "binder" ? `v ${n.target}` : x; };
   const firsts = inputs.filter((x, i) => inputs.findIndex((y) => keyOf(y) === keyOf(x)) === i);
   const params = firsts.map(() => freshId());
+  const nn: Names = { ...names, [fn]: "part" };
   let next = swapIn(code, at, let_);
-  if (at !== root) next = swapIn(next, root, call);
+  // Where each value out was: the call itself, or its field of the record.
+  const p = freshId(), pLet = freshId(), pLam = freshId();
+  const ctor = freshId(), tdef = freshId(), fields = roots.map(() => freshId());
+  const outs = one ? [call] : roots.map((_, i) => freshId());
+  roots.forEach((r, i) => { if (r !== at) next = swapIn(next, r, outs[i]); });
   for (const x of inputs) {
     const r = freshId();
     next = swapIn(next, x, r);
     next.nodes[r] = { id: r, kind: "ref", target: params[firsts.findIndex((y) => keyOf(y) === keyOf(x))] };
   }
-  for (const p of params) next.nodes[p] = { id: p, kind: "binder" };
+  for (const q of params) next.nodes[q] = { id: q, kind: "binder" };
   next.nodes[fn] = { id: fn, kind: "binder" };
   next.nodes[fref] = { id: fref, kind: "ref", target: fn };
   next.nodes[call] = { id: call, kind: "call", fn: fref, args: firsts };
-  next.nodes[lam] = { id: lam, kind: "lambda", params, body: root };
-  next.nodes[outer] = { id: outer, kind: "lambda", params: [fn], body: at === root ? call : at };
+  const rest = roots.includes(at) ? outs[roots.indexOf(at)] : at;
+  if (one) next.nodes[lam] = { id: lam, kind: "lambda", params, body: roots[0] };
+  else {
+    // The record: Part results, one field per value out, named for where
+    // it went (drift, drop) or by its place.
+    const names_ = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = l?.kind === "call" && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
+    const { nodes, add } = { nodes: next.nodes, add: (n: NodeData) => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; } };
+    const build = (t: { target: Id; args: unknown[] }): Id => add({ kind: "tref", target: t.target, args: (t.args as { target: Id; args: unknown[] }[]).map(build) });
+    fields.forEach((f, i) => { nodes[f] = { id: f, kind: "field", type: build(types[i]!) }; nn[f] = names_[i]; });
+    nodes[ctor] = { id: ctor, kind: "variant", fields };
+    const td = add({ kind: "typedef", params: [], variants: [ctor] });
+    nodes[tdef] = { id: tdef, kind: "def", body: td };
+    let tname = "Part results";
+    for (let k = 2; Object.values(names).includes(tname); k++) tname = `Part results ${k}`;
+    nn[tdef] = tname;
+    nn[ctor] = tname.toLowerCase();
+    next = { nodes, defs: [...next.defs, tdef] };
+    const mk = freshId(), cref = freshId();
+    nodes[cref] = { id: cref, kind: "ref", target: ctor };
+    nodes[mk] = { id: mk, kind: "call", fn: cref, args: roots };
+    nodes[lam] = { id: lam, kind: "lambda", params, body: mk };
+    roots.forEach((_, i) => {
+      const fr = freshId(), pr = freshId();
+      nodes[fr] = { id: fr, kind: "ref", target: fields[i] };
+      nodes[pr] = { id: pr, kind: "ref", target: p };
+      nodes[outs[i]] = { id: outs[i], kind: "call", fn: fr, args: [pr] };
+    });
+    nodes[p] = { id: p, kind: "binder" };
+    nn[p] = "results";
+    nodes[pLam] = { id: pLam, kind: "lambda", params: [p], body: rest };
+    nodes[pLet] = { id: pLet, kind: "call", fn: pLam, args: [call] };
+  }
+  next.nodes[outer] = { id: outer, kind: "lambda", params: [fn], body: one ? (at === roots[0] ? call : at) : pLet };
   next.nodes[let_] = { id: let_, kind: "call", fn: outer, args: [lam] };
-  const nn: Names = { ...names, [fn]: "part" };
-  params.forEach((p, i) => { const x = code.nodes[firsts[i]]; nn[p] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
-  const r = guardTyped(info, collect(next), nn, fn, `Made the group a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}. Name it, fold it, or Undo to put it back.`);
+  params.forEach((q, i) => { const x = code.nodes[firsts[i]]; nn[q] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
+  const what = one ? "" : ` Its ${roots.length} values go out together as Part results, and each is read where it was.`;
+  const r = guardTyped(info, collect(next), nn, fn, `Made the group a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}.${what} Name it, fold it, or Undo to put it back.`);
   return r.ok ? { ...r, fn: lam } : r;
 }
 

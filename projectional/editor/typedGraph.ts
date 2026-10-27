@@ -124,7 +124,7 @@ let held = 0, menuAt = 0;
 
 // Where each graph's nodes were placed when last drawn, so an edit keeps
 // them there. Not saved: a reload lays the graph out afresh.
-const drawnAt = new Map<string, Map<Id, Pos>>();
+const drawnAt = new Map<string, Map<Id, Pos & { frame: Id | null }>>();
 
 // Picked nodes, per graph: kept across redraws, not saved.
 const pickedBy = new Map<string, Set<Id>>();
@@ -158,7 +158,9 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   // still on the menu.
   const last = drawnAt.get(key);
   if (last) {
-    const fresh = new Set([...scene.items.keys()].filter((k) => !last.has(k) && !hooks.at[k]));
+    // A node now in another frame (a group made a function) is placed
+    // afresh too: its old place was in the frame it left.
+    const fresh = new Set([...scene.items.keys()].filter((k) => (!last.has(k) || last.get(k)!.frame !== (scene.items.get(k)!.frame ?? null)) && !hooks.at[k]));
     // A new node starts where the fresh layout puts it relative to the
     // nearest node that stays along the wires (what it feeds, mostly),
     // moved as that node was.
@@ -173,17 +175,23 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
       let ring = [k], near: Id | undefined;
       while (ring.length && !near) {
         ring = ring.flatMap((x) => next.get(x) ?? []).filter((x) => !seen.has(x) && (seen.add(x), true));
-        near = ring.find((x) => last.has(x));
+        near = ring.find((x) => last.has(x) && !fresh.has(x));
       }
       if (!near) continue;
       const a = arranged.get(k)!, was = hooks.at[near] ?? last.get(near)!, now = arranged.get(near)!;
       scene.items.get(k)!.auto = { x: a.x + was.x - now.x, y: a.y + was.y - now.y };
     }
-    for (const [k, it] of scene.items) { const p = last.get(k); if (p && !hooks.at[k]) it.auto = p; }
+    for (const [k, it] of scene.items) { const p = last.get(k); if (p && !fresh.has(k) && !hooks.at[k]) it.auto = { x: p.x, y: p.y }; }
+    // Spaced out only nearby: a node inside a frame of kept nodes can be
+    // pushed off without end as the frame grows around it, so a place far
+    // from where it started is not taken.
     if (fresh.size && fresh.size < scene.items.size)
-      for (const [k, p] of Object.entries(tidyScene(shown(hooks.at), hooks.at, fresh))) if (fresh.has(k)) scene.items.get(k)!.auto = p;
+      for (const [k, p] of Object.entries(tidyScene(shown(hooks.at), hooks.at, fresh))) {
+        const it = scene.items.get(k);
+        if (it && fresh.has(k) && Math.hypot(p.x - it.auto.x, p.y - it.auto.y) < 600) it.auto = p;
+      }
   }
-  drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, it.auto])));
+  drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
   interact(canvas, scene, hooks, picked, draw);
