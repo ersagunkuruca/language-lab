@@ -183,7 +183,7 @@ interface UI {
   touched: string[];
   note: string;
   mode: null | "split" | "new-def";
-  newKind: "function" | "value" | "type" | "effect";
+  newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string; running?: boolean } | null;
@@ -1707,7 +1707,24 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   const dname = names[ui.def] ?? "this definition";
   const out = h("div", { class: "structure" });
 
-  if (sel === ui.def && body?.kind === "typedef") {
+  if (sel === ui.def && body?.kind === "typedef" && body.interface) {
+    // An interface's operations are its record's fields, each a function
+    // of its type a (INTERFACES.md).
+    const variant = body.variants[0], a = body.params[0];
+    out.append(h("div", { class: "sub-head" }, `Operations of ${dname} · code.json`));
+    for (const f of get(code, variant, "variant").fields) {
+      const r = Top.removeField(code, sh, variant, f);
+      out.append(row(pick(f, names[f] ?? "operation", typeText(get(code, f, "field").type, names)), edit("×", "Remove this operation", r, () => runTop(info, r), "btn mini")));
+    }
+    const c = textField("f-new-op", "New operation", "its name");
+    const takes = h("select", { id: "f-op-takes" }, h("option", { value: "1" }, `(${names[a] ?? "a"})`), h("option", { value: "2" }, `(${names[a] ?? "a"}, ${names[a] ?? "a"})`)) as HTMLSelectElement;
+    const gives = h("select", { id: "f-op-gives" }, ...([[a, names[a] ?? "a"], [BOOL, "Bool"], [STRING, "Text"], [NUMBER, "Float64"]] as [Id, string][]).map(([v, l]) => h("option", { value: v }, l))) as HTMLSelectElement;
+    const add = h("button", { class: "btn", type: "button" }, "Add the operation");
+    add.addEventListener("click", () => runTop(info, Top.addOperation(code, sh, ui.def, c.input.value, +takes.value, gives.value === a ? null : gives.value)));
+    c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
+    out.append(c.el, h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives), h("div", { class: "acts" }, add),
+      h("p", { class: "hint" }, `Every implementation of ${dname} gets a hole for a new operation.`), implementationsPanel(info, names));
+  } else if (sel === ui.def && body?.kind === "typedef") {
     // An effect is a data type whose cases are operations: the same panel,
     // in its words.
     const w = words(ui.def);
@@ -1724,8 +1741,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(h("p", { class: "hint" }, body.effect
       ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
       : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
-    if (body.interface) out.append(implementationsPanel(info, names));
-    else if (!body.effect && !body.params.length) out.append(interfacesOfType(info, names));
+    if (!body.effect && !body.params.length) out.append(interfacesOfType(info, names));
   } else if (sel === ui.def && isPublished(ui.def)) {
     // A published definition is read-only; copying it in is how you change it.
     const r = T.copyIntoProgram(code, sh, info, ui.def, dname);
@@ -1844,26 +1860,28 @@ function newDefinitionForm(info: T.Info): HTMLElement {
   const kind = ui.newKind;
   const extra = kind === "function" ? textField("f-def-inputs", "Inputs", "names, separated by commas (none for an action)")
     : kind === "type" ? textField("f-def-case", "First case", "a name, e.g. circle")
-    : kind === "effect" ? textField("f-def-case", "First operation", "a name, e.g. ask") : null;
+    : kind === "effect" ? textField("f-def-case", "First operation", "a name, e.g. ask")
+    : kind === "interface" ? textField("f-def-case", "First operation", "a name, e.g. sin") : null;
   const go = h("button", { class: "btn", type: "button" }, "Create");
   go.addEventListener("click", () => {
     const shape: Top.Shape = kind === "function" ? { kind, params: (extra!.input.value).split(",").map((x) => x.trim()).filter(Boolean) }
       : kind === "type" ? { kind, firstCase: extra!.input.value }
-      : kind === "effect" ? { kind, firstOperation: extra!.input.value } : { kind: "value" };
+      : kind === "effect" || kind === "interface" ? { kind, firstOperation: extra!.input.value } : { kind: "value" };
     runTop(info, Top.newDefinition(doc.code, doc.names.short, name.input.value, shape), (r) => {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
-      ui.selected = kind === "type" || kind === "effect" ? null : r.select;
+      ui.selected = kind === "type" || kind === "effect" || kind === "interface" ? null : r.select;
       ui.mode = null;
     });
   });
   for (const f of [name, extra]) f?.input.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
   return h("div", { class: "insp" },
     h("div", { class: "sub-head" }, "New definition · code.json"),
-    seg("new-kind", kind, [["function", "Function"], ["value", "Value"], ["type", "Data type"], ["effect", "Effect"]]),
+    seg("new-kind", kind, [["function", "Function"], ["value", "Value"], ["type", "Data type"], ["effect", "Effect"], ["interface", "Interface"]]),
     h("p", { class: "hint" }, kind === "function" ? "Takes inputs and gives back a value; with no inputs it's an action you can run."
       : kind === "value" ? "One value, computed once."
       : kind === "type" ? "Cases, each with fields: like an enum whose cases carry data."
+      : kind === "interface" ? "Operations a type can have, like Trig's sin and cos: written once for any type a, and each type that implements it says what they do there. Uses resolve to that type's definitions before running."
       : "Operations a computation can ask for, like a data type whose cases are requests. Calling one performs it; whoever runs the computation answers it with a match, one case per operation."),
     name.el, extra?.el ?? null,
     h("div", { class: "acts" }, go, h("button", { class: "btn", type: "button", "data-act": "new-def" }, "Cancel")));

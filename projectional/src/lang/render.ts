@@ -475,7 +475,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   if (comment) out.push({ line: [`-- ${resolveRefs(comment, nameOf)}`], cls: "cmt" });
   if (body?.kind === "typedef") {
     enter(body.params);
-    out.push(ln(kw(`${body.effect ? "effect" : "type"} `), self(), ...body.params.flatMap((p) => [" ", bind(p)])));
+    out.push(ln(kw(`${body.effect ? "effect" : body.interface ? "interface" : "type"} `), self(), ...body.params.flatMap((p) => [" ", bind(p)])));
     out.push(grp(body.variants.map((v) => {
       const vn = node(v) as NodeOf<"variant">;
       const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);

@@ -6,7 +6,8 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { TRIG, TRIG_OPS } from "../src/lang/std.ts";
 import { NUMBER, showIn } from "../src/lang/types.ts";
 import type { NodeOf } from "../src/model.ts";
-import { implement, implementable, infer, setProgramPins } from "../editor/typed.ts";
+import { implement, implementable, infer, interfaces, setProgramPins } from "../editor/typed.ts";
+import { addOperation, newDefinition } from "../src/lang/toplevel.ts";
 
 // Writing an implementation in the editor (BACKLOG E137, INTERFACES.md step
 // 5): a type that has no Trig gets one, a definition of Trig's record at it
@@ -40,4 +41,32 @@ test("implement for a type makes the record with a hole per operation, typed at 
   assert.equal(after.errors.filter((e) => e.missing).length, 0);
   assert.ok(!implementable(r.code, after, TRIG).includes(W.def));
   assert.equal(implement(r.code, r.names, after, TRIG, missing!.type).ok, false);
+});
+
+// A new interface (BACKLOG E138): one operation from a to a; another added
+// with two inputs gives every implementation a hole for it.
+test("a new interface, an operation added, and its implementation's new hole", () => {
+  const k = new Lang(LIBRARY.code);
+  k.type("Wave", [], [["wave", [["height", () => k.tref(NUMBER)]]]]);
+  const code = base(k.code), names = baseNames(k.names);
+  const made = newDefinition(code, names, "Halving", { kind: "interface", firstOperation: "half" });
+  assert.ok(made.ok, !made.ok ? made.reason : "");
+  if (!made.ok) return;
+  const iface = made.code.defs.at(-1)!;
+  assert.ok(interfaces(made.code).includes(iface));
+  const info = infer(made.code, made.names);
+  assert.deepEqual(info.errors, []);
+  const wave = made.code.defs.find((d) => made.names[d] === "Wave")!;
+  const r = implement(made.code, made.names, info, iface, { t: "con", id: wave, args: [] });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const more = addOperation(r.code, r.names, iface, "same", 2, null);
+  assert.ok(more.ok, !more.ok ? more.reason : "");
+  if (!more.ok) return;
+  assert.match(more.note, /1 implementation got a hole for it/);
+  setProgramPins(r.pin!);
+  const after = infer(more.code, more.names);
+  setProgramPins({});
+  const holes = [...after.holes.values()].map((h) => showIn(h.expected, more.names, after.subst));
+  assert.deepEqual(holes, ["(Wave) -> Wave", "(Wave, Wave) -> Wave"]);
 });
