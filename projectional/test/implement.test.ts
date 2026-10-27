@@ -24,8 +24,8 @@ test("implement for a type makes the record with a hole per operation, typed at 
   const before = infer(code, names);
   const missing = before.errors.find((e) => e.missing)?.missing;
   assert.deepEqual(missing && { iface: missing.iface, type: showIn(missing.type, names, before.subst) }, { iface: TRIG, type: "Wave" });
-  assert.ok(implementable(code, before, TRIG).includes(W.def));
-  assert.ok(!implementable(code, before, TRIG).includes(NUMBER), "Float64 has Trig already");
+  assert.ok(implementable(code, before, TRIG).some((t) => t.t === "con" && t.id === W.def));
+  assert.ok(!implementable(code, before, TRIG).some((t) => t.t === "con" && t.id === NUMBER), "Float64 has Trig already");
   const r = implement(code, names, before, TRIG, missing!.type);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
@@ -40,7 +40,7 @@ test("implement for a type makes the record with a hole per operation, typed at 
   // Nothing is missing now, the holes are what's left, and a second one is
   // refused (one implementation per interface and type).
   assert.equal(after.errors.filter((e) => e.missing).length, 0);
-  assert.ok(!implementable(r.code, after, TRIG).includes(W.def));
+  assert.ok(!implementable(r.code, after, TRIG).some((t) => t.t === "con" && t.id === W.def));
   assert.equal(implement(r.code, r.names, after, TRIG, missing!.type).ok, false);
 });
 
@@ -147,4 +147,29 @@ test("changing what an operation takes and gives", () => {
   // Unpinned, the implementation's record is at any type until the hole is written.
   assert.equal(holes.length, 1);
   assert.match(holes[0], /^\((\w+), \1\) -> \1$/);
+});
+
+// Text and a List of Float64 can have an implementation too (BACKLOG E143).
+test("implement at Text and at List Float64", () => {
+  const k = new Lang(LIBRARY.code);
+  const D = k.interface("Doubling", "a", [["double", (a: Id) => k.tfun([k.tref(a)], k.tref(a))]]);
+  let code = base(k.code), names = baseNames(k.names);
+  let info = infer(code, names);
+  const offered = implementable(code, info, D.def).map((t) => showIn(t, names, info.subst));
+  assert.ok(offered.includes("Text") && offered.includes("List Float64"), offered.join(", "));
+  const pins = {};
+  for (const want of ["Text", "List Float64"]) {
+    const t = implementable(code, info, D.def).find((x) => showIn(x, names, info.subst) === want)!;
+    const r = implement(code, names, info, D.def, t);
+    assert.ok(r.ok, !r.ok ? r.reason : "");
+    if (!r.ok) return;
+    Object.assign(pins, r.pin);
+    code = r.code; names = { ...names, ...r.names };
+    setProgramPins(pins);
+    info = infer(code, names);
+    setProgramPins({});
+    assert.deepEqual(info.errors, []);
+  }
+  const left = implementable(code, info, D.def).map((t) => showIn(t, names, info.subst));
+  assert.ok(!left.includes("Text") && !left.includes("List Float64"), left.join(", "));
 });

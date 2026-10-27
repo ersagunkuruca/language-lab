@@ -26,7 +26,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E146 | **Make it a function** on a group: the group becomes a lambda called right there (`((a, b) => …)(x, y)`), its inputs the wires coming in. One wire out is its result; several out become a record of them, taken apart where they're used. Undo or Inline puts it back. Then it can be named, moved out as a definition, or reused | Ersagun 2026-10-27 | P2 | M | after E145 |
-| E143 | Implement's "For the type" lists no Text, no List and no type with parameters, so Text can't implement an interface from the editor (check whether the checker allows it first) | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440). Step two (#491): each filling built once, ownerOfTypeParts reads the defs list, fall's holes 48 s → 39 s in all; what's left is per-candidate whole-program passes (modes.ts analyzer union-find, unit inference, the node copy). Step three (#502): units solved once per hole, 44 s → 28 s. Step four (#503): a solve's verdict kept per program, 28 s → 21 s. Step five (#504): the unit scan skipped per filling, 21 s → 18.5 s, about 0.8 s a palette. Stopped there: each stage left buys under 10% except sharing nodes between fillings instead of copying ~3000 per filling (about 20%), which needs a persistent node store | found doing E100 | P3 | M | |
 | E133 | **Design, held** (coordinator 2026-10-27). Fillings share the program's nodes instead of each copying them (~3000 in physics): a persistent node store under `Code` (a HAMT or an overlay map), which every module reads. E103's last stage over 10%: about 20% off a palette (fall 18.5 s → ~15 s for 23 holes). Write the design note before building | E103 | P3 | L | held |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
@@ -122,6 +121,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E143 | Implement offers Text and List Float64/Int/Text (the checker takes any closed type; one for every List a isn't in the language). | #535 |
 | E142 | An operation's panel changes what it takes and gives; implementations get a hole for it again. | #534 |
 | E141 | An interface reads as an interface: the graph draws its operations, Run says it doesn't run, the palette offers its constructor only as a whole body. | #533 |
 | E145 | A group is bracketed in the blocks too, and folds there with the graph; still layout only. | #532 |

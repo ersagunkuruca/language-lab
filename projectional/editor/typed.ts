@@ -17,7 +17,7 @@ import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../src/lang/std.ts";
-import { INT, NUMBER, RATIONAL_TYPE, schemeArith, showIn, showType, type Type } from "../src/lang/types.ts";
+import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../src/lang/types.ts";
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -1036,14 +1036,19 @@ export function unpin(pins: Pins, def: Id, name: string): PinEdit {
 
 const TYPE = (id: Id): Type => ({ t: "con", id, args: [] });
 
-// The types an interface could be implemented for: closed data types (no
-// type inputs), Float64 and Int, that don't have it yet.
-export function implementable(code: Code, info: Info, iface: Id): Id[] {
+// The types an interface could be implemented for, that don't have it yet:
+// Float64, Int, Text, closed data types (no type inputs), and a List of
+// each of the first three (BACKLOG E143). An implementation is at one
+// whole type (INTERFACES.md): List Float64 and List Text each get their
+// own, as there's no one for every List a yet.
+export function implementable(code: Code, info: Info, iface: Id): Type[] {
   const plain = code.defs.filter((d) => {
     const b = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""];
     return b?.kind === "typedef" && !b.params.length && !b.effect && !b.interface;
   });
-  return [NUMBER, INT, ...plain].filter((t) => !info.implementations?.has(implementationKey(iface, TYPE(t))));
+  const base = [NUMBER, INT, STRING];
+  const lists: Type[] = code.nodes["std.list"] ? base.map((b) => ({ t: "con", id: "std.list", args: [TYPE(b)] })) : [];
+  return [...[...base, ...plain].map(TYPE), ...lists].filter((t) => !info.implementations?.has(implementationKey(iface, t)));
 }
 
 // Every interface there is, the library's and the program's.

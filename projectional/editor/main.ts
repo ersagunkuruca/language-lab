@@ -1686,9 +1686,9 @@ function implementationsPanel(info: T.Info, names: Names): HTMLElement {
   for (const d of have) out.append(row(pick(d, names[d] ?? d, T.typeOf(info, d, names) ?? "")));
   const types = T.implementable(doc.code, info, iface);
   if (!types.length) return out;
-  const sel = h("select", { id: "f-implement" }, ...types.map((t) => h("option", { value: t }, names[t] ?? t))) as HTMLSelectElement;
+  const sel = h("select", { id: "f-implement" }, ...types.map((t, i) => h("option", { value: String(i) }, typeName(info, t, names)))) as HTMLSelectElement;
   const go = h("button", { class: "btn", type: "button" }, "Implement");
-  go.addEventListener("click", () => implementFor(T.implement(doc.code, doc.names.short, info, iface, { t: "con", id: sel.value, args: [] })));
+  go.addEventListener("click", () => implementFor(T.implement(doc.code, doc.names.short, info, iface, types[+sel.value])));
   out.append(h("label", { class: "field", for: "f-implement" }, h("span", {}, "For the type"), sel), h("div", { class: "acts" }, go),
     h("p", { class: "hint" }, `How a type does ${dname}: a definition of its record at that type, with a hole for each operation. Uses of ${dname}'s operations at that type then call it directly.`));
   return out;
