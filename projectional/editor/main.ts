@@ -2125,7 +2125,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
-    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill) worked out just before this, so this can use it. Inside a match, only in that arm", r.ok ? undefined : r.reason)); }
+    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", r.ok ? undefined : r.reason)); }
     // Its place in a list, or among a + b + c's inputs.
     const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
     if (inRow) {
@@ -2218,7 +2218,7 @@ function menuAction(act: string, target: Id | undefined) {
       // the blocks it has no place to keep, so the layout places it.
       const placed = m.blocks ? doc.layout : { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } };
       commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: placed },
-        ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "just before this"}: fill its hole, then use it by name.` : r.note);
+        ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "first among the steps this is in, so all of them can use it"}: fill its hole, then use it by name.` : r.note);
       return paletteFor(hole, m);
     }
     case "named": return toggleNamed(target!);
