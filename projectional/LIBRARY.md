@@ -8,7 +8,7 @@ How to read a type: `(Float64, Float64) -> Float64` takes two Float64s and gives
 
 There are five kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Algebraic is an exact root of a polynomial, like √2, so √2 · √2 is exactly 2. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
 
-- **add** : `(a, a) -> a`. a + b, at any Number: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).
+- **add** : `(a, a) -> a`. a + b, at any Number: Int, Float64, Rational, Algebraic, Complex (and records of Float64s through the vectors module).
 - **subtract** : `(a, a) -> a`. a − b, at any Number.
 - **multiply** : `(a, a) -> a`. a · b, at any Number. At Complex it's the complex product.
 - **negate** : `(a) -> a`. −a, at any Number.
