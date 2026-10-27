@@ -98,7 +98,7 @@ test("typed text calls an interface's operation", () => {
   }
   // The palette offers one twice there, the operation: the record's
   // constructor only as a definition's whole body (BACKLOG E141).
-  const offered = (h: Id, c = code, i = info) => fillings(c, i, h).filter((f) => (f.kind === "call" || f.kind === "ref") && (f.target === T2.op.twice || f.target === T2.v)).map((f) => f.target);
+  const offered = (h: Id, c = code, i = info) => fillings(c, i, h).flatMap((f) => ((f.kind === "call" || f.kind === "ref") && (f.target === T2.op.twice || f.target === T2.v) ? [f.target] : []));
   assert.ok(offered(hole).length > 0 && offered(hole).every((t) => t === T2.op.twice));
   const top = k.def("another twice");
   let body = "";
