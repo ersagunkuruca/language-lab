@@ -139,8 +139,17 @@ real arithmetic.
    - Tests: √2 · √2 is 2, (√2)⁴ is 4, √2 + √3 has `x⁴ − 10x² + 1` and
      prints 3.146…, and √2 < 1.415 is true.
    - Evaluated and compiled.
-3. **Backwards at Algebraic**: polynomial equations give their isolated
-   roots.
+3. **Backwards at Algebraic. Built** (relate.ts, `exactRoots`). An
+   Algebraic `+ − · −x` with an unknown input is also an equation, kept
+   apart from the numeric solver's. With one unknown left, the equations
+   become one polynomial with fraction coefficients: every other unknown
+   is the output of an operation, so it is replaced by what it is made
+   of. Its real roots are the answers, exactly and smallest first
+   (algebraic.ts `realRoots`: Sturm isolation, then the minimal
+   polynomial). So `x · x = 2` gives −√2 and √2, `x · x + x = 12` gives
+   −4 and 3, and `x · x = −1` gives none. Not yet: a coefficient that
+   isn't a fraction (`√2 · x = 2`), which needs norms by resultants, and
+   two unknowns at once.
 4. **`Real`** when a program needs π exactly.
 
 ## Prior art
