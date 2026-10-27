@@ -110,8 +110,25 @@ export function guardTyped(before: Info, code: Code, names: Names, select: Id | 
   const lib = changesPublished(code);
   if (lib) return { ok: false, reason: `${names[lib] ?? display[lib] ?? "that"} is published in a module: it is named by what it says, so it can't change` };
   const after = infer(code, { ...display, ...names });
-  if (after.errors.length > before.errors.length) return { ok: false, reason: after.errors.at(-1)!.message };
+  if (after.errors.length > before.errors.length) return { ok: false, reason: nearest(code, after.errors, select).message };
   return { ok: true, code, names, select, note };
+}
+
+// The error to give as the reason: the one at or inside what the edit put
+// in, else at the nearest node around it, else the last. One change can
+// set off errors further away too (a unit carried on to where it's added
+// to another), but the reader looks where they changed it.
+function nearest(code: Code, errors: Info["errors"], at: Id | undefined): Info["errors"][number] {
+  if (at && code.nodes[at]) {
+    const inside = new Set(subtree(code, at));
+    const hit = errors.find((e) => inside.has(e.id));
+    if (hit) return hit;
+    for (let p = parentOf(code, at); p; p = parentOf(code, p.parent)) {
+      const up = errors.find((e) => e.id === p!.parent);
+      if (up) return up;
+    }
+  }
+  return errors.at(-1)!;
 }
 
 export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling, label: string, defId?: Id): TEdit {
