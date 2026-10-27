@@ -727,9 +727,9 @@ async function groupPicked() {
   await p.locator('.p-graph [data-fold^="group-"]').first().dispatchEvent("click");
   if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded, there's no group frame`);
   await p.locator(".p-graph rect.rg.group").first().click({ button: "right", position: { x: 6, y: 6 } });
-  // drift's · and drop's are two values out: not a function yet (BACKLOG E146).
+  // A group's menu offers to make it a function (BACKLOG E146).
   const fnItem = (await p.locator('.ctx-menu [data-menu="group-fn"]').innerText().catch(() => "")).replace(/\s+/g, " ");
-  if (!/Make it a function.*2 values leave/.test(fnItem)) errors.push(`${where}: the group's Make it a function reads "${fnItem}"`);
+  if (!/Make it a function/.test(fnItem)) errors.push(`${where}: the group's menu has no Make it a function`);
   await p.locator('.ctx-menu [data-menu="ungroup"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: a group's menu has no Ungroup`));
   if (await p.locator(".p-graph rect.rg.group").count()) errors.push(`${where}: ungrouped, the frame is still there`);
   await p.close();

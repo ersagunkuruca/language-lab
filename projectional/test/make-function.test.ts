@@ -27,8 +27,23 @@ test("a group of one value out becomes a function called in its place", () => {
   assert.match(text, /part = \(gravity₂, time₂\) => 0\.5 · gravity₂ · time₂ · time₂/);
   assert.match(text, /drop = part\(gravity₁, time₁\)/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
-  // Two values out (drift's · and drop's): refused, saying why.
-  const two = makeFunction(code, names, info, fall, [drop[0].id, muls.find((m) => !drop.includes(m))!.id]);
-  assert.equal(two.ok, false);
-  if (!two.ok) assert.match(two.reason, /2 values leave the group/);
+});
+
+// Several values out (BACKLOG E149): HSI colour's r and g, grouped, leave
+// part as a record, Part results, and each is read where it was.
+test("a group of several values out gives them back as a record", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
+  const info = infer(code, names);
+  const valueOf = (n: string) => {
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
+    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+  };
+  const r = makeFunction(code, names, info, hsi, [...valueOf("r"), ...valueOf("g")]);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const text = renderLet(r.code, { ...p.pres, names: r.names }, hsi);
+  assert.match(text, /part = \(saturation₂, hue₂\) => ‹part results›\(1 \+ 2 · saturation₂ · cos\(6\.283185307179586 · \(hue₂ − 0\)\), 1 \+ 2 · saturation₂ · cos\(6\.283185307179586 · \(hue₂ − 0\.3333333333333333\)\)\)/);
+  assert.match(text, /results = part\(saturation₁, hue₁\)\n\s+r₁ = r₂\(results\)\n\s+g₁ = g₂\(results\)/);
+  assert.deepEqual(infer(r.code, r.names).errors, []);
 });
