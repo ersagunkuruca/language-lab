@@ -25,7 +25,7 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E140 | A use at a type with no implementation is refused without a reason: `four times(true)` gives "Nothing that fits matches". Say "Bool has no Doubling" and offer Implement there | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P2 | S | |
+| E144 | **Asked now** (Ersagun 2026-10-27: "get rid of the auto tidy that happens whenever I do anything"). An edit lays the graph out afresh; keep what was drawn where it was and place only what is new, spaced out from the rest. Tidy stays on the menu | Ersagun 2026-10-27 | P1 | S | next |
 | E141 | An interface reads as a data type: the graph says "type Doubling: one constructor per case" and draws the record's constructor `doubling`, and Run says "A data type doesn't run". Show it as an interface with its operations; the constructor belongs only in implementations. When an operation has the interface's lowercased name (`Twice`'s `twice`), the palette offers two `twice` calls | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P2 | S | |
 | E142 | A new interface's first operation is always `(a) -> a`, and an operation's Takes and Gives can't be changed afterwards, only removed and added again | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
 | E143 | Implement's "For the type" lists no Text, no List and no type with parameters, so Text can't implement an interface from the editor (check whether the checker allows it first) | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
@@ -124,6 +124,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E140 | A use at a type without the interface says which it lacks: Bool has no Doubling, with Implement Doubling for Bool in the palette | #526 |
 | E139 | Typed text calls an interface's operation: double(double(x)) reads as Doubling's double; an operation comes before a constructor of the same name (twice) | #525 |
 | E138 | Interface as a kind of new definition: one operation (a) -> a; its panel adds operations taking (a) or (a, a) and giving a, Bool, Text or Float64 (implementations get a hole), and lists implementations; the text reads interface Halving a. Turning an existing type into one left out | #521 |
 | E137 | Implement an interface for a type: a data type's panel lists every interface with what implements it or Implement, which makes trig at wave = trig(□, …) pinned to Trig Wave so each hole wants (Wave) -> Wave; an interface's panel lists its implementations; a missing-implementation error offers the same | #520 |

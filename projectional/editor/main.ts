@@ -1541,7 +1541,11 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
   const why = !shown.length && !value && q ? T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query) ?? pureHole(info, hole) : "";
-  if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
+  // What's typed is refused because its type has no implementation of an
+  // interface it needs: say so, and offer to write one (BACKLOG E140).
+  const lacks = typed && !typed.ok ? typed.missing : undefined;
+  if (lacks) list.append(h("p", { class: "hint" }, `${ui.query.trim()} doesn't fit here: ${typed!.ok ? "" : typed!.reason}.`), h("div", { class: "acts" }, implementButton(info, lacks.iface, lacks.type, `Implement ${names[lacks.iface] ?? "it"} for ${showIn(lacks.type, names, info.subst)}`)));
+  else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
 

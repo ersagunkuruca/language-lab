@@ -79,7 +79,9 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
 
 // ---------------------------------------------------------------- edits
 
-export type TEdit = { ok: true; code: Code; names: Names; select?: Id; note: string } | { ok: false; reason: string };
+// missing: refused because a type has no implementation of an interface
+// the edit needs, so the editor can offer to write one (BACKLOG E140).
+export type TEdit = { ok: true; code: Code; names: Names; select?: Id; note: string } | { ok: false; reason: string; missing?: Info["errors"][number]["missing"] };
 
 // Names for messages: the library's and the presentation's, under the
 // program's own (which are what edits change and store).
@@ -110,7 +112,7 @@ export function guardTyped(before: Info, code: Code, names: Names, select: Id | 
   const lib = changesPublished(code);
   if (lib) return { ok: false, reason: `${names[lib] ?? display[lib] ?? "that"} is published in a module: it is named by what it says, so it can't change` };
   const after = infer(code, { ...display, ...names });
-  if (after.errors.length > before.errors.length) return { ok: false, reason: nearest(code, after.errors, select).message };
+  if (after.errors.length > before.errors.length) { const e = nearest(code, after.errors, select); return { ok: false, reason: e.message, ...(e.missing ? { missing: e.missing } : {}) }; }
   return { ok: true, code, names, select, note };
 }
 
