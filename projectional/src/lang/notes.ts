@@ -35,7 +35,7 @@ export const NOTES: Comments = {
   // --- numbers. add, subtract, multiply, negate and less than work on
   // every number type through the generic ones; the versions at one type
   // are what they turn into once the type is known.
-  "builtin.arith.add": "a + b, at any Number: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).",
+  "builtin.arith.add": "a + b, at any Number: Int, Float64, Rational, Algebraic, Complex (and records of Float64s through the vectors module).",
   "builtin.arith.sub": "a − b, at any Number.",
   "builtin.arith.mul": "a · b, at any Number. At Complex it's the complex product.",
   "builtin.arith.neg": "−a, at any Number.",
