@@ -25,7 +25,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E145 | A group (E111, layout only) also shows in the blocks text: its lines bracketed and titled, folding there when it folds in the graph. Still no change to code.json (Ersagun 2026-10-27: "a grouping … mirrored with a group in the block editor") | Ersagun 2026-10-27 | P1 | M | after E144 |
 | E146 | **Make it a function** on a group: the group becomes a lambda called right there (`((a, b) => …)(x, y)`), its inputs the wires coming in. One wire out is its result; several out become a record of them, taken apart where they're used. Undo or Inline puts it back. Then it can be named, moved out as a definition, or reused | Ersagun 2026-10-27 | P2 | M | after E145 |
 | E141 | An interface reads as a data type: the graph says "type Doubling: one constructor per case" and draws the record's constructor `doubling`, and Run says "A data type doesn't run". Show it as an interface with its operations; the constructor belongs only in implementations. When an operation has the interface's lowercased name (`Twice`'s `twice`), the palette offers two `twice` calls | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P2 | S | |
 | E142 | A new interface's first operation is always `(a) -> a`, and an operation's Takes and Gives can't be changed afterwards, only removed and added again | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
@@ -125,6 +124,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E145 | A group is bracketed in the blocks too, and folds there with the graph; still layout only. | #532 |
 | E148 | A let node's right-click opens its value's menu; a menu that fails to build closes with a message instead of taking the page down. | #531 |
 | E144 | An edit no longer lays the graph out again: drawn nodes stay put, new ones sit by their neighbours; Tidy is manual. | #530 |
 | E147 | A loose part wires back over a filled input: what was there goes loose, or a dot nobody named left with one use goes back on its wire (HSI colour, Ersagun 2026-10-27) | #529 |
