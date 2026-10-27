@@ -514,8 +514,8 @@ export const TEXT_OPS = {
 // resolves to these at Algebraic (arith.ts); a literal there is `fraction`.
 const alg: Type = { t: "con", id: "std.algebraic", args: [] };
 const rational: Type = { t: "con", id: "std.rational", args: [] };
-const toAlg = (v: { fields: unknown[] }): A.Algebraic => ({ p: itemsOf(v.fields[0] as { tag: Id; fields: unknown[] }).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
-const ofAlg = (x: A.Algebraic) => ({ tag: ALGEBRAIC_V, fields: [listOf(x.p.map(I.norm)), x.k] });
+export const toAlg = (v: { fields: unknown[] }): A.Algebraic => ({ p: itemsOf(v.fields[0] as { tag: Id; fields: unknown[] }).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
+export const ofAlg = (x: A.Algebraic) => ({ tag: ALGEBRAIC_V, fields: [listOf(x.p.map(I.norm)), x.k] });
 const one = (f: (...xs: A.Algebraic[]) => A.Algebraic) => (...vs: { fields: unknown[] }[]) => ofAlg(f(...vs.map(toAlg)));
 export const ALGEBRAIC_OPS = {
   add: builtin("algebraic.add", "add", pure([alg, alg], alg), one(A.add)),

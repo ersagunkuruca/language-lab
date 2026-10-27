@@ -14,7 +14,7 @@
 // Prior art: Loos, "Computing in algebraic extensions" (1982); the same
 // representation as Mathematica's Root objects and Sage's AA.
 
-import { degree, isolate, isZero, lowest, midpoint, primitive, productPoly, rootsIn, signAt, sturm, sumPoly, trim, negatePoly, inversePoly, type Poly, type Q } from "./poly.ts";
+import { degree, isolate, squareFree, isZero, lowest, midpoint, primitive, productPoly, rootsIn, signAt, sturm, sumPoly, trim, negatePoly, inversePoly, type Poly, type Q } from "./poly.ts";
 import { minimalPolynomial } from "./factor.ts";
 
 export interface Algebraic { p: Poly; k: number }
@@ -78,6 +78,16 @@ function located(p: Poly, enclose: (bits: number) => [Q, Q]): Algebraic {
     if (degree(m) === 1) return fraction(-m[0], m[1]);
     return { p: m, k: rootsIn(sturm(m), null, lo) };
   }
+}
+
+// Every real root of p, smallest first, each as the algebraic number it
+// is: how a polynomial equation runs backwards at Algebraic (relate.ts).
+export function realRoots(p: Poly): Algebraic[] {
+  p = squareFree(primitive(trim(p)));
+  return isolate(p).map(([lo, hi]) => {
+    const m = minimalPolynomial(p, lo, hi);
+    return degree(m) === 1 ? fraction(-m[0], m[1]) : { p: m, k: rootsIn(sturm(m), null, lo) };
+  });
 }
 
 const intervalAdd = ([a, b]: [Q, Q], [c, d]: [Q, Q]): [Q, Q] => [qAdd(a, c), qAdd(b, d)];

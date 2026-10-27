@@ -65,6 +65,10 @@ import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from 
 import { seededGenerator } from "./random.ts";
 import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
 import { infer } from "./infer.ts";
+import { ALGEBRAIC_OPS, ALGEBRAIC_V, ofAlg, toAlg } from "./std.ts";
+import * as Alg from "./algebraic.ts";
+import { realRoots, type Algebraic } from "./algebraic.ts";
+import { lowest, type Q as Frac } from "./poly.ts";
 import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
@@ -110,9 +114,12 @@ export function fromValue(x: unknown): Term {
 // ---------------------------------------------------------------- states
 
 // Equations for the solver use variables named "?n" for logic variable n.
-interface Expr { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: Expr[] }
+// at: an Algebraic constant, exactly (v is near it).
+interface Expr { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: Expr[]; at?: Algebraic }
 // whole: an Int operation's, so its unknowns take only whole answers.
-interface Eq { lhs: Expr; rhs: Expr; whole?: boolean }
+// exact: an Algebraic operation's, solved exactly (exactRoots), never by
+// the numeric solver.
+interface Eq { lhs: Expr; rhs: Expr; whole?: boolean; exact?: boolean }
 type Wait =
   | { k: "concat"; a: Term; b: Term; c: Term }
   | { k: "show"; n: Term; s: Term }
@@ -344,9 +351,19 @@ const eq = (a: Term, b: Term): Goal => (s) => { const t = unify(a, b, s); return
 
 // ---------------------------------------------------------------- constraints
 
+// An Algebraic value as a constant of an equation.
+const algExpr = (t: Term, s: State): Expr | null => {
+  const v = isData(t) && t.tag === ALGEBRAIC_V ? toValue(deep(t, s)) : undefined;
+  if (!v) return null;
+  const at = toAlg(v as Data);
+  return { ...(enum_(Alg.toNumber(at)) as Expr), at };
+};
+
 const toExpr = (t: Term, s: State): Expr | null => {
   t = walk(t, s);
   if (t instanceof LVar) return evar(`?${t.n}`) as Expr;
+  const a = algExpr(t, s);
+  if (a) return a;
   // A big Int, near enough: an Int equation's answers are checked exactly
   // by its operation too.
   return typeof t === "number" ? enum_(t) as Expr : typeof t === "bigint" ? enum_(Number(t)) as Expr : null;
@@ -355,6 +372,8 @@ const toExpr = (t: Term, s: State): Expr | null => {
 function substExpr(e: Expr, s: State): Expr {
   if (e.k === "var" && e.name!.startsWith("?")) {
     const t = walk(new LVar(+e.name!.slice(1)), s);
+    const a = algExpr(t, s);
+    if (a) return a;
     return typeof t === "number" || typeof t === "bigint" ? enum_(Number(t)) as Expr : t instanceof LVar ? evar(`?${t.n}`) as Expr : (() => { throw new TypeMismatch(); })();
   }
   if (e.k === "call") return { ...e, args: e.args!.map((a) => substExpr(a, s)) };
@@ -410,14 +429,23 @@ const PERIODS = 64;
 // where simultaneous equations like a + b = 10, a − b = 4 get eliminated.
 function solveSome(s: State): Stream | undefined {
   if (!s.eqs.length) return undefined;
+  const exact = s.eqs.filter((e) => e.exact);
+  if (exact.length) {
+    const found = exactRoots(exact);
+    // Each real root is an answer, smallest first; the operations' own
+    // waits then work out the rest exactly and check it.
+    if (found) return disj(...found.roots.map((r) => eq(new LVar(+found.x.slice(1)), fromValue(ofAlg(r)))))({ ...s, eqs: s.eqs.filter((e) => !e.exact) });
+  }
+  if (exact.length === s.eqs.length) return undefined;
   // An equation that holds whatever its unknown is (0 = 0 · angle, at the
   // origin) says nothing about it: it's dropped, and the unknown stays free.
   const vars = (e: Eq) => [...new Set([...varsOf(e.lhs), ...varsOf(e.rhs)])];
   const always = (e: Eq) => { const [x] = vars(e); return [0.37, -1.9, 2.6].every((t) => { const l = evalExpr(e.lhs, { [x]: t }), r = evalExpr(e.rhs, { [x]: t }); return Number.isFinite(l) && close(l, r); }); };
-  const empty = s.eqs.filter((e) => vars(e).length === 1 && always(e));
+  const empty = s.eqs.filter((e) => !e.exact && vars(e).length === 1 && always(e));
   if (empty.length) return settle({ ...s, eqs: s.eqs.filter((e) => !empty.includes(e)) });
-  const one = s.eqs.filter((e) => new Set([...varsOf(e.lhs), ...varsOf(e.rhs)]).size === 1);
-  const tries = [...one.map((e) => [e]), ...(s.eqs.length <= 6 && s.eqs.length > 1 ? [s.eqs] : [])];
+  const numeric = s.eqs.filter((e) => !e.exact);
+  const one = numeric.filter((e) => new Set([...varsOf(e.lhs), ...varsOf(e.rhs)]).size === 1);
+  const tries = [...one.map((e) => [e]), ...(numeric.length <= 6 && numeric.length > 1 ? [numeric] : [])];
   for (const group of tries) {
     const ports = [...new Set(group.flatMap((e) => [...varsOf(e.lhs), ...varsOf(e.rhs)]))];
     const rel = relation({ name: "here", ports, eqs: group } as never) as { ports: string[] };
@@ -461,6 +489,60 @@ function solveSome(s: State): Stream | undefined {
   }
   return undefined;
 }
+
+// Algebraic equations with one unknown left, as one polynomial with
+// fraction coefficients: each other unknown is the output of an operation,
+// so it is that operation of what it is made of (x · x + x = 12 is t = x · x,
+// t + x = 12). Its real roots are the answers, exactly (algebraic.ts). Null
+// when that isn't the shape: two unknowns left, a coefficient that isn't a
+// fraction (√2 · x = 2), or nothing that pins x down yet.
+type QPoly = Frac[];
+const qp = {
+  add: (a: QPoly, b: QPoly): QPoly => Array.from({ length: Math.max(a.length, b.length) }, (_, i) => { const [x, y] = [a[i] ?? [0n, 1n], b[i] ?? [0n, 1n]]; return lowest(x[0] * y[1] + y[0] * x[1], x[1] * y[1]); }),
+  neg: (a: QPoly): QPoly => a.map(([n, d]) => [-n, d] as Frac),
+  mul: (a: QPoly, b: QPoly): QPoly => {
+    const out: QPoly = Array.from({ length: Math.max(0, a.length + b.length - 1) }, () => [0n, 1n] as Frac);
+    a.forEach((x, i) => b.forEach((y, j) => { const z = out[i + j]; out[i + j] = lowest(z[0] * x[1] * y[1] + x[0] * y[0] * z[1], z[1] * x[1] * y[1]); }));
+    return out;
+  },
+};
+function exactRoots(eqs: Eq[]): { x: string; roots: Algebraic[] } | null {
+  const defs = new Map<string, Expr>(), constraints: [Expr, Expr][] = [];
+  for (const e of eqs) {
+    if (e.lhs.k === "var" && !defs.has(e.lhs.name!)) defs.set(e.lhs.name!, e.rhs);
+    else constraints.push([e.lhs, e.rhs]);
+  }
+  if (!constraints.length) return null;
+  let x: string | null = null;
+  const seen = new Set<string>();
+  const polyOf = (e: Expr): QPoly | null => {
+    if (e.k === "num") { const f = e.at ? Alg.asFraction(e.at) : Number.isInteger(e.v) ? [BigInt(e.v!), 1n] as Frac : null; return f ? [f] : null; }
+    if (e.k === "var") {
+      const d = defs.get(e.name!);
+      if (d && !seen.has(e.name!)) { seen.add(e.name!); const p = polyOf(d); seen.delete(e.name!); return p; }
+      if (x !== null && x !== e.name) return null;
+      x = e.name!;
+      return [[0n, 1n], [1n, 1n]];
+    }
+    const ps = e.args!.map(polyOf);
+    if (ps.some((p) => !p)) return null;
+    const [a, b] = ps as QPoly[];
+    return e.f === "add" ? qp.add(a, b) : e.f === "sub" ? qp.add(a, qp.neg(b)) : e.f === "mul" ? qp.mul(a, b) : e.f === "neg" ? qp.neg(a) : null;
+  };
+  let p: QPoly | null = null;
+  for (const [l, r] of constraints) {
+    const a = polyOf(l), b = polyOf(r);
+    if (!a || !b) return null;
+    const d = qp.add(a, qp.neg(b));
+    while (d.length && d[d.length - 1][0] === 0n) d.pop();
+    if (d.length > 1) { p = d; break; }
+    if (d.length === 1) return { x: x ?? "?0", roots: [] }; // a constant that isn't 0: no answer
+  }
+  if (!p || x === null) return null;
+  const den = p.reduce((m, [, d]) => (m * d) / gcdBig(m, d), 1n);
+  return { x, roots: realRoots(p.map(([n, d]) => (n * den) / d)) };
+}
+const gcdBig = (a: bigint, b: bigint): bigint => (b === 0n ? (a < 0n ? -a : a) : gcdBig(b, a % b));
 
 const showNumber = STD_IMPL[S.show] as (x: number) => string;
 
@@ -1167,6 +1249,24 @@ export function interpreter(code: Code, opts: Options = {}) {
     // isn't a search worth making.
     const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames)]
       : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
+    const algOp = id === ALGEBRAIC_OPS.add ? "add" : id === ALGEBRAIC_OPS.sub ? "sub" : id === ALGEBRAIC_OPS.mul ? "mul" : id === ALGEBRAIC_OPS.neg ? "neg" : null;
+    if (many && algOp) {
+      // As an Int operation (intEquation), with an input unknown an
+      // Algebraic + − · −x is also an equation, solved exactly: so
+      // x · x = 2 at Algebraic gives −√2 and √2 (EXACT-REALS.md step 3).
+      const g = wait({
+        k: "later", text: id, on: args, ready: (s) => args.every((a) => known(a, s)), then: (s) => {
+          const xs = args.map((a) => toValue(deep(a, s))!);
+          return disj(...many(...xs).map((v: Value) => eq(out, fromValue(v))))(s);
+        },
+      });
+      return (s) => {
+        if (args.every((t) => !(walk(t, s) instanceof LVar))) return g(s);
+        const es = args.map((a) => toExpr(a, s)), o = toExpr(out, s);
+        if (!o || es.some((e) => !e)) return g(s);
+        return g({ ...s, eqs: [...s.eqs, { lhs: o, rhs: ecall(algOp, ...es) as Expr, exact: true }] });
+      };
+    }
     if (many) {
       return wait({
         k: "later", text: id, on: args, ready: (s) => args.every((a) => known(a, s)), then: (s) => {

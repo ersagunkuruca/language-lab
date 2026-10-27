@@ -13,7 +13,8 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ALGEBRAIC_OPS as AL, ARITH, COMPARE, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ALGEBRAIC_OPS as AL, ARITH, COMPARE, ofAlg, S, SHOW_ANY, toAlg } from "../src/lang/std.ts";
+import { relate, toValue } from "../src/lang/relate.ts";
 import { showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -71,4 +72,27 @@ test("one spelling per number: the same number reached two ways is the same valu
   assert.equal(A.root(A.fraction(-2n, 1n), 2), null);
   assert.equal(A.show(A.negate(r2)), "−√2");
   assert.ok(A.less(A.negate(r3), A.negate(r2)));
+});
+
+// EXACT-REALS.md step 3: a polynomial equation at Algebraic runs backwards
+// to its real roots, exactly, smallest first: x · x = 2 gives −√2 and √2,
+// x · x + x = 12 gives −4 and 3, and x · x = −1 none.
+test("polynomial equations run backwards at Algebraic: x · x = 2 gives −√2 and √2", () => {
+  const k = new Lang();
+  const one = (name: string, body: (x: Id) => Id) => { const d = k.def(name); let p = ""; k.define(d, k.fn(["x"], (x) => ((p = x), body(x)))); return () => ({ d, p }); };
+  const zero = () => k.at("std.algebraic", 0);
+  const square = one("square", (x) => k.call(ARITH.add, k.call(ARITH.mul, x, x), zero()));
+  const poly = one("poly", (x) => k.call(ARITH.add, k.call(ARITH.add, k.call(ARITH.mul, x, x), x), zero()));
+  const quartic = one("quartic", (x) => k.call(ARITH.sub, k.call(ARITH.mul, k.call(ARITH.mul, x, x), k.call(ARITH.mul, x, x)), k.call(ARITH.mul, k.at("std.algebraic", 10), k.call(ARITH.mul, x, x))));
+  const code = base(k.code), names = baseNames(k.names);
+  const solve = (f: () => { d: Id; p: Id }, out: number) => {
+    const { d, p } = f();
+    return [...relate(code, d, { out: ofAlg(A.fraction(BigInt(out), 1n)) }, { names, spend: () => true })].map((a) => A.show(toAlg(toValue(a.values[p]) as never)));
+  };
+  assert.deepEqual(solve(square, 2), ["−√2", "√2"]);
+  assert.deepEqual(solve(square, 9), ["-3", "3"]);
+  assert.deepEqual(solve(square, -1), []);
+  assert.deepEqual(solve(poly, 12), ["-4", "3"]);
+  // x⁴ − 10x² = −1: ±√2 ± √3, the four of them, smallest first.
+  assert.deepEqual(solve(quartic, -1).map((s) => s.slice(0, 8)), ["−3.14626", "−0.31783", "0.317837", "3.146264"]);
 });
