@@ -267,6 +267,9 @@ async function implementInterface() {
   await p.locator("button", { hasText: "Add the operation" }).click();
   const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/interface Halving a \| halving\(half: \(a\) -> a, twice: \(a\) -> a\)/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
+  // The graph draws it as an interface, one node per operation (BACKLOG E141).
+  const drawn = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
+  if (!drawn.includes("interface Halving: its operations") || !drawn.includes("(a) -> a") || /\bhalving\b/.test(drawn)) errors.push(`${where}: the graph draws ${drawn.slice(0, 160)}`);
   await p.close();
 }
 

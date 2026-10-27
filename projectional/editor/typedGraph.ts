@@ -677,12 +677,27 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const typeFrame = (td: NodeOf<"typedef">): Sub => {
     // An effect is a typedef too: its cases are its operations, and each
     // says what it gives back to whoever performs it.
-    const title = td.effect ? `effect ${name(defId)}: one operation per case` : `type ${name(defId)}: one constructor per case`;
+    const title = td.interface ? `interface ${name(defId)}: its operations` : td.effect ? `effect ${name(defId)}: one operation per case` : `type ${name(defId)}: one constructor per case`;
     frames.set(defId, { id: defId, parent: null, title, cls: "def", binders: [], labels: [], out: null, pad: [22, 30, 22, 14], minH: 0, minW: tw(title, 6.6) + 24 });
     frame = defId;
     const at = new Map<Id, Pos>();
     let y = 30, w = 0;
-    for (const v of td.variants) {
+    // An interface: one node per operation, saying its type. Its record's
+    // constructor is what an implementation calls, not part of the
+    // interface's own picture (BACKLOG E141).
+    if (td.interface) for (const f of td.variants.flatMap((v) => (node(v) as NodeOf<"variant">).fields)) {
+      const label = typeText((node(f) as NodeOf<"field">).type);
+      const bw = Math.max(64, tw(name(f), 8.2) + 24, tw(label, 6.6) + 22), bh = 48;
+      const k = item(f, bw, bh, (g) => {
+        g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(f)}`, "data-id": f, "data-move": f }), `${name(f)}: an operation of ${name(defId)}, ${label}. Each implementation says how its type does it`));
+        g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(f)));
+        g.append(s("text", { x: 9, y: 38, class: "portl" }, label));
+      });
+      shift(at, k, 22, y);
+      w = Math.max(w, 22 + bw + 22);
+      y += bh + 12;
+    }
+    else for (const v of td.variants) {
       const { fields: fs, returns } = node(v) as NodeOf<"variant">;
       const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
       const gives = returns ? `returns ${typeText(returns)}` : "";

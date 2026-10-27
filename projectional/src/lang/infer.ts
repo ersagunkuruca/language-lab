@@ -1124,6 +1124,11 @@ export type Filling =
 // holes for their inputs when their result fits), literals, and a case
 // analysis of any data in scope. This is the editor's palette: it never
 // offers something that would be an error, so the user can't make one.
+const isInterface = (code: Code, def: Id): boolean => {
+  const body = (code.nodes[def] as NodeOf<"def"> | undefined)?.body;
+  return !!body && code.nodes[body]?.kind === "typedef" && !!(code.nodes[body] as NodeOf<"typedef">).interface;
+};
+
 export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const h = info.holes.get(hole);
   if (!h) return [];
@@ -1274,15 +1279,19 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // A private constructor only where the checker would take it.
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
+  const atTop = Object.values(code.nodes).some((d) => d.kind === "def" && d.body === hole);
   for (const [part, def] of info.owner) {
     const n = code.nodes[part];
-    if (n.kind === "variant") { if (!(n.private && outside)) consider(part, constructorType(code, info.subst, def, part)); }
+    // An interface's constructor makes an implementation, so it's offered
+    // only as a definition's whole body: elsewhere an operation of the same
+    // name (Twice's twice) is what's meant (BACKLOG E141).
+    if (n.kind === "variant") { if (!(n.private && outside) && (atTop || !isInterface(code, def))) consider(part, constructorType(code, info.subst, def, part)); }
     // A field of a one-case type reads it from a value: fst(p), pages(c).
     // An interface's operation is checked whole: what its type ends up
     // as decides whether there is an implementation.
     // Arithmetic's and Ordered's operations are offered as the one + − · <.
     else if (code.nodes[part].kind === "field" && (def === "std.arithmetic" || def === "std.ordered")) continue;
-    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, !!(code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">).interface); }
+    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, isInterface(code, def)); }
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);
