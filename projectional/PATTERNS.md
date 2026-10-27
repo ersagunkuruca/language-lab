@@ -164,4 +164,8 @@ One PR each:
    fresh copy of the edited one), in the same undo step; the note says so.
    A copy changed to read its row's names becomes that row's own line
    again. This holds in the graph too, where the copies are drawn apart.
-   Still to do: "Match deeper" and "Join cases" named in the menu.
+   "Match deeper" and "Join cases" are in the inspector's Pattern section
+   (typed.ts `matchDeeper`, `joinCases`): Match deeper on a field of a case
+   is Split on it, refused while the row reads the field whole (that would
+   need an `as` name); Join cases, on a row or a match, takes back a match
+   whose cases all give the same value and read none of their fields.

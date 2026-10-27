@@ -524,6 +524,30 @@ async function sharedRow() {
   await p.close();
 }
 
+// Match deeper on a field of a row (PATTERNS.md "Editing"): refused while
+// the row reads the field whole; once it doesn't, the field opens into
+// its cases, the rows read as longer patterns.
+async function matchDeeper() {
+  where = "match deeper";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Conjugation/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^bands$/ }).first().click();
+  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  const more = p.locator(".p-text .body [data-id]", { hasText: /^more\b/ }).first();
+  const deeper = p.locator('button:text-is("Match deeper")');
+  await more.click();
+  if (!(await deeper.isDisabled().catch(() => false)) || !/reads more whole/.test((await deeper.getAttribute("title").catch(() => "")) ?? "")) errors.push(`${where}: Match deeper on more isn't refused while bands(more) reads it`);
+  await p.locator(".p-text .body [data-id]", { hasText: /^cons$/ }).first().click();
+  await p.locator('[data-act="t-clear"]').first().click();
+  await more.click();
+  await deeper.click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Match deeper on more once its row is a hole`));
+  if (!/^Matched deeper/.test(await p.locator(".status").innerText())) errors.push(`${where}: ${await p.locator(".status").innerText()}`);
+  if (!/\[a, b\] →/.test(await text())) errors.push(`${where}: after Match deeper bands reads ${await text()}`);
+  await p.close();
+}
+
 // Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
 // E111): the box names what it holds, unfolds into a frame, and Ungroup
 // takes the frame away. The code is untouched throughout.
@@ -1016,6 +1040,7 @@ await answeredLater();
 await groupPicked();
 await patternRows();
 await sharedRow();
+await matchDeeper();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();
