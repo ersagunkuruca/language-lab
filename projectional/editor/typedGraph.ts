@@ -122,6 +122,10 @@ const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]:
 // tap that ends a long press lands on the new one, and isn't a click.
 let held = 0, menuAt = 0;
 
+// Where each graph's nodes were placed when last drawn, so an edit keeps
+// them there. Not saved: a reload lays the graph out afresh.
+const drawnAt = new Map<string, Map<Id, Pos>>();
+
 // Picked nodes, per graph: kept across redraws, not saved.
 const pickedBy = new Map<string, Set<Id>>();
 
@@ -148,6 +152,38 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   autoArrange(scene);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
+  // An edit doesn't lay the graph out again (Ersagun 2026-10-27: no tidy
+  // whenever I do anything): what was drawn stays where it was, and only
+  // what's new gets a place, spaced out from the rest. Tidy everything is
+  // still on the menu.
+  const last = drawnAt.get(key);
+  if (last) {
+    const fresh = new Set([...scene.items.keys()].filter((k) => !last.has(k) && !hooks.at[k]));
+    // A new node starts where the fresh layout puts it relative to the
+    // nearest node that stays along the wires (what it feeds, mostly),
+    // moved as that node was.
+    const arranged = new Map([...scene.items].map(([k, it]) => [k, it.auto]));
+    const next = new Map<Id, Id[]>();
+    for (const w of scene.wires) {
+      const a = "item" in w.from ? w.from.item : null, b = "item" in w.to ? w.to.item : null;
+      if (a && b) { next.set(a, [...(next.get(a) ?? []), b]); next.set(b, [...(next.get(b) ?? []), a]); }
+    }
+    for (const k of fresh) {
+      const seen = new Set([k]);
+      let ring = [k], near: Id | undefined;
+      while (ring.length && !near) {
+        ring = ring.flatMap((x) => next.get(x) ?? []).filter((x) => !seen.has(x) && (seen.add(x), true));
+        near = ring.find((x) => last.has(x));
+      }
+      if (!near) continue;
+      const a = arranged.get(k)!, was = hooks.at[near] ?? last.get(near)!, now = arranged.get(near)!;
+      scene.items.get(k)!.auto = { x: a.x + was.x - now.x, y: a.y + was.y - now.y };
+    }
+    for (const [k, it] of scene.items) { const p = last.get(k); if (p && !hooks.at[k]) it.auto = p; }
+    if (fresh.size && fresh.size < scene.items.size)
+      for (const [k, p] of Object.entries(tidyScene(shown(hooks.at), hooks.at, fresh))) if (fresh.has(k)) scene.items.get(k)!.auto = p;
+  }
+  drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, it.auto])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
   interact(canvas, scene, hooks, picked, draw);
