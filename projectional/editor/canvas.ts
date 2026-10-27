@@ -133,7 +133,9 @@ const MAP = { w: 168, h: 112 };
 const MAP_KEY = "lab:map";
 const mapChoice = (): boolean | null => { try { const v = localStorage.getItem(MAP_KEY); return v === null ? null : v === "on"; } catch { return null; } };
 
-export function infiniteCanvas(key: string, cls: string): Canvas {
+// `start`: what the first view starts on when the picture is wider or
+// taller than the window (an action's steps), instead of its top-left.
+export function infiniteCanvas(key: string, cls: string, start?: () => Element[]): Canvas {
   const root = s("svg", { class: `${cls} canvas` }) as SVGSVGElement;
   const world = s("g", { class: "world" }) as SVGGElement;
   root.append(world);
@@ -153,7 +155,22 @@ export function infiniteCanvas(key: string, cls: string): Canvas {
     let z = Math.min(1, (r.width - 32) / b.width, (high - 32) / b.height);
     if (readable) z = Math.max(z, READABLE);
     const place = (room: number, size: number, at: number) => (size * z <= room - 32 ? (room - size * z) / 2 : 16) - at * z;
-    set({ z, x: place(r.width, b.width, b.x), y: place(high, b.height, b.y) });
+    let x = place(r.width, b.width, b.x), y = place(high, b.height, b.y);
+    // Too wide: the picture's right edge at the right (the start and what
+    // it leads to), what feeds it to its left, unless that hides the start's
+    // left edge; too tall: the start's top at the top.
+    const on = readable ? startBox() : null;
+    if (on && b.width * z > r.width - 32) x = Math.max(16 - on.l * z, r.width - 16 - (b.x + b.width) * z);
+    if (on && b.height * z > high - 32) y = 16 - on.t * z;
+    set({ z, x, y });
+  };
+  // The start's box in world units.
+  const startBox = () => {
+    const els = start?.() ?? [], m = world.getScreenCTM()?.inverse();
+    if (!els.length || !m) return null;
+    const pt = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(m);
+    const bs = els.map((e) => e.getBoundingClientRect()).map((c) => ({ a: pt(c.left, c.top), b: pt(c.right, c.bottom) }));
+    return { l: Math.min(...bs.map((c) => c.a.x)), t: Math.min(...bs.map((c) => c.a.y)) };
   };
   // Reveal: pan the least that brings these on screen. Bigger than the
   // window (a call shown inline grows by its callee's body), zoom out first,

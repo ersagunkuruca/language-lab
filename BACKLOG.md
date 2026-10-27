@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I18 | **Regression.** A `main` opens with its steps off-screen: since #467 the step column is at the right, and the first view shows only literals and wires (Numbers & physics 3 of 18 calls, Run backwards 0 of 10). Undoes #300 | QA7 H1 | 2026-10-27 |
 | I19 | 97 of 152 definitions open with an empty Run, even ones `main` calls with values (`cuts("abc")`): seed from calls inside `print`/`show` too | QA7 L1 | 2026-10-27 |
 | I20 | A unit refusal names a node further down ("distance is m, add(…) is m/s") instead of the two operands that clash | QA7 L2 | 2026-10-27 |
 | I21 | Examples' types read `Float64` (`period : (Float64, Float64) -> Float64`) while their prose says Number; for the Language lane to weigh | QA7 L3 | 2026-10-27 |
@@ -126,6 +125,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I18 | A main opens on its steps: a graph too wide opens with its right edge in view, where the definition's own steps are | #506 |
 | E78 | Steps shows a step nothing reads as a bare line (print(t3)), Nested as a; b; the t temporaries stay | #501 |
 | E62 | A fold to a function, applied, reads and draws as a fold from its start: fold placed from distance = 1 (text #497, graph #499) | #499 |
 | E130 | A loose part may be a function: its inputs are a top lambda whose parameters all stand for a variable (home); render.ts looseParts decides | #493 |
