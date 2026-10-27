@@ -606,17 +606,19 @@ export function looseOver(code: Code, names: Names, info: Info, def: Id, of: Rec
   const cur = code.nodes[slot];
   if (!cur || cur.kind === "hole") return wireLoose(code, names, info, def, of, home, part, slot);
   if (subtree(code, slot).includes(part)) return { ok: false, reason: "that's part of what's there now" };
-  // A variable alone is nothing to keep: it's just replaced.
-  if (cur.kind === "ref") {
+  // A variable or a literal alone is nothing to keep: it's just replaced.
+  if (cur.kind === "ref" || cur.kind === "lit") {
     const c = replace(code, slot, () => ({ kind: "hole" }));
     const w = wireLoose(c, names, infer(c, { ...display, ...names }), def, of, home, part, slot);
-    return w.ok ? settleDot(w, def, cur.target) : w;
+    return !w.ok ? w : cur.kind === "ref" ? settleDot(w, def, cur.target) : { ...w, note: `${w.note} The ${showLit(cur)} that was there is gone; Undo brings it back.` };
   }
   const u = unwire(code, names, info, def, of, home, slot);
   if (!u.ok) return u;
   const w = wireLoose(u.code, u.names, infer(u.code, { ...display, ...u.names }), def, u.of ?? of, u.home ?? home, part, slot);
   return w.ok ? { ...w, note: `${w.note} What was there lies loose at the end of the text.` } : w;
 }
+
+const showLit = (n: NodeOf<"lit">): string => (typeof n.value === "string" && n.of === STRING ? JSON.stringify(n.value) : String(n.value));
 
 // A dot nobody named that a rewire leaves with one use goes back on its
 // one wire: it was only there to share the value.
@@ -635,6 +637,9 @@ export function over(code: Code, names: Names, info: Info, def: Id, of: Record<I
   // A variable alone is nothing to keep: it's just replaced.
   if (!cur || cur.kind === "hole") return wire(code, names, info);
   if (cur.kind === "ref") { const w = wire(code, names, info); return w.ok ? settleDot({ ...w, of, home }, def, cur.target) : w; }
+  // Nor is a number or a text typed in: it's replaced, and Undo brings it
+  // back (Ersagun 2026-10-27: a 600 set loose was in the way).
+  if (cur.kind === "lit") { const w = wire(code, names, info); return w.ok ? { ...w, of, home, note: `${w.note} The ${showLit(cur)} that was there is gone; Undo brings it back.` } : w; }
   if (subtree(code, slot).includes(from)) return { ok: false, reason: "that's part of what's there now" };
   const u = unwire(code, names, info, def, of, home, slot);
   if (!u.ok) return u;

@@ -2360,9 +2360,14 @@ function graphHooks(info: T.Info) {
     },
     share: (from: Id, slot: Id) => {
       const part = loosePart(from);
-      void applyT(part
-        ? T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot)
-        : shareOver(info, from, slot));
+      if (!part) return void applyT(shareOver(info, from, slot));
+      // Wired in, the part's last node takes the input's id: it stays drawn
+      // where it was, not where the input's old value was (Ersagun
+      // 2026-10-27: the two "teleported" into each other's places).
+      const b = (node(part) as NodeOf<"def">).body, n = b ? node(b) : undefined;
+      const root = n?.kind === "lambda" ? n.body : b;
+      const was = root ? graph?.posOf(root) : undefined;
+      void applyT(T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot), undefined, was ? { [slot]: was } : undefined);
     },
     values: (() => {
       const tr = traced(info);
