@@ -49,7 +49,10 @@ export type Node =
   // is that operation, at whatever type the use needs; an implementation
   // is an ordinary definition of the record at one type, and the checker
   // and arith.ts resolve each use to it before anything runs.
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true }
+  //
+  // `unique`: a name that keeps the type apart from another of the same
+  // shape when they are hashed (src/hash.ts); Unison's `unique type`.
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string }
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
   | { id: Id; kind: "field"; type: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin

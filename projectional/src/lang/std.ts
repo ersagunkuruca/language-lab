@@ -26,14 +26,14 @@ for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "D
 // variants are operations, and an operation's third entry is the type it
 // returns (none: it never returns).
 type TypeOf = (p: Id[], self: Id) => Id;
-function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false, iface = false) {
+function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false, iface = false, unique?: string) {
   const ps = params.map((p) => named(node({ id: `${id}.${p}`, kind: "binder" }), p));
   const vs = variants.map(([vname, fields, returns]) => {
     const vid = `${id}.${vname}`;
     const fs = fields.map(([fname, ty]) => named(node({ id: `${vid}.${fname}`, kind: "field", type: ty(ps, id) }), fname));
     return named(node({ id: vid, kind: "variant", fields: fs, ...(returns ? { returns: returns(ps, id) } : {}) }), vname);
   });
-  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}), ...(iface ? { interface: true as const } : {}) });
+  node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}), ...(iface ? { interface: true as const } : {}), ...(unique ? { unique } : {}) });
   return named(node({ id, kind: "def", body: `${id}.type` }), name);
 }
 let tn = 0;
@@ -208,6 +208,16 @@ export const TRIG = typedef("std.trig", "Trig", ["a"], [
 ], false, true);
 export const TRIG_V = "std.trig.trig";
 export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
+// Dual numbers (INTERFACES.md step 3, BACKLOG L40g): value + slope·ε with
+// ε² = 0, so f(dual(x, 1)) carries f′(x) along with f(x). A record of two
+// Float64s, like Complex: + and − part by part, · the product rule (the
+// prelude's), no <, and Trig by the chain rule. After Trig, so ids above
+// don't move.
+export const DUAL = typedef("std.dual", "Dual", [], [
+  ["dual", [["value", () => tref(NUMBER)], ["slope", () => tref(NUMBER)]]],
+// the same shape as Complex, so it says it is its own type
+], false, false, "dual numbers");
+export const DUAL_V = "std.dual.dual";
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -530,7 +540,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

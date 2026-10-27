@@ -1,7 +1,8 @@
 # Interfaces and implementations (design note, 2026-10-27)
 
-BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 and 2 are
-built** (L40e and L40f, `test/interfaces.test.ts`, `test/trig.test.ts`). Ersagun, 2026-10-27:
+BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 to 3 are
+built** (L40e to L40g, `test/interfaces.test.ts`, `test/trig.test.ts`,
+`test/dual.test.ts`). Ersagun, 2026-10-27:
 a type's operations should be "a separate thing, because if it is separate
 you can add more interface implementations later, not just + * - /. For
 example for dual numbers we will probably need implementations of sin,
@@ -179,9 +180,13 @@ and a colour keeps the rule. Literals at a type need one more operation,
    Float64's own stays for programs already written. The text view and the
    graph draw `sin(x)` as a call, not as a field read. On the GPU it is
    WGSL's `sin`, and `derivative` sees it as Float64's.
-3. **Dual numbers** in the prelude, with `Arithmetic` from
-   `table product(dual table)` and `Trig` from the chain rule. A
-   derivative by dual numbers is tested against derive.ts (L45).
+3. **Dual numbers. Built** (L40g, which takes in L45). `std.dual` is
+   `dual(value, slope)`. `+ − · −x` at Dual are the prelude's, with `·`
+   the product rule, through arith.ts's table as Complex's are until step
+   4. `dual table` is tested equal to it. `trig at dual` is the chain
+   rule. A literal at Dual is a constant, so `3` is `dual(3, 0)`. `slope
+   by duals(f, x)` matches derive.ts's `derivative` at every point
+   tested, evaluated and compiled.
 4. **`+ − · <` move onto `Arithmetic` and `Ordered`.** AT, PRELUDE_AT
    and BUILTIN_AT become implementations. Quaternions join (L42, L43).
 5. **The editor** (lane E): the "interface" toggle on a type, as the
