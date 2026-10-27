@@ -118,7 +118,10 @@ interface Layout {
   // Where nodes were put, in world coordinates, by `def/id`. Nodes not
   // here take the automatic place.
   at?: Record<string, Pos>;
-  // Bindings shown as a let node with get nodes instead of wires.
+  // Bindings shown as wires instead of a let node with get nodes, which
+  // is how every named binding is drawn otherwise (Ersagun 2026-10-27,
+  // E157). An unnamed dot on a wire stays a dot unless listed in `named`.
+  wired?: Id[];
   named?: Id[];
   // Frames drawn folded into one box (a lambda, a let, a match arm...). A view.
   folded?: Id[];
@@ -1276,7 +1279,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
   }
   if (n.kind === "binder" && names[id] !== "_") {
-    const on = (doc.layout.named ?? []).includes(id);
+    const on = isNamed(id);
     out.append(h("div", { class: "sub-head" }, "Shown as · layout.json"),
       h("p", { class: "hint" }, on ? "A let node, and a get node next to every use: no long wires." : "Wires from where it's bound to every use."),
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "named", "data-target": id }, on ? "Show as wires" : "Show as let and get nodes")));
@@ -1997,10 +2000,14 @@ function graphOf(info: T.Info): HTMLElement {
 }
 
 // A binding shown as wires, or as a let node with get nodes. A view.
+const isNamed = (b: Id) => (doc.layout.named ?? []).includes(b) || (pres().names[b] !== undefined && !(doc.layout.wired ?? []).includes(b));
+const asNamed = (bs: Set<Id>, on: boolean): Partial<Layout> => {
+  const wired = (doc.layout.wired ?? []).filter((b) => !bs.has(b)), named = (doc.layout.named ?? []).filter((b) => !bs.has(b));
+  return on ? { wired, named: [...named, ...bs] } : { wired: [...wired, ...bs], named };
+};
 function toggleNamed(b: Id) {
-  const now = doc.layout.named ?? [];
-  const on = now.includes(b);
-  commit({ layout: { ...doc.layout, named: on ? now.filter((x) => x !== b) : [...now, b] } }, ["layout.json"],
+  const on = isNamed(b);
+  commit({ layout: { ...doc.layout, ...asNamed(new Set([b]), !on) } }, ["layout.json"],
     on ? "Back to wires: one wire from where it's bound to every use. Only layout.json changed."
       : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only layout.json changed.");
 }
@@ -2009,8 +2016,7 @@ function toggleNamed(b: Id) {
 // get nodes, or every one as wires (BACKLOG E112). A view.
 const bindersOf = (d: Id) => subtree(doc.code, d).filter((b) => node(b)?.kind === "binder" && pres().names[b] !== "_");
 function allNamed(on: boolean) {
-  const bs = new Set(bindersOf(ui.def)), now = doc.layout.named ?? [];
-  commit({ layout: { ...doc.layout, named: on ? [...new Set([...now, ...bs])] : now.filter((b) => !bs.has(b)) } }, ["layout.json"],
+  commit({ layout: { ...doc.layout, ...asNamed(new Set(bindersOf(ui.def)), on) } }, ["layout.json"],
     on ? "Every value is a let node, with a get node at each use. Same program, another look: only layout.json changed."
       : "Every value is wires again, from where it's bound to every use. Only layout.json changed.");
 }
@@ -2110,7 +2116,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(inGraph ? item("Add a value here…", "add", "A new loose value (a hole to fill) here: fill it, then drag its output onto an input")
       : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", r.ok ? undefined : r.reason));
   } else if (kind === "binder" && id) {
-    const on = (doc.layout.named ?? []).includes(id);
+    const on = isNamed(id);
     rows.push(head(names[id] ?? "a value"));
     if (names[id] !== "_" && inGraph) rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
     rows.push(item("Name it…", "name"));
@@ -2169,7 +2175,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
       rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, r.ok ? undefined : r.reason));
       if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): a frame around them, folded, naming what it holds. A view only; unfold or ungroup it from its menu`, groupable(set.members)));
     }
-    const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every((b) => (doc.layout.named ?? []).includes(b));
+    const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
     rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
       : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
     rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
@@ -2380,7 +2386,7 @@ function graphHooks(info: T.Info) {
       commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) } } }, ["layout.json"],
         note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
     },
-    named: new Set(doc.layout.named ?? []),
+    named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
     home: doc.home ?? {},
     folded: new Set(doc.layout.folded ?? []),
