@@ -61,3 +61,28 @@ test("examples/raymarch in Float32: the JavaScript rounds as the GPU does, and a
   // and it isn't float64's picture
   assert.ok(differs > 0);
 });
+
+// C54: the editor's "Make it a function" names a function with a let,
+// `part = (a, b) ↦ a · s + b; part(h, i) + part(i, h)`, using `s` from
+// around it. There are no closures here, so it becomes a definition of
+// its own given `s`; the GPU takes it too.
+test("a function named by a let, using a name from around it, is a definition of its own", async () => {
+  const { Lang } = await import("../../projectional/src/lang/dsl.ts");
+  const { base, baseNames } = await import("../../projectional/src/lang/load.ts");
+  const { infer } = await import("../../projectional/src/lang/infer.ts");
+  const { B } = await import("../../projectional/src/prelude.ts");
+  const { emitWgsl } = await import("../src/wgsl.ts");
+  const k = new Lang();
+  const hsi = k.def("hsi");
+  k.define(hsi, k.fn(["h", "s", "i"], (h, s, i) => k.let("part", k.fn(["a", "b"], (a, b) => k.call(B.add, k.call(B.mul, a, s), b)), (part) =>
+    k.call(B.add, k.call(part, h, i), k.call(part, i, h)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const lowered = lowerScalar(code, info, names, [hsi]);
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.deepEqual(lowered.funcs.map((f) => f.name).sort(), ["hsi", "part"]);
+  assert.deepEqual([...emitWgsl(lowered).refused.values()], []);
+  const js = loadJs(lowered).get(hsi)!;
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const [h, s, i] of [[0.1, 0.5, 0.9], [2, -3, 0.25]]) assert.equal(js(h, s, i), first(r.call(r.value(hsi), h, s, i)));
+});

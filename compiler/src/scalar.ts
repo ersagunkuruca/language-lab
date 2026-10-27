@@ -50,6 +50,7 @@ import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { ABORT, ABORT_OP, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { liftLets } from "../../projectional/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
@@ -298,6 +299,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // The generic + resolved to each type's own operation first
   // (projectional/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
+  // A function named by a let (the editor's "Make it a function": `part =
+  // (a, b) ↦ …; part(x, y)`) is a definition of its own, given what it
+  // uses from around it, since there are no closures here (lift-lets.ts,
+  // C54).
+  ({ code, info, names } = liftLets(code, info, names, true));
   if (opts.data) opts = { ...opts, records: true };
   // derivative(f) of a function written right there becomes the code of
   // its derivative (derive.ts), checked again, so the GPU gets exact
