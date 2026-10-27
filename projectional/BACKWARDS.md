@@ -208,8 +208,9 @@ each step cost more than the last: in the editor about 26 seconds before
 the stack ran out and the pane showed `n = 5` with "Maximum call stack
 size exceeded". Now a waiting equation or check sleeps until one of the
 unknowns it reads gets a value (BACKLOG L83), so a step costs the same at
-any depth. The Run pane's 20,000 steps take under a second, and then it
-shows `n = 5` with "Stopped searching: this direction may go on forever".
+any depth. The Run pane's 20,000 steps took under a second, and then it
+showed `n = 5` with "Stopped searching: this direction may go on forever"
+(until L83b, below, which ends that search on its own).
 
 So the fast version is the better program backwards too: it finds the
 answer in a few steps. It's the search for a second answer, which can
@@ -219,9 +220,23 @@ never succeed, that goes on until the budget ends. Two improvements help:
   Done (BACKLOG E127): the Run pane looks for 0.3 seconds, shows what it
   found, and goes on looking in the background, for a minute at most,
   saying "Still looking for other answers…" with a Stop button.
-- (On the backlog.) Notice that a known input only grows while the result stays fixed, and
-  stop. That's the size-change check MODES.md already runs, applied to
-  values as well as to shapes.
+- Notice that the recursion can't reach the answer any more, and stop.
+  Done (BACKLOG L83b): before a recursive call runs backwards with its
+  answer and some inputs known, the search reads the function's body as
+  arithmetic on intervals (src/lang/bounds.ts). From `fib3(13, 21, k)`,
+  every call the recursion can make has `a` from 13 up and `b` from 21 up
+  (the bounds that keep moving jump to infinity after a few rounds), and
+  what it returns is some call's `a`, so it returns 13 or more. 8 isn't
+  in that, so the branch is dropped. `fibFast(n) = 8` now ends on its own
+  after 17 steps with `n = 5` as its only answer, and `fibFast(n) = 9`
+  says "no answer" after 7, where it ran out of budget before. The same
+  stops a count down once it has passed its answer. The check only
+  speaks when it is sure: a match on data, a call of another function,
+  or text makes the result "anything", and then nothing is dropped. So
+  `fib`, whose calls have `n` unknown, still searches until its budget
+  ends, and so do the Fibonacci numbers with signs that take turns,
+  which go both ways. Prior art: abstract interpretation over intervals
+  with widening (Patrick and Radhia Cousot, POPL 1977).
 
 ### Adding a helper function
 

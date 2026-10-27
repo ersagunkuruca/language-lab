@@ -591,15 +591,17 @@ async function helperAtValue() {
 }
 
 // Run backwards shows the first answer it finds at once, and looks for
-// others in the background, which Stop ends (BACKLOG E127): fibFast(n) = 8
-// is found in 11 steps, and the search for a second answer goes on.
+// others in the background, which Stop ends (BACKLOG E127). The Fibonacci
+// numbers with signs that take turns (1, 1, 0, 1, −1, 2, −3, …, 13 at
+// n = 9) go both ways, so the search for a second answer goes on
+// (fibFast's ends on its own since L83b).
 async function searchGoesOn() {
   where = "run backwards, first answer first";
   const k = new Lang();
-  const fib3 = k.def("fib3"), fast = k.def("fibFast");
-  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(B.add, a, b), k.call(B.sub, i, k.lit(1))))));
-  k.define(fast, k.fn(["n"], (n) => k.call(fib3, k.lit(1), k.lit(1), n)));
-  const file = toFile({ title: "Fibonacci", typed: true, code: base(k.code), names: baseNames(k.names), descriptive: {}, comments: {}, layout: { known: { [fast]: ["out"] } }, examples: { [fast]: ["", "8"] }, signatures: {} }, base(new Lang().code));
+  const signed = k.def("signed"), fast = k.def("signedFib");
+  k.define(signed, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(signed, b, k.call(B.sub, a, b), k.call(B.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (n) => k.call(signed, k.lit(1), k.lit(1), n)));
+  const file = toFile({ title: "Fibonacci", typed: true, code: base(k.code), names: baseNames(k.names), descriptive: {}, comments: {}, layout: { known: { [fast]: ["out"] } }, examples: { [fast]: ["", "13"] }, signatures: {} }, base(new Lang().code));
   const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
@@ -608,11 +610,11 @@ async function searchGoesOn() {
   await p.locator('[data-act="open-file"]').first().click();
   await (await chooser).setFiles({ name: "fibonacci.json", mimeType: "application/json", buffer: Buffer.from(file) });
   const t = Date.now();
-  await p.locator("[data-def]", { hasText: /^fibFast$/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^signedFib$/ }).first().click();
   const run = async () => (await p.locator(".run").first().innerText()).replace(/\s+/g, " ");
-  if (Date.now() - t > 5000 || !/\bn 5\b/.test(await run())) errors.push(`${where}: after ${Date.now() - t} ms it shows ${(await run()).slice(0, 200)}`);
+  if (Date.now() - t > 5000 || !/\bn 9\b/.test(await run())) errors.push(`${where}: after ${Date.now() - t} ms it shows ${(await run()).slice(0, 200)}`);
   await p.locator('[data-act="stop-search"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Stop while it looks for more`));
-  if (!(await run()).includes("Stopped looking for other answers") || !/\bn 5\b/.test(await run())) errors.push(`${where}: stopped, it shows ${(await run()).slice(0, 200)}`);
+  if (!(await run()).includes("Stopped looking for other answers") || !/\bn 9\b/.test(await run())) errors.push(`${where}: stopped, it shows ${(await run()).slice(0, 200)}`);
   await p.close();
 }
 

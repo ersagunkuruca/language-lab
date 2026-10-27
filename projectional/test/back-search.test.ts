@@ -11,23 +11,26 @@ import { searchBackwards } from "../editor/backSearch.ts";
 
 const inputs = (a: { values: Record<string, string> }) => Object.entries(a.values).filter(([k]) => k !== "out").map(([, v]) => v);
 
-// fib3(a, b, k) = if k = 0 then a else fib3(b, a + b, k − 1); fibFast(n) = fib3(1, 1, n)
-function fibFast() {
+// The Fibonacci numbers with signs that take turns (1, 1, 0, 1, −1, 2, −3,
+// 5, −8, 13, …): signed(a, b, k) = if k = 0 then a else signed(b, a − b,
+// k − 1). They go both ways, so nothing tells the search a second answer
+// can't come (fibFast's walk stops since L83b).
+function signedFib() {
   const k = new Lang();
-  const fib3 = k.def("fib3"), fast = k.def("fibFast");
-  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(B.add, a, b), k.call(B.sub, i, k.lit(1))))));
-  k.define(fast, k.fn(["n"], (n) => k.call(fib3, k.lit(1), k.lit(1), n)));
+  const signed = k.def("signed"), fast = k.def("signedFib");
+  k.define(signed, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(signed, b, k.call(B.sub, a, b), k.call(B.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (n) => k.call(signed, k.lit(1), k.lit(1), n)));
   return { code: base(k.code), names: baseNames(k.names), fast };
 }
 
 test("cut short after the first answer, the search keeps it and says there may be more", () => {
-  const { code, names, fast } = fibFast();
-  // Found in 11 steps; the search for a second one goes on for thousands.
+  const { code, names, fast } = signedFib();
+  // Found in a few steps; the search for a second one goes on for thousands.
   const steps = { n: 0 };
-  const cut = searchBackwards(code, fast, { out: 8 }, names, () => ++steps.n > 400);
+  const cut = searchBackwards(code, fast, { out: 13 }, names, () => ++steps.n > 400);
   assert.equal(cut.cut, true);
   assert.equal(cut.error, undefined);
-  assert.deepEqual(cut.answers.map(inputs), [["5"]]);
+  assert.deepEqual(cut.answers.map(inputs), [["9"]]);
 });
 
 test("a search that ends on its own isn't cut", () => {
