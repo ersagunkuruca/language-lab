@@ -9,7 +9,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../src/model.ts";
 import { children, collect, freshId, parentOf, replace, subtree, swapIn } from "../src/model.ts";
 import type { Names, Notation, Presentation } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
-import { fillings, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
+import { fillings, implementationKey, infer as check, type Filling, type Info } from "../src/lang/infer.ts";
 import { isPublished } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { B } from "../src/prelude.ts";
@@ -17,7 +17,7 @@ import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../src/lang/std.ts";
-import { INT, RATIONAL_TYPE, schemeArith, showIn, showType} from "../src/lang/types.ts";
+import { INT, NUMBER, RATIONAL_TYPE, schemeArith, showIn, showType, type Type } from "../src/lang/types.ts";
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -941,6 +941,52 @@ export function unpin(pins: Pins, def: Id, name: string): PinEdit {
   if (!pins[def]) return { ok: false, reason: `${name} isn't pinned` };
   const { [def]: _, ...rest } = pins;
   return { ok: true, pins: rest, note: `Unpinned ${name}: its type follows its body again.` };
+}
+
+// ---------------------------------------------------------------- implementations
+//
+// An implementation of an interface (INTERFACES.md) is a definition of the
+// interface's record at one type: trig at dual = trig(dual sine, …). Made
+// here with a hole for each operation and pinned to Trig Dual, so each
+// hole's palette offers only the functions that fit that operation there.
+
+const TYPE = (id: Id): Type => ({ t: "con", id, args: [] });
+
+// The types an interface could be implemented for: closed data types (no
+// type inputs), Float64 and Int, that don't have it yet.
+export function implementable(code: Code, info: Info, iface: Id): Id[] {
+  const plain = code.defs.filter((d) => {
+    const b = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""];
+    return b?.kind === "typedef" && !b.params.length && !b.effect && !b.interface;
+  });
+  return [NUMBER, INT, ...plain].filter((t) => !info.implementations?.has(implementationKey(iface, TYPE(t))));
+}
+
+// Every interface there is, the library's and the program's.
+export function interfaces(code: Code): Id[] {
+  return code.defs.filter((d) => (code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""] as { interface?: true } | undefined)?.interface);
+}
+
+export function implement(code: Code, names: Names, info: Info, iface: Id, type: Type): TEdit & { pin?: Pins } {
+  const td = code.nodes[(code.nodes[iface] as NodeOf<"def">)?.body ?? ""];
+  if (td?.kind !== "typedef" || !td.interface) return { ok: false, reason: "only an interface is implemented" };
+  const all: Names = { ...LIBRARY.names, ...display, ...names };
+  const at = showType(type, all);
+  if (info.implementations?.has(implementationKey(iface, type))) return { ok: false, reason: `${at} has ${all[iface]} already` };
+  const variant = td.variants[0];
+  const ops = (code.nodes[variant] as NodeOf<"variant">).fields;
+  const nodes = { ...code.nodes };
+  const add = (n: NodeData) => { const id = freshId(); nodes[id] = { id, ...n } as Node; return id; };
+  const holes = ops.map(() => add({ kind: "hole" }));
+  const def = add({ kind: "def", body: add({ kind: "call", fn: add({ kind: "ref", target: variant }), args: holes }) });
+  const taken = new Set(Object.values(all));
+  let label = `${(all[iface] ?? "it").toLowerCase()} at ${at.toLowerCase()}`;
+  for (let k = 2; taken.has(label); k++) label = `${(all[iface] ?? "it").toLowerCase()} at ${at.toLowerCase()} ${k}`;
+  const nn = { ...names, [def]: label };
+  const r = guardTyped(info, { nodes, defs: [...code.defs, def] }, nn, holes[0] ?? def, "");
+  if (!r.ok) return r;
+  const pin: Pins = { [def]: { vars: [], rows: [], type: { t: "con", id: iface, args: [type] } } };
+  return { ...r, pin, note: `New definition ${label}: how ${at} does ${all[iface]}, one hole for each of its ${ops.length} operation${ops.length === 1 ? "" : "s"} (${ops.map((o) => all[o]).join(", ")}). Each palette offers what fits at ${at}.` };
 }
 
 // ---------------------------------------------------------------- rows

@@ -236,6 +236,29 @@ async function swapAndUndo() {
   await p.close();
 }
 
+// A data type's panel lists the interfaces, and Implement writes one: the
+// interface's record at the type, a hole per operation wanting it there
+// (BACKLOG E137, INTERFACES.md step 5).
+async function implementInterface() {
+  where = "implementing an interface";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator('[data-set="new-kind"][data-value="type"]').click();
+  await p.locator("#f-def-name").fill("Wave");
+  await p.locator("#f-def-case").fill("wave");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".structure .srow", { hasText: "Trig" }).locator("button", { hasText: "Implement" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: Wave's panel doesn't offer to implement Trig`));
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/trig at wave› : Trig Wave/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
+  await p.locator(".p-text .hole").first().click();
+  if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
+  await p.close();
+}
+
 // An action that may give no answer (a Choice) isn't offered a Run that
 // can only fail: the panel says how to run it, and its values still show.
 async function choiceAction() {
@@ -1104,6 +1127,7 @@ await plusDrop();
 await looseParts();
 await swapDrop();
 await looseValue();
+await implementInterface();
 await stepOrder();
 await simplifyAppend();
 await searchGoesOn();

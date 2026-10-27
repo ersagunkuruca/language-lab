@@ -82,6 +82,7 @@ import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, CONS, FALSE, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, showIn, type Type } from "../src/lang/types.ts";
+import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
@@ -541,7 +542,7 @@ function pasteIntoSelected() {
 // `then` sets what the editor shows after the edit (which definition is
 // open, what's selected) before it's drawn.
 // `place`: where new nodes go in the graph (layout.json), by id.
-function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>): boolean {
+function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins?: Pins): boolean {
   const w = wrapping;
   wrapping = null;
   if (w && e.ok && e.code.nodes[w.hole] && e.code.nodes[w.hole].kind !== "hole") e = T.wrapInto(e.code, e.names, w.info, w.hole, w.kept);
@@ -569,7 +570,8 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>): boo
   // An edit that sets parts loose, or wires one in, says so (drafts.ts).
   const loose = e.of ? { loose: e.of, home: e.home } : {};
   const placed = place ? { layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(place).map(([k, v]) => [lkey(k), v])) } } } : {};
-  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place ? ["layout.json"] : [])], e.note + note);
+  const pinned = pins ? { signatures: { ...doc.signatures, ...pins } } : {};
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed, ...pinned }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place ? ["layout.json"] : []), ...(pins ? ["signatures.json"] : [])], e.note + note);
   return true;
 }
 
@@ -1236,6 +1238,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
   const err = info.errors.find((e) => e.id === id);
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
+  // A type with no implementation of an interface a use needs: write one.
+  if (err?.missing) out.append(h("div", { class: "acts" }, implementButton(info, err.missing.iface, err.missing.type, `Implement ${names[err.missing.iface] ?? "it"} for ${showIn(err.missing.type, names, info.subst)}`)));
 
   const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
   // The call itself, or its head (the name clicked to select it).
@@ -1647,6 +1651,45 @@ function runTop(info: T.Info, r: Top.Top, then?: (r: Extract<Top.Top, { ok: true
 const row = (...kids: Kid[]) => h("div", { class: "srow" }, ...kids);
 const pick = (id: Id, label: string, detail?: string) => h("button", { class: "slink", type: "button", "data-act": "goto-node", "data-target": id }, label, detail ? h("span", { class: "opt-d" }, ` ${detail}`) : null);
 
+// An interface's implementations (INTERFACES.md): the ones there are, and
+// one to write for a type that has none.
+function implementFor(r: ReturnType<typeof T.implement>) {
+  applyT(r, () => { if (r.ok) { ui.back = [ui.def]; ui.def = r.code.defs.at(-1)!; } }, undefined, r.ok ? r.pin : undefined);
+}
+function implementButton(info: T.Info, iface: Id, type: Type, label: string): HTMLElement {
+  const r = T.implement(doc.code, doc.names.short, info, iface, type);
+  return edit(label, "A definition of the interface's record at this type, a hole for each operation", r, () => implementFor(r));
+}
+
+// A data type's side: each interface, and how this type does it or a
+// button to write how.
+function interfacesOfType(info: T.Info, names: Names): HTMLElement {
+  const type: Type = { t: "con", id: ui.def, args: [] }, dname = names[ui.def] ?? "this type";
+  const out = h("div", {}, h("div", { class: "sub-head" }, `Interfaces ${dname} implements · code.json`));
+  for (const iface of T.interfaces(doc.code)) {
+    const d = info.implementations?.get(implementationKey(iface, type));
+    out.append(row(d ? pick(d, names[iface] ?? iface, `by ${names[d] ?? d}`) : h("span", {}, names[iface] ?? iface), d ? null : implementButton(info, iface, type, "Implement")));
+  }
+  out.append(h("p", { class: "hint" }, `An interface is a set of operations, like Trig's sin and cos. Implementing one for ${dname} is a definition of what each operation does at ${dname}; then the operation works on a ${dname} wherever it's used.`));
+  return out;
+}
+
+function implementationsPanel(info: T.Info, names: Names): HTMLElement {
+  const iface = ui.def, dname = names[iface] ?? "this interface";
+  const out = h("div", {}, h("div", { class: "sub-head" }, `Implementations of ${dname} · code.json`));
+  const have = [...(info.implementations ?? new Map<string, Id>())].filter(([k]) => k.startsWith(`${iface}|`)).map(([, d]) => d);
+  if (!have.length) out.append(h("p", { class: "hint" }, "None yet."));
+  for (const d of have) out.append(row(pick(d, names[d] ?? d, T.typeOf(info, d, names) ?? "")));
+  const types = T.implementable(doc.code, info, iface);
+  if (!types.length) return out;
+  const sel = h("select", { id: "f-implement" }, ...types.map((t) => h("option", { value: t }, names[t] ?? t))) as HTMLSelectElement;
+  const go = h("button", { class: "btn", type: "button" }, "Implement");
+  go.addEventListener("click", () => implementFor(T.implement(doc.code, doc.names.short, info, iface, { t: "con", id: sel.value, args: [] })));
+  out.append(h("label", { class: "field", for: "f-implement" }, h("span", {}, "For the type"), sel), h("div", { class: "acts" }, go),
+    h("p", { class: "hint" }, `How a type does ${dname}: a definition of its record at that type, with a hole for each operation. Uses of ${dname}'s operations at that type then call it directly.`));
+  return out;
+}
+
 // A data type's words, or an effect's: an effect's cases are operations,
 // and their fields are what each is given.
 function words(type: Id) {
@@ -1681,6 +1724,8 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(h("p", { class: "hint" }, body.effect
       ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
       : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
+    if (body.interface) out.append(implementationsPanel(info, names));
+    else if (!body.effect && !body.params.length) out.append(interfacesOfType(info, names));
   } else if (sel === ui.def && isPublished(ui.def)) {
     // A published definition is read-only; copying it in is how you change it.
     const r = T.copyIntoProgram(code, sh, info, ui.def, dname);
