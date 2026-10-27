@@ -2,7 +2,7 @@
 // by precedence, and attaching comments. Parentheses are computed here, at
 // display time; the tree never contains them.
 
-import { resolveRefs, type Code, type Id, type Node } from "../model.ts";
+import { resolveRefs, subtree, type Code, type Id, type Node } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import type { Namer } from "./namer.ts";
 
@@ -66,3 +66,7 @@ export function comment(pres: Presentation, namer: Namer, id: Id): string | unde
 export function lambdaText(code: Code, namer: Namer, params: Id[], body: R): R {
   return { text: `(${params.map((p) => namer.name(p)).join(", ")}) => ${body.text}`, prec: 0 };
 }
+
+// A step done for what it does, not its value: a let whose name nothing
+// reads (print this, then that). The views show it as a step, unnamed.
+export const unread = (code: Code, binder: Id, body: Id) => !subtree(code, body).some((x) => (code.nodes[x] as { target?: Id }).target === binder);

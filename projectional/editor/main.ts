@@ -1125,8 +1125,7 @@ function filesPanel(): HTMLElement {
 }
 
 // The same tree printed: as blocks text, or in the classic shapes (steps,
-// nested, Lisp) with the chosen notation. Those three don't know cases or
-// folds yet, and say so.
+// nested, Lisp) with the chosen notation. One they can't show says so.
 function textPanel(info: T.Info): string {
   try {
     if (ui.text === "blocks") return renderBlocks(doc.code, typedPres(), info, ui.def);

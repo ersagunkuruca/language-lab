@@ -5,7 +5,7 @@ import type { Code, Id } from "../model.ts";
 import { get } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
-import { atom, callText, comment, Footnotes, lambdaText, type R } from "./expr.ts";
+import { atom, callText, comment, Footnotes, lambdaText, unread, type R } from "./expr.ts";
 
 export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: Footnotes) {
   const expr = (id: Id): R => {
@@ -17,6 +17,12 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
       case "hole": r = atom("□"); break;
       case "lambda": r = lambdaText(code, namer, n.params, expr(n.body)); break;
       case "call": {
+        // Steps done one after another (print this, then that): a; b.
+        const f = code.nodes[n.fn];
+        if (f.kind === "lambda" && f.params.every((p) => unread(code, p, f.body))) {
+          r = { text: [...n.args.map((a) => expr(a).text), expr(f.body).text].join("; "), prec: 0 };
+          break;
+        }
         const args = n.args.map(expr);
         r = callText(pres, namer, code.nodes[n.fn], args, () => expr(n.fn));
         break;
