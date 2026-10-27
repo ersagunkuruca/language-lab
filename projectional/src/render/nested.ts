@@ -41,7 +41,8 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
         break;
       }
       case "solve": {
-        const given = Object.entries(n.given).map(([k, e]) => `${k} = ${expr(e).text}`).join(", ");
+        // A port is the callee's parameter, named as it is, or its result.
+        const given = Object.entries(n.given).map(([k, e]) => `${k === "out" ? "out" : namer.name(k)} = ${expr(e).text}`).join(", ");
         const wanted = Object.values(n.binds).map((b) => namer.name(b)).join(", ");
         r = atom(`solve ${namer.name(n.fn)}(${given}) for ${wanted} → ${expr(n.body).text}`);
         break;
@@ -59,11 +60,20 @@ export function renderNested(code: Code, pres: Presentation, defId: Id): string 
   const def = get(code, defId, "def");
   const expr = nestedExpr(code, pres, namer, notes);
 
+  // An action's steps (a; b; c) at the top of a definition: one a line,
+  // as they run.
+  const steps = (id: Id): Id[] => {
+    const n = code.nodes[id], f = n?.kind === "call" ? code.nodes[n.fn] : null;
+    return n?.kind === "call" && f?.kind === "lambda" && f.params.every((p) => unread(code, p, f.body)) ? [...n.args, ...steps(f.body)] : [id];
+  };
   const head = comment(pres, namer, defId);
-  const body = def.body === null ? "extern" : expr(def.body).text;
+  const top = def.body === null ? null : code.nodes[def.body];
+  const lines = top?.kind === "lambda" && steps(top.body).length > 1
+    ? [`${namer.name(defId)} = ${lambdaText(code, namer, top.params, atom("")).text}`.trimEnd(), ...steps(top.body).map((x, i, all) => `  ${expr(x).text}${i < all.length - 1 ? ";" : ""}`)]
+    : [`${namer.name(defId)} = ${def.body === null ? "extern" : expr(def.body).text}`];
   return [
     ...(head ? [`-- ${head}`] : []),
-    `${namer.name(defId)} = ${body}`,
+    ...lines,
     ...notes.lines(),
   ].join("\n");
 }
