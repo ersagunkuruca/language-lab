@@ -19,11 +19,17 @@ import { freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, recursiveLet, type Info } from "./infer.ts";
 
-function find(code: Code): { call: NodeOf<"call">; i: number; p: Id } | null {
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call" || code.nodes[n.fn]?.kind !== "lambda") continue;
+// `every`: every let whose value is a function, recursive or not, outer
+// ones first, so an inner one that calls an outer one calls its
+// definition (the GPU, WebAssembly and C have no closures: scalar.ts, C54).
+function find(code: Code, every = false, kept = new Set<Id>()): { call: NodeOf<"call">; i: number; p: Id } | null {
+  const ids = every ? code.defs.flatMap((d) => subtree(code, d)) : Object.keys(code.nodes);
+  for (const id of ids) {
+    const n = code.nodes[id];
+    if (n?.kind !== "call" || code.nodes[n.fn]?.kind !== "lambda") continue;
     for (let i = 0; i < n.args.length; i++) {
-      const p = recursiveLet(code, n, i);
+      const f = code.nodes[n.fn] as NodeOf<"lambda">;
+      const p = every ? (code.nodes[n.args[i]]?.kind === "lambda" && !kept.has(n.args[i]) && f.params.length === n.args.length ? f.params[i] : null) : recursiveLet(code, n, i);
       if (p) return { call: n, i, p };
     }
   }
@@ -32,13 +38,15 @@ function find(code: Code): { call: NodeOf<"call">; i: number; p: Id } | null {
 
 export const hasRecursiveLet = (code: Code) => find(code) !== null;
 
-export function liftLets(code: Code, info: Info, names: Names = {}): { code: Code; info: Info; names: Names } {
-  if (!hasRecursiveLet(code)) return { code, info, names };
+export function liftLets(code: Code, info: Info, names: Names = {}, every = false): { code: Code; info: Info; names: Names } {
+  if (!find(code, every)) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
   const defs = [...code.defs];
   const out: Names = { ...names };
   const work = () => ({ nodes, defs });
-  for (let site = find(work()); site; site = find(work())) {
+  // Lets whose name is also used as a value: lifted, but the let stays.
+  const kept = new Set<Id>();
+  for (let site = find(work(), every, kept); site; site = find(work(), every, kept)) {
     const { call, i, p } = site;
     const fn = nodes[call.args[i]] as NodeOf<"lambda">;
     const inside = subtree(work(), fn.id);
@@ -84,6 +92,29 @@ export function liftLets(code: Code, info: Info, names: Names = {}): { code: Cod
     // At the let: the definition, given what it uses from around it.
     if (free.length) wrapper(fn.id, free);
     else nodes[fn.id] = { id: fn.id, kind: "ref", target: helper };
+    if (every) {
+      // In the let's body too, name(xs) is helper(free…, xs), and when
+      // that's every use of the name, the let has nothing left to bind.
+      const around = subtree(work(), (nodes[call.fn] as NodeOf<"lambda">).body);
+      const heads = new Map<Id, Id>();
+      for (const x of around) { const m = nodes[x]; if (m?.kind === "call") heads.set(m.fn, m.id); }
+      let other = false;
+      for (const x of around) {
+        const m = nodes[x];
+        if (m?.kind !== "ref" || m.target !== p) continue;
+        const c = heads.get(x);
+        if (!c) { other = true; continue; }
+        nodes[x] = { ...m, target: helper };
+        nodes[c] = { ...(nodes[c] as NodeOf<"call">), args: [...free.map(ref), ...(nodes[c] as NodeOf<"call">).args] };
+      }
+      if (other) kept.add(fn.id);
+      else {
+        const let_ = nodes[call.fn] as NodeOf<"lambda">, at = nodes[call.id] as NodeOf<"call">;
+        const params = let_.params.filter((_, k) => k !== i), args = at.args.filter((_, k) => k !== i);
+        if (params.length) { nodes[let_.id] = { ...let_, params }; nodes[call.id] = { ...at, args }; }
+        else nodes[call.id] = { ...nodes[let_.body], id: call.id };
+      }
+    }
   }
   const lifted = { nodes, defs };
   return { code: lifted, info: infer(lifted, out, undefined, info.options), names: out };
