@@ -413,19 +413,22 @@ test("an arm's checks cut it before its calls run: fib(n) = 4 runs out of budget
 });
 
 test("waiting equations and checks sleep until what they read is known: a step costs the same at any depth (L83)", () => {
-  // fibFast(n) = 8 past its first answer walks on forever, leaving one
-  // waiting equation (n = n₁ + 1) and one waiting check (n₁ ≠ 0) per level.
+  // Past its first answer the search walks on forever, leaving one waiting
+  // equation (n = n₁ + 1) and one waiting check (n₁ ≠ 0) per level.
   // Re-reading them all at every step made 2,000 steps take about a minute.
+  // fibFast was the example until L83b stopped its walk; the Fibonacci
+  // numbers with signs that take turns (1, 1, 0, 1, −1, 2, −3, …) go both
+  // ways, so nothing bounds them.
   const k = new Lang();
-  const fib3 = k.def("fib3"), fast = k.def("fibFast");
+  const signed = k.def("signed"), fast = k.def("signedFib");
   let n = "";
-  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(B.add, a, b), k.call(B.sub, i, k.lit(1))))));
-  k.define(fast, k.fn(["n"], (x) => ((n = x), k.call(fib3, k.lit(1), k.lit(1), x))));
+  k.define(signed, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(signed, b, k.call(B.sub, a, b), k.call(B.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (x) => ((n = x), k.call(signed, k.lit(1), k.lit(1), x))));
   const code = base(k.code), names = baseNames(k.names);
   let steps = 0;
   const started = Date.now();
-  const answers = [...relate(code, fast, { out: 8 }, { names, spend: () => ++steps < 20000 })];
-  assert.deepEqual(answers.map((a) => showTerm(a.values[n])), ["5"]);
+  const answers = [...relate(code, fast, { out: 13 }, { names, spend: () => ++steps < 20000 })];
+  assert.deepEqual(answers.map((a) => showTerm(a.values[n])), ["9"]);
   assert.equal(steps, 20000);
   assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
 });
@@ -443,6 +446,37 @@ test("Int sums run backwards asleep too: fibFast over Ints past its first answer
   // n is found, not left waiting: a check that passes lets what woke with it run.
   assert.deepEqual(answers.map((a) => [showTerm(a.values[n]), a.residual]), [["5", []]]);
   assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
+});
+
+test("a search stops when a recursion can't reach its answer any more: fibFast(n) = 8 ends after n = 5 (L83b)", () => {
+  // fib3(13, 21, k) = 8 can't be: every call it makes has a at 13 or more,
+  // and it returns some call's a (bounds.ts, intervals with widening).
+  const k = new Lang();
+  const fib3 = k.def("fib3"), fast = k.def("fibFast"), halves = k.def("halves"), down = k.def("down");
+  let n = "", h = "", d = "";
+  k.define(fib3, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(fib3, b, k.call(ARITH.add, a, b), k.call(ARITH.sub, i, k.lit(1))))));
+  k.define(fast, k.fn(["n"], (x) => ((n = x), k.call(fib3, k.lit(1), k.lit(1), x))));
+  // The same over Float64: 0.5, 0.5, 1, 1.5, 2.5, 4, …
+  k.define(halves, k.fn(["n"], (x) => ((h = x), k.call(fib3, k.lit(0.5), k.lit(0.5), x))));
+  // Counting down: down(a, k) = if k = 0 then a else down(a − 1, k − 1).
+  // a only falls, so once it is below 3, down(a, k) = 3 can't be.
+  const count = k.def("count");
+  k.define(count, k.fn(["a", "k"], (a, i) => k.if(k.equal(i, k.lit(0)), a, k.call(count, k.call(ARITH.sub, a, k.lit(1)), k.call(ARITH.sub, i, k.lit(1))))));
+  k.define(down, k.fn(["k"], (x) => ((d = x), k.call(count, k.lit(10), x))));
+  const code = base(k.code), names = baseNames(k.names);
+  assert.deepEqual(infer(code, names).errors, []);
+  const solve = (f: Id, out: number, p: string) => {
+    let steps = 0;
+    const answers = [...relate(code, f, { out }, { names, spend: () => ++steps < 20000 })];
+    assert.ok(steps < 20000, `the search ended on its own (${steps} steps)`);
+    return answers.map((a) => showTerm(a.values[p]));
+  };
+  assert.deepEqual(solve(fast, 8, n), ["5"]);
+  assert.deepEqual(solve(fast, 144, n), ["11"]);
+  // Not a Fibonacci number: no answer, and the search says so.
+  assert.deepEqual(solve(fast, 9, n), []);
+  assert.deepEqual(solve(halves, 4, h), ["5"]);
+  assert.deepEqual(solve(down, 3, d), ["7"]);
 });
 
 // A whole literal is an Int (L86b), so x · 3 + 1 = 13 runs on Int multiply:

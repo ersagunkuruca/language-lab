@@ -69,6 +69,7 @@ import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATI
 import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { INT } from "./types.ts";
+import { around, resultBounds, within, type Iv } from "./bounds.ts";
 import { Subst } from "./types.ts";
 
 export class NotInvertible extends Error {}
@@ -905,6 +906,24 @@ export function interpreter(code: Code, opts: Options = {}) {
     return relationGoal(n.fn, at, callee);
   }
 
+  // A recursive call asked for a number it can't return, judged from the
+  // intervals its known inputs keep to (bounds.ts): `fib3(13, 21, k) = 8`,
+  // where every call it makes has `a` at 13 or more. Only when the answer
+  // and some input are known numbers.
+  const numberIn = (t: Term, s: State): Iv | null => {
+    const x = walk(t, s);
+    return typeof x === "number" || typeof x === "bigint" ? around(x) : null;
+  };
+  function outOfReach(c: Closure, args: Term[], out: Term, s: State): boolean {
+    const o = walk(out, s);
+    if (typeof o !== "number" && typeof o !== "bigint") return false;
+    const ins = args.map((a) => numberIn(a, s));
+    if (!ins.some(Boolean)) return false;
+    const outside = (b: Id) => { const v = c.env.get(b); return v === undefined ? null : numberIn(v as Term, s); };
+    const b = resultBounds(code, c.lambda, ins, outside);
+    return !!b && !within(Number(o), b);
+  }
+
   // mode: the mode the plan says the function runs in, when it says.
   function apply(f: Term, args: Term[], out: Term, mode?: Mode): Goal {
     // Functions can't be guessed: wait until it's known which one this is.
@@ -929,7 +948,9 @@ export function interpreter(code: Code, opts: Options = {}) {
     if (f.k === "closure" && fractionOps.has(f.lambda)) return fractionGoal(fractionOps.get(f.lambda)!, args, out);
     if (f.k === "closure") {
       const g = invoke(f, args, out, mode);
-      return isRecursive(f.lambda) ? step(g) : g;
+      if (!isRecursive(f.lambda)) return g;
+      const c = f;
+      return step((s) => (outOfReach(c, args, out, s) ? null : g(s)));
     }
     const t = nodes[f.id];
     if (t.kind === "variant") return eq(out, dataT(f.id, args));
