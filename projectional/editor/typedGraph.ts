@@ -109,6 +109,8 @@ export interface GraphView extends Canvas {
   // The frame a node is drawn in, or a frame's own (null: none); undefined
   // when it isn't drawn.
   frameOf: (id: Id) => Id | null | undefined;
+  // Where a node is drawn now, if it is.
+  posOf: (id: Id) => Pos | undefined;
   unpickAll: () => void;
   // Where a folded frame's contents go when it unfolds: moved together to
   // the nearest place where the frame overlaps nothing (none if it fits).
@@ -201,6 +203,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     pick: (id) => { if (!picked.delete(id)) picked.add(id); },
     unpickAll: () => picked.clear(),
     frameOf: (id) => scene.items.get(id)?.frame ?? (scene.frames.has(id) ? scene.frames.get(id)!.parent : undefined),
+    posOf: (id) => { const it = scene.items.get(id); return it ? hooks.at[id] ?? { x: it.auto.x, y: it.auto.y } : undefined; },
     expand: (ids) => [...expand(scene, ids)],
     room: (f) => roomFor(scene, hooks.at, hooks.folded, f),
     tidy: (only) => {
