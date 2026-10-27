@@ -1042,7 +1042,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   next.nodes[let_] = { id: let_, kind: "call", fn: outer, args: [lam] };
   params.forEach((q, i) => { const x = code.nodes[firsts[i]]; nn[q] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
   const what = one ? "" : ` Its ${roots.length} values go out together as Part results, and each is read where it was.`;
-  const r = guardTyped(info, collect(next), nn, fn, `Made the group a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}.${what} Name it, fold it, or Undo to put it back.`);
+  const r = guardTyped(info, collect(next), nn, fn, `Made it a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}.${what} Name it, fold it, or Undo to put it back.`);
   return r.ok ? { ...r, fn: lam } : r;
 }
 
