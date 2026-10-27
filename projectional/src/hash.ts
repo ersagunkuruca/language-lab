@@ -167,7 +167,11 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       }
       case "call": return ["call", go(n.fn), ...n.args.map(go)];
       case "lambda": return ["lam", n.params.map(go), go(n.body)];
-      case "typedef": return ["type", n.params.map(go), n.variants.map(go)];
+      // `unique`: a type that has the same shape as another but isn't it
+      // (Dual and Complex are both two Float64s) says so, or the two would
+      // be one type by their hashes. Only written when present, so every
+      // hash from before stays.
+      case "typedef": return n.unique ? ["type", n.params.map(go), n.variants.map(go), ["unique", n.unique]] : ["type", n.params.map(go), n.variants.map(go)];
       case "variant": return ["variant", n.fields.map(go)];
       case "field": return ["field", go(n.type)];
       case "tref": {
