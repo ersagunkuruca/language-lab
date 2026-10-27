@@ -411,7 +411,7 @@ roadmap's Done table; this section keeps about a week.
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
 | L40b | Answered (Ersagun 2026-10-27): a type's operations are a separate interface with implementations, resolved before running (monomorphised, zero cost), one implementation per interface and type, dynamic dispatch only when an implementation is passed as a value. Design: projectional/INTERFACES.md; ALGEBRA-TABLES.md points at it. Steps are L40e to L40h | #511 |
 | L40e | Interfaces, step 1 of INTERFACES.md: `interface: true` on typedefs (`Lang.interface`), `Scheme.needs` in schemes and pins (types print `where a has Halving`), `Info.implementations` with the one-per-type error and the rule that an implementation is written as the record, arith.ts `implement` resolving each use to a direct call (a field given as a ref used as is, anything else made a definition), an open whole literal an Int only if Int has what it needs. test/interfaces.test.ts, evaluated and compiled | #513 |
-| L40f | Interfaces, step 2: `std.trig` (sin, cos, tan, exp, log), the prelude's hidden `trig at float64` of the builtins; the palette offers Trig's sin and not Float64's own; the text view and graph draw `sin(x)` as a call, not a field read (records.ts isOperation); WGSL sin on the GPU; derivative works. test/trig.test.ts, LIBRARY.md | #PR |
+| L40f | Interfaces, step 2: `std.trig` (sin, cos, tan, exp, log), the prelude's hidden `trig at float64` of the builtins; the palette offers Trig's sin and not Float64's own; the text view and graph draw `sin(x)` as a call, not a field read (records.ts isOperation); WGSL sin on the GPU; derivative works. test/trig.test.ts, LIBRARY.md | #515 |
 
 ### Coordinator and process
 
