@@ -438,6 +438,12 @@ async function looseValue() {
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
   await p.locator("#f-query").fill('print("hi")');
   if (!/loose part .* can't have effects/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
+  // A function is found by what other languages call it, and by its
+  // comment (BACKLOG E136).
+  await p.locator("#f-query").fill("insert");
+  if (!/put\(□, □, □\)\s*elsewhere called insert/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: insert doesn't find put`);
+  await p.locator("#f-query").fill("holds");
+  if (!/has key\(□, □\)\s*Whether the map holds key/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a word of has key's comment doesn't find it`);
   // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
   await p.locator("#f-query").fill("7");
   await p.locator("#f-query").press("Enter");

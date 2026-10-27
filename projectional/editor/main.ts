@@ -1391,6 +1391,18 @@ const SYMBOLS: Record<string, string[]> = {
   "square root": ["√"], sqrt: ["√"], "less than": ["<"], equal: ["=", "=="], and: ["&&"], or: ["||"], not: ["!"], mod: ["%"], "join text": ["++"],
 };
 
+// Names other languages use, so a search by what something does finds it:
+// insert is put, lookup is value at (BACKLOG E136).
+const ALSO: Record<string, string[]> = {
+  put: ["insert", "set", "update", "store"], "value at": ["lookup", "get", "find", "fetch"], "has key": ["contains", "member", "includes"],
+  "remove key": ["delete", "erase"], "keys of": ["keys"], "values of": ["values"], "map size": ["size", "count", "len"], "set size": ["size", "count", "len"],
+  length: ["size", "count", "len"], keep: ["filter", "where", "select"], map: ["transform", "convert each"], "for each": ["loop", "iterate", "foreach"],
+  append: ["concat", "concatenate"], "join text": ["concat", "concatenate"], "add item": ["insert", "push"], "has item": ["contains", "member", "includes"],
+  "remove item": ["delete", "erase"], "items of": ["elements", "to list"], smaller: ["min", "minimum"], larger: ["max", "maximum"],
+  show: ["to string", "tostring", "format", "string of"], print: ["log", "output", "write", "echo", "console"], attempt: ["try", "catch"],
+  sort: ["order"], sum: ["total", "add up"], "empty map": ["new map", "dictionary", "dict", "hash"], "empty set": ["new set"],
+};
+
 // A new hole's palette: the side panel's when it shows, not a pop-up over
 // the graph repeating it (BACKLOG E125); a pop-up where you clicked when
 // the panel is out of sight.
@@ -1476,12 +1488,22 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
   // An operator's symbol finds it too: + is add.
+  // Then what it is called elsewhere (insert finds put), and last a word
+  // of its comment (key finds value at: "What key holds").
   const symbol = (l: [string, string, string]) => SYMBOLS[l[0].replace(/\(.*$/, "")]?.includes(q) ?? false;
-  const rank = (l: [string, string, string]) => {
-    const name = l[0].toLowerCase();
-    return name === q || name.startsWith(`${q}(`) || symbol(l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) ? 2 : name.includes(q) ? 3 : 4;
+  const also = (l: [string, string, string]) => (q.length > 1 ? ALSO[l[0].replace(/\(.*$/, "")]?.find((w) => w.startsWith(q)) : undefined);
+  const note = (f: T.Filling) => (q.length > 2 && (f.kind === "call" || f.kind === "ref") ? doc.comments[f.target] ?? LIBRARY.comments[f.target] ?? "" : "");
+  const inNote = (f: T.Filling) => note(f).toLowerCase().split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q));
+  const rank = (x: (typeof all)[number]) => {
+    const name = x.l[0].toLowerCase();
+    return name === q || name.startsWith(`${q}(`) || symbol(x.l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) || also(x.l) ? 2 : name.includes(q) ? 3 : x.l.some((s) => s.toLowerCase().includes(q)) ? 4 : 5;
   };
-  const shown = !q ? all : all.filter(({ l }) => symbol(l) || l.some((s) => s.toLowerCase().includes(q))).map((x) => ({ ...x, r: rank(x.l) })).sort((a, b) => a.r - b.r);
+  // Found by another name or by its comment, the row says which.
+  const found = (x: (typeof all)[number], r: number): [string, string, string] => {
+    const w = r === 2 && !x.l[0].toLowerCase().split(/[^\p{L}\p{N}]+/u).some((v) => v.startsWith(q)) ? also(x.l) : undefined;
+    return w ? [x.l[0], `elsewhere called ${w} · ${x.l[1]}`, x.l[2]] : r === 5 ? [x.l[0], note(x.f).split(/(?<=\.)\s/)[0], x.l[2]] : x.l;
+  };
+  const shown = !q ? all : all.filter((x) => symbol(x.l) || also(x.l) || x.l.some((s) => s.toLowerCase().includes(q)) || inNote(x.f)).map((x) => { const r = rank(x); return { ...x, l: found(x, r), r }; }).sort((a, b) => a.r - b.r);
   // Unsearched, the first 40 (the rest are a search away); searched, all.
   const cap = q ? shown.length : 40;
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
