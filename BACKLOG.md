@@ -120,6 +120,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E151 | An interface and its implementations read by their operations (area : (a) -> Float64; area: □), and the panel says Operation and Implementation | #540 |
 | E149 | Make it a function on a group with several values out: they leave as a record (Part results), called once and read where each was used | #539 |
 | E150 | A function that reads or writes files or the console says it doesn't run backwards, instead of a search that stopped in red (unit converter's quantity) | #538 |
 | E146 | Make it a function on a group: part = (inputs) => its nodes, called where they were; one value out (several: E149; shaders: C54). | #536 |

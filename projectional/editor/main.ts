@@ -74,6 +74,7 @@ import { INT } from "../src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../src/presentation.ts";
 import { relationFor } from "../src/lang/equations.ts";
+import { implementationOps, isOperation } from "../src/lang/records.ts";
 import { powers } from "../src/lang/relate.ts";
 import { analyze } from "../../invertible/src/index.js";
 import { renderLet } from "../src/render/letseq.ts";
@@ -1102,7 +1103,8 @@ function kindLabel(id: Id): string {
   const n = node(id);
   if (n.kind === "binder") return T.isDot(doc.code, ui.def, id) ? "Dot" : "Variable";
   if (n.kind === "def") return "Definition";
-  if (n.kind === "call") return node(n.fn)?.kind === "lambda" ? "Let" : "Step (call)";
+  if (n.kind === "call") return node(n.fn)?.kind === "lambda" ? "Let" : implementationOps(doc.code, n.fn) ? "Implementation" : "Step (call)";
+  if (n.kind === "field" && isOperation(doc.code, id)) return "Operation";
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
