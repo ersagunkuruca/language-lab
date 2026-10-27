@@ -253,7 +253,8 @@ async function implementInterface() {
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator(".structure .srow", { hasText: "Trig" }).locator("button", { hasText: "Implement" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: Wave's panel doesn't offer to implement Trig`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!/trig at wave› : Trig Wave/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
+  // One line per operation, by its name (BACKLOG E151).
+  if (!/trig at wave› : Trig Wave/.test(text) || !/= sin: □/.test(text) || /trig\(/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
   await p.locator(".p-text .hole").first().click();
   if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
   // A new interface of the program's own (BACKLOG E138).
@@ -266,14 +267,15 @@ async function implementInterface() {
   await p.locator("#f-new-op").fill("twice");
   await p.locator("button", { hasText: "Add the operation" }).click();
   const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!/interface Halving a \| halving\(half: \(a\) -> a, twice: \(a\) -> a\)/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
+  // It reads as its operations, not as the record that holds them (BACKLOG E151).
+  if (!/interface Halving a half : \(a\) -> a twice : \(a\) -> a/.test(iface) || /\bhalving\(/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
   // An operation's Takes and Gives change from its panel (BACKLOG E142).
   await p.locator('.side button.slink[data-act="goto-node"]', { hasText: /^twice/ }).first().click({ timeout: 5000 }).catch(() => {});
   await p.locator("#f-op-takes").selectOption("2", { timeout: 5000 }).catch(() => errors.push(`${where}: an operation's panel has no Takes`));
   await p.locator("#f-op-gives").selectOption({ label: "Bool" }).catch(() => {});
   await p.locator(".side button", { hasText: /^Change$/ }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: an operation's panel has no Change`));
   const changed = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!changed.includes("twice: (a, a) -> Bool")) errors.push(`${where}: changed, the interface reads ${changed.slice(0, 120)}`);
+  if (!changed.includes("twice : (a, a) -> Bool")) errors.push(`${where}: changed, the interface reads ${changed.slice(0, 120)}`);
   // The graph draws it as an interface, one node per operation (BACKLOG E141).
   const drawn = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
   if (!drawn.includes("interface Halving: its operations") || !drawn.includes("(a) -> a") || /\bhalving\b/.test(drawn)) errors.push(`${where}: the graph draws ${drawn.slice(0, 160)}`);

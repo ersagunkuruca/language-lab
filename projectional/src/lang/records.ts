@@ -40,6 +40,21 @@ export function isOperation(code: Code, field: Id): boolean {
   return ops.has(field);
 }
 
+// The operations an interface's record is built from, when `fn` names its
+// constructor: an implementation is that call, one argument per operation.
+const cases = new WeakMap<Code, Map<Id, Id[]>>();
+export function implementationOps(code: Code, fn: Id): Id[] | null {
+  const f = code.nodes[fn];
+  if (f?.kind !== "ref") return null;
+  let m = cases.get(code);
+  if (!m) {
+    m = new Map();
+    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) m.set(v, (code.nodes[v] as NodeOf<"variant">).fields);
+    cases.set(code, m);
+  }
+  return m.get(f.target) ?? null;
+}
+
 // Where each field sits in its record.
 const indexes = new WeakMap<Code, Map<Id, number>>();
 export function fieldIndex(code: Code, field: Id): number {

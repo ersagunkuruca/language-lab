@@ -20,7 +20,7 @@ import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
 import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
-import { isOperation } from "./records.ts";
+import { implementationOps, isOperation } from "./records.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, SET_TYPE, TRUE } from "./std.ts";
 import { showIn } from "./types.ts";
 
@@ -286,6 +286,13 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const n = node(id);
     // A block you can click.
     const hold = (kids: Blk[], cls = "blk") => [grp(kids, 0, id, cls)];
+    // An implementation reads as its operations, one a line (area: …): it
+    // is the interface's record at a type, which no one calls by name.
+    const ops = n.kind === "call" ? implementationOps(code, n.fn) : null;
+    if (ops && n.kind === "call" && ops.length === n.args.length) {
+      const lines = n.args.flatMap((a, i) => block(a, [part("fld", [nameOf(ops[i])], ops[i]), pn(": ")]));
+      return hold(lead.length ? [ln(...trimEnd(lead)), grp(lines)] : lines);
+    }
     const tab = table(id);
     if (tab && !tab.rows.some((r) => r.cells.some(tall))) {
       //   as map
@@ -476,6 +483,12 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   if (body?.kind === "typedef") {
     enter(body.params);
     out.push(ln(kw(`${body.effect ? "effect" : body.interface ? "interface" : "type"} `), self(), ...body.params.flatMap((p) => [" ", bind(p)])));
+    // An interface reads as its operations and their types: its one case
+    // is how it is held, a record, not something anyone writes.
+    if (body.interface) {
+      out.push(grp((node(body.variants[0]) as NodeOf<"variant">).fields.map((f) => ({ line: [part("fld", [nameOf(f), part("ty", [` : ${typeText((node(f) as NodeOf<"field">).type)}`])], f)], id: f, cls: "variant" }))));
+      return out;
+    }
     out.push(grp(body.variants.map((v) => {
       const vn = node(v) as NodeOf<"variant">;
       const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);
