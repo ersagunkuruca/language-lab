@@ -2332,7 +2332,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // then its result and the values on its wires show.
   const value = !!z && z.t !== "fn";
   const body = defBody(ui.def);
-  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
+  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.interface ? "An interface doesn't run; each implementation says how its type does the operations, and functions call them." : body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
