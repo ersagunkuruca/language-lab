@@ -21,7 +21,7 @@ import { INT, NUMBER, RATIONAL_TYPE, schemeArith, showIn, showType, type Type } 
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
-import { blocksOf, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
+import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
 import { shape } from "../src/lang/patterns.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
@@ -46,7 +46,7 @@ export const typeOf = (info: Info | null, id: Id, names: Names): string | null =
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
 // two can't drift apart: a piece that stands for a node is a span you can
 // click, with its type on hover; a group of lines is a box.
-export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>): HTMLElement {
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = []): HTMLElement {
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
@@ -70,11 +70,55 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   // What only the pane shows (a name's type, a hole's) is marked aside.
   const piece = (p: Piece): Kid => (typeof p === "string" ? p : h("span", { class: `${cls(p.id, p.cls)}${p.pane ? " aside" : ""}`, "data-id": p.id, title: title(p.id, p.title) }, ...p.kids.map(piece)));
   const draw = (b: Blk): HTMLElement => {
+    const g = grouped.get(b);
+    if (g) {
+      const shut = folded.includes(g), n = blocksText([b]).length;
+      const head = h("div", { class: "grp-t", "data-fold": g, title: shut ? "Unfold: show its lines (the graph's group unfolds too)" : "Fold into one line (the graph's group folds too)" },
+        `${shut ? "▸" : "▾"} group`, shut ? h("span", { class: "grp-n" }, ` · ${n} line${n === 1 ? "" : "s"}`) : null);
+      return h("div", { class: `grp${shut ? " folded" : ""}` }, head, ...(shut || !("kids" in b) ? [] : b.kids.map(draw)));
+    }
     if ("line" in b) return h("div", { class: `ln${b.id ? ` ${cls(b.id, b.cls)}` : b.cls ? ` ${b.cls}` : ""}`, "data-id": b.id }, ...b.line.map(piece));
     const c = [b.pad ? "ind" : "", cls(b.id, b.cls) ?? ""].filter(Boolean).join(" ");
     return h("div", { class: c || undefined, "data-id": b.id, style: b.pad && b.pad !== 2 ? `padding-left: ${b.pad * 11}px` : undefined }, ...b.kids.map(draw));
   };
-  return h("div", { class: "typed" }, ...blocksOf(code, pres, info, defId, { pane: true, loose }).map(draw));
+  const grouped = new WeakMap<Blk, Id>();
+  return h("div", { class: "typed" }, ...groupBlocks(blocksOf(code, pres, info, defId, { pane: true, loose }), groups, grouped).map(draw));
+}
+
+// A group the graph draws (BACKLOG E111) is bracketed in the blocks too
+// (E145): the lines that hold its members, from the first to the last, in
+// the innermost block that holds them all. A view, like the graph's: the
+// code doesn't change, and folding it here folds it there.
+export type Groups = Record<Id, Id[]>;
+export function groupBlocks(bs: Blk[], groups: Groups, mark: WeakMap<Blk, Id>): Blk[] {
+  // A group in a group stands for what it holds.
+  const members = (g: Id, seen = new Set<Id>()): Set<Id> => {
+    seen.add(g);
+    return new Set((groups[g] ?? []).flatMap((m) => (groups[m] && !seen.has(m) ? [...members(m, seen)] : [m])));
+  };
+  const ids = (b: Blk, out = new Set<Id>()): Set<Id> => {
+    if (b.id) out.add(b.id);
+    const piece = (p: Piece) => { if (typeof p !== "string") { if (p.id) out.add(p.id); p.kids.forEach(piece); } };
+    if ("line" in b) b.line.forEach(piece);
+    else b.kids.forEach((k) => ids(k, out));
+    return out;
+  };
+  const wrap = (list: Blk[], g: Id, want: Set<Id>): Blk[] | null => {
+    const hits = list.map((b, i) => ([...ids(b)].some((x) => want.has(x)) ? i : -1)).filter((i) => i >= 0);
+    if (!hits.length) return null;
+    const one = list[hits[0]];
+    // All in one block, and not the block itself: look inside it.
+    if (hits.length === 1 && "kids" in one && !(one.id && want.has(one.id))) {
+      const inner = wrap(one.kids, g, want);
+      if (inner) return list.map((b, i) => (i === hits[0] ? { ...one, kids: inner } : b));
+    }
+    const box: Blk = { kids: list.slice(hits[0], hits[hits.length - 1] + 1), pad: 0 };
+    mark.set(box, g);
+    return [...list.slice(0, hits[0]), box, ...list.slice(hits[hits.length - 1] + 1)];
+  };
+  // Inner groups first, so an outer one brackets theirs.
+  const order = Object.keys(groups).sort((a, b) => members(a).size - members(b).size);
+  return order.reduce((acc, g) => wrap(acc, g, members(g)) ?? acc, bs);
 }
 
 // ---------------------------------------------------------------- edits

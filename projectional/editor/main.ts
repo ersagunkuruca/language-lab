@@ -2953,7 +2953,7 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected), ...looseBlocks(info))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded), ...looseBlocks(info))
     : h("pre", { class: "text" }, textPanel(info));
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
@@ -3020,6 +3020,9 @@ document.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
   const mi = t.closest<HTMLElement>("[data-menu]");
   if (mi) return menuAction(mi.dataset.menu!, mi.dataset.target || undefined);
+  // A group's title in the blocks folds it, there and in the graph.
+  const fold = t.closest<HTMLElement>(".blocks-wrap [data-fold]");
+  if (fold) return toggleFolded(fold.dataset.fold!);
   const set = t.closest<HTMLElement>("[data-set]");
   if (set) {
     if (set.dataset.set === "program") return switchProgram(set.dataset.value!);

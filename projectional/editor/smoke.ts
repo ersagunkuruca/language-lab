@@ -705,8 +705,16 @@ async function groupPicked() {
   const box = p.locator(".p-graph rect.rg.group.folded");
   if ((await box.count()) !== 1) errors.push(`${where}: ${await box.count()} folded group boxes`);
   if ((await muls.count()) > 1) errors.push(`${where}: ${await muls.count()} · nodes still drawn outside the box`);
-  if ((await text()) !== was) errors.push(`${where}: grouping changed the code`);
-  await p.locator(".p-graph .items [data-fold]").first().dispatchEvent("click");
+  // The blocks bracket it too (BACKLOG E145), folded as the graph's is;
+  // their title unfolds both.
+  if ((await p.locator(".blocks-wrap .grp.folded").count()) !== 1) errors.push(`${where}: the blocks show ${await p.locator(".blocks-wrap .grp.folded").count()} folded groups`);
+  await p.locator(".blocks-wrap .grp-t").first().click();
+  if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded from the blocks, the graph has no open group frame`);
+  if ((await p.locator(".blocks-wrap .grp:not(.folded)").count()) !== 1) errors.push(`${where}: unfolded, the blocks show no open group`);
+  if ((await text()).replace(/▾ group ?/, "") !== was) errors.push(`${where}: grouping changed the code: ${await text()}`);
+  await p.locator('.p-graph [data-fold^="group-"]').first().dispatchEvent("click");
+  if ((await p.locator(".blocks-wrap .grp.folded").count()) !== 1) errors.push(`${where}: folded in the graph, the blocks' group stays open`);
+  await p.locator('.p-graph [data-fold^="group-"]').first().dispatchEvent("click");
   if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded, there's no group frame`);
   await p.locator(".p-graph rect.rg.group").first().click({ button: "right", position: { x: 6, y: 6 } });
   await p.locator('.ctx-menu [data-menu="ungroup"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: a group's menu has no Ungroup`));
