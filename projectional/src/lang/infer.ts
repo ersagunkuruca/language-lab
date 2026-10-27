@@ -1083,9 +1083,13 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // are rechecked. That holds for a filling that makes a new recursive
   // group too: everything in it already depends on this group.
   const affected = dependents(code, h.group);
+  // Each filling is made once for both checks below, which ask one after
+  // the other.
+  let last: [Filling, Code] | undefined;
+  const filled = (f: Filling) => (last?.[0] === f ? last[1] : (last = [f, fillHole(code, {}, hole, f).code])[1]);
   let before: number | undefined;
   const recheck = (c: Code) => infer(c, {}, { from: info, only: affected }, info.options).errors.length;
-  const whole = (f: Filling) => recheck(fillHole(code, {}, hole, f).code) <= (before ??= recheck(code));
+  const whole = (f: Filling) => recheck(filled(f)) <= (before ??= recheck(code));
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge, a square
   // makes the answer two). What the check makes of the body is its plan,
@@ -1106,7 +1110,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     catch (e) { return `!${(e as Error).message}`; }
   }).join(";");
   let planned: string | undefined;
-  const samePlans = (f: Filling) => plans(fillHole(code, {}, hole, f).code) === (planned ??= plans(code));
+  const samePlans = (f: Filling) => plans(filled(f)) === (planned ??= plans(code));
   const checked = new Map<string, boolean>();
   const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
   const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];

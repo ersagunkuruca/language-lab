@@ -185,8 +185,11 @@ export function dependencies(code: Code, root: Id): Id[] {
 // this finds the def whose typedef they belong to.
 export function ownerOfTypeParts(code: Code): Map<Id, Id> {
   const out = new Map<Id, Id>();
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "def" || !n.body || code.nodes[n.body]?.kind !== "typedef") continue;
+  // Every def is a top-level one, so the defs list is enough: a scan of
+  // every node made it the slow part of checking a palette's offers.
+  for (const d of code.defs) {
+    const n = code.nodes[d];
+    if (n?.kind !== "def" || !n.body || code.nodes[n.body]?.kind !== "typedef") continue;
     for (const v of (code.nodes[n.body] as NodeOf<"typedef">).variants) {
       out.set(v, n.id);
       for (const f of (code.nodes[v] as NodeOf<"variant">).fields) out.set(f, n.id);
