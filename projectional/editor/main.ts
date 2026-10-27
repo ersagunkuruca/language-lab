@@ -2261,8 +2261,10 @@ function graphHooks(info: T.Info) {
       // own last node's output (BACKLOG E120).
       const part = loosePart(from);
       if (part) return (slot: Id) => {
-        if (node(slot)?.kind !== "hole") return "drop it on an empty input";
-        const r = T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot);
+        // A filled input is checked on the drop: the check here runs on
+        // every input passed over, and swapping costs several checks.
+        if (node(slot)?.kind !== "hole") return null;
+        const r = T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot);
         return r.ok ? null : r.reason;
       };
       const p = T.prepareShare(doc.code, doc.names.short, info, ui.def, from);
@@ -2277,7 +2279,7 @@ function graphHooks(info: T.Info) {
     share: (from: Id, slot: Id) => {
       const part = loosePart(from);
       void applyT(part
-        ? T.wireLoose(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot)
+        ? T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot)
         : shareOver(info, from, slot));
     },
     values: (() => {

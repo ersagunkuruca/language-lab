@@ -555,6 +555,33 @@ export function wireLoose(code: Code, names: Names, info: Info, def: Id, of: Rec
   return e.ok ? { ...e, of: x.of, home: x.home } : e;
 }
 
+// A loose part dropped on an input that has a value: the value there is
+// set loose in its place, as any drop on a filled input does (Ersagun
+// 2026-10-27: after a dot he couldn't wire things back where they were).
+export function looseOver(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, part: Id, slot: Id): LooseEdit {
+  const cur = code.nodes[slot];
+  if (!cur || cur.kind === "hole") return wireLoose(code, names, info, def, of, home, part, slot);
+  if (subtree(code, slot).includes(part)) return { ok: false, reason: "that's part of what's there now" };
+  // A variable alone is nothing to keep: it's just replaced.
+  if (cur.kind === "ref") {
+    const c = replace(code, slot, () => ({ kind: "hole" }));
+    const w = wireLoose(c, names, infer(c, { ...display, ...names }), def, of, home, part, slot);
+    return w.ok ? settleDot(w, def, cur.target) : w;
+  }
+  const u = unwire(code, names, info, def, of, home, slot);
+  if (!u.ok) return u;
+  const w = wireLoose(u.code, u.names, infer(u.code, { ...display, ...u.names }), def, u.of ?? of, u.home ?? home, part, slot);
+  return w.ok ? { ...w, note: `${w.note} What was there lies loose at the end of the text.` } : w;
+}
+
+// A dot nobody named that a rewire leaves with one use goes back on its
+// one wire: it was only there to share the value.
+function settleDot<E extends Extract<LooseEdit, { ok: true }>>(e: E, def: Id, dot: Id): E {
+  if (e.names[dot] !== undefined || !isDot(e.code, def, dot) || usesOf(e.code, dot).length !== 1) return e;
+  const r = removeDot(e.code, e.names, infer(e.code, { ...display, ...e.names }), def, dot);
+  return r.ok ? { ...e, code: r.code, names: r.names, note: `${e.note} The dot it left with one use is gone, the value back on its wire.` } : e;
+}
+
 // Wire into an input that already has a value (rule 5): the value there is
 // taken off first and lies loose, so a drop swaps and nothing is lost.
 // `wire` is the drop itself (useVar, share), on the code with the hole.
@@ -562,7 +589,8 @@ export function over(code: Code, names: Names, info: Info, def: Id, of: Record<I
   const cur = code.nodes[slot];
   if (cur?.kind === "ref" && cur.target === from) return { ok: false, reason: "already that" };
   // A variable alone is nothing to keep: it's just replaced.
-  if (!cur || cur.kind === "hole" || cur.kind === "ref") return wire(code, names, info);
+  if (!cur || cur.kind === "hole") return wire(code, names, info);
+  if (cur.kind === "ref") { const w = wire(code, names, info); return w.ok ? settleDot({ ...w, of, home }, def, cur.target) : w; }
   if (subtree(code, slot).includes(from)) return { ok: false, reason: "that's part of what's there now" };
   const u = unwire(code, names, info, def, of, home, slot);
   if (!u.ok) return u;
