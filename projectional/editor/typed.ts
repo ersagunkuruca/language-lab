@@ -159,7 +159,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // where a Rational goes, a whole number or one over another is a
   // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t && t.args.some(wholes);
+  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
   // and the first that type-checks there is the one meant.
   let first: TEdit | undefined;
@@ -228,6 +228,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
 
 // Each way to read what's typed, one id per called name: at most 16.
 function readings(t: Typed): Typed[] {
+  if ("params" in t) return readings(t.body).map((body) => ({ params: t.params, body }));
   if (!("op" in t)) return [t];
   let out: Typed[][] = [[]];
   for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
@@ -240,7 +241,9 @@ function readings(t: Typed): Typed[] {
 // before it negates. A leaf may be a name in scope.
 // A leaf may also be a call written the way it prints, f(a, b), of a
 // definition, a builtin or a constructor: `alts` when several share the name.
-type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] };
+// A function written out, (x, y) => x + y or () => 0, is its inputs (new
+// binders, in scope in its body) and its body.
+type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -273,6 +276,18 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   if (named) return { ref: named };
   const r = parseValue(text, code, names);
   if (!("error" in r)) return { value: r.value };
+  // => binds loosest: (x) => x + 1 is a function of x, not (x) => x, plus 1.
+  const fn = /^\(([^()]*)\)\s*=>\s*(\S[\s\S]*)$/.exec(t);
+  if (fn) {
+    const words = fn[1].trim() ? fn[1].split(",").map((w) => w.trim()) : [];
+    if (words.every((w) => /^[^\s()[\],"=<>]+( [^\s()[\],"=<>]+)*$/u.test(w)) && new Set(words).size === words.length) {
+      const params = words.map((name) => ({ id: freshId(), name }));
+      const inner = new Map(scope);
+      for (const p of params) inner.set(p.name, p.id);
+      const body = typedOut(fn[2], code, names, inner);
+      return "error" in body ? body : { params, body };
+    }
+  }
   for (const level of OPS) {
     let depth = 0, quoted = false;
     for (let i = t.length - 1; i > 0; i--) {
@@ -359,8 +374,15 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     nodes[id] = { id, kind: "call", fn, args };
     return id;
   };
+  const nn: Names = { ...names };
   const tree = (t: Typed, place?: Id): Id => {
     if ("value" in t) return build(t.value, place);
+    if ("params" in t) {
+      const id = place ?? freshId();
+      for (const p of t.params) { nodes[p.id] = { id: p.id, kind: "binder" }; nn[p.id] = p.name; }
+      nodes[id] = { id, kind: "lambda", params: t.params.map((p) => p.id), body: tree(t.body) };
+      return id;
+    }
     if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
     const [p, q] = t.args.map(isWhole);
     if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
@@ -387,7 +409,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   }
   const next = { nodes, defs: code.defs };
   const after = defId ? nextHole(next, defId, hole) : undefined;
-  return guardTyped(info, next, names, after ?? hole, `Filled with ${text.trim()}.`);
+  return guardTyped(info, next, nn, after ?? hole, `Filled with ${text.trim()}.`);
 }
 
 // The next hole after `id` in reading order, or the first one.
