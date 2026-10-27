@@ -169,9 +169,10 @@ test("the Mandelbrot shader: one + and · at Complex, lowered to WGSL whole", as
   assert.match(emitWgsl(lowered).wgsl, /fn escape_at_Float64_\d+\(a0: vec2f, a1: vec2f, a2: f32\) -> f32 \{\n {2}var p0 = a0;[\s\S]*loop \{/);
   const r = makeRunner(e.code, info, { print: () => {} });
   const at = (x: number, y: number) => { for (const v of r.call(r.value(e.named("colour")), x, y, 0)) return (v as { fields: number[] }).fields; return []; };
-  // (−1, −1) is −1.045 − 0.08i, inside the set's second disc; (0, 0.5) is outside it.
-  assert.deepEqual(at(-1, -1), [0, 0, 0]);
-  assert.ok(at(0, 0.5).some((v) => v > 0.2));
+  // At time 0 the picture is 3 wide around −0.7436 + 0.1318i: (0.36, −0.09) is
+  // −0.204 − 0.003i, inside the set's main body; (−1, −1) is −2.24 − 1.37i, outside it.
+  assert.deepEqual(at(0.36, -0.09), [0, 0, 0]);
+  assert.ok(at(-1, -1).some((v) => v > 0.2));
 });
 
 // L40b step 2 (ALGEBRA-TABLES.md): Complex's · is its multiplication table
