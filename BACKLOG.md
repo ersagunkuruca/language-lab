@@ -28,7 +28,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440). Step two (#491): each filling built once, ownerOfTypeParts reads the defs list, fall's holes 48 s → 39 s in all; what's left is per-candidate whole-program passes (modes.ts analyzer union-find, unit inference, the node copy) | found doing E100 | P3 | M | |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
-| E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | text step (#497); the graph next |
 
 ## C: Compiler and targets
 
@@ -123,6 +122,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E62 | A fold to a function, applied, reads and draws as a fold from its start: fold placed from distance = 1 (text #497, graph #499) | #499 |
 | E130 | A loose part may be a function: its inputs are a top lambda whose parameters all stand for a variable (home); render.ts looseParts decides | #493 |
 | E131 | Match deeper and Join cases in the inspector's Pattern section (#490) | #490 |
 | E61 | step 4 shared otherwise row edited in every copy (#487); Match deeper / Join cases menu next | #487 |

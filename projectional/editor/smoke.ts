@@ -548,6 +548,22 @@ async function matchDeeper() {
   await p.close();
 }
 
+// A fold to a function, applied to its start, draws as one fold node with
+// a port for the start, as the text reads it (BACKLOG E62): queens' safe.
+async function foldFrom() {
+  where = "a fold from a start";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Eight queens/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^safe$/ }).first().click();
+  const titles = await p.locator(".p-graph text.cl").allTextContents();
+  if (!titles.includes("fold List from distance")) errors.push(`${where}: safe's graph has ${titles.join(" | ")}`);
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/fold placed from distance = 1/.test(text)) errors.push(`${where}: safe reads ${text}`);
+  await p.close();
+}
+
 // Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
 // E111): the box names what it holds, unfolds into a frame, and Ungroup
 // takes the frame away. The code is untouched throughout.
@@ -1043,6 +1059,7 @@ await groupPicked();
 await patternRows();
 await sharedRow();
 await matchDeeper();
+await foldFrom();
 await dotOnWire();
 await letNodes();
 await newAndDeleteDefinition();
