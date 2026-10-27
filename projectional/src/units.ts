@@ -224,6 +224,12 @@ class System {
     return true;
   }
 
+  copy(): System {
+    const s = new System();
+    s.rows = this.rows.map((r) => ({ coef: new Map(r.coef), rhs: [...r.rhs], pivot: r.pivot }));
+    return s;
+  }
+
   // The term's unit if the system pins it down, else undefined.
   value(term: string): Unit | undefined {
     const { coef, rhs } = this.reduce(new Map([[term, 1]]), ZERO);
@@ -263,18 +269,51 @@ export function compatible(code: Code, defId: Id, a: string, b: string): { ok: b
   };
 }
 
+// The palette tries hundreds of fillings of one hole, each a program that
+// differs from the one before in a few nodes. A definition's constraints
+// then are the earlier ones and a few more, so the earlier system, solved
+// once, takes just the new ones. Only when the earlier one had no
+// conflict: then the new ones conflict, in any order, exactly when the
+// whole set does. Anything else is solved from the start.
+export class UnitsBefore {
+  private solved = new Map<Id, { sys: System; keys: Map<string, number> } | null>();
+  private code: Code;
+  constructor(code: Code) { this.code = code; }
+  of(d: Id) {
+    if (!this.solved.has(d)) {
+      const sys = new System(), cs = constraints(this.code, d);
+      this.solved.set(d, cs.every((c) => sys.add(c)) ? { sys, keys: counts(cs) } : null);
+    }
+    return this.solved.get(d)!;
+  }
+}
+const key = (c: Constraint) => JSON.stringify([c.terms, c.rhs]);
+const counts = (cs: Constraint[]) => { const m = new Map<string, number>(); for (const c of cs) m.set(key(c), (m.get(key(c)) ?? 0) + 1); return m; };
+
+function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conflicts"] {
+  const was = before?.of(d);
+  if (!was) return infer(code, d).conflicts;
+  const cs = constraints(code, d), left = new Map(was.keys), added: Constraint[] = [];
+  for (const c of cs) { const k = key(c), n = left.get(k) ?? 0; if (n) left.set(k, n - 1); else added.push(c); }
+  if ([...left.values()].some((n) => n > 0)) return infer(code, d).conflicts;
+  if (!added.length) return [];
+  const sys = was.sys.copy();
+  return added.some((c) => !sys.add(c)) ? infer(code, d).conflicts : [];
+}
+
 // Unit conflicts in every function of a program, as messages, or in the
 // ones in `only` (the palette trying a filling rechecks just the
-// definitions it can affect). Only programs that declare a unit somewhere
-// are checked: without one, every unit is free and nothing can conflict.
-export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>): { id: Id; message: string }[] {
+// definitions it can affect, `before` its program without the filling).
+// Only programs that declare a unit somewhere are checked: without one,
+// every unit is free and nothing can conflict.
+export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore): { id: Id; message: string }[] {
   if (!Object.values(code.nodes).some((n) => unitOf(n))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
     if (only && !only.has(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
-    for (const c of infer(code, d).conflicts) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
+    for (const c of conflictsWith(code, d, before)) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
   }
   return out;
 }
