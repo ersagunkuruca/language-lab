@@ -1,6 +1,9 @@
 # Exact reals: √2 as the number where x² = 2 (design note, 2026-10-27)
 
-BACKLOG L88. Ersagun, 2026-10-26: "sqrt(2) is the number where x^2=2...
+BACKLOG L88. **Steps 1 and 2 are built** (`src/lang/poly.ts`,
+`src/lang/factor.ts`, `src/lang/algebraic.ts`, `test/algebraic.test.ts`):
+`square root(2) · square root(2)` is 2, evaluated and compiled to
+JavaScript. Ersagun, 2026-10-26: "sqrt(2) is the number where x^2=2...
 run that backwards, and extract as much precision out of that as needed...
 when asked to take even powers of it we just simplify the definition and
 go right to an integer."
@@ -128,7 +131,9 @@ real arithmetic.
 
 1. **Polynomials over Int** (TypeScript beside int.ts): resultant, Sturm
    count, square-free part, exact evaluation at a fraction.
-2. **`Algebraic` as a Number.**
+2. **`Algebraic` as a Number. Built.** Values are the minimal polynomial
+   (factored by Zassenhaus's method, factor.ts) and which real root,
+   so each number has one spelling.
    - Its arithmetic, the simplification to Rational or Int, `=` and `<`.
    - `square root` and `k-th root`, `digits`, and `show`.
    - Tests: √2 · √2 is 2, (√2)⁴ is 4, √2 + √3 has `x⁴ − 10x² + 1` and

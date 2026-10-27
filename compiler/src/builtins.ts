@@ -9,7 +9,7 @@
 
 import type { Id } from "../../projectional/src/model.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ARITH, CELL_OPS, COMPARE, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ALGEBRAIC_OPS, ARITH, CELL_OPS, COMPARE, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -110,6 +110,12 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.write]: { js: op(([c, v]) => `($cells().write(${c}, ${v}), $unit)`), scalar: CELLS },
   // Int: a number while it's small (under 2^28), a BigInt beyond (int.ts), so
   // comparisons are plain JS ones.
+  // Algebraic numbers (EXACT-REALS.md): std.ts's implementation, exact,
+  // on BigInt polynomials.
+  ...Object.fromEntries(Object.entries(ALGEBRAIC_OPS).map(([k, id]): [Id, Target] => [id, {
+    js: ["divide", "root", "sqrt", "asFraction"].includes(k) ? "partial" : "impl",
+    scalar: no("an Algebraic is a polynomial with BigInt coefficients: the scalar profile is Float64s"),
+  }])),
   [INT_OPS.add]: { js: op(([a, b]) => `$int.add(${a}, ${b})`), scalar: INT },
   [INT_OPS.sub]: { js: op(([a, b]) => `$int.sub(${a}, ${b})`), scalar: INT },
   [INT_OPS.mul]: { js: op(([a, b]) => `$int.mul(${a}, ${b})`), scalar: INT },

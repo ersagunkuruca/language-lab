@@ -53,6 +53,9 @@ export const RATIONAL_TYPE = "std.rational";
 // std.ts's Complex: a record of two Float64s with the prelude's + − · and
 // no <.
 export const COMPLEX_TYPE = "std.complex";
+// std.ts's Algebraic: exact roots of polynomials (EXACT-REALS.md), ordered,
+// with builtin arithmetic (src/lang/algebraic.ts).
+export const ALGEBRAIC_TYPE = "std.algebraic";
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";
@@ -156,7 +159,7 @@ export class Subst {
       this.plain.add(t.v);
       return;
     }
-    if (t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE)) return;
+    if (t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE)) return;
     if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind === "ordered") throw new ArithError(kind); return; }
     if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
     if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
