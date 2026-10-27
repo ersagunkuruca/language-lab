@@ -143,6 +143,14 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   };
 
   const takesApart = (n: NodeOf<"match">) => takenApart(code, info, n);
+  const fromFold = (n: NodeOf<"call">) => {
+    const f = node(n.fn);
+    if (f.kind !== "fold" || !n.args.length || n.args.some(tall)) return null;
+    const arms = f.arms.map((a) => { const arm = node(a) as NodeOf<"arm">, lam = node(arm.body); return { arm, lam: lam.kind === "lambda" ? lam : null }; });
+    if (!arms.length || arms.some((x) => x.lam?.params.length !== n.args.length)) return null;
+    const ok = arms.every((x) => x.lam!.params.every((p, i) => base(p) === base(arms[0].lam!.params[i])));
+    return ok ? { arms: arms as { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } : null;
+  };
 
   // Steps before a value: lets, and values taken apart.
   const hasSteps = (id: Id) => { const n = node(id); return isLet(n) || (n.kind === "match" && takesApart(n)); };
@@ -419,6 +427,27 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           return lines.length === 1 && "line" in lines[0] && an.kind === "match" && isBool(an) ? [ln(...lead, pn("("), ...lines[0].line, pn(")"))] : block(a, lead);
         };
         return hold(ops.flatMap((a, i) => one(a, i ? [part("op", [`${nota.glyph} `], n.fn)] : lead)));
+      }
+      // A fold to a function, applied: what queens' safe does to thread a
+      // distance through the fold. It reads as a fold with an accumulator,
+      // from its starting value, each case given the accumulator by name:
+      //   fold placed from distance = 1
+      //     cons(queen, others) with ‹others safe› → … ‹others safe›(distance + 1)
+      // When every case is a function of the same inputs, by name. Two or
+      // more: from (from = zero′, r = ‹if zero›()).
+      const from = fromFold(n);
+      if (from) {
+        const starts = n.args.map((a) => inline(a).p);
+        const arms: Blk[] = from.arms.map(({ arm, lam }) => {
+          const results = arm.results.filter((r): r is Id => r !== null);
+          enter([...arm.binds, ...results, ...lam.params]);
+          const b = grp(hang(lam.body, [...pattern({ con: arm.variant, args: arm.binds.map((v) => ({ v })) }), ...(results.length ? [kw(" with "), ...commas(results.map((r) => [bind(r)]))] : []), pn(" → ")]), 0, arm.id, "arm");
+          leave([...arm.binds, ...results, ...lam.params]);
+          return b;
+        });
+        const inits = commas(from.arms[0].lam.params.map((x, i) => [bind(x), pn(" = "), ...starts[i]]));
+        const many = n.args.length > 1 ? [pn("("), ...inits, pn(")")] : inits;
+        return hold([ln(...lead, kw("fold "), ...inline(f.kind === "fold" ? f.scrutinee : n.fn).p, kw(" from "), ...many), grp(arms)]);
       }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return hold([...block(n.fn, [...lead, kw("apply ")]), grp([ln(kw("to "), pn("("), ...commas(n.args.map((a) => inline(a).p)), pn(")"))])]);
       const args = ops.map((a, i) => {
