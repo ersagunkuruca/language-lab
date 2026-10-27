@@ -886,15 +886,9 @@ export function dotHandles(code: Code, defId: Id, names: Names): Names {
 
 export const usesOf = (code: Code, b: Id): Id[] => Object.values(code.nodes).filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
 
-// Put a dot on the wire out of `slot`: its value moves to a dot at the start
-// of the innermost body around it (a function's, a case's, a let's), where
-// everything after can reach it, and the wire runs from the dot to where the
-// value was. Nothing in scope changes on the way up: only bodies bind names.
-export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id): TEdit {
-  const cur = code.nodes[slot];
-  if (!cur) return { ok: false, reason: "nothing there" };
-  if (cur.kind === "hole") return { ok: false, reason: "a hole has no value to share yet" };
-  if (cur.kind === "ref" && code.nodes[cur.target]?.kind === "binder") return { ok: false, reason: "that wire already comes from a variable: drag from it instead" };
+// The innermost body around `slot` (a function's, a case's, a let's): a
+// let put there sees what `slot` sees, since only bodies bind names.
+function bodyAround(code: Code, defId: Id, slot: Id): Id | null {
   const walk = (n: Id, r: Id): Id | null => {
     if (n === slot) return r;
     const x = code.nodes[n];
@@ -912,7 +906,19 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
     }
   };
   const def = code.nodes[defId] as NodeOf<"def">;
-  const at = def.body ? walk(def.body, def.body) : null;
+  return def?.body ? walk(def.body, def.body) : null;
+}
+
+// Put a dot on the wire out of `slot`: its value moves to a dot at the start
+// of the innermost body around it (a function's, a case's, a let's), where
+// everything after can reach it, and the wire runs from the dot to where the
+// value was. Nothing in scope changes on the way up: only bodies bind names.
+export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id): TEdit {
+  const cur = code.nodes[slot];
+  if (!cur) return { ok: false, reason: "nothing there" };
+  if (cur.kind === "hole") return { ok: false, reason: "a hole has no value to share yet" };
+  if (cur.kind === "ref" && code.nodes[cur.target]?.kind === "binder") return { ok: false, reason: "that wire already comes from a variable: drag from it instead" };
+  const at = bodyAround(code, defId, slot);
   if (!at) return { ok: false, reason: "that isn't inside this definition" };
   const dot = freshId(), use = freshId(), lam = freshId(), let_ = freshId();
   // Point the body's parent at the let first, then the value's at the use,
@@ -924,6 +930,57 @@ export function addDot(code: Code, names: Names, info: Info, defId: Id, slot: Id
   next.nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: at === slot ? use : at };
   next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [slot] };
   return guardTyped(info, next, names, dot, "Put a dot on that wire. Drag from the dot to any input it can reach to use the same value there; naming it is optional.");
+}
+
+// A group made into a function, called where it was (BACKLOG E146): the
+// group's nodes become the body of a function named part, defined in the
+// innermost body around them (where it sees what they saw), and called in
+// their place. What's wired into the group from outside becomes the
+// call's inputs, in reading order. Undo puts it back.
+// For now a group gives one value out: one node of it whose value leaves.
+export function makeFunction(code: Code, names: Names, info: Info, defId: Id, members: Id[]): TEdit & { fn?: Id } {
+  const inDef = new Set(subtree(code, defId));
+  const kinds = ["lit", "ref", "call", "lambda", "match", "fold", "hole"];
+  if (members.some((m) => code.nodes[m]?.kind === "binder")) return { ok: false, reason: "a dot is in the group: a function's body can't hold a dot the rest still uses. Leave the dot out of the group" };
+  const own = members.filter((m) => inDef.has(m) && kinds.includes(code.nodes[m]?.kind));
+  if (!own.length) return { ok: false, reason: "nothing in the group is part of this definition" };
+  // A frame in the group (a function, a match) brings all it holds.
+  const region = new Set(own.flatMap((m) => (["lambda", "match", "fold"].includes(code.nodes[m].kind) ? subtree(code, m) : [m])));
+  const parent = (id: Id) => parentOf(code, id)?.parent;
+  const roots = [...region].filter((m) => kinds.includes(code.nodes[m].kind) && !region.has(parent(m) ?? ""));
+  if (roots.length !== 1) return { ok: false, reason: `${roots.length} values leave the group: for now a function made from a group gives one value, so group the nodes that feed a single one` };
+  const root = roots[0];
+  if (code.nodes[root].kind === "lambda" && region.size === subtree(code, root).length) return { ok: false, reason: "it's a function already" };
+  // What comes in: each child of the group's nodes that isn't in it.
+  // A literal, a called function and a definition's name stay in: they're
+  // drawn on the node, not wired to it.
+  const wire = (x: Id) => { const n = code.nodes[x]; return kinds.includes(n?.kind) && n.kind !== "lit" && !(n.kind === "ref" && code.nodes[n.target]?.kind !== "binder") && parentOf(code, x)?.slot !== "fn"; };
+  const inputs = readingOrder(code, root).filter((x) => !region.has(x) && region.has(parent(x) ?? "") && wire(x));
+  const at = bodyAround(code, defId, root);
+  if (!at) return { ok: false, reason: "that isn't inside this definition" };
+  const fn = freshId(), lam = freshId(), call = freshId(), fref = freshId(), outer = freshId(), let_ = freshId();
+  // The same variable wired in twice (time · time) is one input.
+  const keyOf = (x: Id) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "binder" ? `v ${n.target}` : x; };
+  const firsts = inputs.filter((x, i) => inputs.findIndex((y) => keyOf(y) === keyOf(x)) === i);
+  const params = firsts.map(() => freshId());
+  let next = swapIn(code, at, let_);
+  if (at !== root) next = swapIn(next, root, call);
+  for (const x of inputs) {
+    const r = freshId();
+    next = swapIn(next, x, r);
+    next.nodes[r] = { id: r, kind: "ref", target: params[firsts.findIndex((y) => keyOf(y) === keyOf(x))] };
+  }
+  for (const p of params) next.nodes[p] = { id: p, kind: "binder" };
+  next.nodes[fn] = { id: fn, kind: "binder" };
+  next.nodes[fref] = { id: fref, kind: "ref", target: fn };
+  next.nodes[call] = { id: call, kind: "call", fn: fref, args: firsts };
+  next.nodes[lam] = { id: lam, kind: "lambda", params, body: root };
+  next.nodes[outer] = { id: outer, kind: "lambda", params: [fn], body: at === root ? call : at };
+  next.nodes[let_] = { id: let_, kind: "call", fn: outer, args: [lam] };
+  const nn: Names = { ...names, [fn]: "part" };
+  params.forEach((p, i) => { const x = code.nodes[firsts[i]]; nn[p] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
+  const r = guardTyped(info, collect(next), nn, fn, `Made the group a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}. Name it, fold it, or Undo to put it back.`);
+  return r.ok ? { ...r, fn: lam } : r;
 }
 
 // A new value of its own, not wired anywhere yet: a dot holding a hole, as

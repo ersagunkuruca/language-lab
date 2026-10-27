@@ -542,7 +542,7 @@ function pasteIntoSelected() {
 // `then` sets what the editor shows after the edit (which definition is
 // open, what's selected) before it's drawn.
 // `place`: where new nodes go in the graph (layout.json), by id.
-function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins?: Pins): boolean {
+function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins?: Pins, layout?: Doc["layout"]): boolean {
   const w = wrapping;
   wrapping = null;
   if (w && e.ok && e.code.nodes[w.hole] && e.code.nodes[w.hole].kind !== "hole") e = T.wrapInto(e.code, e.names, w.info, w.hole, w.kept);
@@ -569,9 +569,10 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins
   const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
   // An edit that sets parts loose, or wires one in, says so (drafts.ts).
   const loose = e.of ? { loose: e.of, home: e.home } : {};
-  const placed = place ? { layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(place).map(([k, v]) => [lkey(k), v])) } } } : {};
+  const base = layout ?? doc.layout;
+  const placed = place ? { layout: { ...base, at: { ...(base.at ?? {}), ...Object.fromEntries(Object.entries(place).map(([k, v]) => [lkey(k), v])) } } } : layout ? { layout } : {};
   const pinned = pins ? { signatures: { ...doc.signatures, ...pins } } : {};
-  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed, ...pinned }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place ? ["layout.json"] : []), ...(pins ? ["signatures.json"] : [])], e.note + note);
+  commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed, ...pinned }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place || layout ? ["layout.json"] : []), ...(pins ? ["signatures.json"] : [])], e.note + note);
   return true;
 }
 
@@ -2027,6 +2028,19 @@ function ungroup(g: Id) {
   commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only layout.json changed.");
 }
 
+// A group made a function called where it was (BACKLOG E146): the code
+// changes, and the group's frame gives way to the function's own, folded
+// if the group was.
+function groupToFunction(info: T.Info, g: Id) {
+  const members = doc.layout.groups?.[g];
+  if (!members) return;
+  const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, members);
+  const { [g]: _, ...groups } = doc.layout.groups ?? {};
+  const was = doc.layout.folded ?? [];
+  const folded = was.filter((x) => x !== g);
+  applyT(r, undefined, undefined, undefined, { ...doc.layout, groups, folded });
+}
+
 // A frame drawn folded into one box, or open. A view.
 function toggleFolded(f: Id) {
   const now = doc.layout.folded ?? [];
@@ -2114,7 +2128,11 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     if (kind === "node" && n?.kind === "match" && (doc.layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
     else if (kind === "node" && n?.kind === "match" && flattened(matchRows(doc.code, info, n))) rows.push(item("Draw as nested matches", "tree", "The decision tree as it is stored: one match per level, to see the order it decides in"));
-    if (kind === "frame" && doc.layout.groups?.[id]) rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
+    if (kind === "frame" && doc.layout.groups?.[id]) {
+      const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, doc.layout.groups[id]);
+      rows.push(item("Make it a function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", r.ok ? undefined : r.reason));
+      rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
+    }
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
@@ -2222,6 +2240,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "tidy-picked": return graph?.tidy(graph.picked());
     case "group-picked": return groupPicked(graph?.picked() ?? []);
     case "ungroup": return ungroup(target!);
+    case "group-fn": return groupToFunction(info, target!);
     case "tree": {
       const now = doc.layout.tree ?? [], on = now.includes(target!);
       return commit({ layout: { ...doc.layout, tree: on ? now.filter((x) => x !== target) : [...now, target!] } }, ["layout.json"],
