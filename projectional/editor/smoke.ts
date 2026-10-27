@@ -256,6 +256,17 @@ async function implementInterface() {
   if (!/trig at wave› : Trig Wave/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
   await p.locator(".p-text .hole").first().click();
   if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
+  // A new interface of the program's own (BACKLOG E138).
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator('[data-set="new-kind"][data-value="interface"]').click();
+  await p.locator("#f-def-name").fill("Halving");
+  await p.locator("#f-def-case").fill("half");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator("#f-new-op").fill("twice");
+  await p.locator("button", { hasText: "Add the operation" }).click();
+  const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/interface Halving a \| halving\(half: \(a\) -> a, twice: \(a\) -> a\)/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
   await p.close();
 }
 

@@ -101,7 +101,10 @@ export type Shape =
   | { kind: "type"; firstCase: string }
   // An effect is declared like a data type whose cases are its operations
   // (model.ts): the first one takes nothing and answers nothing until said.
-  | { kind: "effect"; firstOperation: string };
+  | { kind: "effect"; firstOperation: string }
+  // An interface (INTERFACES.md) is a record of operations over one type a:
+  // the first one takes an a and gives one back, until its type is changed.
+  | { kind: "interface"; firstOperation: string };
 
 export function newDefinition(code: Code, names: Names, rawName: string, shape: Shape): Top {
   const name = trim(rawName);
@@ -116,6 +119,15 @@ export function newDefinition(code: Code, names: Names, rawName: string, shape: 
     body = add({ kind: "lambda", params, body: (select = add({ kind: "hole" })) });
   } else if (shape.kind === "value") {
     body = select = add({ kind: "hole" });
+  } else if (shape.kind === "interface") {
+    const a = add({ kind: "binder" });
+    nn[a] = "a";
+    const op = add({ kind: "field", type: add({ kind: "tfun", params: [add({ kind: "tref", target: a, args: [] })], result: add({ kind: "tref", target: a, args: [] }) }) });
+    nn[op] = trim(shape.firstOperation) || "operation";
+    const variant = add({ kind: "variant", fields: [op] });
+    nn[variant] = name.toLowerCase();
+    body = add({ kind: "typedef", params: [a], variants: [variant], interface: true });
+    select = op;
   } else {
     const effect = shape.kind === "effect";
     const first = trim(effect ? shape.firstOperation : shape.firstCase) || name.toLowerCase();
@@ -126,10 +138,11 @@ export function newDefinition(code: Code, names: Names, rawName: string, shape: 
   }
   const def = add({ kind: "def", body });
   nn[def] = name;
-  const what = shape.kind === "type" ? "a data type with one case"
+  const what = shape.kind === "interface" ? `an interface with one operation, ${nn[select]}, from an a to an a: a type implements it by saying what each operation does there`
+    : shape.kind === "type" ? "a data type with one case"
     : shape.kind === "effect" ? "an effect with one operation: calling it performs it, and a match on what performs it handles it"
     : shape.kind === "value" ? "a value: fill its hole" : `a function of ${shape.params.length || "no"} input${shape.params.length === 1 ? "" : "s"}: fill its hole`;
-  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: shape.kind === "type" || shape.kind === "effect" ? def : select, note: `New definition ${name}, ${what}.` };
+  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: shape.kind === "type" || shape.kind === "effect" || shape.kind === "interface" ? def : select, note: `New definition ${name}, ${what}.` };
 }
 
 // Everything outside `def` that points into it: calls, uses as a value,
@@ -278,13 +291,25 @@ export function removeCase(code: Code, names: Names, type: Id, variant: Id): Top
     note: `Removed the case ${nameOf(names, variant)}.${arms ? ` ${arms} arm${arms === 1 ? "" : "s"} for it went too; nothing could reach ${arms === 1 ? "it" : "them"}.` : ""}` };
 }
 
-export function addField(code: Code, names: Names, type: Id, variant: Id, rawName: string, t: TypeSpec): Top {
+// An interface's new operation: n inputs of its type a, giving an a or a
+// type of its own. Every implementation gets a hole for it.
+export function addOperation(code: Code, names: Names, iface: Id, rawName: string, inputs: number, result: Id | null): Top {
+  const td = typedefOf(code, iface);
+  if (!td.interface) return { ok: false, reason: "only an interface has operations of this kind" };
+  const a = td.params[0];
+  const r = addField(code, names, iface, td.variants[0], rawName || "operation", (add) => add({ kind: "tfun", params: Array.from({ length: inputs }, () => add({ kind: "tref", target: a, args: [] })), result: add({ kind: "tref", target: result ?? a, args: [] }) }));
+  if (!r.ok) return r;
+  const made = callsOf(code, td.variants[0]).length;
+  return { ...r, note: `Added the operation ${r.names[r.select]} to ${nameOf(names, iface)}.${made ? ` ${made} implementation${made === 1 ? "" : "s"} got a hole for it.` : ""}` };
+}
+
+export function addField(code: Code, names: Names, type: Id, variant: Id, rawName: string, t: TypeSpec | ((add: (n: NodeData) => Id) => Id)): Top {
   const v = code.nodes[variant] as NodeOf<"variant">;
   if (!typedefOf(code, type).variants.includes(variant)) return { ok: false, reason: "that isn't a case of this type" };
   const name = trim(rawName) || "field";
   const { nodes, add } = builder(code);
   const nn: Names = { ...names };
-  const field = add({ kind: "field", type: buildType(add, t) });
+  const field = add({ kind: "field", type: typeof t === "function" ? t(add) : buildType(add, t) });
   nn[field] = name;
   nodes[variant] = { ...v, fields: [...v.fields, field] };
   // Every place that makes this case gets a hole for the new field.
@@ -303,7 +328,7 @@ export function addField(code: Code, names: Names, type: Id, variant: Id, rawNam
   }
   // Every arm for this case gets a binder for it (and a folded one if the
   // field holds the type itself).
-  const recursive = isRecursive(code, type, t);
+  const recursive = typeof t !== "function" && isRecursive(code, type, t);
   let arms = 0;
   for (const n of Object.values(code.nodes)) {
     if (n.kind !== "arm" || n.variant !== variant) continue;
