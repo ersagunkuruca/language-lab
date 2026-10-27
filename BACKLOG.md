@@ -29,7 +29,6 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440) | found doing E100 | P3 | M | |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 | E78 | Steps and Nested views of an action-heavy `main` read as `t1 = …` temporaries and `(_₁) => …` chains | QA-2026-10-24b L9 | P4 | M | |
-| E131 | Nested patterns: "Match deeper" (typed.ts `splitOn` named as opening a field into its cases) and "Join cases" (an inner match with one row left puts its body back as the outer arm's) on a pattern row's menu | PATTERNS.md "Editing", left from E61 | P3 | S | |
 | E62 | A fold with an accumulator drawn as `fold … from x` over the function-folding tree (queens' `safe`); drawing only, in the text and the graph | L48, LANGUAGE-REVIEW-2026-10-24 §7 | P3 | M | |
 
 ## C: Compiler and targets
@@ -128,6 +127,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E131 | Match deeper and Join cases in the inspector's Pattern section (#490) | #490 |
 | E61 | step 4 shared otherwise row edited in every copy (#487); Match deeper / Join cases menu next | #487 |
 | E111 | Group the picked into one box: a frame of their own, folded, naming what it holds; Ungroup on its menu; layout.json groups | #482 |
 | E80 | Answered later on an operation's panel (Top.setLater): each case gets the rest after its inputs; the graph draws (item) with rest | #480 |
