@@ -569,6 +569,20 @@ async function firstSteps() {
   await p.close();
 }
 
+// A definition's Run starts with what main passes it (BACKLOG I19): cuts
+// is called as cuts("abc") inside a print, and opens with "abc".
+async function seededRun() {
+  where = "a Run seeded from main";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /Run backwards/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^cuts$/ }).first().click();
+  const vals = await p.locator(".side input").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
+  if (!vals.includes('"abc"')) errors.push(`${where}: cuts opens with ${JSON.stringify(vals)}`);
+  await p.close();
+}
+
 async function foldFrom() {
   where = "a fold from a start";
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -1079,6 +1093,7 @@ await patternRows();
 await sharedRow();
 await matchDeeper();
 await foldFrom();
+await seededRun();
 await firstSteps();
 await dotOnWire();
 await letNodes();
