@@ -42,6 +42,7 @@ import { litLabel } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
+import { isOperation } from "../src/lang/records.ts";
 import { foldFrom, looseParts, takenApart } from "../src/lang/render.ts";
 import { flattened, matchRows, patternText } from "../src/lang/patterns.ts";
 
@@ -386,7 +387,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
     const list = listItems(id);
     // A field read is labelled .x, so what's wired in reads as p.x.
-    const field = f.kind === "ref" && node(f.target)?.kind === "field";
+    const field = f.kind === "ref" && node(f.target)?.kind === "field" && !isOperation(code, f.target);
     const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
     // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
     // an inner ++ with a dot on it stays its own node.

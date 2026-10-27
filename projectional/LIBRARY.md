@@ -18,15 +18,16 @@ There are five kinds of number. Int is a whole number of any size. Float64 is a 
 - **at least** : `(a, a) -> Bool`. a ≥ b: not a < b.
 - **smaller** : `(a, a) -> a`. The smaller of two numbers (min); a shader's min.
 - **larger** : `(a, a) -> a`. The larger of two numbers (max); a shader's max.
+- **Trig** (type). An interface: sin, cos, tan, exp and log, for any type that implements them. An implementation is a definition of type Trig T, written trig(its sin, its cos, …); Float64's is the builtins. A use is resolved to the type's own function before the program runs, so it costs nothing (INTERFACES.md).
+- **sin** : `(a) -> a where a has Trig`. Sine of an angle in radians, at any type with Trig (Float64 now; dual numbers next).
+- **cos** : `(a) -> a where a has Trig`. Cosine of an angle in radians, at any type with Trig.
+- **tan** : `(a) -> a where a has Trig`. Tangent of an angle in radians, at any type with Trig.
+- **exp** : `(a) -> a where a has Trig`. e to the power x, at any type with Trig.
+- **log** : `(a) -> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
 - **divide** : `(Float64, Float64) -> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
 - **sqrt** : `(Float64) -> Float64`. The square root.
 - **power** : `(Float64, Float64) -> Float64`. a to the power b.
-- **sin** : `(Float64) -> Float64`. Sine of an angle in radians.
-- **cos** : `(Float64) -> Float64`. Cosine of an angle in radians.
-- **tan** : `(Float64) -> Float64`. Tangent of an angle in radians.
 - **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
-- **exp** : `(Float64) -> Float64`. e to the power x.
-- **log** : `(Float64) -> Float64`. The natural logarithm (the debugging effect is Log, a different thing).
 - **abs** : `(Float64) -> Float64`. The size of a Float64 without its sign.
 - **floor** : `(Float64) -> Float64`. The Float64 rounded down to a whole one, still a Float64. whole part gives an Int.
 - **mod** : `(Float64, Float64) -> Float64`. The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.
@@ -71,6 +72,11 @@ There are five kinds of number. Int is a whole number of any size. Float64 is a 
 - **digits** : `(Algebraic, Int) -> Text`. The first n digits after the point, cut off, worked out exactly: digits(√2, 5) is "1.41421". As many as asked for.
 - **as float64** : `(Algebraic) -> Float64`. The nearest Float64.
 - **show** : `(Algebraic) -> Text`. An Algebraic number as text: 2 or 1/3 when it is a fraction, √2 or −√2 for those, else its first ten digits and an ellipsis.
+- **sin** : `(Float64) -> Float64`. Sine of a Float64 angle in radians: what Trig's sin is at Float64. Not offered on its own: sin is.
+- **cos** : `(Float64) -> Float64`. Cosine of a Float64 angle in radians: what Trig's cos is at Float64. Not offered on its own: cos is.
+- **tan** : `(Float64) -> Float64`. Tangent of a Float64 angle in radians: what Trig's tan is at Float64. Not offered on its own: tan is.
+- **exp** : `(Float64) -> Float64`. e to the power x, for a Float64: what Trig's exp is at Float64. Not offered on its own: exp is.
+- **log** : `(Float64) -> Float64`. The natural logarithm of a Float64 (the debugging effect is Log, a different thing): what Trig's log is at Float64. Not offered on its own: log is.
 - **add** : `(Float64, Float64) -> Float64`. a + b for Float64s: what the generic + is at Float64.
 - **subtract** : `(Float64, Float64) -> Float64`. a − b for Float64s: what the generic − is at Float64.
 - **multiply** : `(Float64, Float64) -> Float64`. a · b for Float64s: what the generic · is at Float64.

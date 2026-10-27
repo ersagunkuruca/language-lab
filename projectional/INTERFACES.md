@@ -1,7 +1,7 @@
 # Interfaces and implementations (design note, 2026-10-27)
 
-BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Step 1 is built**
-(L40e, `test/interfaces.test.ts`). Ersagun, 2026-10-27:
+BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 and 2 are
+built** (L40e and L40f, `test/interfaces.test.ts`, `test/trig.test.ts`). Ersagun, 2026-10-27:
 a type's operations should be "a separate thing, because if it is separate
 you can add more interface implementations later, not just + * - /. For
 example for dual numbers we will probably need implementations of sin,
@@ -173,9 +173,12 @@ and a colour keeps the rule. Literals at a type need one more operation,
      compiled; the resolved program has no interface left; a missing
      implementation, and two at once; a pin keeps what it needs; an
      implementation passed as a value.
-2. **`Trig` in std**, with Float64's implementation as the builtins.
-   `sin` and friends become generic the way `+` did, and the per-type
-   ones stay for programs already written.
+2. **`Trig` in std. Built** (L40f, `test/trig.test.ts`). `std.trig` holds
+   `sin`, `cos`, `tan`, `exp` and `log`. The prelude's hidden `trig at
+   float64` gives the builtins. The palette offers Trig's `sin`, and
+   Float64's own stays for programs already written. The text view and the
+   graph draw `sin(x)` as a call, not as a field read. On the GPU it is
+   WGSL's `sin`, and `derivative` sees it as Float64's.
 3. **Dual numbers** in the prelude, with `Arithmetic` from
    `table product(dual table)` and `Trig` from the chain rule. A
    derivative by dual numbers is tested against derive.ts (L45).
