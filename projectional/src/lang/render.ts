@@ -104,6 +104,18 @@ export function looseParts(code: Code, def: Id, home: Record<Id, Id>): { params:
   return b?.kind === "lambda" && b.params.length && b.params.every((p) => home[p]) ? { params: b.params, expr: b.body } : { params: [], expr: d.body };
 }
 
+// A fold to a function, applied to starting values: a fold with
+// accumulators (BACKLOG E62), when every case is a function of the same
+// inputs, by name. queens' safe: fold placed from distance = 1.
+export function foldFrom(code: Code, n: NodeOf<"call">, nameOf: (id: Id) => string): { fold: NodeOf<"fold">; arms: { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } | null {
+  const f = code.nodes[n.fn];
+  if (f?.kind !== "fold" || !n.args.length) return null;
+  const arms = f.arms.map((a) => { const arm = code.nodes[a] as NodeOf<"arm">, lam = code.nodes[arm.body]; return { arm, lam: lam.kind === "lambda" ? lam : null }; });
+  if (!arms.length || arms.some((x) => x.lam?.params.length !== n.args.length)) return null;
+  const ok = arms.every((x) => x.lam!.params.every((p, i) => nameOf(p) === nameOf(arms[0].lam!.params[i])));
+  return ok ? { fold: f, arms: arms as { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } : null;
+}
+
 // `loose`: the definition is a loose part, with its inputs' `home`.
 export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: Record<Id, Id> } = {}): Blk[] {
   const names = pres.names;
@@ -143,14 +155,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   };
 
   const takesApart = (n: NodeOf<"match">) => takenApart(code, info, n);
-  const fromFold = (n: NodeOf<"call">) => {
-    const f = node(n.fn);
-    if (f.kind !== "fold" || !n.args.length || n.args.some(tall)) return null;
-    const arms = f.arms.map((a) => { const arm = node(a) as NodeOf<"arm">, lam = node(arm.body); return { arm, lam: lam.kind === "lambda" ? lam : null }; });
-    if (!arms.length || arms.some((x) => x.lam?.params.length !== n.args.length)) return null;
-    const ok = arms.every((x) => x.lam!.params.every((p, i) => base(p) === base(arms[0].lam!.params[i])));
-    return ok ? { arms: arms as { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } : null;
-  };
+  const fromFold = (n: NodeOf<"call">) => (n.args.some(tall) ? null : foldFrom(code, n, base));
 
   // Steps before a value: lets, and values taken apart.
   const hasSteps = (id: Id) => { const n = node(id); return isLet(n) || (n.kind === "match" && takesApart(n)); };
