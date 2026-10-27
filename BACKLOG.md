@@ -125,6 +125,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E148 | A let node's right-click opens its value's menu; a menu that fails to build closes with a message instead of taking the page down. | #531 |
 | E144 | An edit no longer lays the graph out again: drawn nodes stay put, new ones sit by their neighbours; Tidy is manual. | #530 |
 | E147 | A loose part wires back over a filled input: what was there goes loose, or a dot nobody named left with one use goes back on its wire (HSI colour, Ersagun 2026-10-27) | #529 |
 | E140 | A use at a type without the interface says which it lacks: Bool has no Doubling, with Implement Doubling for Bool in the palette | #526 |
