@@ -42,7 +42,7 @@ import { litLabel } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { portLabel } from "../src/lang/equations.ts";
-import { isOperation } from "../src/lang/records.ts";
+import { implementationOps, isOperation } from "../src/lang/records.ts";
 import { foldFrom, looseParts, takenApart } from "../src/lang/render.ts";
 import { flattened, matchRows, patternText } from "../src/lang/patterns.ts";
 
@@ -432,7 +432,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const list = listItems(id);
     // A field read is labelled .x, so what's wired in reads as p.x.
     const field = f.kind === "ref" && node(f.target)?.kind === "field" && !isOperation(code, f.target);
-    const label = list ? "list" : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
+    // An implementation is drawn as the interface at its type, one input
+    // per operation, named (BACKLOG E152): not as a call of its record.
+    const ops = implementationOps(code, n.fn);
+    const at = ops ? /^(\S+) (.+)$/.exec(typeOf(id)) : null;
+    const label = list ? "list" : at ? `${at[1]} at ${at[2]}` : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
     // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
     // an inner ++ with a dot on it stays its own node.
     const inputs = list ?? chainOperands(code, id, (a) => !!dotOf(a)) ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
@@ -442,17 +446,19 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const kids = inputs.map((a) => (empty(a) ? null : arg(a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
-    const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0);
+    const portNames = ops && ops.length === n.args.length ? ops.map(name) : null;
+    const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0);
     // A list, or a chain of one operation, takes one more input at its +.
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
-    const bh = Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus;
+    const bh = portNames ? 30 + inputs.length * 20 : Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus;
     const top = badge ? 14 : 0;
-    const portY = (i: number) => top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1);
+    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
-      g.append(s("text", { x: bw / 2, y: top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
+      g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
+      portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
       inputs.forEach((a, i) => g.append(empty(a)
         ? titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: `inp empty${sel(a)}${errs.has(a) ? " err" : ""}`, "data-slot": a, "data-id": a }), `${holeType(a) ? `${holeType(a)}: ` : ""}empty. Click it for the palette, or drag a value onto it`)
         : titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));

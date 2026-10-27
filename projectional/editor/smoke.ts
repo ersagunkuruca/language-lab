@@ -255,6 +255,9 @@ async function implementInterface() {
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   // One line per operation, by its name (BACKLOG E151).
   if (!/trig at wave› : Trig Wave/.test(text) || !/= sin: □/.test(text) || /trig\(/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
+  // The graph draws it as Trig at Wave, an input per operation (BACKLOG E152).
+  const impl = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
+  if (!impl.includes("Trig at Wave") || !impl.includes("sin") || /\btrig\b/.test(impl)) errors.push(`${where}: the graph draws the implementation as ${impl.slice(0, 160)}`);
   await p.locator(".p-text .hole").first().click();
   if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
   // A new interface of the program's own (BACKLOG E138).
