@@ -319,13 +319,23 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   if (call && parts) {
     call[1] = call[1].trim();
     const named = scope.get(call[1]);
-    // Out of scope, a binder or a field isn't something to call.
-    const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind);
-    const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])];
+    // Out of scope, a binder or a field isn't something to call, except an
+    // interface's operation: double(x) (BACKLOG E139). An operation comes
+    // before a constructor of the same name, as the palette offers it.
+    const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind) || isOperation(code, id);
+    const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])]
+      .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
     const args = parts.map((a) => typedOut(a, code, names, scope));
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
   }
   return r;
+}
+
+// A field of an interface's record is one of its operations (INTERFACES.md).
+function isOperation(code: Code, id: Id): boolean {
+  if (code.nodes[id]?.kind !== "field") return false;
+  const v = Object.values(code.nodes).find((n) => n.kind === "variant" && n.fields.includes(id));
+  return !!v && Object.values(code.nodes).some((n) => n.kind === "typedef" && n.interface && n.variants.includes(v.id));
 }
 
 // The arguments of a call, split at its own commas: none inside brackets
