@@ -1694,6 +1694,14 @@ function implementationsPanel(info: T.Info, names: Names): HTMLElement {
   return out;
 }
 
+// What an interface's operation takes, (a) or (a, a), and what it gives.
+function operationPickers(a: Id, names: Names, inputs = 1, gave: Id = a) {
+  const an = names[a] ?? "a";
+  const takes = h("select", { id: "f-op-takes" }, ...[1, 2].map((k) => h("option", { value: String(k), selected: k === inputs }, `(${Array(k).fill(an).join(", ")})`))) as HTMLSelectElement;
+  const gives = h("select", { id: "f-op-gives" }, ...([[a, an], [BOOL, "Bool"], [STRING, "Text"], [NUMBER, "Float64"]] as [Id, string][]).map(([v, l]) => h("option", { value: v, selected: v === gave }, l))) as HTMLSelectElement;
+  return { takes, gives };
+}
+
 // A data type's words, or an effect's: an effect's cases are operations,
 // and their fields are what each is given.
 function words(type: Id) {
@@ -1721,8 +1729,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       out.append(row(pick(f, names[f] ?? "operation", typeText(get(code, f, "field").type, names)), edit("×", "Remove this operation", r, () => runTop(info, r), "btn mini")));
     }
     const c = textField("f-new-op", "New operation", "its name");
-    const takes = h("select", { id: "f-op-takes" }, h("option", { value: "1" }, `(${names[a] ?? "a"})`), h("option", { value: "2" }, `(${names[a] ?? "a"}, ${names[a] ?? "a"})`)) as HTMLSelectElement;
-    const gives = h("select", { id: "f-op-gives" }, ...([[a, names[a] ?? "a"], [BOOL, "Bool"], [STRING, "Text"], [NUMBER, "Float64"]] as [Id, string][]).map(([v, l]) => h("option", { value: v }, l))) as HTMLSelectElement;
+    const { takes, gives } = operationPickers(a, names);
     const add = h("button", { class: "btn", type: "button" }, "Add the operation");
     add.addEventListener("click", () => runTop(info, Top.addOperation(code, sh, ui.def, c.input.value, +takes.value, gives.value === a ? null : gives.value)));
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
@@ -1815,6 +1822,20 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       }
     }
     out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
+    return out;
+  } else if (n?.kind === "field" && (defBody(info.owner.get(sel) ?? "") as { interface?: true } | null)?.interface) {
+    // An interface's operation: what it takes and gives (BACKLOG E142).
+    const iface = info.owner.get(sel)!, td = defBody(iface) as NodeOf<"typedef">, a = td.params[0];
+    const was = code.nodes[n.type] as NodeOf<"tfun">;
+    const gave = (code.nodes[was.result] as NodeOf<"tref">).target;
+    const { takes, gives } = operationPickers(a, names, was.params.length, gave);
+    const change = h("button", { class: "btn", type: "button" }, "Change");
+    change.addEventListener("click", () => runTop(info, Top.setOperation(code, sh, iface, sel, +takes.value, gives.value === a ? null : gives.value)));
+    const variant = td.variants[0];
+    out.append(h("div", { class: "sub-head" }, "Operation of ", pick(iface, names[iface] ?? "the interface"), " · code.json"),
+      h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives),
+      h("div", { class: "acts" }, change, edit("Remove this operation", `Remove it from ${names[iface] ?? "the interface"}`, Top.removeField(code, sh, variant, sel), () => runTop(info, Top.removeField(code, sh, variant, sel), () => { ui.selected = iface; }), "btn danger")),
+      h("p", { class: "hint" }, "An implementation's part for it becomes a hole when what it takes or gives changes."));
     return out;
   } else if (n?.kind === "field") {
     const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
