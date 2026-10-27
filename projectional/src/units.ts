@@ -278,7 +278,10 @@ export function compatible(code: Code, defId: Id, a: string, b: string): { ok: b
 export class UnitsBefore {
   private solved = new Map<Id, { sys: System; keys: Map<string, number> } | null>();
   private code: Code;
-  constructor(code: Code) { this.code = code; }
+  // A filling declares no unit, so the program has one just when the one
+  // before it does.
+  readonly anyUnit: boolean;
+  constructor(code: Code) { this.code = code; this.anyUnit = Object.values(code.nodes).some((n) => unitOf(n)); }
   of(d: Id) {
     if (!this.solved.has(d)) {
       const sys = new System(), cs = constraints(this.code, d);
@@ -307,7 +310,7 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conf
 // Only programs that declare a unit somewhere are checked: without one,
 // every unit is free and nothing can conflict.
 export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore): { id: Id; message: string }[] {
-  if (!Object.values(code.nodes).some((n) => unitOf(n))) return [];
+  if (!(before ? before.anyUnit : Object.values(code.nodes).some((n) => unitOf(n)))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
     if (only && !only.has(d)) continue;
