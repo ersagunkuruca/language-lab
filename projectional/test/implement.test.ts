@@ -8,7 +8,7 @@ import { NUMBER, showIn } from "../src/lang/types.ts";
 import type { Id, NodeOf } from "../src/model.ts";
 import { fillValue, fillings, implement, implementable, infer, interfaces, setProgramPins } from "../editor/typed.ts";
 import { B } from "../src/prelude.ts";
-import { addOperation, newDefinition } from "../src/lang/toplevel.ts";
+import { addOperation, newDefinition, setOperation } from "../src/lang/toplevel.ts";
 
 // Writing an implementation in the editor (BACKLOG E137, INTERFACES.md step
 // 5): a type that has no Trig gets one, a definition of Trig's record at it
@@ -127,4 +127,24 @@ test("a call at a type without the interface says which it lacks", () => {
   assert.match(r.reason, /Bool has no Doubling/);
   assert.equal(r.missing?.iface, D.def);
   assert.equal(r.missing && showIn(r.missing.type, names, info.subst), "Bool");
+});
+
+// An operation's Takes and Gives changed (BACKLOG E142): its type is the new
+// one, and an implementation's part for it is a hole again, wanting it.
+test("changing what an operation takes and gives", () => {
+  const k = new Lang(LIBRARY.code);
+  const fn1 = (a: Id) => k.tfun([k.tref(a)], k.tref(a));
+  const D = k.interface("Doubling", "a", [["double", fn1]]);
+  const impl = k.def("doubling at float64");
+  k.define(impl, k.call(D.v, k.fn(["x"], (x) => k.call(B.add, x, x))));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = setOperation(code, names, D.def, D.op.double, 2, null);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  assert.match(r.note, /1 implementation have a hole for it again/);
+  const info = infer(r.code, r.names);
+  const holes = [...info.holes.values()].map((h) => showIn(h.expected, r.names, info.subst));
+  // Unpinned, the implementation's record is at any type until the hole is written.
+  assert.equal(holes.length, 1);
+  assert.match(holes[0], /^\((\w+), \1\) -> \1$/);
 });

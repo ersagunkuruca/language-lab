@@ -303,6 +303,28 @@ export function addOperation(code: Code, names: Names, iface: Id, rawName: strin
   return { ...r, note: `Added the operation ${r.names[r.select]} to ${nameOf(names, iface)}.${made ? ` ${made} implementation${made === 1 ? "" : "s"} got a hole for it.` : ""}` };
 }
 
+// An operation's inputs and what it gives, changed (BACKLOG E142). What each
+// implementation had for it was written for the old type, so it becomes a
+// hole there, to write again.
+export function setOperation(code: Code, names: Names, iface: Id, field: Id, inputs: number, result: Id | null): Top {
+  const td = typedefOf(code, iface);
+  if (!td.interface) return { ok: false, reason: "only an interface has operations of this kind" };
+  const v = code.nodes[td.variants[0]] as NodeOf<"variant">;
+  const at = v.fields.indexOf(field);
+  if (at < 0) return { ok: false, reason: "that isn't one of its operations" };
+  const a = td.params[0];
+  const { nodes, add } = builder(code);
+  nodes[field] = { ...(code.nodes[field] as NodeOf<"field">), type: add({ kind: "tfun", params: Array.from({ length: inputs }, () => add({ kind: "tref", target: a, args: [] })), result: add({ kind: "tref", target: result ?? a, args: [] }) }) };
+  let redo = 0;
+  for (const c of callsOf(code, v.id)) {
+    if (code.nodes[c.args[at]]?.kind === "hole") continue;
+    nodes[c.id] = { ...c, args: c.args.map((x, i) => (i === at ? add({ kind: "hole" }) : x)) };
+    redo++;
+  }
+  return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: field,
+    note: `Changed what ${nameOf(names, field)} takes and gives.${redo ? ` ${redo} implementation${redo === 1 ? "" : "s"} have a hole for it again, to write for the new type.` : ""}` };
+}
+
 export function addField(code: Code, names: Names, type: Id, variant: Id, rawName: string, t: TypeSpec | ((add: (n: NodeData) => Id) => Id)): Top {
   const v = code.nodes[variant] as NodeOf<"variant">;
   if (!typedefOf(code, type).variants.includes(variant)) return { ok: false, reason: "that isn't a case of this type" };
