@@ -121,6 +121,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E150 | A function that reads or writes files or the console says it doesn't run backwards, instead of a search that stopped in red (unit converter's quantity) | #538 |
 | E146 | Make it a function on a group: part = (inputs) => its nodes, called where they were; one value out (several: E149; shaders: C54). | #536 |
 | E143 | Implement offers Text and List Float64/Int/Text (the checker takes any closed type; one for every List a isn't in the language). | #535 |
 | E142 | An operation's panel changes what it takes and gives; implementations get a hole for it again. | #534 |

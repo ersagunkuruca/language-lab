@@ -81,7 +81,7 @@ import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
 import { BOOL, CONS, FALSE, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, NUMBER, STRING, showIn, type Type } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value } from "../src/lang/run.ts";
@@ -2398,6 +2398,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
     }
+  } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
+    // Run backwards is a search, and a search would touch the world once
+    // per guess: say so, instead of a panel that can only fail.
+    const effs = z.eff.effs.filter((e) => WORLD.includes(e)).map((e) => pres().names[e] ?? e).join(" and ");
+    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, which can't be undone, so it doesn't run backwards: it runs forwards where it's called.`));
   } else if (z?.t === "fn") box.append(backwardsPanel(namer, info));
   // Values on the wires: a function shows them for the values above; an
   // action, once you ask (it may take a while, and its printing is left out).

@@ -1167,6 +1167,10 @@ async function pagePreview() {
   await field.fill("100");
   await field.press("Enter");
   if (!(await p.locator(".status[role=status]").innerText()).includes("Typed 100 in")) errors.push(`${where}: the status bar says nothing of typing 100 in the converter`);
+  // A function that reads files doesn't offer to run backwards: the search
+  // would read once per guess (BACKLOG E150).
+  await p.locator("[data-def]", { hasText: /^quantity$/ }).click();
+  if (await p.locator(".status-line.bad").count() || !(await p.locator(".run .hint, p.hint").allInnerTexts()).some((t) => t.includes("doesn't run backwards"))) errors.push(`${where}: quantity, which reads files, offers to run backwards`);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
   // Saved where its name says it's a page, or the browser shows it as text.
