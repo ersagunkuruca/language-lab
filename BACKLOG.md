@@ -26,7 +26,8 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440). Step two (#491): each filling built once, ownerOfTypeParts reads the defs list, fall's holes 48 s → 39 s in all; what's left is per-candidate whole-program passes (modes.ts analyzer union-find, unit inference, the node copy). Step three (#502): units solved once per hole, 44 s → 28 s. Step four (#503): a solve's verdict kept per program, 28 s → 21 s. Step five (#504): the unit scan skipped per filling, 21 s → 18.5 s, about 0.8 s a palette. Stopped there: each stage left buys under 10% except sharing nodes between fillings instead of copying ~3000 per filling (about 20%), which needs a persistent node store | found doing E100 | P3 | M | |
-| E136 | The palette finds a function by what it does: words of its comment, and common other names (insert, lookup, get → put, value at) | WRITING-2026-10-27 step 3 | P2 | S | |
+| E137 | Writing an implementation (INTERFACES.md step 5): an interface's panel, and a "has no Trig" error, offer **Implement for a type…**; it makes `trig at dual = trig(□, …)` pinned to `Trig Dual`, so each hole's palette offers only the functions that fit that field at that type; the panel lists an interface's implementations | INTERFACES.md step 5, coordinator 2026-10-27 | P1 | M | next |
+| E138 | **Interface** as a kind of new definition beside Data type and Effect (its first operation, `(a) -> a`), and the interface toggle on an existing record type, as the effect one | INTERFACES.md step 5 | P2 | S | |
 | E133 | **Design, held** (coordinator 2026-10-27). Fillings share the program's nodes instead of each copying them (~3000 in physics): a persistent node store under `Code` (a HAMT or an overlay map), which every module reads. E103's last stage over 10%: about 20% off a palette (fall 18.5 s → ~15 s for 23 holes). Write the design note before building | E103 | P3 | L | held |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
 
@@ -124,6 +125,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E136 | The palette finds a function by what it does: other languages' names (insert finds put, lookup finds value at) and the words of its comment (holds finds has key) | #518 |
 | E135 | Wrap in… on the menu and panel: the part becomes the input of the picked call it fits, or () => it when that input wants a function; one undo | #516 |
 | E134 | Typed text reads a function written out: (x) => x + 1, () => 0; count words goes in by typing alone | #514 |
 | E132 | Steps, Nested and Lisp name a solve's ports as the callee does (turn = …, not its ids); Nested puts an action's steps one a line (QA-2026-10-24b L9) | #512 |
