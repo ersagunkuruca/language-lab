@@ -46,6 +46,8 @@ export const SECTIONS: Section[] = [
       ...t("set"), ...prelude("empty set", "as set", "add item", "remove item", "has item", "set union", "set intersection", "set difference", "items of", "set size")] },
   { title: "Searching: Choice", intro: "A computation with the Choice effect may have no answer, one, or several, like a search. one of picks any item, fail drops a path, and all, first, count and optional decide what to do with the answers, which ends the Choice. A function that may have no answer (value at, find, divide fractions) has Choice too, so first(() => value at(m, k), () => 0) gives a default.",
     ids: [...b("oneOf", "fail", "all", "first", "count", "optional", "valueOf"), ...t("optional"), ...b("fuel", "hence", "exists"), ...prelude("inverse", "conjugate")] },
+  { title: "Functions of functions", intro: "A function takes all its inputs at once, as f(a, b). curry makes one that takes them one at a time, for when that is wanted, and partially gives a function its first input ahead of the rest.",
+    ids: [...prelude("curry", "uncurry", "partially", "flip")] },
   { title: "When something goes wrong: Abort and Outcome", intro: "abort(reason) stops with a reason, and its type says so (Abort). attempt catches it as data.",
     ids: [...t("abort", "outcome"), ...prelude("attempt", "value or abort")] },
   { title: "Effects from outside the program", intro: "Each of these puts its effect in the type of every function that uses it, so `die : () -[Random]-> Float64` says die draws random numbers. Something around it handles the effect: seeded handles Random, a page's button handles what its handler does, and what nothing handles, the world answers when the program runs.",

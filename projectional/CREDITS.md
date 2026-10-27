@@ -82,6 +82,7 @@ not only code: an influence is credited even when nothing was copied.
 | Nested data folded through its container | Adapted | Coq's nested inductive types, `src/lang/nested.ts`; in WebAssembly as one mapping function per container type (`compiler/src/scalar.ts` fold). |
 | Units as part of the type, solved as exponent vectors | Prior art | Andrew Kennedy, "Dimension Types" (ESOP 1994), and F#'s units of measure. LANGUAGE.md credits it. |
 | `match`, `fold`, `if` and `cons` as ordinary function nodes; one system, no special kinds | Ersagun's idea | Related: Church/Scott encodings, where data is its own eliminator, and catamorphisms (below). |
+| Functions take all their inputs at once; `curry`, `uncurry`, `flip` and `partially` when one at a time is wanted | Ersagun's idea; Prior art for the names | Ersagun 2026-10-26 ("non curried is easier to reason about"). The names are Haskell's Prelude's (after Haskell Curry). `src/lang/prelude-source.ts`, LANGUAGE.md "Types". |
 
 ## Effects
 
