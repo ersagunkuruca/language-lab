@@ -714,9 +714,16 @@ async function groupPicked() {
   const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   const was = await text();
   const muls = p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn");
+  // With nothing picked, Group and Make it a function take the node
+  // right-clicked (Ersagun 2026-10-27, BACKLOG E154).
+  await muls.nth(0).click({ button: "right" });
+  for (const act of ["picked-fn", "group-picked"]) if (!(await p.locator(`.ctx-menu [data-menu="${act}"]:not([disabled])`, { hasText: "This node" }).count())) errors.push(`${where}: with nothing picked, a node's menu has no ${act} for it`);
+  await p.keyboard.press("Escape");
   await muls.nth(0).click({ modifiers: ["Shift"] });
   await muls.nth(1).click({ modifiers: ["Shift"] });
   await muls.nth(1).click({ button: "right" });
+  // Make it a function is on the picked nodes' own menu too (BACKLOG E154).
+  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "Make it a function" }).count())) errors.push(`${where}: two picked nodes' menu has no Make it a function`);
   await p.locator('.ctx-menu [data-menu="group-picked"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Group on the menu of two picked`));
   const box = p.locator(".p-graph rect.rg.group.folded");
   if ((await box.count()) !== 1) errors.push(`${where}: ${await box.count()} folded group boxes`);
@@ -732,6 +739,10 @@ async function groupPicked() {
   if ((await p.locator(".blocks-wrap .grp.folded").count()) !== 1) errors.push(`${where}: folded in the graph, the blocks' group stays open`);
   await p.locator('.p-graph [data-fold^="group-"]').first().dispatchEvent("click");
   if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded, there's no group frame`);
+  // A node inside the group offers it too: the frame's edge is hard to hit.
+  await muls.first().click({ button: "right" });
+  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "The group it's in" }).count())) errors.push(`${where}: a node in a group has no Make it a function`);
+  await p.keyboard.press("Escape");
   await p.locator(".p-graph rect.rg.group").first().click({ button: "right", position: { x: 6, y: 6 } });
   // A group's menu offers to make it a function (BACKLOG E146).
   const fnItem = (await p.locator('.ctx-menu [data-menu="group-fn"]').innerText().catch(() => "")).replace(/\s+/g, " ");

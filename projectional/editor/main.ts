@@ -2025,11 +2025,21 @@ function groupable(picked: Id[]): string | undefined {
 }
 
 function groupPicked(picked: Id[]) {
-  if (picked.length < 2 || groupable(picked)) return;
+  if (!picked.length || groupable(picked)) return;
   const g = `group-${freshId()}`;
   graph?.unpickAll();
   commit({ layout: { ...doc.layout, groups: { ...(doc.layout.groups ?? {}), [g]: picked }, folded: [...(doc.layout.folded ?? []), g] } }, ["layout.json"],
     `Grouped ${picked.length} into one box, which names what it holds; wires in end on its left, values out leave on its right. Unfold it (▸) to see them in their frame, or Ungroup from its menu. Only layout.json changed.`);
+}
+
+// The nodes Make it a function takes from a right-click on `id`: the
+// picked ones, when it's among them, or else the group it's in, or else
+// just it.
+function fnSet(id: Id, picked: Id[]): { members: Id[]; what: string; group?: Id } | null {
+  if (picked.includes(id)) return { members: picked, what: picked.length > 1 ? `The ${picked.length} picked` : "This node" };
+  const g = Object.entries(doc.layout.groups ?? {}).find(([, ms]) => ms.includes(id) || ms.some((m) => subtree(doc.code, m).includes(id)));
+  if (g) return { members: g[1], what: "The group it's in", group: g[0] };
+  return doc.code.nodes[id] ? { members: [id], what: "This node" } : null;
 }
 
 function ungroup(g: Id) {
@@ -2148,12 +2158,28 @@ function graphMenu(info: T.Info): HTMLElement | null {
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
-    if (picked.length > 1) rows.push(item(`Group the ${picked.length} picked into one box`, "group-picked", "A frame around them, folded: one box naming what it holds. A view only; unfold or ungroup it from its menu", groupable(picked)));
+    // Make it a function, on what's picked or the group this node is in:
+    // the same one action wherever a set of nodes is (Ersagun 2026-10-27:
+    // "I can't find a Make it a function option").
+    // Both are on every node's menu, so they can be found: they take the
+    // picked nodes, the group, or just this node (Ersagun 2026-10-27).
+    const set = id ? fnSet(id, picked) : null;
+    if (set && kind !== "frame") {
+      const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members);
+      rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, r.ok ? undefined : r.reason));
+      if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): a frame around them, folded, naming what it holds. A view only; unfold or ungroup it from its menu`, groupable(set.members)));
+    }
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every((b) => (doc.layout.named ?? []).includes(b));
     rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
       : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
     rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
+  }
+  // Nodes picked: what's done with them comes first, not below the fold
+  // of a menu that scrolls (Ersagun 2026-10-27: "No such options").
+  if (picked.length) {
+    const first = rows.filter((r) => ["picked-fn", "group-picked"].includes(r?.dataset.menu ?? ""));
+    rows.splice(0, rows.length, ...first, h("div", { class: "ctx-sep" }), ...rows.filter((r) => !first.includes(r)));
   }
   // Kept on the screen: at most as tall as its CSS lets it be (440px, then it scrolls).
   const tall = kind === "hole" ? 420 : Math.min(440, 16 + rows.length * 58);
@@ -2247,9 +2273,16 @@ function menuAction(act: string, target: Id | undefined) {
     case "pick": { graph?.pick(target!); ui.menu = null; return render(); }
     case "tidy-all": return graph?.tidy(null);
     case "tidy-picked": return graph?.tidy(graph.picked());
-    case "group-picked": return groupPicked(graph?.picked() ?? []);
+    case "group-picked": return groupPicked(fnSet(target!, graph?.picked() ?? [])?.members ?? []);
     case "ungroup": return ungroup(target!);
     case "group-fn": return groupToFunction(info, target!);
+    case "picked-fn": {
+      const set = fnSet(target!, graph?.picked() ?? []);
+      if (!set) return;
+      if (set.group) return groupToFunction(info, set.group);
+      graph?.unpickAll();
+      return applyT(T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members));
+    }
     case "tree": {
       const now = doc.layout.tree ?? [], on = now.includes(target!);
       return commit({ layout: { ...doc.layout, tree: on ? now.filter((x) => x !== target) : [...now, target!] } }, ["layout.json"],
