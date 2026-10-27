@@ -164,6 +164,8 @@ Proposed in [LANGUAGE-NEEDS-2026-10-24.md](LANGUAGE-NEEDS-2026-10-24.md); the fu
 | Rich number systems, Clifford algebras instead of separate complex/quaternion/dual types | Ersagun's idea | Geometric algebra: W. K. Clifford (1878), David Hestenes; Dorst, Fontijne and Mann, *Geometric Algebra for Computer Science*. |
 | Exact continued-fraction arithmetic | Adapted | R. W. Gosper, HAKMEM (MIT AI Memo 239, 1972), item 101. Credited in `src/lang/cells-programs.ts`, `reactive.html`, NUMBERS.md. e's expansion is Euler's. |
 | Continued fractions computed on demand, through effects | Ersagun's idea | Call-by-need is Haskell's laziness; demand-driven incremental computation is Adapton (below). |
+| `Algebraic` numbers as a polynomial and an isolating interval, arithmetic by resultants (designed, EXACT-REALS.md) | Prior art | Rüdiger Loos, "Computing in algebraic extensions" (1982); Sturm's theorem (1829); Mathematica's `Root`, Sage's `QQbar`/`AA`; Cohen, *A Course in Computational Algebraic Number Theory* (1993). Ersagun's idea (2026-10-26) that √2 is the number where x² = 2. |
+| `Real` as lazy nested intervals (designed, EXACT-REALS.md) | Prior art | Hans-J. Boehm, "Towards an API for the real numbers" (PLDI 2020); iRRAM (Norbert Müller); Edalat and Potts' exact real arithmetic. |
 
 ## Folds as representations, fusion
 
