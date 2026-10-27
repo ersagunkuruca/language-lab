@@ -5,8 +5,9 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { TRIG, TRIG_OPS } from "../src/lang/std.ts";
 import { NUMBER, showIn } from "../src/lang/types.ts";
-import type { NodeOf } from "../src/model.ts";
-import { implement, implementable, infer, interfaces, setProgramPins } from "../editor/typed.ts";
+import type { Id, NodeOf } from "../src/model.ts";
+import { fillValue, implement, implementable, infer, interfaces, setProgramPins } from "../editor/typed.ts";
+import { B } from "../src/prelude.ts";
 import { addOperation, newDefinition } from "../src/lang/toplevel.ts";
 
 // Writing an implementation in the editor (BACKLOG E137, INTERFACES.md step
@@ -69,4 +70,30 @@ test("a new interface, an operation added, and its implementation's new hole", (
   setProgramPins({});
   const holes = [...after.holes.values()].map((h) => showIn(h.expected, more.names, after.subst));
   assert.deepEqual(holes, ["(Wave) -> Wave", "(Wave, Wave) -> Wave"]);
+});
+
+// Typing a call of an interface's operation (BACKLOG E139): double(x) is
+// Doubling's double, and twice(x) is Twice's operation, not its record's
+// constructor of the same name.
+test("typed text calls an interface's operation", () => {
+  const k = new Lang(LIBRARY.code);
+  const fn1 = (a: Id) => k.tfun([k.tref(a)], k.tref(a));
+  const D = k.interface("Doubling", "a", [["double", fn1]]);
+  const T2 = k.interface("Twice", "a", [["twice", fn1]]);
+  const at = (name: string, v: Id) => { const d = k.def(name); k.define(d, k.call(v, k.fn(["x"], (x) => k.call(B.add, x, x)))); };
+  at("doubling at float64", D.v);
+  at("twice at float64", T2.v);
+  const four = k.def("four times");
+  let hole = "";
+  k.define(four, k.fn(["x"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  for (const [text, op] of [["double(double(x))", D.op.double], ["twice(x)", T2.op.twice]] as const) {
+    const r = fillValue(code, names, info, hole, text, four);
+    assert.ok(r.ok, !r.ok ? r.reason : "");
+    if (!r.ok) return;
+    const call = r.code.nodes[hole] as NodeOf<"call">;
+    assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, op, text);
+  }
 });
