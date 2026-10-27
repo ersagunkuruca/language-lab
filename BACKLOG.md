@@ -26,6 +26,8 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E144 | **Asked now** (Ersagun 2026-10-27: "get rid of the auto tidy that happens whenever I do anything"). An edit lays the graph out afresh; keep what was drawn where it was and place only what is new, spaced out from the rest. Tidy stays on the menu | Ersagun 2026-10-27 | P1 | S | next |
+| E145 | A group (E111, layout only) also shows in the blocks text: its lines bracketed and titled, folding there when it folds in the graph. Still no change to code.json (Ersagun 2026-10-27: "a grouping … mirrored with a group in the block editor") | Ersagun 2026-10-27 | P1 | M | after E144 |
+| E146 | **Make it a function** on a group: the group becomes a lambda called right there (`((a, b) => …)(x, y)`), its inputs the wires coming in. One wire out is its result; several out become a record of them, taken apart where they're used. Undo or Inline puts it back. Then it can be named, moved out as a definition, or reused | Ersagun 2026-10-27 | P2 | M | after E145 |
 | E141 | An interface reads as a data type: the graph says "type Doubling: one constructor per case" and draws the record's constructor `doubling`, and Run says "A data type doesn't run". Show it as an interface with its operations; the constructor belongs only in implementations. When an operation has the interface's lowercased name (`Twice`'s `twice`), the palette offers two `twice` calls | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P2 | S | |
 | E142 | A new interface's first operation is always `(a) -> a`, and an operation's Takes and Gives can't be changed afterwards, only removed and added again | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
 | E143 | Implement's "For the type" lists no Text, no List and no type with parameters, so Text can't implement an interface from the editor (check whether the checker allows it first) | Learn thread, 2026-10-27 (walking Ersagun through interfaces) | P3 | S | |
@@ -124,6 +126,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E147 | A loose part wires back over a filled input: what was there goes loose, or a dot nobody named left with one use goes back on its wire (HSI colour, Ersagun 2026-10-27) | #529 |
 | E140 | A use at a type without the interface says which it lacks: Bool has no Doubling, with Implement Doubling for Bool in the palette | #526 |
 | E139 | Typed text calls an interface's operation: double(double(x)) reads as Doubling's double; an operation comes before a constructor of the same name (twice) | #525 |
 | E138 | Interface as a kind of new definition: one operation (a) -> a; its panel adds operations taking (a) or (a, a) and giving a, Bool, Text or Float64 (implementations get a hole), and lists implementations; the text reads interface Halving a. Turning an existing type into one left out | #521 |
