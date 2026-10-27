@@ -477,6 +477,17 @@ recursion. A value that isn't a function still can't use its own name:
 `ones = cons(1, ones)` has no first step to take. The palette offers the
 name inside the function it names.
 
+**Functions take all their inputs at once.** A lambda has a list of inputs
+and a call a list of arguments, on every target and run backwards, so
+`f(a, b)` is one step, inputs can be reordered and simplified as a list, and
+nothing builds a function per argument. One input at a time is something
+you ask for, from the prelude (BACKLOG L87): `curry(f)(a)(b)` is `f(a, b)`,
+`uncurry` goes back, `partially(f, a)` gives `f` its first input ahead of
+the rest (`map(xs, partially(add, 1))`), and `flip(f)` swaps two inputs.
+Each keeps `f`'s effects in its row. Haskell curries every function and
+ML-family languages mostly do; Haskell's Prelude names `curry`, `uncurry`
+and `flip` (prior art).
+
 ## Effects, and why not monads
 
 A function type is `(params) -[effects]-> result`. The effect part is a row:

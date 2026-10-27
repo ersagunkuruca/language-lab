@@ -165,6 +165,15 @@ A computation with the Choice effect may have no answer, one, or several, like a
 - **inverse** : `((a) -[e]-> b, b) -[Choice, Diverge, e]-> a`. The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.
 - **conjugate** : `((a) -[Choice, Diverge, e]-> b, (b) -[Choice, Diverge, e]-> b) -> (a) -[Choice, Diverge, e]-> a`. g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.
 
+## Functions of functions
+
+A function takes all its inputs at once, as f(a, b). curry makes one that takes them one at a time, for when that is wanted, and partially gives a function its first input ahead of the rest.
+
+- **curry** : `((a, b) -[e]-> c) -> (a) -> (b) -[e]-> c`. f, taking its two inputs one at a time: curry(f)(a)(b) is f(a, b). Functions take all their inputs at once; this is for when one at a time is wanted.
+- **uncurry** : `((a) -[e]-> (b) -[e]-> c) -> (a, b) -[e]-> c`. The other way: a function that takes a and gives back a function of b, made into one function of (a, b).
+- **partially** : `((a, b) -[e]-> c, a) -> (b) -[e]-> c`. f with its first input given: partially(f, a)(b) is f(a, b). map(xs, partially(add, 1)) adds 1 to each.
+- **flip** : `((a, b) -[e]-> c) -> (b, a) -[e]-> c`. f with its two inputs swapped: flip(f)(a, b) is f(b, a).
+
 ## When something goes wrong: Abort and Outcome
 
 abort(reason) stops with a reason, and its type says so (Abort). attempt catches it as data.

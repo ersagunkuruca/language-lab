@@ -1194,6 +1194,252 @@
         ],
         "body": "@1o1ntpj94prddgephhcst03fsh:4"
       },
+      "@l2ckopv28e01b1lbsqblvpoqlp": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp",
+        "kind": "def",
+        "body": "@l2ckopv28e01b1lbsqblvpoqlp:1"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:2": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:2",
+        "kind": "binder"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:4": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:4",
+        "kind": "binder"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:6": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:6",
+        "kind": "binder"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:8": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:8",
+        "kind": "ref",
+        "target": "@l2ckopv28e01b1lbsqblvpoqlp:2"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:9": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:9",
+        "kind": "ref",
+        "target": "@l2ckopv28e01b1lbsqblvpoqlp:4"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:10": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:10",
+        "kind": "ref",
+        "target": "@l2ckopv28e01b1lbsqblvpoqlp:6"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:7": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:7",
+        "kind": "call",
+        "fn": "@l2ckopv28e01b1lbsqblvpoqlp:8",
+        "args": [
+          "@l2ckopv28e01b1lbsqblvpoqlp:9",
+          "@l2ckopv28e01b1lbsqblvpoqlp:10"
+        ]
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:5": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:5",
+        "kind": "lambda",
+        "params": [
+          "@l2ckopv28e01b1lbsqblvpoqlp:6"
+        ],
+        "body": "@l2ckopv28e01b1lbsqblvpoqlp:7"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:3": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:3",
+        "kind": "lambda",
+        "params": [
+          "@l2ckopv28e01b1lbsqblvpoqlp:4"
+        ],
+        "body": "@l2ckopv28e01b1lbsqblvpoqlp:5"
+      },
+      "@l2ckopv28e01b1lbsqblvpoqlp:1": {
+        "id": "@l2ckopv28e01b1lbsqblvpoqlp:1",
+        "kind": "lambda",
+        "params": [
+          "@l2ckopv28e01b1lbsqblvpoqlp:2"
+        ],
+        "body": "@l2ckopv28e01b1lbsqblvpoqlp:3"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng",
+        "kind": "def",
+        "body": "@ra2ald50qa9ofgm0jnslk1jpng:1"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:2": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:2",
+        "kind": "binder"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:4": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:4",
+        "kind": "binder"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:5": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:5",
+        "kind": "binder"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:8": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:8",
+        "kind": "ref",
+        "target": "@ra2ald50qa9ofgm0jnslk1jpng:2"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:9": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:9",
+        "kind": "ref",
+        "target": "@ra2ald50qa9ofgm0jnslk1jpng:4"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:7": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:7",
+        "kind": "call",
+        "fn": "@ra2ald50qa9ofgm0jnslk1jpng:8",
+        "args": [
+          "@ra2ald50qa9ofgm0jnslk1jpng:9"
+        ]
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:10": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:10",
+        "kind": "ref",
+        "target": "@ra2ald50qa9ofgm0jnslk1jpng:5"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:6": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:6",
+        "kind": "call",
+        "fn": "@ra2ald50qa9ofgm0jnslk1jpng:7",
+        "args": [
+          "@ra2ald50qa9ofgm0jnslk1jpng:10"
+        ]
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:3": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:3",
+        "kind": "lambda",
+        "params": [
+          "@ra2ald50qa9ofgm0jnslk1jpng:4",
+          "@ra2ald50qa9ofgm0jnslk1jpng:5"
+        ],
+        "body": "@ra2ald50qa9ofgm0jnslk1jpng:6"
+      },
+      "@ra2ald50qa9ofgm0jnslk1jpng:1": {
+        "id": "@ra2ald50qa9ofgm0jnslk1jpng:1",
+        "kind": "lambda",
+        "params": [
+          "@ra2ald50qa9ofgm0jnslk1jpng:2"
+        ],
+        "body": "@ra2ald50qa9ofgm0jnslk1jpng:3"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1",
+        "kind": "def",
+        "body": "@3d001pa3n41ur4b1nmb94vb4u1:1"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:2": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:2",
+        "kind": "binder"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:3": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:3",
+        "kind": "binder"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:5": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:5",
+        "kind": "binder"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:7": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:7",
+        "kind": "ref",
+        "target": "@3d001pa3n41ur4b1nmb94vb4u1:2"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:8": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:8",
+        "kind": "ref",
+        "target": "@3d001pa3n41ur4b1nmb94vb4u1:3"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:9": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:9",
+        "kind": "ref",
+        "target": "@3d001pa3n41ur4b1nmb94vb4u1:5"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:6": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:6",
+        "kind": "call",
+        "fn": "@3d001pa3n41ur4b1nmb94vb4u1:7",
+        "args": [
+          "@3d001pa3n41ur4b1nmb94vb4u1:8",
+          "@3d001pa3n41ur4b1nmb94vb4u1:9"
+        ]
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:4": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:4",
+        "kind": "lambda",
+        "params": [
+          "@3d001pa3n41ur4b1nmb94vb4u1:5"
+        ],
+        "body": "@3d001pa3n41ur4b1nmb94vb4u1:6"
+      },
+      "@3d001pa3n41ur4b1nmb94vb4u1:1": {
+        "id": "@3d001pa3n41ur4b1nmb94vb4u1:1",
+        "kind": "lambda",
+        "params": [
+          "@3d001pa3n41ur4b1nmb94vb4u1:2",
+          "@3d001pa3n41ur4b1nmb94vb4u1:3"
+        ],
+        "body": "@3d001pa3n41ur4b1nmb94vb4u1:4"
+      },
+      "@a9m2elmoo1c3q820dah64k0380": {
+        "id": "@a9m2elmoo1c3q820dah64k0380",
+        "kind": "def",
+        "body": "@a9m2elmoo1c3q820dah64k0380:1"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:2": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:2",
+        "kind": "binder"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:4": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:4",
+        "kind": "binder"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:5": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:5",
+        "kind": "binder"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:7": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:7",
+        "kind": "ref",
+        "target": "@a9m2elmoo1c3q820dah64k0380:2"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:8": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:8",
+        "kind": "ref",
+        "target": "@a9m2elmoo1c3q820dah64k0380:5"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:9": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:9",
+        "kind": "ref",
+        "target": "@a9m2elmoo1c3q820dah64k0380:4"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:6": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:6",
+        "kind": "call",
+        "fn": "@a9m2elmoo1c3q820dah64k0380:7",
+        "args": [
+          "@a9m2elmoo1c3q820dah64k0380:8",
+          "@a9m2elmoo1c3q820dah64k0380:9"
+        ]
+      },
+      "@a9m2elmoo1c3q820dah64k0380:3": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:3",
+        "kind": "lambda",
+        "params": [
+          "@a9m2elmoo1c3q820dah64k0380:4",
+          "@a9m2elmoo1c3q820dah64k0380:5"
+        ],
+        "body": "@a9m2elmoo1c3q820dah64k0380:6"
+      },
+      "@a9m2elmoo1c3q820dah64k0380:1": {
+        "id": "@a9m2elmoo1c3q820dah64k0380:1",
+        "kind": "lambda",
+        "params": [
+          "@a9m2elmoo1c3q820dah64k0380:2"
+        ],
+        "body": "@a9m2elmoo1c3q820dah64k0380:3"
+      },
       "@kdtgd7r18no5s2pd6t2ob895a7": {
         "id": "@kdtgd7r18no5s2pd6t2ob895a7",
         "kind": "def",
@@ -11859,6 +12105,10 @@
       "@evvkvacd5ecmvnt8jl3v6s9n64",
       "@8ilsm74pnh52dq99esfelgj2nh",
       "@1o1ntpj94prddgephhcst03fsh",
+      "@l2ckopv28e01b1lbsqblvpoqlp",
+      "@ra2ald50qa9ofgm0jnslk1jpng",
+      "@3d001pa3n41ur4b1nmb94vb4u1",
+      "@a9m2elmoo1c3q820dah64k0380",
       "@kdtgd7r18no5s2pd6t2ob895a7",
       "@ms51ccsn4d3kn3v0lpdq6cfbre",
       "@i6fegek8k300348mgag5spc82m",
@@ -12517,6 +12767,277 @@
       "plain": [
         0
       ]
+    },
+    "@l2ckopv28e01b1lbsqblvpoqlp": {
+      "vars": [
+        0,
+        1,
+        2
+      ],
+      "rows": [
+        3,
+        4,
+        5
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 2
+            },
+            "eff": {
+              "effs": [],
+              "tail": 3
+            }
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ],
+          "ret": {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 1
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 2
+            },
+            "eff": {
+              "effs": [],
+              "tail": 3
+            }
+          },
+          "eff": {
+            "effs": [],
+            "tail": 4
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 5
+        }
+      },
+      "plain": []
+    },
+    "@ra2ald50qa9ofgm0jnslk1jpng": {
+      "vars": [
+        0,
+        1,
+        2
+      ],
+      "rows": [
+        3,
+        4
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "fn",
+              "params": [
+                {
+                  "t": "var",
+                  "v": 1
+                }
+              ],
+              "ret": {
+                "t": "var",
+                "v": 2
+              },
+              "eff": {
+                "effs": [],
+                "tail": 3
+              }
+            },
+            "eff": {
+              "effs": [],
+              "tail": 3
+            }
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ],
+          "ret": {
+            "t": "var",
+            "v": 2
+          },
+          "eff": {
+            "effs": [],
+            "tail": 3
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 4
+        }
+      },
+      "plain": []
+    },
+    "@3d001pa3n41ur4b1nmb94vb4u1": {
+      "vars": [
+        0,
+        1,
+        2
+      ],
+      "rows": [
+        3,
+        4
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 2
+            },
+            "eff": {
+              "effs": [],
+              "tail": 3
+            }
+          },
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "var",
+              "v": 1
+            }
+          ],
+          "ret": {
+            "t": "var",
+            "v": 2
+          },
+          "eff": {
+            "effs": [],
+            "tail": 3
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 4
+        }
+      },
+      "plain": []
+    },
+    "@a9m2elmoo1c3q820dah64k0380": {
+      "vars": [
+        0,
+        1,
+        2
+      ],
+      "rows": [
+        3,
+        4
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ],
+            "ret": {
+              "t": "var",
+              "v": 2
+            },
+            "eff": {
+              "effs": [],
+              "tail": 3
+            }
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "var",
+              "v": 1
+            },
+            {
+              "t": "var",
+              "v": 0
+            }
+          ],
+          "ret": {
+            "t": "var",
+            "v": 2
+          },
+          "eff": {
+            "effs": [],
+            "tail": 3
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 4
+        }
+      },
+      "plain": []
     },
     "@kdtgd7r18no5s2pd6t2ob895a7": {
       "vars": [
@@ -15450,6 +15971,22 @@
     "@1o1ntpj94prddgephhcst03fsh:2": "f",
     "@1o1ntpj94prddgephhcst03fsh:3": "g",
     "@1o1ntpj94prddgephhcst03fsh:5": "x",
+    "@l2ckopv28e01b1lbsqblvpoqlp": "curry",
+    "@l2ckopv28e01b1lbsqblvpoqlp:2": "f",
+    "@l2ckopv28e01b1lbsqblvpoqlp:4": "a",
+    "@l2ckopv28e01b1lbsqblvpoqlp:6": "b",
+    "@ra2ald50qa9ofgm0jnslk1jpng": "uncurry",
+    "@ra2ald50qa9ofgm0jnslk1jpng:2": "f",
+    "@ra2ald50qa9ofgm0jnslk1jpng:4": "a",
+    "@ra2ald50qa9ofgm0jnslk1jpng:5": "b",
+    "@3d001pa3n41ur4b1nmb94vb4u1": "partially",
+    "@3d001pa3n41ur4b1nmb94vb4u1:2": "f",
+    "@3d001pa3n41ur4b1nmb94vb4u1:3": "a",
+    "@3d001pa3n41ur4b1nmb94vb4u1:5": "b",
+    "@a9m2elmoo1c3q820dah64k0380": "flip",
+    "@a9m2elmoo1c3q820dah64k0380:2": "f",
+    "@a9m2elmoo1c3q820dah64k0380:4": "a",
+    "@a9m2elmoo1c3q820dah64k0380:5": "b",
     "@kdtgd7r18no5s2pd6t2ob895a7": "at most",
     "@kdtgd7r18no5s2pd6t2ob895a7:2": "a",
     "@kdtgd7r18no5s2pd6t2ob895a7:3": "b",
@@ -15827,6 +16364,10 @@
     "@su0m8djlkg5cq4b68i0klesqia": "A fold that prints. Run backwards it unfolds, so it parses.",
     "@9q8d7m9gld6fvdr2gj63v34sgq": "A helper of reverse. Published with the module, not offered in the palette.",
     "@8ilsm74pnh52dq99esfelgj2nh": "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    "@l2ckopv28e01b1lbsqblvpoqlp": "f, taking its two inputs one at a time: curry(f)(a)(b) is f(a, b). Functions take all their inputs at once; this is for when one at a time is wanted.",
+    "@ra2ald50qa9ofgm0jnslk1jpng": "The other way: a function that takes a and gives back a function of b, made into one function of (a, b).",
+    "@3d001pa3n41ur4b1nmb94vb4u1": "f with its first input given: partially(f, a)(b) is f(a, b). map(xs, partially(add, 1)) adds 1 to each.",
+    "@a9m2elmoo1c3q820dah64k0380": "f with its two inputs swapped: flip(f)(a, b) is f(b, a).",
     "@1o1ntpj94prddgephhcst03fsh": "g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.",
     "@kdtgd7r18no5s2pd6t2ob895a7": "a ≤ b: not b < a.",
     "@ms51ccsn4d3kn3v0lpdq6cfbre": "a > b: b < a.",
@@ -15916,6 +16457,10 @@
     "@egedg16di7hp3kq2u7ghqi8dbd",
     "@8ilsm74pnh52dq99esfelgj2nh",
     "@1o1ntpj94prddgephhcst03fsh",
+    "@l2ckopv28e01b1lbsqblvpoqlp",
+    "@ra2ald50qa9ofgm0jnslk1jpng",
+    "@3d001pa3n41ur4b1nmb94vb4u1",
+    "@a9m2elmoo1c3q820dah64k0380",
     "@kdtgd7r18no5s2pd6t2ob895a7",
     "@ms51ccsn4d3kn3v0lpdq6cfbre",
     "@i6fegek8k300348mgag5spc82m",

@@ -56,6 +56,20 @@ export function buildPrelude(): Module {
   const conjugate = k.def("conjugate");
   k.define(conjugate, k.fn(["f", "g"], (f, g) => k.fn(["x"], (x) => k.call(inverse, f, k.call(g, k.call(f, x))))));
 
+  // A function takes all its inputs at once (model.ts: a lambda's params
+  // are a list), so a function of one input that gives back a function is
+  // something you ask for (BACKLOG L87, Ersagun 2026-10-26: "non curried
+  // is easier to reason about"). Curry and uncurry are named after Haskell
+  // Curry, the standard names (Haskell's Prelude has both).
+  const curry = k.def("curry");
+  k.define(curry, k.fn(["f"], (f) => k.fn(["a"], (a) => k.fn(["b"], (b) => k.call(f, a, b)))));
+  const uncurry = k.def("uncurry");
+  k.define(uncurry, k.fn(["f"], (f) => k.fn(["a", "b"], (a, b) => k.call(k.call(f, a), b))));
+  const partially = k.def("partially");
+  k.define(partially, k.fn(["f", "a"], (f, a) => k.fn(["b"], (b) => k.call(f, a, b))));
+  const flip = k.def("flip");
+  k.define(flip, k.fn(["f"], (f) => k.fn(["a", "b"], (a, b) => k.call(f, b, a))));
+
   // The other comparisons, over the one generic `<` (and Text's over
   // `comes before`), so they work on every ordered number type, run
   // backwards and differentiate with no rules of their own; and the
@@ -351,7 +365,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -364,6 +378,10 @@ export function buildPrelude(): Module {
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",
     [inverse]: "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
+    [curry]: "f, taking its two inputs one at a time: curry(f)(a)(b) is f(a, b). Functions take all their inputs at once; this is for when one at a time is wanted.",
+    [uncurry]: "The other way: a function that takes a and gives back a function of b, made into one function of (a, b).",
+    [partially]: "f with its first input given: partially(f, a)(b) is f(a, b). map(xs, partially(add, 1)) adds 1 to each.",
+    [flip]: "f with its two inputs swapped: flip(f)(a, b) is f(b, a).",
     [conjugate]: "g done in f's space: f, then g, then f run backwards (f⁻¹ ∘ g ∘ f). An edit in linear light, a turn about a point, a filter on one band of a signal.",
     [atMost]: "a ≤ b: not b < a.",
     [moreThan]: "a > b: b < a.",
