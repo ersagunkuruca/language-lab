@@ -270,6 +270,40 @@ async function implementInterface() {
   await p.close();
 }
 
+// An edit doesn't lay the graph out again: what was drawn stays where it
+// was, and only what's new is placed (Ersagun 2026-10-27, BACKLOG E144).
+async function editKeepsPlaces() {
+  where = "an edit keeps the graph's places";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("grow");
+  await p.locator("#f-def-inputs").fill("x");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator("#f-query").fill("x · x + 1");
+  await p.keyboard.press("Enter");
+  // Each node's place in the world, apart from the canvas's pan and zoom.
+  const places = () => p.locator(".p-graph svg.canvas > g.world .items [data-id]:not(.rg):not(.src):not(.use-hit)").evaluateAll((es) => Object.fromEntries(es.map((e) => {
+    const g = e as SVGGraphicsElement, b = g.getBBox(), m = (g.closest("g.world") as SVGGraphicsElement).getCTM()!.inverse().multiply(g.getCTM()!);
+    // By id and kind: a filled hole keeps its id as something else.
+    return [`${e.getAttribute("data-id")} ${e.getAttribute("class")}`, `${Math.round(b.x + m.e)},${Math.round(b.y + m.f)}`];
+  })));
+  const before = await places();
+  await p.locator(".p-text .x", { hasText: /^1$/ }).last().click({ button: "right" });
+  await p.locator(".ctx-menu button, .menu button", { hasText: "Replace with" }).first().click();
+  await p.locator("#f-query").fill("2 · 3 · 4 · 5");
+  await p.keyboard.press("Enter");
+  const after = await places();
+  const moved = Object.keys(before).filter((k) => k in after && before[k] !== after[k]);
+  if (Object.keys(after).length <= Object.keys(before).length) errors.push(`${where}: the edit added nothing to the graph`);
+  if (moved.length) errors.push(`${where}: ${moved.length} of ${Object.keys(before).length} nodes moved: ${moved.map((k) => `${before[k]} → ${after[k]}`).join(", ")}`);
+  await p.close();
+}
+
 // An action that may give no answer (a Choice) isn't offered a Run that
 // can only fail: the panel says how to run it, and its values still show.
 async function choiceAction() {
@@ -1139,6 +1173,7 @@ await looseParts();
 await swapDrop();
 await looseValue();
 await implementInterface();
+await editKeepsPlaces();
 await stepOrder();
 await simplifyAppend();
 await searchGoesOn();
