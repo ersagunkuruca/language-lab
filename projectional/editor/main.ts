@@ -309,8 +309,13 @@ const holesIn = (info: T.Info) => [...info.holes.keys()].filter((h) => !inLoose(
 const errorsIn = (info: T.Info) => info.errors.filter((e) => !inLoose(e.id)).length;
 const defNamed = (name: string) => ownDefs().find((d) => (doc.names.short[d] ?? "") === name);
 // A program opens on `main`, with the definition that shows it off in the
-// next tab.
-const showcase = () => defNamed(START[doc.program] ?? "main") ?? ownDefs()[0] ?? doc.code.defs[0];
+// next tab: a picture's colour, or else its first function, not a type.
+const showcase = () => {
+  const own = ownDefs(), picture = pictureEntries(own, doc.names.short), nodes = doc.code.nodes;
+  const typedef = (d: Id) => { const n = nodes[d]; return n?.kind === "def" && !!n.body && nodes[n.body]?.kind === "typedef"; };
+  return defNamed(START[doc.program] ?? "main") ?? (picture && Object.values(picture)[0])
+    ?? own.find((d) => !typedef(d)) ?? own[0] ?? doc.code.defs[0];
+};
 const startDef = () => defNamed("main") ?? showcase();
 const startTabs = () => [...new Set([startDef(), showcase()])];
 const noteOf = (d: Doc) => d.comments[PROGRAM] ?? "";

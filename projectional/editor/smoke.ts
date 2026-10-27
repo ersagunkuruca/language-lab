@@ -583,6 +583,21 @@ async function seededRun() {
   await p.close();
 }
 
+// A shader opens on the definition its picture draws, not on a data type
+// (BACKLOG I22).
+async function shaderOpens() {
+  where = "a shader's first definition";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  for (const prog of ["Shader: ray marching", "Shader: Mandelbrot set"]) {
+    await p.locator('[data-set="program"]', { hasText: prog }).first().click();
+    const tabs = (await p.locator("[data-tab]").allInnerTexts()).map((t) => t.trim());
+    if (!tabs.includes("colour")) errors.push(`${where}: ${prog} opens on ${tabs.join(", ")}`);
+  }
+  await p.close();
+}
+
 async function foldFrom() {
   where = "a fold from a start";
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -1093,6 +1108,7 @@ await patternRows();
 await sharedRow();
 await matchDeeper();
 await foldFrom();
+await shaderOpens();
 await seededRun();
 await firstSteps();
 await dotOnWire();
