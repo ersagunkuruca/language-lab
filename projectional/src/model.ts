@@ -42,7 +42,14 @@ export type Node =
   // terms); everyone else builds one with the library's functions. Taking
   // a value apart with a match is open to all (LANGUAGE.md "Private
   // constructors"; OCaml's private types are the prior art).
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true }
+  //
+  // An interface is declared the same way too (INTERFACES.md): a typedef
+  // with `interface: true`, one type parameter and one case, a record of
+  // functions whose fields are its operations. A ref to one of its fields
+  // is that operation, at whatever type the use needs; an implementation
+  // is an ordinary definition of the record at one type, and the checker
+  // and arith.ts resolve each use to it before anything runs.
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true }
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
   | { id: Id; kind: "field"; type: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin

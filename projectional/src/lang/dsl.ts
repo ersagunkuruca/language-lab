@@ -41,6 +41,19 @@ export class Lang extends Builder {
     return { def, v: ids, f: fields };
   }
 
+  // An interface (INTERFACES.md): a record of functions over one type
+  // parameter, whose fields are its operations. Each field's type is built
+  // from the parameter.
+  interface(name: string, param: string, ops: [string, (a: Id) => Id][]) {
+    const def = this.def(name);
+    const a = this.binder(param);
+    const op: Record<string, Id> = {};
+    const fids = ops.map(([oname, ty]) => (op[oname] = this.named(this.add({ kind: "field", type: ty(a) }), oname)));
+    const v = this.named(this.add({ kind: "variant", fields: fids }), name.toLowerCase());
+    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: [a], variants: [v], interface: true }) };
+    return { def, v, op };
+  }
+
   // An effect: a data type whose cases are operations. Each operation
   // lists its inputs and the type it returns, or null for one that never
   // returns (it ends the handled computation, like abort). "later" marks

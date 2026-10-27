@@ -26,7 +26,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
-import type { Info } from "./infer.ts";
+import { implementationKey, type Info } from "./infer.ts";
 import { ALGEBRAIC_OPS, ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
@@ -82,8 +82,22 @@ const atPrelude = (type: string, op: Id): Id => {
   return ops[op];
 };
 
-export const usesGenericArithmetic = (code: Code) =>
-  Object.values(code.nodes).some((n) => (n.kind === "ref" && n.target in AT) || (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)));
+// The operations of the program's interfaces (INTERFACES.md): each field
+// of an interface typedef, and the interface it belongs to.
+function interfaceOps(code: Code): Map<Id, Id> {
+  const out = new Map<Id, Id>();
+  for (const d of code.defs) {
+    const n = code.nodes[d], td = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
+    if (td?.kind !== "typedef" || !td.interface) continue;
+    for (const v of td.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) out.set(f, d);
+  }
+  return out;
+}
+
+export const usesGenericArithmetic = (code: Code) => {
+  const ops = interfaceOps(code);
+  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)));
+};
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
 // into definitions first (lift-lets.ts), the other rewrite every runner
@@ -123,7 +137,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   // What a number type left open is: Int when a whole literal gave it
   // (`3`, `n + 1`), else Float64 (Haskell defaults to Integer and Double).
   const int: Type = { t: "con", id: INT, args: [] };
-  const otherwise = (v: number): Type => (s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v) ? int : num);
+  // Int only if it has every interface the variable needs (Haskell's
+  // defaulting tries each type in turn the same way).
+  const intFits = (v: number) => [...(s.needs.get(v)?.keys() ?? [])].every((i) => info.implementations?.has(implementationKey(i, int)));
+  const otherwise = (v: number): Type => (s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v) && intFits(v) ? int : num);
   // A type with the definition's variables replaced, and every number-type
   // variable left open made its default.
   const close = (t: Type, env: Env): Type => {
@@ -132,7 +149,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map((a) => close(a, env)) };
     return { t: "fn", params: t.params.map((p) => close(p, env)), ret: close(t.ret, env), eff: s.resolveRow(t.eff) };
   };
-  const constrained = (sc: Scheme) => [...(sc.arith ?? []), ...(sc.ordered ?? [])];
+  const constrained = (sc: Scheme) => [...new Set([...(sc.arith ?? []), ...(sc.ordered ?? []), ...(sc.needs ?? []).map(([v]) => v)])];
   // What a scheme's variables stand for at one use: walk its type beside
   // the use's.
   const bind = (pat: Type, t: Type, vars: Set<number>, out: Env) => {
@@ -184,7 +201,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     outNames[id] = `${names[def] ?? def} at ${vars.map((v) => show(at(v))).join(", ")}`;
     const type = close(sc.type, env);
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !env.has(v));
-    schemes.set(id, { ...sc, vars: sc.vars.filter((v) => !env.has(v)), type, ...(sc.arith ? { arith: left(sc.arith) } : {}), ...(sc.ordered ? { ordered: left(sc.ordered) } : {}) });
+    const needs = (sc.needs ?? []).filter(([v]) => !env.has(v));
+    schemes.set(id, { ...sc, vars: sc.vars.filter((v) => !env.has(v)), type, ...(sc.arith ? { arith: left(sc.arith) } : {}), ...(sc.ordered ? { ordered: left(sc.ordered) } : {}), needs });
     typeOf.set(id, type);
     if (info.divergent.has(def)) divergent.add(id);
     if (body !== null) todo.push({ root: body, env });
@@ -215,14 +233,51 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
         break;
     }
     nodes[fresh] = c as unknown as Node;
+    const o = opAt.get(id);
+    if (o) opAt.set(fresh, o);
     const t = info.typeOf.get(id);
     if (t) typeOf.set(fresh, close(t, env));
     return fresh;
   };
 
+  // A use of an interface's operation (INTERFACES.md) as the
+  // implementation's own: a ref to what the implementation gives for it,
+  // or, when that is more than a ref, to a definition made of it.
+  const ops = interfaceOps(code);
+  const opAt = new Map(info.opAt ?? []);
+  const lifted = new Map<string, Id>();
+  const implement = (id: Id, env: Env) => {
+    const field = (nodes[id] as NodeOf<"ref">).target, iface = ops.get(field)!;
+    let at = close(opAt.get(id) ?? num, env);
+    if (at.t === "var") at = num;
+    const impl = info.implementations?.get(implementationKey(iface, at));
+    if (!impl) throw new Error(`${show(at)} has no ${names[iface] ?? iface}`);
+    const body = code.nodes[(code.nodes[impl] as NodeOf<"def">).body!] as NodeOf<"call">;
+    const variant = (code.nodes[(code.nodes[body.fn] as NodeOf<"ref">).target] as NodeOf<"variant">);
+    const arg = body.args[variant.fields.indexOf(field)];
+    const given = code.nodes[arg];
+    if (given.kind === "ref") { nodes[id] = { id, kind: "ref", target: given.target }; return; }
+    const key = `${impl}|${field}`;
+    let d = lifted.get(key);
+    if (!d) {
+      d = freshId();
+      lifted.set(key, d);
+      const type = close(info.typeOf.get(arg) ?? num, new Map());
+      const root = copyTree(arg, new Map(), new Map());
+      nodes[d] = { id: d, kind: "def", body: root };
+      defs.push(d);
+      outNames[d] = `${names[field] ?? field} of ${names[impl] ?? impl}`;
+      schemes.set(d, { vars: [], rows: [], type });
+      typeOf.set(d, type);
+      todo.push({ root, env: new Map() });
+    }
+    nodes[id] = { id, kind: "ref", target: d };
+  };
+
   // Resolve every use under `root`, at these types.
   const resolve = (root: Id, env: Env) => {
     const walk = (id: Id, parent: Id | null) => {
+      if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {
         const t = typeOf.get(id);
@@ -342,7 +397,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   for (const [d, sc] of schemes) {
     const vars = constrained(sc).filter((v) => !(sc.numbers ?? []).includes(v));
     if (!vars.length) continue;
-    const { arith: _a, ordered: _o, fractional: _f, whole: _w, ...rest } = sc;
+    const { arith: _a, ordered: _o, fractional: _f, whole: _w, needs: _n, ...rest } = sc;
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !vars.includes(v));
     schemes.set(d, { ...rest, vars: left(sc.vars), type: close(sc.type, new Map(vars.map((v) => [v, otherwise(v)]))),
       ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
