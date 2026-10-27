@@ -45,6 +45,10 @@ test checks it equals the table's product.
 
 ## The question: how does a type say what its `·` is?
 
+**Answered (Ersagun, 2026-10-27):** by a separate implementation, found by
+its type, resolved before running so it costs nothing. INTERFACES.md has
+the design. The three options below are kept as the question was asked.
+
 Today arith.ts has a fixed list: at Rational and Complex, the generic
 `+ − · −x <` are the prelude's `add fractions`, `multiply complex` and so
 on (arith.ts PRELUDE_AT). A type you write yourself can't join. For tables
