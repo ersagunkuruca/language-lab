@@ -36,7 +36,7 @@ export interface ProgramFile {
   // Where nodes were put (world coordinates, by `def/id`), which bindings
   // are shown as let and get nodes, what you give each definition when you
   // run it backwards, and which calls are shown inline. All views.
-  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[] };
+  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[] };
   // Example inputs per definition, as text.
   examples: Record<Id, string[]>;
   needs?: Record<Id, string>;
@@ -113,6 +113,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
       // placement) is dropped: those nodes go back to the automatic place.
       ...(isObj(l.at) ? { at: l.at as Record<string, { x: number; y: number }> } : {}),
       ...(Array.isArray(l.named) && l.named.every((c) => typeof c === "string") ? { named: l.named as Id[] } : {}),
+      ...(Array.isArray(l.wired) && l.wired.every((c) => typeof c === "string") ? { wired: l.wired as Id[] } : {}),
       known: isObj(l.known) ? (l.known as Record<Id, Id[]>) : {},
       ...(Array.isArray(l.inline) && l.inline.every((c) => typeof c === "string") ? { inline: l.inline as Id[] } : {}),
       ...(Array.isArray(l.folded) && l.folded.every((c) => typeof c === "string") ? { folded: l.folded as Id[] } : {}),

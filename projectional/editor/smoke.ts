@@ -884,6 +884,11 @@ async function letNodes() {
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   const canvas = p.locator(".p-graph svg.tgraph").first();
   const menu = async () => { const b = (await canvas.boundingBox())!; await canvas.dispatchEvent("contextmenu", { clientX: b.x + b.width - 30, clientY: b.y + b.height - 30 }); };
+  // They are how named values are drawn to begin with (E157).
+  if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main opens with ${await p.locator(".p-graph rect.letn").count()} let nodes`);
+  await menu();
+  await p.locator('.ctx-menu [data-menu="named-none"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as wires`));
+  if (await p.locator(".p-graph rect.letn").count()) errors.push(`${where}: let nodes are left after Show every value as wires`);
   await menu();
   await p.locator('.ctx-menu [data-menu="named-all"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as let and get nodes`));
   if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main shows ${await p.locator(".p-graph rect.letn").count()} let nodes`);
@@ -940,10 +945,11 @@ async function plusDrop() {
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
   const words = p.locator(".p-graph g.items > g", { has: p.locator("text.cl", { hasText: /^words$/ }) }).locator("circle.outp[data-out]");
-  // The list that h1 takes: the + nearest that words node.
+  // The list that h1 takes: the + nearest h1's node.
   const from = (await words.first().boundingBox())!;
+  const h1 = (await p.locator(".p-graph g.items > g", { has: p.locator("text.cl", { hasText: /^h1$/ }) }).first().boundingBox())!;
   const pluses = await p.locator(".p-graph [data-add]").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
-  const to = pluses.sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y))[0];
+  const to = pluses.sort((a, b) => Math.hypot(a.x - h1.x, a.y - h1.y) - Math.hypot(b.x - h1.x, b.y - h1.y))[0];
   if (!to) { errors.push(`${where}: no + in main`); return p.close(); }
   await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await p.mouse.down();
   await p.mouse.move(to.x, to.y, { steps: 8 }); await p.mouse.up();
