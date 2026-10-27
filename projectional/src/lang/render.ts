@@ -93,7 +93,19 @@ const appendLast = (bs: Blk[], p: Piece): Blk[] => {
 
 // `pane`: drawn for the editor, where a long text is clipped and cases
 // that say the same thing stay separate rows, each its own node to edit.
-export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: boolean } = {}): Blk[] {
+// A loose part (editor/drafts.ts) that used variables of its definition
+// takes them as inputs: a lambda at its top whose parameters all stand for
+// one (`home`, input → variable). Any other lambda there is the part
+// itself, a function.
+export function looseParts(code: Code, def: Id, home: Record<Id, Id>): { params: Id[]; expr: Id } | null {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.body) return null;
+  const b = code.nodes[d.body];
+  return b?.kind === "lambda" && b.params.length && b.params.every((p) => home[p]) ? { params: b.params, expr: b.body } : { params: [], expr: d.body };
+}
+
+// `loose`: the definition is a loose part, with its inputs' `home`.
+export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: Record<Id, Id> } = {}): Blk[] {
   const names = pres.names;
   const pane = !!opts.pane;
   // A binder nobody named is called for its type (items, x, event), as the
@@ -438,8 +450,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   }
   // A loose part (editor/drafts.ts) reads as the expression it is, with the
   // variables it uses by their names: not as a function named _1.
-  if (opts.loose && body) {
-    const params = body.kind === "lambda" ? body.params : [], expr = body.kind === "lambda" ? body.body : def.body!;
+  const lp = opts.loose && body ? looseParts(code, defId, opts.loose) : null;
+  if (lp) {
+    const { params, expr } = lp;
     enter(params);
     out.push(...hang(expr, [part("def", ["loose"], defId), pn(": ")]));
     leave(params);
