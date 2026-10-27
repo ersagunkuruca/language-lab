@@ -681,7 +681,8 @@ computation). Neither needs first-class continuations, which is what
 makes them portable:
 
 - **Answered.** A call to the case found on a stack of handlers. The key
-  is the effect's def id (effects have no type parameters). Handlers are
+  is the effect's def id (an effect's type arguments only matter to the
+  checker, L56). Handlers are
   deep: the case runs with the stack cut back below its own handler, so a
   `Log` case that logs reaches the next handler out. JS: closures on an
   array. WASM: a table of `funcref`s or the handler passed as an argument.

@@ -13,7 +13,11 @@ export type Type =
   | { t: "con"; id: Id; args: Type[] }
   | { t: "fn"; params: Type[]; ret: Type; eff: Row };
 
-export interface Row { effs: Id[]; tail: number | null }
+// An effect with parameters is applied in a row (`Yield Int`, as Koka,
+// Unison and Effekt write it; prior art, CREDITS.md): `args` holds the arguments by effect id, so
+// most code reads `effs` and never sees them (EFFECTS-REVIEW-2026-10-24
+// §2.3, BACKLOG L56).
+export interface Row { effs: Id[]; tail: number | null; args?: Record<Id, Type[]> }
 
 // The effects. Ids, like everything else; names are presentation.
 export const CHOICE = "effect.choice";
@@ -202,21 +206,30 @@ export class Subst {
 
   resolveRow(r: Row): Row {
     const effs = new Set(r.effs);
+    const args: Record<Id, Type[]> = { ...r.args };
     let tail = r.tail;
     while (tail !== null && this.rows.has(tail)) {
       const next = this.rows.get(tail)!;
       next.effs.forEach((e) => effs.add(e));
+      for (const [e, xs] of Object.entries(next.args ?? {})) args[e] ??= xs;
       tail = next.tail;
     }
-    return { effs: [...effs].sort(), tail };
+    const sorted = [...effs].sort();
+    const kept = sorted.filter((e) => args[e]);
+    return kept.length ? { effs: sorted, tail, args: Object.fromEntries(kept.map((e) => [e, args[e]])) } : { effs: sorted, tail };
   }
 
   // Fully substituted copy, for display and for storing results.
   zonk(t: Type): Type {
     t = this.resolve(t);
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map((a) => this.zonk(a)) };
-    if (t.t === "fn") return { t: "fn", params: t.params.map((p) => this.zonk(p)), ret: this.zonk(t.ret), eff: this.resolveRow(t.eff) };
+    if (t.t === "fn") return { t: "fn", params: t.params.map((p) => this.zonk(p)), ret: this.zonk(t.ret), eff: this.zonkRow(t.eff) };
     return t;
+  }
+
+  zonkRow(r: Row): Row {
+    const row = this.resolveRow(r);
+    return row.args ? { ...row, args: Object.fromEntries(Object.entries(row.args).map(([e, xs]) => [e, xs.map((x) => this.zonk(x))])) } : row;
   }
 
   private occurs(v: number, t: Type): boolean {
@@ -263,18 +276,25 @@ export class Subst {
     b = this.resolveRow(b);
     const onlyA = a.effs.filter((e) => !b.effs.includes(e));
     const onlyB = b.effs.filter((e) => !a.effs.includes(e));
+    // An effect in both is the same effect, so its arguments are equal:
+    // Yield a and Yield Int make a an Int.
+    for (const e of a.effs) {
+      const x = a.args?.[e], y = b.args?.[e];
+      if (x && y) x.forEach((t, i) => y[i] && this.unify(t, y[i]));
+    }
+    const argsOf = (r: Row, es: Id[]) => { const xs = es.filter((e) => r.args?.[e]); return xs.length ? { args: Object.fromEntries(xs.map((e) => [e, r.args![e]])) } : {}; };
     // Rows are sets, so {Choice | r} = {r} has a solution: r has Choice in
     // it. That's what lets f and derivative(f), which may fail where f
     // doesn't, be passed to the same function.
     if (a.tail !== null && a.tail === b.tail) {
-      if (onlyA.length || onlyB.length) this.bindRow(a.tail, { effs: [...onlyA, ...onlyB], tail: this.next++ });
+      if (onlyA.length || onlyB.length) this.bindRow(a.tail, { effs: [...onlyA, ...onlyB], tail: this.next++, ...argsOf({ effs: [], tail: null, args: { ...b.args, ...a.args } }, [...onlyA, ...onlyB]) });
       return;
     }
     if (onlyA.length && b.tail === null) throw new EffectError(onlyA);
     if (onlyB.length && a.tail === null) throw new EffectError(onlyB);
     const rest = a.tail !== null && b.tail !== null ? this.next++ : null;
-    if (a.tail !== null) this.bindRow(a.tail, { effs: onlyB, tail: rest });
-    if (b.tail !== null) this.bindRow(b.tail, { effs: onlyA, tail: rest });
+    if (a.tail !== null) this.bindRow(a.tail, { effs: onlyB, tail: rest, ...argsOf(b, onlyB) });
+    if (b.tail !== null) this.bindRow(b.tail, { effs: onlyA, tail: rest, ...argsOf(a, onlyA) });
   }
 
   // A row tail given its effects, and a tail for the rest; a tail that may
@@ -323,6 +343,7 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
     freeVars(t.ret, s, vars, rows);
     const r = s.resolveRow(t.eff);
     if (r.tail !== null) rows.add(r.tail);
+    for (const xs of Object.values(r.args ?? {})) xs.forEach((x) => freeVars(x, s, vars, rows));
   }
   return { vars, rows };
 }
@@ -341,7 +362,8 @@ export function instantiate(sc: Scheme, s: Subst): Type {
     if (t.t === "var") return vm.get(t.v) ?? t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     const r = s.resolveRow(t.eff);
-    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: r.effs, tail: r.tail === null ? null : rm.get(r.tail) ?? r.tail } };
+    const args = r.args ? { args: Object.fromEntries(Object.entries(r.args).map(([e, xs]) => [e, xs.map(go)])) } : {};
+    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: r.effs, tail: r.tail === null ? null : rm.get(r.tail) ?? r.tail, ...args } };
   };
   return go(sc.type);
 }
@@ -370,6 +392,7 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     if (t.t === "fn") {
       t.params.forEach(count);
       count(t.ret);
+      Object.values(t.eff.args ?? {}).forEach((xs) => xs.forEach(count));
       if (t.eff.tail !== null) tailCount.set(tailOf(t.eff.tail), (tailCount.get(tailOf(t.eff.tail)) ?? 0) + 1);
     }
   };
@@ -385,7 +408,7 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       if (!t.args.length) return name(t.id);
       return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
     }
-    const effs = t.eff.effs.map(name);
+    const effs = t.eff.effs.map((e) => { const xs = t.eff.args?.[e]; return xs?.length ? `${name(e)} ${xs.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}` : name(e); });
     const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
     if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {
       if (!tailNames.has(tail)) tailNames.set(tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
