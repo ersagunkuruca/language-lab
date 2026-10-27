@@ -80,10 +80,10 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, MAP_V, SET_V, TRUE } from "../src/lang/std.ts";
+import { BOOL, CONS, FALSE, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, showIn, type Type } from "../src/lang/types.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { fromList, needsHandling, showValue, type Value } from "../src/lang/run.ts";
+import { fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -806,7 +806,7 @@ function knownPorts(info: T.Info): Id[] {
 // graph shows what every node makes of them.
 function portText(info: T.Info, p: Id): string {
   const i = portsOfDef(ui.def).indexOf(p);
-  return doc.examples?.[ui.def]?.[i] ?? seeded(ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
+  return doc.examples?.[ui.def]?.[i] ?? seeded(info, ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
 }
 
 // In a program that draws a picture, a function of x, y and time is the
@@ -823,22 +823,67 @@ function pixelSeed(def: Id): string[] | null {
   return names.map((n) => PIXEL[n] ?? "");
 }
 
-// Until you give values of your own, a function starts with the numbers
+// Until you give values of your own, a function starts with the values
 // some call in the program already passes it, so it opens with values on
-// its wires instead of empty boxes.
-function seeded(def: Id): string[] | null {
+// its wires instead of empty boxes: numbers, texts, true and false, and
+// lists of them, written the way values print; or else the values it's
+// first called with when main runs (`words(cuts("abc"))`).
+function seeded(info: T.Info, def: Id): string[] | null {
   const nodes = doc.code.nodes;
   const pixel = pixelSeed(def);
   if (pixel) return pixel;
+  const text = (id: Id): string | null => {
+    const n = nodes[id];
+    if (n?.kind === "lit") return typeof n.value === "number" || /^-?\d+$/.test(n.value) ? String(n.value) : JSON.stringify(n.value);
+    if (n?.kind === "ref") return n.target === TRUE ? "true" : n.target === FALSE ? "false" : n.target === NIL ? "[]" : null;
+    const items: string[] = [];
+    for (let m: Node | undefined = n; m?.kind === "call"; ) {
+      const f = nodes[m.fn];
+      if (f?.kind !== "ref" || f.target !== CONS || m.args.length !== 2) return null;
+      const t = text(m.args[0]);
+      if (t === null) return null;
+      items.push(t);
+      const rest: Node | undefined = nodes[m.args[1]];
+      if (rest?.kind === "ref" && rest.target === NIL) return `[${items.join(", ")}]`;
+      m = rest;
+    }
+    return null;
+  };
   for (const n of Object.values(nodes)) {
     if (n.kind !== "call") continue;
     const f = nodes[n.fn];
     if (f?.kind !== "ref" || f.target !== def) continue;
-    const args = n.args.map((a) => nodes[a]);
-    const nums = args.map((a) => (a?.kind === "lit" && (typeof a.value === "number" || /^-?\d+$/.test(a.value)) ? String(a.value) : null));
-    if (nums.length && nums.every((v) => v !== null)) return nums as string[];
+    const args = n.args.map(text);
+    if (args.length && args.every((v) => v !== null)) return args as string[];
   }
-  return null;
+  const main = defNamed("main"), body = defBody(def);
+  const got = main && body?.kind === "lambda" ? mainCalls(info, main).get(body.id) : undefined;
+  // Only values that read back as themselves: a function passed in, say,
+  // has no way to be typed into a box.
+  const texts = got?.map((v) => showValue(v, doc.code, pres().names));
+  return texts?.length && body?.kind === "lambda" && texts.length === body.params.length && texts.every((t, i) => !("error" in readPort(info, body.params[i], t))) ? texts : null;
+}
+
+// What each function was first called with when main last ran, as far as
+// it got in a few steps and MAIN_MS: printing is swallowed, and the world
+// (files, the network, a page's cells) isn't reached, so it stops there.
+const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+const MAIN_STEPS = 100_000, MAIN_MS = 50;
+function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
+  let calls = mainRuns.get(doc.code);
+  if (!calls) {
+    const got = new Map<Id, Value[]>();
+    const body = defBody(main);
+    if (body?.kind !== "lambda" || !body.params.length) {
+      const end = performance.now() + MAIN_MS;
+      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, [], undefined, (l, args) => {
+        if (!got.has(l)) got.set(l, args);
+        if (performance.now() > end) throw new OutOfSteps();
+      }));
+    }
+    mainRuns.set(doc.code, (calls = got));
+  }
+  return calls;
 }
 
 // A port's text read as a value, the way values print. Where a Text goes,

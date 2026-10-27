@@ -223,6 +223,9 @@ export interface Runtime {
   // The handler of Cells (cells.ts). Without one, each run gets its own,
   // which still computes formulas on demand and remembers them.
   cells?: Cells;
+  // Told each time a function written as a lambda is called, with the
+  // values it's called with (the editor seeds a definition's Run with them).
+  entered?: (lambda: Id, args: Value[]) => void;
 }
 
 // What the world effects do. A failure throws, with a message that becomes
@@ -438,6 +441,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (rest) return this.resumeRest(rest, args[0]);
       const c = closures.get(f as Fn);
       if (c) {
+        rt.entered?.(c.lambda.id, args);
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
       }
       const h = HANDLED.get(f as Fn);
