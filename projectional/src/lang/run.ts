@@ -26,7 +26,8 @@ import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
 import { discharge } from "./ledger.ts";
-import { ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import * as Alg from "./algebraic.ts";
+import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -124,11 +125,15 @@ export function compareValues(a: Value, b: Value, order: Map<Id, number>): numbe
       if (l !== r) return I.less(l, r) ? -1 : 1;
       continue;
     }
+    if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) { const c = Alg.compare(algebraicOf(x), algebraicOf(y)); if (c) return c; continue; }
     if (x.tag !== y.tag) return (order.get(x.tag) ?? 0) < (order.get(y.tag) ?? 0) ? -1 : 1;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
   }
   return 0;
 }
+
+// An Algebraic value as algebraic.ts reads it.
+const algebraicOf = (v: Data): Alg.Algebraic => ({ p: fromList(v.fields[0]).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
 
 // Each case's place in its type, for compareValues.
 export function variantOrder(code: Code): Map<Id, number> {
@@ -921,6 +926,7 @@ export function showValue(v: Value, code: Code, names: Names): string {
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names)).join(", ")}]`;
   // Float64 types show as numbers, as `show fraction` and `show complex` do.
   if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
   if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names)}i`; }
   const name = names[v.tag] ?? v.tag;
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names)).join(", ")})` : name;

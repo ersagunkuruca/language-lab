@@ -10,6 +10,7 @@ import { B, impl } from "../prelude.ts";
 import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
+import * as A from "./algebraic.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -188,11 +189,20 @@ export const TABLE_ENTRY = typedef("std.tableEntry", "Table entry", ["a"], [
   ["times", [["left", ([a]) => tref(a)], ["right", ([a]) => tref(a)], ["gives", ([a]) => tref(a)]]],
 ]);
 export const TIMES_V = "std.tableEntry.times";
+// Algebraic numbers (EXACT-REALS.md, BACKLOG L88): a number held by the
+// equation it solves, √2 as the root of x² − 2 between 1 and 2. Its
+// minimal polynomial's coefficients (constant first) and which real root it
+// is, from the smallest at 0: one spelling per number, so `equal` is
+// right. Its arithmetic is src/lang/algebraic.ts, the builtins below.
+export const ALGEBRAIC = typedef("std.algebraic", "Algebraic", [], [
+  ["algebraic", [["polynomial", () => tref(LIST, tref(INT))], ["root", () => tref(INT)]]],
+]);
+export const ALGEBRAIC_V = "std.algebraic.algebraic";
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
 // for the checker's message.
-export const SMART: Record<Id, string> = { [RATIO]: "fraction or as fraction", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
+export const SMART: Record<Id, string> = { [RATIO]: "fraction or as fraction", [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
 
@@ -458,6 +468,39 @@ export const TEXT_OPS = {
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
 };
 
+// Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
+// resolves to these at Algebraic (arith.ts); a literal there is `fraction`.
+const alg: Type = { t: "con", id: "std.algebraic", args: [] };
+const rational: Type = { t: "con", id: "std.rational", args: [] };
+const toAlg = (v: { fields: unknown[] }): A.Algebraic => ({ p: itemsOf(v.fields[0] as { tag: Id; fields: unknown[] }).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
+const ofAlg = (x: A.Algebraic) => ({ tag: ALGEBRAIC_V, fields: [listOf(x.p.map(I.norm)), x.k] });
+const one = (f: (...xs: A.Algebraic[]) => A.Algebraic) => (...vs: { fields: unknown[] }[]) => ofAlg(f(...vs.map(toAlg)));
+export const ALGEBRAIC_OPS = {
+  add: builtin("algebraic.add", "add", pure([alg, alg], alg), one(A.add)),
+  sub: builtin("algebraic.sub", "subtract", pure([alg, alg], alg), one(A.subtract)),
+  mul: builtin("algebraic.mul", "multiply", pure([alg, alg], alg), one(A.multiply)),
+  neg: builtin("algebraic.neg", "negate", pure([alg], alg), one(A.negate)),
+  less: builtin("algebraic.less", "less than", pure([alg, alg], bool), (a: { fields: unknown[] }, b: { fields: unknown[] }) => truth(A.less(toAlg(a), toAlg(b)))),
+  divide: choice("algebraic.divide", "divide", [alg, alg], alg, (a: { fields: unknown[] }, b: { fields: unknown[] }) => { const q = A.divide(toAlg(a), toAlg(b)); return q ? [ofAlg(q)] : []; }),
+  // The real k-th root: the positive one for an even k, none of a negative
+  // number then.
+  root: choice("algebraic.root", "root", [alg, int], alg, (a: { fields: unknown[] }, k: I.Int) => { const r = A.root(toAlg(a), Number(k)); return r ? [ofAlg(r)] : []; }),
+  sqrt: choice("algebraic.sqrt", "square root", [alg], alg, (a: { fields: unknown[] }) => { const r = A.root(toAlg(a), 2); return r ? [ofAlg(r)] : []; }),
+  // top/bottom, which a literal at Algebraic becomes (the checker has made
+  // sure bottom isn't 0). Not offered: `as algebraic` is.
+  fraction: builtin("algebraic.fraction", "algebraic fraction", pure([int, int], alg), (n: I.Int, d: I.Int) => ofAlg(A.fraction(BigInt(n), BigInt(d)))),
+  ofRational: builtin("algebraic.ofRational", "as algebraic", pure([rational], alg), (r: { fields: I.Int[] }) => ofAlg(A.fraction(BigInt(r.fields[0]), BigInt(r.fields[1])))),
+  // The fraction it is, when it is one: √2 · √2 is 2.
+  asFraction: choice("algebraic.asFraction", "as fraction", [alg], rational, (a: { fields: unknown[] }) => {
+    const f = A.asFraction(toAlg(a));
+    return f ? [{ tag: RATIO, fields: f.map(I.norm) }] : [];
+  }),
+  digits: builtin("algebraic.digits", "digits", pure([alg, int], str), (a: { fields: unknown[] }, n: I.Int) => A.digits(toAlg(a), Number(n))),
+  toNumber: builtin("algebraic.toNumber", "as float64", pure([alg], num), (a: { fields: unknown[] }) => A.toNumber(toAlg(a))),
+  show: builtin("algebraic.show", "show", pure([alg], str), (a: { fields: unknown[] }) => A.show(toAlg(a))),
+};
+
+
 // show for any plain value: [1, 2, 3], circle(2), "text". Cases print
 // with the program's names, which the runtime is given (names are
 // presentation, so they're an input to the run, like the console). Float64's
@@ -477,7 +520,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

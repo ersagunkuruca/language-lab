@@ -6,7 +6,7 @@ How to read a type: `(Float64, Float64) -> Float64` takes two Float64s and gives
 
 ## Numbers
 
-There are four kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
+There are five kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Algebraic is an exact root of a polynomial, like √2, so √2 · √2 is exactly 2. Complex is re + im·i. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +.
 
 - **add** : `(a, a) -> a`. a + b, at any Number: Int, Float64, Rational, Complex (and records of Float64s through the vectors module).
 - **subtract** : `(a, a) -> a`. a − b, at any Number.
@@ -62,6 +62,15 @@ There are four kinds of number. Int is a whole number of any size. Float64 is a 
 - **table product** : `(List (Table entry a), a, a) -> a`. a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).
 - **complex table** : `List (Table entry Complex)`. Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.
 - **Table entry** (type). One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.
+- **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
+- **square root** : `(Algebraic) -[Choice]-> Algebraic`. The positive square root, exactly: square root(2) is √2, the root of x² − 2 between 1 and 2. No answer (Choice) for a negative number.
+- **root** : `(Algebraic, Int) -[Choice]-> Algebraic`. The real k-th root: root(8, 3) is 2, root(2, 2) is √2. For an even k the positive one, and no answer (Choice) for a negative number.
+- **divide** : `(Algebraic, Algebraic) -[Choice]-> Algebraic`. a ÷ b exactly. No answer (Choice) when b is 0.
+- **as algebraic** : `(Rational) -> Algebraic`. A fraction as an Algebraic number.
+- **as fraction** : `(Algebraic) -[Choice]-> Rational`. The fraction an Algebraic number is, when it is one: as fraction(√2 · √2) is 2. No answer (Choice) for √2.
+- **digits** : `(Algebraic, Int) -> Text`. The first n digits after the point, cut off, worked out exactly: digits(√2, 5) is "1.41421". As many as asked for.
+- **as float64** : `(Algebraic) -> Float64`. The nearest Float64.
+- **show** : `(Algebraic) -> Text`. An Algebraic number as text: 2 or 1/3 when it is a fraction, √2 or −√2 for those, else its first ten digits and an ellipsis.
 - **add** : `(Float64, Float64) -> Float64`. a + b for Float64s: what the generic + is at Float64.
 - **subtract** : `(Float64, Float64) -> Float64`. a − b for Float64s: what the generic − is at Float64.
 - **multiply** : `(Float64, Float64) -> Float64`. a · b for Float64s: what the generic · is at Float64.
@@ -72,6 +81,12 @@ There are four kinds of number. Int is a whole number of any size. Float64 is a 
 - **multiply** : `(Int, Int) -> Int`. a · b for Ints: what the generic · is at Int.
 - **negate** : `(Int) -> Int`. −a for an Int: what the generic − is at Int.
 - **less than** : `(Int, Int) -> Bool`. a < b for Ints: what the generic < is at Int.
+- **add** : `(Algebraic, Algebraic) -> Algebraic`. a + b for Algebraic numbers, exactly: what the generic + is at Algebraic.
+- **subtract** : `(Algebraic, Algebraic) -> Algebraic`. a − b for Algebraic numbers, exactly: what the generic − is at Algebraic.
+- **multiply** : `(Algebraic, Algebraic) -> Algebraic`. a · b for Algebraic numbers, exactly: √2 · √2 is 2. What the generic · is at Algebraic.
+- **negate** : `(Algebraic) -> Algebraic`. −a for an Algebraic number: what the generic − is at Algebraic.
+- **less than** : `(Algebraic, Algebraic) -> Bool`. a < b for Algebraic numbers. It always answers: two different algebraic numbers can always be told apart.
+- **algebraic fraction** : `(Int, Int) -> Algebraic`. top/bottom as an Algebraic number: what a literal at Algebraic becomes. Not offered: as algebraic is.
 
 ## True and false, sameness and order
 

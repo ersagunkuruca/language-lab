@@ -27,8 +27,8 @@ import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import type { Info } from "./infer.ts";
-import { ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
-import { COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
+import { ALGEBRAIC_OPS, ARITH, COMPLEX_V, INT_OPS, RATIO, S } from "./std.ts";
+import { ALGEBRAIC_TYPE, COMPLEX_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
@@ -58,6 +58,13 @@ const PRELUDE_AT: Record<string, Record<Id, string>> = {
     [ARITH.add]: "add complex", [ARITH.sub]: "subtract complex", [ARITH.mul]: "multiply complex", [ARITH.neg]: "negate complex",
   },
 };
+// And at Algebraic: builtins (src/lang/algebraic.ts).
+const BUILTIN_AT: Record<string, Record<Id, Id>> = {
+  [ALGEBRAIC_TYPE]: {
+    [ARITH.add]: ALGEBRAIC_OPS.add, [ARITH.sub]: ALGEBRAIC_OPS.sub, [ARITH.mul]: ALGEBRAIC_OPS.mul,
+    [ARITH.neg]: ALGEBRAIC_OPS.neg, [ARITH.less]: ALGEBRAIC_OPS.less,
+  },
+};
 const preludeOps = new Map<string, Record<Id, Id>>();
 // A prelude definition's id, by its name.
 export const preludeDef = (name: string): Id | undefined =>
@@ -76,7 +83,7 @@ const atPrelude = (type: string, op: Id): Id => {
 };
 
 export const usesGenericArithmetic = (code: Code) =>
-  Object.values(code.nodes).some((n) => (n.kind === "ref" && n.target in AT) || (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT));
+  Object.values(code.nodes).some((n) => (n.kind === "ref" && n.target in AT) || (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)));
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
 // into definitions first (lift-lets.ts), the other rewrite every runner
@@ -232,7 +239,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
         return;
       }
       if (plainNumber(n)) { numberLiteral(n as NodeOf<"lit">, env); return; }
-      if (n.kind === "lit" && n.of !== undefined && n.of in PRELUDE_AT) { literal(n); return; }
+      if (n.kind === "lit" && n.of !== undefined && (n.of in PRELUDE_AT || n.of in BUILTIN_AT)) { literal(n); return; }
       const kids: Id[] = [];
       switch (n.kind) {
         case "call": kids.push(n.fn, ...n.args); break;
@@ -252,10 +259,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
-    const parts: [NodeData, Type][] = n.of === RATIONAL_TYPE
+    const parts: [NodeData, Type][] = n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
       ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
       : [[{ kind: "lit", value: typeof n.value === "number" ? n.value : 0 }, num], [{ kind: "lit", value: 0 }, num]];
-    const ctor = n.of === RATIONAL_TYPE ? RATIO : COMPLEX_V;
+    const ctor = n.of === RATIONAL_TYPE ? RATIO : n.of === ALGEBRAIC_TYPE ? ALGEBRAIC_OPS.fraction : COMPLEX_V;
     const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
     nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
     typeOf.set(n.id, t);
@@ -273,7 +280,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
       return;
     }
     if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
-    if (t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE) { literal({ ...n, of: t.id, value: t.id === RATIONAL_TYPE ? decimal(x) : x }); return; }
+    if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE ? x : decimal(x) }); return; }
     const variant = recordVariant(code, t.id);
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
@@ -286,9 +293,9 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const operation = (id: Id, t: Type, parent: Id | null) => {
     const at = AT[(nodes[id] as NodeOf<"ref">).target];
     const x = t.t === "fn" ? t.params[0] : num;
-    if (x.t === "con" && (x.id === NUMBER || x.id === INT || x.id in PRELUDE_AT)) {
+    if (x.t === "con" && (x.id === NUMBER || x.id === INT || x.id in PRELUDE_AT || x.id in BUILTIN_AT)) {
       const target = (nodes[id] as NodeOf<"ref">).target;
-      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : x.id in PRELUDE_AT ? atPrelude(x.id, target) : at.number };
+      nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : x.id in PRELUDE_AT ? atPrelude(x.id, target) : x.id in BUILTIN_AT ? BUILTIN_AT[x.id][target] : at.number };
       typeOf.set(id, t);
       return;
     }

@@ -23,7 +23,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -69,7 +69,7 @@ const ARITH_WHAT = {
 };
 const str: Type = { t: "con", id: STRING, args: [] };
 // A number type itself (a pinned variable counts).
-const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id.startsWith("pin."));
+const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id === ALGEBRAIC_TYPE || t.id.startsWith("pin."));
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
 const PER_TYPE = new Set(["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]));
 const bool: Type = { t: "con", id: BOOL, args: [] };
@@ -489,7 +489,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
         // A literal at Rational is a whole number or top/bottom; at
         // Complex, a Float64 (its real part). arith.ts spells them out.
-        if (n.of === RATIONAL_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
+        if ((n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE) && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
         if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
         break;
       }
