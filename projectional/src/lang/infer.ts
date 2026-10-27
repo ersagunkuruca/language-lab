@@ -34,7 +34,9 @@ const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
 
 discharge("a match on an effect's operations", [DECLARED], "a case for each operation says what it does: the handler");
 
-export interface Problem { id: Id; message: string }
+// missing: an interface a type has no implementation of, for the editor to
+// offer to write one.
+export interface Problem { id: Id; message: string; missing?: { iface: Id; type: Type } }
 // group: the definitions being checked together with the hole's own. Inside
 // them, those definitions aren't generalized yet, so the palette must use
 // their types as they are rather than fresh copies.
@@ -97,7 +99,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map() };
-  const err = (id: Id, message: string) => info.errors.push({ id, message });
+  const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
@@ -908,8 +910,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // + − · and < say what a Number is first, as they always have.
       if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {
         const ordered = w.iface === "std.ordered";
-        err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "ordered" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`);
-      } else err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${of}`);
+        err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "ordered" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
+      } else err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
     }
   }
 

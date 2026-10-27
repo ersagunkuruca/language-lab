@@ -202,7 +202,11 @@ and a colour keeps the rule. Literals at a type need one more operation,
    own (`3` as a quaternion), which needs a "from a fraction" field;
    quaternions as a table (L42, L43).
 5. **The editor** (lane E): the "interface" toggle on a type, as the
-   "effect" one, and `where a has Trig` in types.
+   "effect" one, and `where a has Trig` in types. **Writing an
+   implementation is built** (E137): a data type's panel lists every
+   interface, with what implements it or an Implement button, which makes
+   `trig at wave = trig(□, …)` pinned to `Trig Wave`, so each hole wants
+   `(Wave) -> Wave`. An interface's own panel lists its implementations.
 6. **A value packed with its implementation**, when a program needs it.
 
 ## Prior art
