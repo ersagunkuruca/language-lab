@@ -135,12 +135,14 @@ binary, a match and a fold:
     otherwise → ‹if succ›(pred′(n))
 
 ‹fold Nat′›(n, ‹if zero›, ‹if succ›) =
-  apply fold n
-    empty → (from, r) => r
-    even(h) with ‹run h› → (from, r) => ‹run h›(add′(from, h), ‹run h›(from, r))
-    odd(h) with ‹run h› → (from, r) => ‹if succ›(add′(from, twice′(h)), ‹run h›(add′(from, h), ‹run h›(from, r)))
-    to (zero′, ‹if zero›())
+  fold n from (from = zero′, r = ‹if zero›())
+    empty → r
+    even(h) with ‹run h› → ‹run h›(add′(from, h), ‹run h›(from, r))
+    odd(h) with ‹run h› → ‹if succ›(add′(from, twice′(h)), ‹run h›(add′(from, h), ‹run h›(from, r)))
 ```
+
+(It is a fold to a function of `from` and `r`, applied to their starts;
+the text reads that as a fold with accumulators, BACKLOG E62.)
 
 `fold Nat′` is the interesting one. A fold over Nat must run its `succ`
 case n times, whatever the representation. Done naively on binary
