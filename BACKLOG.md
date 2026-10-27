@@ -409,7 +409,7 @@ roadmap's Done table; this section keeps about a week.
 | L4 | One page model: reactive.html draws std's `Html`, its widgets are definitions, `ui.ts` and `UI` removed | #183 |
 | L3 | LANGUAGE.md says what runs: effects list, bundled output, totality row, Choice-and-world gap (now tested) | #181 |
 | L1 | Run refuses a program that doesn't type-check, naming the definition | #178 |
-| L40b | Answered (Ersagun 2026-10-27): a type's operations are a separate interface with implementations, resolved before running (monomorphised, zero cost), one implementation per interface and type, dynamic dispatch only when an implementation is passed as a value. Design: projectional/INTERFACES.md; ALGEBRA-TABLES.md points at it. Steps are L40e to L40h | #PR |
+| L40b | Answered (Ersagun 2026-10-27): a type's operations are a separate interface with implementations, resolved before running (monomorphised, zero cost), one implementation per interface and type, dynamic dispatch only when an implementation is passed as a value. Design: projectional/INTERFACES.md; ALGEBRA-TABLES.md points at it. Steps are L40e to L40h | #511 |
 
 ### Coordinator and process
 
