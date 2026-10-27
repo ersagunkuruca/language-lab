@@ -126,10 +126,15 @@ const pickedBy = new Map<string, Set<Id>>();
 
 // `key` names the window onto this graph, so redrawing keeps where you were.
 export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
-  const canvas = infiniteCanvas(key, "tgraph");
+  const scene = build(code, pres, info, defId, hooks);
+  // An action opens on its steps, the column they run down: the
+  // definition's own, not those of an action inside it.
+  const depth = (u: Id) => { let n = 0; for (let f = scene.items.get(u)?.frame ?? scene.frames.get(u)?.parent ?? null; f; f = scene.frames.get(f)?.parent ?? null) n++; return n; };
+  const top = Math.min(...[...scene.items.keys()].map(depth));
+  const steps = (scene.chains ?? []).find((c) => c.every((u) => depth(u) === top)) ?? [];
+  const canvas = infiniteCanvas(key, "tgraph", () => steps.map((id) => canvas.world.querySelector(`[data-id="${CSS.escape(id)}"]`)).filter((e): e is Element => !!e));
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
-  const scene = build(code, pres, info, defId, hooks);
   for (const l of hooks.loose ?? []) {
     const part = build(code, pres, info, l, hooks, true);
     for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
