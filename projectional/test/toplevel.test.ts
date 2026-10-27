@@ -784,3 +784,25 @@ test("a list's items and a chain's inputs are added, moved and taken out", async
   assert.deepEqual(values(step(code, T.moveItemTo(code, names, info, at(code, "x").row, 0, 2)), "ws"), ["y", "z", "x"], "dragged to the end, the rest move up");
   assert.deepEqual(values(step(code, T.moveItemTo(code, names, info, at(code, "z").row, 2, 0)), "ws"), ["z", "x", "y"]);
 });
+
+// Ersagun 2026-10-27: a value added before 300 in colour, to name the
+// related numbers, wasn't in scope at 600 or 299. It goes first among
+// the steps, out of first's else, so every one of them can use it.
+test("a value added before a number inside first's else is in scope for every step", async () => {
+  const T = await import("../editor/typed.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/mandelbrot"));
+  const colour = p.named("colour");
+  const lit = (v: number) => subtree(p.code, colour).find((id) => p.code.nodes[id].kind === "lit" && (p.code.nodes[id] as NodeOf<"lit">).value === v)!;
+  const r = T.addStep(p.code, p.pres.names, infer(p.code, p.pres.names), colour, lit(300));
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  if (!r.ok) return;
+  const f = T.fillValue(r.code, r.names, infer(r.code, r.names), r.select!, "300", colour);
+  assert.ok(f.ok, f.ok ? "" : f.reason);
+  if (!f.ok) return;
+  for (const v of [600, 300, 299]) {
+    const u = T.useVar(f.code, f.names, infer(f.code, f.names), colour, r.dot!, lit(v));
+    assert.ok(u.ok, `${v}: ${u.ok ? "" : u.reason}`);
+  }
+});

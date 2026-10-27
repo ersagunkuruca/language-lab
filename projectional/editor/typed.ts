@@ -914,6 +914,43 @@ function bodiesAround(code: Code, defId: Id, slot: Id): Id[] | null {
   return def?.body ? walk(def.body, [def.body]) : null;
 }
 
+// Where the run of steps `slot` is in starts: the definition's body, or a
+// case's, not counting the bodies of functions passed as values (first's
+// else, a map's function). A value added there is in scope for every step
+// of the run, as a let written at the top of the block would be (Ersagun
+// 2026-10-27: a value added before 300 in colour wasn't in scope at 600
+// or 299).
+function stepAround(code: Code, defId: Id, slot: Id): Id | null {
+  const walk = (n: Id, at: Id): Id | null => {
+    if (n === slot) return at;
+    const x = code.nodes[n];
+    switch (x?.kind) {
+      // A function passed as a value: its body is no step of this one.
+      case "lambda": return walk(x.body, at);
+      case "call": {
+        const f = code.nodes[x.fn];
+        // A let: the steps after it are the same run of steps.
+        if (f?.kind === "lambda") { const b = walk(f.body, at); if (b) return b; }
+        else { const b = walk(x.fn, at); if (b) return b; }
+        for (const a of x.args) { const b = walk(a, at); if (b) return b; }
+        return null;
+      }
+      case "match": case "fold": {
+        const f = walk(x.scrutinee, at);
+        if (f) return f;
+        for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, ab); if (g) return g; }
+        return x.kind === "match" && x.otherwise ? walk(x.otherwise, x.otherwise) : null;
+      }
+      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, at); if (f) return f; } return walk(x.body, x.body);
+      default: return null;
+    }
+  };
+  const def = code.nodes[defId] as NodeOf<"def">;
+  const top = def?.body ? code.nodes[def.body] : null;
+  if (!top) return null;
+  return top.kind === "lambda" ? walk(top.body, top.body) : walk(top.id, top.id);
+}
+
 // Put a dot on the wire out of `slot`: its value moves to a dot at the start
 // of the innermost body around it (a function's, a case's, a let's), where
 // everything after can reach it, and the wire runs from the dot to where the
@@ -1060,7 +1097,7 @@ export function addStep(code: Code, names: Names, info: Info, defId: Id, before?
   if (top.kind === "typedef") return { ok: false, reason: "a data type has no steps; add a case or a field instead" };
   if (before !== undefined && (!["lit", "ref", "call", "lambda", "match", "fold", "hole"].includes(code.nodes[before]?.kind) || !subtree(code, defId).includes(before)))
     return { ok: false, reason: "a step goes before a value of this definition" };
-  const at = before ?? (top.kind === "lambda" ? top.body : def.body!);
+  const at = (before !== undefined ? stepAround(code, defId, before) : null) ?? (top.kind === "lambda" ? top.body : def.body!);
   const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
   const next = swapIn(code, at, let_);
   next.nodes[dot] = { id: dot, kind: "binder" };
