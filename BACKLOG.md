@@ -425,6 +425,7 @@ roadmap's Done table; this section keeps about a week.
 | L91 | The Mandelbrot shader's colours are Ersagun's HSI (hsi-playground), Ersagun 2026-10-27: `hsi colour(hue, saturation, intensity)` on linear RGB with Rec. 709 luminance, `encoded` the sRGB transfer, and the palette the hue circle at saturation 1/2 (the triangle's incircle) and luminance 0.236, the brightest where every hue fits, so every colour is equally bright | #523 |
 | L92 | The Mandelbrot shader zooms (Ersagun 2026-10-27): `zoom(time)` takes the picture from 3 wide (the whole set) into Seahorse Valley at −0.7436 + 0.1318i, 0.006 wide, and back out every 30 seconds, by powers so the speed looks the same at every depth; escape allows 300 steps for the detail deep in. Deeper needs more than the GPU's f32 | #524 |
 | L93 | Bug: shaders smoke on main, the GPU 0.45 from the evaluator on the Mandelbrot shader after #524. zoom used 1 − cos(θ), which near θ = 0 keeps only the GPU cos's error (WGSL allows 2^-11), and a pixel on the set's edge then escapes on a different step. Now a smoothstep triangle wave, only + − · abs mod and one power, 0.0005 from the evaluator | #527 |
+| L94 | The Mandelbrot zoom back to Ersagun's simpler form, 3 · 0.002^((1 − cos(τ·t/30))/2), and the GPU check (editor/picture.ts) lets up to 1 point in 20 differ, because on the set's edge the GPU's cos (good to 2^-11, each vendor's own) flips a point's step count. Corrects L93's reasoning: the error is cos's, in any form, not 1 − cos's cancellation | #PR |
 
 ### Coordinator and process
 
