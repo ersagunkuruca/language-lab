@@ -25,7 +25,9 @@ Thread "Writing programs in the editor". Current step (coordinator 2026-10-24 08
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E154 | Make it a function and Group on every node's menu, taking the picked nodes, the group the node is in, or just that node; listed first when nodes are picked. Before, both needed two picked nodes and sat below the fold of a scrolling menu (Ersagun 2026-10-27: "No such options") | Ersagun 2026-10-27 | P1 | S | |
+| E155 | Bug: "Add a value before this…" wrapped only the node clicked (inside first's else in colour), so the new value wasn't in scope at 600 or 299 ("not in scope"); it goes first among the steps the node is in | Ersagun 2026-10-27 | P0 | S | |
+| E156 | Bug: dropping a value onto a filled input swapped them (the value moved there, the old literal went loose where the value was) instead of wiring; dropping a named value wires to it, and a plain literal replaced is just dropped (Undo brings it back) | Ersagun 2026-10-27 | P0 | S | |
+| E157 | Let and get nodes are the default view of let bindings in the graph (layout.named defaults to every binder; "Show every value as wires" turns it off) | Ersagun 2026-10-27 | P1 | S | |
 | E103 | **Bug.** In a definition that something runs backwards (physics `fall`), adding a value takes about 4 s: each of ~450 candidates changes the solve's plan differently (the plan names the call it is stuck on), so each is checked against the whole program. Elsewhere (dice `main`) it is 0.3 s. Needs a cheaper "does this plan change matter" test. Step one (#478): a call given holes no longer counts as a plan change, 4.4 s → 2.3 s; what's left is working out each candidate's plan (~3.5 ms × 440). Step two (#491): each filling built once, ownerOfTypeParts reads the defs list, fall's holes 48 s → 39 s in all; what's left is per-candidate whole-program passes (modes.ts analyzer union-find, unit inference, the node copy). Step three (#502): units solved once per hole, 44 s → 28 s. Step four (#503): a solve's verdict kept per program, 28 s → 21 s. Step five (#504): the unit scan skipped per filling, 21 s → 18.5 s, about 0.8 s a palette. Stopped there: each stage left buys under 10% except sharing nodes between fillings instead of copying ~3000 per filling (about 20%), which needs a persistent node store | found doing E100 | P3 | M | |
 | E133 | **Design, held** (coordinator 2026-10-27). Fillings share the program's nodes instead of each copying them (~3000 in physics): a persistent node store under `Code` (a HAMT or an overlay map), which every module reads. E103's last stage over 10%: about 20% off a palette (fall 18.5 s → ~15 s for 23 holes). Write the design note before building | E103 | P3 | L | held |
 | E77 | A fraction prints as `ratio(1, 2)` in show and Run; read as 1/2 (language `show`: Language lane may take it) | QA-2026-10-24b L1 | P3 | S | moved to L74 (Language lane) |
@@ -121,6 +123,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E154 | Make it a function and Group on every node's menu: the picked nodes, the node's group, or just that node; first on the menu when nodes are picked | #543 |
 | E153 | A hole in an implementation says which operation it is and for which type | #542 |
 | E152 | The graph draws an implementation as the interface at its type (Shape at Circle), a named input per operation | #541 |
 | E151 | An interface and its implementations read by their operations (area : (a) -> Float64; area: □), and the panel says Operation and Implementation | #540 |
