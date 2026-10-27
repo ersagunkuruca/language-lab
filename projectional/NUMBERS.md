@@ -27,6 +27,37 @@ node --test test/numbers.test.ts    # the laws, the rewrite, encoding by running
 cd ../compiler && npm test          # includes the rewritten program, compiled
 ```
 
+## Where this stands (2026-10-27)
+
+**The goal.** You write the meaning (`cons`/`nil`, `zero`/`succ`, a map
+as sorted entries), and every target runs it on whatever storage fits how
+the program uses each value: arrays, ropes, machine integers, trees. The
+choice belongs to one representation layer, shared by the evaluator, every
+compiler target and the editor, which shows the choice and lets you change
+it. One type can have several representations in one program, chosen per
+value, with the cost of converting between them counted.
+
+**Built:**
+- The layer itself: representations as side tables, the rewrite
+  (`represent`), the chooser by declared costs (`choose`), laws checked by
+  running the meaning beside the representation. Peano `Nat` runs as
+  `Int`; `Map` and `Set` become balanced trees when their jobs' costs say
+  so (DATA-STRUCTURES.md), on every target.
+- Per value, for folds: a fold over `characters(t)` walks the text, a fold
+  over `range(n)` is a counter, other lists stay cons cells ("Folds run the
+  way their value is stored", below).
+
+**Not yet:**
+- **Lists as arrays are a compiled-JavaScript trick, outside the layer.**
+  A list that is only walked stays a JS array in compiled JavaScript
+  (compiler/GAPS.md G21, P4a), decided in `compiler/src/compile.ts`. There
+  is no `array` row in the table, so WebAssembly and C keep cons cells, and
+  the editor can't show it. Moving it into the layer is BACKLOG C30 and
+  stage 3 of the roadmap below.
+- User types get one representation per type for the whole program, and
+  costs are declared by hand. Choice per value flow, with conversion costs,
+  and costs worked out from folds are stage 7.
+
 ## Short answers
 
 - **Is this a new language feature?** No new node kinds. A representation
