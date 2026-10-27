@@ -585,11 +585,14 @@ logging, IO, mocking IO in tests) without first-class continuations:
 Both compile to plain JavaScript without capturing continuations: an
 answer is a call to the handler's case found on a stack of handlers, an
 abort is an exception caught by its match (this is how Koka and Effekt
-compile tail-resumptive and abortive handlers). Effects take no type
-parameters, because rows hold effect ids: for an error that carries data
-of its own, declare an effect for it (`effect Invalid = invalid(line: Int,
-why: Text)`), which also makes the type say *which* error a function can
-raise.
+compile tail-resumptive and abortive handlers). An effect can take types,
+as a data type can (L56): `effect Yield a = yield(value: a) returns Unit`,
+and a row holds it applied, so `words : () -[Yield Text]-> Unit`, and the
+handler's case sees `value` as Text. A function that only passes values on
+is generic over them: `pass on(x) = yield(x)` is `(a) -[Yield a]-> Unit`.
+This is how Koka, Unison (`{Stream a}`) and Effekt write it. One limit for
+now: a function type written inside a data type can name such an effect
+but not its argument, which is left open there.
 
 **Answered later** (ANSWERED-LATER.md) is the third shape, for waiting:
 `effect Yield = yield(item: Float64) returns Unit, later`. Its case is given

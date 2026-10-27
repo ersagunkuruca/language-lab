@@ -157,9 +157,6 @@ test("the checker: unhandled effects, incomplete handlers, answers that aren't o
       { variant: ask.op.ask, names: [], body: () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))) },
       { variant: ask.op.tell, names: ["n"], body: () => k.unitValue },
     ])));
-    const bad = k.def("Bad");
-    const a = k.binder("a");
-    k.code.nodes[bad] = { id: bad, kind: "def", body: (k as unknown as { add: (n: object) => Id }).add({ kind: "typedef", params: [a], variants: [], effect: true }) };
     return main;
   });
   // main may perform Ask as far as its type goes; running it is refused
@@ -169,7 +166,33 @@ test("the checker: unhandled effects, incomplete handlers, answers that aren't o
   assert.throws(() => p.run(), /unhandled effect/);
   assert.ok(p.errors.some((m) => /no case for tell/.test(m)), p.errors.join("\n"));
   assert.ok(p.errors.some((m) => /the answer to ask must be one value/.test(m)), p.errors.join("\n"));
-  assert.ok(p.errors.some((m) => /effects can't have parameters/.test(m)), p.errors.join("\n"));
+});
+
+// L56 (EFFECTS-REVIEW-2026-10-24 §2.3): an effect can take a type, as
+// Koka, Unison and Effekt's can. A row holds it applied, Yield Text, and a
+// handler's cases see the same type the computation used.
+test("an effect with a type parameter: Yield Text in the row, and its handler sees Text", () => {
+  const p = program((k) => {
+    const y = k.effect("Yield", [["yield", [["value", ([a]) => k.tref(a)]], () => k.tref("std.unit")]], ["a"]);
+    const words = k.def("words");
+    k.define(words, k.thunk(() => k.seq(k.call(y.op.yield, k.lit("one")), k.call(y.op.yield, k.lit("two")))));
+    const pass = k.def("pass on");
+    k.define(pass, k.fn(["x"], (x) => k.call(y.op.yield, x)));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.handle(k.call(words), [{ variant: y.op.yield, names: ["value"], body: ([v]) => k.call(S.print, v) }])));
+    const doubled = k.def("doubled");
+    k.define(doubled, k.thunk(() => k.handle(k.call(words), [{ variant: y.op.yield, names: ["value"], body: ([v]) => k.call(S.print, show(k, k.call(B.mul, v, k.lit(2)))) }])));
+    return main;
+  });
+  const named = (n: string) => p.k.code.defs.find((d) => p.k.names[d] === n)!;
+  assert.equal(p.type(named("words")), "() -[Yield Text]-> Unit");
+  // Generic over what it yields: each use has its own.
+  assert.equal(showType(p.info.schemes.get(named("pass on"))!.type, baseNames(p.k.names)), "(a) -[Yield a]-> Unit");
+  assert.equal(p.type(named("main")), "() -[Console]-> Unit");
+  assert.deepEqual(p.run(), ["one", "two"]);
+  // Yield Text's values aren't Float64s.
+  assert.ok(p.errors.some((m) => /needs Float64 here, got Text/.test(m)), p.errors.join("\n"));
+  assert.equal(p.errors.length, 1, p.errors.join("\n"));
 });
 
 // ---------------------------------------------------------------- Optional
