@@ -23,7 +23,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -52,7 +52,16 @@ export interface Info {
   hidden: Set<Id>;
   // What it was checked with, so the palette's rechecks see the same pins.
   options?: Options;
+  // Interfaces (INTERFACES.md): each implementation by its interface and
+  // type (implementationKey), and the type each use of an interface's
+  // operation is at, for arith.ts to resolve.
+  implementations?: Map<string, Id>;
+  opAt?: Map<Id, Type>;
 }
+
+// An implementation's place in Info.implementations: its interface and the
+// closed type it is at.
+export const implementationKey = (iface: Id, t: Type) => `${iface}|${JSON.stringify(t)}`;
 
 // pins: signatures that definitions must keep and callers see
 // (signatures.ts). hidden: definitions that can be used where they are
@@ -86,7 +95,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map() };
   const err = (id: Id, message: string) => info.errors.push({ id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -286,6 +295,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
   }
 
+  // An interface is a record of functions over its one type parameter.
+  for (const def of typeDefs) {
+    const td = typedefOf(def)!;
+    if (!td.interface) continue;
+    if (td.params.length !== 1 || td.variants.length !== 1) { err(def, `${nm(def)} is an interface: it takes one type and has one case, its operations`); continue; }
+    for (const f of (code.nodes[td.variants[0]] as NodeOf<"variant">).fields) {
+      if (code.nodes[(code.nodes[f] as NodeOf<"field">).type]?.kind !== "tfun") err(f, `${nm(f)} is an operation of the interface ${nm(def)}, so its type is a function`);
+    }
+  }
+
   // --- definitions, in dependency order
   const valueDefs = code.defs.filter((d) => !isTypeDef(d) && code.nodes[d]?.kind === "def");
   const deps = (d: Id): Id[] => {
@@ -372,6 +391,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (whole.length) sc.whole = whole;
       const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
       if (noWorld.length) sc.noWorld = noWorld;
+      const needs = [...fv.vars].flatMap((v) => [...(s.needs.get(v)?.keys() ?? [])].map((i) => [v, i] as [number, Id]));
+      if (needs.length) sc.needs = needs;
       const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
       if (subs.length) sc.subs = subs;
       // What a definition does while a Choice it doesn't handle is open:
@@ -387,7 +408,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const pin = opts.pins?.[d];
       if (pin && code.nodes[d]) {
         const p = fresh(pin, s);
-        if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${show(p.type)}, and this makes it ${show(t)}`);
+        if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${showT(p.type, names, schemeArith(p), [], schemeNeeds(p))}, and this makes it ${showT(t, names, schemeArith(sc), [], schemeNeeds(sc))}`);
         // Inside, the body's types are the pin's too: an input whose only
         // use was cleared is still the Float64 the pin says, and a hole
         // there expects what the pin does.
@@ -406,7 +427,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const t = s.clone();
     const plainArgs = t.plainArgs;
     t.plainArgs = (id, args) => (id.startsWith(`${RIGID}any.`) ? null : plainArgs(id, args));
-    try { t.unify(instantiate(sc, t), rigid(p)); return true; }
+    const before = t.wanted.length;
+    try {
+      t.unify(instantiate(sc, t), rigid(p));
+      // An interface the body needs must be one the pin says.
+      const said = new Set((p.needs ?? []).map(([v, i]) => `${v}|${i}`));
+      return t.wanted.slice(before).every((w) => {
+        const r = t.resolve(w.t);
+        if (r.t !== "con" || !r.id.startsWith(RIGID)) return true;
+        return said.has(`${r.id.slice(r.id.lastIndexOf(".") + 1)}|${w.iface}`);
+      });
+    }
     catch (e) { if (e instanceof TypeError) return false; throw e; }
   }
 
@@ -434,7 +465,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "def":
         if (isTypeDef(target)) { err(id, `${nm(target)} is a type, not a value`); return s.fresh(); }
         if (mono.has(target)) return mono.get(target)!;
-        if (info.schemes.has(target)) return instantiate(info.schemes.get(target)!, s);
+        if (info.schemes.has(target)) return instantiate(info.schemes.get(target)!, s, id);
         return s.fresh();
       case "builtin":
         if (SIGS[target]) return SIGS[target](s);
@@ -462,6 +493,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const { td, self, fields } = dataType(def);
         if (td.variants.length !== 1) { err(id, `${nm(target)} belongs to one case of ${nm(def)}; use a match to reach it`); return s.fresh(); }
         const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(target);
+        // An interface's field is its operation, at the type this use
+        // needs, which must have an implementation (INTERFACES.md).
+        if (td.interface && td.params.length === 1) {
+          const a = (self as { args: Type[] }).args[0], op = fields(td.variants[0])[i];
+          s.requireInterface(a, def, id);
+          info.opAt!.set(id, a);
+          return opened(op);
+        }
         return { t: "fn", params: [self], ret: fields(td.variants[0])[i], eff: s.freshRow() };
       }
       default:
@@ -838,11 +877,36 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return result;
   }
 
+  // Implementations (INTERFACES.md): the definitions whose type is an
+  // interface at a closed type, one for each pair; then every known type a
+  // use asked for an interface must have one.
+  function implementations() {
+    const table = info.implementations!;
+    for (const d of valueDefs) {
+      const sc = info.schemes.get(d);
+      const t = sc && s.zonk(sc.type);
+      if (!t || t.t !== "con" || !typedefOf(t.id)?.interface || freeVars(t, s).vars.size) continue;
+      const body = code.nodes[(code.nodes[d] as NodeOf<"def">).body!];
+      const fn = body?.kind === "call" ? code.nodes[body.fn] : null;
+      if (fn?.kind !== "ref" || fn.target !== typedefOf(t.id)!.variants[0]) { err(d, `${nm(d)} is an implementation of ${nm(t.id)}, so it is written as the record itself: ${nm(typedefOf(t.id)!.variants[0])}(…) with each operation`); continue; }
+      const key = implementationKey(t.id, t.args[0]), other = table.get(key);
+      if (other) err(d, `${nm(other)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
+      else table.set(key, d);
+    }
+    for (const w of s.wanted) {
+      const t = s.zonk(w.t);
+      if (table.has(implementationKey(w.iface, t))) continue;
+      err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${show({ t: "con", id: w.iface, args: [t] })}`);
+    }
+  }
+
   // Units are part of a number's type: a conflict is a type error.
   for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
   settle();
+  implementations();
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
+  for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
     h.expected = s.zonk(h.expected);
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));

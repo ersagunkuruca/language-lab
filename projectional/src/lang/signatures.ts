@@ -18,7 +18,7 @@ import { children, type Code, type Id } from "../model.ts";
 import { defDeps } from "../hash.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info, type Options } from "./infer.ts";
-import { CONSOLE, schemeArith, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
+import { CONSOLE, schemeArith, schemeNeeds, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
 // after them. Equal pins are equal JSON.
@@ -53,6 +53,9 @@ export function canonical(sc: Scheme): Pin {
     const at = [...vars].filter(([v]) => these.has(v)).map(([, i]) => i);
     if (at.length) out[k] = at;
   }
+  // The interfaces its variables need (INTERFACES.md), the same way.
+  const needs = (sc.needs ?? []).filter(([v]) => vars.has(v)).map(([v, i]): [number, Id] => [vars.get(v)!, i]).sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  if (needs.length) out.needs = needs;
   // Rows a search runs (no world effects) and rows inside others (types.ts
   // Subst), the same way.
   const noWorld = (sc.noWorld ?? []).filter((r) => rows.has(r)).map((r) => rows.get(r)!).sort((a, b) => a - b);
@@ -63,7 +66,7 @@ export function canonical(sc: Scheme): Pin {
 }
 
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc)) : "");
-export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p));
+export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p));
 
 // Pin these definitions at the types the checker gives them now.
 export function pinsOf(info: Info, defs: Id[]): Pins {
@@ -84,7 +87,8 @@ export function fresh(p: Pin, s: Subst): Scheme {
   };
   return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
     ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),
-    ...(p.noWorld ? { noWorld: p.noWorld.map((r) => m.get(r)!) } : {}), ...(p.subs ? { subs: p.subs.map(([f, t]): [number, number] => [m.get(f)!, m.get(t)!]) } : {}) };
+    ...(p.noWorld ? { noWorld: p.noWorld.map((r) => m.get(r)!) } : {}), ...(p.subs ? { subs: p.subs.map(([f, t]): [number, number] => [m.get(f)!, m.get(t)!]) } : {}),
+    ...(p.needs ? { needs: p.needs.map(([v, i]): [number, Id] => [m.get(v)!, i]) } : {}) };
 }
 
 // The pin's type with its variables made rigid: each one a type of its own

@@ -125,6 +125,11 @@ export class Subst {
   // others (WorldError and Sub above).
   noWorld = new Set<number>();
   subs: Sub[] = [];
+  // Type variables that need an implementation of these interfaces
+  // (INTERFACES.md), each with the use that asked; and the known types
+  // asked for one, checked once every implementation is known (infer).
+  needs = new Map<number, Map<Id, Id>>();
+  wanted: { t: Type; iface: Id; at: Id }[] = [];
 
   clone(): Subst {
     const s = new Subst();
@@ -140,6 +145,8 @@ export class Subst {
     s.whole = new Set(this.whole);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
+    s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
+    s.wanted = [...this.wanted];
     return s;
   }
 
@@ -168,6 +175,19 @@ export class Subst {
       return;
     }
     throw new ArithError(kind);
+  }
+
+  // Require t to have an implementation of the interface `iface`: a
+  // variable remembers it, a known type is checked later.
+  requireInterface(t: Type, iface: Id, at: Id): void {
+    t = this.resolve(t);
+    if (t.t === "var") {
+      let m = this.needs.get(t.v);
+      if (!m) this.needs.set(t.v, (m = new Map()));
+      if (!m.has(iface)) m.set(iface, at);
+      return;
+    }
+    this.wanted.push({ t, iface, at });
   }
 
   // Require t not to be an Int: a literal with a fraction part's type.
@@ -256,6 +276,7 @@ export class Subst {
       if (this.fractional.has(v.v)) this.requireFraction(t);
       if (this.whole.has(v.v) && t.t === "var") this.whole.add(t.v);
       if (this.plain.has(v.v)) this.requirePlain(t);
+      for (const [iface, at] of this.needs.get(v.v) ?? []) this.requireInterface(t, iface, at);
       return;
     }
     if (a.t === "con" && b.t === "con" && a.id === b.id && a.args.length === b.args.length) {
@@ -335,7 +356,7 @@ export class WorldError extends EffectError {
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.
 // `fractional` those that may not be Int (a literal's with a fraction part).
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][] }
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][]; needs?: [number, Id][] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -351,12 +372,14 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
   return { vars, rows };
 }
 
-export function instantiate(sc: Scheme, s: Subst): Type {
+// `at`: the use, for an interface its type needs and doesn't have.
+export function instantiate(sc: Scheme, s: Subst, at = ""): Type {
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
   const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
   const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
   for (const v of sc.fractional ?? []) { const t = vm.get(v); if (t?.t === "var") s.fractional.add(t.v); }
   for (const v of sc.whole ?? []) { const t = vm.get(v); if (t?.t === "var") s.whole.add(t.v); }
+  for (const [v, iface] of sc.needs ?? []) { const t = vm.get(v); if (t) s.requireInterface(t, iface, at); }
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   for (const r of sc.noWorld ?? []) if (rm.has(r)) s.noWorld.add(rm.get(r)!);
   for (const [f, t] of sc.subs ?? []) s.subs.push({ from: { effs: [], tail: rm.get(f) ?? f }, to: { effs: [], tail: rm.get(t) ?? t } });
@@ -382,8 +405,9 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // scheme's through schemeArith), the type says so after it: `(a) -> a
 // where a is a Number` (the family of number types, WHAT-NUMBER-MEANS.md).
 // Rows one inside the other (`links`, from showIn) print as one: a search's
-// call and its function, keep and its test.
-export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = []): string {
+// call and its function, keep and its test. `needs`: the interfaces each
+// variable must have (INTERFACES.md), said the same way: `where a has Trig`.
+export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
   const root = new Map<number, number>();
@@ -422,11 +446,17 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     return nested ? s : s;
   };
   const shown = go(t, false);
-  if (!arith?.size) return shown;
+  if (!arith?.size && !needs?.size) return shown;
   const kinds: Record<Arith, string[]> = { arith: [], ordered: [] };
-  for (const [v, letter] of varNames) { const k = arith.get(v); if (k) kinds[k].push(letter); }
+  const has: string[] = [];
+  for (const [v, letter] of varNames) {
+    const k = arith?.get(v);
+    if (k) kinds[k].push(letter);
+    const is = [...(needs?.get(v) ?? [])].map(name);
+    if (is.length) has.push(`${letter} has ${is.join(" and ")}`);
+  }
   const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("Number", "Numbers")}`);
-  const clauses = [kinds.arith.length && say(kinds.arith, "Number"), kinds.ordered.length && say(kinds.ordered, "Number with <")].filter(Boolean);
+  const clauses = [kinds.arith.length && say(kinds.arith, "Number"), kinds.ordered.length && say(kinds.ordered, "Number with <"), ...has].filter(Boolean);
   return clauses.length ? `${shown} where ${clauses.join(", and ")}` : shown;
 }
 
@@ -435,8 +465,15 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
 export function showIn(t: Type, names: Names, s: Subst): string {
   const links: [number, number][] = [];
   for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null) links.push([f, to]); }
-  return showType(s.zonk(t), names, s.arith, links);
+  return showType(s.zonk(t), names, s.arith, links, new Map([...s.needs].map(([v, m]) => [v, m.keys()])));
 }
+
+// A scheme's interfaces, for showType.
+export const schemeNeeds = (sc: Pick<Scheme, "needs">): Map<number, Id[]> => {
+  const out = new Map<number, Id[]>();
+  for (const [v, i] of sc.needs ?? []) out.set(v, [...(out.get(v) ?? []), i]);
+  return out;
+};
 
 // A scheme's number-type variables, for showType.
 export const schemeArith = (sc: Pick<Scheme, "arith" | "ordered">): Map<number, Arith> =>

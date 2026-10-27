@@ -488,6 +488,23 @@ Each keeps `f`'s effects in its row. Haskell curries every function and
 ML-family languages mostly do; Haskell's Prelude names `curry`, `uncurry`
 and `flip` (prior art).
 
+**Interfaces and implementations** (INTERFACES.md, BACKLOG L40e). An
+interface is a record of functions over one type, marked as one, and its
+fields are its operations:
+
+    interface Halving a = halving(half: (a) -> a, twice: (a) -> a)
+    halving at pair = halving(half pair, twice pair)
+    quarter(x) = half(half(x))          // (a) -> a where a has Halving
+
+An implementation is an ordinary definition of the record at one type, and
+a type has one of each. A use of `half` at a type with none is an error at
+the use. A second implementation is an error too. Before anything runs,
+arith.ts copies `quarter` once per type it is used at, and makes each
+`half` a direct call of that type's own function, so nothing is looked up
+while the program runs. An implementation passed as a value and taken
+apart with a match is the dispatch you ask for. Prior art: Haskell's type
+classes (Wadler and Blott, 1989) and Rust's traits, `dyn` on request.
+
 ## Effects, and why not monads
 
 A function type is `(params) -[effects]-> result`. The effect part is a row:

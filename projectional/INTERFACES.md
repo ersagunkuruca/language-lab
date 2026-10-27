@@ -1,6 +1,7 @@
 # Interfaces and implementations (design note, 2026-10-27)
 
-BACKLOG L40b, from ALGEBRA-TABLES.md "the question". Ersagun, 2026-10-27:
+BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Step 1 is built**
+(L40e, `test/interfaces.test.ts`). Ersagun, 2026-10-27:
 a type's operations should be "a separate thing, because if it is separate
 you can add more interface implementations later, not just + * - /. For
 example for dual numbers we will probably need implementations of sin,
@@ -115,12 +116,13 @@ different kinds, or a plugin. Then the program passes the implementation
 as a value, because an implementation is just a record:
 
 ```
-draw all(shapes, how) = map(shapes, (s) => draw(how, s))
+draw all(shapes, how) = map(shapes, (s) => match how { drawing(draw) => draw(s) })
 ```
 
-Here `how` is an ordinary parameter of a record type, and `draw(how, s)`
-is a call through a field. That is one indirect call, written where you
-can see it. If the record is known when compiling, the compiler may
+Here `how` is an ordinary parameter of a record type, taken apart with a
+match. (A ref to the field itself is the interface's operation, resolved
+before running, so a record passed along is reached through its case.)
+Calling `draw` is one indirect call, written where you can see it. If the record is known when compiling, the compiler may
 still resolve it (a constant field projection), but the program doesn't
 count on that.
 
@@ -154,11 +156,23 @@ and a colour keeps the rule. Literals at a type need one more operation,
 
 ## Steps
 
-1. **Interfaces in the checker and arith.ts.** Add the `interface` flag
-   on typedefs, constraints in schemes and pins, the table of
-   implementations with the coherence error, and resolution to direct
-   calls. Tests: a small interface at two types, evaluated and compiled,
-   a missing implementation, and two at once.
+1. **Interfaces in the checker and arith.ts. Built.**
+   - The `interface` flag on typedefs (model.ts; `Lang.interface` in the
+     DSL), and constraints in schemes and pins (`Scheme.needs`). Types
+     print `where a has Halving`.
+   - The table of implementations, with the coherence error
+     (`Info.implementations`). An implementation must be written as the
+     record itself, `halving(…)`.
+   - Resolution to direct calls (arith.ts `implement`): a field given as
+     a ref is used as it is, and anything else becomes a definition of
+     its own.
+   - An open whole literal is an Int only when Int has every interface
+     it needs. Otherwise it is a Float64, as Haskell's defaulting tries
+     each type in turn.
+   - Tests: an interface at Float64 and at a record, evaluated and
+     compiled; the resolved program has no interface left; a missing
+     implementation, and two at once; a pin keeps what it needs; an
+     implementation passed as a value.
 2. **`Trig` in std**, with Float64's implementation as the builtins.
    `sin` and friends become generic the way `+` did, and the per-type
    ones stay for programs already written.
