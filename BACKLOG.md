@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I20 | A unit refusal names a node further down ("distance is m, add(…) is m/s") instead of the two operands that clash | QA7 L2 | 2026-10-27 |
 | I21 | Examples' types read `Float64` (`period : (Float64, Float64) -> Float64`) while their prose says Number; for the Language lane to weigh | QA7 L3 | 2026-10-27 |
 | I22 | Shader programs open on a data type (▤ Vec, ▤ Colour) instead of the definition the picture draws | QA7 L4 | 2026-10-27 |
 
@@ -124,6 +123,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I20 | A unit refusal names the two sides that clash (speed is m/s, time is s), at the node changed | #508 |
 | I19 | A Run starts with what main first passes the function (literal texts and lists too): 97 → 65 of 152 open empty | #507 |
 | I18 | A main opens on its steps: a graph too wide opens with its right edge in view, where the definition's own steps are | #506 |
 | E78 | Steps shows a step nothing reads as a bare line (print(t3)), Nested as a; b; the t temporaries stay | #501 |
