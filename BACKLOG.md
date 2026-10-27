@@ -126,6 +126,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E147 | A loose part wires back over a filled input: what was there goes loose, or a dot nobody named left with one use goes back on its wire (HSI colour, Ersagun 2026-10-27) | #529 |
 | E140 | A use at a type without the interface says which it lacks: Bool has no Doubling, with Implement Doubling for Bool in the palette | #526 |
 | E139 | Typed text calls an interface's operation: double(double(x)) reads as Doubling's double; an operation comes before a constructor of the same name (twice) | #525 |
 | E138 | Interface as a kind of new definition: one operation (a) -> a; its panel adds operations taking (a) or (a, a) and giving a, Bool, Text or Float64 (implementations get a hole), and lists implementations; the text reads interface Halving a. Turning an existing type into one left out | #521 |
