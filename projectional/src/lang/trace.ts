@@ -20,11 +20,12 @@ export interface Trace { values: Map<Id, Value>; result?: Value; error?: { id: I
 
 // `world` is what the world effects do (run.ts Runtime); without one they
 // abort saying so.
-export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"]): Trace {
+// `entered`: told of every call to a function written as a lambda (run.ts).
+export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"], entered?: Runtime["entered"]): Trace {
   const values = new Map<Id, Value>();
   const out: Trace = { values };
   if (info.divergent.has(def)) { out.error = { id: def, message: "it might not finish, so it isn't run here" }; return out; }
-  const r = makeRunner(code, info, { print: () => {}, world });
+  const r = makeRunner(code, info, { print: () => {}, world, entered });
   const first = (xs: Iterable<Value>, id: Id): Value => {
     for (const x of xs) return x;
     throw Object.assign(new Error("no answer (a Choice with none)"), { id });
