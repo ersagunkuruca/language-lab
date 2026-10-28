@@ -241,6 +241,16 @@ export const FIXED = typedef("std.fixed", "Fixed", [], [
   ["fixed", [["steps", () => tref(INT)]]],
 ], false, false, "fixed-point numbers");
 export const FIXED_V = "std.fixed.fixed";
+// Small matrices (BACKLOG L44): Mat2, Mat3 and Mat4, records of Float64s
+// in rows (m11, m12, …). + − part by part, · the matrix product from the
+// matrix-unit table (E_ij · E_jl = E_il, the prelude's matrix table), and
+// a literal is that many times the identity, so 2 + m adds 2 down the
+// diagonal. After Fixed, so ids above don't move.
+const matrix = (n: number) => typedef(`std.mat${n}`, `Mat${n}`, [], [
+  [`mat${n}`, Array.from({ length: n * n }, (_, i): [string, TypeOf] => [`m${Math.floor(i / n) + 1}${(i % n) + 1}`, () => tref(NUMBER)])],
+], false, false, `${n} × ${n} matrices`);
+export const MAT2 = matrix(2), MAT3 = matrix(3), MAT4 = matrix(4);
+export const MAT_V = { 2: "std.mat2.mat2", 3: "std.mat3.mat3", 4: "std.mat4.mat4" } as const;
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -572,7 +582,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

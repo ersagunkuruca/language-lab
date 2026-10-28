@@ -60,6 +60,8 @@ export const ALGEBRAIC_TYPE = "std.algebraic";
 // prelude's · (the product rule) and no <.
 export const DUAL_TYPE = "std.dual";
 export const FIXED_TYPE = "std.fixed";
+// The square matrices and their sizes (std.ts MAT2 to MAT4).
+export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 3, "std.mat4": 4 };
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";
