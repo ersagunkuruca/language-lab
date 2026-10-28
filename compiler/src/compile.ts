@@ -315,7 +315,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   // Where `ret` puts a value.
   // `into`: an `$into` copy's answer, pushed onto the array `d` (P4).
-  interface Out { bool: boolean; leaf: (js: string) => string; into?: { d: string; shape: Into } }
+  // `done`: a let's name whose list is already in the array (letInto);
+  // the other answers are written in its place, not by the into paths.
+  interface Out { bool: boolean; leaf: (js: string) => string; into?: { d: string; shape: Into; done?: Id } }
   interface Reuse { s: string; cell: Id; root: Id; binds: Id[] }
   const RETURN: Out = { bool: false, leaf: (js) => `return ${js};` };
   const RETURN_BOOL: Out = { bool: true, leaf: (js) => `return ${js};` };
@@ -442,8 +444,22 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     intoGains.set(def, r);
     return r;
   }
+  // A let whose value writes the list and whose name is one of the
+  // answers (the pedal's `out = as loud as(…)`, then the block itself when
+  // the pedal is off): the value is written first, and another answer
+  // takes its place.
+  function letInto(n: Node, shape: Into): { p: Id; call: NodeOf<"call">; body: Id } | null {
+    if (shape.rec !== null || n.kind !== "call" || code.nodes[n.fn].kind !== "lambda") return null;
+    const f = node<"lambda">(n.fn), v = code.nodes[n.args[0]];
+    if (f.params.length !== 1 || v?.kind !== "call") return null;
+    const g = refTarget(v.fn);
+    if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g)) return null;
+    const uses = subtree(code, f.body).filter((x) => refTarget(x) === f.params[0]);
+    return uses.length === 1 && tailsOf(f.body).includes(uses[0]) ? { p: f.params[0], call: v, body: f.body } : null;
+  }
   function gainsIn(id: Id, shape: Into, def: Id | null): boolean {
     const n = code.nodes[id];
+    if (letInto(n, shape)) return true;
     if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return gainsIn(node<"lambda">(n.fn).body, shape, def);
     if (n.kind === "match" && !handlerOf(n)) {
       const m = intoMatch(n, shape);
@@ -1532,12 +1548,22 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const n = code.nodes[id];
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
       if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
+        const li = out.into && !out.into.done ? letInto(n, out.into.shape) : null;
+        const t = li ? intoCallee(li.call, out.into!.shape) : null;
+        if (li && t) {
+          // The value written into the array; another answer puts its own
+          // items there instead.
+          const { d } = out.into!, at = temp("n");
+          intoDone.add(li.p);
+          const instead: Out = { ...out, into: undefined, leaf: (js) => `${d}.length = ${at};\n${out.leaf(js)}` };
+          return `const ${at} = ${d}.length;\n${t.name}(${[d, ...argsOf(li.call, t)].join(", ")});\n${ret(li.body, tail, { ...instead, into: { d, shape: out.into!.shape, done: li.p } }, reuse)}`;
+        }
         const f = node<"lambda">(n.fn);
         return f.params.map((p, i) => bindLet(p, letArg(p, n.args[i]))).join("") + ret(f.body, tail, out, reuse);
       }
       if (n.kind === "match") {
         if (handlerOf(n)) return out.leaf(out.bool ? `(${handleEx(n)}.tag === ${JSON.stringify(TRUE)})` : handleEx(n));
-        const m = out.into ? intoMatch(n, out.into.shape) : null;
+        const m = out.into && !out.into.done ? intoMatch(n, out.into.shape) : null;
         if (m && intoCallee(m.call, m.to) && (m.kind === "field" || pure(m.head!))) return intoMatchJs(m, tail, out);
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
@@ -1703,8 +1729,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return `$pushList(${d}, ${ex(id)});\n`;
     }
     function intoJs(n: Node, tail: boolean, out: Out): string | null {
-      const { d, shape } = out.into!;
+      const { d, shape, done } = out.into!;
       if (n.kind === "ref" && intoDone.has(n.target)) return "return;";
+      if (done) return null;
       if (shape.rec === null && n.kind === "ref" && n.target === NIL) return "return;";
       if (n.kind !== "call") return null;
       const f = refTarget(n.fn);

@@ -1007,6 +1007,14 @@ Next, by what the hand versions say is left:
 - (c) the join (a written-out mode) taking a view and writing into one;
 - (d) the block coming in as an array.
 
+**P4a again** (2026-10-28): #338's off switch (`out = as loud as(…)`,
+then the block itself when the pedal is off) had taken the block off the
+`$into` path without anyone noticing, since nothing measured it. A let
+whose value writes the list and whose name is one of the answers is now
+written first, and another answer resets the array and writes its own
+(`letInto`). Best of six: 0.0417 to 0.0327 ms a block, about 22%; a test
+in compile.test.ts checks the block has its array version.
+
 **Where round 4 stops** (2026-10-24): 2.9× the hand-written pedal, from 6×.
 The rest is open (BACKLOG C30). Measured on hand edits of the compiled
 pedal:
