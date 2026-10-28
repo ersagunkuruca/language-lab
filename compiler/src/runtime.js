@@ -370,6 +370,43 @@ export function* $handleS(effect, answers, escapes, body) {
   }
 }
 
+// Operations answered later (ANSWERED-LATER.md, C40). Code that may
+// perform one is a generator; performing yields a $Later, which passes up
+// through the `yield*` of every call to the handler's driver. A case for it
+// gets the rest: a function that resumes the generator with the answer,
+// under the same handler (deep), once. A generator can't be resumed twice
+// from one point, which is the one-shot rule; a second call says so, as
+// the evaluator does.
+class Later {
+  constructor(effect, op, args) { this.effect = effect; this.op = op; this.args = args; }
+}
+export const $later = (effect, op, args) => new Later(effect, op, args);
+export function $handleL(effect, later, ops, answers, escapes, body) {
+  const h = { effect, answers }, it = body();
+  const run = (send) => {
+    const at = handlers.length, d = $rec.d;
+    handlers.push(h);
+    let r;
+    try { r = it.next(send); } catch (e) {
+      handlers.length = at;
+      if (!(e instanceof Escape) || e.handler !== h) throw e;
+      $rec.d = d;
+      return escapes[e.op](...e.args);
+    } finally { handlers.length = at; }
+    if (r.done) return r.value;
+    const m = r.value;
+    if (!(m instanceof Later) || m.effect !== effect || !(m.op in later)) throw new Error(`nothing handles ${m.op ?? m}`);
+    let used = false;
+    const rest = (v) => {
+      if (used) throw new Error(`the rest of ${ops[m.op]} was resumed a second time: a rest runs once`);
+      used = true;
+      return run(v);
+    };
+    return later[m.op](...m.args, rest);
+  };
+  return run(undefined);
+}
+
 // `seeded`: Random answered from a generator (projectional/src/lang/random.ts,
 // the evaluator's too, so both give the same numbers), around a computation
 // with one result or with Choice.

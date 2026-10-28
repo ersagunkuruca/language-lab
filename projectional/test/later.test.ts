@@ -5,6 +5,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Id } from "../src/model.ts";
@@ -17,6 +19,7 @@ import { renderBlocks } from "../src/lang/render.ts";
 import { CONS, NIL, S, SHOW_ANY, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import { compile } from "../../compiler/src/compile.ts";
+import { $setPrint } from "../../compiler/src/runtime.js";
 import { B } from "../src/prelude.ts";
 import { addField, setLater } from "../src/lang/toplevel.ts";
 
@@ -30,13 +33,22 @@ function program(build: (k: Lang) => Id) {
   const info = infer(code, names, undefined, checkOptions);
   const printed: string[] = [];
   const run = () => { runMain(code, info, main, { print: (s) => printed.push(s), names }); return printed; };
+  // Compiled JavaScript (C40): main's prints, the same as the evaluator's.
+  const compiled = async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "later-")), "main.mjs");
+    writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
+    const out: string[] = [];
+    $setPrint((s: string) => out.push(s));
+    try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+    return out;
+  };
   const type = (d: Id) => showType(info.typeOf.get(d)!, names);
   const def = (name: string) => code.defs.find((d) => names[d] === name)!;
-  return { k, code, names, info, run, type, def, main, errors: info.errors.map((e) => e.message) };
+  return { k, code, names, info, run, compiled, type, def, main, errors: info.errors.map((e) => e.message) };
 }
 const say = (k: Lang, ...parts: Id[]) => k.call(S.print, parts.length === 1 ? parts[0] : k.text(...parts));
 
-test("a generator: each yield's rest is resumed once, so the items come out in order", () => {
+test("a generator: each yield's rest is resumed once, so the items come out in order", async () => {
   const p = program((k) => {
     const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
     const three = k.def("three");
@@ -53,13 +65,14 @@ test("a generator: each yield's rest is resumed once, so the items come out in o
   assert.match(p.type(p.def("three")), /^\(\) -\[(Console, Yield|Yield, Console)\]-> List a$/);
   assert.equal(p.type(p.def("collect")), "() -[Console]-> List Float64");
   assert.deepEqual(p.run(), ["start", "got 1", "got 2", "got 3", "end", "[1, 2, 3]"]);
+  assert.deepEqual(await p.compiled(), ["start", "got 1", "got 2", "got 3", "end", "[1, 2, 3]"]);
   // The text reads the rest as it reads a fold's folded values.
   const pres = { names: p.names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as unknown as Parameters<typeof renderBlocks>[1];
   assert.match(renderBlocks(p.code, pres, p.info, p.def("collect")), /yield\(item\) with rest →/);
   assert.match(renderBlocks(p.code, pres, p.info, p.def("Yield")), /yield\(item: Float64\) returns Unit, later/);
 });
 
-test("a case that drops the rest: nothing after the operation runs, and the case's value is the match's", () => {
+test("a case that drops the rest: nothing after the operation runs, and the case's value is the match's", async () => {
   const p = program((k) => {
     const A = k.effect("Ask", [["ask", [["question", () => k.tref(STRING)]], () => k.tref(NUMBER), "later"]]);
     const main = k.def("main");
@@ -70,9 +83,10 @@ test("a case that drops the rest: nothing after the operation runs, and the case
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["before", "0"]);
+  assert.deepEqual(await p.compiled(), ["before", "0"]);
 });
 
-test("a page waits for a fetch: the handler keeps the rest and resumes it when the reply comes, so what came before runs once", () => {
+test("a page waits for a fetch: the handler keeps the rest and resumes it when the reply comes, so what came before runs once", async () => {
   const p = program((k) => {
     const F = k.effect("Fetch", [["fetch", [["url", () => k.tref(STRING)]], () => k.tref(STRING), "later"]]);
     // What the page shows: still waiting for an address (with what to do
@@ -99,9 +113,10 @@ test("a page waits for a fetch: the handler keeps the rest and resumes it when t
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["clicked", "fetching a.txt", "got reply to a.txt", "shows reply to a.txt"]);
+  assert.deepEqual(await p.compiled(), ["clicked", "fetching a.txt", "got reply to a.txt", "shows reply to a.txt"]);
 });
 
-test("a scheduler of two fibers, round robin, written in the language", () => {
+test("a scheduler of two fibers, round robin, written in the language", async () => {
   const p = program((k) => {
     const Y = k.effect("Yield", [["yield", [], () => k.tref(UNIT), "later"]]);
     const Step = k.type("Step", [], [
@@ -129,9 +144,10 @@ test("a scheduler of two fibers, round robin, written in the language", () => {
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["a1", "b1", "a2", "b2", "a3", "b3"]);
+  assert.deepEqual(await p.compiled(), ["a1", "b1", "a2", "b2", "a3", "b3"]);
 });
 
-test("resuming the rest twice is refused: by the checker on one path, and when it happens once the rest has been passed on", () => {
+test("resuming the rest twice is refused: by the checker on one path, and when it happens once the rest has been passed on", async () => {
   const twice = program((k) => {
     const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
     const main = k.def("main");
@@ -152,6 +168,7 @@ test("resuming the rest twice is refused: by the checker on one path, and when i
   });
   assert.deepEqual(branches.errors, []);
   assert.deepEqual(branches.run(), ["5"]);
+  assert.deepEqual(await branches.compiled(), ["5"]);
   // Passed to a function that calls it twice: caught when it happens.
   const passed = program((k) => {
     const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
@@ -163,6 +180,7 @@ test("resuming the rest twice is refused: by the checker on one path, and when i
   });
   assert.deepEqual(passed.errors, []);
   assert.throws(() => passed.run(), /resumed a second time/);
+  await assert.rejects(passed.compiled(), /resumed a second time/);
 });
 
 test("a case that may give several answers can't hold the rest", () => {
@@ -177,7 +195,7 @@ test("a case that may give several answers can't hold the rest", () => {
   assert.ok(p.errors.some((e) => /several answers or none/.test(e)), p.errors.join("; "));
 });
 
-test("compiled JavaScript says it doesn't run an operation answered later yet", () => {
+test("compiled JavaScript runs an operation answered later, and says so where it doesn't yet", async () => {
   const p = program((k) => {
     const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
     const main = k.def("main");
@@ -186,7 +204,20 @@ test("compiled JavaScript says it doesn't run an operation answered later yet", 
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["1"]);
-  assert.throws(() => compile(p.code, p.info, p.names, { runtime, exports: ["main"] }), /answered later/);
+  assert.deepEqual(await p.compiled(), ["1"]);
+  // A function that waits, given to one that calls it as a plain function
+  // (map's row is any): refused, not run wrong.
+  const mapped = program((k) => {
+    const A = k.effect("Ask", [["ask", [["n", () => k.tref(NUMBER)]], () => k.tref(NUMBER), "later"]]);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(k.call(lib("map"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.call(A.op.ask, x))), [
+      { variant: A.op.ask, names: ["n", "rest"], body: ([n, rest]) => k.call(rest, k.call(B.mul, n, k.lit(2))) },
+    ])))));
+    return main;
+  });
+  assert.deepEqual(mapped.errors, []);
+  assert.deepEqual(mapped.run(), ["[2, 4]"]);
+  assert.throws(() => compile(mapped.code, mapped.info, mapped.names, { runtime, exports: ["main"] }), /answered later, given to map/);
 });
 
 test("an operation answered later inside a search: the rest keeps the search's other choices", () => {
@@ -201,6 +232,8 @@ test("an operation answered later inside a search: the rest keeps the search's o
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
+  // Inside a search, not yet (C40's next step).
+  assert.throws(() => compile(p.code, p.info, p.names, { runtime, exports: ["main"] }), /answered later/);
 });
 
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.
