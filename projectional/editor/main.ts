@@ -2970,7 +2970,7 @@ function navigator(p: Presentation) {
     }
     list.lastElementChild!.classList.add("open");
     list.append(h("div", { class: "nav-defs", role: "group", "aria-label": `Definitions in ${label}` },
-      ...defs.map((d) => row({ "data-def": d }, d === ui.def, defBody(d)?.kind === "typedef" ? h("span", { class: "netmark", title: "data type" }, "▤ ") : null, p.names[d] ?? d)),
+      ...defs.map((d) => row({ "data-def": d }, d === ui.def, defBody(d)?.kind === "typedef" ? ((defBody(d) as NodeOf<"typedef">).interface ? h("span", { class: "netmark", title: "interface" }, "◇ ") : h("span", { class: "netmark", title: "data type" }, "▤ ")) : null, p.names[d] ?? d)),
       row({ "data-act": "new-def", title: "A new function, value or data type" }, ui.mode === "new-def", "+ New definition")));
   }
   list.append(row({ "data-act": "new-program" }, false, "+ New program"));
