@@ -240,7 +240,7 @@ test("compiled JavaScript runs an operation answered later, and says so where it
   assert.deepEqual(await mapped.compiled(), ["[2, 4]"]);
 });
 
-test("an operation answered later inside a search: the rest keeps the search's other choices", () => {
+test("an operation answered later inside a search: the rest keeps the search's other choices", async () => {
   const p = program((k) => {
     const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
     const main = k.def("main");
@@ -252,8 +252,7 @@ test("an operation answered later inside a search: the rest keeps the search's o
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
-  // Inside a search, not yet (C40's next step).
-  assert.throws(() => compile(p.code, p.info, p.names, { runtime, exports: ["main"] }), /answered later/);
+  assert.deepEqual(await p.compiled(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
 });
 
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.

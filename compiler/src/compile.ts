@@ -1519,6 +1519,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function laterArgs(n: NodeOf<"call">) {
       const f = code.nodes[n.fn];
       if (!n.args.some((a) => laterFn(ty(a), sp.lat))) return;
+      // A search written in place, inside a generator (handlerEx).
+      if (gen && f.kind === "ref" && [S.first, S.all, S.optional, S.count].includes(f.target) && thunk(n.args[0])) return;
       // A definition's copy waits where its argument does (`specAt`).
       const def = f.kind === "ref" && code.nodes[f.target]?.kind === "def" ? defCall(n) : null;
       const t = def ? info.schemes.get(def.def)!.type : f.kind === "ref" && code.nodes[f.target]?.kind === "variant" ? null : ty(n.fn);
@@ -1536,6 +1538,18 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // searches can take closures for the rest (GAPS.md G11); stopping
       // early is that arrow returning true.
       const search = (leaf: K) => `(() => {\n${scoped(true, () => st(body!.body, leaf))}\n})();`;
+      // A search that waits on an operation answered later (C40): its
+      // statements in a generator of their own, so the rest of the wait
+      // keeps the search's other choices; no closures for the rest.
+      if (!reflective && body && h !== S.fuel && gen && laterFn(ty(n.args[0]), sp.lat)) {
+        const inner = (leaf: K) => scoped(false, () => inGen(true, () => st(body.body, leaf)));
+        const w = (js: string) => `(yield* (function* () {\n${js}\n})())`;
+        const acc = temp("got"), g = n.args[1] ? thunk(n.args[1]) : null;
+        if (h === S.first && g) return w(`${inner((v) => `return ${v};`)}\nreturn ${ex(g.body)};`);
+        if (h === S.all) return w(`const ${acc} = [];\n${inner((v) => `${acc}.push(${v});`)}\nreturn $toList(${acc});`);
+        if (h === S.optional) return w(`${inner((v) => `return { tag: ${tag(SOME)}, fields: [${v}] };`)}\nreturn { tag: ${tag(NONE)}, fields: [] };`);
+        if (h === S.count) return w(`let ${acc} = 0;\n${inner(() => `${acc}++;`)}\nreturn ${acc};`);
+      }
       if (!reflective && body && h !== S.fuel) {
         const got = temp("got");
         if (h === S.first && oneAnswer(body.body, null)) {
