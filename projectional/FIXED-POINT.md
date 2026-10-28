@@ -98,7 +98,10 @@ large worlds.
    can refuse, would let them say so.
 3. WASM and C lowering to `i64` where the range is known.
 4. An example: a lockstep simulation where two runs that share only inputs
-   end in the same state, bit for bit.
+   end in the same state, bit for bit. **Built (L89d)**: examples/lockstep,
+   a cart on a spring driven by 600 inputs. Evaluated, compiled and worked
+   out by hand in BigInt it ends on the same steps (test/lockstep.test.ts).
+   It is not in the editor's menu yet; that is the editor lane's to add.
 
 ## Prior art
 
