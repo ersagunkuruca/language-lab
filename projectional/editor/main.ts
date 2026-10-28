@@ -2706,9 +2706,21 @@ function traced(info: T.Info): Trace | null {
     const params = (defBody(ui.def) as NodeOf<"lambda">).params;
     const args = texts.map((t, i) => readPort(info, params[i], t));
     m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
-      : trace(doc.code, info, ui.def, args.map((a) => (a as { value: Value }).value), quietWorld()));
+      : boundedTrace(info, args.map((a) => (a as { value: Value }).value)));
   }
   return m.get(key)!;
+}
+
+// Values on the wires come from a run on the page's own thread, so one
+// on values nobody gave (main's, say) stops after TRACE_MS: Countdown's
+// solutions, opened with main's numbers, would otherwise hold the page for
+// the whole search (BACKLOG I23). Values you gave run to the end.
+const TRACE_MS = 300;
+function boundedTrace(info: T.Info, args: Value[]): Trace {
+  if (doc.examples?.[ui.def] || !(defBody(ui.def) as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld());
+  const end = performance.now() + TRACE_MS;
+  const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${TRACE_MS} ms the graph waits; Run main runs it in full` });
+  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); });
 }
 
 // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
