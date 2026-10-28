@@ -281,6 +281,86 @@ export function buildPrelude(): Module {
   k.define(showX, k.fn(["x"], (x) => fx(x, (s) => k.if(z.less(s, k.int(0)),
     k.call(S.concat, k.lit("-"), k.call(showSteps, k.call(INT_OPS.neg, s))), k.call(showSteps, s)))));
 
+  // Trig at Fixed, all in Ints, so the same bits on every machine.
+  // sin and cos are CORDIC (Volder, 1959): the angle, brought into
+  // [−π/2, π/2], is turned to 0 by ±atan(2⁻ⁱ) for i = 0 … 31, and (K, 0)
+  // turned the same way ends at (cos, sin), each turn only shifts and
+  // adds. exp is e^r · 2ᵏ for x = k·ln 2 + r, e^r by its series; log is
+  // e·ln 2 + 2·atanh((m − 1)/(m + 1)) for x = m · 2ᵉ with m in [1, 2).
+  // The divisions are by numbers that are never 0, so `first` gives the
+  // one answer; the defaults only say so to the checker.
+  const ONE = 2 ** 32, PI = 13493037705, HALF_PI = 6746518852, TWO_PI = 26986075409, K_GAIN = 2608131496;
+  const LN2 = 2977044472n, LN2_64 = 12786308645202655660n;
+  const ATANS = [3373259426, 1991351318, 1052175346, 534100635, 268086748, 134174063, 67103403, 33553749, 16777131, 8388597, 4194303, 2097152, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2];
+  const only = (body: () => Id, otherwise: () => Id) => k.call(S.first, k.thunk(body), k.thunk(otherwise));
+  const quot = (a: Id, b: Id) => k.call(INT_OPS.quotient, a, b);
+  const shift = (a: Id, by: Id) => k.call(INT_OPS.shiftDown, a, by);
+  const triple = (a: Id, b: Id, c: Id) => k.call(PAIR_V, a, k.call(PAIR_V, b, c));
+  const third = (t: Id, f: (a: Id, b: Id, c: Id) => Id, names = ["a", "b", "c"]) => k.match(t, [{ variant: PAIR_V, names: [names[0], "rest"], body: ([a, r]) => k.match(r, [{ variant: PAIR_V, names: [names[1], names[2]], body: ([b, c]) => f(a, b, c) }]) }]);
+  const cordic = k.def("cordic");
+  // The table from i = 31 down to 0: a fold reaches the last item first.
+  k.define(cordic, k.fn(["angle"], (angle) => k.fold(k.list(...ATANS.map((t, j) => k.call(PAIR_V, k.int(j), k.int(t))).reverse()), [
+    { variant: NIL, names: [], body: () => triple(k.int(K_GAIN), k.int(0), angle) },
+    { variant: CONS, names: ["turn", "turns"], results: [null, "turned"], body: ([turn], [, done]) => k.match(turn, [
+      { variant: PAIR_V, names: ["i", "atan"], body: ([j, at]) => third(done!, (x, y, z0) => k.if(z.less(z0, k.int(0)),
+        triple(z.add(x, shift(y, j)), z.sub(y, shift(x, j)), z.add(z0, at)),
+        triple(z.sub(x, shift(y, j)), z.add(y, shift(x, j)), z.sub(z0, at))), ["x", "y", "left"]) },
+    ]) },
+  ])));
+  // (cos, sin) of an angle in steps.
+  const sinCos = k.def("fixed cosine and sine");
+  k.define(sinCos, k.fn(["angle"], (angle) => k.let("turns", only(() => quot(angle, k.int(TWO_PI)), () => k.int(0)), (t) =>
+    k.let("r", z.sub(angle, z.mul(t, k.int(TWO_PI))), (r0) => k.let("r₂", k.if(z.less(k.int(PI), r0), z.sub(r0, k.int(TWO_PI)), r0), (r) => {
+      const at = (a: Id, flip: boolean) => third(k.call(cordic, a), (c, sn) => k.call(PAIR_V, flip ? k.call(INT_OPS.neg, c) : c, sn), ["cos", "sin", "left"]);
+      return k.if(z.less(k.int(HALF_PI), r), at(z.sub(k.int(PI), r), true),
+        k.if(z.less(r, k.int(-HALF_PI)), at(z.sub(k.int(-PI), r), true), at(r, false)));
+    })))));
+  const cs = (x: Id, f: (c: Id, sn: Id) => Id) => fx(x, (st) => k.match(k.call(sinCos, st), [{ variant: PAIR_V, names: ["cos", "sin"], body: ([c, sn]) => f(c, sn) }]));
+  const sinX = k.def("fixed sin");
+  k.define(sinX, k.fn(["x"], (x) => cs(x, (_, sn) => F(sn))));
+  const cosX = k.def("fixed cos");
+  k.define(cosX, k.fn(["x"], (x) => cs(x, (c) => F(c))));
+  const tanX = k.def("fixed tan");
+  k.define(tanX, k.fn(["x"], (x) => cs(x, (c, sn) => F(only(() => quot(z.up(sn, 32), c), () => z.up(sn, 32))))));
+  const expX = k.def("fixed exp");
+  k.define(expX, k.fn(["x"], (x) => fx(x, (st) => F(only(() => k.let("k", quot(st, k.int(LN2)), (kk) => k.let("r", z.sub(st, z.mul(kk, k.int(LN2))), (r) =>
+    shift(k.fold(k.call(INT_OPS.range, k.int(14)), [
+      { variant: NIL, names: [], body: () => k.int(ONE) },
+      { variant: CONS, names: ["n", "ns"], results: [null, "the rest of the series"], body: ([nn], [, acc]) =>
+        z.add(k.int(ONE), quot(z.down(z.mul(r, acc!), 32), z.add(nn, k.int(1)))) },
+    ]), k.call(INT_OPS.neg, kk)))), () => k.int(0))))));
+  // The number of bits of a positive Int, by halving the range 17 times
+  // (up to 2¹⁶ bits).
+  const bits = k.def("bit length");
+  k.define(bits, k.fn(["n"], (nn) => k.match(k.fold(k.call(INT_OPS.range, k.int(17)), [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, k.int(0), k.int(65536)) },
+    { variant: CONS, names: ["step", "steps"], results: [null, "narrowed"], body: (_, [, lh]) => k.match(lh!, [
+      { variant: PAIR_V, names: ["low", "high"], body: ([lo, hi]) => k.let("middle", z.down(z.add(lo, hi), 1), (mid) =>
+        k.if(k.call(S.equal, shift(nn, mid), k.int(0)), k.call(PAIR_V, lo, mid), k.call(PAIR_V, mid, hi))) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["low", "high"], body: ([, hi]) => hi }])));
+  const logX = k.def("fixed log");
+  k.define(logX, k.fn(["x"], (x) => fx(x, (st) => F(k.if(z.less(st, k.int(1)), k.int(0), only(() =>
+    k.let("e", z.sub(k.call(bits, st), k.int(33)), (e) => k.let("m", shift(st, e), (m) =>
+      k.let("t", quot(z.up(z.sub(m, k.int(ONE)), 32), z.add(m, k.int(ONE))), (t) => k.let("t²", z.down(z.mul(t, t), 32), (t2) =>
+        z.add(z.down(z.mul(e, k.int(LN2_64)), 32), z.mul(k.int(2), z.down(z.mul(t, k.fold(k.call(INT_OPS.range, k.int(12)), [
+          { variant: NIL, names: [], body: () => k.int(0) },
+          { variant: CONS, names: ["j", "js"], results: [null, "the rest of the series"], body: ([j], [, acc]) =>
+            z.add(quot(k.int(ONE), z.add(z.mul(k.int(2), j), k.int(1))), z.down(z.mul(t2, acc!), 32)) },
+        ])), 32))))))), () => k.int(0)))))));
+  const trigX = k.def("trig at fixed");
+  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d))));
+  // √x: the whole square root of x's steps · 2³² by Newton's method from
+  // above (Heron's), which only goes down and stops at the floor; no
+  // answer below 0.
+  const sqrtX = k.def("square root fixed");
+  k.define(sqrtX, k.fn(["x"], (x) => fx(x, (st) => k.if(z.less(st, k.int(0)), k.call(S.fail), k.if(k.call(S.equal, st, k.int(0)), F(k.int(0)),
+    k.let("n", z.up(st, 32), (nn) => F(k.fold(k.call(INT_OPS.range, k.int(12)), [
+      { variant: NIL, names: [], body: () => shift(k.int(1), k.call(INT_OPS.neg, z.down(z.add(k.call(bits, nn), k.int(1)), 1))) },
+      { variant: CONS, names: ["step", "steps"], results: [null, "closer"], body: (_, [, g]) => k.let("next", z.down(z.add(g!, quot(nn, g!)), 1), (nx) =>
+        k.if(z.less(nx, g!), nx, g!)) },
+    ]))))))));
+
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
   // Cl(p, q, r) is p ones, q minus ones and r zeros), for a record type
@@ -579,7 +659,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -679,12 +759,13 @@ export function buildPrelude(): Module {
     [fixedF]: "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
     [showX]: "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently.",
     [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0.",
+    [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX].map(at));
 }

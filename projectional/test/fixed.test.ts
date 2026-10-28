@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, FIXED_V, INT_OPS, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, FIXED_V, INT_OPS, PAIR_V, S, SHOW_ANY, TRIG_OPS } from "../src/lang/std.ts";
 import { FIXED_TYPE } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -84,6 +84,42 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   assert.equal(got[8 + SHOWN.length], `[${(ONE * ONE) / (3n * ONE)}]`);
   assert.equal(got[9 + SHOWN.length], "[]");
   const path = join(mkdtempSync(join(tmpdir(), "fixed-")), "fixed.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});
+
+// Trig at Fixed (FIXED-POINT.md step 2): the one sin, cos, tan, exp and log
+// at Fixed are CORDIC and series in Ints, so evaluated and compiled give
+// the same steps; each is within a few steps of the true value.
+test("Fixed: CORDIC sin and cos, tan, exp, log and square root, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const x = (v: number) => k.at(FIXED_TYPE, v);
+  const stepsOf = (v: Id) => k.match(v, [{ variant: FIXED_V, names: ["steps"], body: ([s]) => s }]);
+  const cases: [string, (a: Id) => Id, (a: number) => number, number[]][] = [
+    ["sin", (a) => k.call(TRIG_OPS.sin, a), Math.sin, [0, 0.5, 1.5707963, 2, 3.14159, -1, -2.5, 10, -100, 1000.25]],
+    ["cos", (a) => k.call(TRIG_OPS.cos, a), Math.cos, [0, 0.5, 2, 3.14159, -1, -2.5, 10, 1000.25]],
+    ["tan", (a) => k.call(TRIG_OPS.tan, a), Math.tan, [0, 0.5, -1, 1.2, 4]],
+    ["exp", (a) => k.call(TRIG_OPS.exp, a), Math.exp, [0, 1, -1, 0.5, 2.5, -7, 10]],
+    ["log", (a) => k.call(TRIG_OPS.log, a), Math.log, [1, 2, 0.5, 10, 1e-3, 12345.678, 1e9]],
+    ["sqrt", (a) => k.call(S.all, k.thunk(() => k.call(lib("square root fixed"), a))), Math.sqrt, [0, 1, 2, 0.25, 1e-6, 12345.678, 1e12]],
+  ];
+  const names: string[] = [];
+  for (const [op, f, , xs] of cases) xs.forEach((v, j) => { names.push(`${op} ${j}`); def(`${op} ${j}`, () => k.call(SHOW_ANY, op === "sqrt" ? k.call(lib("map"), f(x(v)), k.fn(["r"], (r) => stepsOf(r))) : stepsOf(f(x(v))))); });
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const got = names.map((n) => r.value(at(n)));
+  let i = 0;
+  for (const [op, , want, xs] of cases) for (const v of xs) {
+    const shown = String(got[i++]).replace(/^\[|\]$/g, "");
+    const value = Number(BigInt(shown)) / 2 ** 32, exact = want(Number(steps(...decimalParts(String(v)))) / 2 ** 32);
+    assert.ok(Math.abs(value - exact) <= 2e-8 * Math.max(1, Math.abs(exact)), `${op}(${v}) = ${value}, not ${exact}`);
+  }
+  const path = join(mkdtempSync(join(tmpdir(), "fixed-trig-")), "trig.js");
   writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);

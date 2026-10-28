@@ -85,7 +85,17 @@ large worlds.
    reads back to the same steps (Steele and White's free-format digits,
    in Ints), and `divide fixed` is there.
 2. `trig at fixed` by CORDIC, `square root` and `divide`. `divide` is
-   built (L89b); CORDIC and `square root` are next.
+   built (L89b). **The rest is built (L89c)**: `trig at fixed` gives the
+   one sin, cos, tan, exp and log at Fixed. sin and cos are CORDIC with
+   32 turns after bringing the angle into [−π/2, π/2]. exp is
+   e^r · 2ᵏ with e^r by 14 terms of its series. log is e·ln 2 +
+   2·atanh((m − 1)/(m + 1)) with 12 terms. `square root fixed` is
+   Heron's method on the steps. All are Ints only, within a few steps of
+   the true value, and the same evaluated and compiled
+   (test/fixed.test.ts). Trig's fields have no way to say "no answer", so
+   two edges give a number instead: log of 0 or less is 0, and tan where
+   cos is exactly 0 is sin · 2³² steps. L96's ways, or an operation that
+   can refuse, would let them say so.
 3. WASM and C lowering to `i64` where the range is known.
 4. An example: a lockstep simulation where two runs that share only inputs
    end in the same state, bit for bit.
