@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, FIXED_V, ARITHMETIC_V, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -458,6 +458,37 @@ export function buildPrelude(): Module {
     ]) },
   ]))));
 
+  // Small matrices (BACKLOG L44): the multiplication table of n × n
+  // matrices from their matrix units, given as rows of basis elements.
+  // E_ij · E_jl = E_il, and any other product of two units is 0, so the
+  // lines are, for each row i, each E_ij beside row j, and each E_jl of
+  // row j beside E_il of row i. The matrix units are the textbook
+  // basis of a matrix algebra (as in Cayley, 1858).
+  const matrixTable = k.def("matrix table");
+  k.define(matrixTable, k.fn(["rows"], (rows) => k.fold(rows, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["row", "rest"], results: [null, "the rest's lines"], body: ([row], [, rest]) => k.call(append, k.fold(k.call(pairUp, row, rows), [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["unit", "units"], results: [null, "more lines"], body: ([u], [, more]) => k.match(u, [
+        { variant: PAIR_V, names: ["eij", "row j"], body: ([eij, rowJ]) => k.call(append, k.fold(k.call(pairUp, rowJ, row), [
+          { variant: NIL, names: [], body: () => NIL },
+          { variant: CONS, names: ["pair", "pairs"], results: [null, "the row's lines"], body: ([pr], [, lines]) => k.match(pr, [
+            { variant: PAIR_V, names: ["ejl", "eil"], body: ([ejl, eil]) => k.call(CONS, k.call(TIMES_V, eij, ejl, eil), lines!) },
+          ]) },
+        ]), more!) },
+      ]) },
+    ]), rest!) },
+  ])));
+  const units = (size: 2 | 3 | 4) => k.list(...Array.from({ length: size }, (_, i) => k.list(...Array.from({ length: size }, (_, j) =>
+    k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => k.lit(c === i * size + j ? 1 : 0)))))));
+  const matTables = ([2, 3, 4] as const).map((size) => { const d = k.def(`mat${size} table`); k.define(d, k.call(matrixTable, units(size))); return d; });
+  // + − and −x part by part, at any record of Float64s.
+  const partwise = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.zipParts, op, a, b))); return d; };
+  const addParts = partwise("add parts", B.add), subParts = partwise("subtract parts", B.sub);
+  const negParts = k.def("negate parts");
+  k.define(negParts, k.fn(["a"], (a) => k.call(S.mapParts, k.x(B.neg), a)));
+  const matProducts = matTables.map((t, i) => { const d = k.def(`multiply mat${i + 2}`); k.define(d, k.fn(["a", "b"], (a, b) => k.call(tableProduct, k.x(t), a, b))); return d; });
+
   // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
   // at a type is its Arithmetic's, found by the type. Not offered: + is.
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
@@ -473,6 +504,7 @@ export function buildPrelude(): Module {
     impl("ordered at rational", ORDERED_V, [lessF]),
     impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
     impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
+    ...matProducts.map((m, i) => impl(`arithmetic at mat${i + 2}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
     impl("ordered at fixed", ORDERED_V, [lessX]),
   ];
 
@@ -659,7 +691,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -751,6 +783,7 @@ export function buildPrelude(): Module {
     [logD]: "log at Dual: log a + a′/a · ε. Not offered on its own: log is.",
     [trigD]: "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
+    [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
     [cliffordReverse]: "x̃, the reverse of x in the Clifford algebra clifford table(squares, basis) makes: each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
