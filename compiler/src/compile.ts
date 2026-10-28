@@ -1604,13 +1604,19 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // once under the same handler (deep).
     function handleLater(n: NodeOf<"match">, arms: NodeOf<"arm">[]): string {
       const rests = arms.filter((a) => isLater(a.variant)).map((a) => a.binds[a.binds.length - 1]);
-      if (rests.some((r) => laterFn(ty(r), sp.lat))) throw notYet("a handler of an operation answered later around code that itself waits on one");
-      const fn = (a: NodeOf<"arm">) => `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`;
+      // The match itself may wait on another handler's operation (the rest's
+      // row says so): then it is a generator too ($handleLG). Its cases are
+      // generators, it passes what it doesn't handle outward, and the rest
+      // waits as the match does.
+      const waits = rests.some((r) => laterFn(ty(r), sp.lat));
+      const fn = (a: NodeOf<"arm">) => (waits ? `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})` : `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`);
       const table = (as: NodeOf<"arm">[]) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a)}`).join(", ")} }`;
       const returns = (a: NodeOf<"arm">) => !isLater(a.variant) && !!node<"variant">(a.variant).returns;
+      if (waits && arms.some(returns)) throw notYet("a handler that waits, with a case answered at once");
       const ops = `{ ${arms.filter((a) => isLater(a.variant)).map((a) => `${tag(a.variant)}: ${JSON.stringify(names[a.variant] ?? a.variant)}`).join(", ")} }`;
       const body = scoped(false, () => inGen(true, () => ret(n.scrutinee)));
       try { new Function(`"use strict";\n(function* () {\n${body}\n})`); } catch { throw notYet("an operation answered later performed inside a function the compiler makes (a search, a loop)"); }
+      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter((a) => !isLater(a.variant)))}, function* () {\n${body}\n}))`;
       return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n})`;
     }
 
@@ -2600,7 +2606,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(reflected(code))}, ${JSON.stringify([...info.divergent])});`] : [];

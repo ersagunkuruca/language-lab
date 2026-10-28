@@ -407,6 +407,39 @@ export function $handleL(effect, later, ops, answers, escapes, body) {
   return run(undefined);
 }
 
+// ... where the match itself waits on another handler's operation: a
+// generator too, which passes on what isn't its own (and the answer back
+// in), and whose cases and rest are generators.
+export function* $handleLG(effect, later, ops, escapes, body) {
+  const h = { effect, answers: {} }, it = body();
+  function* run(send) {
+    for (;;) {
+      const at = handlers.length, d = $rec.d;
+      handlers.push(h);
+      let r;
+      try { r = it.next(send); } catch (e) {
+        handlers.length = at;
+        if (!(e instanceof Escape) || e.handler !== h) throw e;
+        $rec.d = d;
+        return yield* escapes[e.op](...e.args);
+      } finally { handlers.length = at; }
+      if (r.done) return r.value;
+      const m = r.value;
+      if (m instanceof Later && m.effect === effect && m.op in later) {
+        let used = false;
+        const rest = function* (v) {
+          if (used) throw new Error(`the rest of ${ops[m.op]} was resumed a second time: a rest runs once`);
+          used = true;
+          return yield* run(v);
+        };
+        return yield* later[m.op](...m.args, rest);
+      }
+      send = yield m;
+    }
+  }
+  return yield* run(undefined);
+}
+
 // `seeded`: Random answered from a generator (projectional/src/lang/random.ts,
 // the evaluator's too, so both give the same numbers), around a computation
 // with one result or with Choice.

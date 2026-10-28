@@ -183,6 +183,26 @@ test("resuming the rest twice is refused: by the checker on one path, and when i
   await assert.rejects(passed.compiled(), /resumed a second time/);
 });
 
+// C40 step 2c: the inner handler waits on the outer one's operation, so
+// compiled it is a generator that passes `ask` outward.
+test("a handler of one operation answered later inside another's: each answers its own", async () => {
+  const p = program((k) => {
+    const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(
+      k.handle(k.seq(k.call(Y.op.yield, k.call(A.op.ask)), k.call(Y.op.yield, k.call(B.add, k.call(A.op.ask), k.lit(1))), k.x(NIL)), [
+        { variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.call(CONS, item, k.call(rest, k.x(UNIT_V))) },
+      ]),
+      [{ variant: A.op.ask, names: ["rest"], body: ([rest]) => k.seq(say(k, k.lit("asked")), k.call(rest, k.lit(10))) }],
+    )))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.deepEqual(p.run(), ["asked", "asked", "[10, 11]"]);
+  assert.deepEqual(await p.compiled(), ["asked", "asked", "[10, 11]"]);
+});
+
 test("a case that may give several answers can't hold the rest", () => {
   const p = program((k) => {
     const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
