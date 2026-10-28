@@ -1033,3 +1033,22 @@ test("a recursive let compiles: the helper calls itself and uses the inputs arou
   assert.equal(defs["scaled sum"](toList([1, 2, 3]), 2), 12);
   assert.equal(defs["scaled sum"](toList([]), 5), 0);
 });
+
+// C30: the pedal's block, `out = as loud as(…)` and the block itself when
+// it's off, is written into the array the audio runtime hands it, with no
+// list cells for its answer (P4a; #338's off switch had lost it, about 20%
+// of a block's time). Its samples are checked against the evaluator in
+// projectional/test/audio.test.ts.
+test("the pedal's block function writes into an array, and gives the same samples either way", async () => {
+  const p = load("pedal");
+  const dir = mkdtempSync(join(tmpdir(), "pedal-"));
+  const file = join(dir, "pedal.mjs");
+  writeFileSync(file, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["pedal"] }));
+  const { $arrayOf, $fromList, $toList } = await import("../src/runtime.js");
+  const play = (await import(pathToFileURL(file).href)).defs.pedal() as ((l: unknown) => unknown) & { $into?: unknown };
+  assert.equal(typeof play.$into, "function");
+  const block = Array.from({ length: 128 }, (_, i) => Math.sin(i / 5) * 0.6);
+  // The same cells start both: a fresh pedal for each.
+  const again = (await import(pathToFileURL(file).href + "?2")).defs.pedal() as (l: unknown) => unknown;
+  assert.deepEqual($arrayOf(play, $toList(block)), $fromList(again($toList(block))));
+});
