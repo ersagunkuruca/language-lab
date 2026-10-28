@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, ARITHMETIC_V, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, FIXED_V, ARITHMETIC_V, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -226,6 +226,30 @@ export function buildPrelude(): Module {
   const showD = oneD("show dual", (a, a1) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
     k.if(k.call(S.less, a1, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, a1)), k.lit("ε")))));
 
+  // Fixed (FIXED-POINT.md, BACKLOG L89): an Int counting steps of 2⁻³². + −
+  // and −x are the Int's own; a · b is the steps' product shifted down 32,
+  // rounded towards −∞, the same on every machine; < is the Int's. Doom's
+  // fixed_t (16.16, id Software, 1993) is the classic one.
+  const fx = (v: Id, f: (s: Id) => Id, name = "steps") => k.match(v, [{ variant: FIXED_V, names: [name], body: ([s]) => f(s) }]);
+  const F = (s: Id) => k.call(FIXED_V, s);
+  const twoX = (name: string, f: (a: Id, b: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x", "y"], (x, y) => fx(x, (a) => fx(y, (b) => f(a, b), "steps₂"))));
+    return d;
+  };
+  const addX = twoX("add fixed", (a, b) => F(k.call(INT_OPS.add, a, b)));
+  const subX = twoX("subtract fixed", (a, b) => F(k.call(INT_OPS.sub, a, b)));
+  const mulX = twoX("multiply fixed", (a, b) => F(k.call(INT_OPS.shiftDown, k.call(INT_OPS.mul, a, b), k.int(32))));
+  const lessX = twoX("fixed less than", (a, b) => k.call(INT_OPS.less, a, b));
+  const negX = k.def("negate fixed");
+  k.define(negX, k.fn(["x"], (x) => fx(x, (a) => F(k.call(INT_OPS.neg, a)))));
+  const asFixed = k.def("as fixed");
+  k.define(asFixed, k.fn(["whole"], (w) => F(k.call(INT_OPS.shiftDown, w, k.int(-32)))));
+  const fixedF = k.def("fixed as float64");
+  k.define(fixedF, k.fn(["x"], (x) => fx(x, (a) => n.div(k.call(INT_OPS.toNumber, a), k.lit(2 ** 32)))));
+  const showX = k.def("show fixed");
+  k.define(showX, k.fn(["x"], (x) => k.call(S.show, k.call(fixedF, x))));
+
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
   // Cl(p, q, r) is p ones, q minus ones and r zeros), for a record type
@@ -337,6 +361,8 @@ export function buildPrelude(): Module {
     impl("ordered at int", ORDERED_V, [INT_OPS.less]),
     impl("ordered at rational", ORDERED_V, [lessF]),
     impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
+    impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
+    impl("ordered at fixed", ORDERED_V, [lessX]),
   ];
 
   // Sorting by the order on plain data (`compare`, L66): a merge sort
@@ -522,7 +548,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -618,6 +644,9 @@ export function buildPrelude(): Module {
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",
+    [asFixed]: "A whole number as a Fixed, exactly.",
+    [fixedF]: "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
+    [showX]: "A Fixed as text, through its Float64, so it shows 9 significant digits.",
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };

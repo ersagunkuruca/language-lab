@@ -47,6 +47,9 @@ export function mul(a: Int, b: Int): Int {
   if (typeof a === "number" && typeof b === "number") { const r = a * b; if (small(r)) return r === 0 ? 0 : r; }
   return norm(big(a) * big(b));
 }
+// floor(a / 2^n), an arithmetic shift: Fixed's product (FIXED-POINT.md)
+// rounds this way on every target. A negative n shifts up.
+export const shiftDown = (a: Int, n: Int): Int => norm(big(a) >> big(n));
 export const neg = (a: Int): Int => (typeof a === "number" ? (a === 0 ? 0 : -a) : norm(-a));
 export const abs = (a: Int): Int => (less(a, 0) ? neg(a) : a);
 export const less = (a: Int, b: Int): boolean => a < b;
