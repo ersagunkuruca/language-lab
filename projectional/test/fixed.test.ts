@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, FIXED_V, INT_OPS, PAIR_V, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, FIXED_V, INT_OPS, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { FIXED_TYPE } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -26,6 +26,11 @@ const ONE = 2n ** 32n;
 // The nearest step, halves up, and the product rounded down: by hand.
 const steps = (top: bigint, bottom: bigint) => { const t = 2n * top * ONE + bottom, d = 2n * bottom; return t >= 0n ? t / d : -((-t + d - 1n) / d); };
 const times = (a: bigint, b: bigint) => (a * b) >> 32n;
+const SHOWN = [1, 2 ** 31, 429496730, 4294967295, -1, -429496730, 123456789, 3 * 2 ** 32 + 1];
+const decimalParts = (text: string): [bigint, bigint] => {
+  const [w, f = ""] = text.split(".");
+  return [BigInt(w + f), 10n ** BigInt(f.length)];
+};
 
 test("Fixed: exact literals, a physics loop and a big world, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);
@@ -50,6 +55,10 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   // A step past 10¹², and back: Fixed keeps it.
   show("far away", () => stepsOf(k.call(ARITH.sub, k.call(ARITH.add, k.call(lib("as fixed"), k.int(10 ** 12)), k.call(FIXED_V, k.int(1))), x(1e12))));
   show("as float64", () => k.call(lib("show fixed"), x(-2.75)));
+  // Shown as the shortest decimal that reads back to the same steps.
+  SHOWN.forEach((st, j) => show(`shown ${j}`, () => k.call(lib("show fixed"), k.call(FIXED_V, k.int(st)))));
+  show("a third", () => k.call(S.all, k.thunk(() => stepsOf(k.call(lib("divide fixed"), x(1), x(3))))));
+  show("by zero", () => k.call(S.all, k.thunk(() => k.call(lib("divide fixed"), x(1), x(0)))));
   const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
   const nm = baseNames(k.names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
@@ -59,10 +68,21 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   let h = steps(100n, 1n), v = 0n;
   const g = steps(-981n, 100n), dt = steps(1n, 100n);
   for (let i = 0; i < 1000; i++) { v += times(g, dt); h += times(v, dt); }
-  assert.deepEqual(got, [
+  assert.deepEqual(got.slice(0, 8), [
     String(3n * ONE / 2n), String(steps(1n, 10n)), String(steps(-1n, 10n)), String(times(steps(1n, 10n), steps(-37n, 10n))), "true",
     `"pair(${h}, ${v})"`, "1", "\"-2.75\"",
   ]);
+  // Each shown decimal reads back to its steps, and one digit fewer doesn't.
+  SHOWN.forEach((st, j) => {
+    const text = JSON.parse(got[8 + j] as string) as string;
+    const [top, bottom] = decimalParts(text);
+    assert.equal(steps(top, bottom), BigInt(st), `${text} reads back to ${st}`);
+    // The two decimals one digit shorter around it read back to other steps.
+    const [t, b] = decimalParts(text.slice(0, -1));
+    if (text.includes(".") && !text.endsWith(".") && b > 1n) for (const near of [t, t < 0n ? t - 1n : t + 1n]) assert.notEqual(steps(near, b), BigInt(st));
+  });
+  assert.equal(got[8 + SHOWN.length], `[${(ONE * ONE) / (3n * ONE)}]`);
+  assert.equal(got[9 + SHOWN.length], "[]");
   const path = join(mkdtempSync(join(tmpdir(), "fixed-")), "fixed.js");
   writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;

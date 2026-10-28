@@ -247,8 +247,39 @@ export function buildPrelude(): Module {
   k.define(asFixed, k.fn(["whole"], (w) => F(k.call(INT_OPS.shiftDown, w, k.int(-32)))));
   const fixedF = k.def("fixed as float64");
   k.define(fixedF, k.fn(["x"], (x) => fx(x, (a) => n.div(k.call(INT_OPS.toNumber, a), k.lit(2 ** 32)))));
+  // a ÷ b: floor(a · 2³² / b), no answer when b is 0, as at Rational.
+  const divX = twoX("divide fixed", (a, b) => k.if(k.call(S.equal, b, k.int(0)), k.call(S.fail),
+    F(k.call(INT_OPS.quotient, k.call(INT_OPS.shiftDown, a, k.int(-32)), b))));
+  // The shortest decimal that reads back to the same steps: Steele and
+  // White's free-format digits (1990), in integers. r is what is left of
+  // the fraction and m half a step, both in units of 2⁻³³; each digit
+  // multiplies both by 10, and the digits stop once what is left is
+  // within half a step of either end. Ten digits always suffice for
+  // steps of 2⁻³², so it is a fold over ten, and m = 0 marks done.
+  const z = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), sub: (a: Id, b: Id) => k.call(INT_OPS.sub, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b), less: (a: Id, b: Id) => k.call(INT_OPS.less, a, b), up: (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(-n)), down: (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(n)) };
+  const unit = () => z.up(k.int(1), 33);
+  const state = (text: Id, r: Id, m: Id) => k.call(PAIR_V, text, k.call(PAIR_V, r, m));
+  const fractionDigits = k.def("fraction digits");
+  k.define(fractionDigits, k.fn(["fraction"], (fr) => k.match(k.fold(k.call(INT_OPS.range, k.int(10)), [
+    { variant: NIL, names: [], body: () => state(k.lit(""), z.mul(k.int(2), fr), k.int(1)) },
+    { variant: CONS, names: ["place", "places"], results: [null, "digits so far"], body: (_, [, sofar]) => k.match(sofar!, [
+      { variant: PAIR_V, names: ["text", "left"], body: ([text, left]) => k.match(left, [
+        { variant: PAIR_V, names: ["r", "m"], body: ([r, m]) => k.if(k.call(S.equal, m, k.int(0)), sofar!,
+          k.let("r₁₀", z.mul(r, k.int(10)), (r10) => k.let("m₁₀", z.mul(m, k.int(10)), (m10) => k.let("digit", z.down(r10, 33), (d) =>
+            k.let("rest", z.sub(r10, z.up(d, 33)), (rest) => k.let("low", z.less(rest, m10), (low) => k.let("high", z.less(z.sub(unit(), m10), rest), (high) =>
+              k.if(k.call(S.or, low, high),
+                state(k.call(S.concat, text, k.call(INT_OPS.show, k.if(k.call(S.and, low, k.call(S.or, k.call(S.not, high), z.less(z.mul(k.int(2), rest), unit()))), d, z.add(d, k.int(1))))), k.int(0), k.int(0)),
+                state(k.call(S.concat, text, k.call(INT_OPS.show, d)), rest, m10))))))))) },
+      ]) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["digits", "done"], body: ([ds]) => ds }])));
+  const showSteps = k.def("show fixed steps");
+  k.define(showSteps, k.fn(["steps"], (s) => k.let("whole", z.down(s, 32), (w) => k.let("fraction", z.sub(s, z.up(w, 32)), (fr) =>
+    k.if(k.call(S.equal, fr, k.int(0)), k.call(INT_OPS.show, w),
+      k.call(S.concat, k.call(INT_OPS.show, w), k.call(S.concat, k.lit("."), k.call(fractionDigits, fr))))))));
   const showX = k.def("show fixed");
-  k.define(showX, k.fn(["x"], (x) => k.call(S.show, k.call(fixedF, x))));
+  k.define(showX, k.fn(["x"], (x) => fx(x, (s) => k.if(z.less(s, k.int(0)),
+    k.call(S.concat, k.lit("-"), k.call(showSteps, k.call(INT_OPS.neg, s))), k.call(showSteps, s)))));
 
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
@@ -548,7 +579,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -646,7 +677,8 @@ export function buildPrelude(): Module {
     [showD]: "A dual number as 3 + 2ε.",
     [asFixed]: "A whole number as a Fixed, exactly.",
     [fixedF]: "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
-    [showX]: "A Fixed as text, through its Float64, so it shows 9 significant digits.",
+    [showX]: "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently.",
+    [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0.",
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };

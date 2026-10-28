@@ -81,9 +81,11 @@ large worlds.
    and literals are rounded in arith.ts with the other number literals
    (test/fixed.test.ts). For now `as fixed` takes a whole number,
    `fixed as float64` gives the nearest Float64, and `show fixed` shows
-   through it, so 9 significant digits; the shortest exact decimal comes
-   with step 2.
-2. `trig at fixed` by CORDIC, `square root` and `divide`.
+   through it. **Since L89b** `show fixed` is the shortest decimal that
+   reads back to the same steps (Steele and White's free-format digits,
+   in Ints), and `divide fixed` is there.
+2. `trig at fixed` by CORDIC, `square root` and `divide`. `divide` is
+   built (L89b); CORDIC and `square root` are next.
 3. WASM and C lowering to `i64` where the range is known.
 4. An example: a lockstep simulation where two runs that share only inputs
    end in the same state, bit for bit.
