@@ -185,9 +185,10 @@ In the order the BACKLOG wants them:
    programs in `test/later.test.ts` give the same prints compiled. A
    function that waits, given where any row goes (`map`), gets a copy of
    that definition that waits too (step 2a). A handler around code that
-   waits on another handler's operation passes it outward (step 2c). Not
-   yet: an operation answered later inside a search. It says so when
-   compiled.
+   waits on another handler's operation passes it outward (step 2c). A
+   search written in place may wait too (step 2b). Not yet: a definition
+   with both Choice and a waiting row, and a waiting handler with a case
+   answered at once. Each says so when compiled.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
    `together`, `race` and `within`.
