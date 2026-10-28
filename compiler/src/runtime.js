@@ -30,6 +30,12 @@ export function $fromList(l) {
 // Destination passing (compile.ts, `$into` copies; GAPS.md P4): a list's
 // items pushed onto an array; a function that has an `$into` version
 // writes its list straight into one.
+// The list an `$into` copy writes, as a new array (a view's array, P4).
+export function $intoArray(f, ...args) {
+  const d = [];
+  f(d, ...args);
+  return d;
+}
 export function $pushList(d, l) {
   for (; l.tag === CONS; l = l.fields[1]) d.push(l.fields[0]);
 }

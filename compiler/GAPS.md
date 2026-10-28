@@ -1015,6 +1015,13 @@ written first, and another answer resets the array and writes its own
 (`letInto`). Best of six: 0.0417 to 0.0327 ms a block, about 22%; a test
 in compile.test.ts checks the block has its array version.
 
+**C30, step 1** (2026-10-28): a list that an `$into` copy writes, handed to
+a definition that only takes it apart, now goes in as an array view
+(`$intoArray`) instead of being built as cons cells and walked. In the
+pedal this is the block on the Choice path. Best of six: 0.037 to 0.031 ms
+a block, about 16%, with the same samples. Next: the search (the split,
+`driven_lows`' map and the join) on arrays.
+
 **Where round 4 stops** (2026-10-24): 2.9× the hand-written pedal, from 6×.
 The rest is open (BACKLOG C30). Measured on hand edits of the compiled
 pedal:
