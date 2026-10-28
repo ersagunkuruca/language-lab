@@ -598,6 +598,19 @@ match's value is the computation's value when it finishes normally. Each
 case runs *outside* its handler (deep handlers), so a `Log` case that logs
 reaches the next handler out, and in the end the runtime.
 
+A handler may also say what its normal finish gives, in the match's
+`otherwise` slot, as a function of the computation's value. That lets the
+handler change the result's type (OCaml's value case, L57):
+
+```
+match half(n)
+| abort(why) → none
+| done(x)    → some(x)                                       -- Optional Float64
+```
+
+The compiled JavaScript runs it, except beside an operation answered
+later; WASM and C refuse it with a reason for now.
+
 The continuation isn't a value, on purpose. Every operation is one of two
 shapes, and those two cover what programs need (errors, configuration,
 logging, IO, mocking IO in tests) without first-class continuations:

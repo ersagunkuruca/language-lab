@@ -834,6 +834,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // gives the answer, and the computation carries on with it; a case for
   // one that never returns gives the value of the whole match. Cases run
   // outside the handler, so their own effects are the match's.
+  // The normal finish (BACKLOG L57): a handler's `otherwise` is a function
+  // written in place, given the computation's value when it finishes
+  // without escaping, `| done(x) → some(x)`, so a handler can change the
+  // result's type (OCaml's value case). Without one, the match's value is
+  // the computation's.
   // A match on an effect's operations: the computation it handles may do
   // the effect, and the match doesn't (the ledger, ledger.ts).
   function handle(n: NodeOf<"match"> | NodeOf<"fold">, effect: Id, arms: NodeOf<"arm">[], env: Map<Id, Type>, row: Row, result: Type): Type {
@@ -842,7 +847,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     s.unifyRow({ effs: [], tail: rest }, row);
     const { fields, params, self } = dataType(effect);
     const handled: Row = { effs: [effect], tail: rest, ...(params.size ? { args: { [effect]: (self as { args: Type[] }).args } } : {}) };
-    unifyAt(n.scrutinee, result, expr(n.scrutinee, env, handled), "the handled computation");
+    const done = n.kind === "match" ? n.otherwise : null;
+    const value = done ? s.fresh() : result;
+    unifyAt(n.scrutinee, value, expr(n.scrutinee, env, handled), "the handled computation");
+    if (done) {
+      if (code.nodes[done].kind !== "lambda") err(done, `a handler's normal finish is a function written in place, given the computation's value: done(x) → …`);
+      else unifyAt(done, { t: "fn", params: [value], ret: result, eff: row }, expr(done, env, row), "the normal finish");
+    }
     const seen = new Set<Id>();
     for (const arm of arms) {
       if (owner.get(arm.variant) !== effect) { err(arm.id, `${nm(arm.variant)} is not an operation of ${nm(effect)}`); continue; }
@@ -883,7 +894,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     const missing = typedefOf(effect)!.variants.filter((v) => !seen.has(v));
     if (missing.length) err(n.id, `no case for ${missing.map(nm).join(", ")}: a handler handles every operation of ${nm(effect)}`);
-    if (n.kind === "match" && n.otherwise) err(n.otherwise, `a handler has a case for each operation of ${nm(effect)} and nothing else`);
     return result;
   }
 
