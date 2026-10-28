@@ -47,6 +47,7 @@ import { expandInverses } from "./inverses.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
+const NO_LAT: Set<number> = new Set();
 type K = (value: string) => string;
 
 export interface Options {
@@ -132,8 +133,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // OCaml 5 checks them (ANSWERED-LATER.md, "Prior art").
   const isLater = (op: Id) => !!(code.nodes[op] as NodeOf<"variant">).later;
   const laterEffects = new Set(Object.keys(code.nodes).filter((id) => code.nodes[id].kind === "variant" && isLater(id)).map((id) => effectOf(id)!));
-  const laterRow = (row: Row) => laterEffects.size > 0 && sub.resolveRow(row).effs.some((e) => laterEffects.has(e));
-  const laterFn = (t: Type) => t.t === "fn" && laterRow(t.eff);
+  // `lat`: row variables that stand for a row with such an effect in the
+  // copy being written (`map` given a function that waits: its row is any).
+  const laterRow = (row: Row, lat: Set<number> = NO_LAT) => {
+    if (!laterEffects.size) return false;
+    const r = sub.resolveRow(row);
+    return r.effs.some((e) => laterEffects.has(e)) || (r.tail !== null && lat.has(r.tail));
+  };
+  const laterFn = (t: Type, lat: Set<number> = NO_LAT) => t.t === "fn" && laterRow(t.eff, lat);
   const notYet = (what: string) => new Error(`${what}: compiled JavaScript doesn't run that yet (BACKLOG C40); the evaluator does`);
   const perform = (op: Id, args: string[]) => (isLater(op) ? `(yield $later(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`);
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
@@ -351,7 +358,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // (GAPS.md G25).
   // `sus`: the definition's row holds an operation answered later, so its
   // one copy is a generator function (`isLater`).
-  interface Spec { def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean }
+  interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean }
   // A copy that writes its list into an array it is handed (`$into`): the
   // list itself, or the list field `k` of a record with two fields, when it
   // returns the other one (GAPS.md P4).
@@ -543,18 +550,32 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // `out`: a single-answer copy whose answers are all one record, which
   // puts the record's fields in `$got` and returns whether it has one
   // (GAPS.md G13 again): its caller takes them apart straight away.
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null, lat: Set<number> = NO_LAT): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}`;
+    lat = new Set(scheme.rows.filter((r) => lat.has(r)));
+    // The body's types may name the same rows with variables of their own
+    // (a library definition, checked apart): read them off its lambda.
+    if (lat.size && isFnDef(def)) {
+      const pair = (a: Type, b: Type) => {
+        if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+        if (a.t !== "fn" || b.t !== "fn") return;
+        const x = sub.resolveRow(a.eff).tail, y = sub.resolveRow(b.eff).tail;
+        if (x !== null && y !== null && lat.has(x)) lat.add(y);
+        a.params.forEach((p, i) => b.params[i] && pair(p, b.params[i]));
+        pair(a.ret, b.ret);
+      };
+      pair(scheme.type, ty(node<"def">(def).body!));
+    }
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}${lat.size ? `|l:${[...lat].sort((a, b) => a - b).join(",")}` : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
-      const sus = !reflective && isFnDef(def) && laterFn(t);
+      const sus = !reflective && isFnDef(def) && laterFn(t, lat);
       if (sus && streams) throw notYet(`${base} has Choice and performs an operation answered later`);
       const bool = !sus && !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}`), streams, bool, single, cps, arr, own, out, into, sus };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat };
       if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
       queue.push(s);
@@ -566,7 +587,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -577,18 +598,20 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       collect(t.ret, false);
     };
     collect(scheme.type, true);
-    const out: Rho = new Map();
+    const out: Rho = new Map(), waits = new Set<number>();
     const walk = (s: Type, t: Type) => {
       if (s.t === "con" && t.t === "con") s.args.forEach((a, i) => walk(a, t.args[i]));
       if (s.t !== "fn" || t.t !== "fn") return;
       // Where the position already says Choice, the variable adds nothing,
       // so only positions without it tell us what the variable stands for.
       if (s.eff.tail !== null && inner.has(s.eff.tail) && !s.eff.effs.includes(CHOICE) && !out.get(s.eff.tail)) out.set(s.eff.tail, choice(t.eff, rho));
+      // The same for an operation answered later: a copy that waits (C40).
+      if (s.eff.tail !== null && inner.has(s.eff.tail) && laterRow(t.eff, lat)) waits.add(s.eff.tail);
       s.params.forEach((p, i) => walk(p, t.params[i]));
       walk(s.ret, t.ret);
     };
     walk(scheme.type, ty(ref));
-    return spec(def, out, plain, false, arr, own);
+    return spec(def, out, plain, false, arr, own, false, null, waits);
   }
 
   // The parameters of a function definition that are only ever called,
@@ -1048,7 +1071,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
         });
       }
-      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own));
+      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat);
     }
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
@@ -1324,7 +1347,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
         }
         case "def": {
-          const s = specAt(n.id, n.target, rho);
+          const s = specAt(n.id, n.target, rho, undefined, undefined, false, sp.lat);
           if (!isFnDef(n.target)) return `${s.name}()`;
           // A function without Choice, where a Choice function goes (a list
           // holding both kinds): lifted to a stream of one result.
@@ -1437,7 +1460,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
-      if (laterFn(ty(n.id))) return `(function* (${ps}) {\n${scoped(false, () => inGen(true, () => ret(n.body)))}\n})`;
+      if (laterFn(ty(n.id), sp.lat)) return `(function* (${ps}) {\n${scoped(false, () => inGen(true, () => ret(n.body)))}\n})`;
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
       const b = code.nodes[n.body].kind;
       const plainJs = b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda") ? `((${ps}) => {\n${ret(n.body)}\n})` : `((${ps}) => ${ex(n.body)})`;
@@ -1486,7 +1509,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return spends(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
       }
-      return laterFn(ty(n.fn)) ? `(yield* ${ex(n.fn)}(${n.args.map(ex).join(", ")}))` : `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
+      return laterFn(ty(n.fn), sp.lat) ? `(yield* ${ex(n.fn)}(${n.args.map(ex).join(", ")}))` : `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
     }
 
     // A function that waits on an operation answered later, passed where
@@ -1495,9 +1518,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // next step.
     function laterArgs(n: NodeOf<"call">) {
       const f = code.nodes[n.fn];
-      const t = f.kind === "ref" && code.nodes[f.target]?.kind === "def" ? info.schemes.get(f.target)!.type : f.kind === "ref" && code.nodes[f.target]?.kind === "variant" ? null : ty(n.fn);
+      if (!n.args.some((a) => laterFn(ty(a), sp.lat))) return;
+      // A definition's copy waits where its argument does (`specAt`).
+      const def = f.kind === "ref" && code.nodes[f.target]?.kind === "def" ? defCall(n) : null;
+      const t = def ? info.schemes.get(def.def)!.type : f.kind === "ref" && code.nodes[f.target]?.kind === "variant" ? null : ty(n.fn);
       n.args.forEach((a, i) => {
-        if (t && laterFn(ty(a)) && !(t.t === "fn" && t.params[i] && laterFn(t.params[i]))) throw notYet(`a function that waits on an operation answered later, given to ${f.kind === "ref" ? names[f.target] ?? f.target : "a function"}`);
+        if (t && laterFn(ty(a), sp.lat) && !(t.t === "fn" && t.params[i] && laterFn(t.params[i], def?.lat))) throw notYet(`a function that waits on an operation answered later, given to ${f.kind === "ref" ? names[f.target] ?? f.target : "a function"}`);
       });
     }
 
@@ -1578,7 +1604,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // once under the same handler (deep).
     function handleLater(n: NodeOf<"match">, arms: NodeOf<"arm">[]): string {
       const rests = arms.filter((a) => isLater(a.variant)).map((a) => a.binds[a.binds.length - 1]);
-      if (rests.some((r) => laterFn(ty(r)))) throw notYet("a handler of an operation answered later around code that itself waits on one");
+      if (rests.some((r) => laterFn(ty(r), sp.lat))) throw notYet("a handler of an operation answered later around code that itself waits on one");
       const fn = (a: NodeOf<"arm">) => `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`;
       const table = (as: NodeOf<"arm">[]) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a)}`).join(", ")} }`;
       const returns = (a: NodeOf<"arm">) => !isLater(a.variant) && !!node<"variant">(a.variant).returns;
@@ -1776,7 +1802,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g) || callStreams(n)) return null;
       const c = defCall(n);
       if (c.streams || c.bool) return null;
-      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape);
+      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat);
     }
     // A call that writes into the array `d`: a jump if it is this copy.
     function intoCallJs(n: NodeOf<"call">, t: Spec, tail: boolean, d: string, pre = ""): string {
@@ -2385,11 +2411,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const r = temp("r");
           const rec = callee?.single ? unpackOf(callee) : null;
           if (callee && rec) {
-            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true);
+            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat);
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
           } else if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
-            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr), rec = unpackOf(viaK);
+            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = guarded(n.id, c, k);
