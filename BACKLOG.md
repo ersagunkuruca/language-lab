@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I27 | Make it a function names the function `part` and its inputs `speed₂`, `time₂`; plain names would read better | QA8 L2 | 2026-10-28 |
 | I28 | An implementation reads `‹size at float64›` (lowercased type, quoted), "each of its 1 operation", and the interface is marked ▤ like a data type | QA8 L3 | 2026-10-28 |
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts) | QA8 L4 | 2026-10-28 |
 
@@ -126,6 +125,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I27 | Make it a function names its inputs after what comes in (speed, not speed₂); a shared name gets a subscript only where the outer one is used | #574 |
 | I26 | Search by meaning finds the maths builtins by their plain words: square root finds sqrt, absolute value finds abs | #569 |
 | I25 | Escape puts back what Replace with…, Change the function or Wrap in… took, until something is picked | #567 |
 | E158 | In the graph's menu Wrap in… reads Insert a node after it…; the text keeps Wrap in… | #564 |

@@ -1033,6 +1033,9 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   const firsts = inputs.filter((x, i) => inputs.findIndex((y) => keyOf(y) === keyOf(x)) === i);
   const params = firsts.map(() => freshId());
   const nn: Names = { ...names, [fn]: "part" };
+  // Each input takes the name of what comes in (speed, not speed₂): inside
+  // part the outer one isn't used, so the plain name reads right (QA8 L2).
+  firsts.forEach((x, i) => { const n = code.nodes[x]; const nm = n.kind === "ref" ? names[n.target] : undefined; if (nm && nm !== "_") nn[params[i]] = nm; });
   let next = swapIn(code, at, let_);
   // Where each value out was: the call itself, or its field of the record.
   const p = freshId(), pLet = freshId(), pLam = freshId();
