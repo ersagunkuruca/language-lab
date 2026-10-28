@@ -35,7 +35,7 @@ export const SECTIONS: Section[] = [
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"),
       ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.show", "int.range"),
       ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
-      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "polar", "divide complex", "complex exp", "show complex", "table product", "complex table"), ...t("tableEntry"),
+      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "polar", "divide complex", "complex exp", "show complex", "table product", "complex table", "clifford table"), ...t("tableEntry"),
       ...t("dual"), ...prelude("slope by duals", "divide duals", "show dual", "dual table"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
       ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },

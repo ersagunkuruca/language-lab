@@ -226,6 +226,85 @@ export function buildPrelude(): Module {
   const showD = oneD("show dual", (a, a1) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
     k.if(k.call(S.less, a1, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, a1)), k.lit("ε")))));
 
+  // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
+  // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
+  // Cl(p, q, r) is p ones, q minus ones and r zeros), for a record type
+  // whose basis elements are `basis`, in the blade order 1, e₁, e₂, e₁e₂,
+  // e₃, e₁e₃, … . A blade is which basis vectors it has, a list of Bools.
+  // e_A · e_B is ± the blade with the vectors in one and not both, its sign
+  // a −1 for each swap putting them in order and the square of each vector
+  // they share. The standard construction (as in ganja.js; Dorst, Fontijne
+  // and Mann, Geometric Algebra for Computer Science, 2007).
+  const bladesOf = k.def("blades of");
+  k.define(bladesOf, k.fn(["squares"], (sq) => k.fold(sq, [
+    { variant: NIL, names: [], body: () => k.list(NIL) },
+    { variant: CONS, names: ["square", "rest"], results: [null, "the rest's blades"], body: (_, [, r]) => k.fold(r!, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["blade", "more"], results: [null, "more with this vector"], body: ([b], [, m]) =>
+        k.call(CONS, k.call(CONS, FALSE, b), k.call(CONS, k.call(CONS, TRUE, b), m!)) },
+    ]) },
+  ])));
+  const outer = k.def("blade outer");
+  k.define(outer, k.fn(["a", "b"], (a, b) => k.match(a, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["x", "xs"], body: ([x, xs]) => k.match(b, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["y", "ys"], body: ([y, ys]) => k.call(CONS, k.call(S.not, k.call(S.equal, x, y)), k.call(outer, xs, ys)) },
+    ]) },
+  ])));
+  // −1 for each vector in the blade, 1 when it has none.
+  const flips = k.def("blade flips");
+  k.define(flips, k.fn(["blade"], (bl) => k.fold(bl, [
+    { variant: NIL, names: [], body: () => k.lit(1) },
+    { variant: CONS, names: ["has", "rest"], results: [null, "the rest's flips"], body: ([h], [, r]) => k.if(h, k.call(B.neg, r!), r!) },
+  ])));
+  const bladeSign = k.def("blade sign");
+  k.define(bladeSign, k.fn(["squares", "a", "b"], (sq, a, b) => k.match(sq, [
+    { variant: NIL, names: [], body: () => k.lit(1) },
+    { variant: CONS, names: ["square", "squares₂"], body: ([s0, sqs]) => k.match(a, [
+      { variant: NIL, names: [], body: () => k.lit(1) },
+      { variant: CONS, names: ["x", "xs"], body: ([x, xs]) => k.match(b, [
+        { variant: NIL, names: [], body: () => k.lit(1) },
+        // y moves past every vector of a after it; x and y together square.
+        { variant: CONS, names: ["y", "ys"], body: ([y, ys]) => n.mul(n.mul(
+          k.if(k.call(S.and, x, y), s0, k.lit(1)),
+          k.if(y, k.call(flips, xs), k.lit(1))),
+          k.call(bladeSign, sqs, xs, ys)) },
+      ]) },
+    ]) },
+  ])));
+  const pairUp = k.def("blades with");
+  k.define(pairUp, k.fn(["blades", "basis"], (bs, es) => k.match(bs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["blade", "blades₂"], body: ([b, bs2]) => k.match(es, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["element", "basis₂"], body: ([e, es2]) => k.call(CONS, k.call(PAIR_V, b, e), k.call(pairUp, bs2, es2)) },
+    ]) },
+  ])));
+  // The basis element of a blade, or `none` (a zero) when no element has it.
+  const elementOf = k.def("element of blade");
+  k.define(elementOf, k.fn(["pairs", "blade", "none"], (ps, bl, no) => k.match(ps, [
+    { variant: NIL, names: [], body: () => no },
+    { variant: CONS, names: ["pair", "pairs₂"], body: ([pr, ps2]) => k.match(pr, [
+      { variant: PAIR_V, names: ["b", "e"], body: ([b, e]) => k.if(k.call(S.equal, b, bl), e, k.call(elementOf, ps2, bl, no)) },
+    ]) },
+  ])));
+  const cliffordTable = k.def("clifford table");
+  k.define(cliffordTable, k.fn(["squares", "basis"], (sq, es) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) =>
+    k.fold(ps, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["left", "rest"], results: [null, "the rest's lines"], body: ([l], [, r]) => k.match(l, [
+        { variant: PAIR_V, names: ["a", "ea"], body: ([a, ea]) => k.fold(ps, [
+          { variant: NIL, names: [], body: () => r! },
+          { variant: CONS, names: ["right", "more"], results: [null, "more lines"], body: ([rt], [, m]) => k.match(rt, [
+            { variant: PAIR_V, names: ["b", "eb"], body: ([b, eb]) => k.let("sign", k.call(bladeSign, sq, a, b), (sg) =>
+              k.if(k.call(S.equal, sg, k.lit(0)), m!,
+                k.call(CONS, k.call(TIMES_V, ea, eb, k.call(S.mapParts, k.fn(["part"], (x) => n.mul(sg, x)), k.call(elementOf, ps, k.call(outer, a, b), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), ea)))), m!))) },
+          ]) },
+        ]) },
+      ]) },
+    ]))));
+
   // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
   // at a type is its Arithmetic's, found by the type. Not offered: + is.
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
@@ -425,7 +504,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, divD, slopeAt, dualTable, showD, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, divD, slopeAt, dualTable, showD, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -517,6 +596,7 @@ export function buildPrelude(): Module {
     [logD]: "log at Dual: log a + a′/a · ε. Not offered on its own: log is.",
     [trigD]: "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
+    [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
