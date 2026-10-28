@@ -588,6 +588,13 @@ async function patternRows() {
   if ((await text()) !== was) errors.push(`${where}: switching the drawing changed the text`);
   await p.locator('button[data-act="undo"]').first().click();
   if (!(await ports()).includes("[head, second, ..others]")) errors.push(`${where}: Undo doesn't bring the rows back`);
+  // solutions, opened with main's numbers, stops its values on the wires
+  // instead of holding the page for the whole search (BACKLOG I23).
+  where = "a slow function's values on the wires";
+  const t0 = Date.now();
+  await p.locator("[data-def]", { hasText: /^solutions$/ }).first().click();
+  if (Date.now() - t0 > 5000) errors.push(`${where}: opening solutions took ${Date.now() - t0} ms`);
+  if (!(await p.locator(".side").innerText()).includes("the graph waits")) errors.push(`${where}: solutions doesn't say its values stopped`);
   await p.close();
 }
 
