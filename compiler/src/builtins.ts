@@ -121,6 +121,7 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.mul]: { js: op(([a, b]) => `$int.mul(${a}, ${b})`), scalar: INT },
   [INT_OPS.neg]: { js: op(([a]) => `$int.neg(${a})`), scalar: INT },
   [INT_OPS.abs]: { js: "impl", scalar: INT },
+  [INT_OPS.shiftDown]: { js: "impl", scalar: no("Fixed on WASM and C is FIXED-POINT.md step 3, an i64 where the range is known") },
   [INT_OPS.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: INT },
   [INT_OPS.quotient]: { js: "partial", scalar: INT },
   [INT_OPS.remainder]: { js: "partial", scalar: INT },

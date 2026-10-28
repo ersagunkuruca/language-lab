@@ -1,0 +1,70 @@
+// Fixed (FIXED-POINT.md, BACKLOG L89 step 1): an Int counting steps of
+// 2⁻³², with + − · < through the one + − · < and literals rounded once to
+// the nearest step. A 1,000-step physics loop gives the same steps
+// evaluated and compiled, and the same as Int arithmetic done here by
+// hand; a position at 10¹² keeps a single step, which Float64 loses.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { Lang } from "../src/lang/dsl.ts";
+import { infer } from "../src/lang/infer.ts";
+import { makeRunner, type Value } from "../src/lang/run.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { LIBRARY } from "../src/lang/library.ts";
+import { ARITH, FIXED_V, INT_OPS, PAIR_V, SHOW_ANY } from "../src/lang/std.ts";
+import { FIXED_TYPE } from "../src/lang/types.ts";
+import type { Id } from "../src/model.ts";
+import { compile } from "../../compiler/src/compile.ts";
+
+const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
+const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+const ONE = 2n ** 32n;
+// The nearest step, halves up, and the product rounded down: by hand.
+const steps = (top: bigint, bottom: bigint) => { const t = 2n * top * ONE + bottom, d = 2n * bottom; return t >= 0n ? t / d : -((-t + d - 1n) / d); };
+const times = (a: bigint, b: bigint) => (a * b) >> 32n;
+
+test("Fixed: exact literals, a physics loop and a big world, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const x = (v: number | string) => k.at(FIXED_TYPE, v);
+  const stepsOf = (v: Id) => k.match(v, [{ variant: FIXED_V, names: ["steps"], body: ([s]) => s }]);
+  const names: string[] = [];
+  const show = (name: string, v: () => Id) => { names.push(name); def(name, () => k.call(SHOW_ANY, v())); };
+  show("one and a half", () => stepsOf(x(1.5)));
+  show("a tenth", () => stepsOf(x(0.1)));
+  show("minus a tenth", () => stepsOf(x(-0.1)));
+  show("product", () => stepsOf(k.call(ARITH.mul, x(0.1), x(-3.7))));
+  show("less", () => k.call(ARITH.less, x(-0.25), x(0.1)));
+  // A ball falling for 1,000 steps of 10 ms: v ← v + g·dt, h ← h + v·dt.
+  show("fall", () => k.match(k.fold(k.call(INT_OPS.range, k.int(1000)), [
+    { variant: "std.list.nil", names: [], body: () => k.call(PAIR_V, x(100), x(0)) },
+    { variant: "std.list.cons", names: ["i", "rest"], results: [null, "before"], body: (_, [, before]) => k.match(before!, [
+      { variant: PAIR_V, names: ["h", "v"], body: ([h, v]) => k.let("v₂", k.call(ARITH.add, v, k.call(ARITH.mul, x(-9.81), x(0.01))), (v2) =>
+        k.call(PAIR_V, k.call(ARITH.add, h, k.call(ARITH.mul, v2, x(0.01))), v2)) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["h", "v"], body: ([h, v]) => k.call(SHOW_ANY, k.call(PAIR_V, stepsOf(h), stepsOf(v))) }]));
+  // A step past 10¹², and back: Fixed keeps it.
+  show("far away", () => stepsOf(k.call(ARITH.sub, k.call(ARITH.add, k.call(lib("as fixed"), k.int(10 ** 12)), k.call(FIXED_V, k.int(1))), x(1e12))));
+  show("as float64", () => k.call(lib("show fixed"), x(-2.75)));
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const got = names.map((n) => r.value(at(n)));
+  let h = steps(100n, 1n), v = 0n;
+  const g = steps(-981n, 100n), dt = steps(1n, 100n);
+  for (let i = 0; i < 1000; i++) { v += times(g, dt); h += times(v, dt); }
+  assert.deepEqual(got, [
+    String(3n * ONE / 2n), String(steps(1n, 10n)), String(steps(-1n, 10n)), String(times(steps(1n, 10n), steps(-37n, 10n))), "true",
+    `"pair(${h}, ${v})"`, "1", "\"-2.75\"",
+  ]);
+  const path = join(mkdtempSync(join(tmpdir(), "fixed-")), "fixed.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});

@@ -27,8 +27,8 @@ import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationKey, type Info } from "./infer.ts";
-import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, INT_OPS, RATIO, S } from "./std.ts";
-import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
+import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
+import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
@@ -51,7 +51,7 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
 // of Arithmetic and Ordered (INTERFACES.md step 4), found by type like any
 // other: Rational's `add fractions`, Complex's `multiply complex`, Dual's
 // product rule, Algebraic's builtins.
-const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBRAIC_TYPE]);
+const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBRAIC_TYPE, FIXED_TYPE]);
 // A prelude definition's id, by its name.
 export const preludeDef = (name: string): Id | undefined =>
   Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
@@ -88,6 +88,14 @@ const someLiteralNotFloat64 = (code: Code, info: Info) => Object.values(code.nod
 });
 
 // A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
+// A literal at Fixed: its digits as a fraction, rounded once to the nearest
+// step of 2⁻³² (halves up), so 0.1 is the same steps on every target.
+function fixedSteps(v: unknown): bigint {
+  const [top, bottom] = ratioParts(typeof v === "number" ? decimal(v) : (v as string)) ?? [0n, 1n];
+  const twice = 2n * top * 2n ** 32n + bottom, d = 2n * bottom;
+  return twice >= 0n ? twice / d : -((-twice + d - 1n) / d);
+}
+
 function decimal(x: number): string {
   const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(x));
   if (!m) return "0";
@@ -296,10 +304,11 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
-    const parts: [NodeData, Type][] = n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
+    const parts: [NodeData, Type][] = n.of === FIXED_TYPE ? [[intLit(fixedSteps(n.value)), int]]
+      : n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
       ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
       : [[{ kind: "lit", value: typeof n.value === "number" ? n.value : 0 }, num], [{ kind: "lit", value: 0 }, num]];
-    const ctor = n.of === RATIONAL_TYPE ? RATIO : n.of === ALGEBRAIC_TYPE ? ALGEBRAIC_OPS.fraction : n.of === DUAL_TYPE ? DUAL_V : COMPLEX_V;
+    const ctor = n.of === RATIONAL_TYPE ? RATIO : n.of === ALGEBRAIC_TYPE ? ALGEBRAIC_OPS.fraction : n.of === DUAL_TYPE ? DUAL_V : n.of === FIXED_TYPE ? FIXED_V : COMPLEX_V;
     const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
     nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
     typeOf.set(n.id, t);
@@ -317,7 +326,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
       return;
     }
     if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
-    if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE || t.id === DUAL_TYPE ? x : decimal(x) }); return; }
+    if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE || t.id === DUAL_TYPE ? x : decimal(x) }); return; }
     const variant = recordVariant(code, t.id);
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;

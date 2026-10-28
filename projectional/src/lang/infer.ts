@@ -23,7 +23,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -75,12 +75,12 @@ export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterab
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
-  arith: "a Number (Int, Rational, Float64, Complex, or one case whose fields are all Float64s)",
-  ordered: "a Number with < (Int, Rational or Float64)",
+  arith: "a Number (Int, Rational, Float64, Fixed, Complex, or one case whose fields are all Float64s)",
+  ordered: "a Number with < (Int, Rational, Fixed or Float64)",
 };
 const str: Type = { t: "con", id: STRING, args: [] };
 // A number type itself (a pinned variable counts).
-const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id.startsWith("pin."));
+const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE || t.id === ALGEBRAIC_TYPE || t.id.startsWith("pin."));
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
 // And Float64's sin, cos, tan, exp and log, which Trig's are at Float64.
 const PER_TYPE = new Set([...["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]), ...["sin", "cos", "tan", "exp", "log"].map((op) => `builtin.${op}`)]);

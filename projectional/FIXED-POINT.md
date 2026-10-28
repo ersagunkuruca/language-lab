@@ -76,7 +76,13 @@ large worlds.
 1. `std.fixed` with `arithmetic at fixed`, `ordered at fixed`, literals,
    `as fixed`, `as float64` and `show`, all in the prelude. A test shows
    that a 1,000-step physics loop gives the same steps evaluated and
-   compiled, and a position at 10¹² keeps its last bit.
+   compiled, and a position at 10¹² keeps its last bit. **Built (L89a)**:
+   the product's shift is a new Int builtin, `shifted down` (floor(a / 2ⁿ)),
+   and literals are rounded in arith.ts with the other number literals
+   (test/fixed.test.ts). For now `as fixed` takes a whole number,
+   `fixed as float64` gives the nearest Float64, and `show fixed` shows
+   through it, so 9 significant digits; the shortest exact decimal comes
+   with step 2.
 2. `trig at fixed` by CORDIC, `square root` and `divide`.
 3. WASM and C lowering to `i64` where the range is known.
 4. An example: a lockstep simulation where two runs that share only inputs

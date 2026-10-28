@@ -232,6 +232,15 @@ export const ORDERED = typedef("std.ordered", "Ordered", ["a"], [
   ["ordered", [["less", ([a]) => tfun([tref(a), tref(a)], tref(BOOL), [])]]],
 ], false, true);
 export const ORDERED_V = "std.ordered.ordered";
+// Fixed (FIXED-POINT.md, BACKLOG L89): a number counted in steps of 2⁻³²,
+// an Int of steps, so it has the same bits on every target and the same
+// step size everywhere in a big world. + − · < are the prelude's, Int
+// arithmetic with · rounded down; a literal at Fixed is its digits rounded
+// once to the nearest step. After Ordered, so ids above don't move.
+export const FIXED = typedef("std.fixed", "Fixed", [], [
+  ["fixed", [["steps", () => tref(INT)]]],
+], false, false, "fixed-point numbers");
+export const FIXED_V = "std.fixed.fixed";
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -446,6 +455,7 @@ export const INT_OPS = {
   mul: builtin("int.mul", "multiply", pure([int, int], int), I.mul),
   neg: builtin("int.neg", "negate", pure([int], int), I.neg),
   abs: builtin("int.abs", "abs", pure([int], int), I.abs),
+  shiftDown: builtin("int.shiftDown", "shifted down", pure([int, int], int), I.shiftDown),
   less: builtin("int.less", "less than", pure([int, int], bool), (a: I.Int, b: I.Int) => truth(I.less(a, b))),
   quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
   remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
@@ -562,7 +572,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
