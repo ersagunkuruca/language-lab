@@ -18,7 +18,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts) | QA8 L4 | 2026-10-28 |
+| I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 
 ## E: Editor
 
