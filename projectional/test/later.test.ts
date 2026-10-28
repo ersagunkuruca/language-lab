@@ -205,8 +205,8 @@ test("compiled JavaScript runs an operation answered later, and says so where it
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["1"]);
   assert.deepEqual(await p.compiled(), ["1"]);
-  // A function that waits, given to one that calls it as a plain function
-  // (map's row is any): refused, not run wrong.
+  // A function that waits, given to one whose row is any (map's): that
+  // copy of map waits too.
   const mapped = program((k) => {
     const A = k.effect("Ask", [["ask", [["n", () => k.tref(NUMBER)]], () => k.tref(NUMBER), "later"]]);
     const main = k.def("main");
@@ -217,7 +217,7 @@ test("compiled JavaScript runs an operation answered later, and says so where it
   });
   assert.deepEqual(mapped.errors, []);
   assert.deepEqual(mapped.run(), ["[2, 4]"]);
-  assert.throws(() => compile(mapped.code, mapped.info, mapped.names, { runtime, exports: ["main"] }), /answered later, given to map/);
+  assert.deepEqual(await mapped.compiled(), ["[2, 4]"]);
 });
 
 test("an operation answered later inside a search: the rest keeps the search's other choices", () => {

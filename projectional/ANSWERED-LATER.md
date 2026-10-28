@@ -182,10 +182,11 @@ In the order the BACKLOG wants them:
      `(item) with rest =>`.
 2. **C40**, compiled JavaScript by generators. Then pages can use it.
    Step 1 is built (compile.ts `isLater`, runtime.js `$handleL`): the
-   programs in `test/later.test.ts` give the same prints compiled. Not yet:
-   a function that waits given where any row goes (`map`), an operation
-   answered later inside a search, and a handler around code that itself
-   waits. Each says so when compiled.
+   programs in `test/later.test.ts` give the same prints compiled. A
+   function that waits, given where any row goes (`map`), gets a copy of
+   that definition that waits too (step 2a). Not yet: an operation answered
+   later inside a search, and a handler around code that itself waits. Each
+   says so when compiled.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
    `together`, `race` and `within`.
