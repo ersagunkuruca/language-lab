@@ -356,6 +356,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return !x.returns && !x.later; })) td.variants.forEach((v: Id) => opOf.set(v, n.id));
   }
+  // Every effect's operations, for refusing what isn't lowered yet.
+  const effectOps = new Set(Object.values(code.nodes).flatMap((n) => {
+    const td = n.kind === "def" && n.body ? code.nodes[n.body] : null;
+    return td?.kind === "typedef" && td.effect ? td.variants : [];
+  }));
   const escaping = (e: Id) => e === ABORT || [...opOf.values()].includes(e);
   const escapes: Id[] = [];
   const escapeOf = (e: Id): number => (e === ABORT ? 0 : (escapes.includes(e) || escapes.push(e), escapes.indexOf(e) + 1));
@@ -683,6 +688,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       }
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+        if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
         if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
           // A handler of Abort: the scrutinee is the computation.
           const t = stype(zonk(id));

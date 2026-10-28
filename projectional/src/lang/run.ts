@@ -189,7 +189,7 @@ interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; ba
 // A match handling an effect, waiting for its computation. `base`: the
 // choice points there were when it started, which an operation that never
 // returns cuts back to.
-interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
+interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; done: Id | null; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
 // An arm of a fold: the fields with folded values, and whether each holds
 // the type nested in a container (List Tree) rather than directly.
 interface FoldArm { arm: NodeOf<"arm">; rec: number[]; nested: boolean[]; shapes: (Shape | null)[] }
@@ -617,7 +617,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         }
         case "match": case "fold": {
           const h = n.kind === "match" ? handlerOf(n) : null;
-          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, env, base: this.cps.length, fuel: this.fuel, next: null });
+          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, done: (n as NodeOf<"match">).otherwise, env, base: this.cps.length, fuel: this.fuel, next: null });
           else this.push({ t: n.kind, n, env, next: null } as Frame);
           return this.eval(n.scrutinee, env);
         }
@@ -685,8 +685,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return this.ret(v);
         case "seeded": return this.ret(v);
         // The computation a handler watched has its value: that's the
-        // match's value. An answer goes back to where it was asked for.
-        case "handle": case "answer": return this.ret(v);
+        // match's value, or what its normal finish makes of it (L57),
+        // outside the handler. An answer goes back to where it was asked for.
+        case "handle": return f.done ? this.apply(this.atom(f.done, f.env)!, [v]) : this.ret(v);
+        case "answer": return this.ret(v);
       }
     }
 

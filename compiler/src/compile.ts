@@ -1599,17 +1599,26 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const answers = arms.filter((a) => node<"variant">(a.variant).returns);
       return [table(answers, false), table(arms.filter((a) => !answers.includes(a)), streams)];
     }
-    function handleEx(n: NodeOf<"match">): string {
+    function handleEx(n: NodeOf<"match">, finish = (body: string) => body): string {
       const arms = n.arms.map((a) => node<"arm">(a));
+      if (n.otherwise) {
+        // The normal finish (L57): the computation's value comes out marked,
+        // so the case for it runs outside the handler and an escape's value
+        // passes as it is.
+        if (arms.some((a) => isLater(a.variant))) throw notYet("a handler with a case for the normal finish and an operation answered later");
+        const mark = temp("finished"), r = temp("r");
+        const handled = handleEx({ ...n, otherwise: null }, (body) => `return [${mark}, (() => {\n${body}\n})()];`);
+        return `(() => {\nconst ${mark} = {};\nconst ${r} = ${handled};\nreturn Array.isArray(${r}) && ${r}[0] === ${mark} ? (${ex(n.otherwise)})(${r}[1]) : ${r};\n})()`;
+      }
       if (arms.some((a) => isLater(a.variant))) return handleLater(n, arms);
       if (!arms.some((a) => node<"variant">(a.variant).returns)) {
         // Only escapes: a try/catch (GAPS.md G18), no tables or closures.
         const h = temp("h"), e = temp("e");
         const cases = arms.map((a) => `if (${e}.op === ${tag(a.variant)}) {${binds(a, e, "args")}\n${ret(a.body)}\n}`).join("\n");
-        return `(() => {\nconst ${h} = $enter(${JSON.stringify(handlerOf(n))});\ntry {\n${ret(n.scrutinee)}\n} catch (${e}$) {\nconst ${e} = $caught(${e}$, ${h});\n${cases}\nthrow new Error("unhandled escape");\n} finally {\n$leave(${h});\n}\n})()`;
+        return `(() => {\nconst ${h} = $enter(${JSON.stringify(handlerOf(n))});\ntry {\n${finish(ret(n.scrutinee))}\n} catch (${e}$) {\nconst ${e} = $caught(${e}$, ${h});\n${cases}\nthrow new Error("unhandled escape");\n} finally {\n$leave(${h});\n}\n})()`;
       }
       const [answers, escapes] = handlerCases(n, false);
-      return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${ret(n.scrutinee)}\n})`;
+      return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${finish(ret(n.scrutinee))}\n})`;
     }
 
     // A handler with a case for an operation answered later: the handled

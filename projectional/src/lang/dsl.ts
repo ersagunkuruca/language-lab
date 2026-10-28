@@ -74,8 +74,10 @@ export class Lang extends Builder {
 
   // A handler: a match on the operations of an effect, around the
   // computation that performs it.
-  handle(body: Id, cases: Case[]): Id {
-    return this.match(body, cases);
+  // A handler; `done` is its case for the normal finish (L57), given the
+  // computation's value.
+  handle(body: Id, cases: Case[], done?: [string, (x: Id) => Id]): Id {
+    return this.match(body, cases, done && this.fn([done[0]], done[1]));
   }
 
   tref(target: Id, ...args: Id[]): Id {
