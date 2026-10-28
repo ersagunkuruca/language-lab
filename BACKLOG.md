@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I24 | In an action, Add a value before this makes `‹•1› = print(…)`, a hidden-name dot drawn over the step above; offer Add a step before this | QA8 M1 | 2026-10-28 |
 | I25 | Replace with… empties the part at once and Escape keeps the hole; Escape could cancel until something is picked | QA8 M2 | 2026-10-28 |
 | I26 | Search by meaning: "square root" doesn't find `sqrt` on a Float64 hole, "absolute value" finds nothing | QA8 L1 | 2026-10-28 |
 | I27 | Make it a function names the function `part` and its inputs `speed₂`, `time₂`; plain names would read better | QA8 L2 | 2026-10-28 |
@@ -129,6 +128,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I24 | Add a step before this on a step of an action: a plain step, not a dot with a hidden name | #563 |
 | I23 | Opening a slow function (Countdown's solutions) no longer holds the page: values on the wires nobody gave stop after 300 ms and say so | #562 |
 | E157 | Named bindings draw as let and get nodes by default; Show as wires opts out (layout.wired), unnamed dots stay dots | #546 |
 | E156 | A drop on a literal replaces it (Undo brings it back), and a loose part wired in stays drawn where it was | #545 |
