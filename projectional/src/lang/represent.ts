@@ -142,7 +142,9 @@ export function jobProblem(info: Info, rep: Representation, names: Record<Id, st
 // The program from `entries`, with T's jobs done by `rep`. Node ids are kept
 // where a node is replaced (a match becomes a call to the representation's
 // match), so names and comments stay attached.
-export function represent(code: Code, entries: Id[], rep: Representation): Code {
+// `keep`: definitions written on T that it reaches but leaves as they are
+// (library-reps.ts's meanings of a value with a stored one inside).
+export function represent(code: Code, entries: Id[], rep: Representation, keep: Id[] = []): Code {
   // The definition itself; a representation by the same type changes the
   // jobs (Float32 rounds each one).
   if (rep.type === rep.of && !Object.keys(rep.impl).length && !rep.literal) return code;
@@ -159,7 +161,7 @@ export function represent(code: Code, entries: Id[], rep: Representation): Code 
 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
-  const own = new Set<Id>();
+  const own = new Set<Id>(keep);
   for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : [])]) {
     own.add(d);
     for (const x of dependencies(code, d)) own.add(x);

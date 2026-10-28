@@ -98,8 +98,10 @@ its meaning. The trees are library data since C51: the trees module
 for Set, and publishes their rows in `LIBRARY.reps`, each with `byType`, the
 equal, show and compare that go through its meaning. Since C48 the chooser
 offers every such row, so a Set gets its tree as a Map does. A map or set
-inside another value, or given to a generic definition, still keeps the
-definition (C52, C53). The trees module isn't part of the library every
+inside another value takes the tree too (C52): equal, show and compare on
+that value, and main's answer, are given it with each tree as its meaning.
+One given to a generic definition (C53), or among a map's keys or a set's
+items, keeps the definition. The trees module isn't part of the library every
 program is checked on, only merged in when a tree is chosen (C53): checking
 it is about 700 ms, and the editor checks after every edit. Before that, representations were applied
 only by `lab run` and `lab compile` with a representations.json (#97). A

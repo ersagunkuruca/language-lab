@@ -118,10 +118,59 @@ test("a set given to a generic helper keeps the definition", () => {
   assert.deepEqual(printed(c.code, c.names, main), ["true", 'set of(["a", "b"])']);
 });
 
-test("a program with a map inside another value keeps the definition", () => {
-  const p = program(30, true);
+// C52: a map inside another value takes the tree too; what shows,
+// compares or answers it sees the entries.
+test("a list of maps, a map of maps and main's answer get the tree, and print what the definition prints", () => {
+  const p = program(300, true);
   const info = infer(p.code, p.names, undefined, checkOptions);
-  assert.deepEqual(withLibraryRepresentations(p.code, info, p.names, p.main, p.own).chosen, []);
+  const c = withLibraryRepresentations(p.code, info, p.names, p.main, p.own);
+  assert.deepEqual(c.chosen, ["Map as weight-balanced tree"]);
+  const plain = printed(p.code, p.names, p.main);
+  assert.deepEqual(printed(c.code, c.names, p.main, c.insiders), plain);
+  assert.match(plain.at(-1)!, /^\[map of\(\[pair\("a", 1\)/);
+
+  const k = new Lang(LIBRARY.code);
+  const put = (m: Id, key: string, v: Id) => k.call(L("put"), m, k.lit(key), v);
+  // The same entries put in two orders: trees of two shapes.
+  const small = (first: boolean) => first ? put(put(k.x(L("empty map")), "a", k.lit(1)), "b", k.lit(2)) : put(put(k.x(L("empty map")), "b", k.lit(2)), "a", k.lit(1));
+  const nested = k.def("nested"), other = k.def("other");
+  k.define(nested, put(put(k.x(L("empty map")), "x", small(true)), "y", small(false)));
+  k.define(other, put(put(k.x(L("empty map")), "y", small(true)), "x", small(false)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.call(SHOW_ANY, k.x(nested))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(S.equal, k.x(nested), k.x(other)))),
+    k.call(PAIR_V, k.x(nested), k.lit(1)),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const i2 = infer(code, names, undefined, checkOptions);
+  const c2 = withLibraryRepresentations(code, i2, names, main, [nested, other, main]);
+  assert.deepEqual(c2.chosen, ["Map as weight-balanced tree"]);
+  const answer = (cd: typeof code, nm: Record<Id, string>, ins: Id[]) => {
+    const info = infer(cd, nm, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...ins] });
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const lines: string[] = [];
+    const v = runMain(cd, info, main, { print: (x) => lines.push(x), names: nm });
+    return { lines, v };
+  };
+  const a = answer(code, names, []), b = answer(c2.code, c2.names, c2.insiders);
+  assert.deepEqual(b.lines, a.lines);
+  assert.equal(a.lines[1], "true");
+  assert.deepEqual(b.v, a.v);
+});
+
+test("a set of sets keeps the definition: the tree would order its items by their shapes", () => {
+  const k = new Lang(LIBRARY.code);
+  const seen = k.def("seen");
+  k.define(seen, k.fold(k.call(S.range, k.lit(300)), [
+    { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "s"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(L("add item"), k.x(L("empty set")), i)) },
+  ]));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(L("set size"), k.x(seen))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(withLibraryRepresentations(code, info, names, main, [seen, main]).chosen, []);
 });
 
 test("a representations.json row for Map wins", () => {
