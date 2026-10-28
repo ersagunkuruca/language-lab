@@ -1052,3 +1052,25 @@ test("the pedal's block function writes into an array, and gives the same sample
   const again = (await import(pathToFileURL(file).href + "?2")).defs.pedal() as (l: unknown) => unknown;
   assert.deepEqual($arrayOf(play, $toList(block)), $fromList(again($toList(block))));
 });
+
+// C30: a list made by a definition with an `$into` copy, handed to one
+// that only takes lists apart, arrives as an array and an index (the
+// pedal's compressor samples, walked by its loudness match).
+test("a list a definition writes into an array is walked by index where it's only taken apart, with the same answer", async () => {
+  const k = new Lang();
+  const scaled = k.def("scaled"), total = k.def("total"), main = k.def("main");
+  k.define(scaled, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(B.mul, x, k.lit(2)), k.call(scaled, rest)) },
+  ])));
+  k.define(total, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(B.add, x, k.call(total, rest)) },
+  ])));
+  k.define(main, k.fn(["xs"], (xs) => k.call(total, k.call(scaled, xs))));
+  const { code, info, source, defs } = await compiledDefs(k, ["main"], "into-view.js");
+  assert.match(source, /\$intoArray\(scaled\$into/);
+  const xs = [0.5, 1.25, -3, 8];
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.equal(defs.main(toList(xs)), [...r.call(r.value(main), toList(xs))][0]);
+});

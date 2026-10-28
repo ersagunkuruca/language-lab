@@ -1039,14 +1039,18 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const v = viewArg(a)!;
       return `${v.a}, ${v.i}`;
     }
-    // The array and index a list argument is: a view binder, or `split` and
-    // `characters`, whose arrays are made here.
+    // The array and index a list argument is: a view binder, `split` and
+    // `characters`, whose arrays are made here, or a call of a definition
+    // with an `$into` copy, which writes its list into a new one (P4: the
+    // compressor's samples, walked by the loudness match).
     function viewArg(id: Id): { a: string; i: string } | null {
       const n = code.nodes[id];
       if (n.kind === "ref") return views.get(n.target) ?? null;
       if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
-      return f === TEXT_OPS.split || f === TEXT_OPS.characters ? { a: arraySource(id)!.js, i: "0" } : null;
+      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { a: arraySource(id)!.js, i: "0" };
+      const t = code.nodes[f]?.kind === "def" ? intoCallee(n, { rec: null, k: 0 }) : null;
+      return t ? { a: `$intoArray(${[t.name, ...argsOf(n, t)].join(", ")})`, i: "0" } : null;
     }
     // A copy's parameters as JS names: a view is two.
     const paramNames = (s: Spec) => node<"lambda">(node<"def">(s.def).body!).params.flatMap((p) => (s.arr.get(p) === "view" ? [local(p), `${local(p)}$i`] : [local(p)]));
@@ -2486,7 +2490,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(reflected(code))}, ${JSON.stringify([...info.divergent])});`] : [];
