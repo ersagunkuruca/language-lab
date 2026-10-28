@@ -75,6 +75,8 @@ export const TARGETS: Record<Id, Target> = {
   // Searches and their handlers: loops, or closures for the rest.
   [S.oneOf]: { js: written("searches: a loop over the choices, or `$oneOf` as a value"), scalar: no("chooses among several: a shader has one answer per pixel (WebAssembly takes it)") },
   [S.fail]: { js: written("searches: no answer here"), scalar: CHOOSES },
+  // Replaced by a way before compiling (arith.ts, WAYS.md).
+  [S.byItsWays]: { js: written("an implementation's field, replaced by one of its ways before compiling"), scalar: no("is replaced by one of its ways before compiling") },
   [S.all]: { js: written("handlerEx(): a loop collecting the answers"), scalar: CHOOSES },
   [S.count]: { js: written("handlerEx(): a loop counting the answers"), scalar: CHOOSES },
   [S.optional]: { js: written("handlerEx(): the first answer as some, or none"), scalar: CHOOSES },

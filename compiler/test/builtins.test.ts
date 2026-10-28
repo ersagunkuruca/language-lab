@@ -28,7 +28,10 @@ import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain
 // f(x, …) = builtin(x, …) can't use them; their own tests cover them.
-const IN_PLACE: Record<Id, string> = { [SET]: "set takes the field it sets written in place (test/records.test.ts)" };
+const IN_PLACE: Record<Id, string> = {
+  [SET]: "set takes the field it sets written in place (test/records.test.ts)",
+  [S.byItsWays]: "by its ways only fills an implementation's field, and a way replaces it before anything runs (projectional/test/ways.test.ts)",
+};
 
 // f(x0, …) = builtin(x0, …), checked.
 function calling(id: Id) {

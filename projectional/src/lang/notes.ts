@@ -128,6 +128,7 @@ export const NOTES: Comments = {
   // --- searching: Choice
   "builtin.oneOf": "Any item of the list: a Choice with one answer per item. all, first or count decide what to do with them.",
   "builtin.fail": "No answer. In a search it drops this path.",
+  "builtin.byItsWays": "In an implementation, a field left to the interface's ways: the compiler puts in the cheapest way that ends in a field the implementation gives. Trig at your type can give sin and leave cos by its ways, or the other way round (WAYS.md).",
   "builtin.all": "Every answer a search gives, as a list. The search's Choice ends here.",
   "builtin.count": "How many answers a search gives.",
   "builtin.first": "The first answer a search gives, or the default when it gives none.",

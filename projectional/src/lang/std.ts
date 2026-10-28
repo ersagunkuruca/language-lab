@@ -348,6 +348,10 @@ export const S = {
   hence: builtin("hence", "hence", pure([bool, bool], bool)),
   exists: builtin("exists", "for some", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([a], bool, e)], bool, e); }),
   fail: builtin("fail", "fail", (s) => fn([], s.fresh(), s.freshRow([CHOICE]))),
+  // An implementation's field left to the interface's ways (WAYS.md, L96):
+  // arith.ts puts the cheapest way that ends in given code in its place,
+  // so nothing ever runs this.
+  byItsWays: builtin("byItsWays", "by its ways", (s) => s.fresh()),
   // A function's derivative, read off its graph (src/lang/derive.ts). Where
   // the slope can't be read (the function goes through floor, or takes
   // apart data built from its input) there is none, so the derivative may

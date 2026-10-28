@@ -163,6 +163,7 @@ export function pointsAt(n: Node): Id[] {
   if (n.kind === "solve") out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out")));
   if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);
+  if (n.kind === "def" && n.way) out.push(n.way);
   return out;
 }
 

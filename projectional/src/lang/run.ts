@@ -267,7 +267,7 @@ export class Aborted extends Error {
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The generic + resolved to each type's own (arith.ts); a program
   // without one is unchanged.
-  ({ code, info } = resolveArithmetic(code, info));
+  ({ code, info } = resolveArithmetic(code, info, rt.names ?? {}));
   // Our own copy of the node table: `derivative` writes new code into it.
   code = { nodes: { ...code.nodes }, defs: code.defs };
   const defs = new Map<Id, Value>();
