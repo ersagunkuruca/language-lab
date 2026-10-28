@@ -700,6 +700,13 @@ async function shaderOpens() {
     const tabs = (await p.locator("[data-tab]").allInnerTexts()).map((t) => t.trim());
     if (!tabs.includes("colour")) errors.push(`${where}: ${prog} opens on ${tabs.join(", ")}`);
   }
+  // A helper starts with what the picture's colour first gives it at its
+  // pixel (QA8 L4): the ray marcher's sphere.
+  where = "a shader helper's starting values";
+  await p.locator('[data-set="program"]', { hasText: "Shader: ray marching" }).first().click();
+  await p.locator(".p-nav .nav-row[data-def]", { hasText: /^sphere$/ }).first().click();
+  const vals = await p.locator(".port-row.known input[type=text]").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
+  if (!vals.length || vals.some((v) => !v)) errors.push(`${where}: sphere opens with ${JSON.stringify(vals)}`);
   await p.close();
 }
 
