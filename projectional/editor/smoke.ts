@@ -563,6 +563,12 @@ async function stepOrder() {
   if ((await first()) === was) errors.push(`${where}: Do it earlier on step 2 left ${was} first`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await first()) !== was) errors.push(`${where}: one Undo doesn't put the order back`);
+  // A step goes before a step as a plain step, with no name (QA8 M1).
+  const pr = p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").first(), pb = (await pr.boundingBox())!;
+  await pr.dispatchEvent("contextmenu", { clientX: pb.x + 5, clientY: pb.y + 5 });
+  await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: a print's menu has no Add a step before this`));
+  const lines = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
+  if (!lines[2]?.startsWith("□") || lines.some((l) => l.includes("‹•"))) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
   await p.close();
 }
 

@@ -1113,6 +1113,25 @@ export function addStep(code: Code, names: Names, info: Info, defId: Id, before?
   return r.ok ? { ...r, dot } : r;
 }
 
+// An action's steps are a chain of lets (toplevel.ts, step order): a new
+// step just before `step` is one more let, of a hole whose value nobody
+// names, around the let `step` is the value of, or around the last step.
+export function addActionStep(code: Code, names: Names, info: Info, step: Id): TEdit {
+  const one = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "lambda" && n.params.length === 1; };
+  const at = parentOf(code, step), p = at ? code.nodes[at.parent] : undefined;
+  const x = at?.slot === "args" && p?.kind === "call" && p.args.length === 1 && one(p.fn) ? p.id
+    : at?.slot === "body" && one(at.parent) && Object.values(code.nodes).some((c) => c.kind === "call" && c.fn === at.parent && c.args.length === 1) ? step
+    : null;
+  if (!x) return { ok: false, reason: "it isn't a step of an action" };
+  const b = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
+  const next = swapIn(code, x, let_);
+  next.nodes[b] = { id: b, kind: "binder" };
+  next.nodes[hole] = { id: hole, kind: "hole" };
+  next.nodes[lam] = { id: lam, kind: "lambda", params: [b], body: x };
+  next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [hole] };
+  return guardTyped(info, next, { ...names, [b]: "_" }, hole, "Added a step before it: fill the hole with what to do there.");
+}
+
 // The reverse: a dot with one wire out goes back to being a plain wire.
 export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id): TEdit {
   const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));

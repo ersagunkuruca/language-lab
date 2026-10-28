@@ -2131,7 +2131,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
-    if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", r.ok ? undefined : r.reason)); }
+    // A step of an action gets a step before it, not a value (QA8 M1).
+    if (kind === "node" && stepRows(id).length) { const r = T.addActionStep(doc.code, doc.names.short, info, stepAt(id)); rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", r.ok ? undefined : r.reason)); }
+    else if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", r.ok ? undefined : r.reason)); }
     // Its place in a list, or among a + b + c's inputs.
     const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
     if (inRow) {
@@ -2237,6 +2239,11 @@ function menuAction(act: string, target: Id | undefined) {
     case "inline": return toggleInline(target!);
     case "dot": return void applyT(T.addDot(doc.code, doc.names.short, info, ui.def, target!));
     case "clear": return void applyT(T.toHole(doc.code, doc.names.short, info, target!));
+    case "step-before": {
+      const r = T.addActionStep(doc.code, doc.names.short, info, stepAt(target!));
+      if (!applyT(r) || !r.ok || !m) return;
+      return paletteFor(r.select!, m);
+    }
     case "step-earlier": case "step-later": return runTop(info, Top.moveStep(doc.code, doc.names.short, stepAt(target!), act === "step-earlier" ? -1 : 1));
     case "simplify": return void applyT(T.simplify(doc.code, doc.names.short, info, target!) ?? { ok: false, reason: "nothing to simplify" });
     case "delete": return void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, target!));
