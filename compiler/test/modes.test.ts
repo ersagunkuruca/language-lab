@@ -132,3 +132,39 @@ test("a split written as lifting steps runs backwards as arithmetic, with the ev
   }
   assert.deepEqual([...(defs.split($toList([1, 2, 3])) as Iterable<unknown>)], []);
 });
+
+// C30: a mode whose unknown is a list built front to back (Haar's join run
+// backwards, in the pedal) pushes it onto an array, and a definition that
+// only takes the list apart walks that array. The same answers as the
+// evaluator.
+test("a list a written-out mode builds is pushed onto an array where it's only taken apart", async () => {
+  const k = new Lang();
+  const pairs = k.def("pairs"), total = k.def("total");
+  k.define(pairs, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["a", "rest"], body: ([a, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => k.call(S.fail) },
+      { variant: CONS, names: ["b", "more"], body: ([b, more]) => k.call(CONS, k.call(PAIR_V, a, k.call(B.sub, a, b)), k.call(pairs, more)) },
+    ]) },
+  ])));
+  k.define(total, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(B.add, x, k.call(total, rest)) },
+  ])));
+  const [xs] = paramsOf(k, pairs);
+  k.define(k.def("samples total"), k.fn(["ps"], (ps) => k.call(total,
+    k.call(S.first, k.thunk(() => k.solve(pairs, { out: ps }, { [xs]: "xs" }, ({ [xs]: v }) => v)), k.thunk(() => k.list(k.lit(-1)))))));
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const source = compile(code, info, names, { runtime, exports: ["samples total"] });
+  assert.match(source, /function pairs\$mode\d+\$into\(/);
+  assert.match(source, /total\$arr\(/);
+  writeFileSync(join(dir, "modes-into.js"), source);
+  const defs = (await import(pathToFileURL(join(dir, "modes-into.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {} });
+  const main = Object.keys(names).find((d) => names[d] === "samples total" && code.nodes[d]?.kind === "def")!;
+  const pair = (a: number, b: number) => [...r.call(r.value(PAIR_V), a, b)][0];
+  for (const ps of [[], [pair(3, 1), pair(5, 7)]]) assert.equal(defs["samples total"](toList(ps)), [...r.call(r.value(main), toList(ps))][0]);
+});

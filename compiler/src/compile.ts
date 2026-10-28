@@ -904,15 +904,20 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Solves with at most one answer: they also have `name$one`, which gives
   // the binds (one bind as itself) or $no (GAPS.md P2).
   const onceSolvers = new Set<Id>();
+  // Of those, the ones whose one bind is a list a written-out mode pushes
+  // onto an array: `name$into(d, given…)` (modes.ts).
+  const intoSolvers = new Set<Id>();
   const solverCode: string[] = [];
   function solver(n: NodeOf<"solve">): string {
     if (!solvers.has(n.id)) {
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
       const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
-      if (relational(n) && modes.solver(n, name, modeEmit(true))) {
+      const bound = Object.values(n.binds);
+      if (relational(n) && modes.solver(n, name, modeEmit(true), bound.length === 1 && isList(ty(bound[0])))) {
         solverCode.push(...modes.code.splice(0));
         onceSolvers.add(n.id);
+        if (modes.intoSolvers.has(name)) intoSolvers.add(n.id);
         return name;
       }
       if (relational(n)) {
@@ -1049,8 +1054,29 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
       if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { a: arraySource(id)!.js, i: "0" };
+      if (f === S.first) { const a = firstArray(n); return a ? { a, i: "0" } : null; }
       const t = code.nodes[f]?.kind === "def" ? intoCallee(n, { rec: null, k: 0 }) : null;
       return t ? { a: `$intoArray(${[t.name, ...argsOf(n, t)].join(", ")})`, i: "0" } : null;
+    }
+    // `first` whose answer is a solve's one bind, a list its mode can push
+    // onto an array (the pedal's join run backwards, in `conjugate`): the
+    // search runs as it does as a value, with the solve writing into an
+    // array of its own, and the other way's list copied into one.
+    let arrayAt: { solve: Id; d: string } | null = null;
+    function firstArray(n: NodeOf<"call">): string | null {
+      const body = thunk(n.args[0]), g = thunk(n.args[1]);
+      if (reflective || !body || !g) return null;
+      const tails = tailsOf(body.body), sv = code.nodes[tails[0]];
+      if (tails.length !== 1 || sv.kind !== "solve") return null;
+      const bound = Object.values(sv.binds);
+      if (bound.length !== 1 || refTarget(sv.body) !== bound[0] || !relational(sv) || (solver(sv), !intoSolvers.has(sv.id))) return null;
+      const d = temp("a"), got = temp("got"), was = arrayAt;
+      arrayAt = { solve: sv.id, d };
+      const search = scoped(true, () => st(body.body, (v) => `${got} = ${v};\nreturn true;`));
+      arrayAt = was;
+      const other = viewArg(g.body);
+      const rest = other && other.i === "0" ? other.a : `$listArrays.from(${ex(g.body)})`;
+      return `(() => {\nconst ${d} = [];\nlet ${got} = $no;\n(() => {\n${search}\n})();\nif (${got} !== $no) return ${got};\nreturn ${rest};\n})()`;
     }
     // A copy's parameters as JS names: a view is two.
     const paramNames = (s: Spec) => node<"lambda">(node<"def">(s.def).body!).params.flatMap((p) => (s.arr.get(p) === "view" ? [local(p), `${local(p)}$i`] : [local(p)]));
@@ -2178,6 +2204,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
             const f = solver(n);
             const bound = Object.values(n.binds);
+            if (arrayAt?.solve === n.id) { const { d } = arrayAt; return `${d}.length = 0;\nif (${f}$into(${[d, ...vals].join(", ")})) {\nconst ${local(bound[0])} = ${d};\n${st(n.body, k)}\n}`; }
             if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(n.body, k)}\n}`;
             if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
             return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;

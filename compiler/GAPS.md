@@ -1022,6 +1022,15 @@ pedal this is the block on the Choice path. Best of six: 0.037 to 0.031 ms
 a block, about 16%, with the same samples. Next: the search (the split,
 `driven_lows`' map and the join) on arrays.
 
+**C30, step 2** (2026-10-28): a mode written out (modes.ts) whose one
+unknown is a list built front to back has an `$into` copy too. It pushes
+the items, and a call of itself where nothing else would be tried is a
+jump. `first` whose answer is such a solve's bind, handed to a definition
+that only takes it apart, comes as an array (`firstArray`). In the pedal
+this is Haar's join run backwards, walked by the compressor. Best of six:
+0.0305 to 0.0271 ms a block, about 11%, with the same samples. Next: the
+split and `driven_lows`' map on arrays.
+
 **Where round 4 stops** (2026-10-24): 2.9× the hand-written pedal, from 6×.
 The rest is open (BACKLOG C30). Measured on hand edits of the compiled
 pedal:
