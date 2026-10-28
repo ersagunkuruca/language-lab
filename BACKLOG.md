@@ -18,6 +18,13 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I23 | **Bug.** Opening Countdown's `solutions` freezes the page about 20 s: since #507 the Run's starting values from `main` run Hutton's search on the page's thread. Run them in the worker, or bound them | QA8 H1 | 2026-10-28 |
+| I24 | In an action, Add a value before this makes `‹•1› = print(…)`, a hidden-name dot drawn over the step above; offer Add a step before this | QA8 M1 | 2026-10-28 |
+| I25 | Replace with… empties the part at once and Escape keeps the hole; Escape could cancel until something is picked | QA8 M2 | 2026-10-28 |
+| I26 | Search by meaning: "square root" doesn't find `sqrt` on a Float64 hole, "absolute value" finds nothing | QA8 L1 | 2026-10-28 |
+| I27 | Make it a function names the function `part` and its inputs `speed₂`, `time₂`; plain names would read better | QA8 L2 | 2026-10-28 |
+| I28 | An implementation reads `‹size at float64›` (lowercased type, quoted), "each of its 1 operation", and the interface is marked ▤ like a data type | QA8 L3 | 2026-10-28 |
+| I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts) | QA8 L4 | 2026-10-28 |
 
 ## E: Editor
 
