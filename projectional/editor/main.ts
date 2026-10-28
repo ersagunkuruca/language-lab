@@ -2145,7 +2145,10 @@ function graphMenu(info: T.Info): HTMLElement | null {
     }
     if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
-    if (wrappable(id)) rows.push(item("Wrap in…", "wrap", "Put it inside a call or a function from the palette: it becomes one of its inputs"));
+    // In the graph a wrap is a node put on the wire out of this one; in the
+    // text it reads as wrapping (Ersagun 2026-10-28).
+    if (wrappable(id)) rows.push(inGraph ? item("Insert a node after it…", "wrap", "A call from the palette goes on the wire out of this node: this feeds one of its inputs, and it gives on what this gave")
+      : item("Wrap in…", "wrap", "Put it inside a call or a function from the palette: it becomes one of its inputs"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];

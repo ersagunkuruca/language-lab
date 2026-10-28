@@ -128,6 +128,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| E158 | In the graph's menu Wrap in… reads Insert a node after it…; the text keeps Wrap in… | #564 |
 | I24 | Add a step before this on a step of an action: a plain step, not a dot with a hidden name | #563 |
 | I23 | Opening a slow function (Countdown's solutions) no longer holds the page: values on the wires nobody gave stop after 300 ms and say so | #562 |
 | E157 | Named bindings draw as let and get nodes by default; Show as wires opts out (layout.wired), unnamed dots stay dots | #546 |
