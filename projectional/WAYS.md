@@ -156,7 +156,17 @@ That is not enough where bits matter:
    Knuth's search in arith.ts with costs all 1. Start with Ordered and a
    new Equality (`less` from `at most`, and the circular `equal` and
    `differ`). Show it evaluated and compiled, with the "nothing grounds"
-   error.
+   error. **Built (L96a)**, with Trig instead: Ordered has one field and
+   `=` is the language's own on all plain data, so the first cycle is
+   the prelude's `cos by sin` (sin(x + π/2)) and `sin by cos`. A def node
+   has an optional `way` naming its field, `by its ways` is a builtin
+   that fills a field, and arith.ts runs Knuth's search per
+   implementation, each field given costing 1 and each way 1 plus what
+   it uses. A Trig of the program's own that gives only sin or only cos
+   gets the other; one that gives neither is refused with "leaves cos to
+   its ways, and none of them ends in a field it gives" when it is
+   resolved. Reporting that in the checker instead is a later step
+   (test/ways.test.ts).
 2. **Costs.** Declared costs on ways and per-target constants on
    builtins. A test where JS and C pick differently for Float64 and
    agree, and where Fixed picks once.

@@ -6677,6 +6677,116 @@
           "@lpgbkpl5cvmfold4ma5a9k9on4:17"
         ]
       },
+      "@3ct4tl3o5p917l9j77mqp3ch6h": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h",
+        "kind": "def",
+        "body": "@3ct4tl3o5p917l9j77mqp3ch6h:1",
+        "way": "std.trig.trig.cos"
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:2": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:2",
+        "kind": "binder"
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:8": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:8",
+        "kind": "lit",
+        "value": 1.5707963267948966
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:6": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:6",
+        "kind": "ref",
+        "target": "builtin.arith.add"
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:7": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:7",
+        "kind": "ref",
+        "target": "@3ct4tl3o5p917l9j77mqp3ch6h:2"
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:5": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:5",
+        "kind": "call",
+        "fn": "@3ct4tl3o5p917l9j77mqp3ch6h:6",
+        "args": [
+          "@3ct4tl3o5p917l9j77mqp3ch6h:7",
+          "@3ct4tl3o5p917l9j77mqp3ch6h:8"
+        ]
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:4": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:4",
+        "kind": "ref",
+        "target": "std.trig.trig.sin"
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:3": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:3",
+        "kind": "call",
+        "fn": "@3ct4tl3o5p917l9j77mqp3ch6h:4",
+        "args": [
+          "@3ct4tl3o5p917l9j77mqp3ch6h:5"
+        ]
+      },
+      "@3ct4tl3o5p917l9j77mqp3ch6h:1": {
+        "id": "@3ct4tl3o5p917l9j77mqp3ch6h:1",
+        "kind": "lambda",
+        "params": [
+          "@3ct4tl3o5p917l9j77mqp3ch6h:2"
+        ],
+        "body": "@3ct4tl3o5p917l9j77mqp3ch6h:3"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055",
+        "kind": "def",
+        "body": "@fksvs1dk0tn7domfbk2i0d6055:1",
+        "way": "std.trig.trig.sin"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:2": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:2",
+        "kind": "binder"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:8": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:8",
+        "kind": "lit",
+        "value": 1.5707963267948966
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:6": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:6",
+        "kind": "ref",
+        "target": "builtin.arith.sub"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:7": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:7",
+        "kind": "ref",
+        "target": "@fksvs1dk0tn7domfbk2i0d6055:2"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:5": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:5",
+        "kind": "call",
+        "fn": "@fksvs1dk0tn7domfbk2i0d6055:6",
+        "args": [
+          "@fksvs1dk0tn7domfbk2i0d6055:7",
+          "@fksvs1dk0tn7domfbk2i0d6055:8"
+        ]
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:4": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:4",
+        "kind": "ref",
+        "target": "std.trig.trig.cos"
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:3": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:3",
+        "kind": "call",
+        "fn": "@fksvs1dk0tn7domfbk2i0d6055:4",
+        "args": [
+          "@fksvs1dk0tn7domfbk2i0d6055:5"
+        ]
+      },
+      "@fksvs1dk0tn7domfbk2i0d6055:1": {
+        "id": "@fksvs1dk0tn7domfbk2i0d6055:1",
+        "kind": "lambda",
+        "params": [
+          "@fksvs1dk0tn7domfbk2i0d6055:2"
+        ],
+        "body": "@fksvs1dk0tn7domfbk2i0d6055:3"
+      },
       "@dfoj8ob4ospo06alm3ihlr8u3i": {
         "id": "@dfoj8ob4ospo06alm3ihlr8u3i",
         "kind": "def",
@@ -28532,7 +28642,9 @@
       "@10nkouhf5qp7o329391lr962af",
       "@r817bcd8tfqbdoqvksd0cruit9",
       "@0cblfvog1n4sgre0jo6ikbra07",
-      "@0an1seuub5u5uot51jfl4d1eo1"
+      "@0an1seuub5u5uot51jfl4d1eo1",
+      "@3ct4tl3o5p917l9j77mqp3ch6h",
+      "@fksvs1dk0tn7domfbk2i0d6055"
     ]
   },
   "pins": {
@@ -34224,6 +34336,80 @@
         ]
       },
       "plain": []
+    },
+    "@3ct4tl3o5p917l9j77mqp3ch6h": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ],
+      "needs": [
+        [
+          0,
+          "std.trig"
+        ]
+      ]
+    },
+    "@fksvs1dk0tn7domfbk2i0d6055": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ],
+      "needs": [
+        [
+          0,
+          "std.trig"
+        ]
+      ]
     }
   },
   "names": {
@@ -34472,6 +34658,10 @@
     "@ilortmfvkbjt9bs8q02goksirf:26": "weight",
     "@ilortmfvkbjt9bs8q02goksirf:33": "part",
     "@lpgbkpl5cvmfold4ma5a9k9on4": "complex table",
+    "@3ct4tl3o5p917l9j77mqp3ch6h": "cos by sin",
+    "@3ct4tl3o5p917l9j77mqp3ch6h:2": "x",
+    "@fksvs1dk0tn7domfbk2i0d6055": "sin by cos",
+    "@fksvs1dk0tn7domfbk2i0d6055:2": "x",
     "@dfoj8ob4ospo06alm3ihlr8u3i": "trig at float64",
     "@5ph2d9mlvfoo0ihvgkkg1fjdci": "add duals",
     "@5ph2d9mlvfoo0ihvgkkg1fjdci:2": "x",

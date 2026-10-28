@@ -20,7 +20,9 @@ export type Node =
   | { id: Id; kind: "lambda"; params: Id[]; body: Id }
   // A top-level definition. body === null declares an extern (an opaque value
   // or function we can talk about but not look inside).
-  | { id: Id; kind: "def"; body: Id | null }
+  // `way`: this definition is one way to compute that interface field
+  // (WAYS.md), used for an implementation that leaves it `by its ways`.
+  | { id: Id; kind: "def"; body: Id | null; way?: Id }
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.

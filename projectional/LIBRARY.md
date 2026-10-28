@@ -15,6 +15,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **less than** : `(a, a) -> Bool`. a < b, at any Number with < (not Complex).
 - **Arithmetic** (type). An interface: the one + − · and −x, for any type that implements them. Float64, Int, Rational, Complex, Dual and Algebraic implement it in the prelude; a type of your own joins with a definition of type Arithmetic T, written arithmetic(its +, its −, its ·, its −x). A record of numbers without one gets them part by part. Resolved before the program runs, so it costs nothing (INTERFACES.md).
 - **Ordered** (type). An interface: the one <, for any type that implements it. The prelude's at most, smaller, sort and the rest then work on that type too. A type of your own joins with a definition of type Ordered T, written ordered(its <).
+- **by its ways** : `a`. In an implementation, a field left to the interface's ways: the compiler puts in the cheapest way that ends in a field the implementation gives. Trig at your type can give sin and leave cos by its ways, or the other way round (WAYS.md).
 - **at most** : `(a, a) -> Bool`. a ≤ b: not b < a.
 - **more than** : `(a, a) -> Bool`. a > b: b < a.
 - **at least** : `(a, a) -> Bool`. a ≥ b: not a < b.
