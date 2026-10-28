@@ -1432,6 +1432,9 @@ const ALSO: Record<string, string[]> = {
   "remove item": ["delete", "erase"], "items of": ["elements", "to list"], smaller: ["min", "minimum"], larger: ["max", "maximum"],
   show: ["to string", "tostring", "format", "string of"], print: ["log", "output", "write", "echo", "console"], attempt: ["try", "catch"],
   sort: ["order"], sum: ["total", "add up"], "empty map": ["new map", "dictionary", "dict", "hash"], "empty set": ["new set"],
+  sqrt: ["square root", "root"], "square root": ["sqrt", "root"], abs: ["absolute value", "magnitude", "modulus"], floor: ["round down"],
+  log: ["ln", "natural log", "logarithm"], exp: ["exponential", "e to the"], sin: ["sine"], cos: ["cosine"], tan: ["tangent"],
+  power: ["pow", "exponent", "raise to"], mod: ["remainder", "modulo"], negate: ["minus", "opposite"],
 };
 
 // A new hole's palette: the side panel's when it shows, not a pop-up over
@@ -1524,7 +1527,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const symbol = (l: [string, string, string]) => SYMBOLS[l[0].replace(/\(.*$/, "")]?.includes(q) ?? false;
   const also = (l: [string, string, string]) => (q.length > 1 ? ALSO[l[0].replace(/\(.*$/, "")]?.find((w) => w.startsWith(q)) : undefined);
   const note = (f: T.Filling) => (q.length > 2 && (f.kind === "call" || f.kind === "ref") ? doc.comments[f.target] ?? LIBRARY.comments[f.target] ?? "" : "");
-  const inNote = (f: T.Filling) => note(f).toLowerCase().split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q));
+  const inNote = (f: T.Filling) => { const n = note(f).toLowerCase(); return q.includes(" ") ? n.includes(q) : n.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)); };
   const rank = (x: (typeof all)[number]) => {
     const name = x.l[0].toLowerCase();
     return name === q || name.startsWith(`${q}(`) || symbol(x.l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) || also(x.l) ? 2 : name.includes(q) ? 3 : x.l.some((s) => s.toLowerCase().includes(q)) ? 4 : 5;
