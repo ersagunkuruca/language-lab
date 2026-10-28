@@ -30,7 +30,7 @@ test("implement for a type makes the record with a hole per operation, typed at 
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const def = r.code.defs.at(-1)!;
-  assert.equal(r.names[def], "trig at wave");
+  assert.equal(r.names[def], "trig at Wave");
   setProgramPins(r.pin!);
   const after = infer(r.code, { ...names, ...r.names });
   setProgramPins({});

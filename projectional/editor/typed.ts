@@ -1253,13 +1253,14 @@ export function implement(code: Code, names: Names, info: Info, iface: Id, type:
   const holes = ops.map(() => add({ kind: "hole" }));
   const def = add({ kind: "def", body: add({ kind: "call", fn: add({ kind: "ref", target: variant }), args: holes }) });
   const taken = new Set(Object.values(all));
-  let label = `${(all[iface] ?? "it").toLowerCase()} at ${at.toLowerCase()}`;
-  for (let k = 2; taken.has(label); k++) label = `${(all[iface] ?? "it").toLowerCase()} at ${at.toLowerCase()} ${k}`;
+  // The type keeps its own spelling: size at Float64 (QA8 L3).
+  let label = `${(all[iface] ?? "it").toLowerCase()} at ${at}`;
+  for (let k = 2; taken.has(label); k++) label = `${(all[iface] ?? "it").toLowerCase()} at ${at} ${k}`;
   const nn = { ...names, [def]: label };
   const r = guardTyped(info, { nodes, defs: [...code.defs, def] }, nn, holes[0] ?? def, "");
   if (!r.ok) return r;
   const pin: Pins = { [def]: { vars: [], rows: [], type: { t: "con", id: iface, args: [type] } } };
-  return { ...r, pin, note: `New definition ${label}: how ${at} does ${all[iface]}, one hole for each of its ${ops.length} operation${ops.length === 1 ? "" : "s"} (${ops.map((o) => all[o]).join(", ")}). Each palette offers what fits at ${at}.` };
+  return { ...r, pin, note: `New definition ${label}: how ${at} does ${all[iface]}, ${ops.length === 1 ? `one hole for its operation, ${all[ops[0]]}` : `one hole for each of its ${ops.length} operations (${ops.map((o) => all[o]).join(", ")})`}. Each palette offers what fits at ${at}.` };
 }
 
 // ---------------------------------------------------------------- rows
