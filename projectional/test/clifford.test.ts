@@ -76,3 +76,42 @@ test("clifford table: quaternions, complex, dual and Cl(3, 0), evaluated and com
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// Rotors (BACKLOG L43): R · v · R̃ turns v, and Cl(3, 0)'s even part is the
+// quaternions, with w + ii + jj + kk as w − i e₂₃ + j e₁₃ − k e₁₂.
+test("clifford reverse: rotors of Cl(3, 0) turn vectors and multiply as quaternions", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const M = k.type("Multivector", [], [["multivector", ["s", "e1", "e2", "e12", "e3", "e13", "e23", "e123"].map((p) => [p, num] as [string, () => Id])]]);
+  const of = (...ps: number[]) => k.call(M.v.multivector, ...ps.map((p) => k.lit(p)));
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const squares = () => k.list(...[1, 1, 1].map((x) => k.lit(x)));
+  const basis = def("cl3 basis", () => k.list(...Array.from({ length: 8 }, (_, i) => of(...Array.from({ length: 8 }, (_, j) => (j === i ? 1 : 0))))));
+  const table = def("cl3 table", () => k.call(lib("clifford table"), squares(), k.x(basis)));
+  const mul = (a: Id, b: Id) => k.call(lib("table product"), k.x(table), a, b);
+  const rev = (a: Id) => k.call(lib("clifford reverse"), squares(), k.x(basis), a);
+  const rotor = (t: number) => of(Math.cos(t / 2), 0, 0, -Math.sin(t / 2), 0, 0, 0, 0);
+  const quat = ([w, i, j, q]: number[]) => [w, 0, 0, -q, 0, j, -i, 0];
+  const names: string[] = [];
+  const show = (name: string, x: () => Id) => { names.push(name); def(name, () => k.call(SHOW_ANY, x())); };
+  show("the reverse", () => rev(of(1, 2, 3, 4, 5, 6, 7, 8)));
+  show("turn e1", () => mul(mul(rotor(Math.PI / 3), of(0, 1, 0, 0, 0, 0, 0, 0)), rev(rotor(Math.PI / 3))));
+  show("turn twice", () => mul(rotor(0.4), rotor(0.5)));
+  PAIRS.forEach(([a, b], i) => show(`q${i}`, () => mul(of(...quat(a)), of(...quat(b)))));
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const got = names.map((n) => r.value(at(n)));
+  const parts = (v: Value) => { const s = String(v); return s.slice(s.indexOf("(") + 1, -1).split(", ").map(Number); };
+  const near = (s: Value, want: number[]) => parts(s).forEach((x, i) => assert.ok(Math.abs(x - want[i]) < 1e-8, `${s} ≠ ${want}`));
+  near(got[0], [1, 2, 3, -4, 5, -6, -7, -8]);
+  near(got[1], [0, Math.cos(Math.PI / 3), Math.sin(Math.PI / 3), 0, 0, 0, 0, 0]);
+  near(got[2], [Math.cos(0.45), 0, 0, -Math.sin(0.45), 0, 0, 0, 0]);
+  PAIRS.forEach(([a, b], i) => near(got[3 + i], quat(hamilton(a, b))));
+  const path = join(mkdtempSync(join(tmpdir(), "rotor-")), "rotor.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});
