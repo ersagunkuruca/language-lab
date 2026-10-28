@@ -5,8 +5,8 @@
 // (inferred, not written: the type is a view too).
 //
 // Naming is scope-aware: two binders get a subscript only when both are
-// visible at the same point, since that's the only time they could be
-// confused on screen.
+// visible at the same point and the outer one is used there, since that's
+// the only time they could be confused on screen.
 //
 // One walk draws a definition as lines of pieces in indented groups
 // (blocksOf). The text prints them (renderBlocks), and the editor's Blocks
@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { resolveRefs, subtree } from "../model.ts";
+import { children, resolveRefs, subtree } from "../model.ts";
 import type { Notation, Presentation } from "../presentation.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
@@ -128,12 +128,17 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   const quote = (s: string) => (pres.style.quote && !plain.test(s) ? pres.style.quote[0] + s + pres.style.quote[1] : s);
   const shown = new Map<Id, string>();
   const inScope: Id[] = [];
+  const owner = new Map<Id, Id>();
+  for (const id of subtree(code, defId)) for (const c of children(code.nodes[id])) owner.set(c, id);
+  const usedUnder = (o: Id, id: Id) => { const at = owner.get(id); return !at || owner.get(o) === at || subtree(code, at).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && n.target === o; }); };
   const nameOf = (id: Id) => quote(shown.get(id) ?? base(id));
   const enter = (ids: Id[]) => {
     for (const id of ids) {
       if (!names[id]) given.set(id, paramName(info?.typeOf.get(id), names));
       const b = base(id);
-      const clash = inScope.filter((o) => base(o) === b).length;
+      // An outer one of the same name counts only if it's used where this
+      // one is bound: part = (speed, time) => … reads plainly (QA8 L2).
+      const clash = inScope.filter((o) => base(o) === b && usedUnder(o, id)).length;
       shown.set(id, clash ? b + String(clash + 1).split("").map((d) => SUB[+d]).join("") : b);
       inScope.push(id);
     }

@@ -24,8 +24,8 @@ test("a group of one value out becomes a function called in its place", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const text = renderLet(r.code, { ...p.pres, names: r.names }, fall);
-  assert.match(text, /part = \(gravity₂, time₂\) => 0\.5 · gravity₂ · time₂ · time₂/);
-  assert.match(text, /drop = part\(gravity₁, time₁\)/);
+  assert.match(text, /part = \(gravity, time\) => 0\.5 · gravity · time · time/);
+  assert.match(text, /drop = part\(gravity, time\)/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
 });
 
@@ -43,7 +43,7 @@ test("a group of several values out gives them back as a record", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const text = renderLet(r.code, { ...p.pres, names: r.names }, hsi);
-  assert.match(text, /part = \(saturation₂, hue₂\) => ‹part results›\(1 \+ 2 · saturation₂ · cos\(6\.283185307179586 · \(hue₂ − 0\)\), 1 \+ 2 · saturation₂ · cos\(6\.283185307179586 · \(hue₂ − 0\.3333333333333333\)\)\)/);
-  assert.match(text, /results = part\(saturation₁, hue₁\)\n\s+r₁ = r₂\(results\)\n\s+g₁ = g₂\(results\)/);
+  assert.match(text, /part = \(saturation, hue\) => ‹part results›\(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
+  assert.match(text, /results = part\(saturation, hue\)\n\s+r₁ = r₂\(results\)\n\s+g₁ = g₂\(results\)/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
 });
