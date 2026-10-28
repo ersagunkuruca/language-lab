@@ -305,6 +305,24 @@ export function buildPrelude(): Module {
       ]) },
     ]))));
 
+  // The reverse of x, x̃: each blade's vectors in the opposite order, which
+  // is (−1)^(g(g−1)/2) for a blade of g vectors, the blade's square when
+  // every vector squares to 1. A rotor R turns a vector v into R · v · R̃
+  // (BACKLOG L43): in Cl(3, 0) the rotors are the even part 1, e₁₂, e₁₃,
+  // e₂₃, which multiplies as the quaternions do (Hamilton, 1843; Clifford,
+  // 1878; Hestenes, New Foundations for Classical Mechanics, 1986).
+  const cliffordReverse = k.def("clifford reverse");
+  k.define(cliffordReverse, k.fn(["squares", "basis", "x"], (sq, es, x) => k.let("ones", k.fold(sq, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["square", "rest"], results: [null, "the rest's ones"], body: (_, [, r]) => k.call(CONS, k.lit(1), r!) },
+  ]), (ones) => k.fold(k.call(pairUp, k.call(bladesOf, sq), es), [
+    { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x) },
+    { variant: CONS, names: ["pair", "rest"], results: [null, "the rest reversed"], body: ([pr], [, r]) => k.match(pr, [
+      { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => k.let("weight", n.mul(k.call(bladeSign, ones, b, b), along(x, e)), (w) =>
+        k.call(S.zipParts, B.add, k.call(S.mapParts, k.fn(["part"], (y) => n.mul(w, y)), e), r!)) },
+    ]) },
+  ]))));
+
   // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
   // at a type is its Arithmetic's, found by the type. Not offered: + is.
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
@@ -504,7 +522,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, divD, slopeAt, dualTable, showD, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, divD, slopeAt, dualTable, showD, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
   const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -596,6 +614,7 @@ export function buildPrelude(): Module {
     [logD]: "log at Dual: log a + a′/a · ε. Not offered on its own: log is.",
     [trigD]: "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
+    [cliffordReverse]: "x̃, the reverse of x in the Clifford algebra clifford table(squares, basis) makes: each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",

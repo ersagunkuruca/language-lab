@@ -10767,6 +10767,469 @@
         ],
         "body": "@nqvtom4jb3r3c8hh82i9671fma:4"
       },
+      "@d812sil6aq3obnnaq5csim53uq": {
+        "id": "@d812sil6aq3obnnaq5csim53uq",
+        "kind": "def",
+        "body": "@d812sil6aq3obnnaq5csim53uq:1"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:2": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:2",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:3": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:3",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:4": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:4",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:62": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:62",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:2"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:64": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:64",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:63": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:63",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@d812sil6aq3obnnaq5csim53uq:64"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:66": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:66",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:67": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:67",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:68": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:68",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:71": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:71",
+        "kind": "lit",
+        "value": 1
+      },
+      "@d812sil6aq3obnnaq5csim53uq:70": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:70",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:72": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:72",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:68"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:69": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:69",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:70",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:71",
+          "@d812sil6aq3obnnaq5csim53uq:72"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:65": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:65",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@d812sil6aq3obnnaq5csim53uq:66",
+          "@d812sil6aq3obnnaq5csim53uq:67"
+        ],
+        "results": [
+          null,
+          "@d812sil6aq3obnnaq5csim53uq:68"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:69"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:61": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:61",
+        "kind": "fold",
+        "scrutinee": "@d812sil6aq3obnnaq5csim53uq:62",
+        "arms": [
+          "@d812sil6aq3obnnaq5csim53uq:63",
+          "@d812sil6aq3obnnaq5csim53uq:65"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:7": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:7",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:12": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:12",
+        "kind": "ref",
+        "target": "@rmuljvpp60kuj8khour9n699te"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:13": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:13",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:2"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:11": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:11",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:12",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:13"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:10": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:10",
+        "kind": "ref",
+        "target": "@u6ulqtprp7t04gefhq2qrf9fqi"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:14": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:14",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:3"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:9": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:9",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:10",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:11",
+          "@d812sil6aq3obnnaq5csim53uq:14"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:19": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:19",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:20": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:20",
+        "kind": "lit",
+        "value": 0
+      },
+      "@d812sil6aq3obnnaq5csim53uq:18": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:18",
+        "kind": "lambda",
+        "params": [
+          "@d812sil6aq3obnnaq5csim53uq:19"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:20"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:17": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:17",
+        "kind": "ref",
+        "target": "builtin.mapParts"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:21": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:21",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:4"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:16": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:16",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:17",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:18",
+          "@d812sil6aq3obnnaq5csim53uq:21"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:15": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:15",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@d812sil6aq3obnnaq5csim53uq:16"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:23": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:23",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:24": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:24",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:25": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:25",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:27": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:27",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:23"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:29": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:29",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:30": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:30",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:50": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:50",
+        "kind": "ref",
+        "target": "@ekddvtqv6utadasf66inerg2mn"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:51": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:51",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:7"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:52": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:52",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:29"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:53": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:53",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:29"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:49": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:49",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:50",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:51",
+          "@d812sil6aq3obnnaq5csim53uq:52",
+          "@d812sil6aq3obnnaq5csim53uq:53"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:57": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:57",
+        "kind": "ref",
+        "target": "builtin.zipParts"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:58": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:58",
+        "kind": "ref",
+        "target": "builtin.mul"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:59": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:59",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:4"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:60": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:60",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:30"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:56": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:56",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:57",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:58",
+          "@d812sil6aq3obnnaq5csim53uq:59",
+          "@d812sil6aq3obnnaq5csim53uq:60"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:55": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:55",
+        "kind": "ref",
+        "target": "builtin.total"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:54": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:54",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:55",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:56"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:48": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:48",
+        "kind": "ref",
+        "target": "builtin.mul"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:47": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:47",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:48",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:49",
+          "@d812sil6aq3obnnaq5csim53uq:54"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:33": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:33",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:40": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:40",
+        "kind": "binder"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:42": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:42",
+        "kind": "ref",
+        "target": "builtin.mul"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:43": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:43",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:33"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:44": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:44",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:40"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:41": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:41",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:42",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:43",
+          "@d812sil6aq3obnnaq5csim53uq:44"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:39": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:39",
+        "kind": "lambda",
+        "params": [
+          "@d812sil6aq3obnnaq5csim53uq:40"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:41"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:38": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:38",
+        "kind": "ref",
+        "target": "builtin.mapParts"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:45": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:45",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:30"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:37": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:37",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:38",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:39",
+          "@d812sil6aq3obnnaq5csim53uq:45"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:35": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:35",
+        "kind": "ref",
+        "target": "builtin.zipParts"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:36": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:36",
+        "kind": "ref",
+        "target": "builtin.add"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:46": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:46",
+        "kind": "ref",
+        "target": "@d812sil6aq3obnnaq5csim53uq:25"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:34": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:34",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:35",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:36",
+          "@d812sil6aq3obnnaq5csim53uq:37",
+          "@d812sil6aq3obnnaq5csim53uq:46"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:32": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:32",
+        "kind": "lambda",
+        "params": [
+          "@d812sil6aq3obnnaq5csim53uq:33"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:34"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:31": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:31",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:32",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:47"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:28": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:28",
+        "kind": "arm",
+        "variant": "std.pair.pair",
+        "binds": [
+          "@d812sil6aq3obnnaq5csim53uq:29",
+          "@d812sil6aq3obnnaq5csim53uq:30"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:31"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:26": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:26",
+        "kind": "match",
+        "scrutinee": "@d812sil6aq3obnnaq5csim53uq:27",
+        "arms": [
+          "@d812sil6aq3obnnaq5csim53uq:28"
+        ],
+        "otherwise": null
+      },
+      "@d812sil6aq3obnnaq5csim53uq:22": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:22",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@d812sil6aq3obnnaq5csim53uq:23",
+          "@d812sil6aq3obnnaq5csim53uq:24"
+        ],
+        "results": [
+          null,
+          "@d812sil6aq3obnnaq5csim53uq:25"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:26"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:8": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:8",
+        "kind": "fold",
+        "scrutinee": "@d812sil6aq3obnnaq5csim53uq:9",
+        "arms": [
+          "@d812sil6aq3obnnaq5csim53uq:15",
+          "@d812sil6aq3obnnaq5csim53uq:22"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:6": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:6",
+        "kind": "lambda",
+        "params": [
+          "@d812sil6aq3obnnaq5csim53uq:7"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:8"
+      },
+      "@d812sil6aq3obnnaq5csim53uq:5": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:5",
+        "kind": "call",
+        "fn": "@d812sil6aq3obnnaq5csim53uq:6",
+        "args": [
+          "@d812sil6aq3obnnaq5csim53uq:61"
+        ]
+      },
+      "@d812sil6aq3obnnaq5csim53uq:1": {
+        "id": "@d812sil6aq3obnnaq5csim53uq:1",
+        "kind": "lambda",
+        "params": [
+          "@d812sil6aq3obnnaq5csim53uq:2",
+          "@d812sil6aq3obnnaq5csim53uq:3",
+          "@d812sil6aq3obnnaq5csim53uq:4"
+        ],
+        "body": "@d812sil6aq3obnnaq5csim53uq:5"
+      },
       "@gqaqevodbqvkve52jflltfe15j": {
         "id": "@gqaqevodbqvkve52jflltfe15j",
         "kind": "def",
@@ -16568,6 +17031,7 @@
       "@ua31fdidf4k6mfs5d4s3lfcsm5",
       "@t5b880sjm1o97ojitb6007dl8f",
       "@nqvtom4jb3r3c8hh82i9671fma",
+      "@d812sil6aq3obnnaq5csim53uq",
       "@ld6jeo16ubg7r39233bit24m9r",
       "@l5hrsq9348beg0fck4pcmk92uh",
       "@5p7andlhmptbt2ovbrcsfl8e0s",
@@ -18569,6 +19033,58 @@
       ],
       "numbers": [
         0
+      ]
+    },
+    "@d812sil6aq3obnnaq5csim53uq": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          },
+          {
+            "t": "var",
+            "v": 1
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 1
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": [
+        1
+      ],
+      "numbers": [
+        1
       ]
     },
     "@ld6jeo16ubg7r39233bit24m9r": {
@@ -21671,6 +22187,22 @@
     "@nqvtom4jb3r3c8hh82i9671fma:35": "sign",
     "@nqvtom4jb3r3c8hh82i9671fma:53": "part",
     "@nqvtom4jb3r3c8hh82i9671fma:68": "part",
+    "@d812sil6aq3obnnaq5csim53uq": "clifford reverse",
+    "@d812sil6aq3obnnaq5csim53uq:2": "squares",
+    "@d812sil6aq3obnnaq5csim53uq:3": "basis",
+    "@d812sil6aq3obnnaq5csim53uq:4": "x",
+    "@d812sil6aq3obnnaq5csim53uq:66": "square",
+    "@d812sil6aq3obnnaq5csim53uq:67": "rest",
+    "@d812sil6aq3obnnaq5csim53uq:68": "the rest's ones",
+    "@d812sil6aq3obnnaq5csim53uq:7": "ones",
+    "@d812sil6aq3obnnaq5csim53uq:19": "part",
+    "@d812sil6aq3obnnaq5csim53uq:23": "pair",
+    "@d812sil6aq3obnnaq5csim53uq:24": "rest",
+    "@d812sil6aq3obnnaq5csim53uq:25": "the rest reversed",
+    "@d812sil6aq3obnnaq5csim53uq:29": "blade",
+    "@d812sil6aq3obnnaq5csim53uq:30": "element",
+    "@d812sil6aq3obnnaq5csim53uq:33": "weight",
+    "@d812sil6aq3obnnaq5csim53uq:40": "part",
     "@gqaqevodbqvkve52jflltfe15j": "arithmetic at float64",
     "@brbvg0sr9iq5iaavff80b7jag4": "arithmetic at int",
     "@jdr0cbak0dr75q00ui5q25nhmg": "arithmetic at rational",
@@ -21976,6 +22508,7 @@
     "@sdv400kkulnsfkv4q4tsp0fvht": "log at Dual: log a + a′/a · ε. Not offered on its own: log is.",
     "@p12p1k5q25gst3r560sb3cbbeq": "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
     "@l5hrsq9348beg0fck4pcmk92uh": "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
+    "@d812sil6aq3obnnaq5csim53uq": "x̃, the reverse of x in the Clifford algebra clifford table(squares, basis) makes: each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     "@nqvtom4jb3r3c8hh82i9671fma": "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     "@5p7andlhmptbt2ovbrcsfl8e0s": "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     "@0qulvgbca1hm6dngmbf0eqldf8": "A dual number as 3 + 2ε.",
@@ -22031,6 +22564,7 @@
     "@ilortmfvkbjt9bs8q02goksirf",
     "@lpgbkpl5cvmfold4ma5a9k9on4",
     "@nqvtom4jb3r3c8hh82i9671fma",
+    "@d812sil6aq3obnnaq5csim53uq",
     "@ld6jeo16ubg7r39233bit24m9r",
     "@l5hrsq9348beg0fck4pcmk92uh",
     "@5p7andlhmptbt2ovbrcsfl8e0s",
