@@ -196,7 +196,9 @@ async function swapAndUndo() {
   await p.locator("#m-query").fill("subtract");
   const refusal = await p.locator(".ctx-menu .palette").innerText();
   if (!/subtract doesn't fit here: .*(m\/s|s\b)/s.test(refusal)) errors.push(`${where}: subtract over speed · time is refused with ${JSON.stringify(refusal)}`);
+  // Escape before anything is picked puts the · back (QA8 M2).
   await p.keyboard.press("Escape");
+  if ((await p.locator(".p-text .body").innerText()).includes("□") || !(await p.locator(".p-graph text:text-is('·')").count())) errors.push(`${where}: Escape left a hole where · was`);
   // The same from the Blocks pane: right-click its +, which stands for the
   // call as the graph's node does.
   where = "change the function from the Blocks pane";

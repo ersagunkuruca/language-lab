@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I25 | Replace with… empties the part at once and Escape keeps the hole; Escape could cancel until something is picked | QA8 M2 | 2026-10-28 |
 | I26 | Search by meaning: "square root" doesn't find `sqrt` on a Float64 hole, "absolute value" finds nothing | QA8 L1 | 2026-10-28 |
 | I27 | Make it a function names the function `part` and its inputs `speed₂`, `time₂`; plain names would read better | QA8 L2 | 2026-10-28 |
 | I28 | An implementation reads `‹size at float64›` (lowercased type, quoted), "each of its 1 operation", and the interface is marked ▤ like a data type | QA8 L3 | 2026-10-28 |
@@ -128,6 +127,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I25 | Escape puts back what Replace with…, Change the function or Wrap in… took, until something is picked | #567 |
 | E158 | In the graph's menu Wrap in… reads Insert a node after it…; the text keeps Wrap in… | #564 |
 | I24 | Add a step before this on a step of an action: a plain step, not a dot with a hidden name | #563 |
 | I23 | Opening a slow function (Countdown's solutions) no longer holds the page: values on the wires nobody gave stop after 300 ms and say so | #562 |
