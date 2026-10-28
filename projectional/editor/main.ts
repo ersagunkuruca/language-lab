@@ -580,6 +580,20 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins
   return true;
 }
 
+// Escape while Replace with…, Change the function or Wrap in… waits for
+// a pick puts back what was there, as if it never began (QA8 M2).
+function cancelPick(): boolean {
+  if (!swapped || undo.length !== swapped.at || doc.code.nodes[swapped.hole]?.kind !== "hole") return false;
+  swapped = null;
+  wrapping = null;
+  ui.menu = null;
+  travel(undo, redo, "Cancelled");
+  redo.pop();
+  ui.note = "Cancelled: what was there is back.";
+  render();
+  return true;
+}
+
 function travel(from: Doc[], to: Doc[], label: string) {
   if (from === undo && !from.length && deleted) return undeleteProgram();
   const d = from.pop();
@@ -2253,7 +2267,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "wrap": {
       const kept = doc.code;
       const r = T.toHole(doc.code, doc.names.short, info, target!);
-      if (!applyT(r.ok ? { ...r, note: "Pick what to wrap it in: a call takes it as one of its inputs, a new function as its body. Undo puts it back." } : r)) return;
+      if (!applyT(r.ok ? { ...r, note: "Pick what to wrap it in: a call takes it as one of its inputs, a new function as its body. Escape or Undo puts it back." } : r)) return;
       swapped = { hole: target!, at: undo.length };
       wrapping = { hole: target!, kept, info };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: target! } }; render(); document.getElementById("m-query")?.focus(); }
@@ -2266,7 +2280,7 @@ function menuAction(act: string, target: Id | undefined) {
       // the part itself becomes the hole, and the palette offers what fits.
       const fn = act === "swap" ? (doc.code.nodes[target!] as NodeOf<"call">).fn : target!;
       const r = T.toHole(doc.code, doc.names.short, info, fn);
-      const note = act === "swap" ? "The function is a hole now and its inputs stayed: pick another from the palette." : "Pick what goes here from the palette. Undo puts back what was here.";
+      const note = act === "swap" ? "The function is a hole now and its inputs stayed: pick another from the palette. Escape puts it back." : "Pick what goes here from the palette. Escape or Undo puts back what was here.";
       if (!applyT(r.ok ? { ...r, note } : r)) return;
       swapped = { hole: fn, at: undo.length };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: fn } }; render(); document.getElementById("m-query")?.focus(); }
@@ -3270,6 +3284,7 @@ document.addEventListener("dblclick", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && cancelPick()) return toProgram();
   if (e.key === "Escape" && ui.menu) { ui.menu = null; render(); return toProgram(); }
   if (ui.menu && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     const items = [...document.querySelectorAll<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")];
