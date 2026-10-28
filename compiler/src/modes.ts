@@ -14,10 +14,17 @@
 // then, a fold run one level down, numbers solved by equations, a mode that
 // may have several answers) throws Unsupported, and that solve stays with
 // relate.ts.
+//
+// A mode whose one unknown port is a list built front to back (Haar's join
+// run backwards: two samples consed onto the rest the call of itself gives)
+// also has an `$into` copy, as compile.ts's definitions do (GAPS.md P4): it
+// pushes the items onto an array it is handed and returns whether it has
+// an answer. The cells that would hold them are left out, and a call of a
+// mode for the rest hands the array on.
 
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../projectional/src/lang/modes.ts";
-import { INT_OPS, S } from "../../projectional/src/lang/std.ts";
+import { CONS, INT_OPS, NIL, S } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -44,31 +51,98 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   const portsOf = (lam: NodeOf<"lambda">) => [...lam.params.map((_, i) => String(i)), "out"];
   const order = (ps: string[]) => [...ps].sort((a, b) => (a === "out" ? 1 : b === "out" ? -1 : Number(a) - Number(b)));
 
-  // The function for `def` with these ports known: its name.
-  function modeFn(def: Id, known: string[], emit: ModeEmit): string {
-    const key = `${def}|${order(known).join(",")}`;
+  // Values an `$into` mode builds (temp -> case and fields) and mode calls
+  // it makes (temp -> the call), which its answer may write instead.
+  let built: Map<string, { variant: Id; fields: string[] }> | null = null;
+  let calls: Map<string, { def: Id; ins: string[]; vals: string[] }> | null = null;
+  let handed = new Set<string>();
+  // Failures after which nothing else is tried: the function gives no
+  // answer (the last arm's, inside the last arm…). An `$into` mode's call of
+  // itself there is a jump, and what it pushed needn't be taken back.
+  const finals = new Set<string>(["return false;"]);
+  let self: { name: string; params: string[]; jumps: boolean } | null = null;
+
+  // The function for `def` with these ports known: its name. `into`: the
+  // `$into` copy, for a mode with one unknown port.
+  function modeFn(def: Id, known: string[], emit: ModeEmit, into = false): string {
+    const key = `${def}|${order(known).join(",")}${into ? "|i" : ""}`;
     if (made.has(key)) return made.get(key)!;
     const lam = nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
     if (lam?.kind !== "lambda") throw new Unsupported("not a function");
-    const name = `${(names[def] ?? def).replace(/[^\p{ID_Continue}$]+/gu, "_")}$mode${made.size}`;
+    const name = `${(names[def] ?? def).replace(/[^\p{ID_Continue}$]+/gu, "_")}$mode${made.size}${into ? "$into" : ""}`;
     made.set(key, name);
+    const was = [built, calls, handed, self] as const;
     try {
       const ins = order(known), outs = portsOf(lam).filter((p) => !ins.includes(p));
+      if (into && outs.length !== 1) throw new Unsupported("an array for more than one port");
       const env = new Map<Id, string>();
       const params = ins.map((p) => { const v = `p$${temps++}`; env.set(an.slot(portNode(lam, p)), v); return v; });
       const plan = an.planOf({ k: "def", id: def }, { known: ins, spec: [] });
-      const done = (env: Map<Id, string>) => {
+      const done = (env: Map<Id, string>, fail: string) => {
         const vs = outs.map((p) => env.get(an.slot(portNode(lam, p))));
         if (vs.some((v) => v === undefined)) throw new Unsupported("a port is never found");
-        return `return ${vs.length === 1 ? vs[0] : `[${vs.join(", ")}]`};`;
+        return into ? pushed(vs[0]!, fail, emit) : `return ${vs.length === 1 ? vs[0] : `[${vs.join(", ")}]`};`;
       };
-      const body = writePlan(plan, env, done, emit, "return $no;");
-      out.push(`// ${names[def] ?? def}, run with ${ins.length ? ins.map((p) => (p === "out" ? "its result" : names[lam.params[Number(p)]] ?? p)).join(", ") : "nothing"} known\nfunction ${name}(${params.join(", ")}) {\n${body}\n}`);
+      [built, calls, handed, self] = into ? [new Map(), new Map(), new Set(), { name, params, jumps: false }] : [null, null, handed, null];
+      let body = writePlan(plan, env, done, emit, into ? "return false;" : "return $no;");
+      if (into) body = unused(body);
+      if (self?.jumps) body = `for (;;) {\n${body}\n}`;
+      out.push(`// ${names[def] ?? def}, run with ${ins.length ? ins.map((p) => (p === "out" ? "its result" : names[lam.params[Number(p)]] ?? p)).join(", ") : "nothing"} known${into ? " (its answer pushed onto `d$`)" : ""}\nfunction ${name}(${[...(into ? ["d$"] : []), ...params].join(", ")}) {\n${body}\n}`);
     } catch (e) {
       made.delete(key);
       throw e;
+    } finally {
+      [built, calls, handed, self] = was;
     }
     return name;
+  }
+
+  // An `$into` mode's answer: the items of the cells it built pushed in
+  // order, then the rest: nothing after a nil, a mode call that writes into
+  // the array, or a list it only has as a value copied in. Where a failure
+  // leaves an arm for the next one, what this arm pushed is taken back.
+  function pushed(v: string, fail: string, emit: ModeEmit): string {
+    const lines: string[] = [];
+    let at = v;
+    for (let c = built!.get(at); c?.variant === CONS; c = built!.get(at)) {
+      lines.push(`d$.push(${c.fields[0]});`);
+      at = c.fields[1];
+    }
+    const top = finals.has(fail);
+    const n = top ? "" : `n$${temps++}`;
+    const back = top ? fail : `{\nd$.length = ${n};\n${fail}\n}`;
+    const call = calls!.get(at);
+    let g: string | null = null;
+    if (call) {
+      try { g = modeFn(call.def, call.ins, emit, true); } catch (e) { if (!(e instanceof Unsupported)) throw e; }
+    }
+    if (built!.get(at)?.variant === NIL || at === "$nil") {}
+    else if (call && g && top && g === self?.name) {
+      const ps = self.params;
+      lines.push(ps.length === 1 ? `${ps[0]} = ${call.vals[0]};` : `[${ps.join(", ")}] = [${call.vals.join(", ")}];`, "continue;");
+      self.jumps = true;
+      handed.add(at);
+      return lines.join("\n");
+    } else if (call && g) { lines.push(`if (!${g}(${["d$", ...call.vals].join(", ")})) ${back}`); handed.add(at); }
+    else lines.push(`$pushList(d$, ${at});`);
+    return [...(n && lines.some((l) => l.startsWith("if")) ? [`const ${n} = d$.length;`] : []), ...lines, "return true;"].join("\n");
+  }
+  // The lines that built a cell or called a mode whose value nothing else
+  // reads now, left out.
+  function unused(body: string): string {
+    const word = (t: string) => new RegExp(`(?<![\\p{ID_Continue}$])${t.replace(/\$/g, "\\$")}(?![\\p{ID_Continue}$])`, "u");
+    let lines = body.split("\n"), left = [...built!.keys(), ...handed];
+    for (let again = true; again; ) {
+      again = false;
+      for (const t of left) {
+        const mine = (l: string) => l.startsWith(`const ${t} = `) || (handed.has(t) && l.startsWith(`if (${t} === $no) `));
+        if (lines.some((l) => !mine(l) && word(t).test(l))) continue;
+        lines = lines.filter((l) => !mine(l));
+        left = left.filter((x) => x !== t);
+        again = true;
+      }
+    }
+    return lines.join("\n");
   }
 
   // What the statements of a plan see: the slots that hold a value, the
@@ -95,13 +169,13 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   };
 
   // The statements of a plan: each goal, then the choice, then `done`.
-  function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit, fail: string): string {
+  function writePlan(plan: Plan, env0: Map<Id, string>, done: (env: Map<Id, string>, fail: string) => string, emit: ModeEmit, fail: string): string {
     // `fail`: this way gives no answer, whatever is left (the goals before
     // it can only fail too).
     if (fails(plan)) return fail;
     const sc: Scope = { env: new Map(env0), lines: [], emit, fail };
     for (const e of plan.steps) exec(e, sc);
-    sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit, fail) : done(sc.env));
+    sc.lines.push(plan.branch ? choose(plan.branch, sc.env, done, emit, fail) : done(sc.env, fail));
     return sc.lines.join("\n");
   }
 
@@ -137,6 +211,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
           const fs = e.binds.map((b) => get(sc, b));
           if (fs.some((f) => f === undefined)) throw new Unsupported("a value built from unknowns");
           bind(sc, e.value, `{ tag: ${sc.emit.tag(e.variant)}, fields: [${fs.join(", ")}] }`);
+          built?.set(get(sc, e.value)!, { variant: e.variant, fields: fs as string[] });
         }
         break;
       }
@@ -167,6 +242,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const vals = ins.map((p) => get(sc, port(p)));
       if (vals.some((x) => x === undefined)) throw new Unsupported("a mode's input not known");
       const r = fresh(sc, `${modeFn(head.target, ins, sc.emit)}(${vals.join(", ")})`);
+      if (outs.length === 1) calls?.set(r, { def: head.target, ins, vals: vals as string[] });
       check(r);
       return outs.forEach((p, i) => bind(sc, port(p), outs.length === 1 ? r : `${r}[${i}]`));
     }
@@ -210,7 +286,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   // A choice of arms. The value known: its arm. Else each arm in turn, in
   // a block of its own that it leaves when it fails, until one gives the
   // answer (and returns it).
-  function choose(c: NonNullable<Plan["branch"]>, env: Map<Id, string>, done: (env: Map<Id, string>) => string, emit: ModeEmit, fail: string): string {
+  function choose(c: NonNullable<Plan["branch"]>, env: Map<Id, string>, done: (env: Map<Id, string>, fail: string) => string, emit: ModeEmit, fail: string): string {
     const val = env.get(an.slot(c.value));
     if (val !== undefined) {
       const written = c.arms.filter((a) => a.variant !== null);
@@ -230,8 +306,10 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     }
     if (c.arms.some((a) => a.variant === null)) throw new Unsupported("otherwise, for a value not known");
     // The arms' plans build the value themselves (a case goal).
-    const tries = c.arms.filter((a) => !fails(a.plan)).map((a) => {
+    const ways = c.arms.filter((a) => !fails(a.plan));
+    const tries = ways.map((a, i) => {
       const r = `arm$${temps++}`;
+      if (i === ways.length - 1 && finals.has(fail)) finals.add(`break ${r};`);
       return `${r}: {\n${writePlan(a.plan, new Map(env), done, emit, `break ${r};`)}\n}`;
     });
     return [...tries, fail].join("\n");
@@ -239,8 +317,11 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
 
   // The function for a solve node, or null when it stays with relate.ts:
   // `solve(given…)` gives its one answer, or none, in the list of answers
-  // the interpreter's solver gives.
-  function solver(n: NodeOf<"solve">, name: string, emit: ModeEmit): string | null {
+  // the interpreter's solver gives. `into`: also `name$into(d$, given…)`,
+  // which pushes the one bind, a list, onto `d$` (`intoSolvers`), when the
+  // mode can write it.
+  const intoSolvers = new Set<string>();
+  function solver(n: NodeOf<"solve">, name: string, emit: ModeEmit, into = false): string | null {
     const v = an.ofSolve(n);
     if (!v || !v.ends || v.stuck.length || v.dynamic.length) return null;
     const d = determinism(v.answers);
@@ -262,6 +343,18 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
         // At most one answer: its binds (one bind as itself), or $no
         // (GAPS.md P2).
         `function ${name}$one(${gs.join(", ")}) {\n${(pick.length === 1 && pick[0] === "r") || (outs.length > 1 && pick.length === outs.length && pick.every((p, i) => p === `r[${i}]`)) ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : ${pick.length === 1 ? pick[0] : `[${pick.join(", ")}]`};`}\n}`);
+      if (into && pick.length === 1 && pick[0] === "r") {
+        const mark = out.length, size = made.size;
+        try {
+          const g = modeFn(n.fn, given, emit, true);
+          out.push(`function ${name}$into(${["d$", ...gs].join(", ")}) {\nreturn ${g}(${["d$", ...ins.map(at)].join(", ")});\n}`);
+          intoSolvers.add(name);
+        } catch (e) {
+          if (!(e instanceof Unsupported)) throw e;
+          out.length = mark;
+          for (const k of [...made.keys()].slice(size)) made.delete(k);
+        }
+      }
       return name;
     } catch (e) {
       if (!(e instanceof Unsupported)) throw e;
@@ -282,5 +375,5 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     return ok;
   }
 
-  return { solver, compilable, code: out };
+  return { solver, compilable, code: out, intoSolvers };
 }
