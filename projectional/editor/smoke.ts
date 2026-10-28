@@ -566,6 +566,8 @@ async function stepOrder() {
   await p.locator('button[data-act="undo"]').first().click();
   if ((await first()) !== was) errors.push(`${where}: one Undo doesn't put the order back`);
   // A step goes before a step as a plain step, with no name (QA8 M1).
+  // A menu opened by a script counts as a long press: let it settle first.
+  await p.waitForTimeout(900);
   const pr = p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").first(), pb = (await pr.boundingBox())!;
   await pr.dispatchEvent("contextmenu", { clientX: pb.x + 5, clientY: pb.y + 5 });
   await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: a print's menu has no Add a step before this`));
