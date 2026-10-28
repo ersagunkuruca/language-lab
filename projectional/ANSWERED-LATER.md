@@ -115,7 +115,7 @@ What happens in each case is decided, so a program never meets a surprise:
 
   The cost is linear in the depth between the perform and the handler, and
   only for `later` operations.
-- **Compiled JavaScript (C40).** A definition whose row holds a `later`
+- **Compiled JavaScript (C40, step 1 built).** A definition whose row holds a `later`
   effect gets a generator copy (COMPILER.md already has generators for
   searches). Performing is `yield`. The handler drives the generator, and
   the rest is a wrapper that calls `next(answer)` once. JavaScript
@@ -181,6 +181,11 @@ In the order the BACKLOG wants them:
      rest, after its inputs, and the graph draws the case as
      `(item) with rest =>`.
 2. **C40**, compiled JavaScript by generators. Then pages can use it.
+   Step 1 is built (compile.ts `isLater`, runtime.js `$handleL`): the
+   programs in `test/later.test.ts` give the same prints compiled. Not yet:
+   a function that waits given where any row goes (`map`), an operation
+   answered later inside a search, and a handler around code that itself
+   waits. Each says so when compiled.
 3. **L56**, effects that take a type, for `Ticket a`.
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
    `together`, `race` and `within`.
