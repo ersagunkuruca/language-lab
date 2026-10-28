@@ -889,7 +889,10 @@ function seeded(info: T.Info, def: Id): string[] | null {
     if (args.length && args.every((v) => v !== null)) return args as string[];
   }
   const main = defNamed("main"), body = defBody(def);
-  const got = main && body?.kind === "lambda" ? mainCalls(info, main).get(body.id) : undefined;
+  // A picture has no main: what the picture's function is first called
+  // with at its pixel (QA8 L4: a ray marcher's sphere, Mandelbrot's steps).
+  const entry = main ?? Object.values(pictureEntries(ownDefs(), pres().names) ?? {})[0];
+  const got = entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
   // Only values that read back as themselves: a function passed in, say,
   // has no way to be typed into a box.
   const texts = got?.map((v) => showValue(v, doc.code, pres().names));
@@ -906,9 +909,12 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   if (!calls) {
     const got = new Map<Id, Value[]>();
     const body = defBody(main);
-    if (body?.kind !== "lambda" || !body.params.length) {
+    // main takes nothing; a picture's function takes its pixel.
+    const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
+    const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
+    if (pixel && args.every((a) => !("error" in a))) {
       const end = performance.now() + MAIN_MS;
-      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, [], undefined, (l, args) => {
+      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), undefined, (l, args) => {
         if (!got.has(l)) got.set(l, args);
         if (performance.now() > end) throw new OutOfSteps();
       }));
