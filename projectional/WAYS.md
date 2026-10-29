@@ -181,9 +181,10 @@ That is not enough where bits matter:
    the first real one is L97's (x87's `fsincos` as one polar). Fixed needs
    no `exact` flag for now: its fields are all its own Int code, never a
    target's builtin, so its pick is target-neutral already.
-3. **Trig through polar (L97).** Needs L95's several results and C55's
-   one direction per use, so sin alone is a plain sine and sin with cos
-   is one sincos.
+3. **Trig through polar (L97).** Designed in POLAR.md: Trig fields with
+   several results (`polar`, `unpolar`) and a definition that gives a
+   relation's other direction. Only the polar-first types (Fixed) need
+   C55's one direction per use, so sin alone is a plain sine.
 4. **Agreement checked (T7).** Each field's ways tested against each
    other, cached by hash.
 5. **The editor** shows the pick per field and lets a program pin one.
