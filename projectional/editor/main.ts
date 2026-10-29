@@ -2267,16 +2267,12 @@ function graphFolded(): Set<Id> {
 function toggleFolded(f: Id) {
   const now = doc.layout.folded ?? [];
   const on = graphFolded().has(f), deep = deepFunctions(ui.def).includes(f);
-  // Unfolded where it was dragged, it makes room instead of landing on others.
-  const room = on ? graph?.room(f) ?? {} : {};
-  const at = Object.keys(room).length ? { at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(room).map(([k, v]) => [lkey(k), v])) } } : {};
   const opened = (doc.layout.unfolded ?? []).filter((x) => x !== f);
   const unfolded = on && deep ? [...opened, f] : opened;
   // Opened, it's selected, so it's drawn over its neighbours.
   if (on && doc.code.nodes[f]) ui.selected = f;
-  commit({ layout: { ...doc.layout, ...at, folded: on ? now.filter((x) => x !== f) : deep ? now : [...now, f], ...(unfolded.length || doc.layout.unfolded ? { unfolded } : {}) } }, ["layout.json"],
-    on ? Object.keys(at).length ? "Unfolded, a little way off: where the box was, the frame would have covered other nodes. Only layout.json changed."
-      : "Unfolded: what the frame holds is back where it was. Only layout.json changed."
+  commit({ layout: { ...doc.layout, folded: on ? now.filter((x) => x !== f) : deep ? now : [...now, f], ...(unfolded.length || doc.layout.unfolded ? { unfolded } : {}) } }, ["layout.json"],
+    on ? "Unfolded where the box was, drawn over its neighbours while it's selected. Only layout.json changed."
       : "Folded into one box: wires in end on its left, values out leave on its right. Click ▸ to unfold. Only layout.json changed.");
 }
 
