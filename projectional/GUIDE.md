@@ -10,6 +10,9 @@ they come up, and there's a list of them at the end.
 language and the list of what's still confusing. [LANGUAGE.md](LANGUAGE.md)
 is the full description. Start here; go there when you want the why.
 
+Not sure this is the right start? [Learn](LEARN.md) has a gentler one for
+new programmers and one for people new to functional programming.
+
 *Written on 2026-10-24 against `main` at #397. Every step below was done
 in the editor, in a browser, before it was written down.*
 
