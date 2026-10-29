@@ -97,6 +97,14 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
       () => (withValues ? k.call(bin, s, key, v!, l, r) : t),
       () => B(tk, tv, l, k.call(insert, r, ...kv(key, v)))),
     () => N(key, withValues ? v : null, k.x(tip), k.x(tip)))));
+    // A map's update at (L103): one walk down, change(value) where the key
+    // is, change(default) in a new leaf where it isn't.
+    const update = withValues ? rec("tree update at") : null;
+    if (update) k.define(update, k.fn(["tree", "key", "default", "change"], (t, key, d, f) => parts(t, (s, tk, tv, l, r) => order(key, tk,
+      () => B(tk, tv, k.call(update, l, key, d, f), r),
+      () => k.call(bin, s, key, k.call(f, tv!), l, r),
+      () => B(tk, tv, l, k.call(update, r, key, d, f))),
+    () => N(key, k.call(f, d), k.x(tip), k.x(tip)))));
     const has = rec(`${word} has`);
     k.define(has, k.fn(["tree", "key"], (t, key) => parts(t, (_, tk, __, l, r) => order(key, tk, () => k.call(has, l, key), () => k.x(TRUE), () => k.call(has, r, key)), () => k.x(FALSE))));
     // The leftmost key (and value), and the tree without it: what takes a
@@ -129,7 +137,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     const emptyTree = k.def(`empty ${word}`);
     k.define(emptyTree, k.x(tip));
     defs.push(emptyTree);
-    return { T, tip, size, insert, has, remove, list, emptyTree, first, last };
+    return { T, tip, size, insert, update, has, remove, list, emptyTree, first, last };
   }
 
   // ---- Map
@@ -156,6 +164,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     // A later pair wins: put in the order given.
     [prelude("as map")]: def("tree as map", ["pairs"], (ps) => putAll(k.call(prelude("reverse"), ps), k.x(m.tip))),
     [prelude("put")]: m.insert,
+    [prelude("update at")]: m.update!,
     [prelude("value at")]: find,
     [prelude("remove key")]: m.remove,
     [prelude("has key")]: m.has,
@@ -210,7 +219,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
 
   const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
   const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
-  const mapLog = ["put", "value at", "remove key", "has key", "smallest key", "largest key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
+  const mapLog = ["put", "update at", "value at", "remove key", "has key", "smallest key", "largest key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
   const setLog = ["add item", "remove item", "has item", "smallest item", "largest item"], setLin = ["items of", "match", "fold"];
   // The definitions themselves: every job walks the sorted list.
   const spec = (of: Id, cons: Id, linear: string[], quadratic: string[], one: string[]): Representation => ({

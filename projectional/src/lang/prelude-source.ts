@@ -618,6 +618,14 @@ export function buildPrelude(): Module {
     here: () => k.x(TRUE),
     past: (_, rest) => k.call(self, rest, x),
   }), itself);
+  // One walk to the key's place, changing what it holds or putting
+  // change(default) where it has nothing (L103).
+  const updateEntry = walk("update entry", ["key", "default", "change"], () => ([key, dflt, change], self) => ({
+    end: k.call(CONS, P(key, k.call(change, dflt)), k.x(NIL)),
+    before: (item, rest) => k.call(CONS, P(key, k.call(change, dflt)), k.call(CONS, item, rest)),
+    here: (item, rest) => entry(item, (_, v) => k.call(CONS, P(key, k.call(change, v)), rest), ["item key", "item value"]),
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, key, dflt, change)),
+  }), pairKey);
   const hasEntry = walk("entries have", ["key"], () => ([key], self) => ({
     end: k.x(FALSE),
     before: () => k.x(FALSE),
@@ -633,6 +641,7 @@ export function buildPrelude(): Module {
   const put = def("put", ["map", "key", "value"], (m, key, v) => entriesOf(m, (es) => k.call(MAP_V, k.call(putEntry, es, key, v))));
   const remove = def("remove key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(MAP_V, k.call(removeEntry, es, key))));
   const lookup = def("value at", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(lookupEntry, es, key)));
+  const updateAt = def("update at", ["map", "key", "default", "change"], (m, key, d, f) => entriesOf(m, (es) => k.call(MAP_V, k.call(updateEntry, es, key, d, f))));
   const hasKey = def("has key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(hasEntry, es, key)));
   // Folded from the end of the list, so an earlier pair is put last: the
   // pairs reversed first, so a later pair wins, as puts in a row would.
@@ -721,8 +730,8 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
-  const mapHelpers = [lastItem, putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     [map]: "The list of f(item) for each item, in the same order.",
@@ -763,6 +772,7 @@ export function buildPrelude(): Module {
     [emptyMap]: "The map with no entries.",
     [asMap]: "The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).",
     [put]: "The map with key holding value, in place of what it held.",
+    [updateAt]: "The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.",
     [lookup]: "What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.",
     [remove]: "The map without key.",
     [hasKey]: "Whether the map holds key.",
