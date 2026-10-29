@@ -165,7 +165,10 @@ That is not enough where bits matter:
    it uses. A Trig of the program's own that gives only sin or only cos
    gets the other; one that gives neither is refused with "leaves cos to
    its ways, and none of them ends in a field it gives" when it is
-   resolved. Reporting that in the checker instead is a later step
+   resolved. **Since L96b the checker says it**, at the implementation,
+   before anything runs: "trig at angle leaves sin and cos to their ways,
+   and none of them ends in a field it gives". The search is one function
+   (ways.ts `pickWays`) that the checker and arith.ts both call
    (test/ways.test.ts).
 2. **Costs.** Declared costs on ways and per-target constants on
    builtins. A test where JS and C pick differently for Float64 and

@@ -21,6 +21,7 @@ import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGra
 import { BOOL, CELL_OPS, S, SET, SIGS, SMART } from "./std.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
+import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
   ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
@@ -906,6 +907,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // use asked for an interface must have one.
   function implementations() {
     const table = info.implementations!;
+    let ways: Ways | undefined;
     for (const d of valueDefs) {
       const sc = info.schemes.get(d);
       const t = sc && s.zonk(sc.type);
@@ -916,6 +918,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const key = implementationKey(t.id, t.args[0]), other = table.get(key);
       if (other) err(d, `${nm(other)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
       else table.set(key, d);
+      // A field left to its ways needs a way that ends in fields it gives
+      // (WAYS.md, L96b): said here, before anything runs.
+      const args = (body as NodeOf<"call">).args, variant = code.nodes[fn.target] as NodeOf<"variant">;
+      if (args.some((a) => leftToWays(code, a))) {
+        const pick = pickWays(code, ways ??= waysIn(code), variant, args);
+        const stuck = variant.fields.filter((f) => !pick.has(f));
+        if (stuck.length) err(d, `${nm(d)} leaves ${stuck.map(nm).join(" and ")} to ${stuck.length === 1 ? "its ways" : "their ways"}, and none of them ends in a field it gives: give ${stuck.length === 1 ? "it, or a field its ways use" : "one of them, or a field their ways use"}`);
+      }
     }
     for (const w of s.wanted) {
       const t = s.zonk(w.t);

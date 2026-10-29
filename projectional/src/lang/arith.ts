@@ -23,10 +23,11 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId } from "../model.ts";
+import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationKey, type Info } from "./infer.ts";
+import { interfaceOps, leftToWays, pickWays, waysIn } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
@@ -55,18 +56,6 @@ const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBR
 // A prelude definition's id, by its name.
 export const preludeDef = (name: string): Id | undefined =>
   Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
-
-// The operations of the program's interfaces (INTERFACES.md): each field
-// of an interface typedef, and the interface it belongs to.
-function interfaceOps(code: Code): Map<Id, Id> {
-  const out = new Map<Id, Id>();
-  for (const d of code.defs) {
-    const n = code.nodes[d], td = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
-    if (td?.kind !== "typedef" || !td.interface) continue;
-    for (const v of td.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) out.set(f, d);
-  }
-  return out;
-}
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
@@ -228,42 +217,13 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const ops = interfaceOps(code);
   const opAt = new Map(info.opAt ?? []);
   const lifted = new Map<string, Id>();
-  // Ways (WAYS.md, BACKLOG L96): the definitions that give an interface
-  // field from its other fields, and the fields each one uses.
-  const waysOf = new Map<Id, { def: Id; uses: Set<Id> }[]>();
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "def" || !n.way || !n.body) continue;
-    const uses = new Set<Id>();
-    const look = (x: Id) => { const m = code.nodes[x]; if (m.kind === "ref" && ops.has(m.target)) uses.add(m.target); children(m).forEach(look); };
-    look(n.body);
-    waysOf.set(n.way, [...(waysOf.get(n.way) ?? []), { def: n.id, uses }]);
-  }
-  // For one implementation, the cheapest way to each field: a field it
-  // gives costs 1, a way 1 plus what it uses. Knuth's generalisation of
-  // Dijkstra's algorithm (1977): the cheapest field whose way uses only
-  // finished fields is finished next, so a cycle of ways is never followed.
+  // Ways (WAYS.md, BACKLOG L96, ways.ts): each implementation's pick,
+  // made once.
+  const ways = waysIn(code, ops);
   const chosen = new Map<Id, Map<Id, Id | null>>();
   const choose = (impl: Id, variant: NodeOf<"variant">, args: Id[]) => {
     let pick = chosen.get(impl);
-    if (pick) return pick;
-    const cost = new Map<Id, number>();
-    pick = new Map();
-    variant.fields.forEach((f, i) => { const g = code.nodes[args[i]]; if (!(g.kind === "ref" && g.target === S.byItsWays)) { cost.set(f, 1); pick!.set(f, null); } });
-    for (;;) {
-      let best: { field: Id; way: Id; cost: number } | null = null;
-      for (const f of variant.fields) {
-        if (cost.has(f)) continue;
-        for (const w of waysOf.get(f) ?? []) {
-          if (![...w.uses].every((u) => cost.has(u))) continue;
-          const c = 1 + [...w.uses].reduce((a, u) => a + cost.get(u)!, 0);
-          if (!best || c < best.cost) best = { field: f, way: w.def, cost: c };
-        }
-      }
-      if (!best) break;
-      cost.set(best.field, best.cost);
-      pick.set(best.field, best.way);
-    }
-    chosen.set(impl, pick);
+    if (!pick) chosen.set(impl, (pick = pickWays(code, ways, variant, args)));
     return pick;
   };
   const implement = (id: Id, env: Env) => {
@@ -276,7 +236,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const variant = (code.nodes[(code.nodes[body.fn] as NodeOf<"ref">).target] as NodeOf<"variant">);
     const arg = body.args[variant.fields.indexOf(field)];
     const given = code.nodes[arg];
-    if (given.kind === "ref" && given.target === S.byItsWays) {
+    if (leftToWays(code, arg)) {
       const way = choose(impl, variant, body.args).get(field);
       if (!way) throw new Error(`${names[impl] ?? impl} leaves ${names[field] ?? field} to its ways, and none of them ends in a field it gives`);
       nodes[id] = { id, kind: "ref", target: way };

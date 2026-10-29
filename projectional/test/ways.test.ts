@@ -56,7 +56,11 @@ for (const gives of ["sin", "cos"] as const) test(`Trig giving only ${gives}: th
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
 
-test("Trig leaving both sin and cos to their ways: nothing ends in given code, and it says so", () => {
+test("Trig leaving both sin and cos to their ways: nothing ends in given code, and the checker says so at the implementation (L96b)", () => {
   const p = program("neither");
+  const impl = p.code.defs.find((d) => p.names[d] === "trig at angle")!;
+  assert.deepEqual(p.info.errors.filter((e) => e.id === impl).map((e) => e.message),
+    ["trig at angle leaves sin and cos to their ways, and none of them ends in a field it gives: give one of them, or a field their ways use"]);
+  // Run anyway, it still stops where the use is resolved.
   assert.throws(() => makeRunner(p.code, p.info, { print: () => {}, names: p.names }).value(p.code.defs.find((d) => p.names[d] === "the cosine")!), /leaves cos to its ways, and none of them ends in a field it gives/);
 });
