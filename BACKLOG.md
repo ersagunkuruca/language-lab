@@ -139,9 +139,9 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I43 | Every framed part (function, action, case) whose body is more than 3 deep or 3 wide starts folded in the graph; opened, it stays open (#616) | #619 |
 | I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps | #618 |
 | M2 | A map or set in a field of the program's own type takes the tree in lab run, lab compile (#592) and the editor's Run | #617 |
-| I43 | A function whose body is more than 3 deep starts folded in the graph; opened, it stays open | #616 |
 | I42 | Tidy everything centres each node on its inputs (Reingold–Tilford), steps keep their column | #614 |
 | I41 | Tidy everything keeps inputs in the order they plug in, however tall each is | #613 |
 | I35 | The nested to-do outline runs in reactive.html and the example menu, steps indented under their item | #611 |

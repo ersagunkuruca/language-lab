@@ -135,7 +135,7 @@ interface Layout {
   named?: Id[];
   // Frames drawn folded into one box (a lambda, a let, a match arm...). A view.
   folded?: Id[];
-  // Functions that start folded in the graph (deepFunctions) and were opened.
+  // Framed parts that start folded in the graph (deepFunctions) and were opened.
   unfolded?: Id[];
   // Per definition: which ports (parameters, and "out" for the result) you
   // give it when running it backwards. Choosing different ones is how you
@@ -2146,32 +2146,51 @@ function groupToFunction(info: T.Info, g: Id) {
   applyT(r, undefined, undefined, undefined, { ...doc.layout, groups, folded });
 }
 
-// A function whose body is more than DEEP nodes deep starts folded in the
-// graph (Ersagun 2026-10-28: "bigger than 3 (or 2) depth gets collapsed").
-// Deep counts the longest chain from the body's result to a leaf, a call's
-// function name included, a function inside as one: `x * 2 + 1` is 3 and
-// stays open, `f(g(h(x)))` is 4 and starts folded. At 2 a third of the
-// examples' functions would start folded, most of them one-line sums; at 3
-// it's one in six. Opened, it stays open: layout.json's unfolded.
-const DEEP = 3;
+// A framed part (a function, an action, a case of a match or a fold)
+// whose body is more than BIG deep or wide starts folded in the graph
+// (Ersagun 2026-10-29: "max(recursive depth, recursive breadth) of a
+// lambda decides whether it is folded by default. All framed parts").
+// Both count the nodes the graph draws, through the frames inside: depth
+// is the longest chain from the body's result to a leaf, breadth the most
+// nodes side by side at one level. A call's function is the call's node,
+// not one below it. `x * 2 + 1` is 3 deep and 2 wide and stays open;
+// `f(g(h(x)))` is 4 deep and starts folded, and so does `f(a, b, c, d)`,
+// 4 wide. The definition's own frame never folds. Opened, it stays open:
+// layout.json's unfolded.
+const BIG = 3;
 const deepCache = new WeakMap<Code, Map<Id, Id[]>>();
 function deepFunctions(def: Id): Id[] {
   const byDef = deepCache.get(doc.code) ?? new Map<Id, Id[]>();
   deepCache.set(doc.code, byDef);
   if (byDef.has(def)) return byDef.get(def)!;
   const out: Id[] = [];
-  const depth = (id: Id): number => { const n = node(id); return !n ? 0 : n.kind === "lambda" ? 1 : 1 + Math.max(0, ...children(n).map(depth)); };
-  const bodyOf = (id: Id) => { let b = id; for (let n = node(b); n?.kind === "lambda"; n = node(b)) b = n.body; return b; };
-  // A function given its arguments on the spot is a let, not a function's frame.
+  const kids = (id: Id): Id[] => {
+    const n = node(id);
+    if (!n) return [];
+    switch (n.kind) {
+      case "call": return node(n.fn)?.kind === "ref" ? n.args : [n.fn, ...n.args];
+      case "lambda": case "arm": return [n.body];
+      case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
+      default: return children(n).filter((c) => node(c)?.kind !== "binder");
+    }
+  };
+  const big = (body: Id) => {
+    let level = [body], deep = 0, wide = 0;
+    while (level.length) { deep++; wide = Math.max(wide, level.length); level = level.flatMap(kids); }
+    return Math.max(deep, wide) > BIG;
+  };
+  // A function given its arguments on the spot is a let, drawn as dots, not a frame.
   const walk = (id: Id, top: boolean) => {
     const n = node(id);
     if (!n) return;
     if (n.kind === "lambda") {
-      const body = bodyOf(id);
-      if (!top && depth(body) > DEEP) out.push(id);
+      let body = n.body;
+      for (let b = node(body); b?.kind === "lambda"; b = node(body)) body = b.body;
+      if (!top && big(body)) out.push(id);
       return walk(body, false);
     }
-    if (n.kind === "call" && node(n.fn)?.kind === "lambda") { n.args.forEach((a) => walk(a, false)); return walk(bodyOf(n.fn), false); }
+    if (n.kind === "call" && node(n.fn)?.kind === "lambda") { n.args.forEach((a) => walk(a, false)); return walk((node(n.fn) as NodeOf<"lambda">).body, false); }
+    if (n.kind === "arm" && big(n.body)) out.push(id);
     for (const c of children(n)) walk(c, false);
   };
   const b = defBody(def);
