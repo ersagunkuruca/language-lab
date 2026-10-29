@@ -91,9 +91,11 @@ function load(path: string): Program {
 // again, like any program.
 function represented(p: Program, main: Id): Program {
   // Every definition the program has, so the ones main shares with others
-  // change together; types stay as they are.
+  // change together; types stay as they are for its own representations.
+  // The library's are chosen over the types too, so a field typed Map
+  // becomes the tree its code builds (GAPS.md M2).
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return !b || p.code.nodes[b]?.kind !== "typedef"; });
-  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, defs, p.reps);
+  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps);
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {

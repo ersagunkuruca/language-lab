@@ -14,6 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COMPARE, CONS, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { NUMBER, STRING } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -204,4 +205,40 @@ test("the represented program compiles: JavaScript prints the same, and WebAssem
   assert.deepEqual([...lowered.refused.values()], []);
   assert.deepEqual([...emitC(lowered).refused.values()], []);
   assert.ok(WebAssembly.validate(emitWasm(lowered).bytes));
+});
+
+// GAPS.md M2: a map in a field of the program's own type. The type is
+// handed to the chooser with the rest, so the field holds the tree the
+// code now builds; equal, show and compare on the record see the entries.
+test("a record of the program's own type holding a map gets the tree, and is equal, shown and compared by its entries", () => {
+  const k = new Lang(LIBRARY.code);
+  const Tally = k.type("Tally", [], [["tally", [["label", () => k.tref(STRING)], ["counts", () => k.tref("std.map", k.tref(STRING), k.tref(NUMBER))]]]]);
+  const put = (m: Id, key: string, v: number) => k.call(L("put"), m, k.lit(key), k.lit(v));
+  const counts = k.def("counts");
+  k.define(counts, k.fold(k.call(S.range, k.lit(300)), [
+    { variant: NIL, names: [], body: () => k.x(L("empty map")) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "m"], body: ([i], [, m]) => k.call(L("put"), m!, k.call(SHOW_ANY, k.call(S.mod, i, k.lit(40))), i) },
+  ]));
+  const ab = k.def("ab"), ba = k.def("ba"), abc = k.def("abc");
+  // The same entries put in two orders: trees of two shapes.
+  k.define(ab, k.call(Tally.v.tally, k.lit("t"), put(put(put(put(k.x(L("empty map")), "a", 1), "b", 2), "c", 3), "d", 4)));
+  k.define(ba, k.call(Tally.v.tally, k.lit("t"), put(put(put(put(k.x(L("empty map")), "d", 4), "c", 3), "b", 2), "a", 1)));
+  k.define(abc, k.call(Tally.v.tally, k.lit("t"), put(put(k.x(L("empty map")), "a", 1), "b", 2)));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(k.call(L("map size"), k.x(counts))),
+    show(k.x(ab)),
+    show(k.call(S.equal, k.x(ab), k.x(ba))),
+    show(k.call(COMPARE, k.x(ab), k.x(abc))),
+    show(k.call(COMPARE, k.x(abc), k.x(ba))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const c = withLibraryRepresentations(code, info, names, main, [Tally.def, counts, ab, ba, abc, main]);
+  assert.deepEqual(c.chosen, ["Map as weight-balanced tree"]);
+  const plain = printed(code, names, main);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), plain);
+  assert.equal(plain[2], "true");
 });

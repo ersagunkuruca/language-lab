@@ -1199,6 +1199,12 @@ and compared by meaning. That makes it a Language-lane change with an
 editor line, so it needs the editor lane's go-ahead. `routes.test.ts`
 has a todo for it.
 
+*Fixed* (BACKLOG M2) in lab.ts; the editor lane makes runWorker.ts's
+line. The test found show wrong: a record of the program's own type
+didn't count as holding a map, and once it did, its meanings couldn't be
+built in the same type, which the rewrite changes. They are built in a
+copy of the type that the rewrite leaves alone.
+
 **M3. Taking the head of `items of` walks the whole set (perf: n per
 step, so n² per search).** `settle` is `match items of(frontier) | nil →
 … | cons(next, later) → …`, and `later` is never used. Compiled, each

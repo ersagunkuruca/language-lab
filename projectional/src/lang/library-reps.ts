@@ -48,7 +48,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   // equal, show and compare on a stored value: the row's own, through its
   // meaning; on a value with one inside, given that value as meanings.
   const k = new Lang(code);
-  const meanings = asMeanings(k, code, info, chosen);
+  const meanings = asMeanings(k, code, info, names, chosen);
   const nodes: Record<Id, Node> = { ...code.nodes };
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? chosen.find((r) => r.of === t.id) : undefined; };
@@ -93,9 +93,11 @@ const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY
 // value with each one as its meaning (null if it has none): a list item by
 // item, a case field by field, a map's values. The definitions aren't the
 // program's, so representing it leaves the meanings they build alone.
-function asMeanings(k: Lang, code: Code, info: Info, chosen: Representation[]) {
+function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Representation[]) {
   const made = new Map<string, Id | null>();
-  const has = (t: Type): boolean => t.t === "con" && (chosen.some((r) => r.of === t.id) || t.args.some((a) => has(info.subst.zonk(a))));
+  // A case of another type has one if its own fields do (GAPS.md M2: the
+  // program's record holding a map).
+  const has = (t: Type): boolean => t.t === "con" && (chosen.some((r) => r.of === t.id) || t.args.some((a) => has(info.subst.zonk(a))) || holds(t.id));
   const key = (t: Type): string => (t.t === "con" ? `${t.id}(${t.args.map((a) => key(info.subst.zonk(a))).join(",")})` : t.t);
   const meanings = (t: Type): Id | null => {
     t = info.subst.zonk(t);
@@ -129,12 +131,52 @@ function asMeanings(k: Lang, code: Code, info: Info, chosen: Representation[]) {
       if (n.kind === "tref") return params.get(n.target) ?? { t: "con", id: n.target, args: n.args.map(fieldType) };
       return { t: "var", v: -1 };
     };
-    k.define(d, k.fn(["value"], (v) => k.match(v, td.variants.map((variant) => {
+    // A type whose own fields hold a stored value is rewritten too, so its
+    // meanings are built in a copy that isn't (GAPS.md M2).
+    const into = holds(t.id) ? (k.code.nodes[(k.code.nodes[shadow(t.id)] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants : td.variants;
+    k.define(d, k.fn(["value"], (v) => k.match(v, td.variants.map((variant, j) => {
       const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
       const each = fields.map((f) => meanings(fieldType((code.nodes[f] as NodeOf<"field">).type)));
-      return { variant, names: fields.map((_, i) => `field ${i + 1}`), body: (xs: Id[]) => (fields.length ? k.call(variant, ...xs.map((x, i) => (each[i] ? k.call(each[i]!, x) : x))) : k.x(variant)) };
+      return { variant, names: fields.map((_, i) => `field ${i + 1}`), body: (xs: Id[]) => (fields.length ? k.call(into[j], ...xs.map((x, i) => (each[i] ? k.call(each[i]!, x) : x))) : k.x(into[j])) };
     }))));
     return d;
+  };
+  // Does a type's definition name a stored type in its fields, itself or
+  // through another type that does (not through its parameters)?
+  const holding = new Map<Id, boolean>();
+  const holds = (id: Id): boolean => {
+    if (holding.has(id)) return holding.get(id)!;
+    holding.set(id, false);
+    const td = code.nodes[(code.nodes[id] as NodeOf<"def">)?.body ?? ""];
+    const names = (n: Id): boolean => {
+      const x = code.nodes[n];
+      if (x?.kind === "tref") return chosen.some((r) => r.of === x.target) || (x.target !== id && holds(x.target)) || x.args.some(names);
+      if (x?.kind === "tfun") return [...x.params, x.result].some(names);
+      return false;
+    };
+    const r = td?.kind === "typedef" && td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => names((code.nodes[f] as NodeOf<"field">).type)));
+    holding.set(id, r);
+    return r;
+  };
+  // The copy: the same cases and names, with each type that holds one
+  // (itself too) replaced by its copy, so the stored types stay meanings.
+  const shadows = new Map<Id, Id>();
+  const shadow = (id: Id): Id => {
+    if (shadows.has(id)) return shadows.get(id)!;
+    const td = code.nodes[(code.nodes[id] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+    const ty = (n: Id, ps: Id[]): Id => {
+      const x = code.nodes[n];
+      if (x?.kind === "tref") {
+        const p = td.params.indexOf(x.target);
+        return k.tref(p >= 0 ? ps[p] : holds(x.target) ? shadow(x.target) : x.target, ...x.args.map((a) => ty(a, ps)));
+      }
+      if (x?.kind === "tfun") return k.tfun(x.params.map((a) => ty(a, ps)), ty(x.result, ps), x.effects);
+      return n;
+    };
+    const made = k.type(names[id] ?? "copy", td.params.map((p) => names[p] ?? "a"), td.variants.map((v) =>
+      [names[v] ?? "case", (code.nodes[v] as NodeOf<"variant">).fields.map((f) => [names[f] ?? "field", (self: Id, ps: Id[]) => (shadows.set(id, self), ty((code.nodes[f] as NodeOf<"field">).type, ps))] as [string, (self: Id, ps: Id[]) => Id])]));
+    shadows.set(id, made.def);
+    return made.def;
   };
   return meanings;
 }
