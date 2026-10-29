@@ -36,8 +36,16 @@ export function seededGenerator(seed: number): Generator {
 }
 
 // What the world answers `random()` with when nothing in the program
-// does: the platform's cryptographic randomness, 53 bits of it.
+// does: the platform's cryptographic randomness, 53 bits of it. Asked for
+// a few thousand words at a time: one call per number cost about 0.4 ms in
+// Node, which was nearly all of Pig's thousand games.
+const pool = new Uint32Array(4096);
+let left = 0;
 export function worldRandom(): number {
-  const w = crypto.getRandomValues(new Uint32Array(2));
-  return ((w[0] >>> 5) * 67108864 + (w[1] >>> 6)) / 9007199254740992;
+  if (left < 2) {
+    crypto.getRandomValues(pool);
+    left = pool.length;
+  }
+  left -= 2;
+  return ((pool[left] >>> 5) * 67108864 + (pool[left + 1] >>> 6)) / 9007199254740992;
 }
