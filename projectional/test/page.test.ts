@@ -54,6 +54,40 @@ test("the pig page: a game, its replay word for word, and a thousand games told 
   assert.equal(lines(), game, "the quiet games say nothing on the page");
 });
 
+// Tumble: one chain reaction under three strategies. A tap goes to all
+// three lanes; each step's animation ending (animationend) shows the next.
+test("the tumble page: three lanes agree on one move, and treat a second one tapped mid-chain three ways", () => {
+  const { root } = open("tumble");
+  const all = (e: FakeEl, f: (e: FakeEl) => boolean, out: FakeEl[] = []) => { if (f(e)) out.push(e); e.kids.forEach((k) => k instanceof FakeEl && all(k, f, out)); return out; };
+  const lanes = ["wait", "at once", "step by step"].map((id) => root.find(id));
+  const status = () => lanes.map((l) => all(l, (e) => e.attrs.get("id")?.endsWith(" status") ?? false)[0].textContent);
+  const logic = () => lanes.map((l) => all(l, (e) => (e.attrs.get("class") ?? "").startsWith("dot")).map((e) => e.attrs.get("class") + (e.attrs.get("style") ?? "")).join("|"));
+  // Every step's animation ends, lane by lane, until all three rest.
+  const settle = () => {
+    for (let n = 0; n < 100; n++) {
+      const timers = lanes.map((l) => all(l, (e) => e.attrs.get("class") === "timer")[0]);
+      if (timers.every((t) => !t)) return n;
+      timers.forEach((t) => t?.fire("animationend"));
+    }
+    throw new Error("the lanes never came to rest");
+  };
+  root.find("hint").fire("click");
+  const hinted = all(lanes[0], (e) => e.attrs.get("class") === "tap hint");
+  assert.equal(hinted.length, 2);
+  hinted.forEach((e) => e.fire("pointerdown"));
+  assert.deepEqual(status().map((s) => s.split(".")[0]), ["Showing: swap", "Showing: swap", "Showing: swap"]);
+  assert.match(status()[1], /still to show: [1-9]/, "all at once worked out the whole chain");
+  assert.ok(settle() >= 4);
+  const one = logic();
+  assert.equal(one[0], one[1]);
+  assert.equal(one[1], one[2], "with no tap mid-chain the three strategies end on the same board");
+  root.find("two").fire("click");
+  assert.match(status()[0], /Taps ignored: 1\./);
+  assert.match(status()[2], /Swaps waiting for the next link: 1\./);
+  settle();
+  assert.match(status()[2], /At rest\. Swaps waiting for the next link: 0\./);
+});
+
 test("the converter previews: typing in one field moves the others", () => {
   const { root } = open("converter");
   const inputs: FakeEl[] = [];
