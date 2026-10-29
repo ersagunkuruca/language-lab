@@ -103,9 +103,7 @@ Mercury compiles each mode.
    and a use that follows the declared direction as `length, angle =
    polar(x, y)`; the DSL builds both (`results`, `use`).
    examples/relations' polar and sum and difference declare theirs, so
-   `to polar` and `split` read that way (test/results.test.ts). The
-   signature line still shows the predicate's type; it reads as the
-   direction in L95b.
+   `to polar` and `split` read that way (test/results.test.ts).
 2. **L95b, built.** Results computed directly: `= e1, e2` for a
    definition whose body is `r1 = e1 and r2 = e2` with no result inside an
    e; other directions written by naming what's given (`d, b = ‹sum and
