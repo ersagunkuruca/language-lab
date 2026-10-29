@@ -255,6 +255,22 @@ to fail when its expectation is changed. They left editor/smoke.ts.
 
 The 18 left drag, drop, measure places or scroll (T11).
 
+### T11. Drags in Node, and what is left for the browser
+
+happy-dom has no layout, so `test/editor-page.ts` gives each element a
+box of its own (a small square in a grid, in the order it is first asked
+for) and `elementFromPoint` finds the element whose box holds the point.
+A drag from one element's box to another's then reaches the element the
+scenario meant; `evaluate` runs its function in the page. Six more
+scenarios pass and moved: 19 in Node, about 2.5 min, run when the editor
+changes. Whatever compares places (an edit keeps the graph's places,
+steps in one column, the first view, scrolling) or needs an iframe, a
+download, reactive.html or the phone layout stays in `editor/smoke.ts`,
+now a nightly browser check of about 3 minutes instead of 10: per program
+only its first definition's keyboard, menus, Tidy, map and folding, and
+Run in a worker once. The rule from here: a scenario that passes in Node
+moves there.
+
 ### T6. Rules against the paradigm pin (WORKFLOW.md)
 
 - **Tests speak the language's terms.** They state what a program does
@@ -356,7 +372,7 @@ examples. They are a language design item, for after T1 to T6.
 | T8 | Browser tests nightly only; editor checks without a browser | process, then E | medium |
 | T9 | Every definition drawn by the editor in Node (happy-dom) | process | medium |
 | T10 | Editing scenarios in Node, on a stand-in for Playwright's page | process | medium |
-| T11 | Drags in Node too; one short browser check; smoke.ts deleted | process | medium |
+| T11 | Drags in Node too; a short nightly browser check for real layout | process | medium |
 
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting

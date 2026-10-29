@@ -83,7 +83,49 @@ export function openEditor(saved?: string) {
       return `[${mark}]`;
     });
   };
-  const layout = (what: string) => { throw new Error(`${what} needs a browser's layout`); };
+  // No layout, so every element gets a box of its own, a small square in a
+  // grid in the order it is first asked for, and a point finds the element
+  // whose box it is in. A drag from one element to another then reaches the
+  // element it was meant for; whatever compares places on screen is the
+  // browser check's.
+  const boxed: Element[] = [], boxes = new WeakMap<Element, number>();
+  const boxOf = (el: Element) => {
+    let i = boxes.get(el);
+    if (i === undefined) { i = boxed.push(el) - 1; boxes.set(el, i); }
+    const x = 20 + (i % 60) * 20, y = 20 + Math.floor(i / 60) * 20;
+    return { x, y, width: 10, height: 10, left: x, top: y, right: x + 10, bottom: y + 10 };
+  };
+  const at = (x: number, y: number) => boxed.find((el) => { const b = boxOf(el); return el.isConnected && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; }) ?? null;
+  (window.Element as unknown as { prototype: { getBoundingClientRect(): unknown } }).prototype.getBoundingClientRect = function (this: Element) { return { ...boxOf(this), toJSON() {} }; };
+  (doc as unknown as { elementFromPoint(x: number, y: number): Element | null }).elementFromPoint = at;
+  // A function run in the page, as Playwright's evaluate does.
+  const inPage = <T,>(f: (...a: never[]) => T) => window.eval(`(${f.toString()})`) as (...a: unknown[]) => T;
+  let pointer = { x: 0, y: 0 }, downOn: Element | null = null;
+  const fireAt = (type: string, init: Record<string, unknown> = {}) => {
+    const el = at(pointer.x, pointer.y) ?? doc.body;
+    fire(el, type, { clientX: pointer.x, clientY: pointer.y, isPrimary: true, pointerId: 1, pointerType: "mouse", ...init });
+    return el;
+  };
+  const mouse = {
+    async move(x: number, y: number, o: { steps?: number } = {}) {
+      const from = pointer, steps = o.steps ?? 1;
+      for (let i = 1; i <= steps; i++) {
+        pointer = { x: from.x + ((x - from.x) * i) / steps, y: from.y + ((y - from.y) * i) / steps };
+        fireAt("pointermove", { buttons: downOn ? 1 : 0 }); fireAt("mousemove");
+      }
+      await settle();
+    },
+    async down(o: { button?: "right" } = {}) { const button = o.button === "right" ? 2 : 0; downOn = fireAt("pointerdown", { button, buttons: 1 }); fireAt("mousedown", { button }); await settle(); },
+    async up(o: { button?: "right" } = {}) {
+      const button = o.button === "right" ? 2 : 0;
+      const el = fireAt("pointerup", { button }); fireAt("mouseup", { button });
+      if (el === downOn) fireAt(button ? "contextmenu" : "click", { button });
+      downOn = null;
+      await settle();
+    },
+    async click(x: number, y: number, o: { button?: "right" } = {}) { await this.move(x, y); await this.down(o); await this.up(o); },
+    async wheel() {},
+  };
   class Locator {
     selector: string; text?: Text; pick: (els: El[]) => El[]; within?: Locator;
     constructor(selector: string, text?: Text, pick: (els: El[]) => El[] = (e) => e, within?: Locator) {
@@ -135,12 +177,13 @@ export function openEditor(saved?: string) {
     async isChecked(o: { timeout?: number } = {}) { return (await this.one(o.timeout) as HTMLInputElement).checked; }
     async inputValue(o: { timeout?: number } = {}) { return (await this.one(o.timeout) as HTMLInputElement).value; }
     async allTextContents() { return this.all().map((e) => e.textContent ?? ""); }
-    async boundingBox(): Promise<null> { return layout("boundingBox"); }
-    async evaluate(): Promise<never> { return layout("evaluate"); }
-    async evaluateAll(): Promise<never> { return layout("evaluateAll"); }
-    async innerText(o: { timeout?: number } = {}) { return (await this.one(o.timeout)).innerText; }
+    async boundingBox() { const b = boxOf(await this.one()); return { x: b.x, y: b.y, width: b.width, height: b.height }; }
+    // As Playwright's: run in the page, given the element(s) and the argument.
+    async evaluate<T, A = any>(f: (el: HTMLElement, arg: A) => T, arg?: A) { return inPage(f as (...a: never[]) => T)(await this.one(), arg); }
+    async evaluateAll<T, A = any>(f: (els: HTMLElement[], arg: A) => T, arg?: A) { return inPage(f as (...a: never[]) => T)(this.all(), arg); }
+    async innerText(o: { timeout?: number } = {}) { const el = await this.one(o.timeout); return el.innerText ?? el.textContent ?? ""; }
     async textContent() { return (await this.one()).textContent; }
-    async allInnerTexts() { return this.all().map((e) => e.innerText); }
+    async allInnerTexts() { return this.all().map((e) => e.innerText ?? e.textContent ?? ""); }
     async getAttribute(name: string, o: { timeout?: number } = {}) { return (await this.one(o.timeout)).getAttribute(name); }
     async isVisible() { return this.all().length > 0; }
     async waitFor(o: { timeout?: number; state?: "attached" | "detached" } = {}) {
@@ -173,7 +216,8 @@ export function openEditor(saved?: string) {
     },
   };
   return {
-    doc, errors, keyboard, window,
+    doc, errors, keyboard, mouse, window,
+    evaluate: <T,>(f: (arg?: never) => T, arg?: unknown) => inPage(f)(arg),
     locator: (selector: string, o: { hasText?: Text } = {}) => new Locator(selector, o.hasText),
     texts: (selector: string) => [...doc.querySelectorAll(selector)].map((e) => e.textContent ?? ""),
     close: async () => { await window.happyDOM.abort(); await window.happyDOM.close(); },
