@@ -151,7 +151,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     for (const id of part.items.keys()) scene.faded.add(id);
   }
   for (const [g, members] of Object.entries(hooks.groups ?? {})) group(scene, g, members);
-  autoArrange(scene);
+  autoArrange(scene, hooks.folded);
   for (const p of [...picked]) if (!scene.items.has(p) && !scene.frames.has(p)) picked.delete(p);
   const shown = (at: Record<Id, Pos>) => fold(scene, at, hooks.folded);
   // An edit doesn't lay the graph out again (Ersagun 2026-10-27: no tidy
@@ -867,7 +867,12 @@ function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>):
     if (scene.items.has(k)) { out[k] = p; continue; }
     const b = boxes.get(k);
     if (!b) continue;
-    for (const c of expand(scene, [k])) { const q = pos.get(c)!; out[c] = { x: Math.round(q.x + p.x - b.x), y: Math.round(q.y + p.y - b.y) }; }
+    // A box's place can be fractional: contents that round to where they
+    // are haven't moved.
+    for (const c of expand(scene, [k])) {
+      const q = pos.get(c)!, x = Math.round(q.x + p.x - b.x), y = Math.round(q.y + p.y - b.y);
+      if (x !== Math.round(q.x) || y !== Math.round(q.y)) out[c] = { x, y };
+    }
   }
   return out;
 }
@@ -1107,10 +1112,13 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
 }
 
 // A graph nobody has moved is drawn as Tidy everything draws it, so the
-// two are one layout.
-function autoArrange(scene: Scene) {
+// two are one layout: folded frames are laid out as the boxes they are
+// drawn as, after their contents are laid out inside them.
+function autoArrange(scene: Scene, folded?: Set<Id>) {
   const { nodes, frames, wires } = asLayout(scene, {});
   for (const [k, p] of arrange(nodes, frames, wires, scene.chains)) scene.items.get(k)!.auto = p;
+  if (!folded?.size) return;
+  for (const [k, p] of Object.entries(unfoldMoves(scene, {}, tidyScene(fold(scene, {}, folded), {}, null)))) scene.items.get(k)!.auto = p;
 }
 
 // Tidy everything lays it all out afresh (arrange), the same every time;
