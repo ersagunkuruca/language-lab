@@ -260,6 +260,14 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **write** : `(Cell a, a) -[Update]-> Unit`. Puts a new value in a cell. Only event handlers can write.
 - **formula** : `(() -[Cells, Diverge]-> a) -[Cells]-> Cell a`. A cell whose value is computed from other cells, and kept up to date when they change.
 - **each** : `(Cell (List a), (a) -[Cells, Diverge]-> b) -[Cells]-> Cell (List b)`. A cell holding f of each item of a list cell, where an item that stays keeps what f gave it.
+- **path** : `((a) -> b) -> Path a b`. A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.
+- **item path** : `(Path a (List b), Int) -> Path a b`. Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.
+- **then path** : `(Path a b, Path b c) -> Path a c`. The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.
+- **read at** : `(Cell a, Path a b) -[Cells, Diverge, Choice]-> b`. What is at a place in a cell's value. A page part that reads it is redrawn only when that place changes, not when another item does. No answer when the place isn't there (an item past the end).
+- **write at** : `(Cell a, Path a b, b) -[Update]-> Unit`. Puts a value at a place in a cell's value; only what read that place, or a place inside or around it, runs again. A place that isn't there changes nothing. Only event handlers can write.
+- **insert at** : `(Cell a, Path a (List b), Int, b) -[Update]-> Unit`. Puts an item into the list at a place, before item i (at the end when i is past it).
+- **remove at** : `(Cell a, Path a (List b), Int) -[Update]-> Unit`. Takes item i out of the list at a place; nothing when there's no item i.
+- **move at** : `(Cell a, Path a (List b), Int, Int) -[Update]-> Unit`. Moves item `from` of the list at a place to position `to`; nothing when either isn't there.
 - **Html** (type). A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
 - **Event** (type). What a page's handler is given when its event comes: the field's value and the key pressed.

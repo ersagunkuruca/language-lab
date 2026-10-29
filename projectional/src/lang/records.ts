@@ -27,6 +27,17 @@ export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
   return path.length && e?.kind === "ref" && e.target === n.params[0] ? path : null;
 }
 
+// A place for `path` (L98): a field or a path of fields as for `set`, or
+// the parameter itself, (t) ↦ t, for the whole value ([]).
+export function placePath(code: Code, id: Id, unfinished = false): Id[] | null {
+  const n = code.nodes[id];
+  if (n?.kind === "lambda" && n.params.length === 1) {
+    const body = code.nodes[n.body];
+    if (body?.kind === "ref" && body.target === n.params[0]) return [];
+  }
+  return fieldPath(code, id, unfinished);
+}
+
 // Whether a field is an interface's operation (INTERFACES.md): `sin(x)`,
 // not a field read `x.sin`.
 const operations = new WeakMap<Code, Set<Id>>();

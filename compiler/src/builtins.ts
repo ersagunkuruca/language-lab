@@ -110,6 +110,16 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.each]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $listArrays)`), scalar: CELLS },
   [CELL_OPS.read]: { js: op(([c]) => `$cells().read(${c})`), scalar: CELLS },
   [CELL_OPS.write]: { js: op(([c, v]) => `($cells().write(${c}, ${v}), $unit)`), scalar: CELLS },
+  // Places and edits at them (L98): runtime.js $path, on the same handler.
+  // A path's fields are known when compiling, as set's are.
+  [CELL_OPS.path]: { js: written("pathCall(): `$path.of` with the field positions written in place"), scalar: CELLS },
+  [CELL_OPS.itemPath]: { js: op(([p, i]) => `$path.item(${p}, ${i})`), scalar: CELLS },
+  [CELL_OPS.thenPath]: { js: op(([p, q]) => `$path.then(${p}, ${q})`), scalar: CELLS },
+  [CELL_OPS.readAt]: { js: "partial", scalar: CELLS },
+  [CELL_OPS.writeAt]: { js: op(([c, p, v]) => `$path.write(${c}, ${p}, ${v})`), scalar: CELLS },
+  [CELL_OPS.insertAt]: { js: op(([c, p, i, v]) => `$path.insert(${c}, ${p}, ${i}, ${v})`), scalar: CELLS },
+  [CELL_OPS.removeAt]: { js: op(([c, p, i]) => `$path.remove(${c}, ${p}, ${i})`), scalar: CELLS },
+  [CELL_OPS.moveAt]: { js: op(([c, p, a, b]) => `$path.move(${c}, ${p}, ${a}, ${b})`), scalar: CELLS },
   // Int: a number while it's small (under 2^28), a BigInt beyond (int.ts), so
   // comparisons are plain JS ones.
   // Algebraic numbers (EXACT-REALS.md): std.ts's implementation, exact,

@@ -18,12 +18,12 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
-import { BOOL, S, SET, SIGS, SMART } from "./std.ts";
+import { BOOL, CELL_OPS, S, SET, SIGS, SMART } from "./std.ts";
 import { ratioParts } from "./int.ts";
-import { fieldPath } from "./records.ts";
+import { fieldPath, placePath } from "./records.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -214,7 +214,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (plainParams.has(def)) return plainParams.get(def)!;
     const td = typedefOf(def);
     // a cell is a place, not a value: two of them holding the same thing differ
-    if (def === CELL) { plainParams.set(def, null); return null; }
+    if (def === CELL || def === PATH) { plainParams.set(def, null); return null; }
     plainParams.set(def, new Set()); // builtins; and a type's mention of itself adds nothing
     if (!td) return new Set();
     const need = new Set<number>();
@@ -644,6 +644,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
           && !info.errors.some((e) => e.id === n.args[0])) {
           err(n.args[0], "set needs a field here, or a path of fields such as (p) ↦ p.address.city");
+        }
+        if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === CELL_OPS.path && n.args.length && !placePath(code, n.args[0], true)
+          && !info.errors.some((e) => e.id === n.args[0])) {
+          err(n.args[0], "path needs a field here, a path of fields such as (t) ↦ t.address.city, or (t) ↦ t for the whole");
         }
         t = ret;
         break;

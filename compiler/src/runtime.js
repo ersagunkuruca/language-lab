@@ -103,10 +103,14 @@ export function $eq(a, b) {
 // builtins compiled code calls by id.
 export * as $int from '../../projectional/src/lang/int.ts';
 export * as $text from '../../projectional/src/lang/text.ts';
-export { STD_IMPL as $impl, STD_MANY as $many } from '../../projectional/src/lang/std.ts';
+export { STD_IMPL as $impl } from '../../projectional/src/lang/std.ts';
+import { CELL_OPS, STD_MANY } from '../../projectional/src/lang/std.ts';
+// The Choice builtins: std.ts's, and read at (L98), which reads the
+// runtime's cells (below), so it can't live in std.ts.
+const readAt = (c, p) => { const v = $cells().readAt(c, stepsOf(p), $listArrays); return v === undefined ? [] : [v]; };
+export const $many = { ...STD_MANY, [CELL_OPS.readAt]: readAt };
 // A Choice builtin's answer, or $no: each has at most one (GAPS.md G24).
-import { STD_MANY } from '../../projectional/src/lang/std.ts';
-export const $partial = Object.fromEntries(Object.entries(STD_MANY).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
+export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
 import { showValue, compareValues, ORDER_VALUES } from '../../projectional/src/lang/run.ts';
 export const $showAny = (v, names) => showValue(v, null, names);
@@ -482,10 +486,21 @@ export const $io = {
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells, Pending } from '../../projectional/src/lang/cells.ts';
+import { Cells, Pending, listEdits, pathValue, stepsOf } from '../../projectional/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }
+// Places and edits at them (L98): a path is cells.ts's, and an edit is the
+// handler's, with the compiled code's lists.
+export const $path = {
+  item: (p, i) => pathValue([...stepsOf(p), { item: Number(i) }]),
+  then: (p, q) => pathValue([...stepsOf(p), ...stepsOf(q)]),
+  of: (steps) => pathValue(steps),
+  write: (c, p, v) => ($cells().edit(c, stepsOf(p), () => v, $listArrays), $unit),
+  insert: (c, p, i, v) => ($cells().edit(c, stepsOf(p), (l) => $toList(listEdits.insert($fromList(l), Number(i), v)), $listArrays), $unit),
+  remove: (c, p, i) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.remove($fromList(l), Number(i)); return xs && $toList(xs); }, $listArrays), $unit),
+  move: (c, p, a, b) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.move($fromList(l), Number(a), Number(b)); return xs && $toList(xs); }, $listArrays), $unit),
+};
 
 // optional: the first answer as some(answer), or none.
 export function $optional(f) { for (const x of f()) return { tag: SOME, fields: [x] }; return { tag: NONE, fields: [] }; }

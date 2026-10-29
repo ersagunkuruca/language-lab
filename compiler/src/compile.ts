@@ -31,8 +31,8 @@ import { children, subtree, type Code, type Id, type Node, type NodeOf } from ".
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { BOOL, CONS, FALSE, INT_OPS, LIST, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
-import { fieldPath } from "../../projectional/src/lang/records.ts";
+import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, LIST, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { fieldPath, placePath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
@@ -1395,6 +1395,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return `$setPath(${record}, ${JSON.stringify(path)}, ${value})`;
     }
 
+    // path (L98): a field path, or (t) ↦ t for the whole, known now too.
+    function pathCall(get: Id): string {
+      const steps = placePath(code, get)!.map((f) => ({ field: fieldIndex(f) }));
+      return `$path.of(${JSON.stringify(steps)})`;
+    }
+
     function construct(variant: Id, fields: string[]): string {
       if (variant === CONS) return `$cons(${fields.join(", ")})`;
       const js = `({ tag: ${tag(variant)}, fields: [${fields.join(", ")}] })`;
@@ -1497,6 +1503,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === S.gradient) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
           if (f.target === S.exists) return `$exists($program, ${ex(n.args[0])})`;
           if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
+          if (f.target === CELL_OPS.path) return pathCall(n.args[0]);
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
         if (t.kind === "variant" && isConst(n.id)) return hoist(construct(f.target, n.args.map(ex)));
@@ -2436,6 +2443,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         else if (target === S.gradient) c = `$derivative($program, ${args[0]}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
         else if (target === S.exists) c = `$exists($program, ${args[0]})`;
         else if (target === SET) c = setCall(n.args[0], args[1], args[2]);
+        else if (target === CELL_OPS.path) c = pathCall(n.args[0]);
         else if (kind === "builtin" && (oneOf(target!) ?? implOf(target!))) c = `${oneOf(target!) ?? implOf(target!)}(${args.join(", ")})`;
         else c = `${fn}(${args.join(", ")})`;
         let out: string;
@@ -2632,7 +2640,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(reflected(code))}, ${JSON.stringify([...info.divergent])});`] : [];

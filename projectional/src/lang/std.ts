@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { CELL, PATH, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
@@ -436,6 +436,7 @@ export const IO = {
 // endless data is recursion the checker can't see end). Not Update: a
 // formula reads, it doesn't write. Writing is Update, a world effect.
 const cellOf = (a: Type): Type => ({ t: "con", id: CELL, args: [a] });
+const pathOf = (whole: Type, part: Type): Type => ({ t: "con", id: PATH, args: [whole, part] });
 export const CELL_OPS = {
   cell: builtin("cells.cell", "cell", (s) => { const a = s.fresh(); return fn([a], cellOf(a), s.freshRow([CELLS])); }),
   formula: builtin("cells.formula", "formula", (s) => { const a = s.fresh(); return fn([fn([], a, { effs: [CELLS, DIVERGE], tail: null })], cellOf(a), s.freshRow([CELLS])); }),
@@ -447,6 +448,22 @@ export const CELL_OPS = {
   }),
   read: builtin("cells.read", "read", (s) => { const a = s.fresh(); return fn([cellOf(a)], a, s.freshRow([CELLS, DIVERGE])); }),
   write: builtin("cells.write", "write", (s) => { const a = s.fresh(); return fn([cellOf(a), a], unit, s.freshRow([UPDATE])); }),
+  // Places and edits at them (L98, STABLE-REFERENCES.md §1). A path names
+  // a place inside a cell's value: `path(f)` from a field or a path of
+  // fields written in place ((t) ↦ t is the whole), `item path(p, i)` item
+  // i of the list at p, `then path(p, q)` q inside p. An edit at a place
+  // copies only the way down to it and wakes only the readers of that
+  // place, of places inside it and of places around it; `read at` is a
+  // reader of one place. A place that isn't there: read at has no answer
+  // and an edit changes nothing.
+  path: builtin("cells.path", "path", (s) => { const r = s.fresh(), a = s.fresh(); return fn([fn([r], a, s.freshRow())], pathOf(r, a), s.freshRow()); }),
+  itemPath: builtin("cells.itemPath", "item path", (s) => { const w = s.fresh(), a = s.fresh(); return fn([pathOf(w, list(a)), int], pathOf(w, a), s.freshRow()); }),
+  thenPath: builtin("cells.thenPath", "then path", (s) => { const a = s.fresh(), b = s.fresh(), c = s.fresh(); return fn([pathOf(a, b), pathOf(b, c)], pathOf(a, c), s.freshRow()); }),
+  readAt: builtin("cells.readAt", "read at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, b)], b, s.freshRow([CELLS, DIVERGE, CHOICE])); }),
+  writeAt: builtin("cells.writeAt", "write at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, b), b], unit, s.freshRow([UPDATE])); }),
+  insertAt: builtin("cells.insertAt", "insert at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int, b], unit, s.freshRow([UPDATE])); }),
+  removeAt: builtin("cells.removeAt", "remove at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int], unit, s.freshRow([UPDATE])); }),
+  moveAt: builtin("cells.moveAt", "move at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int, int], unit, s.freshRow([UPDATE])); }),
 };
 
 // The builtins that run a function they're given and keep one of its
