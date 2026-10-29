@@ -620,6 +620,11 @@ async function patternRows() {
   await p.locator("[data-def]", { hasText: /^solutions$/ }).first().click();
   if (Date.now() - t0 > 5000) errors.push(`${where}: opening solutions took ${Date.now() - t0} ms`);
   if (!(await p.locator(".side").innerText()).includes("the graph waits")) errors.push(`${where}: solutions doesn't say its values stopped`);
+  // results gives a Found: its answer reads as one, never NaN (I32).
+  await p.locator("[data-def]", { hasText: /^results$/ }).first().click();
+  const found = await p.locator(".port-row output").first().innerText().catch(() => "");
+  if (!found.startsWith("found(")) errors.push(`${where}: results' answer reads ${found.slice(0, 60)}`);
+  await p.locator("[data-def]", { hasText: /^solutions$/ }).first().click();
   // Its answer reads by the constructors' names, not their hashes (I30).
   // The page's short look may find none; the worker's whole search does.
   await p.locator(".port-row output", { hasText: /^\[apply\(/ }).first().waitFor({ timeout: 15000 }).catch(() => {});

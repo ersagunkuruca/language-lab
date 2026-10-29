@@ -1053,6 +1053,7 @@ function stopSearch() {
   render();
 }
 
+const NUMERIC = /^-?\d+(\.\d+)?(e[-+]?\d+)?$/;
 function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const ports = portsOfDef(ui.def);
@@ -1066,7 +1067,9 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   box.append(h("p", { class: "hint" }, pred
     ? "A function that says true or false: what used to be a network. Tick the ports you know and it solves for the rest, keeping it true."
     : "Tick the ports you know, the result included, and it works out the others: this function, run backwards."));
-  const nice = (v: string) => (/^-?\d/.test(v) ? fmt(Number(v)) : v.replace(/^std\.bool\./, ""));
+  // Only a whole number is rounded: a value that merely starts with a digit
+  // (a constructor's hash, say) isn't one, and read as one it was NaN (I32).
+  const nice = (v: string) => (NUMERIC.test(v) ? fmt(Number(v)) : v.replace(/^std\.bool\./, ""));
   for (const p of ports) {
     const on = known.includes(p);
     const id = `f-port-${p}`;
