@@ -4,6 +4,7 @@
 // repository with these pages in it, so the editor is the site's home page.
 // They are build output, not committed (.gitignore):
 //   index.html     the editor; open it locally too
+//   learn.html     LEARN.md, the front page that picks a level
 //   tutorial.html  TUTORIAL.md as a page, its screenshots read from
 //                  projectional/tutorial/
 //   guide.html     GUIDE.md the same way (screenshots in projectional/guide/)
@@ -38,7 +39,7 @@ const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[
 // Links in the docs are relative to projectional/; the pages are at the root.
 const docPage = (md: string, out: string, title: string) => {
   const body = markdown(readFileSync(here + "../" + md, "utf8"))
-    .replace(/(src|href)="(?![a-z]+:|#|\/|index\.html|tutorial\.html|guide\.html)/g, '$1="projectional/');
+    .replace(/(src|href)="(?![a-z]+:|#|\/|index\.html|learn\.html|tutorial\.html|guide\.html)/g, '$1="projectional/');
   writeFileSync(site + out, `<!doctype html>
 <html lang="en">
 <head>
@@ -77,6 +78,8 @@ ${body}
 </html>
 `);
 };
+// Where to start (LEARN.md): picks a level and links on to the two below.
+docPage("LEARN.md", "learn.html", "Learn");
 docPage("TUTORIAL.md", "tutorial.html", "Language tutorial");
 // The hands-on start (GUIDE.md): the editor's Learn button opens it.
 docPage("GUIDE.md", "guide.html", "A hands-on guide to the editor and the language");

@@ -12,7 +12,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export const slug = (s: string) => s.toLowerCase().replace(/<[^>]+>|&[a-z]+;/g, "").replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/ /g, "-");
 
-const PAGES: Record<string, string> = { "TUTORIAL.md": "tutorial.html", "GUIDE.md": "guide.html" };
+const PAGES: Record<string, string> = { "LEARN.md": "learn.html", "TUTORIAL.md": "tutorial.html", "GUIDE.md": "guide.html" };
 
 const href = (u: string) => {
   if (/^[a-z]+:|^#/.test(u) || !/\.md(#.*)?$/.test(u)) return u;
