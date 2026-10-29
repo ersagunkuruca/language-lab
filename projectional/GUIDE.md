@@ -1,55 +1,57 @@
 # A hands-on guide to the editor and the language
 
-This is a tour you do with the editor open:
-https://ersagunkuruca.github.io/language-lab/. It starts from one small
-program, *Page: two dice*, and changes it with real edits. Each section is
-short and ends with one thing to try. Words are explained the first time
-they come up, and there's a list of them at the end.
+Do this tour with the editor open beside it:
+https://ersagunkuruca.github.io/language-lab/.
 
-[TUTORIAL.md](TUTORIAL.md) is the longer reference: the ideas behind the
-language and the list of what's still confusing. [LANGUAGE.md](LANGUAGE.md)
-is the full description. Start here; go there when you want the why.
+We start from one small program, *Page: two dice*, and change it with real
+edits. Each section is short. Each one ends with one thing to try.
 
-Not sure this is the right start? [Learn](LEARN.md) has a gentler one for
-new programmers and one for people new to functional programming.
+New words are explained when they first come up. There's a list of them
+at the end.
 
-*Written on 2026-10-24 against `main` at #397. Every step below was done
-in the editor, in a browser, before it was written down.*
+Want the ideas first? [Learn](LEARN.md) has a gentle start for new
+programmers and one for people new to functional programming. The
+[tutorial](TUTORIAL.md) goes deeper, and [LANGUAGE.md](LANGUAGE.md) has
+every detail.
 
 ---
 
 ## 1. What you're looking at
 
-Open the editor and pick **Page: two dice** in the **Programs** list on
-the left. Under the program's name are its **definitions**: `die`,
-`two dice`, `a hundred rolls`, `times rolled`, `the first`, `most`, `bar`,
-`bars`, `landed`, `credits`, `main`. A definition is a named piece of the program, usually a function.
+Open the editor. In the **Programs** list on the left, pick
+**Page: two dice**.
+
+Under the program's name are its **definitions**. A definition is a named
+piece of the program, usually a function. This one has `die`, `two dice`,
+`a hundred rolls`, `times rolled`, `the first`, `most`, `bar`, `bars`,
+`landed`, `credits` and `main`.
 
 ![The two dice program open on main](guide/dice-main.png)
 
 The window has four parts:
 
-- **Programs** (left): the programs and their definitions. Click one to
-  open it.
-- **The graph** (middle top): the definition you opened, drawn as boxes
-  (**nodes**) joined by **wires**. Data flows left to right.
-- **Text** (middle bottom): the same definition as text. **Blocks** is the
-  view to read; the other three (Steps, Nested, Lisp) are older ways of
-  writing the same thing.
-- **Run** (right top) and the **inspector** (right bottom). Run runs
-  things. The inspector shows whatever you selected, and has tabs:
-  Program, Checks, Files and Guide.
+- **Programs**, on the left. Click a definition to open it.
+- **The graph**, in the middle at the top. The definition is drawn as
+  boxes (**nodes**) joined by **wires**. Data flows from left to right.
+- **Text**, in the middle below the graph. It's the same definition,
+  written out. **Blocks** is the view to read. Steps, Nested and Lisp are
+  other ways of writing the same thing.
+- **Run** and the **inspector**, on the right. Run runs things. The
+  inspector shows what you've selected.
 
-The graph and the text are two drawings of one thing. There's no source
-file underneath: the program is a tree of parts, each with an id, and both
-views draw that tree. That's why you can't make a typo or a syntax error:
-you never type the program, you pick its parts.
+The graph and the text are two drawings of the same thing.
 
-**Try it:** click **Roll** a few times on the page in the Run pane. Then
-click **Throw 100** a few times and watch the bars: the green ones grow
-toward the red ticks, which are what fair dice give on average, and
-everything shrinks to fit once the longest bar reaches the edge. Then
-click **Roll 100 with seed 7** twice: the same hundred both times.
+There's no source file underneath. The program is a tree of parts, and
+both views draw that tree. You never type the program: you pick its
+parts. So you can't make a typo or a syntax error.
+
+**Try it:**
+
+1. Click **Roll** a few times on the page in the Run pane.
+2. Click **Throw 100** a few times and watch the bars. The green bars grow
+   toward the red ticks, which show what fair dice give on average.
+3. Click **Roll 100 with seed 7** twice. You get the same hundred rolls
+   both times.
 
 ## 2. Reading one definition, two ways
 
@@ -60,120 +62,141 @@ die : () -[Random]-> Float64
 die() = floor(random() · 6) + 1
 ```
 
-The first line is the **type**: what goes in, what comes out, and what
-else the function does along the way (section 4). The second line is the
-body: a random number from 0 up to (not including) 1, times 6, rounded
-down, plus 1.
+The first line is the **type**. It says what goes in, what comes out, and
+what else the function does along the way. Section 4 is about types.
 
-In the graph the same body is boxes: `random` feeds `·` with `6`, that
-feeds `floor`, that feeds `+` with `1`, and the last wire goes to `result`
-on the right. A small grey word above a box, like **Random**, is a
-**badge**: it says that box does something besides compute a value.
+The second line is the body. Take a random number from 0 up to 1, times 6.
+Round it down and add 1. That gives a whole number from 1 to 6.
 
-Things to know while reading:
+The graph shows the same body as boxes. `random` and `6` feed `·`. That
+feeds `floor`, which feeds `+` with `1`. The last wire goes to `result` on
+the right.
+
+Some boxes have a small grey word above them, like **Random**. That's a
+**badge**. It means the box does something besides work out a value.
+
+A few things to know while reading:
 
 - **Hover** over any part of the Blocks text to see its type.
-- **Double-click** a name (`two dice` inside `a hundred rolls`, say) to
-  open that definition. **← main** at the top takes you back.
-- **Click** a part to select it. The inspector then says what it is and
-  what you can do with it.
-- Names in `‹…›` are names with spaces in them: `‹two dice›` is one name.
+- **Double-click** a name to open that definition. **← main** at the top
+  takes you back.
+- **Click** a part to select it. The inspector says what it is and what
+  you can do with it.
+- A name in `‹…›` is a name with spaces in it. `‹two dice›` is one name.
 
-**Try it:** open `two dice` and `a hundred rolls` and read each in both
-views. In `a hundred rolls`, find the `seed` in the graph: an input is a
-purple **dot** on the left edge, and every place that uses it is a wire
-from that dot.
+**Try it:** open `two dice` and `a hundred rolls`, and read each one in
+both views. In `a hundred rolls`, find `seed` in the graph. An input is a
+purple **dot** on the left edge. Every place that uses it gets a wire from
+that dot.
 
 ## 3. Changing a value: holes and the palette
 
-To change part of a program, you take the part out and put another one in.
-Taking it out leaves a **hole**, drawn `□`. A hole knows the type of what
-belongs there, and the inspector lists only things that fit: the
-**palette**.
+To change a part of a program, you take it out and put something else in.
+
+Taking a part out leaves a **hole**, drawn `□`. A hole knows what type
+belongs in it. The inspector lists only the things that fit. That list is
+the **palette**.
 
 Let's make the "Roll 100" button use a random seed instead of 7. Open
-**main** and find, in the Blocks text, the line
+**main** and find this line in the Blocks text:
 
 ```
 write(rolls, append(‹a hundred rolls›(7), read(rolls)))
 ```
 
-1. Click the `7`. The inspector says **Literal** (a written-out value) of
-   type `Float64`.
-2. Press **Delete** (or **Clear to a hole** in the inspector). The `7`
-   becomes `□Float64`, and the palette opens on the right.
+1. Click the `7`. The inspector says **Literal**, which means a value
+   written out, of type `Float64`.
+2. Press **Delete**. The `7` becomes a hole, `□Float64`, and the palette
+   opens.
 3. Type `die` in the palette's search and click `die()`.
 
 ![A hole and its palette](guide/hole-palette.png)
 
 The status line at the bottom says *Filled with die(). No holes left in
-this definition.* The page runs again: each click on "Roll 100 with
-seed 7" now takes a die roll as its seed, so you get one of six different
-hundreds. (The button's label still says "seed 7": that's just text, and
-you can change it the same way: click it and type in the inspector.)
+this definition.*
 
-The palette groups what fits: **in scope** (inputs and names you can
-reach from here), **calls** (functions, each arriving with a hole per
-input), **constructors** and **literals**. You can also type a value
-(`3`, `"hi"`, `[1, 2]`) or a short sum (`x + 1`).
+The page runs again. Now each click on that button rolls a die for the
+seed, so you get one of six different hundreds. The label still says
+"seed 7". That's only text, and you can change it the same way.
 
-**Undo** in the top bar takes back any edit, one step at a time.
+The palette sorts what fits into groups:
 
-**Try it:** put `7` back with Undo. Then do the edit again, but pick
+- **in scope**: inputs and names you can reach from here
+- **calls**: functions, each with a hole for every input
+- **constructors** and **literals**
+
+You can also type a value, like `3`, `"hi"` or `[1, 2]`, or a short sum,
+like `x + 1`.
+
+**Undo**, in the top bar, takes back any edit, one step at a time.
+
+**Try it:** put the `7` back with Undo. Then do the edit again, but pick
 `two dice()` instead of `die()`.
 
 ## 4. Reading a type
 
 Every definition's first line is its type. Read the arrow as "takes …,
-gives …":
+gives …".
 
 | type | read it as |
 |---|---|
 | `die : () -[Random]-> Float64` | takes nothing, gives a Float64, and uses **Random** on the way |
 | `a hundred rolls : (Float64) -> List Float64` | takes a Float64, gives a list of Float64s, and does nothing else |
-| `times rolled : (List a, a) -> Int` | takes a list of anything and one more of the same kind, gives a whole number |
+| `times rolled : (List a, a) -> Int` | takes a list of anything, and one more thing of the same kind, and gives a whole number |
 | `main : () -[Cells, Time]-> Html` | takes nothing, gives a page, and uses cells and the clock |
 
-- What's between `-[` and `]->` are the function's **effects**: things it
-  does besides giving back a value. A plain `->` means none. Section 5 is
-  about them.
-- A lowercase letter like `a` means "any type, as long as it's the same
-  everywhere `a` appears". `times rolled` counts how many items equal the
-  one you give, so it works on lists of numbers, of text, of anything.
-- Nobody wrote these types. The editor works them out from the body and
-  updates them as you edit.
+The words between `-[` and `]->` are the function's **effects**. Effects
+are things a function does besides give back a value. A plain `->` means
+it has none. Section 5 is about effects.
 
-**Try it:** open `times rolled`, then `bar`, and say each type out loud
-before hovering its parts.
+A lowercase letter like `a` means "any type". It has to be the same type
+everywhere `a` appears. `times rolled` counts how many items in a list
+equal the one you give it. So it works on lists of numbers, of text, of
+anything.
+
+Nobody wrote these types. The editor works them out from the body, and
+updates them as you edit.
+
+**Try it:** open `times rolled`, then `bar`. Say each type out loud
+before you hover over its parts.
 
 ## 5. Effects and handlers: the dice and the clock
 
 An **effect** is something a function asks for while it runs: a random
-number, the time, a line printed. The function only asks; something
-outside it answers. That something is a **handler**.
+number, the time, a line printed.
 
-`die` asks for a random number with `random()`. Who answers? It depends on
-where `die` is called:
+The function only asks. Something outside it answers. That something is
+called a **handler**.
 
-- **Nobody, so the world answers.** Open `die` and press **Run die** in
-  the Run pane: a fresh number each time, from the browser's randomness.
-- **`seeded` answers.** `a hundred rolls` is
-  `seeded(seed, map(range(100), (i) => ‹two dice›()))`. Everything inside
-  `seeded` gets its random numbers from the seed, so the same seed gives
-  the same hundred rolls every time. That's why `a hundred rolls` has no
-  `Random` in its type: the asking happens inside, and the answer comes
-  from inside too.
-- **You answer.** A handler is written like a `match`, with one line per
-  question the effect can ask (its **operations**).
+`die` asks for a random number with `random()`. Who answers depends on
+where `die` is called. There are three possibilities.
 
-Make a loaded die that always rolls 6:
+**Nobody answers, so the world does.** Open `die` and press **Run die**
+in the Run pane. You get a fresh number each time, from the browser.
+
+**`seeded` answers.** `a hundred rolls` is:
+
+```
+seeded(seed, map(range(100), (i) => ‹two dice›()))
+```
+
+Everything inside `seeded` gets its random numbers from the seed. So the
+same seed always gives the same hundred rolls. That's why `a hundred
+rolls` has no `Random` in its type: the question is asked inside it, and
+answered inside it too.
+
+**You answer.** You can write your own handler. It looks like a `match`,
+with one line for each question the effect can ask. Those questions are
+the effect's **operations**.
+
+Let's make a loaded die that always rolls 6:
 
 1. Under the definitions, click **+ New definition**. Name it
-   `loaded die`, leave inputs empty, and press **Create**.
+   `loaded die`, leave the inputs empty, and press **Create**.
 2. Its body is a hole. Type `handle` in the palette and pick
    **handle Random in □**.
-3. The first hole is what to run: pick `die()`.
-4. The other hole is the answer to `random`: type `0.99` and press Enter.
+3. The first hole is what to run. Pick `die()`.
+4. The other hole is the answer to `random`. Type `0.99` and press Enter.
 
 ![A handler that answers Random with 0.99](guide/loaded-die.png)
 
@@ -184,179 +207,188 @@ loaded die() =
     random → 0.99
 ```
 
-Press **Run loaded die**: always 6. Its type says `() -> Float64`, no
-Random, because the handler answered every question.
+Press **Run loaded die**. It's always 6. Its type is `() -> Float64`,
+with no Random, because the handler answered every question.
 
-**The clock** is the effect `Time`, with `now()`. `landed`
-reads `now()` to decide how many of a hundred throws have landed so far,
-and in `main` the status line and the bars show `landed`, so they run again every
-frame: the throws land one every 20 ms and the status line counts the
-seconds since the last roll.
+**The clock** is another effect, `Time`, which you ask with `now()`.
+`landed` reads `now()` to work out how many of a hundred throws have
+landed so far. In `main`, the bars and the status line show `landed`, so
+they update every frame. One throw lands every 20 ms.
 
-**This is what went wrong with die() as a seed** inside `a hundred rolls`.
-In `seeded(die(), …)`, the `die()` is rolled *before* `seeded` starts, so
-`seeded` doesn't answer it. The function would gain `Random` in its type,
-and the editor refuses edits that change a type while it is holding it
-(section 9). Calling it from `main` with `die()`, as in section 3, works,
-because a button may use Random: the Roll button already does.
+**Why `die()` can't be the seed inside `a hundred rolls`.** In
+`seeded(die(), …)`, the die is rolled *before* `seeded` starts. So
+`seeded` doesn't answer it, and `a hundred rolls` would get `Random` in
+its type. Section 9 shows what the editor does about that. Using `die()`
+in `main` works, as in section 3, because a button is allowed to use
+Random.
 
-The **Effects** program has an effect declared from scratch (`Ask`) and
-two handlers. Run its `main`: `360 · can't: nobody to share with`.
-
-**Try it:** open `Effects` → `area` and press its Run. It tells you that
-nothing answers Ask. Then read `main` to see who does.
+**Try it:** open the **Effects** program, then `area`, and press its Run.
+It tells you that nothing answers `Ask`. Then read `main` to see who
+does, and run it.
 
 ## 6. Choice: search without writing a search
 
-`Choice` is the effect of "pick one of these", where the program may also
-say "this pick is no good" (`fail()`). Open **Eight queens** → `queens`:
+`Choice` is the effect of "pick one of these". The program can also say
+"this pick is no good", with `fail()`.
+
+Open **Eight queens**, then `queens`:
 
 ```
 column = ‹one of›(range(size))
 if safe(column, board) then cons(column, board) else fail()
 ```
 
-For each row it picks any column, and gives up on that pick if a queen
-could take another. There's no loop that tries the columns: the handler
-does that. Open `main`:
+For each row, it picks a column. If a queen there could be taken, it
+gives up on that pick.
 
-- `first(queens(8), else nil)`: the first board that works.
-- `count(queens(8))`: how many boards work (92).
-- `all(queens(6))`: every board, as a list.
+There's no loop that tries every column. The handler does the trying.
+Open `main` to see three handlers:
 
-Same `queens`, three handlers, three answers. Press **Run main**.
+- `first(queens(8), else nil)` gives the first board that works.
+- `count(queens(8))` gives how many boards work: 92.
+- `all(queens(6))` gives every board, as a list.
 
-Choice is also how the language says "there might be no answer": there is
-no `null`. Something has to handle the Choice (`first`, `all`, `count`,
-`optional`) before you can use the answer.
+It's the same `queens` each time. Three handlers give three different
+answers. Press **Run main**.
 
-**Try it:** in `main`, change the `6` in `all(queens(6))` to `5`
-(click it, Delete, type `5`, Enter) and run again: ten boards. The
-heading above them still says 6, because that's a separate piece of text.
+Choice is also how the language says "there might be no answer". There's
+no `null`. Something has to handle the Choice, like `first`, `all`,
+`count` or `optional`, before you can use the answer.
+
+**Try it:** in `main`, change the `6` in `all(queens(6))` to `5`. Click
+it, press Delete, type `5` and press Enter. Run it again and you get ten
+boards. The heading above them still says 6, because the heading is a
+separate piece of text.
 
 ## 7. Running a function backwards
 
-Every function can run backwards: give it the answer and it finds the
-inputs. Open **Run backwards** → `square` (`square(x) = x · x`).
+Every function can run backwards. Give it the answer, and it finds the
+inputs.
+
+Open **Run backwards**, then `square`. It's `square(x) = x · x`.
 
 The Run pane lists the function's **ports**: its input `x` and its
-`result`, each with a tick box. Ticked ports are the ones you give.
+`result`. Each has a tick box. A ticked port is one you give a value to.
 
-1. Type `3` next to `x` and press Enter: result `9`.
-2. Tick **result**, untick **x**, and type `9` next to result: `x` is `3`,
-   with **1 other answer** under it (that's −3).
+1. Type `3` next to `x` and press Enter. The result is `9`.
+2. Now tick **result**, untick **x**, and type `9` next to result. You get
+   `x` is `3`, with **1 other answer** under it. That one is −3.
 
 ![square run backwards](guide/backwards-square.png)
 
-Now `greet` (`greet(name) = "hello, " ++ name`). Untick **name**, tick
-**result**, and type `"hello, Ada"`, with the quotes because it's text:
-`name` is `"Ada"`. Nobody wrote an "un-greet" function: the editor
-derives it.
+Now try `greet`, which is `greet(name) = "hello, " ++ name`. Untick
+**name**, tick **result**, and type `"hello, Ada"`. Keep the quotes,
+because it's text. You get `name` is `"Ada"`.
+
+Nobody wrote an "un-greet" function. The editor works it out.
 
 **Try it:** run `magnitude` backwards from `5`.
 
 ## 8. Pages
 
-A **page** is a definition that gives `Html`. `main` in two dice is one.
-Its parts:
+A **page** is a definition that gives back `Html`. `main` in two dice is
+a page. Here are its parts:
 
-- `rolls = cell(nil)`: a **cell**, a value that can change. It starts
-  as the empty list.
-- `read(rolls)` reads it; `write(rolls, …)` changes it.
-- `button("Roll", (event) => …)`: a button, and what to do when it's
-  clicked. The part after `=>` is a function the page calls on each click,
-  so it may use Random and write cells.
+- `rolls = cell(nil)` makes a **cell**: a value that can change. This one
+  starts as an empty list.
+- `read(rolls)` reads the cell. `write(rolls, …)` changes it.
+- `button("Roll", (event) => …)` is a button, with what to do when it's
+  clicked. The part after `=>` runs on each click, so it may roll dice and
+  write cells.
 - Any part that reads a cell runs again when the cell changes. That's how
   the bars update. Nothing else needs to.
-- `styled(…)`, `p(…)`, `h1(…)`, `words(…)` are HTML elements, each a
-  function.
+- `styled(…)`, `p(…)`, `h1(…)` and `words(…)` are HTML elements. Each one
+  is a function.
 
-A page's `main` doesn't print: the Run pane *is* the page. **Restart**
-runs it from scratch, and **Open in a tab** shows it on its own.
+A page's `main` doesn't print anything. The Run pane *is* the page.
+**Restart** runs it from scratch. **Open in a tab** shows it on its own.
 
-To add a button, copy an existing one: click the `(` right after `named`
-on the `"hundred"` button and press Ctrl+C, then paste it into a hole in
-the list. A list has no "add an item" yet, so making that hole is a
-detour: click the list's `[`, cut it with Ctrl+X, fill the hole with
-`append(□, □)`, paste the list back into the first □, then fill the
-second with `cons(□, □)` and its last □ with `nil`. That leaves one □ for
-the new button.
+To add a button, copy one that's there:
 
-**Try it:** change the `"Roll"` label to `"Throw"` and click it on the
+1. Click the `(` right after `named` on the `"hundred"` button, and press
+   Ctrl+C.
+2. With it still selected, the inspector says *Item 5 of 5 in the list*.
+   Press **Add one after**. That leaves a hole in the list, after the
+   "hundred" button.
+3. Paste into the hole with Ctrl+V.
+
+**Try it:** change the `"Roll"` label to `"Throw"`, then click it on the
 page.
 
 ## 9. When the editor says no
 
-Every edit is checked before it happens. When an edit would break the
-program, nothing changes and the status line says **Refused:** and why.
+Every edit is checked before it happens. If an edit would break the
+program, nothing changes. The status line says **Refused:** and why.
 
-The one you're most likely to meet: when you clear part of a finished
-definition, the editor **holds** that definition's type until the hole is
-filled, so the rest of the program keeps working meanwhile. A fill that
-would change the type is refused, even one the palette offered. That's
-the die-as-seed case:
+Here's the refusal you're most likely to meet. When you clear a part of a
+finished definition, the editor **holds** that definition's type until the
+hole is filled. That way the rest of the program keeps working while you
+edit. A fill that would change the type is refused.
 
-> Refused: a hundred rolls is pinned to (Float64) -> List Float64, and this
-> makes it (a) -[Random]-> List Float64. Nothing changed.
+That's what happens with `die()` as the seed. The message says that
+`a hundred rolls` keeps its type while it has a hole, and that `die()`
+would make it do Random.
 
-Two ways on:
+There are two ways on:
 
-- Make the change somewhere that's allowed to have the effect: in the
-  caller, as in section 3.
-- Or let the type change: click the definition's name in the Blocks text,
-  and in the inspector press **Let it loosen**. Then fill the hole again.
+- Make the change in a place that's allowed to have the effect, like the
+  caller. That's what section 3 did.
+- Or let the type change. Press **Let it loosen**, beside the palette,
+  then fill the hole again.
 
-A type can also be **pinned** on purpose, in the inspector of a definition
-(**Pin this type**): then it's a promise, and only Unpin lets it change.
+You can also **pin** a type on purpose, with **Pin this type** in a
+definition's inspector. A pinned type is a promise. Only **Unpin** lets it
+change.
 
-(The message says "pinned" when it is only held, and the palette shouldn't
-offer what will be refused. Both are known editor bugs and are on the
-backlog.)
-
-**Try it:** in `a hundred rolls`, clear `seed` and pick `die()` to see
-the refusal. Then Let it loosen, pick `die()` again, and read the new
-type. Undo twice to get back.
+**Try it:** in `a hundred rolls`, clear `seed` and pick `die()`, and read
+the refusal. Then press Let it loosen, pick `die()` again, and read the
+new type. Undo twice to get back.
 
 ## 10. Saving, and getting back
 
 - **Every edit is kept in this browser** as you make it. Close the tab,
-  come back, and your changes are there.
+  come back, and your changes are still there.
 - **Undo** and **Redo** step through your edits.
-- **Reset** puts an example back as it shipped. It can be undone too.
-- **Program** tab → **Save file** downloads the whole program (code,
-  names, comments, layout) as one file. **Open file…** loads one back.
+- **Reset** puts an example back the way it shipped. You can undo that
+  too.
+- In the **Program** tab, **Save file** downloads the whole program as one
+  file: code, names, comments and layout. **Open file…** loads one back.
   **New program** starts an empty one.
 
-Edits live in this browser only, so another browser or a cleared
-browser won't have them. Save a file of anything you want to keep.
+Your edits live only in this browser. Another browser, or this one after
+clearing its data, won't have them. Save a file of anything you want to
+keep.
 
-**Try it:** Save file on your changed two dice, Reset it, then Open file
-to get your version back.
+**Try it:** save your changed two dice to a file, press Reset, then open
+the file to get your version back.
 
 ## Words used here
 
 | word | meaning |
 |---|---|
 | definition | a named part of a program, usually a function |
-| node, wire | a box in the graph and the line carrying a value between boxes |
+| node, wire | a box in the graph, and the line that carries a value between boxes |
 | dot | where a value starts: an input, or a named value inside a body |
 | hole `□` | a part not filled in yet; it knows its type |
 | palette | the list of things that fit a hole |
 | type | what goes in, what comes out, and the effects |
 | `a`, `b` in a type | any type, the same one each time it appears |
 | effect | something a function asks for: Random, Time, Choice, Console… |
-| handler | what answers an effect: `seeded`, `first`, a `handle` match, or the world |
-| badge | the small word over a node naming its effect |
-| cell | a value that can change; a page re-runs what read it |
+| handler | what answers an effect: `seeded`, `first`, a `handle`, or the world |
+| badge | the small word over a node that names its effect |
+| cell | a value that can change; a page runs again what read it |
 | held, pinned | a type the editor keeps fixed while you edit, or that you fixed on purpose |
-| port | an input or the result, in the Run pane's backwards runs |
+| port | an input or the result, in the Run pane |
 
 ## Credits
 
 This guide is our own and borrows no teaching material. The programs it
 uses credit their sources on screen and in [CREDITS.md](CREDITS.md):
-the seeded rolls are xoshiro128** by David Blackman and Sebastiano Vigna
-(adapted code); the clock that runs each frame follows Fran (Elliott and
-Hudak) and Elm (prior art); effects with handlers you choose follow Koka
-and Eff (prior art); the eight queens puzzle is Max Bezzel's (1848), and
-search by choice and failure follows Prolog and Verse (prior art).
+
+- The seeded rolls are xoshiro128** by David Blackman and Sebastiano
+  Vigna (adapted code).
+- The clock that runs each frame follows Fran (Elliott and Hudak) and Elm
+  (prior art).
+- Effects with handlers you choose follow Koka and Eff (prior art).
+- The eight queens puzzle is Max Bezzel's (1848). Search by choice and
+  failure follows Prolog and Verse (prior art).
