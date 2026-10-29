@@ -2,7 +2,7 @@
 // value chips that don't overlap, and tidy.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { arrange, crossingsOf, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
+import { arrange, crossingsOf, nearestInOrder, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type TNode } from "../editor/graphLayout.ts";
 
 test("two crossing wires cross once, in the middle", () => {
   const a = curvePoints(0, 0, 200, 100), b = curvePoints(0, 100, 200, 0);
@@ -159,6 +159,22 @@ test("arrange keeps inputs in the order they plug in, however tall each is", () 
   const wires = [w("p", "f", 0), w("q", "f", 1), w("a", "p", 0), w("b", "p", 1), w("c", "p", 2), w("d", "q", 0), w("e", "q", 1)];
   const at = arrange(nodes, [], wires);
   assert.equal(["a", "b", "c", "d", "e"].sort((x, y) => at.get(x)!.y - at.get(y)!.y).join(""), "abcde");
+  // Each parent sits centred on its inputs, as in a tidy tree.
+  const box = (id: string) => ({ ...nodes.find((n) => n.id === id)!, ...at.get(id)! });
+  const middle = (id: string) => box(id).y + box(id).h / 2;
+  const centredOn = (id: string, ins: string[]) => {
+    const top = Math.min(...ins.map((i) => box(i).y)), bottom = Math.max(...ins.map((i) => box(i).y + box(i).h));
+    assert.ok(Math.abs(middle(id) - (top + bottom) / 2) <= 1, `${id} is centred on ${ins}`);
+  };
+  centredOn("p", ["a", "b", "c"]); centredOn("q", ["d", "e"]); centredOn("f", ["p", "q"]);
+});
+
+test("nearestInOrder: as near as can be, in order, gap apart", () => {
+  assert.deepEqual(nearestInOrder([{ want: 0, h: 10 }, { want: 100, h: 10 }], 5), [0, 100]);
+  // Both want 0: they share the push, half each.
+  assert.deepEqual(nearestInOrder([{ want: 0, h: 10 }, { want: 0, h: 10 }], 10), [-10, 10]);
+  // Out of order wants keep the order.
+  assert.deepEqual(nearestInOrder([{ want: 50, h: 10 }, { want: 0, h: 10 }], 0), [20, 30]);
 });
 
 test("an action's steps keep one column in the order they run, each step's dot level with it", () => {

@@ -2257,7 +2257,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
     rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
       : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
-    rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports, folded frames as one box"));
+    rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports and the call centred on them (Reingold–Tilford tidy trees), folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
   // Nodes picked: what's done with them comes first, not below the fold

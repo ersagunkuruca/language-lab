@@ -9,7 +9,8 @@
 //                (unless that crosses others), inputs stay left of what
 //                they feed
 //   arrange      lay out afresh, the same every time: columns from the
-//                inputs to the result, inputs in the order of their ports
+//                inputs to the result, inputs in the order of their ports,
+//                each node centred on its inputs
 //   crossings    where one wire passes over another (drawn as a bridge, a
 //                small hop, as in Visio's line jumps) or under a node (a
 //                tunnel)
@@ -450,6 +451,26 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       // Pushed down to make room: move the column back up, half way.
       if (r) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
     });
+    // Each node then sits centred on the inputs that feed it, as a parent
+    // over its children in Reingold and Tilford's tidy trees: from the
+    // inputs' column to the result's, so a parent is centred on children
+    // already in place. A column keeps its order and its gaps, and goes as
+    // near those centres as it can (isotonic regression, by pooling
+    // adjacent violators). An action's steps stay as they were stacked:
+    // they read down their column in the order they run.
+    const steps = new Set(chainsIn.flat());
+    for (let r = cols.length - 2; r >= 0; r--) {
+      const col = cols[r];
+      if (!col || col.some((u) => steps.has(u))) continue;
+      const wants = col.map((u) => {
+        const ins = units.filter((v) => outs.get(v)!.some((e) => e.to === u));
+        if (!ins.length) return y.get(u)!;
+        const top = Math.min(...ins.map((v) => y.get(v)!)), bottom = Math.max(...ins.map((v) => y.get(v)! + size.get(v)!.h));
+        return (top + bottom) / 2 - size.get(u)!.h / 2;
+      });
+      const sorted = col.map((u, i) => ({ u, want: wants[i] })).sort((a, b) => y.get(a.u)! - y.get(b.u)!);
+      for (const [u, t] of nearestInOrder(sorted.map((e) => ({ want: e.want, h: size.get(e.u)!.h })), gap).map((t, i) => [sorted[i].u, t] as const)) y.set(u, t);
+    }
     // What a step leads to and nothing reads (a step's dot, an action's
     // result) was stacked before the steps had places: it goes level with
     // the step that feeds it.
@@ -489,6 +510,26 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     return { x: at.x + f.pad[0] + p.x, y: at.y + f.pad[1] + p.y };
   };
   for (const n of nodes) { const p = abs(n.id); out.set(n.id, { x: Math.round(p.x), y: Math.round(p.y) }); }
+  return out;
+}
+
+// Tops for boxes stacked in this order, `gap` apart at least, each as near
+// its `want` as can be (least squares): with each top less the heights and
+// gaps above it, that's isotonic regression, solved by pooling adjacent
+// violators (Ayer, Brunk, Ewing, Reid and Silverman, 1955).
+export function nearestInOrder(boxes: { want: number; h: number }[], gap: number): number[] {
+  const off: number[] = [];
+  boxes.forEach((b, i) => off.push(i ? off[i - 1] + boxes[i - 1].h + gap : 0));
+  const pools: { sum: number; n: number }[] = [];
+  boxes.forEach((b, i) => {
+    pools.push({ sum: b.want - off[i], n: 1 });
+    while (pools.length > 1 && pools[pools.length - 2].sum / pools[pools.length - 2].n > pools[pools.length - 1].sum / pools[pools.length - 1].n) {
+      const last = pools.pop()!;
+      pools[pools.length - 1].sum += last.sum; pools[pools.length - 1].n += last.n;
+    }
+  });
+  const out: number[] = [];
+  for (const p of pools) for (let k = 0; k < p.n; k++) out.push(p.sum / p.n + off[out.length]);
   return out;
 }
 
