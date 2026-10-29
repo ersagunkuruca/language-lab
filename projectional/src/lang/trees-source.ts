@@ -24,6 +24,7 @@ export function buildTreesModule(preludeModule: Module): Module {
     ...r, type: at(r.type), meaning: r.meaning && at(r.meaning),
     impl: Object.fromEntries(Object.entries(r.impl).map(([job, d]) => [job, at(d)])),
     ...(r.byType ? { byType: { equal: at(r.byType.equal), show: at(r.byType.show), compare: at(r.byType.compare) } } : {}),
+    ...(r.heads ? { heads: Object.fromEntries(Object.entries(r.heads).map(([job, d]) => [job, at(d)])) } : {}),
   });
   const m = makeModule("trees", p.code, p.names, [], p.pins, {}, t.defs.map(at));
   // makeModule takes in what the trees use, the prelude's map, keep and

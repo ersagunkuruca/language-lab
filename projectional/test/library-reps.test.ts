@@ -15,7 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COMPARE, CONS, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER, STRING } from "../src/lang/types.ts";
-import type { Id } from "../src/model.ts";
+import { subtree, type Id } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -241,4 +241,41 @@ test("a record of the program's own type holding a map gets the tree, and is equ
   const plain = printed(code, names, main);
   assert.deepEqual(printed(c.code, c.names, main, c.insiders), plain);
   assert.equal(plain[2], "true");
+});
+
+// GAPS.md M3: a match on a set's items (a map's keys or entries) that
+// never uses the rest reads only the first, down the left of the tree.
+test("a match on the items of a tree that doesn't use the rest takes the smallest, and prints what the definition prints", () => {
+  const k = new Lang(LIBRARY.code);
+  const seen = k.def("seen");
+  k.define(seen, k.fold(k.call(S.range, k.lit(300)), [
+    { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "s"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(S.mod, k.call(B.mul, i, k.lit(7919)), k.lit(1000))) },
+  ]));
+  const counts = k.def("counts");
+  k.define(counts, k.call(L("as map"), k.list(k.call(PAIR_V, k.lit("b"), k.lit(2)), k.call(PAIR_V, k.lit("a"), k.lit(1)))));
+  const firstOf = (list: Id, empty: Id, useRest: boolean) => k.match(list, [
+    { variant: NIL, names: [], body: () => empty },
+    { variant: CONS, names: ["x", "later"], body: ([x, later]) => (useRest ? later : x) },
+  ]);
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(firstOf(k.call(L("items of"), k.x(seen)), k.lit(-1), false)),
+    show(firstOf(k.call(L("items of"), k.x(L("empty set"))), k.lit(-1), false)),
+    show(firstOf(k.call(L("items of"), k.x(seen)), k.list(), true)),
+    show(firstOf(k.call(L("keys of"), k.x(counts)), k.lit("none"), false)),
+    show(firstOf(k.call(L("entries of"), k.x(counts)), k.call(PAIR_V, k.lit(""), k.lit(0)), false)),
+    show(k.call(L("map size"), k.x(counts))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const c = withLibraryRepresentations(code, info, names, main, [seen, counts, main]);
+  assert.deepEqual(c.chosen, ["Map as weight-balanced tree", "Set as weight-balanced tree"]);
+  const plain = printed(code, names, main);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), plain);
+  assert.equal(plain[0], "0");
+  // the four that don't use the rest take the head; the one that does, the list
+  const heads = subtree(c.code, main).filter((x) => { const n = c.code.nodes[x]; return n.kind === "ref" && / head/.test(c.names[n.target] ?? ""); });
+  assert.equal(heads.length, 4);
 });

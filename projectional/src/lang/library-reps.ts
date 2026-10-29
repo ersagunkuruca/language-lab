@@ -19,7 +19,7 @@ import type { Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
-import { COMPARE, LIST, MAP, MAP_V, PAIR_V, S, SHOW_ANY } from "./std.ts";
+import { COMPARE, CONS, LIST, MAP, MAP_V, PAIR_V, S, SHOW_ANY } from "./std.ts";
 import type { Type } from "./types.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -55,6 +55,21 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
   for (const d of defs) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
+    // A match on a stored value's items (keys, entries) whose cons case
+    // doesn't use the rest needs only the first: its row's head, down the
+    // left of the tree, not the whole list (GAPS.md M3).
+    if (n.kind === "match") {
+      const s = code.nodes[n.scrutinee], f = s?.kind === "call" ? code.nodes[s.fn] : undefined;
+      const head = s?.kind === "call" && f?.kind === "ref" && s.args[0] ? rowOf(s.args[0])?.heads?.[f.target] : undefined;
+      const cons = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === CONS);
+      const rest = cons?.binds[1];
+      if (head && rest && !subtree(code, cons.body).some((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === rest; })) {
+        const r = freshId();
+        nodes[r] = { id: r, kind: "ref", target: head };
+        nodes[s.id] = { ...(s as NodeOf<"call">), fn: r };
+      }
+      continue;
+    }
     if (n.kind !== "call") continue;
     const f = code.nodes[n.fn];
     const job = f?.kind === "ref" ? BY_VALUE[f.target] : undefined;

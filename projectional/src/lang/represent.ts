@@ -42,6 +42,11 @@ export interface Representation {
   // an argument's type is T, done through `meaning` (map-tree.ts). The
   // rewrite finds those calls by type (C47).
   byType?: { equal: Id; show: Id; compare: Id };
+  // For a job that gives a list (a set's items, a map's keys or entries),
+  // a definition giving only its first item, as a list of one or nil: a
+  // match on the job's list whose cons case doesn't use the rest is that
+  // (library-reps.ts, GAPS.md M3).
+  heads?: Record<Id, Id>;
 }
 
 export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
