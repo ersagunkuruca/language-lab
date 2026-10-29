@@ -203,8 +203,13 @@ export function buildPrelude(): Module {
   k.define(polarF, k.fn(["length", "angle", "x", "y"], (r, t, x, y) =>
     k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
   k.results(polarF, "x", "y");
+  // Unpolar (L97c2), polar's other direction: atan2 and the length.
+  const unpolarF = k.def("float64 unpolar");
+  k.define(unpolarF, k.fn(["length", "angle", "x", "y"], (r, t, x, y) =>
+    k.and(k.equal(r, k.call(B.sqrt, k.call(B.add, k.call(B.mul, x, x), k.call(B.mul, y, y)))), k.equal(t, k.call(B.atan2, y, x)))));
+  k.results(unpolarF, "length", "angle");
   const trigF = k.def("trig at float64");
-  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF].map((b) => k.x(b))));
+  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF].map((b) => k.x(b))));
 
   // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
   // a function given dual(x, 1) gives its value and its slope at x.
@@ -235,8 +240,17 @@ export function buildPrelude(): Module {
   const tanD = oneD("dual tan", (a, a1) => k.let("cos", k.call(B.cos, a), (c) => D(k.call(B.tan, a), n.div(a1, n.mul(c, c)))));
   const expD = oneD("dual exp", (a, a1) => k.let("eᵃ", k.call(B.exp, a), (e) => D(e, n.mul(e, a1))));
   const logD = oneD("dual log", (a, a1) => D(k.call(B.log, a), n.div(a1, a)));
+  // Unpolar by the chain rule: for r = √(x² + y²), r′ = (x·x′ + y·y′)/r,
+  // and atan2(y, x)′ = (x·y′ − y·x′)/r².
+  const unpolarD = k.def("dual unpolar");
+  const xy = (x: Id, y: Id, f: (a: Id, a1: Id, b: Id, b1: Id) => Id) => du(x, (a, a1) => du(y, (b, b1) => f(a, a1, b, b1), ["y value", "y slope"]), ["x value", "x slope"]);
+  const sq = (a: Id, b: Id) => n.add(n.mul(a, a), n.mul(b, b));
+  k.define(unpolarD, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(r, xy(x, y, (a, a1, b, b1) => k.let("r", k.call(B.sqrt, sq(a, b)), (rr) => D(rr, n.div(n.add(n.mul(a, a1), n.mul(b, b1)), rr))))),
+    k.equal(t, xy(x, y, (a, a1, b, b1) => D(k.call(B.atan2, b, a), n.div(n.sub(n.mul(a, b1), n.mul(b, a1)), sq(a, b))))))));
+  k.results(unpolarD, "length", "angle");
   const trigD = k.def("trig at dual");
-  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays)));
+  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD)));
   const slopeAt = k.def("slope by duals");
   k.define(slopeAt, k.fn(["f", "x"], (f, x) => du(k.call(f, D(x, k.lit(1))), (_, a1) => a1)));
   const dualTable = k.def("dual table");
@@ -367,8 +381,32 @@ export function buildPrelude(): Module {
           { variant: CONS, names: ["j", "js"], results: [null, "the rest of the series"], body: ([j], [, acc]) =>
             z.add(quot(k.int(ONE), z.add(z.mul(k.int(2), j), k.int(1))), z.down(z.mul(t2, acc!), 32)) },
         ])), 32))))))), () => k.int(0)))))));
+  // Unpolar is CORDIC's other mode, vectoring (L97c2): (x, y), brought
+  // into the right half-plane, is turned onto the x axis by ±atan(2⁻ⁱ),
+  // which adds up to the angle, and x ends as the length over K. Each of
+  // length and angle runs it once.
+  const vector = k.def("cordic vector");
+  k.define(vector, k.fn(["x", "y"], (x0, y0) => k.fold(k.list(...ATANS.map((t, j) => k.call(PAIR_V, k.int(j), k.int(t))).reverse()), [
+    { variant: NIL, names: [], body: () => triple(x0, y0, k.int(0)) },
+    { variant: CONS, names: ["turn", "turns"], results: [null, "turned"], body: ([turn], [, done]) => k.match(turn, [
+      { variant: PAIR_V, names: ["i", "atan"], body: ([j, at]) => third(done!, (x, y, z0) => k.if(z.less(y, k.int(0)),
+        triple(z.sub(x, shift(y, j)), z.add(y, shift(x, j)), z.sub(z0, at)),
+        triple(z.add(x, shift(y, j)), z.sub(y, shift(x, j)), z.add(z0, at))), ["x", "y", "angle"]) },
+    ]) },
+  ])));
+  // (x, y) in steps, mirrored through 0 when x < 0 (then the angle is π
+  // more, or less when y < 0): what `cordic vector` reads.
+  const halfPlane = (sx: Id, sy: Id, f: (len: Id, ang: Id) => Id) => {
+    const at = (a: Id, b: Id, off: number) => third(k.call(vector, a, b), (len, _, ang) => f(z.down(z.mul(len, k.int(K_GAIN)), 32), off ? z.add(ang, k.int(off)) : ang), ["x", "y", "angle"]);
+    return k.if(z.less(sx, k.int(0)), k.if(z.less(sy, k.int(0)), at(k.call(INT_OPS.neg, sx), k.call(INT_OPS.neg, sy), -PI), at(k.call(INT_OPS.neg, sx), k.call(INT_OPS.neg, sy), PI)), at(sx, sy, 0));
+  };
+  const unpolarX = k.def("fixed unpolar");
+  k.define(unpolarX, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(r, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (len) => F(len)), "y steps"), "x steps")),
+    k.equal(t, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (_, ang) => F(ang)), "y steps"), "x steps")))));
+  k.results(unpolarX, "length", "angle");
   const trigX = k.def("trig at fixed");
-  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays)));
+  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarX)));
   // √x: the whole square root of x's steps · 2³² by Newton's method from
   // above (Heron's), which only goes down and stops at the floor; no
   // answer below 0.
@@ -892,9 +930,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector].map(at));
 }

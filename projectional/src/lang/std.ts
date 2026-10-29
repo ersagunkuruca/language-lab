@@ -220,6 +220,15 @@ export const TRIG_POLAR = `${TRIG_V}.polar`;
   named(node({ id: TRIG_POLAR, kind: "field", type, results: [2, 3], ports: ["length", "angle", "x", "y"] }), "polar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_POLAR);
 }
+// And its other direction, unpolar: the same four ports read as (x, y) →
+// length, angle (L97c2), atan2 and the length of a vector at once.
+export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
+{
+  const port = (i: number) => node({ id: `${TRIG_UNPOLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
+  const type = node({ id: `${TRIG_UNPOLAR}.type`, kind: "tfun", params: [0, 1, 2, 3].map(port), result: node({ id: `${TRIG_UNPOLAR}.t4`, kind: "tref", target: BOOL, args: [] }), effects: [] });
+  named(node({ id: TRIG_UNPOLAR, kind: "field", type, results: [0, 1], ports: ["length", "angle", "x", "y"] }), "unpolar");
+  (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
+}
 // Dual numbers (INTERFACES.md step 3, BACKLOG L40g): value + slope·ε with
 // ε² = 0, so f(dual(x, 1)) carries f′(x) along with f(x). A record of two
 // Float64s, like Complex: + and − part by part, · the product rule (the

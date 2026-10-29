@@ -15,7 +15,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pickWays, waysIn } from "../src/lang/ways.ts";
-import { S, SHOW_ANY, TRIG_OPS, TRIG_POLAR, TRIG_V } from "../src/lang/std.ts";
+import { DUAL_V, FIXED_V, S, SHOW_ANY, TRIG_OPS, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V } from "../src/lang/std.ts";
 import { showType, NUMBER } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
@@ -66,7 +66,11 @@ function angle(declare: boolean) {
   const polar = def("angle polar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) =>
     k.and(k.equal(x, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.cos, rad(t))))), k.equal(y, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.sin, rad(t))))))));
   if (declare) k.results(polar, "x", "y");
-  def("trig at angle", () => k.call(TRIG_V, k.x(S.byItsWays), k.x(S.byItsWays), k.x(tan), k.x(exp), k.x(log), k.x(polar)));
+  const unpolar = def("angle unpolar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) => k.and(
+    k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
+    k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
+  k.results(unpolar, "length", "angle");
+  def("trig at angle", () => k.call(TRIG_V, k.x(S.byItsWays), k.x(S.byItsWays), k.x(tan), k.x(exp), k.x(log), k.x(polar), k.x(unpolar)));
   const at = (x: number) => k.call(A.v.angle, k.lit(x));
   def("the cosine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.cos, at(0.3))));
   def("the sine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.sin, at(0.3))));
@@ -100,4 +104,36 @@ test("Dual and Fixed give sin and cos and get polar by them; Float64 gives all t
   assert.equal(pick("trig at dual"), "polar by sincos");
   assert.equal(pick("trig at fixed"), "polar by sincos");
   assert.equal(pick("trig at float64"), null);
+});
+
+// Unpolar (L97c2): the same ports, (x, y) → length, angle, given by each
+// type: Float64 by atan2, Dual by the chain rule, Fixed by CORDIC's
+// vectoring mode, all in Ints.
+test("length, angle = unpolar(x, y) at Float64, Dual and Fixed, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const un = (x: Id, y: Id, f: (r: Id, t: Id) => Id) => k.solve(TRIG_UNPOLAR, { 2: x, 3: y, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) => f(r, t));
+  const both2 = (a: Id, b: Id) => k.text(k.call(SHOW_ANY, a), k.lit(" "), k.call(SHOW_ANY, b));
+  def("at float64", () => un(k.lit(3), k.lit(4), both2));
+  const D = (a: number, b: number) => k.call(DUAL_V, k.lit(a), k.lit(b));
+  def("at dual", () => un(D(3, 1), D(4, 0), both2));
+  const X = (v: number) => k.call(FIXED_V, k.int(Math.round(v * 2 ** 32)));
+  const steps = (v: Id) => k.match(v, [{ variant: FIXED_V, names: ["steps"], body: ([st]) => k.call(SHOW_ANY, st) }]);
+  def("at fixed", () => un(X(-3), X(4), (r, t) => k.text(steps(r), k.lit(" "), steps(t))));
+  def("at fixed below", () => un(X(-3), X(-4), (r, t) => k.text(steps(r), k.lit(" "), steps(t))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const NAMES = ["at float64", "at dual", "at fixed", "at fixed below"];
+  const { evaluated, compiled } = await both(code, info, names, NAMES);
+  assert.deepEqual(compiled, evaluated);
+  const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
+  const [r, t] = String(evaluated[0]).split(" ").map(Number);
+  near(r, 5); near(t, Math.atan2(4, 3));
+  // dual(5, 3/5) and dual(atan2(4, 3), −4/25).
+  const nums = String(evaluated[1]).match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
+  near(nums[0], 5); near(nums[1], 0.6); near(nums[2], Math.atan2(4, 3)); near(nums[3], -0.16);
+  for (const [i, y] of [[2, 4], [3, -4]] as const) {
+    const [rs, ts] = String(evaluated[i]).split(" ").map((v) => Number(v) / 2 ** 32);
+    near(rs, 5, 1e-6); near(ts, Math.atan2(y, -3), 1e-6);
+  }
 });
