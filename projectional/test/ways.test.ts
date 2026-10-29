@@ -32,7 +32,12 @@ function program(gives: "sin" | "cos" | "neither") {
   const lift = (name: string, f: Id) => def(name, () => k.fn(["a"], (a) => k.match(a, [{ variant: A.v.angle, names: ["r"], body: ([r]) => k.call(A.v.angle, k.call(f, r)) }])));
   const [sin, cos, tan, exp, log] = (["sin", "cos", "tan", "exp", "log"] as const).map((op) => lift(`angle ${op}`, B[op]));
   const left = () => k.x(S.byItsWays);
-  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log), left()));
+  const rad = (a: Id) => k.call(A.f["angle.radians"], a);
+  const unpolar = def("angle unpolar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) => k.and(
+    k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
+    k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
+  k.results(unpolar, "length", "angle");
+  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log), left(), k.x(unpolar)));
   const at = (x: number) => k.call(A.v.angle, k.lit(x));
   def("the cosine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.cos, at(0.3))));
   def("the sine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.sin, at(0.3))));

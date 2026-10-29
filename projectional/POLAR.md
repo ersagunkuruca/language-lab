@@ -110,9 +110,13 @@ the last step.
    Float64 gives `float64 polar`, Dual and Fixed leave polar to its ways
    and get it from their sin and cos, and a type that gives only polar
    gets sin and cos (test/polar.test.ts, evaluated and compiled).
-   **Next (L97c2):** the `unpolar` field the same way (Float64 by atan2,
-   Dual by the chain rule), the prelude's `polar` relation with `unpolar`
-   as its direction, and asin and acos as ways of unpolar.
+   **L97c2, built.** The `unpolar` field the same way, the same four
+   ports read as (x, y) → length, angle: Float64 gives `float64 unpolar`
+   (√(x² + y²) and atan2), Dual `dual unpolar` by the chain rule, and
+   Fixed `fixed unpolar`, CORDIC's vectoring mode in Ints (each of length
+   and angle runs it once, until C55). No way gives unpolar yet, so every
+   Trig gives it. **Next (L97c3):** the prelude's `polar` relation with
+   `unpolar` as its direction, and asin and acos as ways of unpolar.
 4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
    its ways. Cheap only with C55 (sin alone must not do the cos half).
 5. **L97e.** The complex laws, after T7.
