@@ -25,7 +25,9 @@ function page() {
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const cells = new Cells(equal);
   const value = runMain(code, info, p.main, { print: () => {}, names, cells });
-  const root = mountHtml(value, { cells, doc: fakeDoc(), call: evaluatorCall }) as FakeEl;
+  // What the page says it drew again, as a page flashes it.
+  const ran: string[] = [];
+  const root = mountHtml(value, { cells, doc: fakeDoc(), call: evaluatorCall, ran: (n) => ran.push(leaves(n as FakeEl | FakeText).join(" | ")) }) as FakeEl;
   const all = (e: FakeEl): FakeEl[] => [e, ...e.kids.flatMap((x) => (x instanceof FakeEl ? all(x) : []))];
   // The row of the item with this title: its buttons follow its text.
   const button = (title: string, label: string) => {
@@ -33,7 +35,7 @@ function page() {
     return all(rows[0]).find((e) => e.tag === "button" && e.textContent === label)!;
   };
   const lines = () => leaves(root);
-  return { cells, root, button, lines, all: () => all(root) };
+  return { cells, root, ran, button, lines, all: () => all(root) };
 }
 
 test("the outline draws every item at its depth, and the count reads 2 of 7 done", () => {
@@ -78,4 +80,18 @@ test("adding, moving and removing items: one row made, moved or dropped, keys ke
   assert.equal(p.lines()[0], "✓ water the plants");
   assert.equal(p.cells.rowsMade - rows, 0);
   assert.equal(p.lines().at(-1), "2 of 4 done");
+});
+
+test("a page shows only what was drawn again: one row for a tick, none for a move", () => {
+  const p = page();
+  p.button("water the plants", "tick").fire("click");
+  assert.deepEqual(p.ran, ["○ water the plants", "1 of 7 done"], "the list holding the rows ran, but the other rows were kept, not drawn");
+  p.ran.length = 0;
+  p.button("write the report", "up").fire("click");
+  assert.deepEqual(p.ran, ["1 of 7 done"], "a move draws no row");
+  p.ran.length = 0;
+  // A step's tick still draws its top-level item again, steps and all,
+  // until rows read their item's fields as places (BACKLOG L99).
+  p.button("ask Ana", "tick").fire("click");
+  assert.deepEqual(p.ran, ["○ plan the trip | ✓ book the train | ○ find a room | ✓ ask Ana", "2 of 7 done"]);
 });

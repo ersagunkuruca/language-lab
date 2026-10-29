@@ -64,6 +64,12 @@ const LIVE = new Set(["value", "checked"]);
 // again, a kept row is the same nodes, watchers and all, moved to its new
 // place, which is how a list keeps rows by identity (Solid's <For>).
 const drawn = new WeakMap<Mount, WeakMap<object, Node_>>();
+// The kept rows drawn before, and the new elements holding one, with their
+// children: when a part runs again, what it says it drew is only what is
+// new, not the kept rows it moved (a reorder draws nothing).
+const moved = new WeakSet<Node_>();
+const holding = new WeakMap<Node_, Node_[]>();
+const fresh = (n: Node_): Node_[] => moved.has(n) ? [] : holding.get(n)?.flatMap(fresh) ?? [n];
 
 export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   const owner = typeof v === "object" && v !== null ? KEPT.get(v) : undefined;
@@ -71,7 +77,7 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   let mine = drawn.get(m);
   if (!mine) drawn.set(m, (mine = new WeakMap()));
   const before = mine.get(v as object);
-  if (before) return before;
+  if (before) { moved.add(before); return before; }
   // Its watchers belong to the row, not to the part drawing it, so they
   // last as long as the item does.
   const node = m.cells.under(owner, () => draw(v, m, svg));
@@ -84,7 +90,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const d = v as Data;
   const steps = m.steps ?? PAGE_STEPS;
   cells.around = (update) => withSteps(steps, update);
-  const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}) => {
+  const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
     let first = true;
     const node: CellNode = cells.watch(() => {
       // Something it asked for isn't here yet: it keeps what it shows, and
@@ -96,7 +102,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
         if (!(e instanceof Pending)) throw e;
         return;
       }
-      if (!first) m.ran?.(e, node);
+      if (!first) for (const x of made()) m.ran?.(x, node);
       first = false;
     }, label);
   };
@@ -111,7 +117,8 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       // belongs to its watcher, whose next run disposes of it first.
       const e = doc.createElement("lab-part");
       e.setAttribute("style", "display: contents");
-      watch(e, "part", () => { e.replaceChildren(mountHtml(m.call(d.fields[0]), m, svg)); }, () => { e.replaceChildren(doc.createTextNode(STUCK)); });
+      let now: Node_ | undefined;
+      watch(e, "part", () => { e.replaceChildren((now = mountHtml(m.call(d.fields[0]), m, svg))); }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); }, () => (now ? fresh(now) : []));
       return e;
     }
     case HTML_V.element: {
@@ -156,7 +163,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           else console.warn("this page can't play sound here: build it with lab build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);
       }
-      e.append(...fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg)));
+      const kids = fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg));
+      e.append(...kids);
+      if (kids.some((k) => moved.has(k) || holding.has(k))) holding.set(e, kids);
       return e;
     }
     default: throw new Error(`not Html: ${d.tag}`);
