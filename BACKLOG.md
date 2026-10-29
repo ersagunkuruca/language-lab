@@ -26,7 +26,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 | I65 | Editor for several named results (RESULTS.md step 3, L95c): a definition with results shows one node with an output wire per result in the graph (an unconnected wire is `_`), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
-| I58 | An embed naming a missing def or program silently shows another `main` (`def=nosuch` → sort's main, `program=nosuch` → Numbers & physics); a bad `&code=` says "(Failed to fetch)" | QA10 M3 (QA-2026-10-29b.md) | 2026-10-29 |
 | I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA10 L1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the editor's footer hint takes a line of every embed | QA10 L3 (QA-2026-10-29b.md) | 2026-10-29 |
 | I61 | Dashed purple wires run from a parameter to the definition's header (Tumble `show next`'s `lane`, Pig `main`) | QA10 L4 (QA-2026-10-29b.md) | 2026-10-29 |
@@ -149,6 +148,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I58 | A link naming a missing program or definition, or carrying unreadable code, says so instead of showing another | #651 |
 | I56 | A graph with folded frames opens exactly where Tidy everything puts it | #650 |
 | I50 | Run says what the editor can't do as a hint (backwards through Random or a cell, what might not finish) and a forward run the search misses as a warning, not as errors: Pig play / games won by B, Tumble clear / settle / new board | #648 |
 | I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
