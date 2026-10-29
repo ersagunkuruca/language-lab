@@ -24,7 +24,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps (editor/main.ts, editor/build.ts, README). Editor lane's files; the Tumble thread does it once the lane says the menu is free | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
-| I43 | Graph: a function whose body is deeper than a few calls starts folded | Ersagun 2026-10-28 | 2026-10-29 |
 
 ## E: Editor
 
@@ -141,6 +140,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I43 | A function whose body is more than 3 deep starts folded in the graph; opened, it stays open | #616 |
 | I42 | Tidy everything centres each node on its inputs (Reingold–Tilford), steps keep their column | #614 |
 | I41 | Tidy everything keeps inputs in the order they plug in, however tall each is | #613 |
 | I35 | The nested to-do outline runs in reactive.html and the example menu, steps indented under their item | #611 |
