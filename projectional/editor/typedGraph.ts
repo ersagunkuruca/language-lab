@@ -795,6 +795,8 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // (Influence: Houdini's minimized network boxes.)
 
 const FOLDH = 44;
+// The longest name, and the longest line, a folded box lists.
+const HOLDN = 16, HOLDS = 34;
 function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
   // The outermost folded frame among f and the frames around it.
@@ -805,13 +807,17 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   };
   if (![...scene.frames.keys()].some((f) => hider(f))) return scene;
   const { boxes } = placeAll(scene, at);
-  // A box says what it holds: the calls inside, the first few by name.
+  // A box says what it holds: the calls inside, the first few by name,
+  // in a line short enough not to widen the box (Ersagun 2026-10-29).
   const holds = (f: Id) => {
     const inside = [...scene.items.values()].filter((it) => hider(it.frame) === f);
     const count = new Map<string, number>();
     for (const it of inside) if (it.name) count.set(it.name, (count.get(it.name) ?? 0) + 1);
-    const names = [...count].map(([n, k]) => (k > 1 ? `${n} ×${k}` : n));
-    return names.length ? `${names.slice(0, 3).join(", ")}${names.length > 3 ? ", …" : ""}` : `${inside.length} node${inside.length === 1 ? "" : "s"} inside`;
+    const names = [...count].map(([n, k]) => `${n.length > HOLDN ? `${n.slice(0, HOLDN - 1)}…` : n}${k > 1 ? ` ×${k}` : ""}`);
+    if (!names.length) return `${inside.length} node${inside.length === 1 ? "" : "s"} inside`;
+    let line = names[0];
+    for (const n of names.slice(1)) { if (line.length + n.length + 2 > HOLDS) return `${line}, …`; line += `, ${n}`; }
+    return line;
   };
   const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
