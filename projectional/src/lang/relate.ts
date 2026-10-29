@@ -1560,6 +1560,8 @@ export function showTerm(t: Term, names?: Record<string, string>): string {
   const show = (x: Term) => showTerm(x, names);
   if (t instanceof LVar) return `_${t.n}`;
   if (typeof t === "number") return String(+t.toPrecision(10));
+  // An Int is a bigint (#446): it was falling through to <function>.
+  if (typeof t === "bigint") return String(t);
   if (typeof t === "string") return JSON.stringify(t);
   if (isData(t)) {
     if (t.tag === CONS || t.tag === NIL) {
