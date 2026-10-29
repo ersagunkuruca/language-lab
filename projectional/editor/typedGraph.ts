@@ -128,6 +128,15 @@ let held = 0, menuAt = 0;
 // them there. Not saved: a reload lays the graph out afresh.
 const drawnAt = new Map<string, Map<Id, Pos & { frame: Id | null }>>();
 
+// The longest a title or a case's row reads before it is shortened.
+const APART = 24;
+// A function's frame titled by its parameters, which its dots already
+// show by name: past APART it reads (…) => (Ersagun 2026-10-29).
+function paramsTitle(names: string[], rest?: string): string {
+  const full = `(${names.join(", ")})${rest ? ` with ${rest}` : ""} =>`;
+  return full.length > APART ? `(…)${rest ? ` with ${rest}` : ""} =>` : full;
+}
+
 // Picked nodes, per graph: kept across redraws, not saved.
 const pickedBy = new Map<string, Set<Id>>();
 
@@ -376,7 +385,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         for (let b = node(body); b?.kind === "lambda"; b = node(body)) { params.push(...b.params); body = b.body; }
         // A function of nothing is an action, run when what it's given to
         // asks: first(queens(8), else nil) in the text.
-        return region(id, params.length ? `(${params.map(name).join(", ")}) =>` : "action", params, body, "lam");
+        return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam");
       }
       case "match": case "fold": return cases(id, n);
       case "call": {
@@ -622,8 +631,6 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // function per case, each drawn as a frame whose parameters are that
   // case's fields (and, for a fold, the parts already folded). Only the
   // chosen case's function runs.
-  // The longest a case's title or row reads before it is shortened.
-  const APART = 24;
   const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">, from?: { args: Id[]; lams: Map<Id, NodeOf<"lambda">> }): Sub => {
     let armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
     const isIf = n.kind === "match" && armNodes.length === 2 && armNodes.every((a) => [TRUE, FALSE].includes(a.variant));
@@ -657,7 +664,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const pat = patternText(r.pat, name, name);
       labels.push(pat.length > APART ? `${pat.slice(0, APART - 1)}…` : pat);
       inputs.push(r.at);
-      kids.push(region(r.at, `(${r.binds.map(name).join(", ")}) =>`, r.binds, r.body, "arm"));
+      kids.push(region(r.at, paramsTitle(r.binds.map(name)), r.binds, r.body, "arm"));
     }
     for (const arm of rows ? [] : armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
@@ -669,7 +676,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       // the text reads it: (item) with rest (ANSWERED-LATER.md).
       const op = handles ? node(arm.variant) : null;
       const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
-      kids.push(region(arm.id, later ? `(${arm.binds.slice(0, -1).map(name).join(", ")}) with ${name(arm.binds.at(-1)!)} =>` : `(${params.map(name).join(", ")}) =>`, params, lam ? lam.body : arm.body, "arm"));
+      kids.push(region(arm.id, later ? paramsTitle(arm.binds.slice(0, -1).map(name), name(arm.binds.at(-1)!)) : paramsTitle(params.map(name)), params, lam ? lam.body : arm.body, "arm"));
     }
     if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
@@ -805,7 +812,7 @@ function group(scene: Scene, g: Id, members: Id[]) {
 
 const FOLDH = 44;
 // The longest name, and the longest line, a folded box lists.
-const HOLDN = 16, HOLDS = 34;
+const HOLDN = 14, HOLDS = 24;
 function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
   // The outermost folded frame among f and the frames around it.
