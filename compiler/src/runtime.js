@@ -117,6 +117,23 @@ export const $showAny = (v, names) => showValue(v, null, names);
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
 export const $compare = (a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1];
+// `compare` at its type (compile.ts, GAPS.md M4): -1, 0 or 1. An Int has
+// one spelling (a number while small, a BigInt beyond), and < works across
+// the two. A text by code point: `<` on code units agrees unless one of
+// them has a character past the basic plane.
+export const $ORDER = ORDER_VALUES;
+export const $compareN = compareValues;
+export { numberOrder as $numberOrder } from '../../projectional/src/lang/run.ts';
+export const $intOrder = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
+import { less as textLess } from '../../projectional/src/lang/text.ts';
+export const $textOrder = (a, b) => {
+  if (a === b) return 0;
+  for (let i = 0, n = Math.min(a.length, b.length); i < n; i++) {
+    const x = a.charCodeAt(i), y = b.charCodeAt(i);
+    if (x !== y) return x < 0xd800 || y < 0xd800 ? (x < y ? -1 : 1) : textLess(a, b) ? -1 : 1;
+  }
+  return a.length < b.length ? -1 : 1;
+};
 
 export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));
 export const $mod = (a, b) => ((a % b) + b) % b;

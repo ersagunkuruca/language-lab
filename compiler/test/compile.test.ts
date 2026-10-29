@@ -237,6 +237,39 @@ test("a step straight over split or characters, with nothing after it, still tak
   assert.equal((want as string[])[0], '["a", "b"]');
 });
 
+test("compare at its type gives the evaluator's order: numbers, texts past the basic plane, big Ints, cases, records and lists (GAPS.md M4)", async () => {
+  const { COMPARE, ORDER_V, PAIR_V } = await import("../../projectional/src/lang/std.ts");
+  const { STRING, INT } = await import("../../projectional/src/lang/types.ts");
+  const k = new Lang();
+  const Shape = k.type("Shape", [], [["circle", [["radius", () => k.tref(NUMBER)]]], ["square", [["side", () => k.tref(INT)]]], ["named", [["label", () => k.tref(STRING)]]]]);
+  // generic: a copy for each type it is used at
+  const smaller = k.def("smaller");
+  k.define(smaller, k.fn(["a", "b"], (a, b) => k.match(k.call(COMPARE, a, b), [{ variant: ORDER_V.after, names: [], body: () => b }], a)));
+  const pair = (i: number | string, t: string) => k.call(PAIR_V, k.int(i), k.lit(t));
+  const both = (x: Id, y: Id) => [k.call(SHOW_ANY, k.call(COMPARE, x, y)), k.call(SHOW_ANY, k.call(smaller, x, y))];
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(
+    ...both(k.lit("b"), k.lit("a")),
+    ...both(k.lit("ab"), k.lit("a")),
+    // U+1D49C against U+FF01: before by code unit, after by code point
+    ...both(k.lit("\u{1D49C}"), k.lit("\uFF01")),
+    ...both(k.int("9007199254740993"), k.int(5)),
+    ...both(k.int(-3), k.int("-9007199254740993")),
+    ...both(k.call(B.add, k.lit(0.1), k.lit(0.2)), k.lit(0.3)),
+    ...both(pair(1, "b"), pair(1, "a")),
+    ...both(pair(0, "z"), pair(1, "a")),
+    ...both(k.call(Shape.v.square, k.int(2)), k.call(Shape.v.circle, k.lit(9))),
+    ...both(k.call(Shape.v.named, k.lit("x")), k.call(Shape.v.named, k.lit("x"))),
+    ...both(k.list(k.int(1), k.int(2)), k.list(k.int(1), k.int(3))),
+    ...both(k.list(), k.list(k.int(1))),
+  )));
+  const { code, info, names, defs } = await compiledDefs(k, ["main"], "compare-typed.js");
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const want = fromList([...r.call(r.value(main))][0]);
+  assert.deepEqual(fromList(defs.main() as Value), want);
+  assert.deepEqual((want as string[]).slice(4, 6), ["after", "\"\uFF01\""]);
+});
+
 test("running out of fuel in plain code inside a search fails that branch only, as in the evaluator", async () => {
   const k = new Lang();
   // counts up from x forever when x ≥ 0: the checker can't show it ends

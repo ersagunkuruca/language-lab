@@ -31,7 +31,7 @@ import { children, subtree, type Code, type Id, type Node, type NodeOf } from ".
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { BOOL, CELL_OPS, CONS, FALSE, INT_OPS, LIST, NIL, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath, placePath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
@@ -48,6 +48,7 @@ import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
 const NO_LAT: Set<number> = new Set();
+const NO_AT: Map<number, Type> = new Map();
 type K = (value: string) => string;
 
 export interface Options {
@@ -217,6 +218,92 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (t.t === "con" && (t.id === STRING || t.id === INT)) return `(${a} === ${b})`;
     return `$eq(${a}, ${b})`;
   };
+  // `compare` at its type (GAPS.md M4), as -1, 0 or 1: a Float64, an Int
+  // or a text with its own order, a case of a type that isn't recursive
+  // field by field in a function made for that type (as G0 did for
+  // `equal`). Anything else, and a type with a variable left in it, goes
+  // to the evaluator's order (run.ts compareValues), as a number too.
+  // `orderFns`: the functions made, by type.
+  const orderFns = new Map<string, { name: string; js: string | null }>();
+  const monoDeep = (t: Type): Type => (t.t === "var" ? (monoVars.has(t.v) ? monoDeep(monoVars.get(t.v)!) : t) : t.t === "con" ? { ...t, args: t.args.map(monoDeep) } : t);
+  const closedType = (t: Type): boolean => (t.t === "con" ? t.args.every(closedType) : false);
+  const orderOf = (t: Type): string | null => {
+    t = monoDeep(sub.zonk(t));
+    if (t.t !== "con" || !closedType(t)) return null;
+    if (t.id === NUMBER) return "$numberOrder";
+    if (t.id === INT) return "$intOrder";
+    if (t.id === STRING) return "$textOrder";
+    const td = code.nodes[(code.nodes[t.id] as { body?: Id })?.body ?? ""];
+    if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.some((v) => v === RATIO || v === ALGEBRAIC_V)) return null;
+    const key = JSON.stringify(t);
+    const made = orderFns.get(key);
+    // One being made is a recursive type: the general order, which keeps
+    // its own stack, so a long list can't overflow.
+    if (made) return made.js === null ? (made.name = "") || null : made.name || null;
+    const name = ident(`$order ${key}`, `$order_${names[t.id] ?? "type"}`);
+    const entry = { name, js: null as string | null };
+    orderFns.set(key, entry);
+    const params = new Map(td.params.map((p, i) => [p, (t as { args: Type[] }).args[i]] as const));
+    const fieldType = (id: Id): Type => {
+      const n = code.nodes[id];
+      if (n.kind === "tref") return params.get(n.target) ?? { t: "con", id: n.target, args: n.args.map(fieldType) };
+      return { t: "var", v: -1 };
+    };
+    const cases: string[] = [];
+    for (const v of td.variants) {
+      const fs = (code.nodes[v] as NodeOf<"variant">).fields;
+      const each: string[] = [];
+      for (let i = 0; i < fs.length; i++) {
+        const o = orderOf(fieldType((code.nodes[fs[i]] as NodeOf<"field">).type)) ?? `((x, y) => $compareN(x, y, $order))`;
+        if (entry.name === "") break;
+        each.push(`c = ${o}(a.fields[${i}], b.fields[${i}]);\nif (c) return c;`);
+      }
+      if (entry.name === "") return null;
+      if (each.length) cases.push(td.variants.length > 1 ? `case ${tag(v)}: {\n${each.join("\n")}\nbreak;\n}` : each.join("\n"));
+    }
+    const tags = td.variants.length > 1 ? `if (a.tag !== b.tag) return $order.get(a.tag) < $order.get(b.tag) ? -1 : 1;\n` : "";
+    const body = cases.length ? `let c;\n${td.variants.length > 1 ? `switch (a.tag) {\n${cases.join("\n")}\n}` : cases.join("\n")}\n` : "";
+    entry.js = `function ${name}(a, b) {\n${tags}${body}return 0;\n}`;
+    return name;
+  };
+  const orderJs = (arg: Id, [a, b]: string[]) => { const o = orderOf(withAt(curAt, ty(arg))); return o ? `${o}(${a}, ${b})` : `$compareN(${a}, ${b}, $order)`; };
+  // The copy being written: its `at`, in both its scheme's variables and
+  // its body's.
+  let curAt: Map<number, Type> = NO_AT;
+  const withAt = (at: Map<number, Type>, t: Type): Type => (!at.size ? t : t.t === "var" ? at.get(t.v) ?? t : t.t === "con" ? { ...t, args: t.args.map((x) => withAt(at, sub.zonk(x))) } : t.t === "fn" ? { ...t, params: t.params.map((x) => withAt(at, sub.zonk(x))), ret: withAt(at, sub.zonk(t.ret)) } : t);
+  const typeName = (t: Type): string => (t.t === "con" ? [names[t.id] ?? "T", ...t.args.map(typeName)].join("_") : "a");
+  // Does a definition compare values of its own type variables, itself or
+  // through another definition it calls with them?
+  const typedMemo = new Map<Id, boolean>();
+  const typed = (def: Id): boolean => {
+    if (typedMemo.has(def)) return typedMemo.get(def)!;
+    typedMemo.set(def, false);
+    const sc = info.schemes.get(def);
+    const open = (t: Type): boolean => { t = sub.zonk(t); return t.t === "var" ? true : t.t === "con" ? t.args.some(open) : t.t === "fn" ? [...t.params, t.ret].some(open) : false; };
+    const r = !!sc && sc.vars.length > 0 && code.nodes[def]?.kind === "def" && isFnDef(def) && subtree(code, def).some((x) => {
+      const n = code.nodes[x];
+      if (n.kind === "call") return refTarget(n.fn) === COMPARE && !!n.args[0] && open(ty(n.args[0]));
+      return n.kind === "ref" && n.target !== def && code.nodes[n.target]?.kind === "def" && open(ty(x)) && typed(n.target);
+    });
+    typedMemo.set(def, r);
+    return r;
+  };
+  // `at` read in the body's variables too (a library definition, checked
+  // apart, has its own): its lambda's type paired with the scheme's.
+  const typedAt = (def: Id, at: Map<number, Type>): Map<number, Type> => {
+    if (!at.size) return at;
+    const out = new Map(at);
+    const pair = (a: Type, b: Type) => {
+      b = sub.zonk(b);
+      if (a.t === "var") { if (b.t === "var" && at.has(a.v)) out.set(b.v, at.get(a.v)!); return; }
+      if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+      if (a.t === "fn" && b.t === "fn") { a.params.forEach((x, i) => b.params[i] && pair(x, b.params[i])); pair(a.ret, b.ret); }
+    };
+    pair(info.schemes.get(def)!.type, ty(node<"def">(def).body!));
+    return out;
+  };
+  // A copy's `at` as its key gives it (in its scheme's variables).
+  const keyAt = (s: Spec): Map<number, Type> => new Map([...s.at].filter(([v]) => info.schemes.get(s.def)!.vars.includes(v)));
   const node = <K extends NodeOf<any>["kind"]>(id: Id) => code.nodes[id] as NodeOf<K>;
 
   // ---- identifiers: display names where there are some, made unique
@@ -358,7 +445,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // (GAPS.md G25).
   // `sus`: the definition's row holds an operation answered later, so its
   // one copy is a generator function (`isLater`).
-  interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean }
+  // `at`: the types the copy's type variables stand for, where it compares
+  // values of them (`typed`), so `compare` there is at those types
+  // (GAPS.md M4): the tree jobs get a copy per key type. Specializing by
+  // type as MLton does for every definition, here only where it compares.
+  interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean; at: Map<number, Type> }
   // A copy that writes its list into an array it is handed (`$into`): the
   // list itself, or the list field `k` of a record with two fields, when it
   // returns the other one (GAPS.md P4).
@@ -550,7 +641,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // `out`: a single-answer copy whose answers are all one record, which
   // puts the record's fields in `$got` and returns whether it has one
   // (GAPS.md G13 again): its caller takes them apart straight away.
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null, lat: Set<number> = NO_LAT): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null, lat: Set<number> = NO_LAT, at: Map<number, Type> = NO_AT): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
     lat = new Set(scheme.rows.filter((r) => lat.has(r)));
@@ -567,7 +658,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       };
       pair(scheme.type, ty(node<"def">(def).body!));
     }
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}${lat.size ? `|l:${[...lat].sort((a, b) => a - b).join(",")}` : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}${lat.size ? `|l:${[...lat].sort((a, b) => a - b).join(",")}` : ""}${at.size ? `|t:${JSON.stringify(scheme.vars.filter((v) => at.has(v)).map((v) => at.get(v)))}` : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
@@ -575,7 +666,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (sus && streams) throw notYet(`${base} has Choice and performs an operation answered later`);
       const bool = !sus && !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
       const single = !reflective && streams && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat };
+      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}${at.size ? `$${scheme.vars.flatMap((v) => (at.has(v) ? [typeName(at.get(v)!)] : [])).join("_")}` : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat, at: typedAt(def, at) };
       if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
       queue.push(s);
@@ -587,7 +678,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT, callerAt: Map<number, Type> = NO_AT): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -611,7 +702,17 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       walk(s.ret, t.ret);
     };
     walk(scheme.type, ty(ref));
-    return spec(def, out, plain, false, arr, own, false, null, waits);
+    // The types its variables stand for here, where the copy compares them.
+    const at = new Map<number, Type>();
+    if (typed(def)) {
+      const bindVars = (a: Type, b: Type) => {
+        if (a.t === "var") { const t = monoDeep(withAt(callerAt, b)); if (scheme.vars.includes(a.v) && closedType(t)) at.set(a.v, t); return; }
+        if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && bindVars(x, sub.zonk(b.args[i])));
+        if (a.t === "fn" && b.t === "fn") { a.params.forEach((x, i) => b.params[i] && bindVars(x, sub.zonk(b.params[i]))); bindVars(a.ret, sub.zonk(b.ret)); }
+      };
+      bindVars(scheme.type, ty(ref));
+    }
+    return spec(def, out, plain, false, arr, own, false, null, waits, at);
   }
 
   // The parameters of a function definition that are only ever called,
@@ -1001,6 +1102,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const heapCopies = new Set<string>(), heapCalled = new Set<string>();
 
   function body(sp: Spec): string {
+    curAt = sp.at;
     // The copies this one's heap copy calls with a yield.
     const yields = new Set<string>();
     const rho = sp.rho;
@@ -1071,7 +1173,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
         });
       }
-      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat);
+      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat, sp.at);
     }
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
@@ -1347,7 +1449,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return kind ? `$toList(${kind === "front" ? local(n.target) : `$fromBack(${local(n.target)})`})` : local(n.target);
         }
         case "def": {
-          const s = specAt(n.id, n.target, rho, undefined, undefined, false, sp.lat);
+          const s = specAt(n.id, n.target, rho, undefined, undefined, false, sp.lat, sp.at);
           if (!isFnDef(n.target)) return `${s.name}()`;
           // A function without Choice, where a Choice function goes (a list
           // holding both kinds): lifted to a stream of one result.
@@ -1492,6 +1594,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
         if (t.kind === "builtin") {
+          if (f.target === COMPARE) return `$ORDER[${orderJs(n.args[0], n.args.map(ex))} + 1]`;
           if (INLINE[f.target]) {
             const js = INLINE[f.target].js(n.args.map(INLINE[f.target]?.boolArgs ? exBool : ex), n.args.map(narrowText));
             return INLINE[f.target].bool ? `$bool(${js})` : js;
@@ -1729,6 +1832,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
         const s = temp("s");
         const scrut = code.nodes[n.scrutinee];
+        if (scrut.kind === "call" && code.nodes[scrut.fn].kind === "ref" && node<"ref">(scrut.fn).target === COMPARE) {
+          // A match on `compare`: on the number, with no Order built.
+          const at: Id[] = [ORDER_V.before, ORDER_V.same, ORDER_V.after];
+          const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${at.indexOf(a.variant) - 1}: {\n${ret(a.body, tail, out, reuse)}\n}`);
+          if (n.otherwise) cases.push(`default: {\n${ret(n.otherwise, tail, out, reuse)}\n}`);
+          return `const ${s} = ${orderJs(scrut.args[0], scrut.args.map(ex))};\nswitch (${s}) {\n${cases.join("\n")}\n}`;
+        }
         const mine = !sp.streams && once.has(id) && scrut.kind === "ref" && ownedAt(scrut.target, n.scrutinee, sp.own, new Set());
         const cases = n.arms.map((a) => node<"arm">(a)).map((a) => {
           const r = mine && a.variant === CONS ? { s, cell: (scrut as NodeOf<"ref">).target, root: a.body, binds: a.binds } : reuse;
@@ -1838,7 +1948,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g) || callStreams(n)) return null;
       const c = defCall(n);
       if (c.streams || c.bool) return null;
-      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat);
+      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat, keyAt(c));
     }
     // A call that writes into the array `d`: a jump if it is this copy.
     function intoCallJs(n: NodeOf<"call">, t: Spec, tail: boolean, d: string, pre = ""): string {
@@ -2435,6 +2545,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = field(args[0], target!);
+        else if (target === COMPARE) c = `$ORDER[${orderJs(n.args[0], args)} + 1]`;
         else if (kind === "builtin" && INLINE[target!]) {
           const js = INLINE[target!].js(INLINE[target!]?.boolArgs ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
           c = INLINE[target!].bool ? `$bool(${js})` : js;
@@ -2451,11 +2562,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const r = temp("r");
           const rec = callee?.single ? unpackOf(callee) : null;
           if (callee && rec) {
-            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat);
+            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee));
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
           } else if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee && cps) {
-            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat), rec = unpackOf(viaK);
+            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat, keyAt(callee)), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = guarded(n.id, c, k);
@@ -2641,7 +2752,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
+    "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
+  const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(reflected(code))}, ${JSON.stringify([...info.divergent])});`] : [];
   return indent([
@@ -2651,7 +2764,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     ...program,
     // Only when the code kept shows a case: a library function that does
     // (the html module's px) isn't a reason when nothing calls it.
-    ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$compare(")) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`] : []),
+    ...orders,
+    ...([...out, ...exported, ...solverCode, ...constants, ...orders].some((b) => /\$order(?![\w$])/.test(b)) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`] : []),
     ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(")) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...solverCode,
     ...constants,
