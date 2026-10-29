@@ -96,6 +96,7 @@ test("each tree job agrees with the definition through meaning, and the tree sta
     assert.deepEqual(call(impl("value at"), tree, probe), call(spec("value at"), map, probe));
     assert.ok(equal(call(impl("has key"), tree, probe)!, call(spec("has key"), map, probe)!));
     assert.equal(call(impl("map size"), tree), call(spec("map size"), map));
+    for (const end of ["smallest key", "largest key"]) assert.deepEqual(call(impl(end), tree), call(spec(end), map), end);
   }
   }
 });
@@ -176,4 +177,31 @@ test("byType: equal, show and compare on trees go through the meaning", () => {
   assert.equal((call(setTree.byType!.equal, a, b) as Data).tag, "std.bool.true");
   assert.equal((call(setTree.byType!.compare, a, b) as Data).tag, "std.order.same");
   assert.equal(call(setTree.byType!.show, a), "set of([1, 2])");
+});
+
+test("a set's smallest and largest item, and a map's smallest and largest key (L102): the tree walks one side, and agrees with the sorted list", () => {
+  const [mapTree, , setTree] = LIBRARY.reps;
+  const k = new Lang(LIBRARY.code);
+  const L = lib;
+  const nums = (xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
+  // A Choice: `all` lists the answers, none for an empty set.
+  const ends = (s: Id) => k.call(S.all, k.thunk(() => k.call(CONS, k.call(L("smallest item"), s), k.call(CONS, k.call(L("largest item"), s), k.x(NIL)))));
+  const frontier = k.call(L("as set"), k.list(...[[30, "c"], [10, "b"], [20, "a"], [10, "a"]].map(([d, t]) => k.call(PAIR_V, k.lit(d), k.lit(t)))));
+  const m = k.call(L("as map"), k.list(...["kiwi", "apple", "pear"].map((t, i) => k.call(PAIR_V, k.lit(t), k.lit(i)))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.call(SHOW_ANY, ends(k.call(L("as set"), nums([5, 1, 4, 1, 3]))))),
+    k.call(S.print, k.call(SHOW_ANY, ends(k.x(L("empty set"))))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(S.first, k.thunk(() => k.call(L("smallest item"), frontier)), k.thunk(() => k.call(PAIR_V, k.lit(0), k.lit("none")))))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(CONS, k.call(L("smallest key"), m), k.call(CONS, k.call(L("largest key"), m), k.x(NIL))))))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(L("largest key"), k.x(L("empty map"))))))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const plain = printed(code, names, main);
+  assert.deepEqual(plain, ["[[1, 5]]", "[]", 'pair(10, "a")', '[["apple", "pear"]]', "[]"]);
+  const stored = represent(represent(merge(code, TREES.code), [main], mapTree), [main], setTree);
+  assert.deepEqual(printed(stored, names, main), plain);
+  // On the tree, each is log n: a walk down one side, not the items listed.
+  assert.equal(setTree.cost[lib("smallest item")], "log n");
+  assert.equal(mapTree.cost[lib("largest key")], "log n");
 });

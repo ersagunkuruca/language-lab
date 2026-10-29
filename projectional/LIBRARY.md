@@ -177,6 +177,8 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **values of** : `(Map a b) -> List b`. The values, in the order of their keys.
 - **entries of** : `(Map a b) -> List (Pair a b)`. The entries as pair(key, value), in key order.
 - **map size** : `(Map a b) -> Int`. How many keys the map holds.
+- **smallest key** : `(Map a b) -[Choice]-> a`. The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.
+- **largest key** : `(Map a b) -[Choice]-> a`. The map's largest key, in compare's order; no answer when the map is empty.
 - **Set** (type). A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).
 - **empty set** : `Set a`. The set with no items.
 - **as set** : `(List a) -> Set a`. The set of a list's items: in compare's order, each once.
@@ -188,6 +190,8 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **set difference** : `(Set a, Set a) -> Set a`. The items of the first set that aren't in the second.
 - **items of** : `(Set a) -> List a`. The items, in order.
 - **set size** : `(Set a) -> Int`. How many items the set has.
+- **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
+- **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
 
 ## Searching: Choice
 

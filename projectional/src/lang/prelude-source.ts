@@ -659,6 +659,29 @@ export function buildPrelude(): Module {
   const has = def("has item", ["set", "item"], (st, x) => itemsOf(st, (xs) => k.call(hasItem_, xs, x)));
   const items = def("items of", ["set"], (st) => itemsOf(st, (xs) => xs));
   const setSize = def("set size", ["set"], (st) => itemsOf(st, (xs) => k.call(length, xs)));
+  // The two ends of a set, and of a map's keys (L102, routes' LG1): the
+  // items are sorted, so the smallest is the first and the largest the
+  // last. Each is a Choice with no answer when there is none, as value at
+  // is. The trees (map-tree.ts) walk down one side instead, in log n.
+  // Haskell's Data.Set lookupMin and lookupMax, Rust's BTreeSet first and
+  // last are the same jobs.
+  const lastItem = k.def("last of items");
+  k.define(lastItem, k.fn(["list"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => x },
+      { variant: CONS, names: ["next", "after"], body: () => k.call(lastItem, rest) },
+    ]) },
+  ])));
+  const firstOf = (xs: Id) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([x]) => x },
+  ]);
+  const keyOfEntry = (e: Id) => entry(e, (key) => key);
+  const smallestItem = def("smallest item", ["set"], (st) => itemsOf(st, (xs) => firstOf(xs)));
+  const largestItem = def("largest item", ["set"], (st) => itemsOf(st, (xs) => k.call(lastItem, xs)));
+  const smallestKey = def("smallest key", ["map"], (m) => entriesOf(m, (es) => keyOfEntry(firstOf(es))));
+  const largestKey = def("largest key", ["map"], (m) => entriesOf(m, (es) => keyOfEntry(k.call(lastItem, es))));
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
   // sorted.
@@ -698,8 +721,8 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize];
-  const mapHelpers = [putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const mapHelpers = [lastItem, putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     [map]: "The list of f(item) for each item, in the same order.",
@@ -758,6 +781,10 @@ export function buildPrelude(): Module {
     [difference]: "The items of the first set that aren't in the second.",
     [items]: "The items, in order.",
     [setSize]: "How many items the set has.",
+    [smallestItem]: "The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).",
+    [largestItem]: "The set's largest item, in compare's order; no answer when the set is empty.",
+    [smallestKey]: "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
+    [largestKey]: "The map's largest key, in compare's order; no answer when the map is empty.",
     ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",

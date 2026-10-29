@@ -118,10 +118,18 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     const onto = rec(`${word} onto`);
     k.define(onto, k.fn(["tree", "rest"], (t, rest) => parts(t, (_, tk, tv, l, r) => k.call(onto, l, k.call(CONS, withValues ? k.call(PAIR_V, tk, tv!) : tk, k.call(onto, r, rest))), () => rest)));
     const list = def(`${word} list`, ["tree"], (t) => k.call(onto, t, k.x(NIL)));
+    // The two ends (L102): down the left side to the smallest key, down
+    // the right to the largest; no answer at a tip.
+    const end = (name: string, left: boolean) => {
+      const d = rec(`${word} ${name}`);
+      k.define(d, k.fn(["tree"], (t) => parts(t, (_, tk, __, l, r) => parts(left ? l : r, () => k.call(d, left ? l : r), () => tk, "next "), () => k.call(S.fail))));
+      return d;
+    };
+    const first = end("first", true), last = end("last", false);
     const emptyTree = k.def(`empty ${word}`);
     k.define(emptyTree, k.x(tip));
     defs.push(emptyTree);
-    return { T, tip, size, insert, has, remove, list, emptyTree };
+    return { T, tip, size, insert, has, remove, list, emptyTree, first, last };
   }
 
   // ---- Map
@@ -156,6 +164,8 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("values of")]: def("tree values", ["tree"], (t) => k.call(prelude("map"), k.call(m.list, t), k.fn(["entry"], (e) => pair(e, (_, v) => v)))),
     [prelude("entries of")]: m.list,
     [prelude("map size")]: m.size,
+    [prelude("smallest key")]: m.first,
+    [prelude("largest key")]: m.last,
   };
   const mapByType = {
     equal: mapOf((a, b) => k.call(S.equal, a, b), "tree equal"),
@@ -189,6 +199,8 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("set difference")]: filtered("set tree difference", (inB) => k.call(S.not, inB)),
     [prelude("items of")]: s.list,
     [prelude("set size")]: s.size,
+    [prelude("smallest item")]: s.first,
+    [prelude("largest item")]: s.last,
   };
   const setByType = {
     equal: setOf((a, b) => k.call(S.equal, a, b), "set tree equal"),
@@ -198,8 +210,8 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
 
   const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
   const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
-  const mapLog = ["put", "value at", "remove key", "has key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
-  const setLog = ["add item", "remove item", "has item"], setLin = ["items of", "match", "fold"];
+  const mapLog = ["put", "value at", "remove key", "has key", "smallest key", "largest key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
+  const setLog = ["add item", "remove item", "has item", "smallest item", "largest item"], setLin = ["items of", "match", "fold"];
   // The definitions themselves: every job walks the sorted list.
   const spec = (of: Id, cons: Id, linear: string[], quadratic: string[], one: string[]): Representation => ({
     name: "sorted list", of, type: of, meaning: null, canonical: true, impl: {},
