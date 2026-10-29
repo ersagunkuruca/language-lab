@@ -21,7 +21,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 | I36 | A function type written in a data type's field has a closed row, and a call's row must equal the caller's (COMPILER.md's known imprecision), so calling it fixes the caller's whole row. Tumble's `Chain.rest` is called from a page handler, so it lists all ten of a handler's effects (Cells, Update, Console, Files, …) where Diverge is all it does. Containment at calls, or L58's named row `Handler`, would fix it | examples/tumble | 2026-10-29 |
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
-| I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps (editor/main.ts, editor/build.ts, README). Editor lane's files; the Tumble thread does it once the lane says the menu is free | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 
@@ -140,6 +139,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps | #618 |
 | M2 | A map or set in a field of the program's own type takes the tree in lab run, lab compile (#592) and the editor's Run | #617 |
 | I43 | A function whose body is more than 3 deep starts folded in the graph; opened, it stays open | #616 |
 | I42 | Tidy everything centres each node on its inputs (Reingold–Tilford), steps keep their column | #614 |
