@@ -212,9 +212,12 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     posOf: (id) => { const it = scene.items.get(id); return it ? hooks.at[id] ?? { x: it.auto.x, y: it.auto.y } : undefined; },
     expand: (ids) => [...expand(scene, ids)],
     tidy: (only) => {
-      const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
+      const moved = only?.length === 1 && scene.frames.has(only[0]) ? arrangeInside(scene, hooks.at, hooks.folded, only[0])
+        : only ? unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, expand(scene, only)))
+        : changed(scene, hooks.at, arrangeAll(scene, hooks.folded));
       const n = Object.keys(moved).length;
-      hooks.moved(moved, n ? `Tidied ${only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : only ? "Already tidy: nothing overlaps." : "Already tidy: laying it out again moves nothing.");
+      const frame = only?.length === 1 && scene.frames.has(only[0]);
+      hooks.moved(moved, n ? `Tidied ${frame ? "what's inside" : only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : only && !frame ? "Already tidy: nothing overlaps." : "Already tidy: laying it out again moves nothing.");
     },
   };
 }
@@ -1104,10 +1107,47 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
 // two are one layout: folded frames are laid out as the boxes they are
 // drawn as, after their contents are laid out inside them.
 function autoArrange(scene: Scene, folded?: Set<Id>) {
+  for (const [k, p] of Object.entries(arrangeAll(scene, folded))) scene.items.get(k)!.auto = p;
+}
+
+// Where everything goes, laid out afresh: each folded frame's contents as
+// they'd be with it open and the folded frames inside it shut, innermost
+// first, then the whole with every folded frame as the box it's drawn as.
+function arrangeAll(scene: Scene, folded?: Set<Id>): Record<Id, Pos> {
+  const cur: Record<Id, Pos> = {};
   const { nodes, frames, wires } = asLayout(scene, {});
-  for (const [k, p] of arrange(nodes, frames, wires, scene.chains)) scene.items.get(k)!.auto = p;
-  if (!folded?.size) return;
-  for (const [k, p] of Object.entries(unfoldMoves(scene, {}, tidyScene(fold(scene, {}, folded), {}, null)))) scene.items.get(k)!.auto = p;
+  for (const [k, p] of arrange(nodes, frames, wires, scene.chains)) cur[k] = p;
+  if (!folded?.size) return cur;
+  const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
+  const depth = (f: Id) => { let n = 0; for (let p = parent(f); p; p = parent(p)) n++; return n; };
+  const inside = (fr: Id | null, f: Id) => { for (let p = fr; p; p = parent(p)) if (p === f) return true; return false; };
+  for (const f of [...folded].filter((g) => scene.frames.has(g)).sort((a, b) => depth(b) - depth(a))) {
+    const shut = new Set([...folded].filter((g) => g !== f && !inside(f, g)));
+    for (const [k, p] of Object.entries(unfoldMoves(scene, cur, tidyScene(fold(scene, cur, shut), cur, null))))
+      if (inside(scene.items.get(k)?.frame ?? null, f)) cur[k] = p;
+  }
+  Object.assign(cur, unfoldMoves(scene, cur, tidyScene(fold(scene, cur, folded), cur, null)));
+  return cur;
+}
+
+// What moved from where it's drawn now.
+function changed(scene: Scene, at: Record<Id, Pos>, to: Record<Id, Pos>): Record<Id, Pos> {
+  const { pos } = placeAll(scene, at);
+  const out: Record<Id, Pos> = {};
+  for (const [k, p] of Object.entries(to)) { const o = pos.get(k); if (!o || Math.round(o.x) !== Math.round(p.x) || Math.round(o.y) !== Math.round(p.y)) out[k] = { x: Math.round(p.x), y: Math.round(p.y) }; }
+  return out;
+}
+
+// Tidy what's inside a frame lays its contents out afresh, as Tidy
+// everything would (arrange, steps and folded frames included), and keeps
+// the frame's corner where it is.
+function arrangeInside(scene: Scene, at: Record<Id, Pos>, folded: Set<Id> | undefined, f: Id): Record<Id, Pos> {
+  const fresh = arrangeAll(scene, folded);
+  const was = placeAll(scene, at).boxes.get(f), now = placeAll(scene, { ...at, ...fresh }).boxes.get(f);
+  if (!was || !now) return {};
+  const to: Record<Id, Pos> = {};
+  for (const k of expand(scene, [f])) to[k] = { x: fresh[k].x + was.x - now.x, y: fresh[k].y + was.y - now.y };
+  return changed(scene, at, to);
 }
 
 // Tidy everything lays it all out afresh (arrange), the same every time;
@@ -1208,7 +1248,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     const start = ev.target as Element;
     const add = start.closest("[data-add]")?.getAttribute("data-add");
     if (add && hooks.addItem) { ev.preventDefault(); hooks.addItem(add); return; }
-    const src = start.closest("[data-src]")?.getAttribute("data-src");
+    // A step done only for its effect has no value to wire: a drag moves it.
+    const src = start.closest("[data-src]:not(.silent)")?.getAttribute("data-src");
     const out = start.closest("[data-out]")?.getAttribute("data-out");
     const slot = start.closest("circle.inp")?.getAttribute("data-slot");
     const mv = start.closest("[data-move]")?.getAttribute("data-move");
