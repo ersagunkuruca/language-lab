@@ -33,7 +33,7 @@ test("lockstep: the same steps evaluated, compiled and by hand", async () => {
     vel += times(a, dt);
     pos += times(vel, dt);
   }
-  assert.match(String(evaluated), new RegExp(`steps ${pos}$`));
+  assert.match(String(evaluated), new RegExp(`position in steps of 2⁻³² ${pos}$`));
   // main is a value, and Run main gives it.
   assert.equal(runMain(p.code, info, p.named("main"), { print: () => {}, names: p.pres.names }), evaluated);
   const path = join(mkdtempSync(join(tmpdir(), "lockstep-")), "lockstep.js");

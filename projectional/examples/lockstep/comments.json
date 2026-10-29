@@ -3,6 +3,6 @@
   "h5ndo92o930oikj0fvkp0g78k0": "One tick of a cart on a spring: the input pushes it (−1, 0 or 1), the spring pulls it back towards 0 and friction slows it. All Fixed, so every machine computes the same steps.",
   "uv7ccedlk7rcfunc5plpp3nkv5": "What a player pressed, one per tick: ten seconds of right, nothing, left, nothing. In a lockstep game only these go over the network.",
   "g9qclj9bvrtjd0cagutsqgmch9": "Every tick from rest, in order. Two machines that run this on the same inputs end in the same state, bit for bit, which Float64 can't promise across compilers and processors.",
-  "ed5vevjq2546grfn7oikkd08rp": "Where the cart ends after ten seconds, and its exact steps, so two machines can compare.",
+  "ed5vevjq2546grfn7oikkd08rp": "Where the cart ends after ten seconds, and its position counted exactly, in steps of 2⁻³² (a negative count is left of 0), so two machines can compare.",
   "program": "Textbook: deterministic lockstep, as in Bettner and Terrano, \"1500 Archers on a 28.8\" (GDC 2001): only inputs travel, so every machine must compute the same state. Our own: the cart on a spring, in Fixed (FIXED-POINT.md, BACKLOG L89)."
 }
