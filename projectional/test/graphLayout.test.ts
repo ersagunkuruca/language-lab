@@ -148,6 +148,19 @@ test("arrange lays out afresh: the same from anywhere, again moves nothing, inpu
   for (const n of nodes) assert.deepEqual(elsewhere.get(n.id), { x: p(n.id).x + d.x, y: p(n.id).y + d.y });
 });
 
+test("arrange keeps inputs in the order they plug in, however tall each is", () => {
+  // f(p, q); p(a, b, c); q(d, e). b and e are tall (a function's frame,
+  // say): ordered by where their tops would like to be, b went above a and
+  // e above d.
+  const ids = ["f", "p", "q", "a", "b", "c", "d", "e"];
+  const tall = (id: string) => id === "b" || id === "e";
+  const nodes: TNode[] = ids.map((id) => ({ id, x: 0, y: 0, w: 60, h: tall(id) ? 120 : id === "p" ? 50 : 30, frame: null }));
+  const w = (from: string, to: string, k: number) => ({ from, fx: 60, fy: tall(from) ? 60 : 15, to, tx: 0, ty: 10 + 15 * k, flow: true });
+  const wires = [w("p", "f", 0), w("q", "f", 1), w("a", "p", 0), w("b", "p", 1), w("c", "p", 2), w("d", "q", 0), w("e", "q", 1)];
+  const at = arrange(nodes, [], wires);
+  assert.equal(["a", "b", "c", "d", "e"].sort((x, y) => at.get(x)!.y - at.get(y)!.y).join(""), "abcde");
+});
+
 test("an action's steps keep one column in the order they run, each step's dot level with it", () => {
   // Three steps; the first two lead to a dot each, the last is the result.
   // Without the chain, s1 and s2 would sit left of s3 (they feed the dots,

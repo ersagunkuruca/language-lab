@@ -359,9 +359,10 @@ export function tidy(nodes: TNode[], frames: TFrame[], wires: TWire[], only: Set
 // nodes; then in columns by how far each is from the result (longest path,
 // the layering of Sugiyama et al.; what nothing feeds goes just left of
 // what it feeds), the result's column on the right. Each
-// column is placed after the one it feeds: a unit goes level with the
-// inputs it feeds, so a call's inputs come in the order of its ports, and
-// then they're stacked so nothing overlaps.
+// column is placed after the one it feeds: units in the order they plug in
+// (by what they feed, top to bottom, then by port), so a call's inputs come
+// in the order of its ports however tall each is; each goes level with the
+// input it feeds, then they're stacked so nothing overlaps.
 // `chains`: units that keep one column and this order, top to bottom (an
 // action's steps, in the order they run).
 export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains: string[][] = [], gap = 18, colGap = 46): Map<string, Pos> {
@@ -431,7 +432,19 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
         return es.reduce((s, e) => s + y.get(e.to)! + e.at, 0) / es.length - es[0].from;
       };
       const ws = new Map(col.map((u) => [u, r ? want(u) : 0]));
-      const sorted = keepOrder(r ? [...col].sort((a, b) => ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!) : [...col]);
+      // The order is where each plugs in: under the highest thing it feeds,
+      // at that input. Not where its top would like to be: a tall input (a
+      // function's frame) would jump above the inputs before it, and one
+      // parent's last input above the next parent's first.
+      const plug = (u: string): [number, number] => {
+        const es = outs.get(u)!.filter((e) => y.has(e.to));
+        if (!es.length) return [Infinity, 0];
+        const e = es.reduce((m, e) => (y.get(e.to)! < y.get(m.to)! || (y.get(e.to)! === y.get(m.to)! && e.at < m.at) ? e : m));
+        return [y.get(e.to)!, e.at];
+      };
+      const ps = new Map(col.map((u) => [u, plug(u)]));
+      const byPlug = (a: string, b: string) => ps.get(a)![0] - ps.get(b)![0] || ps.get(a)![1] - ps.get(b)![1] || ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!;
+      const sorted = keepOrder(r ? [...col].sort(byPlug) : [...col]);
       let bottom = -Infinity;
       for (const u of sorted) { const t = r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap); y.set(u, t); bottom = t + size.get(u)!.h; }
       // Pushed down to make room: move the column back up, half way.
