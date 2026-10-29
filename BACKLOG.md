@@ -20,7 +20,6 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|
 | I31 | Opening `shadow` (1.4 s), `march`, `shade` and Countdown `solutions` (1.0 s) blocks the page: cap the opening Run's work on the page thread at ~300 ms as #562 does for the wires | QA9 M1 | 2026-10-29 |
 | I32 | A result that wasn't run reads `NaN` in the answer's blue (Countdown `results`, which gives a Found) | QA9 L1 | 2026-10-29 |
-| I33 | Insert a node after it… still says "Wrapped it in the call" | QA9 L2 | 2026-10-29 |
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 | I35 | Show the nested to-do outline (src/lang/cells-programs.ts `outlineProgram`, L100) in reactive.html beside its code with the "what ran" count, and in the editor's example menu; editor lane | Language lane, L100 | 2026-10-29 |
 
@@ -138,6 +137,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I33 | Insert a node after it… says Pick the node to insert after it, then Inserted the call after it; Wrap in… keeps its words | #605 |
 | I30 | Run's answers name constructors by their names: solutions reads [apply(times, …)], shade rgb(…) | #599 |
 | Pig menu | Page: Pig in the example menu, and apps/pig.html built beside the other apps | this PR |
 | I34 | Smoke's Tab check counts only the parts Tab steps through; tick's only part is selected already, so it presses nothing | #582 |

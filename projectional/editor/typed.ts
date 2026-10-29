@@ -504,7 +504,7 @@ export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
 // and the hole has just been filled with a call or a function. The part
 // goes back into the first of its empty inputs where it type-checks; where
 // a function of nothing goes, as () => the part. One edit with the fill.
-export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: Code): TEdit {
+export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: Code, inserted = false): TEdit {
   const wrapper = code.nodes[at];
   const slots = wrapper?.kind === "call" ? wrapper.args : wrapper?.kind === "lambda" ? [wrapper.body] : [];
   const open = slots.filter((x) => code.nodes[x]?.kind === "hole");
@@ -520,7 +520,8 @@ export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: C
     for (const thunk of [false, true]) {
       const next = replace(base, slot, () => (thunk ? { kind: "lambda", params: [], body: part } : was as NodeData));
       if (!thunk) delete next.nodes[part];
-      const r = guardTyped(before, next, names, at, wrapper.kind === "lambda" ? "Wrapped it in a function: it is the body." : `Wrapped it in the call: it is one of its inputs${thunk ? ", as () => it, since a function of nothing goes there" : ""}.`);
+      const r = guardTyped(before, next, names, at, wrapper.kind === "lambda" ? (inserted ? "Inserted a function after it: it is the body." : "Wrapped it in a function: it is the body.")
+        : `${inserted ? "Inserted the call after it: it feeds one of its inputs" : "Wrapped it in the call: it is one of its inputs"}${thunk ? ", as () => it, since a function of nothing goes there" : ""}.`);
       if (r.ok) return r;
       last ??= r;
     }
