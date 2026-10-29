@@ -65,6 +65,8 @@ export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";
+// A place inside a value (L98): Path whole part.
+export const PATH = "type.path";
 
 export class TypeError extends Error {}
 

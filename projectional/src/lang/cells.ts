@@ -47,6 +47,9 @@ export interface CellNode {
   error?: unknown;
   // What else goes when it's disposed (each's rows, below).
   onDispose?: () => void;
+  // The paths it read in each source with read at (L98), as keys; a source
+  // it read whole with read isn't here.
+  paths?: Map<CellNode, string[]>;
 }
 
 // Each value `each` made, with the owner it was made under: a page that
@@ -59,6 +62,62 @@ export const KEPT = new WeakMap<object, CellNode>();
 // `read`.
 export const CELL = Symbol("cell");
 export const nodeOf = (v: Value): CellNode | null => (typeof v === "function" ? ((v as unknown as Record<symbol, CellNode>)[CELL] ?? null) : null);
+
+// A place inside a cell's value (L98, STABLE-REFERENCES.md §1): item i of
+// a list or field i of a record, outermost first. A path is a value of the
+// language, made by `path`, `item path` and `then path` (std.ts), and
+// compared by identity like a cell; the cell's handler applies an edit at
+// one and wakes only the readers whose path meets it.
+export type Step = { item: number } | { field: number };
+export const PATH = Symbol("path");
+export const stepsOf = (v: Value): Step[] | null => (typeof v === "function" ? ((v as unknown as Record<symbol, Step[]>)[PATH] ?? null) : null);
+export const pathValue = (steps: Step[]): Value => Object.assign(() => { throw new Error("a path is used by read at and the edits, not called"); }, { [PATH]: steps }) as unknown as Value;
+// How a list is taken apart and made: cons cells in the evaluator, the
+// compiled code's own lists in JS.
+export interface Lists { from: (v: Value) => Value[]; to: (xs: Value[]) => Value }
+type Data = { tag: string; fields: Value[] };
+const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : `f${s.field}/`)).join("");
+// The part of v at steps, or undefined when there is no such item.
+export function partAt(v: Value, steps: Step[], lists: Lists): Value | undefined {
+  for (const s of steps) {
+    if ("field" in s) v = (v as unknown as Data).fields[s.field];
+    else { const xs = lists.from(v); if (!(s.item >= 0 && s.item < xs.length)) return undefined; v = xs[s.item]; }
+  }
+  return v;
+}
+// v with change(part) at steps, copying only the path down to it; v itself
+// when there is no such item or change gives undefined.
+export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value | undefined, lists: Lists): Value {
+  if (!steps.length) return change(v) ?? v;
+  const [s, ...rest] = steps;
+  if ("field" in s) {
+    const d = v as unknown as Data, inner = changeAt(d.fields[s.field], rest, change, lists);
+    if (inner === d.fields[s.field]) return v;
+    const fields = d.fields.slice();
+    fields[s.field] = inner;
+    return { ...d, fields } as unknown as Value;
+  }
+  const xs = lists.from(v);
+  if (!(s.item >= 0 && s.item < xs.length)) return v;
+  const inner = changeAt(xs[s.item], rest, change, lists);
+  if (inner === xs[s.item]) return v;
+  const ys = xs.slice();
+  ys[s.item] = inner;
+  return lists.to(ys);
+}
+// The three edits of a list: an item put in at i (at the end when i is past
+// it), the item at i taken out, the item at `from` moved to `to`. A place
+// that isn't there changes nothing.
+export const listEdits = {
+  insert: (xs: Value[], i: number, x: Value) => { const ys = xs.slice(); ys.splice(Math.max(0, Math.min(i, xs.length)), 0, x); return ys; },
+  remove: (xs: Value[], i: number) => (i >= 0 && i < xs.length ? [...xs.slice(0, i), ...xs.slice(i + 1)] : undefined),
+  move: (xs: Value[], from: number, to: number) => {
+    if (!(from >= 0 && from < xs.length && to >= 0 && to < xs.length) || from === to) return undefined;
+    const ys = xs.slice(), [x] = ys.splice(from, 1);
+    ys.splice(to, 0, x);
+    return ys;
+  },
+};
 
 // A formula whose computation gave no value (it ran out of `with fuel`).
 export class NoValue extends Error {}
@@ -127,14 +186,19 @@ export class Cells {
     return this.wrap(this.node(compute, undefined, label));
   }
 
-  read(c: Value): Value {
+  read(c: Value, at?: Step[]): Value {
     const n = nodeOf(c);
     if (!n) throw new Error("read needs a cell");
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
-    if (this.current && !this.current.sources.includes(n)) {
-      this.current.sources.push(n);
-      n.observers.add(this.current);
+    const r = this.current;
+    if (r) {
+      const first = !r.sources.includes(n);
+      if (first) { r.sources.push(n); n.observers.add(r); }
+      // A read of a place adds the place; a whole read, or a place read
+      // after one, keeps the reader waking at every change.
+      if (at && n.compute === null && (first || r.paths?.has(n))) (r.paths ??= new Map()).set(n, [...(r.paths.get(n) ?? []), keyOf(at)]);
+      else r.paths?.delete(n);
     }
     if (n.compute) this.update(n);
     if (n.error !== undefined) throw n.error;
@@ -148,7 +212,7 @@ export class Cells {
     try { return this.read(c); } finally { this.current = saved; }
   }
 
-  write(c: Value, v: Value): void {
+  write(c: Value, v: Value, at?: Step[]): void {
     const n = nodeOf(c);
     if (!n) throw new Error("write needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
@@ -156,8 +220,32 @@ export class Cells {
     if (this.journal) { const was = n.value as Value; this.journal.undo.push(() => this.write(c, was)); }
     n.value = v;
     if (this.onWrite) this.onWrite(this.order.get(n)!, v);
-    for (const o of n.observers) this.mark(o, DIRTY);
+    // A change at a place wakes the readers of that place, of a place
+    // inside it and of one around it; the rest read elsewhere (L98).
+    const key = at && keyOf(at);
+    for (const o of n.observers) {
+      const ps = key === undefined ? undefined : o.paths?.get(n);
+      if (!ps || ps.some((p) => p.startsWith(key!) || key!.startsWith(p))) this.mark(o, DIRTY);
+    }
     if (!this.batching) this.flush();
+  }
+
+  // An edit at a place in a cell's value (L98): change(part) put there,
+  // only that path copied, the readers of other places left asleep. The
+  // readers of every place inside it wake too, so an insert, remove or move
+  // in a list wakes the readers of its items, whose positions it shifts.
+  edit(c: Value, at: Step[], change: (part: Value) => Value | undefined, lists: Lists): void {
+    const n = nodeOf(c);
+    if (!n) throw new Error("an edit needs a cell");
+    if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
+    const old = n.value as Value, next = changeAt(old, at, change, lists);
+    if (next !== old) this.write(c, next, at);
+  }
+
+  // What's at a place in a cell's value, read as a reader of that place
+  // only; undefined when there's no such item.
+  readAt(c: Value, at: Step[], lists: Lists): Value | undefined {
+    return partAt(this.read(c, at), at, lists);
   }
 
   // Solid's createEffect: run now, and again whenever a cell it read
@@ -260,6 +348,7 @@ export class Cells {
     n.disposed = true;
     for (const s of n.sources) s.observers.delete(n);
     n.sources = [];
+    n.paths = undefined;
     n.owned.forEach((o) => this.dispose(o));
     n.owned = [];
   }
@@ -309,6 +398,7 @@ export class Cells {
   private recompute(n: CellNode): void {
     for (const s of n.sources) s.observers.delete(n);
     n.sources = [];
+    n.paths = undefined;
     n.owned.forEach((o) => this.dispose(o));
     n.owned = [];
     const [current, owner] = [this.current, this.owner];

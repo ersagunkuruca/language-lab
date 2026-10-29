@@ -137,6 +137,12 @@ Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-
 | Struct of arrays and parallel systems as later goals | Influence | Mike Acton, "Data-Oriented Design and C++" (CppCon 2014); Rust's rayon. |
 | Persistent structures as the main road | Considered, rejected | Okasaki (1998), Clojure (Rich Hickey), Immutable.js: they bound the copy but keep the diff. |
 
+## Edits at a path in a cell (L98a)
+
+| What | Label | Who and where |
+|---|---|---|
+| `path`, `item path`, `then path`; `write at`, `insert at`, `remove at`, `move at` and `read at`, waking only the readers of the place (cells.ts `edit`, std.ts, STABLE-REFERENCES.md §1) | Influence | Solid's `createStore` with paths and `produce` (Ryan Carniato), MobX (Michel Weststrate), Immer's patches (Michel Weststrate). A path from fields written in place is `set`'s lens (REVIEW.md §5.3). Written fresh, no code taken. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |

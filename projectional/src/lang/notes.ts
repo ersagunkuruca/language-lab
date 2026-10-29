@@ -167,4 +167,12 @@ export const NOTES: Comments = {
   "builtin.cells.each": "A cell holding f of each item of a list cell, where an item that stays keeps what f gave it.",
   "builtin.cells.read": "What a cell holds now. A page part that reads it is redrawn when it changes.",
   "builtin.cells.write": "Puts a new value in a cell. Only event handlers can write.",
+  "builtin.cells.path": "A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.",
+  "builtin.cells.itemPath": "Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.",
+  "builtin.cells.thenPath": "The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.",
+  "builtin.cells.readAt": "What is at a place in a cell's value. A page part that reads it is redrawn only when that place changes, not when another item does. No answer when the place isn't there (an item past the end).",
+  "builtin.cells.writeAt": "Puts a value at a place in a cell's value; only what read that place, or a place inside or around it, runs again. A place that isn't there changes nothing. Only event handlers can write.",
+  "builtin.cells.insertAt": "Puts an item into the list at a place, before item i (at the end when i is past it).",
+  "builtin.cells.removeAt": "Takes item i out of the list at a place; nothing when there's no item i.",
+  "builtin.cells.moveAt": "Moves item `from` of the list at a place to position `to`; nothing when either isn't there.",
 };
