@@ -3,7 +3,7 @@
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
 and the design the repository keeps. Step 1 of §1 (L98a) and of §2 (L99a)
-are built, below; the rest is not yet. The steps
+and the demo (L100) are built, below; the rest is not yet. The steps
 are BACKLOG rows L98-L101 and C56-C61.
 
 **In one sentence:** the window between pure functions and objects that stay
@@ -231,6 +231,19 @@ live "what ran" counter beside it: renaming an item runs one watcher,
 ticking one updates its line and the "3 of 7 done" count, moving an item
 moves one row, adding a child adds one row. Built on L98 and L99, written
 in the editor's language with plain `Item` data and keys.
+
+**Built (L100), on L98a and L99a:** `outlineProgram` in
+src/lang/cells-programs.ts, the outline with plain `Item(key, title, done,
+children)` data at any depth, in one cell, changed only by edits at a path.
+A row's buttons find their item by key when pressed (`place of`, a search
+ended before the edit, since an edit can't run while a Choice is open), so
+an item moved up keeps its buttons. Ticking a step three deep makes one row
+again, the top-level item it is in, and the "3 of 7 done" count runs; adding
+an item makes one row; moving or removing one makes none
+(test/outline.test.ts). Not yet: the tracked views of L99's next step, so
+that ticking one step runs its line only rather than its top-level item's
+whole row (about 70 watchers today, all in that row); and the page in the
+editor's example menu and reactive.html, which is the editor lane's.
 
 ## Prior art
 

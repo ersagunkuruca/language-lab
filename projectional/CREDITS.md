@@ -145,6 +145,8 @@ Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-
 
 | `each` following the edits: one row made, moved or disposed per edit, no matching (cells.ts `each`, L99a) | Influence | Solid's `mapArray` and `<For>` with stores (Ryan Carniato), whose keyed rows this replaces matching with; differential dataflow's changes as data (McSherry et al. 2013). Written fresh. |
 
+| The nested to-do outline (cells-programs.ts `outlineProgram`, L100) | Influence | TodoMVC (Addy Osmani, Sindre Sorhus and others) as the shape of a to-do demo; Solid's stores demo of nested to-dos (Ryan Carniato). Written fresh. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |
