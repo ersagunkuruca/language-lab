@@ -3,7 +3,11 @@
     "mgcebnp7roc7m4l0tscmiltsi1": {
       "id": "mgcebnp7roc7m4l0tscmiltsi1",
       "kind": "def",
-      "body": "4669vdm9o17it6br1motbin1mc"
+      "body": "4669vdm9o17it6br1motbin1mc",
+      "results": [
+        "095ehaelth31d6t4po8v3nas3h",
+        "ni08ovt7psg5j62ntu8o8rgila"
+      ]
     },
     "095ehaelth31d6t4po8v3nas3h": {
       "id": "095ehaelth31d6t4po8v3nas3h",
@@ -273,7 +277,11 @@
     "c5p1l9o2i5uqv9fviacg7f3oi8": {
       "id": "c5p1l9o2i5uqv9fviacg7f3oi8",
       "kind": "def",
-      "body": "11qo0pl0sfv4iomtkfaaf6828o"
+      "body": "11qo0pl0sfv4iomtkfaaf6828o",
+      "results": [
+        "r2d5a98729i0dd55i1nhjiq5u3",
+        "rnpp4m4bcs4ndqmuaff9tmcapb"
+      ]
     },
     "q6gesv3t1uqirsn909g16ra93b": {
       "id": "q6gesv3t1uqirsn909g16ra93b",
@@ -1201,7 +1209,7 @@
     "9gaev54lqaieb2c71qb9jh0pm2": {
       "id": "9gaev54lqaieb2c71qb9jh0pm2",
       "kind": "lit",
-      "value": "square roots(−1) = ["
+      "value": "square roots(\u22121) = ["
     },
     "j3koqtp5pdcpcvpip2v0gib6b8": {
       "id": "j3koqtp5pdcpcvpip2v0gib6b8",

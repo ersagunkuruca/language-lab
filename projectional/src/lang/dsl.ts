@@ -2,7 +2,7 @@
 // makes nodes with fresh ids and records names in a side table.
 
 import { Builder } from "../builder.ts";
-import { merge, type Code, type Id } from "../model.ts";
+import { merge, type Code, type Id, type NodeOf } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { BOOL, CONS, FALSE, NIL, S, std, TRUE, UNIT_V } from "./std.ts";
 import { INT } from "./types.ts";
@@ -126,6 +126,29 @@ export class Lang extends Builder {
       { variant: TRUE, names: [], body: () => then },
       { variant: FALSE, names: [], body: () => otherwise },
     ]);
+  }
+
+  // A definition's results (RESULTS.md, L95): the parameters it gives when
+  // given the others, named in order. The definition stays a predicate.
+  results(def: Id, ...names: string[]): Id {
+    const d = this.code.nodes[def] as NodeOf<"def">;
+    const params = (this.code.nodes[d.body!] as NodeOf<"lambda">).params;
+    d.results = names.map((name) => { const p = params.find((q) => this.names[q] === name); if (!p) throw new Error(`no parameter ${name}`); return p; });
+    return def;
+  }
+
+  // A use of a definition with results: its other ports given by `args`,
+  // in order, and its results bound side by side (by the given display
+  // names) in body. It is the solve node, read as `a, b = f(x, y)`.
+  use(fn: Id, args: Id[], names: string[], body: (...results: Id[]) => Id): Id {
+    const d = this.code.nodes[fn] as NodeOf<"def">;
+    const params = (this.code.nodes[d.body!] as NodeOf<"lambda">).params, results = d.results ?? [];
+    const ins = params.filter((p) => !results.includes(p));
+    if (ins.length !== args.length || names.length !== results.length) throw new Error("a use gives each input and names each result");
+    const given: Record<string, Id> = Object.fromEntries(ins.map((p, i) => [p, this.x(args[i])]));
+    given.out = this.true;
+    const binds = Object.fromEntries(results.map((r, i) => [r, this.binder(names[i])]));
+    return this.add({ kind: "solve", fn, given, binds, body: this.x(body(...results.map((r) => binds[r]))) });
   }
 
   // Use relation `fn` in one direction: `given` ports from expressions, the

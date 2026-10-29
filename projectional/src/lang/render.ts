@@ -408,6 +408,21 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       return hold([ln(...lead, kw(`${handles ? "handle" : n.kind} `), ...inline(n.scrutinee).p), grp(arms)]);
     }
     if (n.kind === "solve") {
+      // A use of a definition with results, in the direction it declares
+      // (RESULTS.md): length, angle = polar(x, y), the results side by side.
+      const f = node(n.fn);
+      const lam = f?.kind === "def" && f.results && f.body ? node(f.body) : null;
+      if (f?.kind === "def" && f.results && lam?.kind === "lambda") {
+        const results = f.results, ins = lam.params.filter((p) => !results.includes(p));
+        const outTrue = node(n.given.out)?.kind === "ref" && (node(n.given.out) as NodeOf<"ref">).target === TRUE;
+        if (outTrue && Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(n.binds).length === results.length && results.every((r) => r in n.binds)) {
+          const bound = results.map((r) => n.binds[r]);
+          enter(bound);
+          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(n.fn)], n.fn), pn("("), ...commas(ins.map((p) => inline(n.given[p]).p)), pn(")")), grp(block(n.body, []))]);
+          leave(bound);
+          return out;
+        }
+      }
       // solve polar(x = …, y = …) for length, angle as r, θ
       const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
       const givenArgs = commas(Object.entries(n.given).map(([k, e]) => [pn(`${label(k)} = `), ...inline(e).p]));
@@ -516,7 +531,10 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];
   if (body.kind === "lambda") {
     enter(body.params);
-    out.push(...hang(body.body, [self(), pn("("), ...commas(body.params.map((p) => [bind(p)])), pn(") = ")]));
+    // A definition with results shows them after its inputs (RESULTS.md).
+    const results = def.results ?? [];
+    const head = [self(), pn("("), ...commas(body.params.filter((p) => !results.includes(p)).map((p) => [bind(p)])), pn(")")];
+    out.push(...hang(body.body, results.length ? [...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = ")] : [...head, pn(" = ")]));
     leave(body.params);
   } else out.push(...hang(def.body!, [self(), pn(" = ")]));
   return out;
