@@ -377,7 +377,7 @@ let deleted: Doc | null = null;
 let swapped: { hole: Id; at: number } | null = null;
 // Wrap in… makes the part a hole the same way; the fill that comes next
 // takes it back as one of its inputs (typed.ts wrapInto).
-let wrapping: { hole: Id; kept: Code; info: T.Info } | null = null;
+let wrapping: { hole: Id; kept: Code; info: T.Info; graph: boolean } | null = null;
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
@@ -557,7 +557,7 @@ function pasteIntoSelected() {
 function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins?: Pins, layout?: Doc["layout"]): boolean {
   const w = wrapping;
   wrapping = null;
-  if (w && e.ok && e.code.nodes[w.hole] && e.code.nodes[w.hole].kind !== "hole") e = T.wrapInto(e.code, e.names, w.info, w.hole, w.kept);
+  if (w && e.ok && e.code.nodes[w.hole] && e.code.nodes[w.hole].kind !== "hole") e = T.wrapInto(e.code, e.names, w.info, w.hole, w.kept, w.graph);
   if (!e.ok) {
     ui.menu = null;
     ui.note = `Refused: ${heldReason(e.reason)}. Nothing changed.`;
@@ -2284,9 +2284,11 @@ function menuAction(act: string, target: Id | undefined) {
     case "wrap": {
       const kept = doc.code;
       const r = T.toHole(doc.code, doc.names.short, info, target!);
-      if (!applyT(r.ok ? { ...r, note: "Pick what to wrap it in: a call takes it as one of its inputs, a new function as its body. Escape or Undo puts it back." } : r)) return;
+      const graph = !!m && !m.blocks;
+      if (!applyT(r.ok ? { ...r, note: graph ? "Pick the node to insert after it: a call takes it as one of its inputs, a new function as its body. Escape or Undo puts it back."
+        : "Pick what to wrap it in: a call takes it as one of its inputs, a new function as its body. Escape or Undo puts it back." } : r)) return;
       swapped = { hole: target!, at: undo.length };
-      wrapping = { hole: target!, kept, info };
+      wrapping = { hole: target!, kept, info, graph };
       if (m) { ui.menu = { ...m, target: { kind: "hole", id: target! } }; render(); document.getElementById("m-query")?.focus(); }
       else { ui.selected = target!; render(); document.getElementById("f-query")?.focus(); }
       return;

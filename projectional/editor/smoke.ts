@@ -205,6 +205,13 @@ async function swapAndUndo() {
   // Escape before anything is picked puts the · back (QA8 M2).
   await p.keyboard.press("Escape");
   if ((await p.locator(".p-text .body").innerText()).includes("□") || !(await p.locator(".p-graph text:text-is('·')").count())) errors.push(`${where}: Escape left a hole where · was`);
+  // Insert a node after it says so, not "Wrapped it" (I33).
+  await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
+  await p.locator('[data-menu="wrap"]').click();
+  await p.locator("#m-query").fill("negate");
+  await p.locator(".ctx-menu button", { hasText: /^negate/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: no negate to insert after ·`));
+  if (!/^Inserted the call after it/.test(await p.locator(".status").innerText())) errors.push(`${where}: inserting a node after · says ${await p.locator(".status").innerText()}`);
+  await p.locator('button[data-act="undo"]').first().click();
   // The same from the Blocks pane: right-click its +, which stands for the
   // call as the graph's node does.
   where = "change the function from the Blocks pane";
