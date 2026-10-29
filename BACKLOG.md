@@ -18,6 +18,11 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I30 | **Bug.** Run shows constructors as hashes: Countdown `solutions` reads `[hqti16…(9b16…, …)]`, the ray marcher's `shade` reads `gpabgmg1…(0.43, 0.46, 0.52)` for `rgb(…)`; 5 definitions | QA9 H1 | 2026-10-29 |
+| I34 | **Bug.** Smoke red on main: Lockstep `tick`, Shift+Tab from the last part selects `0.0166666667` but focus leaves the blocks, so Shift+F10 opens no menu | QA9 H2 | 2026-10-29 |
+| I31 | Opening `shadow` (1.4 s), `march`, `shade` and Countdown `solutions` (1.0 s) blocks the page: cap the opening Run's work on the page thread at ~300 ms as #562 does for the wires | QA9 M1 | 2026-10-29 |
+| I32 | A result that wasn't run reads `NaN` in the answer's blue (Countdown `results`, which gives a Found) | QA9 L1 | 2026-10-29 |
+| I33 | Insert a node after it… still says "Wrapped it in the call" | QA9 L2 | 2026-10-29 |
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 
 ## E: Editor
