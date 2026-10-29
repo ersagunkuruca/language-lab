@@ -43,8 +43,9 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk>) => {
   try {
     setDisplayNames(names);
     setProgramPins(pins);
-    // std's Map stored the way the chooser picks (library-reps.ts, C47).
-    const own = code.defs.filter((d) => !LIBRARY.code.nodes[d] && code.nodes[(code.nodes[d] as { body?: Id }).body ?? ""]?.kind !== "typedef");
+    // std's Map stored the way the chooser picks (library-reps.ts, C47),
+    // in the program's own types' fields too (GAPS.md M2): the types go in.
+    const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     const first = infer(code, names), lib = withLibraryRepresentations(code, first, names, def, own);
     const v = runMain(lib.code, lib.chosen.length ? infer(lib.code, lib.names) : first, def, {
       print: (line) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
