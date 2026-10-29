@@ -245,6 +245,9 @@ test("compare at its type gives the evaluator's order: numbers, texts past the b
   // generic: a copy for each type it is used at
   const smaller = k.def("smaller");
   k.define(smaller, k.fn(["a", "b"], (a, b) => k.match(k.call(COMPARE, a, b), [{ variant: ORDER_V.after, names: [], body: () => b }], a)));
+  // generic in a value it doesn't compare: one copy per compared type
+  const labelled = k.def("labelled");
+  k.define(labelled, k.fn(["a", "b", "label"], (a, b, label) => k.call(PAIR_V, k.call(smaller, a, b), label)));
   const pair = (i: number | string, t: string) => k.call(PAIR_V, k.int(i), k.lit(t));
   const both = (x: Id, y: Id) => [k.call(SHOW_ANY, k.call(COMPARE, x, y)), k.call(SHOW_ANY, k.call(smaller, x, y))];
   const main = k.def("main");
@@ -262,8 +265,11 @@ test("compare at its type gives the evaluator's order: numbers, texts past the b
     ...both(k.call(Shape.v.named, k.lit("x")), k.call(Shape.v.named, k.lit("x"))),
     ...both(k.list(k.int(1), k.int(2)), k.list(k.int(1), k.int(3))),
     ...both(k.list(), k.list(k.int(1))),
+    k.call(SHOW_ANY, k.call(labelled, k.lit("b"), k.lit("a"), k.int(1))),
+    k.call(SHOW_ANY, k.call(labelled, k.lit("a"), k.lit("c"), k.lit("one"))),
   )));
-  const { code, info, names, defs } = await compiledDefs(k, ["main"], "compare-typed.js");
+  const { code, info, names, source, defs } = await compiledDefs(k, ["main"], "compare-typed.js");
+  assert.deepEqual(source.match(/^function labelled\S*\(/gm), ["function labelled$Text("]);
   const r = makeRunner(code, info, { print: () => {}, names });
   const want = fromList([...r.call(r.value(main))][0]);
   assert.deepEqual(fromList(defs.main() as Value), want);
