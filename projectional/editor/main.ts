@@ -276,6 +276,8 @@ const initial = (): Doc => {
 // programs (localStorage) are neither read nor written.
 const ASKED = new URLSearchParams(typeof location === "object" ? location.search : "");
 const EMBED = ASKED.has("embed");
+// `&readonly`: the code can't change; Run's inputs still can.
+const READONLY = EMBED && ASKED.has("readonly");
 
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
@@ -292,6 +294,9 @@ if (!EMBED) try {
     doc = docs[saved.current] ?? (isExample(saved.current) ? initialFor(saved.current) : doc);
   }
 } catch {}
+// `?program=sort&def=insert` (an embed's Open in the editor) opens that
+// example, with your edits to it if you made any.
+if (!EMBED && isExample(ASKED.get("program") ?? "")) doc = docs[ASKED.get("program")!] ?? initialFor(ASKED.get("program")!);
 
 // A saved program holds the library it was saved with, and the library
 // moves on: builtins are renamed and removed (sum-and-difference became an
@@ -367,7 +372,7 @@ const OPENING = TOUCH
   : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
 
 const ui: UI = {
-  def: (EMBED && defNamed(ASKED.get("def") ?? "")) || startDef(),
+  def: defNamed(ASKED.get("def") ?? "") || startDef(),
   pane: "graph",
   back: [],
   selected: null,
@@ -403,6 +408,11 @@ let wrapping: { hole: Id; kept: Code; info: T.Info; graph: boolean } | null = nu
 
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
+  if (READONLY && (next.code || next.names)) {
+    ui.note = "This snippet is read-only: Open in the editor to change it.";
+    ui.refused = true;
+    return render();
+  }
   deleted = null;
   const filled = swapped && undo.length === swapped.at && next.code && next.code.nodes[swapped.hole] && next.code.nodes[swapped.hole].kind !== "hole";
   swapped = null;
@@ -3247,10 +3257,11 @@ function draw() {
     app.replaceChildren(
       h("main", { class: "embed" },
         h("section", { class: "panel p-text", "aria-label": "Text" },
-          h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def))),
+          h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def)),
+            h("a", { class: "btn open", href: `./?program=${encodeURIComponent(doc.program)}&def=${encodeURIComponent(doc.names.short[ui.def] ?? "")}`, target: "_blank", rel: "noopener" }, "Open in the editor")),
           h("div", { class: "body" }, textView)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
-        ui.selected ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null),
+        ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null),
       status);
     return restore();
   }
