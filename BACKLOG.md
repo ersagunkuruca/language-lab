@@ -139,7 +139,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| I44 | The editor embeds in an iframe: ?embed&program=…&def=… (#620), &readonly and Open in the editor (#621), &code= and Copy embed link (#622), and the tutorial's Loops are folds runs insert and sort embedded | #623 |
+| I44 | The editor embeds in an iframe: ?embed&program=…&def=… (#620), &readonly and Open in the editor (#621), &code= and Copy embed link (#622), and the tutorial's Loops are folds runs insert and sort embedded | #624 |
 | I43 | Every framed part (function, action, case) whose body is more than 3 deep or 3 wide starts folded in the graph; opened, it stays open (#616) | #619 |
 | I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps | #618 |
 | M2 | A map or set in a field of the program's own type takes the tree in lab run, lab compile (#592) and the editor's Run | #617 |
