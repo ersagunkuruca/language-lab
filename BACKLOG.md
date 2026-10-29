@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I32 | A result that wasn't run reads `NaN` in the answer's blue (Countdown `results`, which gives a Found) | QA9 L1 | 2026-10-29 |
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 | I35 | Show the nested to-do outline (src/lang/cells-programs.ts `outlineProgram`, L100) in reactive.html beside its code with the "what ran" count, and in the editor's example menu; editor lane | Language lane, L100 | 2026-10-29 |
 | I36 | A function type written in a data type's field has a closed row, and a call's row must equal the caller's (COMPILER.md's known imprecision), so calling it fixes the caller's whole row. Tumble's `Chain.rest` is called from a page handler, so it lists all ten of a handler's effects (Cells, Update, Console, Files, …) where Diverge is all it does. Containment at calls, or L58's named row `Handler`, would fix it | examples/tumble | 2026-10-29 |
@@ -142,6 +141,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I32 | Run rounds a value only when it is a whole number; Countdown's results reads found(…), never NaN | #610 |
 | I31 | Opening a definition builds the names, starting values and code hash once per version; shadow opens in 0.5 s, not 2.3 s | #609 |
 | I33 | Insert a node after it… says Pick the node to insert after it, then Inserted the call after it; Wrap in… keeps its words | #605 |
 | I30 | Run's answers name constructors by their names: solutions reads [apply(times, …)], shade rgb(…) | #599 |
