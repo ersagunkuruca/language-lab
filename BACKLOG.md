@@ -23,7 +23,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I49 | Resize a node by hand: not now, but likely needed at some point (Ersagun 2026-10-29) | Ersagun | 2026-10-29 |
-| I53 | Pig's main, the play-a-game handler: its default unfolded shape is bad, Tidy what's inside makes it worse, and its purple step dots can't be dragged | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 | I50 | With every definition shown (SWEEP=all, as the nightly does), the values stop with an error on four definitions: Page: Pig `play` and `games won by B` ("random() outside seeded answers from the world, which only runs forward"), Page: Tumble `clear` ("No answer: the known values contradict each other…") and `new board` ("Values stopped: calls something that might not finish"). Either the values should say something calmer for these, or the examples change | test/draws.test.ts (T9) | 2026-10-29 |
 
@@ -144,6 +143,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I53 | A folded frame's contents are laid out as they'd be open (folded frames inside shut), so Pig's handler opens compact; Tidy what's inside lays a frame out afresh and keeps its corner; step dots move on a plain drag | #633 |
 | I52 | A frame unfolds where its box was (drawn over its neighbours while selected) and folds back there; nothing is moved to make room | #632 |
 | I51 | The selected item and the frames around it are drawn over the rest; a frame you unfold is selected, so it covers its neighbours | #631 |
 | I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
