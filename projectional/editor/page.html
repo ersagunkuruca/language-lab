@@ -104,7 +104,10 @@ button { font: inherit; color: inherit; }
    pane at a time, the full height, picked from a bar at the bottom; the
    top bar scrolls sideways instead of wrapping. */
 .panes { display: none; }
-/* Embedded in another page (?embed): one definition's blocks over Run */
+/* Embedded in another page (?embed): one definition's graph and blocks over Run */
+.embed > .text-head { padding: 0 4px; }
+.embed .p-graph { flex: none; height: min(60vh, 360px); }
+.embed .p-graph > .graph-host { margin: 6px; border-radius: 10px; }
 .embed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .embed .p-text { flex: none; overflow: visible; }
 .embed .p-text .body { overflow: visible; }

@@ -3313,16 +3313,16 @@ function draw() {
     if (focused) document.getElementById(focused)?.focus();
   };
 
-  // Embedded: the definition's blocks, Run, and what's selected (a hole's
-  // palette), one under the other.
+  // Embedded: the definition's graph and its blocks, as the editor shows
+  // both, then Run and what's selected (a hole's palette), one under the other.
   if (EMBED && unpacking) return void app.replaceChildren(h("p", { class: "status" }, "Opening the snippet…"));
   if (EMBED) {
     app.replaceChildren(
       h("main", { class: "embed" },
-        h("section", { class: "panel p-text", "aria-label": "Text" },
-          h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def)),
-            h("a", { class: "btn open", href: `${location.href.split(/[?#]/)[0]}?${ASKED.has("code") ? `code=${ASKED.get("code")}` : `program=${encodeURIComponent(doc.program)}`}&def=${encodeURIComponent(doc.names.short[ui.def] ?? "")}`, target: "_blank", rel: "noopener" }, "Open in the editor")),
-          h("div", { class: "body" }, textView)),
+        h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def)),
+          h("a", { class: "btn open", href: `${location.href.split(/[?#]/)[0]}?${ASKED.has("code") ? `code=${ASKED.get("code")}` : `program=${encodeURIComponent(doc.program)}`}&def=${encodeURIComponent(doc.names.short[ui.def] ?? "")}`, target: "_blank", rel: "noopener" }, "Open in the editor")),
+        h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host" }, graphOf(info))),
+        h("section", { class: "panel p-text", "aria-label": "Text" }, h("div", { class: "body" }, textView)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
         ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null),
       status);

@@ -66,7 +66,7 @@ th { color: var(--muted); font-weight: 600; }
 figure { margin: 1.2em 0; }
 img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
 figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
-figure.embed iframe { width: 100%; height: 560px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+figure.embed iframe { width: 100%; height: 760px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 </style>
 </head>
 <body>
