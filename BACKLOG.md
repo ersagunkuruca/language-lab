@@ -22,7 +22,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I36 | A function type written in a data type's field has a closed row, and a call's row must equal the caller's (COMPILER.md's known imprecision), so calling it fixes the caller's whole row. Tumble's `Chain.rest` is called from a page handler, so it lists all ten of a handler's effects (Cells, Update, Console, Files, …) where Diverge is all it does. Containment at calls, or L58's named row `Handler`, would fix it | examples/tumble | 2026-10-29 |
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
-| I46 | A folded box sizes itself to its summary of what it holds, so it can be very wide (Tumble's main): cap it | Ersagun | 2026-10-29 |
 | I47 | A text node's widest is still too wide: clip it shorter | Ersagun | 2026-10-29 |
 | I48 | A match case lists every field of its constructor, which can be too long: shorten it | Ersagun | 2026-10-29 |
 | I49 | Maybe: resize a node by hand (Ersagun: "I don't know. But this default node sizing is bad") | Ersagun | 2026-10-29 |
@@ -146,6 +145,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I46 | A folded box lists what it holds in one short line (names clipped at 16, the line at about 34), so it stays narrow | #626 |
 | I45 | An unmoved graph is laid out after its deep frames fold, as Tidy everything does; Tidy no longer counts nodes that don't move | #625 |
 | I44 | The editor embeds in an iframe: ?embed&program=…&def=… (#620), &readonly and Open in the editor (#621), &code= and Copy embed link (#622), and the tutorial's Loops are folds runs insert and sort embedded | #624 |
 | I43 | Every framed part (function, action, case) whose body is more than 3 deep or 3 wide starts folded in the graph; opened, it stays open (#616) | #619 |
