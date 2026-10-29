@@ -25,7 +25,10 @@ export type Node =
   // `results`: the parameters it gives, in order, when given the others
   // (RESULTS.md): a predicate read as a function with several results.
   // `cost`: a way's own declared cost (WAYS.md "Costs"), 1 when not given.
-  | { id: Id; kind: "def"; body: Id | null; way?: Id; results?: Id[]; cost?: number }
+  // `direction`: this definition, with results, computes another direction
+  // of that one (POLAR.md): the same ports in the same order, so a solve of
+  // that one given this one's inputs is a solve of this one.
+  | { id: Id; kind: "def"; body: Id | null; way?: Id; results?: Id[]; cost?: number; direction?: Id }
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.
@@ -123,7 +126,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
     case "call": return { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body) };
-    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
+    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f) };
     case "field": return { ...n, id: f(n.id), type: f(n.type) };

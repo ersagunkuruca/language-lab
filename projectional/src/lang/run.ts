@@ -25,6 +25,7 @@ import { resolveArithmetic } from "./arith.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
+import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
@@ -753,10 +754,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           yield Object.keys(n.binds).map((k) => sol[k]!);
         }
       };
-      // A solve with exactly one answer (oneAnswer, MODES.md) leaves no
-      // choice point: its first answer is the answer.
+      // A solve with exactly one answer (oneAnswer, MODES.md), or results
+      // each computed from the inputs (directions.ts), leaves no choice
+      // point: its first answer is the answer.
       let answers: Iterable<Value[]> = bodies();
-      if (p.mode === "relational" && oneAnswer(code, n)) {
+      if (p.mode === "relational" ? oneAnswer(code, n) : computedForward(code, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[n.fn] ?? n.fn} this way gives exactly one answer, and it gave none`);
         answers = [r.value];

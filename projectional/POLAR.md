@@ -84,11 +84,20 @@ the last step.
 
 1. **L97a, built.** Complex's `polar` is now `from polar` (the prelude's
    name and LIBRARY.md; no example used it).
-2. **L97b.** A definition that gives another direction of a relation with
-   results: the def's optional `direction of`, the checker's check, and a
-   solve in that direction compiled and evaluated as a call. The prelude's
-   `polar` relation with `unpolar` as its backwards direction, using
-   Float64's atan2 for now.
+2. **L97b, built.** A definition that gives another direction of a
+   relation with results: the def's optional `direction` (the relation it
+   is a direction of, the same ports in the same order), checked at the
+   definition ("unpolar is a direction of polar, so it has polar's 4
+   ports, in order", and of the same types). A solve of the relation that
+   gives the direction's inputs is a solve of the direction, for the
+   checker, the evaluator and the compiler alike (src/lang/directions.ts,
+   run first by infer and by resolveArithmetic); the program still reads
+   and hashes as polar. And a solve in a definition's declared direction
+   whose results are each an expression of the inputs (`= e1, e2`) is
+   computed forward, one answer and no Choice, so `unpolar(x, y) →
+   length, angle = √(x² + y²), atan2(y, x)` is a function and not a search
+   (test/directions.test.ts). The prelude's own `polar` and `unpolar` come
+   with Trig in step 3, where they are used.
 3. **L97c.** Interface fields with results, and Trig's `polar` and
    `unpolar` fields with the ways above, so `unpolar` and the backwards
    direction go through the type. Float64 gives sin, cos, atan2; Dual gets
