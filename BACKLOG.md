@@ -147,6 +147,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I67 | An embed shows the definition's graph above its blocks, as the editor shows both (Ersagun 2026-10-29) | #660 |
 | I66 | The top bar's Learn button opens learn.html, the level-picking front page | #658 |
 | I61 | An action's step dashes inside a folded box go with it, not from the graph's corner | #652 |
 | I58 | A link naming a missing program or definition, or carrying unreadable code, says so instead of showing another | #651 |
