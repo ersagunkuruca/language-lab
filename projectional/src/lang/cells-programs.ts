@@ -16,7 +16,7 @@ import type { Id } from "../model.ts";
 import { B } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY } from "./library.ts";
-import { CELL_OPS, CONS, FIRST, HTML_V, INT_OPS, LIST, NIL, NONE, PAIR, PAIR_V, S, SECOND, SOME, TEXT_OPS, UNIT } from "./std.ts";
+import { BOOL, CELL_OPS, CONS, FIRST, HTML_V, INT_OPS, LIST, NIL, NONE, PAIR, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, UNIT } from "./std.ts";
 import { CELL, CELLS, DIVERGE, INT, NUMBER, STRING, UPDATE } from "./types.ts";
 
 const C = CELL_OPS;
@@ -331,4 +331,100 @@ export function fractionsProgram() {
       ));
     }))))))))));
   return { code: k.code, names: k.names, main, defs: { CF, rational, root, e, terms, showTerms, value, plus, minus, times, over } };
+}
+
+// A nested to-do outline (BACKLOG L100, STABLE-REFERENCES.md "The demo"):
+// plain `Item` data with keys, any depth, in one cell, changed only by
+// edits at a path (L98). The top-level rows are an `each` that follows
+// the edits (L99a): ticking, renaming or adding a step to one item makes
+// that item's row again and nothing else, and adding or moving an item
+// makes or moves one row. The count is a formula over the whole outline.
+// An item is found by its key, so its place is worked out when a button
+// is pressed, not kept: positions shift, keys don't.
+export function outlineProgram() {
+  const { k, lib } = lang();
+  const ui = widgets(k);
+  const map = lib("map"), length = lib("length");
+  const I = INT_OPS;
+  const read = (c: Id) => k.call(C.read, c);
+  const text = (f: () => Id) => k.call(ui.label, k.thunk(f));
+  const button = (label: string, f: () => Id) => k.call(ui.button, k.lit(label), k.thunk(f));
+
+  const Item = k.type("Item", [], [["item", [
+    ["key", () => k.tref(INT)], ["title", () => k.tref(STRING)], ["done", () => k.tref(BOOL)],
+    ["children", (self) => k.tref(LIST, k.tref(self))],
+  ]]]);
+  const F = (f: string) => Item.f[`item.${f}`];
+  const field = (f: string) => k.call(C.path, k.fn(["it"], (it) => k.call(F(f), it)));
+  const whole = () => k.call(C.path, k.fn(["all"], (all) => all));
+  const mk = (key: number, title: string, done: boolean, kids: Id[] = []) => k.call(Item.v.item, k.int(key), k.lit(title), done ? k.true : k.false, k.list(...kids));
+
+  // Where the item with this key is: the list it's in, as a path from the
+  // whole outline, and its position there. No answer when it isn't there.
+  const place = k.def("place of");
+  k.define(place, k.fn(["items", "key", "here", "at"], (items, key, here, at) => k.match(items, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["first", "rest"], body: ([x, rest]) => k.if(k.equal(k.call(F("key"), x), key),
+      k.call(PAIR_V, here, at),
+      k.call(S.first,
+        k.thunk(() => k.call(place, k.call(F("children"), x), key, k.call(C.thenPath, k.call(C.itemPath, here, at), field("children")), k.int(0))),
+        k.thunk(() => k.call(place, rest, key, here, k.call(I.add, at, k.int(1)))))) },
+  ])));
+  // How many items, and how many of them are done, at any depth.
+  const tally = k.def("tally");
+  k.define(tally, k.fn(["items"], (items) => k.fold(items, [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, k.int(0), k.int(0)) },
+    { variant: CONS, names: ["first", "rest"], results: [null, "after"], body: ([x], [, after]) => k.match(k.call(tally, k.call(F("children"), x)), [
+      { variant: PAIR_V, names: ["inside done", "inside all"], body: ([d, n]) => k.match(after!, [
+        { variant: PAIR_V, names: ["done", "all"], body: ([d2, n2]) => k.call(PAIR_V,
+          k.call(I.add, k.call(I.add, d, d2), k.if(k.call(F("done"), x), k.int(1), k.int(0))),
+          k.call(I.add, k.call(I.add, n, n2), k.int(1))) },
+      ]) },
+    ]) },
+  ])));
+
+  // The edits a row's buttons make, each at the place its key is now.
+  // The search is a Choice, so it's ended (optional) before anything is
+  // written: an edit can't be made on a path a search may abandon.
+  const at = (outline: Id, key: Id, f: (list: Id, i: Id) => Id) => k.match(k.call(S.optional, k.thunk(() => k.call(place, read(outline), key, whole(), k.int(0)))), [
+    { variant: SOME, names: ["found"], body: ([found]) => k.match(found, [
+      { variant: PAIR_V, names: ["list", "position"], body: ([l, i]) => f(l, i) },
+    ]) },
+    { variant: NONE, names: [], body: () => k.unitValue },
+  ]);
+  const fresh = (nextKey: Id, title: Id, then: (item: Id) => Id) => k.let("key", read(nextKey), (key) => k.seq(
+    k.call(C.write, nextKey, k.call(I.add, key, k.int(1))),
+    then(k.call(Item.v.item, key, title, k.false, k.x(NIL)))));
+  // One item and its steps, drawn; each is a plain value, so a row shows
+  // the item it was made for, and is made again when that item changes.
+  const draw = k.def("draw item");
+  k.define(draw, k.fn(["outline", "next key", "item"], (outline, nextKey, it) => k.let("key", k.call(F("key"), it), (key) => k.call(ui.column, k.list(
+    k.call(ui.row, k.list(
+      text(() => k.text(k.if(k.call(F("done"), it), k.lit("✓ "), k.lit("○ ")), k.call(F("title"), it))),
+      button("tick", () => at(outline, key, (l, i) => k.call(C.writeAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), field("done")), k.call(S.not, k.call(F("done"), it))))),
+      button("add a step", () => fresh(nextKey, k.lit("new step"), (step) => at(outline, key, (l, i) =>
+        k.call(C.insertAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), field("children")), k.call(length, k.call(F("children"), it)), step)))),
+      button("up", () => at(outline, key, (l, i) => k.call(C.moveAt, outline, l, i, k.call(I.sub, i, k.int(1))))),
+      button("remove", () => at(outline, key, (l, i) => k.call(C.removeAt, outline, l, i))),
+    )),
+    k.call(ui.column, k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step)))),
+  )))));
+
+  const main = k.def("main");
+  k.define(main, k.thunk(() =>
+    k.let("outline", k.call(C.cell, k.list(
+      mk(1, "plan the trip", false, [mk(2, "book the train", true), mk(3, "find a room", false, [mk(4, "ask Ana", false)])]),
+      mk(5, "water the plants", true),
+      mk(6, "write the report", false, [mk(7, "draft", false)]),
+    )), (outline) =>
+    k.let("next key", k.call(C.cell, k.int(8)), (nextKey) =>
+    k.let("rows", k.call(C.each, outline, k.fn(["item"], (it) => k.call(draw, outline, nextKey, it))), (rows) => k.call(ui.column, k.list(
+      k.call(ui.entry, k.lit("add an item, then Enter"), k.fn(["title"], (title) => fresh(nextKey, title, (x) =>
+        k.call(C.insertAt, outline, whole(), k.call(length, read(outline)), x)))),
+      k.call(ui.part, k.thunk(() => k.call(ui.column, read(rows)))),
+      text(() => k.match(k.call(tally, read(outline)), [
+        { variant: PAIR_V, names: ["done", "all"], body: ([d, n]) => k.text(k.call(SHOW_ANY, d), k.lit(" of "), k.call(SHOW_ANY, n), k.lit(" done")) },
+      ])),
+    )))))));
+  return { code: k.code, names: k.names, main, item: Item.def };
 }
