@@ -109,7 +109,14 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   switch (d.tag) {
     case HTML_V.text: {
       const t = doc.createTextNode("");
-      watch(t, "text", () => { t.textContent = String(m.call(d.fields[0])); }, () => { t.textContent = STUCK; });
+      // A text that comes out the same ran, but the page shows no change:
+      // moving an item runs the count again, and the count is the same.
+      let changed = true;
+      watch(t, "text", () => {
+        const now = String(m.call(d.fields[0]));
+        changed = now !== t.textContent;
+        if (changed) t.textContent = now;
+      }, () => { t.textContent = STUCK; }, () => (changed ? [t] : []));
       return t;
     }
     case HTML_V.part: {
