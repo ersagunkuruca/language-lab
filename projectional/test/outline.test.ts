@@ -88,7 +88,7 @@ test("a page shows only what was drawn again: one row for a tick, none for a mov
   assert.deepEqual(p.ran, ["○ water the plants", "1 of 7 done"], "the list holding the rows ran, but the other rows were kept, not drawn");
   p.ran.length = 0;
   p.button("write the report", "up").fire("click");
-  assert.deepEqual(p.ran, ["1 of 7 done"], "a move draws no row");
+  assert.deepEqual(p.ran, [], "a move draws no row, and the count it ran again is the same");
   p.ran.length = 0;
   // A step's tick still draws its top-level item again, steps and all,
   // until rows read their item's fields as places (BACKLOG L99).
