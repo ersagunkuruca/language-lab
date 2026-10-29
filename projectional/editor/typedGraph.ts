@@ -868,10 +868,17 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     if (a.in && a.in === b.in) continue;
     wires.push({ ...w, from: a.e, to: b.e });
   }
+  // An action's step-to-step dashes, the same: inside one folded box they
+  // go with it (they used to be drawn from the graph's corner, I61).
+  const then: [End, End][] = [];
+  for (const [x, y] of scene.then ?? []) {
+    const a = map(x, true), b = map(y, false);
+    if (!(a.in && a.in === b.in)) then.push([a.e, b.e]);
+  }
   for (const f of frames.values()) if (f.out) { const o = map(f.out, true); if (o.in) frames.set(f.id, { ...f, out: o.e }); }
   const sources = new Map<Id, End>();
   for (const [k, e] of scene.sources) { const m = map(e, true); if (!m.in) sources.set(k, m.e); }
-  return { ...scene, items, frames, wires, sources, result: scene.result && map(scene.result, true).e };
+  return { ...scene, items, frames, wires, then, sources, result: scene.result && map(scene.result, true).e };
 }
 
 function foldToggle(x: number, y: number, f: Id, glyph: string, title: string): SVGElement {

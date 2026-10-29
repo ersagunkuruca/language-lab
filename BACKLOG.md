@@ -28,7 +28,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
 | I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA10 L1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the editor's footer hint takes a line of every embed | QA10 L3 (QA-2026-10-29b.md) | 2026-10-29 |
-| I61 | Dashed purple wires run from a parameter to the definition's header (Tumble `show next`'s `lane`, Pig `main`) | QA10 L4 (QA-2026-10-29b.md) | 2026-10-29 |
 | I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA10 L5 (QA-2026-10-29b.md) | 2026-10-29 |
 | I63 | Nested to-do: each item's tick / add a step / up / remove wrap onto 2-3 lines in the Run pane | QA10 L6 (QA-2026-10-29b.md) | 2026-10-29 |
 | I64 | The browser smoke fails on main at letNodes ("a call picked in the graph"): it waits for the dice `die` call node, which since auto-fold (#619) sits inside a handler drawn folded. Pick a call that's drawn, or unfold its frame first; editor/smoke.ts is the smoke-replacement thread's, so agree with it who edits | smoke thread, 2026-10-29 | 2026-10-29 |
@@ -148,6 +147,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I61 | An action's step dashes inside a folded box go with it, not from the graph's corner | #652 |
 | I58 | A link naming a missing program or definition, or carrying unreadable code, says so instead of showing another | #651 |
 | I56 | A graph with folded frames opens exactly where Tidy everything puts it | #650 |
 | I50 | Run says what the editor can't do as a hint (backwards through Random or a cell, what might not finish) and a forward run the search misses as a warning, not as errors: Pig play / games won by B, Tumble clear / settle / new board | #648 |
