@@ -3343,7 +3343,7 @@ function draw() {
         // On a phone held upright they're behind More, so the bar fits.
         h("button", { class: "btn more", type: "button", "data-act": "more", "aria-expanded": "false" }, "More"),
         h("div", { class: "links" },
-          h("a", { class: "btn", href: "guide.html", title: "A hands-on guide: one program changed step by step (GUIDE.md); it links on to the tutorial" }, "Learn"),
+          h("a", { class: "btn", href: "learn.html", title: "Learn the language: pick where to start, from a five-year-old's first steps to the whole language (LEARN.md)" }, "Learn"),
           h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
           h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells")))),
     h("main", { class: "grid is-typed", style: dockStyle(), "data-pane": ui.pane },
