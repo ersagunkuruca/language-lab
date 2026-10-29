@@ -881,7 +881,10 @@ function foldToggle(x: number, y: number, f: Id, glyph: string, title: string): 
 }
 
 // What tidy says of a folded box, said of what it holds: they move with it.
-function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>): Record<Id, Pos> {
+// Exact for a layout worked out in steps (arrangeAll): rounding there made
+// each pass start a pixel off the last, so a graph opened a pixel away
+// from where Tidy everything puts it (I56).
+function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>, exact = false): Record<Id, Pos> {
   const out: Record<Id, Pos> = {};
   const { pos, boxes } = placeAll(scene, at);
   for (const [k, p] of Object.entries(moved)) {
@@ -891,7 +894,9 @@ function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>):
     // A box's place can be fractional: contents that round to where they
     // are haven't moved.
     for (const c of expand(scene, [k])) {
-      const q = pos.get(c)!, x = Math.round(q.x + p.x - b.x), y = Math.round(q.y + p.y - b.y);
+      const q = pos.get(c)!;
+      if (exact) { out[c] = { x: q.x + p.x - b.x, y: q.y + p.y - b.y }; continue; }
+      const x = Math.round(q.x + p.x - b.x), y = Math.round(q.y + p.y - b.y);
       if (x !== Math.round(q.x) || y !== Math.round(q.y)) out[c] = { x, y };
     }
   }
@@ -1107,7 +1112,10 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
 // two are one layout: folded frames are laid out as the boxes they are
 // drawn as, after their contents are laid out inside them.
 function autoArrange(scene: Scene, folded?: Set<Id>) {
-  for (const [k, p] of Object.entries(arrangeAll(scene, folded))) scene.items.get(k)!.auto = p;
+  // Twice: arrange breaks ties by where things already are, and Tidy
+  // everything starts from this layout, not from the one the graph was
+  // built with, so one pass left it moving a pixel here and there (I56).
+  for (let i = 0; i < 2; i++) for (const [k, p] of Object.entries(arrangeAll(scene, folded))) scene.items.get(k)!.auto = p;
 }
 
 // Where everything goes, laid out afresh: each folded frame's contents as
@@ -1123,10 +1131,10 @@ function arrangeAll(scene: Scene, folded?: Set<Id>): Record<Id, Pos> {
   const inside = (fr: Id | null, f: Id) => { for (let p = fr; p; p = parent(p)) if (p === f) return true; return false; };
   for (const f of [...folded].filter((g) => scene.frames.has(g)).sort((a, b) => depth(b) - depth(a))) {
     const shut = new Set([...folded].filter((g) => g !== f && !inside(f, g)));
-    for (const [k, p] of Object.entries(unfoldMoves(scene, cur, tidyScene(fold(scene, cur, shut), cur, null))))
+    for (const [k, p] of Object.entries(unfoldMoves(scene, cur, tidyScene(fold(scene, cur, shut), cur, null), true)))
       if (inside(scene.items.get(k)?.frame ?? null, f)) cur[k] = p;
   }
-  Object.assign(cur, unfoldMoves(scene, cur, tidyScene(fold(scene, cur, folded), cur, null)));
+  Object.assign(cur, unfoldMoves(scene, cur, tidyScene(fold(scene, cur, folded), cur, null), true));
   return cur;
 }
 

@@ -25,7 +25,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I49 | Resize a node by hand: not now, but likely needed at some point (Ersagun 2026-10-29) | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 | I65 | Editor for several named results (RESULTS.md step 3, L95c): a definition with results shows one node with an output wire per result in the graph (an unconnected wire is `_`), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
-| I56 | 8 graphs don't open in Tidy's layout (#625): the first Tidy everything moves Lockstep `step` 28 nodes, Tumble `show next` 102, `swap tapped` 103, `scene drawn` 31, `status` 34, `neighbours` 15, to-do `draw item` 121, Countdown `main` 2 | QA10 M1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
 | I58 | An embed naming a missing def or program silently shows another `main` (`def=nosuch` → sort's main, `program=nosuch` → Numbers & physics); a bad `&code=` says "(Failed to fetch)" | QA10 M3 (QA-2026-10-29b.md) | 2026-10-29 |
 | I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA10 L1 (QA-2026-10-29b.md) | 2026-10-29 |
@@ -150,6 +149,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I56 | A graph with folded frames opens exactly where Tidy everything puts it | #650 |
 | I50 | Run says what the editor can't do as a hint (backwards through Random or a cell, what might not finish) and a forward run the search misses as a warning, not as errors: Pig play / games won by B, Tumble clear / settle / new board | #648 |
 | I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
 | I55 | Backwards answers print an Int (a bigint since #446) as a number, not <function>; Lockstep simulate reads pair(fixed(…), fixed(…)) | #647 |
