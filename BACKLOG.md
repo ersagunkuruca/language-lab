@@ -35,6 +35,7 @@ New items land here until the next triage gives them a lane and a priority.
 | I61 | Dashed purple wires run from a parameter to the definition's header (Tumble `show next`'s `lane`, Pig `main`) | QA10 L4 (QA-2026-10-29b.md) | 2026-10-29 |
 | I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA10 L5 (QA-2026-10-29b.md) | 2026-10-29 |
 | I63 | Nested to-do: each item's tick / add a step / up / remove wrap onto 2-3 lines in the Run pane | QA10 L6 (QA-2026-10-29b.md) | 2026-10-29 |
+| I64 | The browser smoke fails on main at letNodes ("a call picked in the graph"): it waits for the dice `die` call node, which since auto-fold (#619) sits inside a handler drawn folded. Pick a call that's drawn, or unfold its frame first; editor/smoke.ts is the smoke-replacement thread's, so agree with it who edits | smoke thread, 2026-10-29 | 2026-10-29 |
 
 ## E: Editor
 
