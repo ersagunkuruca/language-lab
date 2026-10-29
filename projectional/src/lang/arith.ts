@@ -27,7 +27,7 @@ import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationKey, type Info } from "./infer.ts";
-import { interfaceOps, leftToWays, pickWays, waysIn } from "./ways.ts";
+import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
@@ -93,7 +93,10 @@ function decimal(x: number): string {
   return `${m[1]}${top}/${bottom}`;
 }
 
-export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { code: Code; info: Info; names: Names } {
+// costOf: what each builtin costs on the target being compiled for, which
+// can change which way gives a field (WAYS.md "Costs"); target-neutral
+// when not given.
+export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL): { code: Code; info: Info; names: Names } {
   ({ code, info, names } = liftLets(code, info, names));
   if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
   const s = info.subst;
@@ -223,7 +226,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
   const chosen = new Map<Id, Map<Id, Id | null>>();
   const choose = (impl: Id, variant: NodeOf<"variant">, args: Id[]) => {
     let pick = chosen.get(impl);
-    if (!pick) chosen.set(impl, (pick = pickWays(code, ways, variant, args)));
+    if (!pick) chosen.set(impl, (pick = pickWays(code, ways, variant, args, costOf)));
     return pick;
   };
   const implement = (id: Id, env: Env) => {
@@ -236,12 +239,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}): { 
     const variant = (code.nodes[(code.nodes[body.fn] as NodeOf<"ref">).target] as NodeOf<"variant">);
     const arg = body.args[variant.fields.indexOf(field)];
     const given = code.nodes[arg];
-    if (leftToWays(code, arg)) {
-      const way = choose(impl, variant, body.args).get(field);
-      if (!way) throw new Error(`${names[impl] ?? impl} leaves ${names[field] ?? field} to its ways, and none of them ends in a field it gives`);
-      nodes[id] = { id, kind: "ref", target: way };
-      return;
-    }
+    // A written field is a way like any other: a cheaper way wins.
+    const way = choose(impl, variant, body.args).get(field);
+    if (way) { nodes[id] = { id, kind: "ref", target: way }; return; }
+    if (leftToWays(code, arg)) throw new Error(`${names[impl] ?? impl} leaves ${names[field] ?? field} to its ways, and none of them ends in a field it gives`);
     if (given.kind === "ref") { nodes[id] = { id, kind: "ref", target: given.target }; return; }
     const key = `${impl}|${field}`;
     let d = lifted.get(key);

@@ -24,7 +24,8 @@ export type Node =
   // (WAYS.md), used for an implementation that leaves it `by its ways`.
   // `results`: the parameters it gives, in order, when given the others
   // (RESULTS.md): a predicate read as a function with several results.
-  | { id: Id; kind: "def"; body: Id | null; way?: Id; results?: Id[] }
+  // `cost`: a way's own declared cost (WAYS.md "Costs"), 1 when not given.
+  | { id: Id; kind: "def"; body: Id | null; way?: Id; results?: Id[]; cost?: number }
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.

@@ -170,9 +170,17 @@ That is not enough where bits matter:
    and none of them ends in a field it gives". The search is one function
    (ways.ts `pickWays`) that the checker and arith.ts both call
    (test/ways.test.ts).
-2. **Costs.** Declared costs on ways and per-target constants on
-   builtins. A test where JS and C pick differently for Float64 and
-   agree, and where Fixed picks once.
+2. **Costs. Built (L96c).** A way's declared cost (the def's `cost`, 1
+   when not given) and a builtin's cost on a target (`resolveArithmetic`'s
+   `costOf`, target-neutral by default, Infinity for a builtin the target
+   lacks). A written field is now a way like any other: it costs 1, or
+   its builtin's cost, and a cheaper way beats it. So a target where cos
+   costs 5, or has no cos, takes `cos by sin` for Float64, and the program
+   gives the same numbers (test/ways.test.ts). No target declares its own
+   constants yet: none of today's differ in a way that changes a pick, and
+   the first real one is L97's (x87's `fsincos` as one polar). Fixed needs
+   no `exact` flag for now: its fields are all its own Int code, never a
+   target's builtin, so its pick is target-neutral already.
 3. **Trig through polar (L97).** Needs L95's several results and C55's
    one direction per use, so sin alone is a plain sine and sin with cos
    is one sincos.
