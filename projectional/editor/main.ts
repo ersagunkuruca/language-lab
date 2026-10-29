@@ -53,6 +53,9 @@ import diceComments from "../examples/dice/comments.json" with { type: "json" };
 import pigCode from "../examples/pig/code.json" with { type: "json" };
 import pigNames from "../examples/pig/names.default.json" with { type: "json" };
 import pigComments from "../examples/pig/comments.json" with { type: "json" };
+import tumbleCode from "../examples/tumble/code.json" with { type: "json" };
+import tumbleNames from "../examples/tumble/names.default.json" with { type: "json" };
+import tumbleComments from "../examples/tumble/comments.json" with { type: "json" };
 import pedalCode from "../examples/pedal/code.json" with { type: "json" };
 import pedalNames from "../examples/pedal/names.default.json" with { type: "json" };
 import pedalComments from "../examples/pedal/comments.json" with { type: "json" };
@@ -150,7 +153,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -242,6 +245,7 @@ const initialFor = (program: Program): Doc =>
   : program === "mandelbrot" ? typedDoc("mandelbrot", mandelbrotCode as Code, mandelbrotNames, mandelbrotComments)
   : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
   : program === "pig" ? typedDoc("pig", pigCode as Code, pigNames, pigComments)
+  : program === "tumble" ? typedDoc("tumble", tumbleCode as Code, tumbleNames, tumbleComments)
   : program === "outline" ? outlineDoc()
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
