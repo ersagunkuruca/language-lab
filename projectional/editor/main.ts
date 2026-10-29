@@ -685,8 +685,18 @@ function typesOf(): T.Info | null {
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
+// The names every view reads, built once per version of what they come
+// from: merging the library's every name cost a few ms a call, and the Run
+// panel calls it hundreds of times a render (QA9 M1). Read only.
+let shown: { from: unknown[]; names: Names } | null = null;
+function shownNames(): Names {
+  const from = [doc.code, doc.loose, doc.names.short, doc.names.descriptive, ui.layer];
+  if (!shown || from.some((x, i) => x !== shown!.from[i]))
+    shown = { from, names: layer<Names>(LIBRARY.names, looseNames(), doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}) };
+  return shown.names;
+}
 const pres = (names: Names = {}, comments: Comments = doc.comments): Presentation => ({
-  names: layer<Names>(LIBRARY.names, looseNames(), doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}, names),
+  names: Object.keys(names).length ? layer<Names>(shownNames(), names) : shownNames(),
   comments,
   hints: doc.hints,
   style: { ...styles[ui.style], quote: undefined },
@@ -868,7 +878,17 @@ function pixelSeed(def: Id): string[] | null {
 // its wires instead of empty boxes: numbers, texts, true and false, and
 // lists of them, written the way values print; or else the values it's
 // first called with when main runs (`words(cuts("abc"))`).
+// Once per version of the code: the panel asks for every port, several
+// times a render, and a look through the whole program costs ~25 ms.
+// A rename keeps the code but changes how the values read.
+const seeds = new WeakMap<Code, { names: Names; m: Map<Id, string[] | null> }>();
 function seeded(info: T.Info, def: Id): string[] | null {
+  let m = seeds.get(doc.code)?.names === pres().names ? seeds.get(doc.code)!.m : undefined;
+  if (!m) seeds.set(doc.code, { names: pres().names, m: (m = new Map()) });
+  if (!m.has(def)) m.set(def, seedOf(info, def));
+  return m.get(def)!;
+}
+function seedOf(info: T.Info, def: Id): string[] | null {
   const nodes = doc.code.nodes;
   const pixel = pixelSeed(def);
   if (pixel) return pixel;
@@ -962,8 +982,19 @@ function setKnown(info: T.Info, port: Id, on: boolean) {
 interface Backwards extends Found { stopped?: boolean; plan?: { status: string; needMore: number; steps: Step[] } }
 
 const backwardsCache = new Map<string, Backwards>();
+// The page's own share of opening a definition stays near 300 ms (QA9
+// M1): this short look and the values on the wires (TRACE_MS) split it.
+const BACK_MS = 100;
+// The program's own code, hashed once per version: ~100 ms on the ray
+// marcher, and every render asks.
+const codeHashes = new WeakMap<Code, string>();
+function codeHash(): string {
+  let h = codeHashes.get(doc.code);
+  if (h === undefined) codeHashes.set(doc.code, (h = String(fnv(JSON.stringify(userCode(doc.code))))));
+  return h;
+}
 function runBackwards(info: T.Info, known: Id[]): Backwards {
-  const key = JSON.stringify([fnv(JSON.stringify(userCode(doc.code))), ui.def, known, known.map((k) => portText(info, k))]);
+  const key = JSON.stringify([codeHash(), ui.def, known, known.map((k) => portText(info, k))]);
   const hit = backwardsCache.get(key);
   if (hit && !(hit.cut && searchingKey !== key)) return hit;
   const out: Backwards = { answers: [], more: false };
@@ -991,7 +1022,7 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
   } catch {}
   // A short look on the page, so the first answer shows at once; what
   // that cuts short, the worker searches to the end (BACKLOG E127).
-  const until = Date.now() + 300;
+  const until = Date.now() + BACK_MS;
   Object.assign(out, searchBackwards(doc.code, ui.def, values, pres().names, () => Date.now() > until));
   if (out.cut) searchOn(key, values, out.plan);
   backwardsCache.set(key, out);
@@ -2759,7 +2790,7 @@ function traced(info: T.Info): Trace | null {
 // on values nobody gave (main's, say) stops after TRACE_MS: Countdown's
 // solutions, opened with main's numbers, would otherwise hold the page for
 // the whole search (BACKLOG I23). Values you gave run to the end.
-const TRACE_MS = 300;
+const TRACE_MS = 200;
 function boundedTrace(info: T.Info, args: Value[]): Trace {
   if (doc.examples?.[ui.def] || !(defBody(ui.def) as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld());
   const end = performance.now() + TRACE_MS;
