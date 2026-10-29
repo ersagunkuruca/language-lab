@@ -143,6 +143,8 @@ Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-
 |---|---|---|
 | `path`, `item path`, `then path`; `write at`, `insert at`, `remove at`, `move at` and `read at`, waking only the readers of the place (cells.ts `edit`, std.ts, STABLE-REFERENCES.md §1) | Influence | Solid's `createStore` with paths and `produce` (Ryan Carniato), MobX (Michel Weststrate), Immer's patches (Michel Weststrate). A path from fields written in place is `set`'s lens (REVIEW.md §5.3). Written fresh, no code taken. |
 
+| `each` following the edits: one row made, moved or disposed per edit, no matching (cells.ts `each`, L99a) | Influence | Solid's `mapArray` and `<For>` with stores (Ryan Carniato), whose keyed rows this replaces matching with; differential dataflow's changes as data (McSherry et al. 2013). Written fresh. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |

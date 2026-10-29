@@ -2,8 +2,8 @@
 
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
-and the design the repository keeps. Step 1 of §1 is built (L98a, below);
-the rest is not yet. The steps
+and the design the repository keeps. Step 1 of §1 (L98a) and of §2 (L99a)
+are built, below; the rest is not yet. The steps
 are BACKLOG rows L98-L101 and C56-C61.
 
 **In one sentence:** the window between pure functions and objects that stay
@@ -146,6 +146,19 @@ moves one DOM node, a remove disposes one row's owner. Nothing is diffed.
 Reactive or plain is the handler's choice. Under a plain `State` handler a
 write is a store; under `Cells` it wakes readers. A program with no formula,
 watcher or page can have its tracking removed altogether.
+
+**Built (L99a): `each` driven by the edits**, in the evaluator and compiled
+JS. Every edit tells the handler what it was (an insert at i, a remove at
+i, a move, or a write at a place). `each` keeps the edits made to its list
+since it last ran. When they are all of the list itself or of one item, it
+follows them: an insert makes one row, a remove disposes one, a move moves
+one and makes nothing, and an edit inside item i remakes that row only.
+Nothing is matched. A whole `write`, or anything else it can't follow,
+falls back to matching items by equality, as before. Row positions are
+kept by following the edits, so no key is needed for `each`. Not yet: the
+tracked views, so that a row reads its item's fields as places and an edit
+of item i's title runs only what read that title, not the whole row; and
+html.ts's `for each` moving the one DOM node (test/cell-paths.test.ts).
 
 ### 3. Owned values updated in place (C56)
 
