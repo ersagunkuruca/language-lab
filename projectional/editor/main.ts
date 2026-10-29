@@ -294,6 +294,15 @@ if (!EMBED) try {
     doc = docs[saved.current] ?? (isExample(saved.current) ? initialFor(saved.current) : doc);
   }
 } catch {}
+// `&code=…`: an embed of a program carried in the link itself (Copy embed
+// link, in the Program panel), drawn once it's unpacked.
+let unpacking = EMBED && ASKED.has("code");
+if (unpacking) void unpackSnippet(ASKED.get("code")!).then((p) => {
+  doc = typedDoc("snippet", p.code, p.names, p.comments);
+  showProgram();
+  ui.def = defNamed(ASKED.get("def") ?? "") || ui.def;
+  ui.tabs = [ui.def];
+}, (e) => { ui.note = `This embed's code= can't be read (${e instanceof Error ? e.message : String(e)}).`; ui.refused = true; }).finally(() => { unpacking = false; render(); });
 // `?program=sort&def=insert` (an embed's Open in the editor) opens that
 // example, with your edits to it if you made any.
 if (!EMBED && isExample(ASKED.get("program") ?? "")) doc = docs[ASKED.get("program")!] ?? initialFor(ASKED.get("program")!);
@@ -2036,6 +2045,7 @@ function programPanel(): HTMLElement {
     h("button", { class: "btn", type: "button", "data-act": "new-program" }, "New program"),
     h("button", { class: "btn", type: "button", "data-act": "open-file" }, "Open file…"),
     h("button", { class: "btn", type: "button", "data-act": "save-file" }, "Save file"),
+    h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: the open definition's blocks and Run" }, "Copy embed link"),
     mine ? h("button", { class: "btn danger", type: "button", "data-act": "delete-program" }, "Delete") : null),
     h("p", { class: "hint" }, "Every edit is kept in this browser as you go. A file holds the code, names, comments and layout together."));
   // The program's comment, as a definition has one: what it is, and whose
@@ -2047,6 +2057,36 @@ function programPanel(): HTMLElement {
   ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
   out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", {}, "Comment · comments.json"), ta));
   return out;
+}
+
+// A link that embeds the open definition (?embed). An example as shipped
+// is named; anything else travels in the link: the program's own nodes,
+// names and comments as JSON, deflated, in base64url.
+const OWN = (id: Id) => !id.includes(".") && !id.startsWith("@");
+async function embedLink(): Promise<string> {
+  const base = location.href.split(/[?#]/)[0], def = encodeURIComponent(doc.names.short[ui.def] ?? "");
+  if (isExample(doc.program) && !doc.edited) return `${base}?embed&program=${encodeURIComponent(doc.program)}&def=${def}`;
+  const json = JSON.stringify({
+    code: { nodes: Object.fromEntries(Object.entries(doc.code.nodes).filter(([id]) => OWN(id))), defs: doc.code.defs.filter(OWN) },
+    names: Object.fromEntries(Object.entries(doc.names.short).filter(([id]) => OWN(id))),
+    comments: doc.comments,
+  });
+  const packed = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+  let bin = "";
+  packed.forEach((b) => { bin += String.fromCharCode(b); });
+  return `${base}?embed&def=${def}&code=${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+async function unpackSnippet(text: string): Promise<{ code: Code; names: Names; comments: Comments }> {
+  const bin = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text());
+}
+async function copyEmbedLink() {
+  const link = await embedLink();
+  const copied = await window.navigator.clipboard?.writeText(link).then(() => true, () => false);
+  ui.note = `${copied ? "Copied" : "Here's"} a link that embeds ${doc.names.short[ui.def] ?? "this definition"} (add &readonly to stop edits): ${link}`;
+  ui.refused = false;
+  render();
 }
 
 // A comment shown as text, a paragraph a line, links as links.
@@ -3253,12 +3293,13 @@ function draw() {
 
   // Embedded: the definition's blocks, Run, and what's selected (a hole's
   // palette), one under the other.
+  if (EMBED && unpacking) return void app.replaceChildren(h("p", { class: "status" }, "Opening the snippet…"));
   if (EMBED) {
     app.replaceChildren(
       h("main", { class: "embed" },
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def)),
-            h("a", { class: "btn open", href: `./?program=${encodeURIComponent(doc.program)}&def=${encodeURIComponent(doc.names.short[ui.def] ?? "")}`, target: "_blank", rel: "noopener" }, "Open in the editor")),
+            h("a", { class: "btn open", href: `${location.href.split(/[?#]/)[0]}?${ASKED.has("code") ? `code=${ASKED.get("code")}` : `program=${encodeURIComponent(doc.program)}`}&def=${encodeURIComponent(doc.names.short[ui.def] ?? "")}`, target: "_blank", rel: "noopener" }, "Open in the editor")),
           h("div", { class: "body" }, textView)),
         h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
         ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null),
@@ -3379,6 +3420,7 @@ document.addEventListener("click", (e) => {
     if (a === "open-file") return openFile();
     if (a === "stop-search") return stopSearch();
     if (a === "save-file") return saveFile();
+    if (a === "embed-link") return void copyEmbedLink();
     if (a === "delete-program") return deleteProgram();
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
     if (a === "t-replace" && ui.selected) return menuAction("replace", ui.selected);
@@ -3517,5 +3559,14 @@ document.addEventListener("keydown", (e) => {
     removeSelected();
   }
 });
+
+// A snippet's Open in the editor (`?code=…`) becomes a program of your
+// own, and the link is dropped from the address so a reload doesn't add it twice.
+if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p) => {
+  history.replaceState(null, "", location.pathname);
+  addProgram({ ...typedDoc(MINE, p.code, p.names, p.comments), title: "Snippet" }, "Opened the snippet from the link as a program of your own. Edits are kept in this browser.");
+  ui.def = defNamed(ASKED.get("def") ?? "") || ui.def;
+  render();
+}, (e) => { ui.note = `The link's code= can't be read (${e instanceof Error ? e.message : String(e)}).`; ui.refused = true; render(); });
 
 render();
