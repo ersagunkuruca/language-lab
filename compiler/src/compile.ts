@@ -2034,9 +2034,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return { li: 0, before: `const ${by} = ${ex(n.args[1])};\nconst ${parts} = [];\n`, each: (x) => `${parts}.push(${x});`, after: `${parts}.join(${by})` };
       }
       if (code.nodes[f.target].kind !== "def" || !isFnDef(f.target) || info.divergent.has(f.target)) return null;
-      if (stepOf(f.target)) {
+      // A step as the sink: its own step on each item, then pushed (GAPS.md
+      // M1: `keep(split(line, " "), test)` had pushed the items untested).
+      const own = stepOf(f.target);
+      if (own) {
         const out = temp("out");
-        return { li: stepOf(f.target)!.li, before: `const ${out} = [];\n`, each: (x) => `${out}.push(${x});`, after: `$toList(${out})` };
+        return { li: own.li, before: `const ${out} = [];\n`, each: (x) => `{\n${own.emit(x, (v) => `${out}.push(${v});`)}\n}`, after: `$toList(${out})` };
       }
       const lam = node<"lambda">(node<"def">(f.target).body!), b = code.nodes[lam.body];
       if (b.kind !== "fold") return null;

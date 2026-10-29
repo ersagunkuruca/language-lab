@@ -50,10 +50,9 @@ test("routes: ties, a road to itself, a trip that goes nowhere, a near with noth
   ]);
 });
 
-// GAPS.md M1: `words` is keep(split(line, " "), …), and the compiled keep
-// straight over split gives the list unchanged, so "E  F" has an empty
-// word and is a bad line. Open: when it's fixed, drop the todo.
-test("routes: more than one space between words", { todo: "GAPS.md round 5, M1: keep straight over split is compiled to the list unchanged" }, () => {
+// GAPS.md M1: `words` is keep(split(line, " "), …); the compiled keep
+// straight over split had given the list unchanged.
+test("routes: more than one space between words", () => {
   const r = all(["r.txt"], { "r.txt": ties("   ") });
   assert.deepEqual(r.out.join("\n").split("\n"), [
     "6 towns, 6 roads, 2 parts",
