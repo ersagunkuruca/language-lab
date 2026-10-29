@@ -390,7 +390,7 @@ const ui: UI = {
   style: "math",
   text: "blocks",
   touched: [],
-  note: `${OPENING} Run lets you run any function backwards.`,
+  note: READONLY ? "Read-only: Run's inputs change, the code doesn't. Open in the editor to change it." : EMBED ? OPENING : `${OPENING} Run lets you run any function backwards.`,
   mode: null,
   query: "",
   refused: false,
@@ -2676,7 +2676,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   if ((action || value) && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
-  else if (z?.t === "fn") box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
+  else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
   if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result)));
   // A hole isn't a failure: it is where the program isn't written yet.

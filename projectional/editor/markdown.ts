@@ -2,6 +2,8 @@
 // headings (with GitHub's anchor ids), paragraphs, lists, fenced code,
 // tables, images, links, rules, and inline code, bold and italics.
 // Relative links to other .md files point at the repository on GitHub.
+// `?[caption](index.html?embed&…)` on a line of its own is the editor
+// embedded (editor/main.ts, ?embed): a live snippet in the page.
 
 const REPO = "https://github.com/ersagunkuruca/language-lab/blob/main/projectional/";
 
@@ -38,6 +40,8 @@ export function markdown(src: string): string {
       out.push(`<pre><code>${esc(body.join("\n"))}</code></pre>`);
       continue;
     }
+    const em = /^\?\[([^\]]*)\]\(([^)\s]+)\)$/.exec(l.trim());
+    if (em) { out.push(`<figure class="embed"><iframe src="${esc(em[2])}" title="${esc(em[1])}" loading="lazy"></iframe><figcaption>${inline(em[1])}</figcaption></figure>`); i++; continue; }
     const hd = /^(#{1,6}) (.*)$/.exec(l);
     if (hd) { const t = inline(hd[2]); out.push(`<h${hd[1].length} id="${slug(t)}">${t}</h${hd[1].length}>`); i++; continue; }
     if (/^---+$/.test(l.trim())) { out.push("<hr>"); i++; continue; }

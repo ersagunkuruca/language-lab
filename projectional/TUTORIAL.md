@@ -351,13 +351,11 @@ A **fold** is a match where each recursive field also comes with its
 already-computed result. In `insert`, the `cons(head, tail)` case also gets
 `tail′`, which is `x` already inserted into `tail`:
 
-```
-insert(x, items) =
-  fold items
-    nil → [x]
-    cons(head, tail) with tail′ →
-      if x < head then cons(x, cons(head, tail)) else cons(head, tail′)
-```
+?[insert, live: change x or items under Run and the result follows; tick result and untick items to run it backwards; click a part to see its type and what can replace it](index.html?embed&program=sort&def=insert)
+
+And `sort` is a fold too: each item is inserted into the rest, already sorted. This one is read-only; Open in the editor takes you to the whole program.
+
+?[sort, read-only](index.html?embed&readonly&program=sort&def=sort)
 
 In the graph a fold is the same shape as a match; the case frames just have
 the extra inputs. A fold always finishes. It also works on trees whose
