@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../projectional/src/lang/std.ts";
+import { CELL_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../projectional/src/lang/std.ts";
 import { base, baseNames } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
@@ -30,6 +30,7 @@ import { compile } from "../src/compile.ts";
 // f(x, …) = builtin(x, …) can't use them; their own tests cover them.
 const IN_PLACE: Record<Id, string> = {
   [SET]: "set takes the field it sets written in place (test/records.test.ts)",
+  [CELL_OPS.path]: "path takes the field or path of fields it names written in place, as set does (projectional/test/cell-paths.test.ts)",
   [S.byItsWays]: "by its ways only fills an implementation's field, and a way replaces it before anything runs (projectional/test/ways.test.ts)",
 };
 
@@ -63,13 +64,15 @@ test("every builtin type-checks when called, and the evaluator runs it", () => {
 });
 
 test("every builtin has one record for the compiler's targets (builtins.ts), agreeing with std.ts", () => {
-  for (const id of [...builtins, SET]) {
+  for (const id of [...builtins, SET, CELL_OPS.path]) {
     const t = TARGETS[id];
     assert.ok(t, `${name(id)} has no record in compiler/src/builtins.ts`);
     // std.ts's implementation is run only where there is one; a Choice
     // builtin is partial, and only those are.
     if (t.js === "impl") assert.ok(STD_IMPL[id] && !STD_MANY[id], name(id));
-    assert.equal(t.js === "partial", !!STD_MANY[id], name(id));
+    // read at is partial too, its answers the runtime's (runtime.js $many):
+    // it reads the runtime's cells, which std.ts hasn't got.
+    assert.equal(t.js === "partial", !!STD_MANY[id] || id === CELL_OPS.readAt, name(id));
     if (typeof t.scalar === "string") assert.ok(t.scalar in SCALAR_OPS, name(id));
   }
   assert.deepEqual(Object.keys(TARGETS).filter((id) => !SIGS[id]), []);

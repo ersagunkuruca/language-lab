@@ -31,9 +31,9 @@ import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
-import { Cells, NoValue, Pending, nodeOf } from "./cells.ts";
+import { Cells, NoValue, Pending, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
-import { fieldIndex, fieldPath, setPath } from "./records.ts";
+import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
@@ -49,6 +49,7 @@ export function fromList(v: Value): Value[] {
   for (let d = v as Data; d.tag === CONS; d = d.fields[1] as Data) out.push(d.fields[0]);
   return out;
 }
+const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 
 // Float64s stand for reals and floats only approximate them, so two numbers
 // are equal when they agree to the precision floats carry. Otherwise a
@@ -328,6 +329,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       try { return one(cells.read(c)); } catch (e) { if (e instanceof NoValue) return []; throw e; }
     },
     [CELL_OPS.write]: (c, v) => (cells.write(c, v), one(unit)),
+    // Places and edits at them (L98, cells.ts).
+    [CELL_OPS.path]: (get) => {
+      const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
+      const path = m?.prim ? [m.prim] : m?.lambda ? placePath(code, m.lambda) : null;
+      if (!path) throw new Error("path needs a field, a path of fields, or (t) ↦ t");
+      return one(pathValue(path.map((f) => ({ field: fieldIndex(code, f) }))));
+    },
+    [CELL_OPS.itemPath]: (p, i) => one(pathValue([...stepsOf(p)!, { item: Number(i) }])),
+    [CELL_OPS.thenPath]: (p, q) => one(pathValue([...stepsOf(p)!, ...stepsOf(q)!])),
+    [CELL_OPS.readAt]: (c, p) => {
+      try { const v = cells.readAt(c, stepsOf(p)!, LISTS); return v === undefined ? [] : one(v); } catch (e) { if (e instanceof NoValue) return []; throw e; }
+    },
+    [CELL_OPS.writeAt]: (c, p, v) => (cells.edit(c, stepsOf(p)!, () => v, LISTS), one(unit)),
+    [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS), one(unit)),
+    [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS), one(unit)),
+    [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS), one(unit)),
     [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];

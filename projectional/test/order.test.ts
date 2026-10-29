@@ -35,6 +35,7 @@ function program() {
   const cmp = (a: Id, b: Id) => show(k.call(COMPARE, a, b));
   const p = (x: number, l: string) => k.call(Point.v.point, k.lit(x), k.lit(l));
   const nan = () => k.call(B.div, k.lit(0), k.lit(0));
+  const xOf = () => k.fn(["point"], (q) => k.match(q, [{ variant: Point.v.point, names: ["x", "label"], body: ([x]) => x }]));
   const defs = {
     numbers: def("numbers", () => k.list(cmp(k.lit(1), k.lit(2)), cmp(k.lit(2), k.lit(2)), cmp(k.int("9007199254740993"), k.int(3)), cmp(k.lit(0.1 + 0.2), k.lit(0.3)), cmp(nan(), k.lit(1)), cmp(k.lit(1), nan()), cmp(nan(), nan()), cmp(k.lit(-0), k.lit(0)))),
     texts: def("texts", () => k.list(cmp(k.lit("apple"), k.lit("banana")), cmp(k.lit("b"), k.lit("ab")), cmp(k.lit("ab"), k.lit("abc")))),
@@ -45,6 +46,11 @@ function program() {
     sortedTexts: def("sorted texts", () => show(k.call(sort, k.list(k.lit("pear"), k.lit("apple"), k.lit("fig"))))),
     sortedLevels: def("sorted levels", () => show(k.call(sort, k.list(k.x(Level.v.high), k.x(Level.v.low), k.x(Level.v.medium), k.x(Level.v.low))))),
     sortedEmpty: def("sorted empty", () => show(k.call(sort, k.list()))),
+    // sort by (L104): by x alone, so the labels keep the list's order on a
+    // tie (stable); by −x for the largest first.
+    sortedByX: def("sorted by x", () => show(k.call(lib("sort by"), k.list(p(3, "c"), p(1, "z"), p(2, "b"), p(1, "a"), p(3, "a"), p(1, "m")), xOf()))),
+    sortedByMinusX: def("sorted by minus x", () => show(k.call(lib("sort by"), k.list(p(1, "a"), p(3, "b"), p(2, "c"), p(3, "a")), k.fn(["point"], (q) => k.call(B.neg, k.call(xOf(), q)))))),
+    sortedByEmpty: def("sorted by empty", () => show(k.call(lib("sort by"), k.list(), xOf()))),
     // Functions can't be compared, as they can't be told equal.
     functions: def("functions", () => k.call(COMPARE, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
   };
@@ -52,7 +58,7 @@ function program() {
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
 }
 
-const NAMES = ["numbers", "texts", "fractions", "cases", "lists", "sorted numbers", "sorted texts", "sorted levels", "sorted empty"];
+const NAMES = ["numbers", "texts", "fractions", "cases", "lists", "sorted numbers", "sorted texts", "sorted levels", "sorted empty", "sorted by x", "sorted by minus x", "sorted by empty"];
 const items = (v: Value): Value[] => { const out: Value[] = []; let l = v as { fields: Value[] }; while (l.fields.length) { out.push(l.fields[0]); l = l.fields[1] as { fields: Value[] }; } return out; };
 
 test("compare: numbers by value, text by code point, cases in declared order, then fields; functions are refused", () => {
@@ -73,12 +79,16 @@ test("compare: numbers by value, text by code point, cases in declared order, th
   assert.equal(v(p.defs.sortedTexts), '["apple", "fig", "pear"]');
   assert.equal(v(p.defs.sortedLevels), "[low, low, medium, high]");
   assert.equal(v(p.defs.sortedEmpty), "[]");
+  assert.equal(v(p.defs.sortedByX), '[point(1, "z"), point(1, "a"), point(1, "m"), point(2, "b"), point(3, "c"), point(3, "a")]');
+  assert.equal(v(p.defs.sortedByMinusX), '[point(3, "b"), point(3, "a"), point(2, "c"), point(1, "a")]');
+  assert.equal(v(p.defs.sortedByEmpty), "[]");
 });
 
 test("sort surely finishes: its type has no Diverge, and it takes any plain data", () => {
   const p = program();
   const sc = p.info.schemes.get(lib("sort"))!;
   assert.equal(showType(sc.type, p.names), "(List a) -> List a");
+  assert.equal(showType(p.info.schemes.get(lib("sort by"))!.type, p.names), "(List a, (a) -[e]-> b) -[e]-> List a");
 });
 
 test("compiled JavaScript gives the evaluator's answers", async () => {

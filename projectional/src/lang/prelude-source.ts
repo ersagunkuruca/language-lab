@@ -552,6 +552,43 @@ export function buildPrelude(): Module {
       ]) },
     ])));
 
+  // Sorting by a key (L104, routes' LG3): the same bottom-up merge sort,
+  // comparing key(item)s, so a program sorts records by one field without
+  // a type whose fields put that one first. Stable: items with the same
+  // key keep the list's order. The fold adds the items from the end, so
+  // each new run holds earlier items than the one it meets and goes first
+  // on a tie. Python's sorted(key=…) and Haskell's sortOn are the same.
+  const mergeByKey = k.def("merge by key");
+  k.define(mergeByKey, k.fn(["key", "xs", "ys"], (key, xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => ys },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => xs },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.match(k.call(COMPARE, k.call(key, y), k.call(key, x)), [
+        { variant: ORDER_V.before, names: [], body: () => k.call(CONS, y, k.call(mergeByKey, key, xs, yr)) },
+      ], k.call(CONS, x, k.call(mergeByKey, key, xr, ys))) },
+    ]) },
+  ])));
+  const addRunByKey = k.def("add run by key");
+  k.define(addRunByKey, k.fn(["key", "run", "slots"], (key, run, slots) => k.match(slots, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.call(SOME, run), k.x(NIL)) },
+    { variant: CONS, names: ["slot", "higher"], body: ([slot, higher]) => k.match(slot, [
+      { variant: NONE, names: [], body: () => k.call(CONS, k.call(SOME, run), higher) },
+      { variant: SOME, names: ["held"], body: ([held]) => k.call(CONS, k.x(NONE), k.call(addRunByKey, key, k.call(mergeByKey, key, run, held), higher)) },
+    ]) },
+  ])));
+  const sortBy = k.def("sort by");
+  k.define(sortBy, k.fn(["list", "key"], (xs, key) => k.fold(
+    k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["item", "rest"], results: [null, "slots"], body: ([item], [, slots]) => k.call(addRunByKey, key, k.call(CONS, item, k.x(NIL)), slots!) },
+    ]), [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["slot", "higher"], results: [null, "merged"], body: ([slot], [, merged]) => k.match(slot, [
+        { variant: NONE, names: [], body: () => merged! },
+        { variant: SOME, names: ["run"], body: ([run]) => k.call(mergeByKey, key, run, merged!) },
+      ]) },
+    ])));
+
   // Maps and sets (L65, DATA-STRUCTURES.md): the entries sorted by key in
   // compare's order with no key twice, the items sorted with none twice,
   // so each has one spelling. Every operation keeps it. Each walks the
@@ -618,6 +655,14 @@ export function buildPrelude(): Module {
     here: () => k.x(TRUE),
     past: (_, rest) => k.call(self, rest, x),
   }), itself);
+  // One walk to the key's place, changing what it holds or putting
+  // change(default) where it has nothing (L103).
+  const updateEntry = walk("update entry", ["key", "default", "change"], () => ([key, dflt, change], self) => ({
+    end: k.call(CONS, P(key, k.call(change, dflt)), k.x(NIL)),
+    before: (item, rest) => k.call(CONS, P(key, k.call(change, dflt)), k.call(CONS, item, rest)),
+    here: (item, rest) => entry(item, (_, v) => k.call(CONS, P(key, k.call(change, v)), rest), ["item key", "item value"]),
+    past: (item, rest) => k.call(CONS, item, k.call(self, rest, key, dflt, change)),
+  }), pairKey);
   const hasEntry = walk("entries have", ["key"], () => ([key], self) => ({
     end: k.x(FALSE),
     before: () => k.x(FALSE),
@@ -633,6 +678,7 @@ export function buildPrelude(): Module {
   const put = def("put", ["map", "key", "value"], (m, key, v) => entriesOf(m, (es) => k.call(MAP_V, k.call(putEntry, es, key, v))));
   const remove = def("remove key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(MAP_V, k.call(removeEntry, es, key))));
   const lookup = def("value at", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(lookupEntry, es, key)));
+  const updateAt = def("update at", ["map", "key", "default", "change"], (m, key, d, f) => entriesOf(m, (es) => k.call(MAP_V, k.call(updateEntry, es, key, d, f))));
   const hasKey = def("has key", ["map", "key"], (m, key) => entriesOf(m, (es) => k.call(hasEntry, es, key)));
   // Folded from the end of the list, so an earlier pair is put last: the
   // pairs reversed first, so a later pair wins, as puts in a row would.
@@ -721,8 +767,8 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, attempt, valueOrAbort, emptyMap, asMap, put, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
-  const mapHelpers = [lastItem, putEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     [map]: "The list of f(item) for each item, in the same order.",
@@ -758,11 +804,15 @@ export function buildPrelude(): Module {
     [negF]: "What −x is at Rational. Not offered on its own: − is.",
     [lessF]: "What < is at Rational. Not offered on its own: < is.",
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.",
+    [mergeByKey]: "Two lists sorted by key as one. A helper of sort by, not offered.",
+    [addRunByKey]: "A helper of sort by, as add run is of sort. Not offered.",
     [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
     [valueOrAbort]: "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
     [emptyMap]: "The map with no entries.",
     [asMap]: "The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).",
     [put]: "The map with key holding value, in place of what it held.",
+    [updateAt]: "The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.",
     [lookup]: "What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.",
     [remove]: "The map without key.",
     [hasKey]: "Whether the map holds key.",
@@ -830,9 +880,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos].map(at));
 }

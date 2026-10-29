@@ -159,6 +159,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
+- **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 
 ## Maps and sets
@@ -169,6 +170,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **empty map** : `Map a b`. The map with no entries.
 - **as map** : `(List (Pair a b)) -> Map a b`. The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).
 - **put** : `(Map a b, a, b) -> Map a b`. The map with key holding value, in place of what it held.
+- **update at** : `(Map a b, a, b, (b) -[e]-> b) -[e]-> Map a b`. The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.
 - **value at** : `(Map a b, a) -[Choice]-> b`. What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.
 - **remove key** : `(Map a b, a) -> Map a b`. The map without key.
 - **has key** : `(Map a b, a) -> Bool`. Whether the map holds key.
@@ -258,6 +260,14 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **write** : `(Cell a, a) -[Update]-> Unit`. Puts a new value in a cell. Only event handlers can write.
 - **formula** : `(() -[Cells, Diverge]-> a) -[Cells]-> Cell a`. A cell whose value is computed from other cells, and kept up to date when they change.
 - **each** : `(Cell (List a), (a) -[Cells, Diverge]-> b) -[Cells]-> Cell (List b)`. A cell holding f of each item of a list cell, where an item that stays keeps what f gave it.
+- **path** : `((a) -> b) -> Path a b`. A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.
+- **item path** : `(Path a (List b), Int) -> Path a b`. Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.
+- **then path** : `(Path a b, Path b c) -> Path a c`. The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.
+- **read at** : `(Cell a, Path a b) -[Cells, Diverge, Choice]-> b`. What is at a place in a cell's value. A page part that reads it is redrawn only when that place changes, not when another item does. No answer when the place isn't there (an item past the end).
+- **write at** : `(Cell a, Path a b, b) -[Update]-> Unit`. Puts a value at a place in a cell's value; only what read that place, or a place inside or around it, runs again. A place that isn't there changes nothing. Only event handlers can write.
+- **insert at** : `(Cell a, Path a (List b), Int, b) -[Update]-> Unit`. Puts an item into the list at a place, before item i (at the end when i is past it).
+- **remove at** : `(Cell a, Path a (List b), Int) -[Update]-> Unit`. Takes item i out of the list at a place; nothing when there's no item i.
+- **move at** : `(Cell a, Path a (List b), Int, Int) -[Update]-> Unit`. Moves item `from` of the list at a place to position `to`; nothing when either isn't there.
 - **Html** (type). A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
 - **Event** (type). What a page's handler is given when its event comes: the field's value and the key pressed.

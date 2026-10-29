@@ -205,3 +205,25 @@ test("a set's smallest and largest item, and a map's smallest and largest key (L
   assert.equal(setTree.cost[lib("smallest item")], "log n");
   assert.equal(mapTree.cost[lib("largest key")], "log n");
 });
+
+test("update at changes the value at a key in one walk, or puts change(default) (L103); the tree agrees with the sorted list", () => {
+  const [mapTree] = LIBRARY.reps;
+  const k = new Lang(LIBRARY.code);
+  const L = lib;
+  // Counting words, and a list of neighbours grown at the front: routes'
+  // `connect` without its `neighbours` helper.
+  const words = ["b", "a", "c", "a", "b", "a"];
+  const counted = words.reduce((m, w) => k.call(L("update at"), m, k.lit(w), k.lit(0), k.fn(["n"], (n) => k.call(B.add, n, k.lit(1)))), k.x(L("empty map")));
+  const roads = [["a", "b"], ["a", "c"], ["b", "c"]];
+  const graph = roads.reduce((g, [x, y]) => k.call(L("update at"), g, k.lit(x), k.x(NIL), k.fn(["ns"], (ns) => k.call(CONS, k.lit(y), ns))), k.x(L("empty map")));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("entries of"), counted))),
+    k.call(S.print, k.call(SHOW_ANY, k.call(L("entries of"), graph))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const plain = printed(code, names, main);
+  assert.deepEqual(plain, ['[pair("a", 3), pair("b", 2), pair("c", 1)]', '[pair("a", ["c", "b"]), pair("b", ["c"])]']);
+  assert.deepEqual(printed(represent(merge(code, TREES.code), [main], mapTree), names, main), plain);
+  assert.equal(mapTree.cost[lib("update at")], "log n");
+});

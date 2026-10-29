@@ -2,7 +2,8 @@
 
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
-and the design the repository keeps. Nothing here is built yet. The steps
+and the design the repository keeps. Step 1 of §1 is built (L98a, below);
+the rest is not yet. The steps
 are BACKLOG rows L98-L101 and C56-C61.
 
 **In one sentence:** the window between pure functions and objects that stay
@@ -108,6 +109,27 @@ anybody sees is still immutable.
 Keyed collections need unique keys: inserting a key already present is an
 error, as in a Map. The handler keeps the table from key to position that
 makes a keyed edit O(1).
+
+**Built (L98a), in the evaluator and compiled JS.** A path is a value of
+type `Path whole part`, made by three builtins: `path(f)` from a field or a
+path of fields written in place, as `set` takes them (`(t) ↦ t` is the whole
+value), `item path(p, i)` for item i of the list at p, and `then path(p, q)`.
+Fields are named by the field itself, not by text, since names are
+presentation. The edits are `write at(c, p, v)`, `insert at(c, p, i, v)`,
+`remove at(c, p, i)` and `move at(c, p, from, to)`, in Update. `read at(c,
+p)` reads one place and has no answer when it isn't there (an item past the
+end). An edit at a place that isn't there changes nothing.
+
+The handler (cells.ts `edit`) copies only the way down to the place, so the
+other items are the same values as before. It wakes a reader of the cell
+only if the reader read the whole cell, or read with `read at` a place that
+is this place, inside it, or around it. So writing item 1's title doesn't
+wake the reader of item 0's title, and an insert into a list wakes the
+readers of its items, whose positions it shifts. Keys are not built yet:
+positions shift, so a keyed reader (L99) is what keeps a row's reads put.
+The "in place" store is also not built yet: the value is copied along its
+path, and storing it in place is C56's representation
+(test/cell-paths.test.ts).
 
 ### 2. Reads tracked by path: reactive is a representation (L99)
 
