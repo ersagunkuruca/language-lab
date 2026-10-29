@@ -18,7 +18,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I30 | **Bug.** Run shows constructors as hashes: Countdown `solutions` reads `[hqti16…(9b16…, …)]`, the ray marcher's `shade` reads `gpabgmg1…(0.43, 0.46, 0.52)` for `rgb(…)`; 5 definitions | QA9 H1 | 2026-10-29 |
 | I31 | Opening `shadow` (1.4 s), `march`, `shade` and Countdown `solutions` (1.0 s) blocks the page: cap the opening Run's work on the page thread at ~300 ms as #562 does for the wires | QA9 M1 | 2026-10-29 |
 | I32 | A result that wasn't run reads `NaN` in the answer's blue (Countdown `results`, which gives a Found) | QA9 L1 | 2026-10-29 |
 | I33 | Insert a node after it… still says "Wrapped it in the call" | QA9 L2 | 2026-10-29 |
@@ -137,6 +136,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I30 | Run's answers name constructors by their names: solutions reads [apply(times, …)], shade rgb(…) | #599 |
 | Pig menu | Page: Pig in the example menu, and apps/pig.html built beside the other apps | this PR |
 | I34 | Smoke's Tab check counts only the parts Tab steps through; tick's only part is selected already, so it presses nothing | #582 |
 | I28 | An implementation is named size at Float64 (the type's own spelling), one operation's note reads plainly, and the navigator marks an interface ◇ | #576 |
