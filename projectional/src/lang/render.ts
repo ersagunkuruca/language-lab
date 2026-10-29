@@ -58,12 +58,12 @@ export function renderBlocks(code: Code, pres: Presentation, info: Info | null, 
 // lines it has, so it doesn't stretch its view; hovering shows all of it,
 // and the inspector edits all of it. The printed text has all of it.
 const SHORT = 32;
-export function litLabel(v: string | number | boolean): { short: string; full?: string } {
+export function litLabel(v: string | number | boolean, max = SHORT): { short: string; full?: string } {
   if (typeof v !== "string") return { short: String(v) };
   const lines = v.split("\n");
-  if (lines.length === 1 && v.length <= SHORT) return { short: JSON.stringify(v) };
+  if (lines.length === 1 && v.length <= max) return { short: JSON.stringify(v) };
   const first = lines.find((l) => l.trim()) ?? "";
-  const clip = first.trim().length > SHORT ? `${first.trim().slice(0, SHORT - 1)}…` : `${first.trim()}${lines.length > 1 ? "…" : ""}`;
+  const clip = first.trim().length > max ? `${first.trim().slice(0, max - 1)}…` : `${first.trim()}${lines.length > 1 ? "…" : ""}`;
   return { short: `${JSON.stringify(clip).slice(0, -1)}"${lines.length > 1 ? ` · ${lines.length} lines` : ""}`, full: v };
 }
 
