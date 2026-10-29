@@ -124,6 +124,18 @@ Proposed in [LANGUAGE-NEEDS-2026-10-24.md](LANGUAGE-NEEDS-2026-10-24.md); the fu
 | Channels; actors not a construct; STM | Influence / Considered, rejected | CSP (Hoare 1978), Go, Erlang (Armstrong); STM (Harris, Marlow, Peyton Jones, Herlihy 2005). |
 | Maps with one meaning and several representations; an order on data; Outcome; foreign definitions | Influence | Weight-balanced trees (Adams 1993), HAMT (Bagwell 2001), RRB vectors (Bagwell, Rompf 2012); OCaml's `compare` and Erlang's term order; Rust's `Result`; Gleam's `@external` and Elm's ports. |
 
+## Stable references, in place and reactive collections (designed, not built)
+
+Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-C60); the full list of sources is there. When a row is built, its entry moves to the section of the feature.
+
+| What | Label | Who and where |
+|---|---|---|
+| Values stay values; the compiler stores ones with one holder in place, invisibly | Ersagun's idea / Prior art | Ersagun asked for "the window" between pure functions and stable references (2026-10-29). Done before: Clean's uniqueness types; Koka's Perceus and FBIP (Reinking, Xie, de Moura, Leijen 2021; Lorenzen, Leijen, Swierstra 2023); Roc; Lean 4; Hylo's mutable value semantics (Racordon, Abrahams et al. 2022) and Swift's copy on write. |
+| A cell owns its value; writes are edits at a path; reads tracked by path so data inside stays plain | Influence | Solid's `createStore` and `produce` (Ryan Carniato), MobX (Michel Weststrate), Immer's patches; DBSP (Budiu et al. 2023), differential dataflow (McSherry et al. 2013), Jane Street's Incremental. The colour argument: Bob Nystrom, "What color is your function?" (2015). |
+| Regions per scope, references as positions with a generation, flat inline layout | Influence | Goose (Wouter van Oortmerssen, 2026, [wiki](https://github.com/aardappel/goose/wiki)); Tofte and Talpin's regions (1994, MLKit); ECS engines' generational indices (Unity DOTS, Bevy, flecs by Sander Mertens); FlatBuffers. |
+| Struct of arrays and parallel systems as later goals | Influence | Mike Acton, "Data-Oriented Design and C++" (CppCon 2014); Rust's rayon. |
+| Persistent structures as the main road | Considered, rejected | Okasaki (1998), Clojure (Rich Hickey), Immutable.js: they bound the copy but keep the diff. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |
