@@ -360,7 +360,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const d = dotOf(id);
     if (d) return useNode(id, d);
     switch (n.kind) {
-      case "lit": { const l = litLabel(n.value); return pill(id, l.short, "lit", undefined, l.full); }
+      // A text node is clipped shorter than in the blocks: a node is read
+      // at a glance, and the whole text is on hover (Ersagun 2026-10-29).
+      case "lit": { const l = litLabel(n.value, 18); return pill(id, l.short, "lit", undefined, l.full); }
       case "hole": return pill(id, `□ ${holeType(id)}`.trim(), "hole");
       case "ref": {
         const t = node(n.target);
