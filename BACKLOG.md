@@ -19,7 +19,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I30 | **Bug.** Run shows constructors as hashes: Countdown `solutions` reads `[hqti16…(9b16…, …)]`, the ray marcher's `shade` reads `gpabgmg1…(0.43, 0.46, 0.52)` for `rgb(…)`; 5 definitions | QA9 H1 | 2026-10-29 |
-| I34 | **Bug.** Smoke red on main: Lockstep `tick`, Shift+Tab from the last part selects `0.0166666667` but focus leaves the blocks, so Shift+F10 opens no menu | QA9 H2 | 2026-10-29 |
 | I31 | Opening `shadow` (1.4 s), `march`, `shade` and Countdown `solutions` (1.0 s) blocks the page: cap the opening Run's work on the page thread at ~300 ms as #562 does for the wires | QA9 M1 | 2026-10-29 |
 | I32 | A result that wasn't run reads `NaN` in the answer's blue (Countdown `results`, which gives a Found) | QA9 L1 | 2026-10-29 |
 | I33 | Insert a node after it… still says "Wrapped it in the call" | QA9 L2 | 2026-10-29 |
@@ -128,6 +127,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I34 | Smoke's Tab check counts only the parts Tab steps through; tick's only part is selected already, so it presses nothing | #582 |
 | I28 | An implementation is named size at Float64 (the type's own spelling), one operation's note reads plainly, and the navigator marks an interface ◇ | #576 |
 | I27 | Make it a function names its inputs after what comes in (speed, not speed₂); a shared name gets a subscript only where the outer one is used | #574 |
 | I26 | Search by meaning finds the maths builtins by their plain words: square root finds sqrt, absolute value finds abs | #569 |
