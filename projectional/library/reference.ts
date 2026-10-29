@@ -35,7 +35,7 @@ export const SECTIONS: Section[] = [
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"),
       ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"),
       ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
-      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "polar", "divide complex", "complex exp", "show complex", "table product", "complex table", "clifford table", "clifford reverse"), ...t("tableEntry"),
+      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "show complex", "table product", "complex table", "clifford table", "clifford reverse"), ...t("tableEntry"),
       ...t("mat2", "mat3", "mat4"), ...prelude("matrix table"),
       ...t("fixed"), ...prelude("as fixed", "fixed as float64", "show fixed", "divide fixed", "square root fixed"),
       ...t("dual"), ...prelude("slope by duals", "divide duals", "show dual", "dual table"),

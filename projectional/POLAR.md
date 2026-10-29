@@ -82,8 +82,8 @@ the last step.
 
 ## Steps
 
-1. **L97a.** Rename Complex's `polar` to `from polar` (prelude, examples
-   physics and relations, docs). Small, on its own.
+1. **L97a, built.** Complex's `polar` is now `from polar` (the prelude's
+   name and LIBRARY.md; no example used it).
 2. **L97b.** A definition that gives another direction of a relation with
    results: the def's optional `direction of`, the checker's check, and a
    solve in that direction compiled and evaluated as a call. The prelude's

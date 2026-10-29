@@ -60,7 +60,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **complex conjugate** : `(Complex) -> Complex`. a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².
 - **modulus** : `(Complex) -> Float64`. |z|, how far z is from 0 (the vectors module's magnitude says the same).
 - **angle of** : `(Complex) -> Float64`. The angle from the positive real line to z, in radians, between −π and π (atan2).
-- **polar** : `(Float64, Float64) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
+- **from polar** : `(Float64, Float64) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
 - **divide complex** : `(Complex, Complex) -[Choice]-> Complex`. z ÷ w for complex numbers; no answer when w is 0.
 - **complex exp** : `(Complex) -> Complex`. e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
 - **show complex** : `(Complex) -> Text`. A complex number as 3 + 4i or 3 − 4i.
