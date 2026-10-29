@@ -302,7 +302,8 @@ if (unpacking) void unpackSnippet(ASKED.get("code")!).then((p) => {
   showProgram();
   ui.def = defNamed(ASKED.get("def") ?? "") || ui.def;
   ui.tabs = [ui.def];
-}, (e) => { ui.note = `This embed's code= can't be read (${e instanceof Error ? e.message : String(e)}).`; ui.refused = true; }).finally(() => { unpacking = false; render(); });
+  missingAsked();
+}, () => { ui.note = UNREADABLE; ui.refused = true; }).finally(() => { unpacking = false; render(); });
 // `?program=sort&def=insert` (an embed's Open in the editor) opens that
 // example, with your edits to it if you made any.
 if (!EMBED && isExample(ASKED.get("program") ?? "")) doc = docs[ASKED.get("program")!] ?? initialFor(ASKED.get("program")!);
@@ -400,6 +401,19 @@ const ui: UI = {
   tabs: startTabs(),
   panel: "node",
 };
+
+// A link naming a program or a definition that isn't there says so, rather
+// than quietly showing another one.
+function missingAsked(): string {
+  const program = ASKED.get("program"), def = ASKED.get("def");
+  const gone = [
+    program && !ASKED.has("code") && !isExample(program) ? `There's no example called "${program}", so this is ${titleOf(doc)}.` : "",
+    def && !defNamed(def) ? `${titleOf(doc)} has no definition called "${def}", so this is ${doc.names.short[ui.def] ?? "another"}.` : "",
+  ].filter(Boolean).join(" ");
+  if (gone) { ui.note = gone; ui.refused = true; }
+  return gone;
+}
+if (!ASKED.has("code")) missingAsked();
 
 
 const undo: Doc[] = [];
@@ -2084,6 +2098,8 @@ async function embedLink(): Promise<string> {
   packed.forEach((b) => { bin += String.fromCharCode(b); });
   return `${base}?embed&def=${def}&code=${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
 }
+// A code= that doesn't unpack was most likely cut short or changed on the way.
+const UNREADABLE = "This link's code can't be read: it may have been cut short or changed when it was copied. Copy embed link, in the Program panel, makes a new one.";
 async function unpackSnippet(text: string): Promise<{ code: Code; names: Names; comments: Comments }> {
   const bin = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
   const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
@@ -3572,7 +3588,8 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
   history.replaceState(null, "", location.pathname);
   addProgram({ ...typedDoc(MINE, p.code, p.names, p.comments), title: "Snippet" }, "Opened the snippet from the link as a program of your own. Edits are kept in this browser.");
   ui.def = defNamed(ASKED.get("def") ?? "") || ui.def;
+  missingAsked();
   render();
-}, (e) => { ui.note = `The link's code= can't be read (${e instanceof Error ? e.message : String(e)}).`; ui.refused = true; render(); });
+}, () => { ui.note = UNREADABLE; ui.refused = true; render(); });
 
 render();
