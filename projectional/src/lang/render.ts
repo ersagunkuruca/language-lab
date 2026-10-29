@@ -21,7 +21,7 @@ import type { Info } from "./infer.ts";
 import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
 import { implementationOps, isOperation } from "./records.ts";
-import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, SET_TYPE, TRUE } from "./std.ts";
+import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE } from "./std.ts";
 import { showIn } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -415,10 +415,16 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       if (f?.kind === "def" && f.results && lam?.kind === "lambda") {
         const results = f.results, ins = lam.params.filter((p) => !results.includes(p));
         const outTrue = node(n.given.out)?.kind === "ref" && (node(n.given.out) as NodeOf<"ref">).target === TRUE;
-        if (outTrue && Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(n.binds).length === results.length && results.every((r) => r in n.binds)) {
-          const bound = results.map((r) => n.binds[r]);
+        const declared = Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(n.binds).length === results.length && results.every((r) => r in n.binds);
+        // Another direction names what it's given, and its results are
+        // the ports it binds, in the definition's order.
+        const ports = lam.params, other = Object.keys(n.given).every((k) => k === "out" || ports.includes(k)) && Object.keys(n.binds).every((k) => ports.includes(k));
+        if (outTrue && (declared || other)) {
+          const order = declared ? results : ports.filter((p) => p in n.binds);
+          const bound = order.map((r) => n.binds[r]);
+          const args = declared ? ins.map((p) => inline(n.given[p]).p) : ports.filter((p) => p in n.given).map((p) => [pn(`${portLabel(code, names, n.fn, p)} = `), ...inline(n.given[p]).p]);
           enter(bound);
-          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(n.fn)], n.fn), pn("("), ...commas(ins.map((p) => inline(n.given[p]).p)), pn(")")), grp(block(n.body, []))]);
+          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(n.fn)], n.fn), pn("("), ...commas(args), pn(")")), grp(block(n.body, []))]);
           leave(bound);
           return out;
         }
@@ -526,18 +532,48 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     leave(params);
     return out;
   }
-  const t = typeAt(defId);
+  // A definition with results shows the direction it declares: its inputs,
+  // the effects of finding its results, and the results by name.
+  const shape = def.results && body?.kind === "lambda" ? body : null;
+  const effs = info?.directions?.get(defId);
+  const t = shape && effs && shape.params.every((p) => typeAt(p))
+    ? `(${shape.params.filter((p) => !def.results!.includes(p)).map(typeAt).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${def.results!.map((r) => `${nameOf(r)}: ${typeAt(r)}`).join(", ")}`
+    : typeAt(defId);
   if (t) out.push(ln(self(), part("ty big", [` : ${t}`])));
   if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];
   if (body.kind === "lambda") {
     enter(body.params);
-    // A definition with results shows them after its inputs (RESULTS.md).
+    // A definition with results shows them after its inputs (RESULTS.md),
+    // and when each is an expression of the inputs, `= e1, e2` for
+    // `r1 = e1 and r2 = e2`.
     const results = def.results ?? [];
     const head = [self(), pn("("), ...commas(body.params.filter((p) => !results.includes(p)).map((p) => [bind(p)])), pn(")")];
-    out.push(...hang(body.body, results.length ? [...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = ")] : [...head, pn(" = ")]));
+    const each = results.length ? givenBy(body.body, results) : null;
+    if (each) out.push(ln(...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = "), ...commas(each.map((e) => inline(e).p))));
+    else out.push(...hang(body.body, results.length ? [...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = ")] : [...head, pn(" = ")]));
     leave(body.params);
   } else out.push(...hang(def.body!, [self(), pn(" = ")]));
   return out;
+
+  // The expression each result equals, in order, when the body is just
+  // `r1 = e1 and r2 = e2 …` with no result inside any e; null otherwise.
+  function givenBy(b: Id, results: Id[]): Id[] | null {
+    const parts: Id[] = [];
+    const calls = (n: Node, f: Id) => n.kind === "call" && n.args.length === 2 && node(n.fn)?.kind === "ref" && (node(n.fn) as NodeOf<"ref">).target === f;
+    const flat = (id: Id) => { const n = node(id); if (calls(n, S.and) && n.kind === "call") { flat(n.args[0]); flat(n.args[1]); } else parts.push(id); };
+    flat(b);
+    if (parts.length !== results.length) return null;
+    const isRef = (id: Id, r: Id) => { const n = node(id); return n.kind === "ref" && n.target === r; };
+    const mentions = (id: Id) => subtree(code, id).some((x) => { const n = node(x); return n.kind === "ref" && results.includes(n.target); });
+    const out = results.map((r, i) => {
+      const n = node(parts[i]);
+      if (!calls(n, S.equal) || n.kind !== "call") return null;
+      const [a, c] = n.args;
+      const e = isRef(a, r) ? c : isRef(c, r) ? a : null;
+      return e && !mentions(e) ? e : null;
+    });
+    return out.every((e): e is Id => e !== null) ? out : null;
+  }
 
   function typeText(id: Id): string {
     const n = node(id);

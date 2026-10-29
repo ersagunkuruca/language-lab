@@ -24,7 +24,7 @@ function program(results: string[], use = true) {
   const sd = k.def("sum and difference");
   k.define(sd, k.fn(["s", "d", "a", "b"], (s, d, a, b) => k.and(k.equal(s, k.call(B.add, a, b)), k.equal(d, k.call(B.sub, a, b)))));
   k.results(sd, ...results);
-  const main = k.def("main");
+  const main = use ? k.def("main") : "";
   if (use) k.define(main, k.thunk(() => k.use(sd, [k.lit(5), k.lit(1)], ["half sum", "half difference"], (a, b) => k.text(k.call(SHOW_ANY, a), k.lit(" "), k.call(SHOW_ANY, b)))));
   const code: Code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
@@ -65,4 +65,34 @@ test("results are its own ports, each once, and it is a predicate", () => {
   assert.ok(info.errors.some((e) => /twice has results, so it is a predicate over its ports/.test(e.message)), String(info.errors.map((e) => e.message)));
   const p = program(["a", "a"], false);
   assert.ok(p.info.errors.some((e) => /results are some of its own ports, each once: a isn't/.test(e.message)));
+});
+
+test("the signature reads as the declared direction, with its effects", () => {
+  const p = program(["a", "b"]);
+  assert.match(p.text(p.sd), /^‹sum and difference› : \(Float64, Float64\) -> a: Float64, b: Float64\n/);
+});
+
+test("results each given by an expression of the inputs read as = e1, e2", () => {
+  const k = new Lang();
+  const hd = k.def("half and double");
+  k.define(hd, k.fn(["x", "h", "d"], (x, h, d) => k.and(k.equal(h, k.call(B.div, x, k.lit(2))), k.equal(d, k.call(B.mul, x, k.lit(2))))));
+  k.results(hd, "h", "d");
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  const text = renderBlocks(code, pres, info, hd);
+  assert.match(text, /‹half and double›\(x\) → h, d = x \/ 2, x · 2$/m, text);
+});
+
+test("another direction names what it's given, and binds the ports left, in order", () => {
+  const p = program(["a", "b"], false);
+  const sd = p.k.code.nodes[p.sd] as NodeOf<"def">;
+  const [s, d, a, b] = (p.k.code.nodes[sd.body!] as NodeOf<"lambda">).params;
+  const main = p.k.def("other way");
+  p.k.define(main, p.k.thunk(() => p.k.solve(p.sd, { [s]: p.k.lit(10), [a]: p.k.lit(3), out: p.k.true }, { [b]: "b", [d]: "d" }, ({ [b]: bv, [d]: dv }) => p.k.text(p.k.call(SHOW_ANY, dv), p.k.lit(" "), p.k.call(SHOW_ANY, bv)))));
+  const code = base(p.k.code), names = baseNames(p.k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  assert.match(renderBlocks(code, pres, info, main), /d, b = ‹sum and difference›\(s = 10, a = 3\)/);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), "-4 7");
 });
