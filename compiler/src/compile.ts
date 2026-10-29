@@ -272,21 +272,49 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   let curAt: Map<number, Type> = NO_AT;
   const withAt = (at: Map<number, Type>, t: Type): Type => (!at.size ? t : t.t === "var" ? at.get(t.v) ?? t : t.t === "con" ? { ...t, args: t.args.map((x) => withAt(at, sub.zonk(x))) } : t.t === "fn" ? { ...t, params: t.params.map((x) => withAt(at, sub.zonk(x))), ret: withAt(at, sub.zonk(t.ret)) } : t);
   const typeName = (t: Type): string => (t.t === "con" ? [names[t.id] ?? "T", ...t.args.map(typeName)].join("_") : "a");
-  // Does a definition compare values of its own type variables, itself or
-  // through another definition it calls with them?
-  const typedMemo = new Map<Id, boolean>();
-  const typed = (def: Id): boolean => {
-    if (typedMemo.has(def)) return typedMemo.get(def)!;
-    typedMemo.set(def, false);
+  // The type variables of a definition (its scheme's) whose values it
+  // compares, itself or through another definition it calls with them:
+  // the ones a copy per type is made for. A library definition's body has
+  // variables of its own, read off its lambda paired with the scheme.
+  const comparedMemo = new Map<Id, Set<number>>();
+  const varsOf = (t: Type, out: Set<number>): Set<number> => {
+    t = sub.zonk(t);
+    if (t.t === "var") out.add(t.v);
+    else if (t.t === "con") t.args.forEach((x) => varsOf(x, out));
+    else if (t.t === "fn") { t.params.forEach((x) => varsOf(x, out)); varsOf(t.ret, out); }
+    return out;
+  };
+  const compared = (def: Id): Set<number> => {
+    if (comparedMemo.has(def)) return comparedMemo.get(def)!;
+    const out = new Set<number>();
+    comparedMemo.set(def, out);
     const sc = info.schemes.get(def);
-    const open = (t: Type): boolean => { t = sub.zonk(t); return t.t === "var" ? true : t.t === "con" ? t.args.some(open) : t.t === "fn" ? [...t.params, t.ret].some(open) : false; };
-    const r = !!sc && sc.vars.length > 0 && code.nodes[def]?.kind === "def" && isFnDef(def) && subtree(code, def).some((x) => {
+    if (!sc || !sc.vars.length || code.nodes[def]?.kind !== "def" || !isFnDef(def)) return out;
+    const toScheme = new Map<number, number>(sc.vars.map((v) => [v, v]));
+    const pair = (a: Type, b: Type) => {
+      b = sub.zonk(b);
+      if (a.t === "var") { if (b.t === "var") toScheme.set(b.v, a.v); return; }
+      if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+      if (a.t === "fn" && b.t === "fn") { a.params.forEach((x, i) => b.params[i] && pair(x, b.params[i])); pair(a.ret, b.ret); }
+    };
+    pair(sc.type, ty(node<"def">(def).body!));
+    const add = (vs: Set<number>) => { for (const v of vs) { const w = toScheme.get(v); if (w !== undefined && sc.vars.includes(w)) out.add(w); } };
+    for (const x of subtree(code, def)) {
       const n = code.nodes[x];
-      if (n.kind === "call") return refTarget(n.fn) === COMPARE && !!n.args[0] && open(ty(n.args[0]));
-      return n.kind === "ref" && n.target !== def && code.nodes[n.target]?.kind === "def" && open(ty(x)) && typed(n.target);
-    });
-    typedMemo.set(def, r);
-    return r;
+      if (n.kind === "call" && refTarget(n.fn) === COMPARE && n.args[0]) add(varsOf(ty(n.args[0]), new Set()));
+      if (n.kind !== "ref" || n.target === def || code.nodes[n.target]?.kind !== "def") continue;
+      const g = compared(n.target);
+      if (!g.size) continue;
+      // The types the callee's compared variables stand for here.
+      const bindVars = (a: Type, b: Type) => {
+        b = sub.zonk(b);
+        if (a.t === "var") { if (g.has(a.v)) add(varsOf(b, new Set())); return; }
+        if (a.t === "con" && b.t === "con") a.args.forEach((y, i) => b.args[i] && bindVars(y, b.args[i]));
+        if (a.t === "fn" && b.t === "fn") { a.params.forEach((y, i) => b.params[i] && bindVars(y, b.params[i])); bindVars(a.ret, b.ret); }
+      };
+      bindVars(info.schemes.get(n.target)!.type, ty(x));
+    }
+    return out;
   };
   // `at` read in the body's variables too (a library definition, checked
   // apart, has its own): its lambda's type paired with the scheme's.
@@ -446,7 +474,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // `sus`: the definition's row holds an operation answered later, so its
   // one copy is a generator function (`isLater`).
   // `at`: the types the copy's type variables stand for, where it compares
-  // values of them (`typed`), so `compare` there is at those types
+  // values of them (`compared`), so `compare` there is at those types
   // (GAPS.md M4): the tree jobs get a copy per key type. Specializing by
   // type as MLton does for every definition, here only where it compares.
   interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean; at: Map<number, Type> }
@@ -704,9 +732,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     walk(scheme.type, ty(ref));
     // The types its variables stand for here, where the copy compares them.
     const at = new Map<number, Type>();
-    if (typed(def)) {
+    const cmp = compared(def);
+    if (cmp.size) {
       const bindVars = (a: Type, b: Type) => {
-        if (a.t === "var") { const t = monoDeep(withAt(callerAt, b)); if (scheme.vars.includes(a.v) && closedType(t)) at.set(a.v, t); return; }
+        if (a.t === "var") { const t = monoDeep(withAt(callerAt, b)); if (cmp.has(a.v) && closedType(t)) at.set(a.v, t); return; }
         if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && bindVars(x, sub.zonk(b.args[i])));
         if (a.t === "fn" && b.t === "fn") { a.params.forEach((x, i) => b.params[i] && bindVars(x, sub.zonk(b.params[i]))); bindVars(a.ret, sub.zonk(b.ret)); }
       };

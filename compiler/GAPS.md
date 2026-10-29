@@ -1254,6 +1254,7 @@ towns, compiled on the trees, it went from 1433 to 643 ms (30× to 16× the
 ideal), and at 1000 from 294 to 132 ms. A copy is made for each type every
 variable is called at, the value's too (`tree put$Text_Int`,
 `tree put$Text_Text`). Copying only the compared ones would make less code.
+That is done now (BACKLOG M4 again): 64.3 KB to 53.8 KB, at the same speed.
 
 **M5. The trees count their depth (perf, small).** Every tree job that
 recurses (`tree put`, `set tree add`, …) increments and decrements
