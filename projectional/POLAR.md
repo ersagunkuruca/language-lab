@@ -98,15 +98,26 @@ the last step.
    length, angle = √(x² + y²), atan2(y, x)` is a function and not a search
    (test/directions.test.ts). The prelude's own `polar` and `unpolar` come
    with Trig in step 3, where they are used.
-3. **L97c.** Interface fields with results, and Trig's `polar` and
-   `unpolar` fields with the ways above, so `unpolar` and the backwards
-   direction go through the type. Float64 gives sin, cos, atan2; Dual gets
-   polar, unpolar, asin, acos from its chain-rule sin and cos.
+3. **L97c, built.** Interface fields with results, and Trig's `polar`:
+   a field node may name the positions of its results (`results`, with
+   `ports` for the text), a use is a solve of the field, `_, y =
+   polar(1, angle)`, checked in the direction the field declares with one
+   answer ("polar gives x, y from length, angle" otherwise), and resolved
+   by arith.ts to what the type gives, or to the way picked, its ports
+   moved from positions to that definition's parameters. A definition
+   given for it must declare the same results, with one answer. The
+   prelude's ways are `polar by sincos`, `sin by polar` and `cos by polar`;
+   Float64 gives `float64 polar`, Dual and Fixed leave polar to its ways
+   and get it from their sin and cos, and a type that gives only polar
+   gets sin and cos (test/polar.test.ts, evaluated and compiled).
+   **Next (L97c2):** the `unpolar` field the same way (Float64 by atan2,
+   Dual by the chain rule), the prelude's `polar` relation with `unpolar`
+   as its direction, and asin and acos as ways of unpolar.
 4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
    its ways. Cheap only with C55 (sin alone must not do the cos half).
 5. **L97e.** The complex laws, after T7.
 
-Steps 1 to 3 do not need C55; C55 only makes the polar-first types (Fixed)
+Steps 1 to 3 (and L97c2) do not need C55; C55 only makes the polar-first types (Fixed)
 as cheap as they should be.
 
 ## Prior art (to credit when built)

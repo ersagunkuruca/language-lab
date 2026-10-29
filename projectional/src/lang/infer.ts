@@ -712,6 +712,20 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // its port types from the function's own type.
   function solveType(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row): Type {
     const inner = new Map(env);
+    // An interface's field with results (POLAR.md, L97c): the type's own
+    // definition answers it, in the direction the field declares, with one
+    // answer. Ports are positions.
+    const field = code.nodes[n.fn];
+    if (field?.kind === "field" && field.results) {
+      const ty = code.nodes[field.type];
+      const ins = ty?.kind === "tfun" ? ty.params.map((_, i) => i).filter((i) => !field.results!.includes(i)) : [];
+      const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
+      const port = (i: number) => field.ports?.[i] ?? String(i);
+      if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(n.binds).every((k) => field.results!.includes(Number(k))))
+        err(n.id, `${nm(n.fn)} gives ${field.results.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
+      relationalSolve(n, env, row, inner, false, undefined, true);
+      return expr(n.body, inner, row);
+    }
     let p: ReturnType<typeof planSolve> | null = null;
     try { p = planSolve(code, n); } catch (e) { err(n.id, (e as Error).message); }
     if (p?.mode === "relational") {
@@ -913,6 +927,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Implementations (INTERFACES.md): the definitions whose type is an
   // interface at a closed type, one for each pair; then every known type a
   // use asked for an interface must have one.
+  const resultsGiven: { impl: Id; field: Id; by: Id }[] = [];
   function implementations() {
     const table = info.implementations!;
     let ways: Ways | undefined;
@@ -929,10 +944,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // A field left to its ways needs a way that ends in fields it gives
       // (WAYS.md, L96b): said here, before anything runs.
       const args = (body as NodeOf<"call">).args, variant = code.nodes[fn.target] as NodeOf<"variant">;
+      // A field with results (POLAR.md) is given by a definition that
+      // declares the same results; checked in results(), with its direction.
+      variant.fields.forEach((f, i) => { const fl = code.nodes[f], a = code.nodes[args[i]]; if (fl?.kind === "field" && fl.results && a?.kind === "ref" && !leftToWays(code, args[i])) resultsGiven.push({ impl: d, field: f, by: a.target }); });
       if (args.some((a) => leftToWays(code, a))) {
         const pick = pickWays(code, ways ??= waysIn(code), variant, args);
         const stuck = variant.fields.filter((f) => !pick.has(f));
-        if (stuck.length) err(d, `${nm(d)} leaves ${stuck.map(nm).join(" and ")} to ${stuck.length === 1 ? "its ways" : "their ways"}, and none of them ends in a field it gives: give ${stuck.length === 1 ? "it, or a field its ways use" : "one of them, or a field their ways use"}`);
+        if (stuck.length) err(d, `${nm(d)} leaves ${stuck.map(nm).join(", ").replace(/, ([^,]*)$/, " and $1")} to ${stuck.length === 1 ? "its ways" : "their ways"}, and none of them ends in a field it gives: give ${stuck.length === 1 ? "it, or a field its ways use" : "one of them, or a field their ways use"}`);
       }
     }
     for (const w of s.wanted) {
@@ -996,6 +1014,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   settle();
   implementations();
   results();
+  // Each field with results given by a definition with the same results,
+  // in that direction with one answer (POLAR.md, L97c).
+  for (const { impl, field, by } of resultsGiven) {
+    const fl = code.nodes[field] as NodeOf<"field">, d = code.nodes[by];
+    const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+    const port = (i: number) => fl.ports?.[i] ?? String(i);
+    const want = `${fl.results!.map(port).join(", ")} from ${(fl.ports ?? []).filter((_, i) => !fl.results!.includes(i)).join(", ")}`;
+    const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fl.results!.length && d.results.every((r, i) => lam.params.indexOf(r) === fl.results![i]);
+    if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
+    else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
+  }
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
@@ -1351,7 +1380,13 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // One + for every number type (NUMBERS.md, "One `+`"): the palette
   // offers the generic arithmetic, not each type's own, which stored
   // programs keep and which is what the generic resolves to.
-  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id)) consider(id, sig(info.subst));
+  // `by its ways` only for an implementation's field that has a way.
+  const wayField = () => {
+    const call = Object.values(code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && n.args.includes(hole));
+    const v = call && code.nodes[call.fn]?.kind === "ref" ? code.nodes[(code.nodes[call.fn] as NodeOf<"ref">).target] : null;
+    return v?.kind === "variant" && waysIn(code).has(v.fields[call!.args.indexOf(hole)]);
+  };
+  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id) && (id !== S.byItsWays || wayField())) consider(id, sig(info.subst));
   // A private constructor only where the checker would take it.
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
