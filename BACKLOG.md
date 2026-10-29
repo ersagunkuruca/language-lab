@@ -127,6 +127,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| Pig menu | Page: Pig in the example menu, and apps/pig.html built beside the other apps | this PR |
 | I34 | Smoke's Tab check counts only the parts Tab steps through; tick's only part is selected already, so it presses nothing | #582 |
 | I28 | An implementation is named size at Float64 (the type's own spelling), one operation's note reads plainly, and the navigator marks an interface ◇ | #576 |
 | I27 | Make it a function names its inputs after what comes in (speed, not speed₂); a shared name gets a subscript only where the outer one is used | #574 |
@@ -389,7 +390,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
-| Pig | examples/pig, an effects demo (Ersagun picked it, 2026-10-29): one game of Pig performs Random, its own Decide and Say, and the page runs it under different handlers. hold at is a strategy, written into puts the commentary on the page, recorded into keeps the numbers drawn and replayed from plays the same game back, and quietly runs 1000 games silently. The editor menu and apps/pig.html come next | this PR |
+| Pig | examples/pig, an effects demo (Ersagun picked it, 2026-10-29): one game of Pig performs Random, its own Decide and Say, and the page runs it under different handlers. hold at is a strategy, written into puts the commentary on the page, recorded into keeps the numbers drawn and replayed from plays the same game back, and quietly runs 1000 games silently. The editor menu and apps/pig.html in the next PR | #585 |
 | Dice | The dice page throws 100 from the browser's randomness, landing one every 20 ms (the clock drives it); its bars shrink to fit as they grow and a red tick marks what fair dice give, so the shape visibly converges (Ersagun, 2026-10-29) | #584 |
 | L86b | A whole literal nothing fixes defaults to Int, one with a fraction part to Float64 (types.ts `whole`, arith.ts `otherwise`): `2 + 3` alone is the Int 5 and `10^12 · 10^12` exact; `inc(x) = x + 1` alone is `(Int) -> Int`. Also: `later` waits say what they read, so Int sums backwards sleep too (fibFast over Ints, 20,000 steps in 0.7 s), and a passing check lets what woke with it run | #475 |
 | L83 | Backwards, waiting equations and checks sleep until one of the unknowns they read gets a value (relate.ts `doze`, woken in `bindVar`), instead of every step re-reading all of them: `fibFast(n) = 8` past its first answer ran 2,000 steps in about a minute and overflowed the stack in the editor; 20,000 steps now take under a second. The stopping rule is L83b | #473 |
