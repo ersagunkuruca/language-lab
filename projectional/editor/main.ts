@@ -132,6 +132,8 @@ interface Layout {
   named?: Id[];
   // Frames drawn folded into one box (a lambda, a let, a match arm...). A view.
   folded?: Id[];
+  // Functions that start folded in the graph (deepFunctions) and were opened.
+  unfolded?: Id[];
   // Per definition: which ports (parameters, and "out" for the result) you
   // give it when running it backwards. Choosing different ones is how you
   // invert it, and it never touches code.json.
@@ -2140,14 +2142,56 @@ function groupToFunction(info: T.Info, g: Id) {
   applyT(r, undefined, undefined, undefined, { ...doc.layout, groups, folded });
 }
 
+// A function whose body is more than DEEP nodes deep starts folded in the
+// graph (Ersagun 2026-10-28: "bigger than 3 (or 2) depth gets collapsed").
+// Deep counts the longest chain from the body's result to a leaf, a call's
+// function name included, a function inside as one: `x * 2 + 1` is 3 and
+// stays open, `f(g(h(x)))` is 4 and starts folded. At 2 a third of the
+// examples' functions would start folded, most of them one-line sums; at 3
+// it's one in six. Opened, it stays open: layout.json's unfolded.
+const DEEP = 3;
+const deepCache = new WeakMap<Code, Map<Id, Id[]>>();
+function deepFunctions(def: Id): Id[] {
+  const byDef = deepCache.get(doc.code) ?? new Map<Id, Id[]>();
+  deepCache.set(doc.code, byDef);
+  if (byDef.has(def)) return byDef.get(def)!;
+  const out: Id[] = [];
+  const depth = (id: Id): number => { const n = node(id); return !n ? 0 : n.kind === "lambda" ? 1 : 1 + Math.max(0, ...children(n).map(depth)); };
+  const bodyOf = (id: Id) => { let b = id; for (let n = node(b); n?.kind === "lambda"; n = node(b)) b = n.body; return b; };
+  // A function given its arguments on the spot is a let, not a function's frame.
+  const walk = (id: Id, top: boolean) => {
+    const n = node(id);
+    if (!n) return;
+    if (n.kind === "lambda") {
+      const body = bodyOf(id);
+      if (!top && depth(body) > DEEP) out.push(id);
+      return walk(body, false);
+    }
+    if (n.kind === "call" && node(n.fn)?.kind === "lambda") { n.args.forEach((a) => walk(a, false)); return walk(bodyOf(n.fn), false); }
+    for (const c of children(n)) walk(c, false);
+  };
+  const b = defBody(def);
+  if (b) walk(b.id, true);
+  byDef.set(def, out);
+  return out;
+}
+
+// What the graph draws folded: what was folded, and deep functions not opened.
+function graphFolded(): Set<Id> {
+  const open = new Set(doc.layout.unfolded ?? []);
+  return new Set([...(doc.layout.folded ?? []), ...deepFunctions(ui.def).filter((f) => !open.has(f))]);
+}
+
 // A frame drawn folded into one box, or open. A view.
 function toggleFolded(f: Id) {
   const now = doc.layout.folded ?? [];
-  const on = now.includes(f);
+  const on = graphFolded().has(f), deep = deepFunctions(ui.def).includes(f);
   // Unfolded where it was dragged, it makes room instead of landing on others.
   const room = on ? graph?.room(f) ?? {} : {};
   const at = Object.keys(room).length ? { at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(room).map(([k, v]) => [lkey(k), v])) } } : {};
-  commit({ layout: { ...doc.layout, ...at, folded: on ? now.filter((x) => x !== f) : [...now, f] } }, ["layout.json"],
+  const opened = (doc.layout.unfolded ?? []).filter((x) => x !== f);
+  const unfolded = on && deep ? [...opened, f] : opened;
+  commit({ layout: { ...doc.layout, ...at, folded: on ? now.filter((x) => x !== f) : deep ? now : [...now, f], ...(unfolded.length || doc.layout.unfolded ? { unfolded } : {}) } }, ["layout.json"],
     on ? Object.keys(at).length ? "Unfolded, a little way off: where the box was, the frame would have covered other nodes. Only layout.json changed."
       : "Unfolded: what the frame holds is back where it was. Only layout.json changed."
       : "Folded into one box: wires in end on its left, values out leave on its right. Click ▸ to unfold. Only layout.json changed.");
@@ -2201,7 +2245,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const d = calleeDef(id);
     if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc.code, typedPres(), d).name(d)}`, "goto"));
     const code = view?.code ?? doc.code;
-    if (kind === "frame") rows.push((doc.layout.folded ?? []).includes(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold into one box", "fold", "Hide what it holds; its wires in and out stay"));
+    if (kind === "frame") rows.push(graphFolded().has(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold into one box", "fold", "Hide what it holds; its wires in and out stay"));
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
@@ -2475,7 +2519,7 @@ function graphHooks(info: T.Info) {
     named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
     home: doc.home ?? {},
-    folded: new Set(doc.layout.folded ?? []),
+    folded: graphFolded(),
     fold: toggleFolded,
     groups: doc.layout.groups,
     tree: new Set(doc.layout.tree ?? []),
