@@ -158,10 +158,25 @@ follows them: an insert makes one row, a remove disposes one, a move moves
 one and makes nothing, and an edit inside item i remakes that row only.
 Nothing is matched. A whole `write`, or anything else it can't follow,
 falls back to matching items by equality, as before. Row positions are
-kept by following the edits, so no key is needed for `each`. Not yet: the
-tracked views, so that a row reads its item's fields as places and an edit
-of item i's title runs only what read that title, not the whole row; and
-html.ts's `for each` moving the one DOM node (test/cell-paths.test.ts).
+kept by following the edits, so no key is needed for `each`.
+
+**Built (L99b): tracked views**, in the evaluator. A row of `each` over a
+cell gets its item as a view: the item as it is now in the cell, typed as
+the plain value. Reading a field, or a list's case, through it records that
+place for the reader; reading a record or a list only hands on another view.
+So a watcher in a row waits on the places it read, and an edit at item i's
+`done` runs only what read that `done`. A place read through a view wakes
+for an edit there or around it, never for one deeper in. What the row read
+while it was being made is the row's: an edit there makes the row again, an
+edit anywhere else in the item doesn't. A row's places are kept by the row,
+so when the list only moves it, nothing in it wakes. Views stay inside the
+reactive part: whatever is written to a cell or becomes a formula's value
+is copied out of them first, so a cell never holds a window on another.
+Compiled JS keeps L99a's behaviour (the row is made again) until the
+compiler picks views where a watcher reads (test/cell-paths.test.ts,
+test/outline.test.ts). Not yet: a list read while a row is made (the
+outline's steps, mapped when their item's row is) makes that row again when
+an item is added to it; an `each` of its own for the steps would make one.
 
 ### 3. Owned values updated in place (C56)
 
@@ -242,13 +257,13 @@ src/lang/cells-programs.ts, the outline with plain `Item(key, title, done,
 children)` data at any depth, in one cell, changed only by edits at a path.
 A row's buttons find their item by key when pressed (`place of`, a search
 ended before the edit, since an edit can't run while a Choice is open), so
-an item moved up keeps its buttons. Ticking a step three deep makes one row
+an item moved up keeps its buttons. Ticking a step three deep made one row
 again, the top-level item it is in, and the "3 of 7 done" count runs; adding
 an item makes one row; moving or removing one makes none
-(test/outline.test.ts). Not yet: the tracked views of L99's next step, so
-that ticking one step runs its line only rather than its top-level item's
-whole row (about 70 watchers today, all in that row); and the page in the
-editor's example menu and reactive.html, which is the editor lane's.
+(test/outline.test.ts). With L99b's views, ticking an item at any depth runs
+3 formulas and watchers (its line, the count and the list) where it ran 76,
+and makes no row. Adding a step still makes its top-level row again (see
+L99b). The page is in the editor's example menu and reactive.html (I35).
 
 ## Prior art
 

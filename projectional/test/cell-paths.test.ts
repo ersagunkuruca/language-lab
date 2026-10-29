@@ -117,6 +117,43 @@ test("each follows the edits: an insert makes one row, a move none, a remove dis
   assert.equal(made() - before, 1);
 });
 
+test("tracked views: a row's watchers read places of its item, kept by the row through moves, and a cell never holds a view", () => {
+  // Cons lists, as the evaluator has them, so rows get views (L99).
+  const cons: Lists = {
+    from: (v) => { const xs: Value[] = []; for (let d = v as unknown as { tag: string; fields: Value[] }; d.tag === "cons"; d = d.fields[1] as never) xs.push(d.fields[0]); return xs; },
+    to: (xs) => xs.reduceRight<Value>((tail, x) => ({ tag: "cons", fields: [x, tail] }) as unknown as Value, { tag: "nil", fields: [] } as unknown as Value),
+    views: { cons: "cons", nil: "nil", isList: (v) => typeof v === "object" && ["cons", "nil"].includes((v as unknown as { tag: string }).tag) },
+  };
+  const c = new Cells(same);
+  const todos = c.cell(cons.to(["a", "b", "c"].map((t) => item(t))));
+  const ran: string[] = [], made: Value[] = [];
+  const kept = c.cell("" as unknown as Value);
+  const rows = c.each(todos, (x) => {
+    made.push(x);
+    const d = x as unknown as { fields: Value[] };
+    c.watch(() => { ran.push(`${d.fields[0]} ${d.fields[1]}`); });
+    return x;
+  }, cons);
+  c.watch(() => { c.read(rows); });
+  assert.deepEqual(ran, ["a false", "b false", "c false"]);
+  ran.length = 0;
+  const before = c.rowsMade;
+  // An edit inside an item runs its watcher only: the row isn't made again.
+  c.edit(todos, [{ item: 1 }, { field: 1 }], () => true as unknown as Value, cons);
+  assert.deepEqual(ran, ["b true"]);
+  assert.equal(c.rowsMade, before);
+  ran.length = 0;
+  // A move shifts the rows; their watchers stay asleep, and then read their own item.
+  c.edit(todos, [], (l) => { const xs = listEdits.move(cons.from(l), 1, 0); return xs && cons.to(xs); }, cons, { at: [], kind: "move", from: 1, to: 0 });
+  assert.deepEqual(ran, []);
+  c.edit(todos, [{ item: 0 }, title], () => "B" as unknown as Value, cons);
+  assert.deepEqual(ran, ["B true"], "item 0 is now b's row");
+  // Written into a cell, a view is what it shows then, not a window on todos.
+  c.write(kept, made[0]);
+  c.edit(todos, [{ item: 1 }, title], () => "A" as unknown as Value, cons);
+  assert.equal((c.peek(kept) as unknown as { fields: Value[] }).fields[0], "a");
+});
+
 // ---------------------------------------------------------------- in the language
 
 // A cell of to-dos, edited at paths, each step's whole list and one place

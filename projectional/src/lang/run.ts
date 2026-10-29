@@ -50,6 +50,8 @@ export function fromList(v: Value): Value[] {
   return out;
 }
 const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
+// What each needs to hand its rows tracked views (cells.ts, L99).
+const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
 
 // Float64s stand for reals and floats only approximate them, so two numbers
 // are equal when they agree to the precision floats carry. Otherwise a
@@ -322,7 +324,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [CELL_OPS.each]: (items, f) => one(cells.each(items, (x) => {
       for (const v of (f as Fn)(x)) return v;
       throw new NoValue("each gave no value for an item");
-    }, { from: fromList, to: toList })),
+    }, { ...LISTS, views: LIST_VIEWS })),
     // A formula that gave no value (it ran out of `with fuel`) is a read
     // with no answer; it is computed again at the next read.
     [CELL_OPS.read]: (c) => {

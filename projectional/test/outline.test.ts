@@ -43,18 +43,22 @@ test("the outline draws every item at its depth, and the count reads 2 of 7 done
   assert.deepEqual(p.lines(), ["○ plan the trip", "✓ book the train", "○ find a room", "○ ask Ana", "✓ water the plants", "○ write the report", "○ draft", "2 of 7 done"]);
 });
 
-test("ticking a step three deep runs its item's row and the count, not the other rows", () => {
+test("ticking a step three deep runs its line and the count, and makes no row", () => {
   const p = page();
   const runs = p.cells.runs, rows = p.cells.rowsMade;
   p.button("ask Ana", "tick").fire("click");
   assert.deepEqual(p.lines(), ["○ plan the trip", "✓ book the train", "○ find a room", "✓ ask Ana", "✓ water the plants", "○ write the report", "○ draft", "3 of 7 done"]);
-  assert.equal(p.cells.rowsMade - rows, 1, "one row made again: the top-level item the step is in");
+  assert.equal(p.cells.rowsMade - rows, 0, "the row reads its item through a view (L99): its line runs, nothing is made");
+  // However deep, a tick runs about the same: its line, the count and the list.
   const ran = p.cells.runs - runs;
-  // Ticking a top-level item without steps runs no more than that.
+  assert.ok(ran <= 10, `${ran} formulas and watchers ran`);
   const runs2 = p.cells.runs;
   p.button("water the plants", "tick").fire("click");
-  assert.ok(p.cells.runs - runs2 <= ran, `${p.cells.runs - runs2} against ${ran}`);
+  assert.equal(p.cells.runs - runs2, ran);
   assert.equal(p.lines().at(-1), "2 of 7 done");
+  // The buttons read the item as it is now: ticking again unticks.
+  p.button("ask Ana", "tick").fire("click");
+  assert.equal(p.lines()[3], "○ ask Ana");
 });
 
 test("adding, moving and removing items: one row made, moved or dropped, keys keeping each item's buttons on it", () => {
@@ -82,16 +86,14 @@ test("adding, moving and removing items: one row made, moved or dropped, keys ke
   assert.equal(p.lines().at(-1), "2 of 4 done");
 });
 
-test("a page shows only what was drawn again: one row for a tick, none for a move", () => {
+test("a page shows only what changed: one line for a tick at any depth, nothing for a move", () => {
   const p = page();
   p.button("water the plants", "tick").fire("click");
-  assert.deepEqual(p.ran, ["○ water the plants", "1 of 7 done"], "the list holding the rows ran, but the other rows were kept, not drawn");
+  assert.deepEqual(p.ran, ["○ water the plants", "1 of 7 done"]);
   p.ran.length = 0;
   p.button("write the report", "up").fire("click");
   assert.deepEqual(p.ran, [], "a move draws no row, and the count it ran again is the same");
   p.ran.length = 0;
-  // A step's tick still draws its top-level item again, steps and all,
-  // until rows read their item's fields as places (BACKLOG L99).
   p.button("ask Ana", "tick").fire("click");
-  assert.deepEqual(p.ran, ["○ plan the trip | ✓ book the train | ○ find a room | ✓ ask Ana", "2 of 7 done"]);
+  assert.deepEqual(p.ran, ["✓ ask Ana", "2 of 7 done"]);
 });

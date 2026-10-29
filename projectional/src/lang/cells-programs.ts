@@ -399,8 +399,9 @@ export function outlineProgram() {
   const fresh = (nextKey: Id, title: Id, then: (item: Id) => Id) => k.let("key", read(nextKey), (key) => k.seq(
     k.call(C.write, nextKey, k.call(I.add, key, k.int(1))),
     then(k.call(Item.v.item, key, title, k.false, k.x(NIL)))));
-  // One item and its steps, drawn; each is a plain value, so a row shows
-  // the item it was made for, and is made again when that item changes.
+  // One item and its steps, drawn. The item is plain data; each hands the
+  // row a view of it (cells.ts, L99), so a tick runs the one line that
+  // read that `done`, at any depth.
   const draw = k.def("draw item");
   k.define(draw, k.fn(["outline", "next key", "item"], (outline, nextKey, it) => k.let("key", k.call(F("key"), it), (key) => k.call(ui.column, k.list(
     k.call(ui.row, k.list(
