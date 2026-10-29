@@ -112,9 +112,6 @@ export interface GraphView extends Canvas {
   // Where a node is drawn now, if it is.
   posOf: (id: Id) => Pos | undefined;
   unpickAll: () => void;
-  // Where a folded frame's contents go when it unfolds: moved together to
-  // the nearest place where the frame overlaps nothing (none if it fits).
-  room: (frame: Id) => Record<Id, Pos>;
 }
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
@@ -214,7 +211,6 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     frameOf: (id) => scene.items.get(id)?.frame ?? (scene.frames.has(id) ? scene.frames.get(id)!.parent : undefined),
     posOf: (id) => { const it = scene.items.get(id); return it ? hooks.at[id] ?? { x: it.auto.x, y: it.auto.y } : undefined; },
     expand: (ids) => [...expand(scene, ids)],
-    room: (f) => roomFor(scene, hooks.at, hooks.folded, f),
     tidy: (only) => {
       const moved = unfoldMoves(scene, hooks.at, tidyScene(shown(hooks.at), hooks.at, only ? expand(scene, only) : null));
       const n = Object.keys(moved).length;
@@ -897,51 +893,6 @@ function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>):
     }
   }
   return out;
-}
-
-// A box dragged somewhere and unfolded would spread its contents over
-// whatever is there now. Instead they move together, keeping their shape,
-// to the nearest place where the frame overlaps nothing outside it.
-function roomFor(scene: Scene, at: Record<Id, Pos>, folded: Set<Id> | undefined, f: Id): Record<Id, Pos> {
-  const open = fold(scene, at, new Set([...(folded ?? [])].filter((x) => x !== f)));
-  const { pos, boxes } = placeAll(open, at);
-  const b = boxes.get(f);
-  if (!b) return {};
-  const within = (g: Id | null, of: Id | null) => { for (let p = g; p; p = scene.frames.get(p)?.parent ?? null) if (p === of) return true; return false; };
-  // Everything drawn, with the frame (or item) it sits in.
-  const drawn: [Id | null, Box][] = [];
-  for (const [k, it] of open.items) drawn.push([scene.items.has(k) ? it.frame : k, { ...pos.get(k)!, w: it.w, h: it.h }]);
-  for (const [k, fb] of boxes) drawn.push([k, fb]);
-  const GAP = 18;
-  const meet = (a: Box, o: Box, gap: number) => o.x < a.x + a.w + gap && a.x < o.x + o.w + gap && o.y < a.y + a.h + gap && a.y < o.y + o.h + gap;
-  // The frame clears everything outside it, and each frame around it,
-  // grown to take it, clears what it didn't already touch.
-  const around: [Box, Box[]][] = [];
-  for (let a = scene.frames.get(f)?.parent ?? null; a; a = scene.frames.get(a)?.parent ?? null) {
-    const ab = boxes.get(a);
-    if (ab) around.push([ab, drawn.filter(([g, o]) => !within(g, a) && !within(a, g) && !meet(ab, o, 0)).map(([, o]) => o)]);
-  }
-  const others = drawn.filter(([g]) => !within(g, f) && !within(f, g)).map(([, o]) => o);
-  const clear = (dx: number, dy: number) => {
-    const m = { x: b.x + dx, y: b.y + dy, w: b.w, h: b.h };
-    if (others.some((o) => meet(m, o, GAP))) return false;
-    return around.every(([ab, out]) => {
-      const x = Math.min(ab.x, m.x - GAP), y = Math.min(ab.y, m.y - GAP);
-      const grown = { x, y, w: Math.max(ab.x + ab.w, m.x + m.w + GAP) - x, h: Math.max(ab.y + ab.h, m.y + m.h + GAP) - y };
-      return !out.some((o) => meet(grown, o, 0));
-    });
-  };
-  if (clear(0, 0)) return {};
-  for (let r = 20; r <= 4000; r += 20) {
-    const ring: [number, number][] = [];
-    for (let t = -r; t <= r; t += 20) ring.push([t, -r], [t, r], [-r, t], [r, t]);
-    const fit = ring.filter(([dx, dy]) => clear(dx, dy)).sort((p, q) => Math.hypot(...p) - Math.hypot(...q))[0];
-    if (!fit) continue;
-    const all = placeAll(scene, at).pos, out: Record<Id, Pos> = {};
-    for (const c of expand(scene, [f])) { const q = all.get(c)!; out[c] = { x: Math.round(q.x + fit[0]), y: Math.round(q.y + fit[1]) }; }
-    return out;
-  }
-  return {};
 }
 
 // ---------------------------------------------------------------- drawing
