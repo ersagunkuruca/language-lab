@@ -24,6 +24,8 @@ New items land here until the next triage gives them a lane and a priority.
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I49 | Maybe: resize a node by hand (Ersagun: "I don't know. But this default node sizing is bad") | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
+| I50 | With every definition shown (SWEEP=all, as the nightly does), the values stop with an error on four definitions: Page: Pig `play` and `games won by B` ("random() outside seeded answers from the world, which only runs forward"), Page: Tumble `clear` ("No answer: the known values contradict each other…") and `new board` ("Values stopped: calls something that might not finish"). Either the values should say something calmer for these, or the examples change | test/draws.test.ts (T9) | 2026-10-29 |
+| I51 | Showing values is slow on a few definitions, on the page thread: Countdown numbers `main` ~14 s, Page: Tumble `tap places` and `lane drawn` ~16 s each (52 s in the browser smoke). The page freezes meanwhile | test/draws.test.ts (T9), smoke timings | 2026-10-29 |
 
 ## E: Editor
 
@@ -109,15 +111,14 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L98 | **Design** (projectional/STABLE-REFERENCES.md §1): a cell owns its value and a write is an edit at a path: `write(c, at(3).title, v)`, `insert`, `remove`, `move` in Update; paths are plain data (`at(i)`, `key(k)`, a field); the handler applies the edit in place and wakes only readers of that path, its prefixes and the order or size; a kept old value makes the next edit copy only its path. Keyed collections need unique keys (handler keeps key → position). Evaluator first. **Step 1 done (L98a)**: paths and edits by position, waking by place; next keys (with L99) | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P2 | L | |
 | L99 | **Design** (projectional/STABLE-REFERENCES.md §2): reads tracked by path, so data inside cells stays plain (no `Cell` fields, no colour): a watcher or formula gets a tracked view typed as the plain value. `each`/`for each` become keyed and driven by L98's edits (one row added, moved or disposed, no diff, no O(n²) match). A plain `State` handler for cells nobody watches. Needs L98. **Step 1 done (L99a)**: `each` follows the edits; next the tracked views | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P2 | L | |
 | L101 | **Later goal** (projectional/STABLE-REFERENCES.md §5): multithreading where uniqueness allows it: a column with one holder split and mapped on several threads with no data races (rayon), effect rows deciding what runs side by side as an ECS scheduler does. Joins LANGUAGE-NEEDS-2026-10-24 `together` and data-parallel map | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | L | |
-| T9 | Every example's every definition drawn by the editor's own code in Node on a fake page (test/fakedom.ts or similar), failing on anything thrown or a list shown as cons(…): what the browser smoke's first 6 minutes check, in seconds, per merge | Ersagun 2026-10-29, TESTING.md T8 | P1 | M | thread "Replace the slow browser smoke test"; may need editor/main.ts to start without a window (ask lane E) |
 | T10 | The smoke's 37 editing scenarios (swap and undo, drops, loose parts, let nodes…) as plain tests of the edits, each browser scenario deleted when its test exists | Ersagun 2026-10-29, TESTING.md T8 | P2 | M | lane E, after T9 |
-| T11 | What stays in a browser: one check of about 30 s (the page loads, one program runs, a shader draws, the phone layout) | Ersagun 2026-10-29, TESTING.md T8 | P2 | S | after T10 |
+| T11 | What stays in a browser: one check of about 30 s, nightly (the page loads, one program runs, a shader draws, the phone layout, the graph's clicks, Tab and Tidy); editor/smoke.ts is deleted | Ersagun 2026-10-29, TESTING.md T8 | P2 | S | after T10 |
 
 ## Testing and fast feedback
 
 Thread "Testing strategy and fast feedback", which owns `.github/workflows`
 since 2026-10-23. Plan and measurements: projectional/TESTING.md. T1-T3,
-T4 to T6 and T8 are done; T7 is in lane L; T9 to T11 replace the browser smoke.
+T4 to T6, T8 and T9 are done; T7 is in lane L; T10 and T11 replace the rest of the browser smoke, which is then deleted (Ersagun, 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
@@ -526,6 +527,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| T9 | test/draws.test.ts: the editor's own code (main.ts bundled as the page is) on happy-dom in Node opens every example from the picker, its first definition, main and an eighth of the rest (all with SWEEP=all), shows values, and fails on anything thrown or logged, a stopped run or values, or a list shown as cons(…); also the programs saved by an older editor. ~65 s per change, ~2.5 min for all 240 definitions, against 6 min for 59 in the browser. affected.ts runs it when the editor changes. Found I50, I51 | this PR |
 | T8 | Browser tests (editor, shaders, sound, GPU) leave Check main and the before-push run: `npm run affected` runs them only with `--all` (nightly) or `--browser`. Check main ~10 min to ~1, about 140 billed minutes a day to about 15 | #623 |
 | T6 | Testing rules in WORKFLOW.md ("Tests"): the language's terms, laws over all examples, tests go with the design they pin, under 5 s per file or a sweep, no coverage targets. The tests that mention `cons` read against them: toplevel.test.ts edits a match on a list's cons arm (would change with arrays, as it should); compiler checks that output has no `$cons` (the opposite of a pin) | this PR |
 | T5 | Nightly at 03:00 UTC, when main changed since the `good` tag: `npm run affected -- --all` (every test, every sweep in full, the browser and GPU checks); green moves `good`. Running Pages by hand on `good` puts back the last fully checked site | #267 |

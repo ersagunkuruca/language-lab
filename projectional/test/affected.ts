@@ -64,9 +64,12 @@ const setup = code.some((f) => /(^|\/)(package(-lock)?\.json|tsconfig\.json)$/.t
 const examples = new Set(code.flatMap((f) => f.match(/^projectional\/examples\/([^/]+)\//)?.[1] ?? []));
 
 const tests = sources.filter((f) => /\.test\.(ts|js)$/.test(f));
+// A test that bundles the editor reaches what the editor imports, and its
+// page, though it imports neither.
+const bundles: Record<string, string[]> = { "projectional/test/draws.test.ts": ["projectional/editor/main.ts", "projectional/editor/page.html", "projectional/editor/smoke-saved.json"] };
 const chosen = tests.filter((t) => {
   if (all || setup) return true;
-  const reach = closure([t]);
+  const reach = closure([t, ...(bundles[t] ?? [])]);
   if (code.some((f) => reach.has(f))) return true;
   // Data the tests read at run time: the library and the examples.
   const text = [...reach].map((f) => readFileSync(join(top, f), "utf8")).join("\n");

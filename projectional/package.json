@@ -27,6 +27,7 @@
     "@types/node": "^22.15.0",
     "@webgpu/types": "^0.1.60",
     "esbuild": "0.25.10",
+    "happy-dom": "^20.14.6",
     "playwright-core": "^1.55.0",
     "typescript": "^5.8.3"
   }
