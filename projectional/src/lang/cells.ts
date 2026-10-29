@@ -50,7 +50,14 @@ export interface CellNode {
   // The paths it read in each source with read at (L98), as keys; a source
   // it read whole with read isn't here.
   paths?: Map<CellNode, string[]>;
+  // each's: the edits made to the list it maps since it last ran (L99),
+  // or null once one came that it can't follow (a whole write).
+  edits?: Edit[] | null;
 }
+
+// What an edit did, for each (L99): at a place, a write, or in the list
+// there an insert, a remove or a move.
+export type Edit = { at: Step[]; kind: "write" } | { at: Step[]; kind: "insert" | "remove"; i: number } | { at: Step[]; kind: "move"; from: number; to: number };
 
 // Each value `each` made, with the owner it was made under: a page that
 // draws it again keeps what it drew the first time (html.ts).
@@ -144,6 +151,8 @@ export class Cells {
   private batching = 0;
   // Every formula and watcher run, for showing what work was done.
   runs = 0;
+  // Every row each made, the same (L99).
+  rowsMade = 0;
   onRun: ((node: CellNode) => void) | null = null;
   // How each watcher's update runs, the formulas it checks included: a page
   // gives each one its own step budget (html.ts).
@@ -212,7 +221,7 @@ export class Cells {
     try { return this.read(c); } finally { this.current = saved; }
   }
 
-  write(c: Value, v: Value, at?: Step[]): void {
+  write(c: Value, v: Value, at?: Step[], what?: Edit): void {
     const n = nodeOf(c);
     if (!n) throw new Error("write needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
@@ -224,6 +233,7 @@ export class Cells {
     // inside it and of one around it; the rest read elsewhere (L98).
     const key = at && keyOf(at);
     for (const o of n.observers) {
+      if (o.edits !== undefined) o.edits = what && o.edits ? [...o.edits, what] : null;
       const ps = key === undefined ? undefined : o.paths?.get(n);
       if (!ps || ps.some((p) => p.startsWith(key!) || key!.startsWith(p))) this.mark(o, DIRTY);
     }
@@ -234,12 +244,14 @@ export class Cells {
   // only that path copied, the readers of other places left asleep. The
   // readers of every place inside it wake too, so an insert, remove or move
   // in a list wakes the readers of its items, whose positions it shifts.
-  edit(c: Value, at: Step[], change: (part: Value) => Value | undefined, lists: Lists): void {
+  // `what` says which edit it is, for each; a plain write at the place
+  // when not given.
+  edit(c: Value, at: Step[], change: (part: Value) => Value | undefined, lists: Lists, what: Edit = { at, kind: "write" }): void {
     const n = nodeOf(c);
     if (!n) throw new Error("an edit needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
     const old = n.value as Value, next = changeAt(old, at, change, lists);
-    if (next !== old) this.write(c, next, at);
+    if (next !== old) this.write(c, next, at, what);
   }
 
   // What's at a place in a cell's value, read as a reader of that place
@@ -303,33 +315,65 @@ export class Cells {
   // This is Solid's mapArray, which its <For> is built on. `list` turns the
   // language's lists into arrays and back.
   each(items: Value, f: (item: Value) => Value, list: { from: (v: Value) => Value[]; to: (xs: Value[]) => Value }, label = "each"): Value {
-    let rows: { item: Value; value: Value; root: CellNode }[] = [];
+    type Row = { item: Value; value: Value; root: CellNode };
+    let rows: Row[] = [];
+    const row = (item: Value, made: CellNode[]): Row => {
+      const root: CellNode = { value: undefined, state: CLEAN, compute: null, sources: [], observers: new Set(), watcher: false, owned: [], label: `${label} row`, runs: 0, disposed: false };
+      made.push(root);
+      const [current, owner] = [this.current, this.owner];
+      this.current = null;
+      this.owner = root;
+      let value: Value;
+      try { value = f(item); } finally { this.current = current; this.owner = owner; }
+      if (typeof value === "object" && value !== null) KEPT.set(value, root);
+      this.rowsMade++;
+      return { item, value, root };
+    };
+    // Driven by the edits (L99): when everything since the last run was an
+    // edit of the list itself or of one item, each follows them, one row
+    // made, moved or disposed per edit, and nothing is matched. Otherwise
+    // (the first run, a whole write) items are matched by equality, as
+    // Solid's mapArray does.
+    const follow = (edits: Edit[], xs: Value[], made: CellNode[]): { rows: Row[]; gone: Row[] } | null => {
+      const next = [...rows], gone: Row[] = [];
+      for (const e of edits) {
+        if (e.at.length === 0 && e.kind === "insert") next.splice(Math.min(e.i, next.length), 0, null as unknown as Row);
+        else if (e.at.length === 0 && e.kind === "remove") gone.push(...next.splice(e.i, 1).filter(Boolean));
+        else if (e.at.length === 0 && e.kind === "move") next.splice(e.to, 0, next.splice(e.from, 1)[0]);
+        else if (e.at.length > 0 && "item" in e.at[0]) { const i = e.at[0].item; if (next[i]) gone.push(next[i]); next[i] = null as unknown as Row; }
+        else return null;
+      }
+      if (next.length !== xs.length) return null;
+      return { rows: next.map((r, i) => r ?? row(xs[i], made)), gone };
+    };
     const cell = this.node(() => {
       const old = [...rows], made: CellNode[] = [];
+      const edits = cell.edits;
+      cell.edits = [];
+      let gone: Row[];
       try {
-        const next = list.from(this.read(items)).map((item) => {
-          const i = old.findIndex((r) => this.same(r.item, item));
-          if (i >= 0) return old.splice(i, 1)[0];
-          const root: CellNode = { value: undefined, state: CLEAN, compute: null, sources: [], observers: new Set(), watcher: false, owned: [], label: `${label} row`, runs: 0, disposed: false };
-          made.push(root);
-          const [current, owner] = [this.current, this.owner];
-          this.current = null;
-          this.owner = root;
-          let value: Value;
-          try { value = f(item); } finally { this.current = current; this.owner = owner; }
-          if (typeof value === "object" && value !== null) KEPT.set(value, root);
-          return { item, value, root };
-        });
-        rows = next;
+        const xs = list.from(this.read(items));
+        const followed = edits && edits.length && rows.length ? follow(edits, xs, made) : null;
+        if (followed) { rows = followed.rows; gone = followed.gone; }
+        else {
+          rows = xs.map((item) => {
+            const i = old.findIndex((r) => this.same(r.item, item));
+            return i >= 0 ? old.splice(i, 1)[0] : row(item, made);
+          });
+          gone = old;
+        }
       } catch (e) {
         // Stopped part way (out of steps, waiting): what it made goes, and
         // the rows stay as they were.
         made.forEach((r) => this.dispose(r));
+        rows = old;
+        cell.edits = null;
         throw e;
       }
-      old.forEach((r) => this.dispose(r.root));
+      gone.forEach((r) => this.dispose(r.root));
       return list.to(rows.map((r) => r.value));
     }, undefined, label);
+    cell.edits = null;
     cell.onDispose = () => rows.forEach((r) => this.dispose(r.root));
     return this.wrap(cell);
   }

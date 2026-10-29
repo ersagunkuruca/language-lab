@@ -76,6 +76,47 @@ test("an insert, remove or move in a list wakes the readers of its items, whose 
   assert.deepEqual(((c.peek(state) as unknown as { fields: Value[][] }).fields[0] as unknown as { fields: Value[] }[]).map((x) => x.fields[0]), ["b", "z"]);
 });
 
+// ---------------------------------------------------------------- each, driven by the edits (L99)
+
+test("each follows the edits: an insert makes one row, a move none, a remove disposes one, an item's edit remakes only its row", () => {
+  const c = new Cells(same);
+  const n = 1000;
+  const todos = c.cell(Array.from({ length: n }, (_, i) => item(`task ${i}`)) as unknown as Value);
+  // Each row is a cell made under the item's owner, so a disposed row shows.
+  const shown = c.each(todos, (x) => (x as unknown as { fields: string[] }).fields[0] as unknown as Value, arrays);
+  const titles = () => c.read(shown) as unknown as string[];
+  assert.equal(titles().length, n);
+  const made = () => c.rowsMade;
+  let before = made();
+  c.edit(todos, [], (l) => listEdits.insert(l as unknown as Value[], 0, item("first")) as unknown as Value, arrays, { at: [], kind: "insert", i: 0 });
+  assert.equal(titles()[0], "first");
+  assert.equal(made() - before, 1, "one row for the new item, none matched");
+  before = made();
+  c.edit(todos, [], (l) => listEdits.move(l as unknown as Value[], 0, 500) as unknown as Value, arrays, { at: [], kind: "move", from: 0, to: 500 });
+  assert.equal(titles()[500], "first");
+  assert.equal(made() - before, 0, "a move makes nothing");
+  c.edit(todos, [{ item: 3 }, title], () => "renamed" as unknown as Value, arrays);
+  assert.equal(titles()[3], "renamed");
+  assert.equal(made() - before, 1, "an item's edit remakes its row only");
+  before = made();
+  c.edit(todos, [], (l) => listEdits.remove(l as unknown as Value[], 500) as unknown as Value, arrays, { at: [], kind: "remove", i: 500 });
+  assert.equal(titles().length, n);
+  assert.ok(!titles().includes("first"));
+  assert.equal(made() - before, 0);
+  // Several edits before anyone reads: followed in order.
+  c.batch(() => {
+    c.edit(todos, [], (l) => listEdits.insert(l as unknown as Value[], 2, item("a")) as unknown as Value, arrays, { at: [], kind: "insert", i: 2 });
+    c.edit(todos, [], (l) => listEdits.insert(l as unknown as Value[], 0, item("b")) as unknown as Value, arrays, { at: [], kind: "insert", i: 0 });
+  });
+  assert.deepEqual(titles().slice(0, 4), ["b", "task 0", "task 1", "a"]);
+  assert.equal(made() - before, 2);
+  // A whole write is matched by equality, as before: the items that stay keep their rows.
+  before = made();
+  c.write(todos, [item("z"), ...(c.peek(todos) as unknown as Value[])] as unknown as Value);
+  assert.equal(titles()[0], "z");
+  assert.equal(made() - before, 1);
+});
+
 // ---------------------------------------------------------------- in the language
 
 // A cell of to-dos, edited at paths, each step's whole list and one place
@@ -89,18 +130,18 @@ function program() {
   const at = (i: number) => k.call(CELL_OPS.itemPath, whole(), k.int(i));
   const titleAt = (i: number) => k.call(CELL_OPS.thenPath, at(i), k.call(CELL_OPS.path, k.fn(["t"], (t) => k.call(titleOf, t))));
   const demo = k.def("demo");
-  k.define(demo, k.fn([], () => k.let("todos", k.call(CELL_OPS.cell, k.list(mk("milk"), mk("bread"))), (todos) => {
+  k.define(demo, k.fn([], () => k.let("todos", k.call(CELL_OPS.cell, k.list(mk("milk"), mk("bread"))), (todos) => k.let("titles", k.call(CELL_OPS.each, todos, k.fn(["t"], (t) => k.call(titleOf, t))), (titles) => {
     const show = () => k.call(SHOW_ANY, k.call(CELL_OPS.read, todos));
     const one = (p: Id) => k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(CELL_OPS.readAt, todos, p))));
-    const lines: Id[] = [];
+    const lines: Id[] = [k.call(SHOW_ANY, k.call(CELL_OPS.read, titles))];
     lines.push(k.seq(k.call(CELL_OPS.writeAt, todos, titleAt(1), k.lit("rye")), show()));
     lines.push(k.seq(k.call(CELL_OPS.insertAt, todos, whole(), k.int(0), mk("eggs")), show()));
     lines.push(k.seq(k.call(CELL_OPS.writeAt, todos, k.call(CELL_OPS.thenPath, at(2), k.call(CELL_OPS.path, k.fn(["t"], (t) => k.call(doneOf, t)))), k.true), show()));
     lines.push(k.seq(k.call(CELL_OPS.moveAt, todos, whole(), k.int(2), k.int(0)), show()));
     lines.push(k.seq(k.call(CELL_OPS.removeAt, todos, whole(), k.int(1)), show()));
     lines.push(k.seq(k.call(CELL_OPS.writeAt, todos, titleAt(9), k.lit("nowhere")), show()));
-    return k.list(...lines, one(titleAt(0)), one(titleAt(9)));
-  })));
+    return k.list(...lines, one(titleAt(0)), one(titleAt(9)), k.call(SHOW_ANY, k.call(CELL_OPS.read, titles)));
+  }))));
   // path wants a place written in place, not any function.
   const bad = k.def("bad");
   k.define(bad, k.call(CELL_OPS.path, k.fn(["t"], (t) => k.call(S.concat, t, k.lit("!")))));
@@ -109,6 +150,7 @@ function program() {
 }
 
 const EXPECTED = [
+  '["milk", "bread"]',
   '[item("milk", false), item("rye", false)]',
   '[item("eggs", false), item("milk", false), item("rye", false)]',
   '[item("eggs", false), item("milk", false), item("rye", true)]',
@@ -117,6 +159,7 @@ const EXPECTED = [
   '[item("rye", true), item("milk", false)]',
   '["rye"]',
   "[]",
+  '["rye", "milk"]',
 ];
 
 test("paths and edits type-check, path refuses a function that isn't a place, and the evaluator applies the edits", () => {

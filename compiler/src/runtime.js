@@ -497,9 +497,9 @@ export const $path = {
   then: (p, q) => pathValue([...stepsOf(p), ...stepsOf(q)]),
   of: (steps) => pathValue(steps),
   write: (c, p, v) => ($cells().edit(c, stepsOf(p), () => v, $listArrays), $unit),
-  insert: (c, p, i, v) => ($cells().edit(c, stepsOf(p), (l) => $toList(listEdits.insert($fromList(l), Number(i), v)), $listArrays), $unit),
-  remove: (c, p, i) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.remove($fromList(l), Number(i)); return xs && $toList(xs); }, $listArrays), $unit),
-  move: (c, p, a, b) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.move($fromList(l), Number(a), Number(b)); return xs && $toList(xs); }, $listArrays), $unit),
+  insert: (c, p, i, v) => ($cells().edit(c, stepsOf(p), (l) => $toList(listEdits.insert($fromList(l), Number(i), v)), $listArrays, { at: stepsOf(p), kind: 'insert', i: Number(i) }), $unit),
+  remove: (c, p, i) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.remove($fromList(l), Number(i)); return xs && $toList(xs); }, $listArrays, { at: stepsOf(p), kind: 'remove', i: Number(i) }), $unit),
+  move: (c, p, a, b) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.move($fromList(l), Number(a), Number(b)); return xs && $toList(xs); }, $listArrays, { at: stepsOf(p), kind: 'move', from: Number(a), to: Number(b) }), $unit),
 };
 
 // optional: the first answer as some(answer), or none.
