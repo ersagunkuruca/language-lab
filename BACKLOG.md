@@ -23,7 +23,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I49 | Maybe: resize a node by hand (Ersagun: "I don't know. But this default node sizing is bad") | Ersagun | 2026-10-29 |
-| I50 | A function's frame repeats its parameters in its title, (a, b, c, …) =>, though its dots name them; and folded boxes are still a bit wide | Ersagun | 2026-10-29 |
 | I51 | An unfolded frame is drawn under everything else: the selected item and the frames around it should be drawn on top | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 
@@ -145,6 +144,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
 | I48 | A case that takes a value apart reads lane(…) = past 24 characters (its fields stay on the frame that gets them); long pattern rows are clipped too | #628 |
 | I47 | A text node in the graph is clipped at 18 characters (the blocks keep 32); the whole text is on hover | #627 |
 | I46 | A folded box lists what it holds in one short line (names clipped at 16, the line at about 34), so it stays narrow | #626 |
