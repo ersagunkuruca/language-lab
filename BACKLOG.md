@@ -23,7 +23,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
-| I44 | The editor embeds in an iframe to teach with code snippets: (a) `?embed&program=…&def=…`, one definition's blocks and Run; (b) `&readonly` and an Open in the editor link; (c) `&code=…` for a snippet of its own; (d) a tutorial section built from embeds | Ersagun 2026-10-28 (plan approved: "Looks good") | 2026-10-29 |
 
 ## E: Editor
 
@@ -140,6 +139,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I44 | The editor embeds in an iframe: ?embed&program=…&def=… (#620), &readonly and Open in the editor (#621), &code= and Copy embed link (#622), and the tutorial's Loops are folds runs insert and sort embedded | #624 |
 | I43 | Every framed part (function, action, case) whose body is more than 3 deep or 3 wide starts folded in the graph; opened, it stays open (#616) | #619 |
 | I38 | Page: Tumble in the editor's example menu, and apps/tumble.html built beside the other apps | #618 |
 | M2 | A map or set in a field of the program's own type takes the tree in lab run, lab compile (#592) and the editor's Run | #617 |

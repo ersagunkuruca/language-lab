@@ -38,7 +38,7 @@ const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[
 // Links in the docs are relative to projectional/; the pages are at the root.
 const docPage = (md: string, out: string, title: string) => {
   const body = markdown(readFileSync(here + "../" + md, "utf8"))
-    .replace(/(src|href)="(?![a-z]+:|#|\/)/g, '$1="projectional/');
+    .replace(/(src|href)="(?![a-z]+:|#|\/|index\.html)/g, '$1="projectional/');
   writeFileSync(site + out, `<!doctype html>
 <html lang="en">
 <head>
@@ -65,6 +65,7 @@ th { color: var(--muted); font-weight: 600; }
 figure { margin: 1.2em 0; }
 img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
 figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
+figure.embed iframe { width: 100%; height: 560px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 </style>
 </head>
 <body>
