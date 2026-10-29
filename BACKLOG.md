@@ -55,6 +55,7 @@ Thread "Bigger programs and compiler gaps". Current step: the items below in ord
 | C58 | **Design** (projectional/STABLE-REFERENCES.md §4): keyed collections stored as a grow-only array with a free list; a key resolves to slot + generation so a reused slot never answers an old key (ECS generational indices) | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | M | |
 | C59 | **Design** (projectional/STABLE-REFERENCES.md §4): flat inline layout for data built once and read (nested records without pointers, doubling as a file format; FlatBuffers, Goose) | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | M | |
 | C60 | **Later goal** (projectional/STABLE-REFERENCES.md §5): cache friendliness: a list of records stored as columns (struct of arrays) when its loops read few fields; WASM and C fully, JS via typed arrays | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | L | |
+| C61 | **Later goal** (projectional/STABLE-REFERENCES.md §6): where code runs chosen by cost, never written: pure rows without Choice to Web Workers or threads, the scalar profile to the GPU (WebGPU compute, as compiler/gpu.ts already does for tests), the rest on the main thread; the chooser weighs work against moving data (C59, C60). Extends L96 ways-by-cost from one operation to a map or fold. Prior art: Unity Burst, Futhark, Accelerate, Halide schedules, HVM/Bend. First step: read Bend 2 and write the design note | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | L | |
 
 ## L: Language and library
 
