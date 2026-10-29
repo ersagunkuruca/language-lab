@@ -168,6 +168,8 @@ values inside cells. The compiler decides; a silent copy is slower, never
 wrong. Reference counts at run time where the compiler can't tell
 (Perceus) are the fallback.
 
+The design note is compiler/IN-PLACE.md (C62, C63).
+
 ### 4. Regions, references as positions, flat layout (C57-C59)
 
 Three ideas from Goose (Wouter van Oortmerssen, 2026), and from ECS engines
