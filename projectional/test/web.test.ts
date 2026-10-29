@@ -136,7 +136,9 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   for (const [, js] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) runInContext(js, context);
   const root = body.kids[0] as FakeEl;
   const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
-  const bars = () => [...root.html().matchAll(/px"><\/span>(\d+)/g)].map((m) => Number(m[1]));
+  // each row: the total, the green bar, the red tick, then the count
+  const bars = () => [...root.html().matchAll(/px"><\/span><\/span><span>(\d+)/g)].map((m) => Number(m[1]));
+  const widths = () => [...root.html().matchAll(/background: #4a7; width: ([\d.]+)px/g)].map((m) => Number(m[1]));
   assert.equal(root.find("status").textContent, "Rolls: 0"); // no "last" before any roll
   root.find("hundred").fire("click");
   const once = bars();
@@ -149,6 +151,19 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   assert.equal(root.find("status").textContent, "Rolls: 201; the last 0 s ago");
   frame(1_002_500);
   assert.equal(root.find("status").textContent, "Rolls: 201; the last 2 s ago");
+  // Throw 100 lands one roll every 20 ms, and the bars follow frame by frame
+  root.find("throw").fire("click");
+  assert.equal(root.find("status").textContent, "Rolls: 201; the last 0 s ago");
+  frame(1_003_500);
+  assert.equal(root.find("status").textContent, "Rolls: 251; the last 1 s ago");
+  assert.equal(bars().reduce((a, b) => a + b, 0), 251);
+  frame(1_010_000);
+  assert.equal(root.find("status").textContent, "Rolls: 301; the last 7 s ago");
+  // a roll is 3 px until the longest bar would pass 300 px, then all shrink together
+  for (let i = 0; i < 10; i++) root.find("hundred").fire("click");
+  const w = widths(), n = bars();
+  assert.ok(Math.max(...w) <= 300 && Math.max(...w) > 200, `widths ${w}`);
+  w.forEach((x, i) => n[i] && assert.ok(Math.abs(x / n[i] - w[5] / n[5]) < 1e-6, "one scale for every bar"));
 });
 
 test("what a page's views and handlers may do is named once, and the runtime handles all of it", () => {

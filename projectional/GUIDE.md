@@ -19,8 +19,8 @@ in the editor, in a browser, before it was written down.*
 
 Open the editor and pick **Page: two dice** in the **Programs** list on
 the left. Under the program's name are its **definitions**: `die`,
-`two dice`, `a hundred rolls`, `times rolled`, `bar`, `bars`, `credits`,
-`main`. A definition is a named piece of the program, usually a function.
+`two dice`, `a hundred rolls`, `times rolled`, `the first`, `most`, `bar`,
+`bars`, `landed`, `credits`, `main`. A definition is a named piece of the program, usually a function.
 
 ![The two dice program open on main](guide/dice-main.png)
 
@@ -43,7 +43,10 @@ views draw that tree. That's why you can't make a typo or a syntax error:
 you never type the program, you pick its parts.
 
 **Try it:** click **Roll** a few times on the page in the Run pane. Then
-click **Roll 100 with seed 7** twice and watch the bars.
+click **Throw 100** a few times and watch the bars: the green ones grow
+toward the red ticks, which are what fair dice give on average, and
+everything shrinks to fit once the longest bar reaches the edge. Then
+click **Roll 100 with seed 7** twice: the same hundred both times.
 
 ## 2. Reading one definition, two ways
 
@@ -181,9 +184,11 @@ loaded die() =
 Press **Run loaded die**: always 6. Its type says `() -> Float64`, no
 Random, because the handler answered every question.
 
-**The clock** is the effect `Time`, with `now()`. In `main`, the status
-line reads `now()`, so the page reads the clock and that line runs again
-every frame: it counts the seconds since the last roll.
+**The clock** is the effect `Time`, with `now()`. `landed`
+reads `now()` to decide how many of a hundred throws have landed so far,
+and in `main` the status line and the bars show `landed`, so they run again every
+frame: the throws land one every 20 ms and the status line counts the
+seconds since the last roll.
 
 **This is what went wrong with die() as a seed** inside `a hundred rolls`.
 In `seeded(die(), …)`, the `die()` is rolled *before* `seeded` starts, so
