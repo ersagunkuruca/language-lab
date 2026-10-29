@@ -224,6 +224,23 @@ every example's every definition drawn in Node on a fake page, the
 editing scenarios as plain tests of the edits, and a browser check of
 about 30 s for what only a browser can show.
 
+### T9. Every definition drawn in Node
+
+`test/draws.test.ts` bundles editor/main.ts as the page is built and runs
+it on happy-dom's document in Node (no layout, no canvas, a Run worker that
+never answers). It opens each example from the picker, a fresh page each,
+and shows the first definition, `main` and an eighth of the rest, with
+their values; `SWEEP=all` shows all 240. It fails on anything the page
+throws or logs, a run or values that stop with an error, or a list shown
+as `cons(…)` in the blocks, and does the same for programs saved by an
+older editor. Here: about 65 s per change and 2.5 min for every
+definition, where the browser took 6 min for 59. A view made to throw on
+Eight queens' `safe` fails it. `affected.ts` runs it when anything the
+editor imports, or its page, changes.
+
+Left to the browser for now (T10, T11): the graph's clicks by position,
+Tab and Shift+F10, Tidy, folding, and the 37 editing scenarios.
+
 ### T6. Rules against the paradigm pin (WORKFLOW.md)
 
 - **Tests speak the language's terms.** They state what a program does
@@ -323,6 +340,7 @@ examples. They are a language design item, for after T1 to T6.
 | T6 | Testing rules in WORKFLOW.md; review the three `cons` tests | process | small |
 | T7 | Accepted answers, laws, hash-cached checks in the editor | L, then E | large |
 | T8 | Browser tests nightly only; editor checks without a browser | process, then E | medium |
+| T9 | Every definition drawn by the editor in Node (happy-dom) | process | medium |
 
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting
