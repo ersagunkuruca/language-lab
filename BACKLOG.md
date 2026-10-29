@@ -24,7 +24,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I49 | Resize a node by hand: not now, but likely needed at some point (Ersagun 2026-10-29) | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
-| I50 | With every definition shown (SWEEP=all, as the nightly does), the values stop with an error on four definitions: Page: Pig `play` and `games won by B` ("random() outside seeded answers from the world, which only runs forward"), Page: Tumble `clear` and `settle` (QA10 L2) ("No answer: the known values contradict each other…") and `new board` ("Values stopped: calls something that might not finish"). Either the values should say something calmer for these, or the examples change | test/draws.test.ts (T9) | 2026-10-29 |
 | I65 | Editor for several named results (RESULTS.md step 3, L95c): a definition with results shows one node with an output wire per result in the graph (an unconnected wire is `_`), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
 | I56 | 8 graphs don't open in Tidy's layout (#625): the first Tidy everything moves Lockstep `step` 28 nodes, Tumble `show next` 102, `swap tapped` 103, `scene drawn` 31, `status` 34, `neighbours` 15, to-do `draw item` 121, Countdown `main` 2 | QA10 M1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
@@ -151,12 +150,13 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I50 | Run says what the editor can't do as a hint (backwards through Random or a cell, what might not finish) and a forward run the search misses as a warning, not as errors: Pig play / games won by B, Tumble clear / settle / new board | #648 |
+| I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
 | I55 | Backwards answers print an Int (a bigint since #446) as a number, not <function>; Lockstep simulate reads pair(fixed(…), fixed(…)) | #647 |
 | I54 | A program that declares no unit skips solving for units (homogeneous, so nothing to show); Tumble's tap places and lane drawn open in about 0.25 s, not 9 s | #645 |
 | I53 | A folded frame's contents are laid out as they'd be open (folded frames inside shut), so Pig's handler opens compact; Tidy what's inside lays a frame out afresh and keeps its corner; step dots move on a plain drag | #633 |
 | I52 | A frame unfolds where its box was (drawn over its neighbours while selected) and folds back there; nothing is moved to make room | #632 |
 | I51 | The selected item and the frames around it are drawn over the rest; a frame you unfold is selected, so it covers its neighbours | #631 |
-| I50 | A function's frame reads (…) => past 24 characters (its dots name the parameters); folded boxes list at most about 24 characters | #629 |
 | I48 | A case that takes a value apart reads lane(…) = past 24 characters (its fields stay on the frame that gets them); long pattern rows are clipped too | #628 |
 | I47 | A text node in the graph is clipped at 18 characters (the blocks keep 32); the whole text is on hover | #627 |
 | I46 | A folded box lists what it holds in one short line (names clipped at 16, the line at about 34), so it stays narrow | #626 |

@@ -1096,6 +1096,10 @@ function stopSearch() {
 }
 
 const NUMERIC = /^-?\d+(\.\d+)?(e[-+]?\d+)?$/;
+// What the editor can't do here, not what's wrong with the program: run
+// backwards through the world or a cell, or run what might not finish
+// (I50). Said as a hint, not an error.
+const LIMIT = /only runs forward|might not finish/;
 function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const ports = portsOfDef(ui.def);
@@ -1128,12 +1132,16 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }
   if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
-  else if (r.error) box.append(h("p", { class: "status-line bad" }, r.error));
+  else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `It doesn't run backwards: ${r.error}.`) : h("p", { class: "status-line bad" }, r.error));
   else if (r.cut) box.append(h("p", { class: "status-line" }, r.answers.length ? "Still looking for other answers… " : "Looking for an answer… ",
     h("button", { class: "btn", type: "button", "data-act": "stop-search", title: "Keep what it has found so far" }, "Stop")));
   else if (r.stopped) box.append(h("p", { class: "status-line" }, r.answers.length ? "Stopped looking for other answers: Run again to look further." : "Stopped looking before it found an answer: give it more known ports."));
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
-  else if (!r.answers.length) box.append(h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
+  // Every input given and none found: the search missed the one answer a
+  // run forwards gives (relate's limits, I39), not a contradiction.
+  else if (!r.answers.length) box.append(ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out")
+    ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
+    : h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
   if (r.answers.length > 1 || r.more) {
     const wanted = ports.filter((p) => !known.includes(p));
     const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : namer.name(p)} ${nice(a.values[p])}`).join(", "));
@@ -2681,7 +2689,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // Nor is a run on values you didn't give: they're only a starting point.
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
-    : !doc.examples?.[ui.def] ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
+    : !doc.examples?.[ui.def] || LIMIT.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
