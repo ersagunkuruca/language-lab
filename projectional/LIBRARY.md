@@ -169,6 +169,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **empty map** : `Map a b`. The map with no entries.
 - **as map** : `(List (Pair a b)) -> Map a b`. The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).
 - **put** : `(Map a b, a, b) -> Map a b`. The map with key holding value, in place of what it held.
+- **update at** : `(Map a b, a, b, (b) -[e]-> b) -[e]-> Map a b`. The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.
 - **value at** : `(Map a b, a) -[Choice]-> b`. What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.
 - **remove key** : `(Map a b, a) -> Map a b`. The map without key.
 - **has key** : `(Map a b, a) -> Bool`. Whether the map holds key.
