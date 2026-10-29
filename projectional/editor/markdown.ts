@@ -1,7 +1,8 @@
 // Just enough Markdown to turn TUTORIAL.md into a page next to the editor:
 // headings (with GitHub's anchor ids), paragraphs, lists, fenced code,
 // tables, images, links, rules, and inline code, bold and italics.
-// Relative links to other .md files point at the repository on GitHub.
+// Relative links to other .md files point at the repository on GitHub,
+// except docs that have their own page next to the editor (PAGES).
 // `?[caption](index.html?embed&…)` on a line of its own is the editor
 // embedded (editor/main.ts, ?embed): a live snippet in the page.
 
@@ -11,7 +12,13 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export const slug = (s: string) => s.toLowerCase().replace(/<[^>]+>|&[a-z]+;/g, "").replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/ /g, "-");
 
-const href = (u: string) => (/^[a-z]+:|^#/.test(u) ? u : /\.md(#.*)?$/.test(u) ? new URL(u, REPO).href : u);
+const PAGES: Record<string, string> = { "TUTORIAL.md": "tutorial.html", "GUIDE.md": "guide.html" };
+
+const href = (u: string) => {
+  if (/^[a-z]+:|^#/.test(u) || !/\.md(#.*)?$/.test(u)) return u;
+  const [file, hash] = u.split("#");
+  return PAGES[file] ? PAGES[file] + (hash ? "#" + hash : "") : new URL(u, REPO).href;
+};
 
 function inline(s: string): string {
   const codes: string[] = [];
