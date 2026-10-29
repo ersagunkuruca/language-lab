@@ -9,7 +9,7 @@
     "bench": "node bench.ts",
     "gpu": "node gpu.ts",
     "wasi": "node wasi.ts",
-    "gaps": "node gaps/bench.ts && node gaps/bench-countdown.ts && node gaps/bench-chapters.ts && node gaps/bench-ledger.ts"
+    "gaps": "node gaps/bench.ts && node gaps/bench-countdown.ts && node gaps/bench-chapters.ts && node gaps/bench-ledger.ts && node gaps/bench-routes.ts"
   },
   "engines": {
     "node": ">=22.18"

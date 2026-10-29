@@ -1045,3 +1045,280 @@ pedal:
 No single next stage buys 10%, so the stages stop here. Done again, (b)
 to (d) are one stage. Within 2× would also need the solver's 12-digit
 rounding (`$clean`, about 6% of the time) to be cheaper or not needed.
+
+## Round 5: routes (2026-10-29)
+
+`projectional/examples/routes` reads a file of roads between towns and
+answers questions about them. It prints how many towns, roads and parts
+there are, the length of the cheapest network that joins every town that
+can be joined (Kruskal's method, 1956, over a union-find forest joined by
+size, Galler and Fischer, 1964), and the town farthest from the first one.
+Then, for each `trip` line, it prints the shortest route (Dijkstra's
+method, 1959), and for each `near` line, the towns within so many km.
+
+```
+$ node projectional/cli/lab.ts run --as-defined projectional/examples/routes projectional/examples/routes/roads.txt
+7 towns, 8 roads, 2 parts
+cheapest network: 570 km in 5 roads
+farthest from Arden: Eskar, 460 km
+Arden → Brisk → Dunmore → Eskar: 460 km
+Eskar → Dunmore → Brisk → Arden: 460 km
+Arden → Gant: no route
+within 250 km of Brisk: Arden 120, Colm 150, Dunmore 200
+Gant → Fallow: 70 km
+```
+
+It has 39 definitions, against ledger's 32: 6 types and 33 functions. It
+is the first program of the rounds that is built on std's `Map` and `Set`
+(DATA-STRUCTURES.md). Before it, no example used them:
+
+- the graph is a `Map Text (List (Pair Text Int))`;
+- Dijkstra's frontier is a `Set (Pair Int Text)`, nearest first;
+- the best way to each town is a `Map Text Best`;
+- the union-find forest is two maps in a record.
+
+Three recursions the checker can't see end (`settle`, `way back`, `root`)
+give it `Diverge`. It sorts records with the prelude's `sort` through
+`compare`. `Abort` is raised in three places and handled once.
+
+It was written with the TypeScript DSL (`Lang`) by a script that isn't
+kept, as the pedal was, so this round says nothing about what the editor
+makes hard. It can't be opened and run in the editor yet anyway (M2).
+
+Files:
+- `compiler/gaps/routes.ideal.js`: the hand-written ideal, with the gaps
+  marked. Maps are JS Maps changed in place, and the frontier is a
+  binary heap whose stale pairs are skipped when popped. The pairs that
+  count come out in the same order as from the program's set.
+- `compiler/gaps/routes.ts`: five ways in one process (the evaluator and
+  the compiled code, each on maps and sets as defined and as trees, and
+  the ideal), and a generator of made-up countries.
+- `compiler/test/routes.test.ts`: all five agree on output and exit code,
+  failures included, apart from the two open gaps below (marked todo).
+- `compiler/gaps/bench-routes.ts`: the first table below.
+- `compiler/gaps/bench-routes-edits.ts`: the compiled program edited by
+  hand, one gap at a time, for the second table.
+
+### Results
+
+```
+country               evaluator  evaluator,   compiled  compiled,     ideal  compiled/  trees/
+                                     trees                  trees              ideal    ideal
+100 towns, 6 KB         2229 ms    1815 ms      101 ms     20 ms    1.35 ms      75×    15.0×
+300 towns, 18 KB       21910 ms    5806 ms      549 ms     75 ms    3.81 ms     144×    19.6×
+1000 towns, 61 KB     (skipped)  (skipped)     8049 ms    422 ms      12 ms     683×    35.8×
+3000 towns, 183 KB    (skipped)  (skipped)    93313 ms   2710 ms      60 ms    2190×    45.3×
+```
+
+Each country has its towns, twice as many roads again, and 10 trips and
+nears. Each trip or near is a Dijkstra search from its town, and so is
+the summary. "Trees" means the weight-balanced trees the chooser picks
+for Map and Set. The 93 s is from one run; the bench now skips it.
+
+This is the widest gap of the five rounds, and the only one that grows
+with the input: 15× to 45× with the trees, and worse than quadratic as
+defined. The first two findings are correctness gaps:
+
+- the compiled code gets one input wrong (M1);
+- `lab run` and the editor refuse the program (M2).
+
+What each fix would buy was measured by editing the compiled program by
+hand (best of 7, against the same ideal time per size):
+
+```
+edit, each on top of the last        1000 towns   3000 towns
+as compiled, on trees                   22.4×        70.0×
+M3 the smallest item, not items of      15.2×        33.8×
+M4 compare at its type                   7.2×        15.5×
+M5 no depth counting in the trees        7.3×        13.9×
+M7 value at as a loop, one lookup        6.9×        14.8×
+```
+
+Timings on this machine move by about 20% from run to run, so the last
+two rows are within the noise. M3 and M4 together take the program from
+70× to about 15× at 3000 towns. Most of what's left is M6, the trees
+themselves.
+
+### The gaps, ranked
+
+**M1. `map` or `keep` straight over `split` compiles to the list unchanged
+(correctness: wrong output).** `words(line)` is `keep(split(line, " "),
+w => not(w = ""))`. The compiled `words` binds the test and never calls
+it:
+
+```js
+function words(line6) {
+  return (() => {
+    const test = ((w) => !(w === ""));
+    const out$39 = [];
+    for (const x$40 of $text.split(line6, " ")) out$39.push(x$40);
+    return $toList(out$39);
+  })();
+}
+```
+
+So `road E  F 1` (two spaces) is a bad line compiled, and a road from E
+to F in the evaluator. `map(split(t, " "), f)` as a definition's answer
+gives the words without `f` in the same way. This was checked on a
+two-line program: `"a  b"` gives `a,b` against `a,,b` for keep, and
+`a!,!,b!` against `a,,b` for map. The cause is in `fused`
+(compile.ts). When the outermost call is itself a step (`stepOf` says
+so for `map` and `keep`), `sinkOf` makes it a sink that pushes each item.
+That sink's own step is never applied. A chain of steps under it hides
+this, because the chain's steps are applied. The empty chain over an
+array source, allowed since G21 part 1 (0bed298), is where nothing
+applies it. Inside a step chain, or with `join all` as the sink, the
+answer is right.
+
+*Fix:* in `sinkOf`, apply the step's `emit` to each item before pushing,
+or don't take a step definition as the sink when the chain is empty. A
+test in compile.test.ts with `map` and `keep` straight over `split` and
+`characters`. `routes.test.ts` has a todo that turns green with the fix.
+
+**M2. A map or set in a field of the program's own type can't take the
+tree (correctness: refused).** `lab run` without `--as-defined` says
+"routes doesn't check on Map as weight-balanced tree, …: search needs
+Set (Pair Int Text) here, got Set tree (Pair Int Text); …". The
+chooser picks the trees, and `represent` rewrites the definitions it is
+handed. lab.ts's `represented` and the editor's runWorker.ts hand it
+only the definitions that aren't types, so `Search`, `Forest` and the
+record of `Best`s keep fields typed `Map` and `Set`, while the code that
+fills them now makes trees. The editor's Run fails the same way, so the
+program can't run there at all. Handing `withLibraryRepresentations`
+every definition, the types too, makes it check and run, and print what
+the definition prints. The tree columns above are measured that way.
+`asMeanings` already turns a case's fields into meanings, so equal, show
+and compare on such a record should be right. That needs a test, since
+no example compares one.
+
+*Fix:* pass the program's types to the rewrite in lab.ts and
+runWorker.ts, with a test that a record holding a map is equal, shown
+and compared by meaning. That makes it a Language-lane change with an
+editor line, so it needs the editor lane's go-ahead. `routes.test.ts`
+has a todo for it.
+
+**M3. Taking the head of `items of` walks the whole set (perf: n per
+step, so n² per search).** `settle` is `match items of(frontier) | nil →
+… | cons(next, later) → …`, and `later` is never used. Compiled, each
+step makes the whole set into a list (`set_tree_onto`) to read its first
+item. The trees module already has `set tree smallest`, which walks down
+the left. *Fix:* a law the compiler reads: a match on `items of(s)`
+(also `keys of`, `entries of`) whose cons arm doesn't use the rest is
+the representation's smallest, or nil when it's empty. The lists those
+jobs give are walked once, front to back, so a lazy `items of` would do
+it too (ROADMAP 5's folds as representations). In the library, a
+`smallest item` (Choice) with a tree job would let the program say what
+it means (language gap LG1 below). *Measured:* 70× to 34× at 3000 towns,
+22× to 15× at 1000.
+
+**M4. `compare` is the evaluator's, at run time (perf).** Every step in
+a tree compares keys through `$compare`, which is `compareValues` in
+run.ts. Each call does four things:
+
+- allocates a stack of pairs;
+- tests each text against a regular expression for characters outside
+  the basic plane;
+- looks up each case's place in a Map;
+- returns an Order record, which is then switched on by its tag string.
+
+Keys here are a Text, or a Pair of Int and Text. *Fix:* compile `compare`
+at its type, as G0 did for `equal`:
+
+- Text: `<` and `===`, with code points only when a text has a
+  character outside the basic plane;
+- Int: numbers, with a bigint path;
+- a record: field by field, in line;
+- the answer: -1, 0 or 1, switched on as a number.
+
+The tree jobs in the trees module call `compare` generically, so this
+needs them compiled at the key type: copies per type, which L38's generic
+code already makes. *Measured:* 34× to 15.5× at 3000 towns, 15× to 7×
+at 1000.
+
+**M5. The trees count their depth (perf, small).** Every tree job that
+recurses (`tree put`, `set tree add`, …) increments and decrements
+`$rec.d` and checks it against 1000, for C21's switch to the heap. A
+weight-balanced tree is never more than about 2·log₂ n deep, so the
+check never fires. *Fix:* a representation's jobs can say they recurse
+only on a balanced shape, and the compiler leaves the count out of
+those. *Measured:* about 10% at 3000 towns, nothing at 1000, so within
+the noise. It waits for M6, after which the trees are a larger share of
+the time.
+
+**M6. The maps are persistent, the ideal's are changed in place (perf:
+most of what's left).** Each `put`, `add item` and `remove item` copies
+the path from the root, making log n new nodes, and rebalances.
+`improve` does three of these each time a road makes a town nearer, and
+`settle` removes one more. After M3 to M5, a profile at 3000 towns has
+`tree value at` at 26% and `relax` (with `improve` in it) at 21%. The
+tree builders (`add`, `put`, `balance`, `node`) come to 20%, and GC to 8%.
+The ideal's JS Map hashes a town once and changes one entry. In `settle`,
+`shortest` and `cheapest`, every map and set has one owner: each
+version is used once, to make the next. *Fix:* reuse in place when the
+old version is dead (Perceus, Reinking, Xie, de Moura and Leijen, PLDI
+2021; native N5c already finds unique values), then the in-place table
+row of DATA-STRUCTURES.md ("later representations"), for maps that are
+only looked up. This is the large one, and it needs a design note first.
+
+**M7. Lookups done twice and in closures (perf, small).** `improve`
+reads `value at(found, town)` twice: once for the test and once to
+remove the old pair. Each read is wrapped in an `(() => …)()` for its
+`first`, and the test goes through `$bool(…).tag === "std.bool.true"`.
+`tree value at` is a recursion that checks `$no` after each call,
+though its calls are in tail position. *Fix:*
+- the same pure call with the same arguments in one body, done once;
+- `first` over a lookup as statements (P6 did this for a solve with one
+  answer);
+- a Choice definition whose recursive call is the arm's answer, as a
+  jump.
+
+*Measured* (a loop for `value at`, one lookup in `improve`): within the
+noise, so it waits.
+
+**M8. The evaluator takes seconds (not the compiler's, but the editor
+runs it).** With the trees, 300 towns take 5.8 s in the evaluator, 1,500
+times the ideal, and 22 s as defined. When M2 lets the editor's Run take
+the trees, a file this size will still hold Run for seconds. This is a
+note for the Language lane, not a compiler gap: the evaluator's cost per
+step of the tree jobs.
+
+### Language gaps
+
+These are the places where routes declares a type, defines a helper or
+wraps a call only because the language lacks something (WORKFLOW.md,
+"Language gaps, every round"):
+
+- **LG1. No way to take a set's smallest item.** `settle` takes it apart
+  with `items of` (M3). A `smallest item(s)` (Choice: none when empty),
+  with `largest item` and the same for a map's keys, says what is meant
+  and gives the tree a job. No other example uses sets yet.
+- **LG2. No "change the value at a key".** `connect` is
+  `put(g, a, cons(x, neighbours(g, a)))`, where `neighbours` exists only
+  for its default. `size of` exists the same way. `improve` looks the
+  same key up twice (M7). An `update(m, k, default, f)` would remove
+  `neighbours`, `size of` and the double lookup. ledger's `add to`
+  writes around the same thing with a list, as round 3 shows. That makes
+  two examples, so P2 by the workflow's rule.
+- **LG3. Sorting by a key needs a type.** `Span` exists only so that
+  `compare` puts the length first, so `sort` orders roads shortest first.
+  A `sort by(list, key)` or `sort with(list, before)` would use the
+  `road` lines as they are. ledger writes its own insertion sort for the
+  same reason (it sorts by amount or by name). Two examples, so P2.
+- **LG4. A word splitter.** `words` is `keep(split(line, " "), …)`.
+  It's small, but it is where M1 bit, and wc and calc split their input
+  their own ways.
+
+### Proposed order
+
+1. M1, the miscompile. It is a small PR, and the most urgent: a program
+   prints the wrong thing.
+2. M2, so routes runs in `lab run` and the editor. It needs the Language
+   lane, with the editor lane's say for runWorker.ts.
+3. M3, the smallest item, with LG1 if the Language lane takes it, so the
+   law and the operation come together.
+4. M4, compare at its type: about 2× on its own.
+5. M6's design note: in-place reuse of maps and sets that have one owner.
+6. M5 and M7 after M6, when they can be measured above the noise.
+
+These go into BACKLOG.md's Inbox for the coordinator's triage: M1 to M7
+as C rows, and LG1 to LG3 as L rows.

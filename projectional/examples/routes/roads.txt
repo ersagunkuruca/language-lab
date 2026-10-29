@@ -1,0 +1,15 @@
+# Made-up towns and roads, in km.
+road Arden Brisk 120
+road Arden Colm 300
+road Brisk Colm 150
+road Brisk Dunmore 200
+road Colm Dunmore 90
+road Colm Eskar 260
+road Dunmore Eskar 140
+road Fallow Gant 70
+
+trip Arden Eskar
+trip Eskar Arden
+trip Arden Gant
+near Brisk 250
+trip Gant Fallow
