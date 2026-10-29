@@ -92,16 +92,13 @@ test("routes: what goes wrong, and the exit codes", () => {
   assert.deepEqual(r, { out: ["2 towns, 1 road, 1 part\ncheapest network: 1 km in 1 road\nfarthest from A: B, 1 km", "A → B: 1 km"], err: ["routes: line 3: no road goes to Z"], code: 1 });
 });
 
-// GAPS.md M2: lab run, lab compile and the editor's Run hand the chooser
-// the program's definitions but not its types, so the records keep fields
-// typed Map and Set while the code now builds trees. Open: when it's fixed,
-// drop the todo.
-test("routes: the trees chosen the way lab chooses them check", { todo: "GAPS.md round 5, M2: a map or set in a field of the program's own type" }, () => {
+// GAPS.md M2: the chooser is handed the program's types too, so the
+// records' Map and Set fields hold the trees the code builds.
+test("routes: the trees chosen the way lab chooses them check", () => {
   const p = load("routes");
   const own: string[] = JSON.parse(readFileSync(join(examples, "routes/code.json"), "utf8")).defs;
   const main = own.find((d) => p.pres.names[d] === "main")!;
-  const defs = own.filter((d) => p.code.nodes[(p.code.nodes[d] as { body?: string }).body ?? ""]?.kind !== "typedef");
-  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, defs);
+  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own);
   const options = p.options as Parameters<typeof infer>[3];
   const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
