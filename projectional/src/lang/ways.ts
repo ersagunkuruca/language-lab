@@ -29,7 +29,7 @@ export function waysIn(code: Code, ops: Map<Id, Id> = interfaceOps(code)): Ways 
   for (const n of Object.values(code.nodes)) {
     if (n.kind !== "def" || !n.way || !n.body) continue;
     const uses = new Set<Id>();
-    const look = (x: Id) => { const m = code.nodes[x]; if (m.kind === "ref" && ops.has(m.target)) uses.add(m.target); children(m).forEach(look); };
+    const look = (x: Id) => { const m = code.nodes[x]; if (m.kind === "ref" && ops.has(m.target)) uses.add(m.target); if (m.kind === "solve" && ops.has(m.fn)) uses.add(m.fn); children(m).forEach(look); };
     look(n.body);
     ways.set(n.way, [...(ways.get(n.way) ?? []), { def: n.id, uses, cost: n.cost ?? 1 }]);
   }

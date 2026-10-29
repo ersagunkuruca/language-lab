@@ -32,7 +32,7 @@ function program(gives: "sin" | "cos" | "neither") {
   const lift = (name: string, f: Id) => def(name, () => k.fn(["a"], (a) => k.match(a, [{ variant: A.v.angle, names: ["r"], body: ([r]) => k.call(A.v.angle, k.call(f, r)) }])));
   const [sin, cos, tan, exp, log] = (["sin", "cos", "tan", "exp", "log"] as const).map((op) => lift(`angle ${op}`, B[op]));
   const left = () => k.x(S.byItsWays);
-  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log)));
+  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log), left()));
   const at = (x: number) => k.call(A.v.angle, k.lit(x));
   def("the cosine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.cos, at(0.3))));
   def("the sine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.sin, at(0.3))));
@@ -60,7 +60,7 @@ test("Trig leaving both sin and cos to their ways: nothing ends in given code, a
   const p = program("neither");
   const impl = p.code.defs.find((d) => p.names[d] === "trig at angle")!;
   assert.deepEqual(p.info.errors.filter((e) => e.id === impl).map((e) => e.message),
-    ["trig at angle leaves sin and cos to their ways, and none of them ends in a field it gives: give one of them, or a field their ways use"]);
+    ["trig at angle leaves sin, cos and polar to their ways, and none of them ends in a field it gives: give one of them, or a field their ways use"]);
   // Run anyway, it still stops where the use is resolved.
   assert.throws(() => makeRunner(p.code, p.info, { print: () => {}, names: p.names }).value(p.code.defs.find((d) => p.names[d] === "the cosine")!), /leaves cos to its ways, and none of them ends in a field it gives/);
 });

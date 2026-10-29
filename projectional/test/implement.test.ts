@@ -35,8 +35,10 @@ test("implement for a type makes the record with a hole per operation, typed at 
   const after = infer(r.code, { ...names, ...r.names });
   setProgramPins({});
   const body = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"call">;
-  assert.equal(body.args.length, 5);
-  for (const hole of body.args) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -> Wave");
+  assert.equal(body.args.length, 6);
+  for (const hole of body.args.slice(0, 5)) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -> Wave");
+  // polar, a predicate over its four ports (POLAR.md).
+  assert.equal(showIn(after.holes.get(body.args[5])!.expected, names, after.subst), "(Wave, Wave, Wave, Wave) -> Bool");
   // Nothing is missing now, the holes are what's left, and a second one is
   // refused (one implementation per interface and type).
   assert.equal(after.errors.filter((e) => e.missing).length, 0);

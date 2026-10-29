@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRIG_POLAR, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -191,8 +191,20 @@ export function buildPrelude(): Module {
   const way = (name: string, field: Id, body: () => Id) => { const d = k.def(name); k.define(d, body()); (k.code.nodes[d] as NodeOf<"def">).way = field; return d; };
   const cosBySin = way("cos by sin", TRIG_OPS.cos, () => k.fn(["x"], (x) => k.call(TRIG_OPS.sin, k.call(ARITH.add, x, k.lit(Math.PI / 2)))));
   const sinByCos = way("sin by cos", TRIG_OPS.sin, () => k.fn(["x"], (x) => k.call(TRIG_OPS.cos, k.call(ARITH.sub, x, k.lit(Math.PI / 2)))));
+  // Polar (POLAR.md, L97c): Trig's field with results, (length, angle) →
+  // x, y. A type gives it, or sin and cos and gets it by their way; sin and
+  // cos come from it in turn, each reading one of its results.
+  const polarBy = way("polar by sincos", TRIG_POLAR, () => k.fn(["length", "angle", "x", "y"], (r, t, x, y) =>
+    k.and(k.equal(x, k.call(ARITH.mul, r, k.call(TRIG_OPS.cos, t))), k.equal(y, k.call(ARITH.mul, r, k.call(TRIG_OPS.sin, t))))));
+  k.results(polarBy, "x", "y");
+  const sinByPolar = way("sin by polar", TRIG_OPS.sin, () => k.fn(["angle"], (t) => k.solve(TRIG_POLAR, { 0: k.lit(1), 1: t, out: k.true }, { 3: "y" }, ({ 3: y }) => y)));
+  const cosByPolar = way("cos by polar", TRIG_OPS.cos, () => k.fn(["angle"], (t) => k.solve(TRIG_POLAR, { 0: k.lit(1), 1: t, out: k.true }, { 2: "x" }, ({ 2: x }) => x)));
+  const polarF = k.def("float64 polar");
+  k.define(polarF, k.fn(["length", "angle", "x", "y"], (r, t, x, y) =>
+    k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
+  k.results(polarF, "x", "y");
   const trigF = k.def("trig at float64");
-  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log].map((b) => k.x(b))));
+  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF].map((b) => k.x(b))));
 
   // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
   // a function given dual(x, 1) gives its value and its slope at x.
@@ -224,7 +236,7 @@ export function buildPrelude(): Module {
   const expD = oneD("dual exp", (a, a1) => k.let("eᵃ", k.call(B.exp, a), (e) => D(e, n.mul(e, a1))));
   const logD = oneD("dual log", (a, a1) => D(k.call(B.log, a), n.div(a1, a)));
   const trigD = k.def("trig at dual");
-  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d))));
+  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays)));
   const slopeAt = k.def("slope by duals");
   k.define(slopeAt, k.fn(["f", "x"], (f, x) => du(k.call(f, D(x, k.lit(1))), (_, a1) => a1)));
   const dualTable = k.def("dual table");
@@ -356,7 +368,7 @@ export function buildPrelude(): Module {
             z.add(quot(k.int(ONE), z.add(z.mul(k.int(2), j), k.int(1))), z.down(z.mul(t2, acc!), 32)) },
         ])), 32))))))), () => k.int(0)))))));
   const trigX = k.def("trig at fixed");
-  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d))));
+  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays)));
   // √x: the whole square root of x's steps · 2³² by Newton's method from
   // above (Heron's), which only goes down and stops at the floor; no
   // answer below 0.
@@ -880,9 +892,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF].map(at));
 }

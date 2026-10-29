@@ -208,6 +208,18 @@ export const TRIG = typedef("std.trig", "Trig", ["a"], [
 ], false, true);
 export const TRIG_V = "std.trig.trig";
 export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
+// Trig's polar (POLAR.md, BACKLOG L97c): a field with results, the
+// predicate polar(length, angle, x, y) read as (length, angle) → x, y. A
+// use is a solve of it, `x, y = polar(r, t)`, resolved like any field to
+// what the type gives. Its type's nodes have ids of their own, so the ids
+// after Trig don't move.
+export const TRIG_POLAR = `${TRIG_V}.polar`;
+{
+  const port = (i: number) => node({ id: `${TRIG_POLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
+  const type = node({ id: `${TRIG_POLAR}.type`, kind: "tfun", params: [0, 1, 2, 3].map(port), result: node({ id: `${TRIG_POLAR}.t4`, kind: "tref", target: BOOL, args: [] }), effects: [] });
+  named(node({ id: TRIG_POLAR, kind: "field", type, results: [2, 3], ports: ["length", "angle", "x", "y"] }), "polar");
+  (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_POLAR);
+}
 // Dual numbers (INTERFACES.md step 3, BACKLOG L40g): value + slope·ε with
 // ε² = 0, so f(dual(x, 1)) carries f′(x) along with f(x). A record of two
 // Float64s, like Complex: + and − part by part, · the product rule (the

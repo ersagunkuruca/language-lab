@@ -62,7 +62,10 @@ export type Node =
   // shape when they are hashed (src/hash.ts); Unison's `unique type`.
   | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string }
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
-  | { id: Id; kind: "field"; type: Id }
+  // `results` (an interface's field, POLAR.md): the positions of the
+  // ports it gives, when its type is a predicate over its ports read as a
+  // function with several results; `ports` names them for the text.
+  | { id: Id; kind: "field"; type: Id; results?: number[]; ports?: string[] }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
   | { id: Id; kind: "tref"; target: Id; args: Id[] }

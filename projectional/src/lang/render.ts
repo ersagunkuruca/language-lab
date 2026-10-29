@@ -430,6 +430,19 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           return out;
         }
       }
+      // An interface's field with results (POLAR.md), in the direction it
+      // declares: x, y = polar(r, t), a result nobody reads as _.
+      if (f?.kind === "field" && f.results) {
+        const fr = f.results, ins = Object.keys(n.given).filter((k) => k !== "out").map(Number).sort((a, b) => a - b);
+        if (ins.every((i) => !fr.includes(i)) && Object.keys(n.binds).every((k) => fr.includes(Number(k)))) {
+          const bound = Object.values(n.binds);
+          enter(bound);
+          const outs = fr.map((i) => (String(i) in n.binds ? [bind(n.binds[String(i)])] : [pn("_")]));
+          const out = hold([ln(...lead, ...commas(outs), pn(" = "), part("ref fn", [nameOf(n.fn)], n.fn), pn("("), ...commas(ins.map((i) => inline(n.given[String(i)]).p)), pn(")")), grp(block(n.body, []))]);
+          leave(bound);
+          return out;
+        }
+      }
       // solve polar(x = …, y = …) for length, angle as r, θ
       const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
       const givenArgs = commas(Object.entries(n.given).map(([k, e]) => [pn(`${label(k)} = `), ...inline(e).p]));
@@ -537,8 +550,11 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   // the effects of finding its results, and the results by name.
   const shape = def.results && body?.kind === "lambda" ? body : null;
   const effs = info?.directions?.get(defId);
+  // A constraint on its type variables is said once, at the end.
+  const first = shape?.params.map((p) => typeAt(p) ?? "").find((x) => x.includes(" where ")) ?? "", where = first ? first.slice(first.indexOf(" where ")) : "";
+  const bare = (p: Id) => typeAt(p)!.split(" where ")[0];
   const t = shape && effs && shape.params.every((p) => typeAt(p))
-    ? `(${shape.params.filter((p) => !def.results!.includes(p)).map(typeAt).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${def.results!.map((r) => `${nameOf(r)}: ${typeAt(r)}`).join(", ")}`
+    ? `(${shape.params.filter((p) => !def.results!.includes(p)).map(bare).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${def.results!.map((r) => `${nameOf(r)}: ${bare(r)}`).join(", ")}${where}`
     : typeAt(defId);
   if (t) out.push(ln(self(), part("ty big", [` : ${t}`])));
   if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];

@@ -159,8 +159,9 @@ export function pointsAt(n: Node): Id[] {
   if (n.kind === "ref" || n.kind === "tref") out.push(n.target);
   if (n.kind === "arm") out.push(n.variant);
   // A solve's ports are the function's parameters, and "out", its result.
-  // A builtin has no parameter nodes: its ports are positions, 0, 1, ….
-  if (n.kind === "solve") out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out")));
+  // A builtin and an interface's field have no parameter nodes: their ports
+  // are positions, 0, 1, ….
+  if (n.kind === "solve") out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out" && !/^\d{1,2}$/.test(k))));
   if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);
   if (n.kind === "def" && n.way) out.push(n.way);

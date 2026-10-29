@@ -60,7 +60,7 @@ export const preludeDef = (name: string): Id | undefined =>
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
+  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "solve" && ops.has(n.fn)) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -265,6 +265,33 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     nodes[id] = { id, kind: "ref", target: d };
   };
 
+  // A solve of an interface's field with results (POLAR.md, L97c): a solve
+  // of what the type gives for it, or of the way picked, its ports moved
+  // from positions to that definition's parameters.
+  const implementSolve = (id: Id, env: Env) => {
+    const n = nodes[id] as NodeOf<"solve">;
+    const ref: NodeOf<"ref"> = { id, kind: "ref", target: n.fn };
+    const before = nodes[id];
+    nodes[id] = ref;
+    implement(id, env);
+    let target = (nodes[id] as NodeOf<"ref">).target;
+    nodes[id] = before;
+    const sc = schemes.get(target);
+    if (sc && constrained(sc).length) {
+      const at: Env = new Map();
+      const a = close(opAt.get(id) ?? num, env);
+      const fieldType = close({ t: "fn", params: [a, a, a, a], ret: { t: "con", id: "std.bool", args: [] }, eff: pure }, env);
+      bind(sc.type, fieldType, new Set(constrained(sc)), at);
+      target = instance(target, at, sc);
+    }
+    const d = nodes[target];
+    const lam = d?.kind === "def" && d.body ? nodes[d.body] : null;
+    if (lam?.kind !== "lambda") throw new Error(`${names[n.fn] ?? n.fn} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
+    const key = (k: string) => (k === "out" ? k : lam.params[Number(k)]);
+    const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
+    nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
+  };
+
   // Resolve every use under `root`, at these types.
   const resolve = (root: Id, env: Env) => {
     const walk = (id: Id, parent: Id | null) => {
@@ -276,6 +303,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         if (x?.t === "con" && info.implementations?.has(implementationKey(f.iface, x))) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
       }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
+      if (nodes[id].kind === "solve" && ops.has((nodes[id] as NodeOf<"solve">).fn)) implementSolve(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {
         const t = typeOf.get(id);
