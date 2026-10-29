@@ -1265,6 +1265,7 @@ only on a balanced shape, and the compiler leaves the count out of
 those. *Measured:* about 10% at 3000 towns, nothing at 1000, so within
 the noise. It waits for M6, after which the trees are a larger share of
 the time.
+Measured again after M4, it is still within the noise (IN-PLACE.md).
 
 **M6. The maps are persistent, the ideal's are changed in place (perf:
 most of what's left).** Each `put`, `add item` and `remove item` copies
@@ -1280,6 +1281,10 @@ old version is dead (Perceus, Reinking, Xie, de Moura and Leijen, PLDI
 2021; native N5c already finds unique values), then the in-place table
 row of DATA-STRUCTURES.md ("later representations"), for maps that are
 only looked up. This is the large one, and it needs a design note first.
+
+*Design:* compiler/IN-PLACE.md (BACKLOG C56, C62, C63). After M4, a
+profile has lookups at 27% and node building at 20%, so the table (C63)
+matters more than reuse in place (C62).
 
 **M7. Lookups done twice and in closures (perf, small).** `improve`
 reads `value at(found, town)` twice: once for the test and once to
