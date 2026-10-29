@@ -26,7 +26,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
 | I50 | With every definition shown (SWEEP=all, as the nightly does), the values stop with an error on four definitions: Page: Pig `play` and `games won by B` ("random() outside seeded answers from the world, which only runs forward"), Page: Tumble `clear` and `settle` (QA10 L2) ("No answer: the known values contradict each other…") and `new board` ("Values stopped: calls something that might not finish"). Either the values should say something calmer for these, or the examples change | test/draws.test.ts (T9) | 2026-10-29 |
 | I65 | Editor for several named results (RESULTS.md step 3, L95c): a definition with results shows one node with an output wire per result in the graph (an unconnected wire is `_`), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
-| I54 | Opening Tumble's `tap places` or `lane drawn` freezes the page ~9 s (one 9.1 s long task, mostly the evaluator's reduce): starting values worked out on the page's thread. Cap it at ~300 ms as #562 does for the wires | QA10 H1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I55 | Lockstep `simulate` opens with `presses` empty and its result reading `pair(fixed(<function>), fixed(<function>))` | QA10 H2 (QA-2026-10-29b.md) | 2026-10-29 |
 | I56 | 8 graphs don't open in Tidy's layout (#625): the first Tidy everything moves Lockstep `step` 28 nodes, Tumble `show next` 102, `swap tapped` 103, `scene drawn` 31, `status` 34, `neighbours` 15, to-do `draw item` 121, Countdown `main` 2 | QA10 M1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
@@ -153,6 +152,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I54 | A program that declares no unit skips solving for units (homogeneous, so nothing to show); Tumble's tap places and lane drawn open in about 0.25 s, not 9 s | #645 |
 | I53 | A folded frame's contents are laid out as they'd be open (folded frames inside shut), so Pig's handler opens compact; Tidy what's inside lays a frame out afresh and keeps its corner; step dots move on a plain drag | #633 |
 | I52 | A frame unfolds where its box was (drawn over its neighbours while selected) and folds back there; nothing is moved to make room | #632 |
 | I51 | The selected item and the frames around it are drawn over the rest; a frame you unfold is selected, so it covers its neighbours | #631 |
