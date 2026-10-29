@@ -583,7 +583,9 @@ async function stepOrder() {
   await p.waitForTimeout(900);
   const pr = p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").first(), pb = (await pr.boundingBox())!;
   await pr.dispatchEvent("contextmenu", { clientX: pb.x + 5, clientY: pb.y + 5 });
-  await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: a print's menu has no Add a step before this`));
+  // Its click adds the step and opens the palette on the new hole, which
+  // checks every candidate against physics' main: give it time.
+  await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 10000 }).catch(async () => errors.push(`${where}: a print's menu has no Add a step before this: ${await p.locator(".ctx-menu").innerText({ timeout: 500 }).catch(() => "no menu")}`));
   const lines = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
   if (!lines[2]?.startsWith("□") || lines.some((l) => l.includes("‹•"))) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
   await p.close();
