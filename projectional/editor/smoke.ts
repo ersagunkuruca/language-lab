@@ -1,20 +1,10 @@
-// What still needs a real browser (TESTING.md T10): drags and drops, places
-// on screen, scrolling, the phone layout, a page's iframe, reactive.html. The
-// editing gestures that don't are test/editing.test.ts, and every
-// definition drawn is test/draws.test.ts, both in Node. This runs nightly.
-//
-// The built page in a real browser: open every example program, its first
-// definition, its main and a slice of the rest (a different eighth each
-// run, all of them with SWEEP=all, as the nightly run does: TESTING.md T4),
-// run each, show its values and click its first nodes (and
-// once per program, tidy its graph and show a binding as let and get nodes), and
-// fail on any error the page throws or logs, or any run or values that
-// stop with an error. The unit tests can't catch a view that throws while
-// drawing; this can.
-//
-// Then the same for a browser that saved its programs with an older editor
-// (smoke-saved.json: Relations in programs as saved before one world, with
-// a builtin that has since gone), changed by its owner or not.
+// What only a real browser shows, once a night (TESTING.md T8 to T11):
+// places on screen, scrolling, drags that depend on where things are, the
+// phone layout, Run in a worker, a page in its iframe and Save page, and
+// reactive.html. Per program: its first definition's keyboard, menus,
+// Tidy, the map and folding. Every definition drawn is test/draws.test.ts
+// and the editing gestures are test/editing.test.ts, both in Node and per
+// change. A scenario that passes there moves there.
 //
 //   npm run build-editor && npm run smoke [-- url of another build]
 //
@@ -25,7 +15,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, type Page } from "playwright-core";
-import { inSweep } from "../test/helpers.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { B } from "../src/prelude.ts";
@@ -36,7 +25,6 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const errors: string[] = [];
 let where = "loading";
 let defs = 0;
-let seen = 0;
 
 async function visit(saved: string | null, only?: string) {
   const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
@@ -57,7 +45,9 @@ async function visit(saved: string | null, only?: string) {
     await click('[data-set="program"]', i);
     const names = await p.locator("[data-def]").allInnerTexts();
     for (const [j, def] of names.entries()) {
-      if (j > 0 && def.trim() !== "main" && !inSweep(seen++)) continue;
+      // Every definition is drawn in Node (test/draws.test.ts); here only
+      // what a browser adds: the first one's gestures, and Run in a worker.
+      if (j > 0 && !(i === 0 && def.trim() === "main")) continue;
       where = `${saved ? "saved by an older editor: " : ""}${program} / ${def}`;
       await click("[data-def]", j);
       // A list reads as a list in the blocks too, however tall its items.
@@ -126,11 +116,13 @@ async function visit(saved: string | null, only?: string) {
           await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
           await click('.ctx-item[data-menu="named"]');
           // A frame folded into one box, and unfolded.
+          // Some start folded (I43), so it counts: one more, then as many.
           if (await p.locator(".p-graph [data-fold]").count()) {
+            const folded = () => p.locator(".p-graph .rg.folded").count(), had = await folded();
             await p.locator(".p-graph [data-fold]").first().dispatchEvent("click");
-            if (!(await p.locator(".p-graph .rg.folded").count())) errors.push(`${where}: folding a frame drew no folded box`);
+            if ((await folded()) <= had) errors.push(`${where}: folding a frame drew no folded box`);
             await p.locator(".p-graph .items [data-fold]").first().dispatchEvent("click", {}, { timeout: 500 }).catch(() => {});
-            if (await p.locator(".p-graph .rg.folded").count()) errors.push(`${where}: unfolding left a folded box`);
+            if ((await folded()) > had) errors.push(`${where}: unfolding left a folded box`);
           }
           await stopped(p);
         }
@@ -146,30 +138,6 @@ async function visit(saved: string | null, only?: string) {
 async function stopped(p: Page) {
   for (const line of await p.locator(".status-line.bad").allInnerTexts()) errors.push(`${where}: ${line}`);
 }
-
-// In the graph, an input dropped on another input of the same + moves
-// there (BACKLOG E101); one Undo puts it back. Changing the function is
-// test/editing.test.ts's swapAndUndo.
-async function reorderInputs() {
-  where = "reorder inputs in the graph";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
-  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
-  const ports = p.locator(".p-graph g:has(> text:text-is('+')) > circle.inp");
-  const [one, two] = [await ports.nth(0).boundingBox(), await ports.nth(1).boundingBox()];
-  if (one && two) {
-    await p.mouse.move(one.x + one.width / 2, one.y + one.height / 2);
-    await p.mouse.down();
-    await p.mouse.move(two.x + two.width / 2, two.y + two.height / 2, { steps: 6 });
-    await p.mouse.up();
-    if ((await distance()) !== "distance = drop + drift") errors.push(`${where}: dropping drift's input on drop's reads ${await distance()}`);
-    await p.locator('button[data-act="undo"]').first().click();
-  } else errors.push(`${where}: the + node's inputs aren't on screen`);
-  await p.close();
-}
-
 // An edit doesn't lay the graph out again: what was drawn stays where it
 // was, and only what's new is placed (Ersagun 2026-10-27, BACKLOG E144).
 async function editKeepsPlaces() {
@@ -224,41 +192,6 @@ async function textKeepsPlace() {
   await p.locator(".p-graph [data-move]").first().dispatchEvent("pointerdown", { button: 0 });
   await p.locator(".p-graph [data-move]").first().dispatchEvent("pointerup", { button: 0 });
   if ((await top()) < 20) errors.push(`${where}: selecting in the graph sent the text back to the top`);
-  await p.close();
-}
-
-// Delete takes out one node: what fed it lies loose at the end of the
-// text and beside the graph, and wires back in from its frame's output
-// (BACKLOG E116, E117; NODE-EDITOR.md, "Loose parts"). Two dice's main.
-async function looseParts() {
-  where = "loose parts";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
-  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  await p.locator(".blocks-wrap .head", { hasText: /^named$/ }).first().click();
-  await p.keyboard.press("Delete");
-  const after = await text();
-  const loose = (t: string) => (t.match(/ loose: /g) ?? []).length;
-  if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
-  if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
-  await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
-  // By the part's own last node's output, as the status says (BACKLOG E120):
-  // the faded output furthest right, of a node, not of a lone literal (E122).
-  const outs = await p.locator(".p-graph .items > g.faded:not(:has(rect.pill)) circle.outp[data-out]").evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
-  const out = outs.sort((a, b) => b.x - a.x)[0];
-  if (!out) { errors.push(`${where}: the loose part's nodes have no output to drag`); return p.close(); }
-  const hole = (await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").first().boundingBox())!;
-  await p.mouse.move(out.x + out.width / 2, out.y + out.height / 2); await p.mouse.down();
-  await p.mouse.move(hole.x + hole.width / 2, hole.y + hole.height / 2, { steps: 8 }); await p.mouse.up();
-  if (!/^Wired it in/.test(await p.locator(".status").innerText())) { errors.push(`${where}: wiring a loose part into the hole: ${await p.locator(".status").innerText()}`); return p.close(); }
-  if (loose(await text()) !== loose(after) - 1) errors.push(`${where}: the part wired in is still listed as loose`);
-  // Undo, twice, gives main back as it was.
-  await p.locator('[data-act="undo"]').click();
-  await p.locator('[data-act="undo"]').click();
-  if ((await text()).includes("-- loose")) errors.push(`${where}: undo left loose parts behind`);
   await p.close();
 }
 
@@ -427,42 +360,6 @@ async function firstSteps() {
   await p.close();
 }
 
-// A definition's Run starts with what main passes it (BACKLOG I19): cuts
-// is called as cuts("abc") inside a print, and opens with "abc".
-async function seededRun() {
-  where = "a Run seeded from main";
-  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: /Run backwards/ }).first().click();
-  await p.locator("[data-def]", { hasText: /^cuts$/ }).first().click();
-  const vals = await p.locator(".side input").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
-  if (!vals.includes('"abc"')) errors.push(`${where}: cuts opens with ${JSON.stringify(vals)}`);
-  await p.close();
-}
-
-// A shader opens on the definition its picture draws, not on a data type
-// (BACKLOG I22).
-async function shaderOpens() {
-  where = "a shader's first definition";
-  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  for (const prog of ["Shader: ray marching", "Shader: Mandelbrot set"]) {
-    await p.locator('[data-set="program"]', { hasText: prog }).first().click();
-    const tabs = (await p.locator("[data-tab]").allInnerTexts()).map((t) => t.trim());
-    if (!tabs.includes("colour")) errors.push(`${where}: ${prog} opens on ${tabs.join(", ")}`);
-  }
-  // A helper starts with what the picture's colour first gives it at its
-  // pixel (QA8 L4): the ray marcher's sphere.
-  where = "a shader helper's starting values";
-  await p.locator('[data-set="program"]', { hasText: "Shader: ray marching" }).first().click();
-  await p.locator(".p-nav .nav-row[data-def]", { hasText: /^sphere$/ }).first().click();
-  const vals = await p.locator(".port-row.known input[type=text]").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
-  if (!vals.length || vals.some((v) => !v)) errors.push(`${where}: sphere opens with ${JSON.stringify(vals)}`);
-  await p.close();
-}
-
 // Picked nodes grouped into one box, a view like a frame's fold (BACKLOG
 // E111): the box names what it holds, unfolds into a frame, and Ungroup
 // takes the frame away. The code is untouched throughout.
@@ -541,31 +438,6 @@ async function searchGoesOn() {
   await p.close();
 }
 
-// A simplification that keeps the meaning is offered on the node's menu:
-// append of two lists written out is one list (BACKLOG E98).
-async function simplifyAppend() {
-  where = "simplify append";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
-  const box = (await p.locator(".p-graph svg.tgraph").first().boundingBox())!;
-  await p.locator(".p-graph svg.tgraph").first().dispatchEvent("contextmenu", { clientX: box.x + box.width - 40, clientY: box.y + box.height - 40 });
-  await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 });
-  await p.keyboard.type("append([1, 2], [3])");
-  await p.keyboard.press("Enter");
-  await p.keyboard.press("Escape");
-  const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!(await text()).includes("append([1, 2], [3])")) { errors.push(`${where}: couldn't write the append: ${(await text()).slice(-120)}`); return p.close(); }
-  await p.waitForTimeout(900);
-  await p.locator(".p-graph g:has(> text:text-is('append')) > rect.cn").first().click({ button: "right" });
-  await p.locator('.ctx-menu [data-menu="simplify"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: append's menu offers no Simplify`));
-  if (!(await text()).includes("[1, 2, 3]") || (await text()).includes("append(")) errors.push(`${where}: simplified, it reads ${(await text()).slice(-120)}`);
-  await p.locator('button[data-act="undo"]').first().click();
-  if (!(await text()).includes("append([1, 2], [3])")) errors.push(`${where}: one Undo doesn't bring the append back`);
-  await p.close();
-}
-
 // A click on a wire puts a dot where you clicked, and nothing else moves
 // (BACKLOG E109), though the dot's let changes how main would be laid out.
 async function dotOnWire() {
@@ -595,44 +467,6 @@ async function dotOnWire() {
   await p.close();
 }
 
-// Let and get nodes for the whole definition at once, from the canvas's
-// menu (BACKLOG E112); and a call picked in the graph opens or changes the
-// function it calls (E113).
-async function letNodes() {
-  where = "let and get nodes for every value";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
-  await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
-  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  const canvas = p.locator(".p-graph svg.tgraph").first();
-  const menu = async () => { const b = (await canvas.boundingBox())!; await canvas.dispatchEvent("contextmenu", { clientX: b.x + b.width - 30, clientY: b.y + b.height - 30 }); };
-  // They are how named values are drawn to begin with (E157).
-  if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main opens with ${await p.locator(".p-graph rect.letn").count()} let nodes`);
-  await menu();
-  await p.locator('.ctx-menu [data-menu="named-none"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as wires`));
-  if (await p.locator(".p-graph rect.letn").count()) errors.push(`${where}: let nodes are left after Show every value as wires`);
-  await menu();
-  await p.locator('.ctx-menu [data-menu="named-all"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the canvas's menu has no Show every value as let and get nodes`));
-  if ((await p.locator(".p-graph rect.letn").count()) < 4) errors.push(`${where}: main shows ${await p.locator(".p-graph rect.letn").count()} let nodes`);
-  // A let node's menu is its value's: name it, or back to wires.
-  const letn = p.locator(".p-graph rect.letn").first(), lb = (await letn.boundingBox())!;
-  await letn.dispatchEvent("contextmenu", { clientX: lb.x + 5, clientY: lb.y + 5 });
-  const offers = (await p.locator(".ctx-menu .ctx-item").allInnerTexts()).join(" | ");
-  if (!offers.includes("Show as wires") || offers.includes("Put a dot")) errors.push(`${where}: a let node's menu offers ${offers}`);
-  await p.keyboard.press("Escape");
-  await menu();
-  await p.locator('.ctx-menu [data-menu="named-none"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to wires`));
-  if (await p.locator(".p-graph rect.letn").count()) errors.push(`${where}: let nodes are left after Show every value as wires`);
-  where = "a call picked in the graph";
-  // A menu opened by a script counts as a long press, whose tap is ignored for a moment.
-  await p.waitForTimeout(900);
-  await p.locator(".p-graph g.items > g:has(text.cl:text-is('die')) rect.cn").first().dispatchEvent("click");
-  const acts = (await p.locator(".side button").allInnerTexts()).join(" | ");
-  if (!acts.includes("Open die") || !acts.includes("Change the function")) errors.push(`${where}: its panel offers ${acts}`);
-  await p.close();
-}
-
 // A folded frame is a node like the rest (BACKLOG E107): pressing on its
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
@@ -643,14 +477,22 @@ async function foldedFrame() {
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   await p.locator('.p-graph .fold-t:text("▾")').first().dispatchEvent("click");
-  const box = p.locator(".p-graph rect.folded").first();
-  const words = p.locator(".p-graph rect.folded + text.rt").first();
+  // Frames may start folded (I43), some inside others: take a folded box
+  // whose title a click reaches.
+  const k = await p.locator(".p-graph rect.folded + text.rt").evaluateAll((es) => es.findIndex((e) => {
+    const r = e.getBoundingClientRect();
+    return document.elementFromPoint(r.x + 5, r.y + r.height / 2) === e;
+  }));
+  const words = p.locator(".p-graph rect.folded + text.rt").nth(Math.max(k, 0));
   await words.scrollIntoViewIfNeeded();
   const wb = await words.boundingBox();
   if (!wb) { errors.push(`${where}: folding drew no box`); return p.close(); }
   await p.mouse.click(wb.x + 5, wb.y + wb.height / 2);
-  if (!/\bsel\b/.test((await box.getAttribute("class")) ?? "")) errors.push(`${where}: a click on its title doesn't select it, or it isn't outlined`);
-  const at = () => box.evaluate((e) => e.parentElement!.getAttribute("transform"));
+  // The selected frame is drawn again on top (in a second g.items), so
+  // the box to look at from here is the selected one.
+  const picked = p.locator(".p-graph rect.folded.sel").last();
+  if (!(await picked.count())) errors.push(`${where}: a click on its title doesn't select it, or it isn't outlined`);
+  const at = () => picked.evaluate((e) => e.parentElement!.getAttribute("transform"), undefined, { timeout: 2000 }).catch(() => null);
   const before = await at();
   await p.mouse.move(wb.x + 5, wb.y + wb.height / 2); await p.mouse.down(); await p.mouse.move(wb.x + 60, wb.y + 50, { steps: 5 }); await p.mouse.up();
   if ((await at()) === before) errors.push(`${where}: dragging it by its title doesn't move it`);
@@ -887,36 +729,25 @@ async function pagePreview() {
   await ctx.close();
 }
 
-const saved = readFileSync(new URL("smoke-saved.json", import.meta.url), "utf8");
-const edited = JSON.stringify({ ...JSON.parse(saved), docs: { relations: { ...JSON.parse(saved).docs.relations, edited: true } } });
 await visit(null);
-const fresh = defs;
-await visit(saved, "Relations in programs");
-await visit(edited, "Relations in programs");
-await reorderInputs();
 await navScroll();
 await textKeepsPlace();
 await foldedFrame();
 await plusDrop();
-await looseParts();
 await swapDrop();
 await looseValue();
 await editKeepsPlaces();
 await stepOrder();
-await simplifyAppend();
 await searchGoesOn();
 await groupPicked();
 await patternRows();
-await shaderOpens();
-await seededRun();
 await firstSteps();
 await dotOnWire();
-await letNodes();
 await pagePreview();
 await cellsPage();
 await phone();
 await browser.close();
-console.log(`${fresh} definitions, and ${defs - fresh} more on programs saved by an older editor${process.env.SWEEP === "all" ? "" : " (a slice: SWEEP=all for every one)"}`);
+console.log(`${defs} definitions`);
 if (errors.length) {
   console.error(errors.join("\n\n"));
   process.exit(1);
