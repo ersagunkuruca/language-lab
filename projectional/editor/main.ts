@@ -2480,7 +2480,8 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   } else if (choice) {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
       h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional"), "."));
-  } else if (action) {
+  } else if (action || value && ui.def === defNamed("main")) {
+    // main runs whatever it is: a value's Run gives the value.
     const going = ui.output?.def === ui.def && ui.output.running;
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));

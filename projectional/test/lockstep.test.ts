@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 import { root } from "../src/io.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, type Value } from "../src/lang/run.ts";
+import { makeRunner, runMain, type Value } from "../src/lang/run.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -34,6 +34,8 @@ test("lockstep: the same steps evaluated, compiled and by hand", async () => {
     pos += times(vel, dt);
   }
   assert.match(String(evaluated), new RegExp(`steps ${pos}$`));
+  // main is a value, and Run main gives it.
+  assert.equal(runMain(p.code, info, p.named("main"), { print: () => {}, names: p.pres.names }), evaluated);
   const path = join(mkdtempSync(join(tmpdir(), "lockstep-")), "lockstep.js");
   writeFileSync(path, compile(p.code, info, p.pres.names, { runtime, exports: ["main"] }));
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;

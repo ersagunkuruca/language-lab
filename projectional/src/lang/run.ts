@@ -850,7 +850,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 // before anything runs.
 export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: (s) => console.log(s) }): Value {
   const t = info.typeOf.get(def);
-  if (!t || t.t !== "fn" || t.params.length) throw new Error("only an action (a function with no inputs) can be run");
+  if (!t || t.t === "fn" && t.params.length) throw new Error("only an action or a value (no inputs) can be run");
+  // A value runs as what it is: nothing to call, and nothing it prints.
+  if (t.t !== "fn") {
+    const problem = typeError(code, info, def, rt.names ?? {});
+    if (problem) throw new Error(problem);
+    return makeRunner(code, info, rt).value(def);
+  }
   return start(code, info, def, t, [], rt);
 }
 
