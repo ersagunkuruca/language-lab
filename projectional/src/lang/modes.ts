@@ -36,6 +36,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import { children, ownerOfTypeParts, subtree } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
+import { computedForward } from "./directions.ts";
 import { INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
 
 // How many answers: whether there can be none, and whether there can be
@@ -910,7 +911,7 @@ export function oneAnswer(code: Code, n: NodeOf<"solve">): boolean {
   if (!m.has(n.id)) {
     const p = planSolve(code, n);
     const v = p.mode === "relational" ? solveMode(code, n) : null;
-    m.set(n.id, v ? !v.stuck.length && v.ends && determinism(v.answers) === "det" : p.unique);
+    m.set(n.id, computedForward(code, n) || (v ? !v.stuck.length && v.ends && determinism(v.answers) === "det" : p.unique));
   }
   return m.get(n.id)!;
 }

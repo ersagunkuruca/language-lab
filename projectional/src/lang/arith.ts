@@ -34,6 +34,7 @@ import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
 import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
+import { useDirections } from "./directions.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -97,6 +98,9 @@ function decimal(x: number): string {
 // can change which way gives a field (WAYS.md "Costs"); target-neutral
 // when not given.
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL): { code: Code; info: Info; names: Names } {
+  // A relation's own directions first (directions.ts), so the evaluator and
+  // the compiler run a solve the way the checker typed it.
+  code = useDirections(code);
   ({ code, info, names } = liftLets(code, info, names));
   if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
   const s = info.subst;

@@ -1089,7 +1089,10 @@ angle = …` is still the predicate over four ports, and says that given x
 and y it gives length and angle. A use in that direction reads as the
 results side by side, `length, angle = polar(x, y)`, and is the same solve
 node underneath. The checker says at the definition when its inputs can't
-pin its results down.
+pin its results down. Another definition can give a relation's other
+direction (POLAR.md): `unpolar(x, y) → length, angle = √(x² + y²),
+atan2(y, x)`, marked as a direction of polar, answers every solve of polar
+given x and y, with one answer instead of a search.
 
 The effect comes from the solver's static `direction()`. Exactly one answer
 that can't fail is pure: the missing addend of `+`, for instance. Several

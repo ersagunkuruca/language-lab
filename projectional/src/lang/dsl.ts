@@ -137,6 +137,13 @@ export class Lang extends Builder {
     return def;
   }
 
+  // `def` gives another direction of `of` (POLAR.md): the same ports in the
+  // same order, its own results.
+  direction(def: Id, of: Id): Id {
+    (this.code.nodes[def] as NodeOf<"def">).direction = of;
+    return def;
+  }
+
   // A use of a definition with results: its other ports given by `args`,
   // in order, and its results bound side by side (by the given display
   // names) in body. It is the solve node, read as `a, b = f(x, y)`.

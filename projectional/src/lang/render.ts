@@ -15,6 +15,7 @@
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
+import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
 import { portLabel } from "./equations.ts";
 import type { Info } from "./infer.ts";
@@ -548,7 +549,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     // `r1 = e1 and r2 = e2`.
     const results = def.results ?? [];
     const head = [self(), pn("("), ...commas(body.params.filter((p) => !results.includes(p)).map((p) => [bind(p)])), pn(")")];
-    const each = results.length ? givenBy(body.body, results) : null;
+    const each = results.length ? givenBy(code, body.body, results) : null;
     if (each) out.push(ln(...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = "), ...commas(each.map((e) => inline(e).p))));
     else out.push(...hang(body.body, results.length ? [...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = ")] : [...head, pn(" = ")]));
     leave(body.params);
@@ -557,24 +558,6 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
 
   // The expression each result equals, in order, when the body is just
   // `r1 = e1 and r2 = e2 …` with no result inside any e; null otherwise.
-  function givenBy(b: Id, results: Id[]): Id[] | null {
-    const parts: Id[] = [];
-    const calls = (n: Node, f: Id) => n.kind === "call" && n.args.length === 2 && node(n.fn)?.kind === "ref" && (node(n.fn) as NodeOf<"ref">).target === f;
-    const flat = (id: Id) => { const n = node(id); if (calls(n, S.and) && n.kind === "call") { flat(n.args[0]); flat(n.args[1]); } else parts.push(id); };
-    flat(b);
-    if (parts.length !== results.length) return null;
-    const isRef = (id: Id, r: Id) => { const n = node(id); return n.kind === "ref" && n.target === r; };
-    const mentions = (id: Id) => subtree(code, id).some((x) => { const n = node(x); return n.kind === "ref" && results.includes(n.target); });
-    const out = results.map((r, i) => {
-      const n = node(parts[i]);
-      if (!calls(n, S.equal) || n.kind !== "call") return null;
-      const [a, c] = n.args;
-      const e = isRef(a, r) ? c : isRef(c, r) ? a : null;
-      return e && !mentions(e) ? e : null;
-    });
-    return out.every((e): e is Id => e !== null) ? out : null;
-  }
-
   function typeText(id: Id): string {
     const n = node(id);
     if (n.kind === "tfun") return `(${n.params.map(typeText).join(", ")}) ${n.effects?.length ? `-[${n.effects.map(nameOf).join(", ")}]->` : "->"} ${typeText(n.result)}`;

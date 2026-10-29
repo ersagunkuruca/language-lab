@@ -16,6 +16,7 @@ import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
+import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, CELL_OPS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
@@ -95,6 +96,9 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
 export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore }, opts: Options = {}): Info {
+  // A solve that one of its relation's directions answers is checked as a
+  // solve of that direction (directions.ts, POLAR.md).
+  code = useDirections(code);
   // gradient(f)(p): p's type, for gradient(f) (smoothGradient, below).
   const at = new Map<Id, Type>();
   const s = new Subst();
@@ -729,7 +733,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const ports = p.rel!.ports;
       for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k) && !outTrue(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
       if (p.status !== "solved") err(n.id, `${nm(n.fn)} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
-      else if (!p.unique) choice(n.id, row, [CHOICE], `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`);
+      else if (!p.unique && !computedForward(code, n)) choice(n.id, row, [CHOICE], `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`);
     }
     return expr(n.body, inner, row);
   }
@@ -979,6 +983,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (!why) (info.directions ??= new Map()).set(d, [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])]);
       } catch (e) { why = (e as Error).message; }
       if (why) err(d, `${nm(d)}'s results can't all be found from ${from}: ${why}`);
+      // Another direction of a relation (POLAR.md, L97b): its ports, in
+      // order, are the relation's, of the same types.
+      if (!def.direction || why) continue;
+      const wrong = directionProblem(code, d, nm);
+      if (wrong) { err(d, wrong); continue; }
+      const theirs = info.schemes.get(def.direction);
+      if (sc && theirs) { try { const c = s.clone(); c.unify(instantiate(sc, c), instantiate(theirs, c)); } catch { err(d, `${nm(d)} is a direction of ${nm(def.direction)}, so its ports have ${nm(def.direction)}'s types: ${show(sc.type)} isn't ${show(theirs.type)}`); } }
     }
   }
 
