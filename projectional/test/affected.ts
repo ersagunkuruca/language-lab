@@ -66,7 +66,8 @@ const examples = new Set(code.flatMap((f) => f.match(/^projectional\/examples\/(
 const tests = sources.filter((f) => /\.test\.(ts|js)$/.test(f));
 // A test that bundles the editor reaches what the editor imports, and its
 // page, though it imports neither.
-const bundles: Record<string, string[]> = { "projectional/test/draws.test.ts": ["projectional/editor/main.ts", "projectional/editor/page.html", "projectional/editor/smoke-saved.json"] };
+const editorPage = ["projectional/editor/main.ts", "projectional/editor/page.html"];
+const bundles: Record<string, string[]> = { "projectional/test/draws.test.ts": [...editorPage, "projectional/editor/smoke-saved.json"], "projectional/test/editing.test.ts": editorPage };
 const chosen = tests.filter((t) => {
   if (all || setup) return true;
   const reach = closure([t, ...(bundles[t] ?? [])]);

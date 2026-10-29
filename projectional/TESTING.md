@@ -241,6 +241,20 @@ editor imports, or its page, changes.
 Left to the browser for now (T10, T11): the graph's clicks by position,
 Tab and Shift+F10, Tidy, folding, and the 37 editing scenarios.
 
+### T10. The editing scenarios in Node
+
+`test/editor-page.ts` is the editor's page from T9 plus a stand-in for the
+part of Playwright's page the smoke used: `locator` (with `hasText`,
+`first`, `nth`, `:text-is`, `:has-text`), `click` as a person makes it
+(pointer and mouse down and up, then click or the context menu), `fill`,
+`selectOption`, `keyboard.press` and `type`. A gesture by position
+(`boundingBox`, `mouse`, `evaluate`) says it needs a browser. So
+`test/editing.test.ts` holds the smoke's scenarios word for word, and a
+scenario moves when it passes there: 13 of 31, about 100 s, each checked
+to fail when its expectation is changed. They left editor/smoke.ts.
+
+The 18 left drag, drop, measure places or scroll (T11).
+
 ### T6. Rules against the paradigm pin (WORKFLOW.md)
 
 - **Tests speak the language's terms.** They state what a program does
@@ -341,6 +355,8 @@ examples. They are a language design item, for after T1 to T6.
 | T7 | Accepted answers, laws, hash-cached checks in the editor | L, then E | large |
 | T8 | Browser tests nightly only; editor checks without a browser | process, then E | medium |
 | T9 | Every definition drawn by the editor in Node (happy-dom) | process | medium |
+| T10 | Editing scenarios in Node, on a stand-in for Playwright's page | process | medium |
+| T11 | Drags in Node too; one short browser check; smoke.ts deleted | process | medium |
 
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting
