@@ -1,7 +1,8 @@
 # The tests a merge to main can reach, beside the deploy instead of before
 # it (projectional/TESTING.md, T1 and T2): projectional/test/affected.ts
-# picks them from what changed since the last commit this workflow passed,
-# from unit tests to the editor in a browser and WGSL on a GPU. A red run
+# picks them from what changed since the last commit this workflow passed.
+# The browser tests (the editor, shaders, sound, WGSL on a GPU) took 8.5
+# of a run's 10 minutes, so they run in nightly.yml instead (T8). A red run
 # doesn't stop the site; it is main's to fix, by the next pull request. A
 # pull request itself only type-checks (test.yml).
 name: Check main

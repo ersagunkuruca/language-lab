@@ -205,6 +205,25 @@ moves `good`; red posts in the project and goes to the top of the backlog
 as a P0. This is where an interaction between distant parts of the code is
 caught, a day late at most.
 
+### T8. The browser tests leave the per-merge run (2026-10-29)
+
+Ersagun, 2026-10-29: the browser tests take too long and cost either
+Actions minutes or Claude tokens. By then the smoke had grown back from
+T4's 1 min 22 s to 8.5 of Check main's 10 minutes (unit tests: 20 s), and
+almost every merge reached it, about 14 merges a day, so roughly 140
+billed minutes a day. Timed here: 6 min opening 59 definitions (one, Page:
+Tumble / tap places, takes 52 s alone) and 4 min for 37 editing scenarios.
+
+Now `npm run affected` leaves the browser tests out unless given `--all`
+(the nightly run) or `--browser`. Check main is the unit tests only, about
+a minute; the browser tests run once a night, when main changed, and a red
+nightly is fixed first. Threads no longer run the smoke before every push.
+
+Next, so editor breaks are caught per merge again without a browser:
+every example's every definition drawn in Node on a fake page, the
+editing scenarios as plain tests of the edits, and a browser check of
+about 30 s for what only a browser can show.
+
 ### T6. Rules against the paradigm pin (WORKFLOW.md)
 
 - **Tests speak the language's terms.** They state what a program does
@@ -303,6 +322,7 @@ examples. They are a language design item, for after T1 to T6.
 | T5 | Nightly full run, `good` tag, red goes to the project | workflows | small |
 | T6 | Testing rules in WORKFLOW.md; review the three `cons` tests | process | small |
 | T7 | Accepted answers, laws, hash-cached checks in the editor | L, then E | large |
+| T8 | Browser tests nightly only; editor checks without a browser | process, then E | medium |
 
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting

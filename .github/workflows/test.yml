@@ -17,10 +17,10 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
-# Every test suite (unit, the editor in a browser, shaders, WGSL on a GPU)
-# runs once per merge in check-main.yml, beside the deploy: a failure there
-# is reported, and the next pull request fixes main. Run the suites locally
-# before pushing.
+# The unit suites run once per merge in check-main.yml, beside the deploy,
+# and the browser tests (the editor, shaders, sound, WGSL on a GPU) once a
+# night in nightly.yml: a failure there is reported, and the next pull
+# request fixes main. Run the unit suites locally before pushing.
 jobs:
   typecheck:
     runs-on: ubuntu-latest
