@@ -1195,6 +1195,10 @@ async function cellsPage() {
   await p.locator("#fractions input[type=range]").nth(1).fill("4");
   const square = await p.locator("#fractions .ui-text").last().innerText();
   if (!square.endsWith("= [4]")) errors.push(`${where}: √4 × √4 shows ${square}`);
+  // The nested to-do outline (I35): ticking a step deep in it counts.
+  await p.locator("#outline .ui-row", { hasText: "ask Ana" }).locator(".ui-button", { hasText: "tick" }).click();
+  const done = await p.locator("#outline .ui-text").last().innerText();
+  if (done !== "3 of 7 done") errors.push(`${where}: ticking ask Ana leaves the outline at ${done}`);
   await p.close();
 }
 
