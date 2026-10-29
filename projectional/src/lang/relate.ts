@@ -1554,7 +1554,10 @@ function portsOf(code: Code, fn: Id, known: string[]): string[] {
 // The solver writes x^2; the editor writes x², like units do.
 export const powers = (t: string) => t.replace(/\^(\d+)(?![.\d])/g, (_, d: string) => d.split("").map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+c]).join(""));
 
-export function showTerm(t: Term): string {
+// With the program's names, a constructor reads by its name (rgb(…), not
+// its hash), the way showValue prints it.
+export function showTerm(t: Term, names?: Record<string, string>): string {
+  const show = (x: Term) => showTerm(x, names);
   if (t instanceof LVar) return `_${t.n}`;
   if (typeof t === "number") return String(+t.toPrecision(10));
   if (typeof t === "string") return JSON.stringify(t);
@@ -1562,10 +1565,11 @@ export function showTerm(t: Term): string {
     if (t.tag === CONS || t.tag === NIL) {
       const xs: string[] = [];
       let d: Term = t;
-      while (isData(d) && d.tag === CONS) { xs.push(showTerm(d.fields[0])); d = d.fields[1]; }
-      return isData(d) ? `[${xs.join(", ")}]` : `[${[...xs, `…${showTerm(d)}`].join(", ")}]`;
+      while (isData(d) && d.tag === CONS) { xs.push(show(d.fields[0])); d = d.fields[1]; }
+      return isData(d) ? `[${xs.join(", ")}]` : `[${[...xs, `…${show(d)}`].join(", ")}]`;
     }
-    return t.fields.length ? `${t.tag}(${t.fields.map(showTerm).join(", ")})` : t.tag;
+    const name = names?.[t.tag] ?? t.tag;
+    return t.fields.length ? `${name}(${t.fields.map(show).join(", ")})` : name;
   }
   return "<function>";
 }

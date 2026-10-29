@@ -23,7 +23,7 @@ export function searchBackwards(code: Code, def: Id, values: Record<string, unkn
     const seen = new Set<string>();
     let tries = 0;
     for (const a of relate(code, def, values, { spend: () => ++steps < STEPS && !(out.cut = stop()), names })) {
-      const shown = Object.fromEntries(Object.entries(a.values).map(([k, v]) => [k, showTerm(v)]));
+      const shown = Object.fromEntries(Object.entries(a.values).map(([k, v]) => [k, showTerm(v, names)]));
       const key = JSON.stringify(Object.values(shown).map((v) => (/^-?\d/.test(v) ? fmt(Number(v)) : v)));
       if (seen.has(key)) { if (++tries > 64) break; continue; }
       seen.add(key);
