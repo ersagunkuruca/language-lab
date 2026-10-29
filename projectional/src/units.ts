@@ -247,7 +247,15 @@ export interface Inference {
   unit: (term: string) => Unit | undefined;
 }
 
+// With no unit declared anywhere every constraint is homogeneous (each
+// right side is zero), so nothing conflicts and no term gets a unit worth
+// showing: Tumble's tap places spent 8 s solving such a system (QA10 H1).
+const declares = new WeakMap<Code, boolean>();
+const UNITLESS: Inference = { ok: true, conflicts: [], unit: () => undefined };
 export function infer(code: Code, defId: Id, extra: Constraint[] = []): Inference {
+  let any = declares.get(code);
+  if (any === undefined) declares.set(code, (any = Object.values(code.nodes).some((n) => unitOf(n))));
+  if (!any && extra.every((c) => c.rhs.every((x) => x === 0))) return UNITLESS;
   const sys = new System();
   const conflicts: Inference["conflicts"] = [];
   for (const c of [...constraints(code, defId), ...extra]) {
