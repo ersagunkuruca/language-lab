@@ -1219,6 +1219,11 @@ it too (ROADMAP 5's folds as representations). In the library, a
 it means (language gap LG1 below). *Measured:* 70× to 34× at 3000 towns,
 22× to 15× at 1000.
 
+*Fixed* (BACKLOG M3): the trees' rows carry `heads`, a list of the first
+item only for each of those jobs, and library-reps.ts uses it for such a
+match. At 3000 towns, compiled on the trees, it went from 2630 to 1433 ms
+(72× to 30× the ideal), and at 1000 from 410 to 294 ms.
+
 **M4. `compare` is the evaluator's, at run time (perf).** Every step in
 a tree compares keys through `$compare`, which is `compareValues` in
 run.ts. Each call does four things:

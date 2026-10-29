@@ -129,7 +129,11 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     const emptyTree = k.def(`empty ${word}`);
     k.define(emptyTree, k.x(tip));
     defs.push(emptyTree);
-    return { T, tip, size, insert, has, remove, list, emptyTree, first, last };
+    // The first entry (item) only, as a list of one, or nil: down the
+    // left, not the whole list (GAPS.md M3). `pick` takes what smallest
+    // gives.
+    const head = (name: string, pick: (e: Id) => Id) => def(name, ["tree"], (t) => parts(t, (_, tk, tv, l) => k.call(CONS, pick(k.call(smallest, l, ...kv(tk, tv))), k.x(NIL)), () => k.x(NIL)));
+    return { T, tip, size, insert, has, remove, list, emptyTree, first, last, head };
   }
 
   // ---- Map
@@ -167,6 +171,10 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("smallest key")]: m.first,
     [prelude("largest key")]: m.last,
   };
+  const mapHeads = {
+    [prelude("entries of")]: m.head("tree head entry", (e) => e),
+    [prelude("keys of")]: m.head("tree head key", (e) => pair(e, (key) => key)),
+  };
   const mapByType = {
     equal: mapOf((a, b) => k.call(S.equal, a, b), "tree equal"),
     compare: mapOf((a, b) => k.call(COMPARE, a, b), "tree compare"),
@@ -202,6 +210,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("smallest item")]: s.first,
     [prelude("largest item")]: s.last,
   };
+  const setHeads = { [prelude("items of")]: s.head("set tree head", (x) => x) };
   const setByType = {
     equal: setOf((a, b) => k.call(S.equal, a, b), "set tree equal"),
     compare: setOf((a, b) => k.call(COMPARE, a, b), "set tree compare"),
@@ -218,9 +227,9 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     cost: { ...at(linear, "n"), ...at(quadratic, "n²"), ...at(one, "1"), [cons]: "1", space: "n" },
   });
   return {
-    map: { name: "weight-balanced tree", of: MAP, type: m.T.def, meaning: mapMeaning, canonical: false, impl: mapImpl, byType: mapByType,
+    map: { name: "weight-balanced tree", of: MAP, type: m.T.def, meaning: mapMeaning, canonical: false, impl: mapImpl, byType: mapByType, heads: mapHeads,
       cost: { ...at(mapLog, "log n"), ...at(mapLin, "n"), ...at(["as map", "merge maps"], "n log n"), ...at(["empty map", "map size"], "1"), [MAP_V]: "n log n", space: "n" } },
-    set: { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType,
+    set: { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType, heads: setHeads,
       cost: { ...at(setLog, "log n"), ...at(setLin, "n"), ...at(["as set", "set union", "set intersection", "set difference"], "n log n"), ...at(["empty set", "set size"], "1"), [SET_V]: "n log n", space: "n" } },
     mapSpec: spec(MAP, MAP_V, [...mapLog, ...mapLin, "map size"], ["as map", "merge maps"], ["empty map"]),
     setSpec: spec(SET_TYPE, SET_V, [...setLog, ...setLin, "set size", "set union", "set intersection", "set difference"], ["as set"], ["empty set"]),
