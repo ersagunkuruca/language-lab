@@ -57,6 +57,9 @@ equality question. We keep them apart.
   In place is entirely the compiler's choice.
 - **Later goals: cache friendliness and multithreading**, as ECS engines get
   them. Both are recorded below as later steps.
+- **No fractional ordering** (2026-10-29). An item's place is its position
+  in the list, and a reorder is a `move at` edit, as built. No fractional
+  keys (numbers or strings between two neighbours) are used to order items.
 
 These follow the project's two rules: the type is the meaning and the
 representation is how fast it goes (NUMBERS.md), and target quirks never
@@ -269,6 +272,7 @@ collections (designed, not built)".
 - Path-tracked stores and edits as changes: Solid's `createStore` and
   `produce` (Ryan Carniato), MobX (Michel Weststrate), Immer's patches;
   DBSP (Budiu et al. 2023), differential dataflow (McSherry et al. 2013),
-  Jane Street's Incremental. Fractional positions for ordered items:
-  Figma's fractional indexing, Logoot and other sequence CRDTs.
+  Jane Street's Incremental. Considered and declined (Ersagun 2026-10-29):
+  fractional positions for ordered items (Figma's fractional indexing,
+  Logoot and other sequence CRDTs).
 - The colour argument: Bob Nystrom, "What color is your function?" (2015).
