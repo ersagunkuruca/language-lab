@@ -447,7 +447,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // one copy is a generator function (`isLater`).
   // `at`: the types the copy's type variables stand for, where it compares
   // values of them (`typed`), so `compare` there is at those types
-  // (GAPS.md M4): the tree jobs get a copy per key type.
+  // (GAPS.md M4): the tree jobs get a copy per key type. Specializing by
+  // type as MLton does for every definition, here only where it compares.
   interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean; at: Map<number, Type> }
   // A copy that writes its list into an array it is handed (`$into`): the
   // list itself, or the list field `k` of a record with two fields, when it
