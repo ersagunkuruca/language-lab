@@ -60,6 +60,10 @@ export interface Info {
   // operation is at, for arith.ts to resolve.
   implementations?: Map<string, Id>;
   opAt?: Map<Id, Type>;
+  // Each definition with results (RESULTS.md): the effects of the direction
+  // it declares, Choice when it may give several answers or none, Diverge
+  // when its search may not end.
+  directions?: Map<Id, Id[]>;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -969,8 +973,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       let why: string | null = null;
       try {
         const p = planSolve(asked, use);
-        if (p.mode === "relational") { const v = solveMode(asked, use, names); const stuck = v?.stuck.filter((x) => x !== "a hole") ?? []; if (stuck.length) why = stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs`; }
+        let ends = true;
+        if (p.mode === "relational") { const v = solveMode(asked, use, names); const stuck = v?.stuck.filter((x) => x !== "a hole") ?? []; if (stuck.length) why = stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs`; ends = !!v?.ends; }
         else if (p.status !== "solved") why = `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}`;
+        if (!why) (info.directions ??= new Map()).set(d, [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])]);
       } catch (e) { why = (e as Error).message; }
       if (why) err(d, `${nm(d)}'s results can't all be found from ${from}: ${why}`);
     }

@@ -103,14 +103,15 @@ Mercury compiles each mode.
    and a use that follows the declared direction as `length, angle =
    polar(x, y)`; the DSL builds both (`results`, `use`).
    examples/relations' polar and sum and difference declare theirs, so
-   `to polar` and `split` read that way (test/results.test.ts). The
-   signature line still shows the predicate's type; it reads as the
-   direction in L95b.
-2. **L95b.** Results computed directly: `= e1, e2` for a definition whose
-   results are each given by an expression of its inputs, and other
-   directions written by naming what's given.
-3. **L95c (editor lane).** The graph node's output wires, the palette and
-   structural editing of results.
+   `to polar` and `split` read that way (test/results.test.ts).
+2. **L95b, built.** Results computed directly: `= e1, e2` for a
+   definition whose body is `r1 = e1 and r2 = e2` with no result inside an
+   e; other directions written by naming what's given (`d, b = ‹sum and
+   difference›(s = 10, a = 3)`); and the signature line read as the
+   declared direction, with the effects the checker found for it
+   (`Info.directions`).
+3. **L95c (editor lane, Inbox I65).** The graph node's output wires, the
+   palette and structural editing of results.
 4. **C55 (compiler lane).** Each direction compiled on its own, unused
    results dropped.
 
