@@ -95,12 +95,17 @@ Mercury compiles each mode.
 
 ## Steps
 
-1. **L95a.** The definition's `results` (the model's def node lists which
-   of its ports they are, in order); the checker checks the declared
-   direction at the definition and types a use from it; text renders the
-   definition's header (`→ length, angle`) and a use that follows the
-   declared direction as `length, angle = polar(x, y)`; the DSL builds
-   both. examples/relations' polar and `to polar` use it.
+1. **L95a, built.** The definition's `results` (the model's def node lists
+   which of its ports they are, in order); the checker checks the declared
+   direction at the definition ("sum and difference's results can't all be
+   found from d: it needs 1 more known port"), and a use is typed as any
+   `solve` is; text renders the definition's header (`→ length, angle`)
+   and a use that follows the declared direction as `length, angle =
+   polar(x, y)`; the DSL builds both (`results`, `use`).
+   examples/relations' polar and sum and difference declare theirs, so
+   `to polar` and `split` read that way (test/results.test.ts). The
+   signature line still shows the predicate's type; it reads as the
+   direction in L95b.
 2. **L95b.** Results computed directly: `= e1, e2` for a definition whose
    results are each given by an expression of its inputs, and other
    directions written by naming what's given.

@@ -18,7 +18,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
-import { BOOL, CELL_OPS, S, SET, SIGS, SMART } from "./std.ts";
+import { BOOL, CELL_OPS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
@@ -942,8 +942,43 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Units are part of a number's type: a conflict is a type error.
   for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
+  // Definitions with results (RESULTS.md, L95): a predicate whose result
+  // ports are named, in order. The direction they declare must be one the
+  // inputs pin down, said here at the definition rather than at a use.
+  function results() {
+    for (const d of valueDefs) {
+      const def = code.nodes[d] as NodeOf<"def">;
+      if (!def.results) continue;
+      const lam = def.body ? code.nodes[def.body] : null;
+      if (lam?.kind !== "lambda") { err(d, `${nm(d)} has results, so it is a function of its ports`); continue; }
+      const odd = def.results.filter((r, i) => !lam.params.includes(r) || def.results!.indexOf(r) !== i);
+      if (odd.length) { err(d, `${nm(d)}'s results are some of its own ports, each once: ${odd.map(nm).join(", ")} isn't`); continue; }
+      const sc = info.schemes.get(d), t = sc && s.zonk(sc.type);
+      if (t?.t === "fn" && !(t.ret.t === "con" && t.ret.id === BOOL)) { err(d, `${nm(d)} has results, so it is a predicate over its ports (it gives true or false), not ${show(t.ret)}`); continue; }
+      // The direction, as a use would ask it: the other ports given, out true.
+      const ins = lam.params.filter((p) => !def.results!.includes(p));
+      const nodes: Record<Id, Node> = { ...code.nodes };
+      const add = (n: Node) => { nodes[n.id] = n; return n.id; };
+      const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
+      given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
+      const binds = Object.fromEntries(def.results.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
+      const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as NodeOf<"solve">;
+      add(use);
+      const asked = { nodes, defs: code.defs };
+      const from = ins.length ? ins.map(nm).join(", ") : "nothing";
+      let why: string | null = null;
+      try {
+        const p = planSolve(asked, use);
+        if (p.mode === "relational") { const v = solveMode(asked, use, names); const stuck = v?.stuck.filter((x) => x !== "a hole") ?? []; if (stuck.length) why = stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs`; }
+        else if (p.status !== "solved") why = `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}`;
+      } catch (e) { why = (e as Error).message; }
+      if (why) err(d, `${nm(d)}'s results can't all be found from ${from}: ${why}`);
+    }
+  }
+
   settle();
   implementations();
+  results();
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {

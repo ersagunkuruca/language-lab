@@ -164,6 +164,7 @@ export function pointsAt(n: Node): Id[] {
   if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);
   if (n.kind === "def" && n.way) out.push(n.way);
+  if (n.kind === "def" && n.results) out.push(...n.results);
   return out;
 }
 

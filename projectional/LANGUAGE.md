@@ -1084,6 +1084,13 @@ outputs stay consistent with each other (`src/lang/solve.ts`,
 ‹square roots›(y) = all(() => solve square(result = y) for x → x)
 ```
 
+A definition can name its results (RESULTS.md): `polar(x, y) → length,
+angle = …` is still the predicate over four ports, and says that given x
+and y it gives length and angle. A use in that direction reads as the
+results side by side, `length, angle = polar(x, y)`, and is the same solve
+node underneath. The checker says at the definition when its inputs can't
+pin its results down.
+
 The effect comes from the solver's static `direction()`. Exactly one answer
 that can't fail is pure: the missing addend of `+`, for instance. Several
 answers, or possibly none, is `Choice`, a lazy stream with the canonical
