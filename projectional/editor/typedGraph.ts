@@ -622,6 +622,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // function per case, each drawn as a frame whose parameters are that
   // case's fields (and, for a fold, the parts already folded). Only the
   // chosen case's function runs.
+  // The longest a case's title or row reads before it is shortened.
+  const APART = 24;
   const cases = (id: Id, n: NodeOf<"match"> | NodeOf<"fold">, from?: { args: Id[]; lams: Map<Id, NodeOf<"lambda">> }): Sub => {
     let armNodes = n.arms.map((a) => node(a) as NodeOf<"arm">);
     const isIf = n.kind === "match" && armNodes.length === 2 && armNodes.every((a) => [TRUE, FALSE].includes(a.variant));
@@ -636,7 +638,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // halves(front, back) = split(tail) does; its function runs next.
     const apart = n.kind === "match" && takenApart(code, info, n);
     const starts = from ? from.lams.get(armNodes[0].id)!.params : [];
-    const title = from ? `fold${type ? ` ${name(type)}` : ""} from ${starts.map(name).join(", ")}` : isIf ? "if" : apart ? `${name(armNodes[0].variant)}(${armNodes[0].binds.map(name).join(", ")}) =` : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
+    // Taking a value apart names its fields once, on the frame that gets
+    // them; the node itself says only whose, when they'd make it long
+    // (Ersagun 2026-10-29).
+    const fields = apart ? `${name(armNodes[0].variant)}(${armNodes[0].binds.map(name).join(", ")}) =` : "";
+    const title = from ? `fold${type ? ` ${name(type)}` : ""} from ${starts.map(name).join(", ")}` : isIf ? "if" : apart ? (fields.length > APART ? `${name(armNodes[0].variant)}(…) =` : fields) : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
@@ -648,7 +654,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const all = n.kind === "match" && !handles && !isIf && !apart && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
     const rows = all && flattened(all) ? all : null;
     for (const r of rows ?? []) {
-      labels.push(patternText(r.pat, name, name));
+      const pat = patternText(r.pat, name, name);
+      labels.push(pat.length > APART ? `${pat.slice(0, APART - 1)}…` : pat);
       inputs.push(r.at);
       kids.push(region(r.at, `(${r.binds.map(name).join(", ")}) =>`, r.binds, r.body, "arm"));
     }
