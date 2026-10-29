@@ -1248,6 +1248,13 @@ needs them compiled at the key type: copies per type, which L38's generic
 code already makes. *Measured:* 34× to 15.5× at 3000 towns, 15× to 7×
 at 1000.
 
+*Fixed* (BACKLOG M4): `orderOf` in compile.ts, and a copy per type for a
+generic definition that compares its type variables (Spec `at`). At 3000
+towns, compiled on the trees, it went from 1433 to 643 ms (30× to 16× the
+ideal), and at 1000 from 294 to 132 ms. A copy is made for each type every
+variable is called at, the value's too (`tree put$Text_Int`,
+`tree put$Text_Text`). Copying only the compared ones would make less code.
+
 **M5. The trees count their depth (perf, small).** Every tree job that
 recurses (`tree put`, `set tree add`, …) increments and decrements
 `$rec.d` and checks it against 1000, for C21's switch to the heap. A
