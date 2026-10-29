@@ -1774,11 +1774,17 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const fn = (a: NodeOf<"arm">) => (waits ? `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})` : `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`);
       const table = (as: NodeOf<"arm">[]) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a)}`).join(", ")} }`;
       const returns = (a: NodeOf<"arm">) => !isLater(a.variant) && !!node<"variant">(a.variant).returns;
-      if (waits && arms.some(returns)) throw notYet("a handler that waits, with a case answered at once");
+      // A case answered at once answers in place, as a plain function, even
+      // where the match waits: one that would wait itself isn't compiled yet.
+      const now = (as: NodeOf<"arm">[]) => {
+        const t = `{ ${as.map((a) => `${tag(a.variant)}: ((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => inGen(false, () => ret(a.body)))}\n})`).join(", ")} }`;
+        try { new Function(`"use strict";\n(${t})`); } catch { throw notYet("a handler that waits, with a case answered at once that waits too"); }
+        return t;
+      };
       const ops = `{ ${arms.filter((a) => isLater(a.variant)).map((a) => `${tag(a.variant)}: ${JSON.stringify(names[a.variant] ?? a.variant)}`).join(", ")} }`;
       const body = scoped(false, () => inGen(true, () => ret(n.scrutinee)));
       try { new Function(`"use strict";\n(function* () {\n${body}\n})`); } catch { throw notYet("an operation answered later performed inside a function the compiler makes (a search, a loop)"); }
-      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter((a) => !isLater(a.variant)))}, function* () {\n${body}\n}))`;
+      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${now(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}))`;
       return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n})`;
     }
 

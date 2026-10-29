@@ -203,6 +203,27 @@ test("a handler of one operation answered later inside another's: each answers i
   assert.deepEqual(await p.compiled(), ["asked", "asked", "[10, 11]"]);
 });
 
+// C40: the inner handler waits on Ask (its rest's row says so), and has a
+// case answered at once too, which answers in place.
+test("a handler that waits, with a case answered at once: compiled, each answers its own", async () => {
+  const p = program((k) => {
+    const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"], ["size", [], () => k.tref(NUMBER)]]);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(
+      k.handle(k.seq(k.call(Y.op.yield, k.call(A.op.ask)), k.call(Y.op.yield, k.call(B.add, k.call(Y.op.size), k.call(A.op.ask))), k.x(NIL)), [
+        { variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.call(CONS, item, k.call(rest, k.x(UNIT_V))) },
+        { variant: Y.op.size, names: [], body: () => k.seq(say(k, k.lit("sized")), k.lit(7)) },
+      ]),
+      [{ variant: A.op.ask, names: ["rest"], body: ([rest]) => k.seq(say(k, k.lit("asked")), k.call(rest, k.lit(10))) }],
+    )))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.deepEqual(p.run(), ["asked", "sized", "asked", "[10, 17]"]);
+  assert.deepEqual(await p.compiled(), ["asked", "sized", "asked", "[10, 17]"]);
+});
+
 test("a case that may give several answers can't hold the rest", () => {
   const p = program((k) => {
     const A = k.effect("Ask", [["ask", [], () => k.tref(NUMBER), "later"]]);

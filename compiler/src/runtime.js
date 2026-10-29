@@ -430,9 +430,10 @@ export function $handleL(effect, later, ops, answers, escapes, body) {
 
 // ... where the match itself waits on another handler's operation: a
 // generator too, which passes on what isn't its own (and the answer back
-// in), and whose cases and rest are generators.
-export function* $handleLG(effect, later, ops, escapes, body) {
-  const h = { effect, answers: {} }, it = body();
+// in), and whose cases and rest are generators. A case answered at once
+// is a plain function, answered in place as $handle's are.
+export function* $handleLG(effect, later, ops, answers, escapes, body) {
+  const h = { effect, answers }, it = body();
   function* run(send) {
     for (;;) {
       const at = handlers.length, d = $rec.d;
