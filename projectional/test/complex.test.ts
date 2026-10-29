@@ -28,7 +28,7 @@ function program() {
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
   const [show, i, divide, exp, conj, modulus, angle, polar, asC, magnitude] =
-    ["show complex", "i", "divide complex", "complex exp", "complex conjugate", "modulus", "angle of", "polar", "as complex", "magnitude"].map(lib);
+    ["show complex", "i", "divide complex", "complex exp", "complex conjugate", "modulus", "angle of", "from polar", "as complex", "magnitude"].map(lib);
   const z = (re: number, im: number) => k.call(COMPLEX_V, k.lit(re), k.lit(im));
   const all = (body: () => Id) => k.call(S.all, k.thunk(body));
   const im = (v: Id) => k.match(v, [{ variant: COMPLEX_V, names: ["re", "im"], body: ([, b]) => b }]);
