@@ -1175,6 +1175,8 @@ or don't take a step definition as the sink when the chain is empty. A
 test in compile.test.ts with `map` and `keep` straight over `split` and
 `characters`. `routes.test.ts` has a todo that turns green with the fix.
 
+*Fixed:* `sinkOf` applies the step's own `emit` before pushing (BACKLOG M1).
+
 **M2. A map or set in a field of the program's own type can't take the
 tree (correctness: refused).** `lab run` without `--as-defined` says
 "routes doesn't check on Map as weight-balanced tree, …: search needs

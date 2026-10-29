@@ -218,6 +218,25 @@ test("Bool parameters and tests passed to keep are JS booleans, and boxed where 
   assert.deepEqual(fromList(defs.main() as Value), fromList([...r.call(r.value(main))][0]));
 });
 
+test("a step straight over split or characters, with nothing after it, still takes its step (GAPS.md M1)", async () => {
+  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const k = new Lang(LIBRARY.code);
+  const keep = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "keep")!;
+  const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(
+    k.call(SHOW_ANY, k.call(keep, k.call(T.split, k.lit("a  b"), k.lit(" ")), k.fn(["w"], (w) => k.call(S.not, k.call(S.equal, w, k.lit("")))))),
+    k.call(SHOW_ANY, k.call(map, k.call(T.split, k.lit("a  b"), k.lit(" ")), k.fn(["w"], (w) => k.call(T.length, w)))),
+    k.call(SHOW_ANY, k.call(keep, k.call(T.characters, k.lit("a b")), k.fn(["c"], (c) => k.call(S.not, k.call(S.equal, c, k.lit(" ")))))),
+  )));
+  const { code, info, defs } = await compiledDefs(k, ["main"], "step-sink.js");
+  const r = makeRunner(code, info, { print: () => {} });
+  const want = fromList([...r.call(r.value(main))][0]);
+  assert.deepEqual(fromList(defs.main() as Value), want);
+  assert.equal((want as string[])[0], '["a", "b"]');
+});
+
 test("running out of fuel in plain code inside a search fails that branch only, as in the evaluator", async () => {
   const k = new Lang();
   // counts up from x forever when x ≥ 0: the checker can't show it ends
