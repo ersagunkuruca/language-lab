@@ -104,6 +104,10 @@ button { font: inherit; color: inherit; }
    pane at a time, the full height, picked from a bar at the bottom; the
    top bar scrolls sideways instead of wrapping. */
 .panes { display: none; }
+/* Embedded in another page (?embed): one definition's blocks over Run */
+.embed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.embed .p-text { flex: none; overflow: visible; }
+.embed .p-text .body { overflow: visible; }
 @media (max-width: 900px), (max-height: 500px) {
   #app { height: 100dvh; gap: 4px; padding: 4px; }
   .bar { flex-wrap: nowrap; overflow-x: auto; padding-block: 4px; }

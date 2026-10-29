@@ -270,10 +270,17 @@ const initial = (): Doc => {
   return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints };
 };
 
+// An embed (`?embed&program=sort&def=insert`): one definition's blocks
+// and Run, for a page that teaches with the editor in an iframe. It starts
+// from the example as shipped and keeps nothing, so the editor's own
+// programs (localStorage) are neither read nor written.
+const ASKED = new URLSearchParams(typeof location === "object" ? location.search : "");
+const EMBED = ASKED.has("embed");
+
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
-let doc: Doc = initial();
-try {
+let doc: Doc = EMBED ? initialFor(ASKED.get("program") ?? "numbers") : initial();
+if (!EMBED) try {
   const saved = JSON.parse(localStorage.getItem(STORE) ?? "null");
   // Programs that have left the picker (the old data-type algebra) are
   // dropped, and so are untyped ones saved before one world.
@@ -360,7 +367,7 @@ const OPENING = TOUCH
   : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
 
 const ui: UI = {
-  def: startDef(),
+  def: (EMBED && defNamed(ASKED.get("def") ?? "")) || startDef(),
   pane: "graph",
   back: [],
   selected: null,
@@ -413,6 +420,7 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
 
 function save() {
   docs[doc.program] = doc;
+  if (EMBED) return;
   try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs })); } catch {}
 }
 
@@ -3015,7 +3023,7 @@ function select(id: Id | null) {
 const GUIDE_SEEN = "projectional-guide-seen";
 // The guide is a tab in the side column, open on a first visit, so the
 // graph keeps its room.
-try { if (!localStorage.getItem(GUIDE_SEEN)) { ui.panel = "guide"; localStorage.setItem(GUIDE_SEEN, "1"); } } catch { ui.panel = "guide"; }
+if (!EMBED) try { if (!localStorage.getItem(GUIDE_SEEN)) { ui.panel = "guide"; localStorage.setItem(GUIDE_SEEN, "1"); } } catch { ui.panel = "guide"; }
 
 function guide(): HTMLElement {
   const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph" }); r.append(...els); return r; };
@@ -3227,6 +3235,25 @@ function draw() {
     ["guide", "Guide", () => [guide()]],
   ];
   const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
+  const status = h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note);
+  const restore = () => {
+    SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
+    if (focused) document.getElementById(focused)?.focus();
+  };
+
+  // Embedded: the definition's blocks, Run, and what's selected (a hole's
+  // palette), one under the other.
+  if (EMBED) {
+    app.replaceChildren(
+      h("main", { class: "embed" },
+        h("section", { class: "panel p-text", "aria-label": "Text" },
+          h("div", { class: "text-head" }, h("h2", {}, namer.name(ui.def))),
+          h("div", { class: "body" }, textView)),
+        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
+        ui.selected ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null),
+      status);
+    return restore();
+  }
 
   app.replaceChildren(
     h("header", { class: "bar" },
@@ -3266,13 +3293,12 @@ function draw() {
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
           ...shown[2]()))),
-    h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note),
+    status,
     // At phone width one pane at a time, picked here (page.html).
     h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run"]] as const).map(([k, label]) =>
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
-  SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
-  if (focused) document.getElementById(focused)?.focus();
+  restore();
 }
 
 // A press outside the menu closes it, before anything else sees the press.
