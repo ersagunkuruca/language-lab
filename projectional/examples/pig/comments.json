@@ -1,0 +1,17 @@
+{
+  "bijikre7pr7bj7071uuo2347jl": "Whether to roll again. The game asks; whoever handles Decide answers: a strategy, or later a person clicking.",
+  "cnp69hf9u3dhfqrab22b9mor91": "A line of commentary. The game says what happens; a handler decides where it goes: onto the page, or nowhere.",
+  "d9vdgsof1bvlg232vanl1qg4am": "One die: a random number in [0, 1), times 6, rounded down, plus 1. Who answers Random is up to the caller.",
+  "io0ivhumib5ih0uqj0o21uitfo": "Player 0 is A, player 1 is B.",
+  "6ial1l1g2bmmdgkpis7043o4r9": "One turn of Pig: roll; a 1 loses everything rolled this turn, anything else adds to it, and then the player decides whether to roll again or hold. It performs Random, Say and Decide and handles none of them.",
+  "3llo3u5pedol1qq32m3aulr4gq": "Turns until someone reaches 100. mine is the score of the player whose turn it is, theirs the other's. Gives the winner.",
+  "5bhlgenqae23rto8vd5o9r157u": "A strategy, as a handler of Decide: keep rolling until this turn's points reach the player's limit (a for A, b for B), or until holding would win.",
+  "k15pg1nk1cj15n6bo57ji6ck06": "Answers Say by saying nothing: the same game, no commentary.",
+  "3q3cc7oo14slml5fuuc834hn56": "Answers Say by adding the line to a cell, which the page shows.",
+  "nn7tc8ldbda0p28e4k283h6l6f": "Passes each Random on to whoever handles it outside, and keeps the answers in a cell.",
+  "0e85tg725301i10t9anngmilth": "Answers Random from a cell of numbers kept earlier, one at a time, so the game rolls exactly what it rolled then. When they run out it asks outside.",
+  "bdlg8uc08177k9ld1v4aiks276": "n games with no commentary, A holding at a and B at b, each starting in turn. Gives how many B won.",
+  "7ivqqoskl0oa912bl5u4r48d6a": "Who this page borrows from, shown on the page (projectional/CREDITS.md).",
+  "v1isr9ufagrak5t5mnnred9g63": "The page. Each button runs the same play under different handlers: Play records the world's random numbers as it goes and writes the commentary onto the page; Replay answers Random from that record, so the same game comes out; the last plays games with no commentary and counts who wins.",
+  "program": "Prior art: Pig is a folk dice game, described by John Scarne (Scarne on Dice, 1945); hold at 20 is the rule of thumb analysed by Todd Neller and Clifton Presser, \"Optimal Play of the Dice Game Pig\", The UMAP Journal 25(1), 2004.\nPrior art: effects answered by handlers you choose are Eff's (Andrej Bauer and Matija Pretnar) and Koka's (Daan Leijen).\nOur own: the page, and running one game under strategy, commentary, recording and replay handlers."
+}

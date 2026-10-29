@@ -37,6 +37,23 @@ test("the dice page previews: Roll draws, the clock runs on frames, stop stops i
   assert.equal(tick(), 0);
 });
 
+// Pig: one game, run under different handlers. A replay answers Random from
+// the numbers the game drew, so it says exactly what the game said.
+test("the pig page: a game, its replay word for word, and a thousand games told quietly", () => {
+  const { root } = open("pig");
+  const lines = () => root.find("lines").textContent;
+  root.find("play").fire("click");
+  const game = lines();
+  assert.match(game, /^(A|B) rolls /);
+  assert.match(game, /(A|B) wins, 1\d\d to \d+$/);
+  root.find("replay").fire("click");
+  assert.equal(lines(), game);
+  root.find("many").fire("click");
+  const [, a, b] = root.find("tally").textContent.match(/A \(holds at 20\) won (\d+) and B \(holds at 25\) won (\d+)\./)!.map(Number);
+  assert.equal(a + b, 1000);
+  assert.equal(lines(), game, "the quiet games say nothing on the page");
+});
+
 test("the converter previews: typing in one field moves the others", () => {
   const { root } = open("converter");
   const inputs: FakeEl[] = [];
