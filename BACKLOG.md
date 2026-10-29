@@ -108,12 +108,15 @@ Thread "Language and library lane". Order (Ersagun, 2026-10-24 07:01): L38, one 
 | L98 | **Design** (projectional/STABLE-REFERENCES.md §1): a cell owns its value and a write is an edit at a path: `write(c, at(3).title, v)`, `insert`, `remove`, `move` in Update; paths are plain data (`at(i)`, `key(k)`, a field); the handler applies the edit in place and wakes only readers of that path, its prefixes and the order or size; a kept old value makes the next edit copy only its path. Keyed collections need unique keys (handler keeps key → position). Evaluator first. **Step 1 done (L98a)**: paths and edits by position, waking by place; next keys (with L99) | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P2 | L | |
 | L99 | **Design** (projectional/STABLE-REFERENCES.md §2): reads tracked by path, so data inside cells stays plain (no `Cell` fields, no colour): a watcher or formula gets a tracked view typed as the plain value. `each`/`for each` become keyed and driven by L98's edits (one row added, moved or disposed, no diff, no O(n²) match). A plain `State` handler for cells nobody watches. Needs L98. **Step 1 done (L99a)**: `each` follows the edits; next the tracked views | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P2 | L | |
 | L101 | **Later goal** (projectional/STABLE-REFERENCES.md §5): multithreading where uniqueness allows it: a column with one holder split and mapped on several threads with no data races (rayon), effect rows deciding what runs side by side as an ECS scheduler does. Joins LANGUAGE-NEEDS-2026-10-24 `together` and data-parallel map | Ersagun 2026-10-29, thread "Design reactive lists for cells" | P3 | L | |
+| T9 | Every example's every definition drawn by the editor's own code in Node on a fake page (test/fakedom.ts or similar), failing on anything thrown or a list shown as cons(…): what the browser smoke's first 6 minutes check, in seconds, per merge | Ersagun 2026-10-29, TESTING.md T8 | P1 | M | thread "Replace the slow browser smoke test"; may need editor/main.ts to start without a window (ask lane E) |
+| T10 | The smoke's 37 editing scenarios (swap and undo, drops, loose parts, let nodes…) as plain tests of the edits, each browser scenario deleted when its test exists | Ersagun 2026-10-29, TESTING.md T8 | P2 | M | lane E, after T9 |
+| T11 | What stays in a browser: one check of about 30 s (the page loads, one program runs, a shader draws, the phone layout) | Ersagun 2026-10-29, TESTING.md T8 | P2 | S | after T10 |
 
 ## Testing and fast feedback
 
 Thread "Testing strategy and fast feedback", which owns `.github/workflows`
 since 2026-10-23. Plan and measurements: projectional/TESTING.md. T1-T3,
-T4 to T6 are done; T7 is in lane L.
+T4 to T6 and T8 are done; T7 is in lane L; T9 to T11 replace the browser smoke.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
@@ -518,6 +521,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| T8 | Browser tests (editor, shaders, sound, GPU) leave Check main and the before-push run: `npm run affected` runs them only with `--all` (nightly) or `--browser`. Check main ~10 min to ~1, about 140 billed minutes a day to about 15 | #623 |
 | T6 | Testing rules in WORKFLOW.md ("Tests"): the language's terms, laws over all examples, tests go with the design they pin, under 5 s per file or a sweep, no coverage targets. The tests that mention `cons` read against them: toplevel.test.ts edits a match on a list's cons arm (would change with arrays, as it should); compiler checks that output has no `$cons` (the opposite of a pin) | this PR |
 | T5 | Nightly at 03:00 UTC, when main changed since the `good` tag: `npm run affected -- --all` (every test, every sweep in full, the browser and GPU checks); green moves `good`. Running Pages by hand on `good` puts back the last fully checked site | #267 |
 | T2 | `npm run affected` runs only the tests a change reaches: the import graph across the three packages, the test files that read a changed example, the browser tests when the pages could change; Check main runs it from its last green commit. Over the last 40 merges: 6 needed nothing, 5 nearly every unit test, the rest a few files; the browser tests (now the long pole, T4) for 31 | #266 |

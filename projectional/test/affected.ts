@@ -6,13 +6,16 @@
 //   npm run affected -- <base>     changes since <base>
 //   npm run affected -- <a> <b>    changes from commit a to b (files as they are now)
 //   npm run affected -- --all      everything, every sweep in full (the nightly run)
+//   npm run affected -- --browser  the browser tests too, when the change reaches them
 //   npm run affected -- --list     say what would run, run nothing
 //
 // A test file runs when it, or anything it imports (through any chain, in
 // projectional, compiler or invertible), changed. The examples are read at
 // run time, which no import shows, so a changed example also runs the test
-// files that name it or list the examples folder. The browser tests run
-// when anything the built pages are made of changed. A change to a
+// files that name it or list the examples folder. The browser tests (the
+// editor, shaders, sound, WGSL on a GPU) take about ten minutes, so they
+// run only with --all, once a night, or with --browser, when anything they
+// are made of changed (TESTING.md, T8). A change to a
 // package's setup (package.json, the lockfile, tsconfig) runs everything,
 // and prose and pictures run nothing.
 
@@ -25,6 +28,7 @@ const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encodin
 const argv = process.argv.slice(2);
 const all = argv.includes("--all");
 const listOnly = argv.includes("--list");
+const browser = all || argv.includes("--browser");
 const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--"));
 
 const PACKAGES = ["projectional", "compiler", "invertible"];
@@ -88,16 +92,17 @@ for (const p of PACKAGES) {
   // Node runs (cores - 1) files at a time, one on a two-core runner.
   if (mine.length) runs.push({ what: `${p}: ${mine.length} of ${tests.filter((t) => t.startsWith(p + "/")).length} test files`, cwd: p, cmd: ["node", "--test", "--test-concurrency=2", "--test-reporter=dot", ...mine] });
 }
-if (page) {
+if (page && browser) {
   runs.push({ what: "build the pages", cwd: "projectional", cmd: ["node", "editor/build.ts"] });
   runs.push({ what: "the editor in a browser", cwd: "projectional", cmd: ["node", "editor/smoke.ts"] });
   runs.push({ what: "shaders in a browser", cwd: "projectional", cmd: ["node", "editor/shaders-smoke.ts"] });
 }
-if (gpu) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
-if (sound) runs.push({ what: "sound in a browser", cwd: "projectional", cmd: ["node", "test/sound-browser.ts"] });
+if (gpu && browser) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
+if (sound && browser) runs.push({ what: "sound in a browser", cwd: "projectional", cmd: ["node", "test/sound-browser.ts"] });
 
 console.log(all ? "everything, every sweep in full" : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
+if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
 if (!runs.length) console.log("  nothing to test");
 if (listOnly) process.exit(0);
 
