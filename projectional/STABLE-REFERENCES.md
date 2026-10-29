@@ -3,7 +3,7 @@
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
 and the design the repository keeps. Nothing here is built yet. The steps
-are BACKLOG rows L98-L101 and C56-C60.
+are BACKLOG rows L98-L101 and C56-C61.
 
 **In one sentence:** the window between pure functions and objects that stay
 where they are is *uniqueness*: a value only one place holds may be changed
@@ -165,6 +165,29 @@ representation in the language, which Ersagun decided against.
   rayon does. Effect rows already say what each step reads and writes, which
   is what an ECS scheduler uses to decide what may run side by side. This
   joins LANGUAGE-NEEDS-2026-10-24.md's `together` and data-parallel map.
+
+### 6. Where code runs, chosen like everything else (C61)
+
+Ersagun (2026-10-29): use every processing environment, more automatically
+than Unity's Burst or hand-written compute shaders. On the web that is JS,
+WebAssembly, Web Workers and the GPU through WebGPU, which does run
+general compute shaders (we already do: `compiler/gpu.ts` runs each scalar
+function as a WGSL compute shader and compares it with the evaluator).
+
+The same rule as above applies: where a part runs is a representation-like
+choice, made by the compiler by cost, never written in the program. What
+makes a part eligible is already in its type: a pure row with no Choice can
+go to a worker or the GPU; the scalar profile (numbers, records of numbers,
+loops) can go to WGSL; anything with Console, Files or Update stays on the
+main thread. The chooser weighs the work against the cost of moving the
+data there and back, which is where flat layout (C59) and columns (C60)
+matter. This extends L96's "ways chosen by cost per target" from one
+operation to a whole map or fold. Prior art: Unity's Burst compiler and
+job system; Futhark (Henriksen et al. 2017) and Accelerate (Chakravarty et
+al. 2011) for data-parallel code on GPUs; Halide's separation of algorithm
+and schedule (Ragan-Kelley et al. 2013); HVM and Bend (Victor Taelin,
+Higher Order Company), which run interaction-net programs on CPU threads
+or the GPU automatically. Bend 2 not yet read.
 
 ## The demo (L100)
 
