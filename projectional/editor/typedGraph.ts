@@ -969,11 +969,25 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   const { pos, boxes, point } = placeAll(scene, at);
   const depth = (f: Id | null): number => (f ? 1 + depth(scene.frames.get(f)!.parent) : 0);
 
+  // What's selected is drawn over what isn't, with the frames around it up
+  // to the outermost under the definition: an unfolded frame doesn't hide
+  // under its neighbours (Ersagun 2026-10-29). Each layer below has a
+  // second group drawn after all of the first.
+  const parentOf = (f: Id) => scene.frames.get(f)?.parent ?? null;
+  const chosen = hooks.selected ?? null;
+  let top: Id | null = chosen && scene.frames.has(chosen) ? chosen : chosen ? scene.items.get(chosen)?.frame ?? null : null;
+  while (top && parentOf(top) && parentOf(top) !== scene.defId) top = parentOf(top);
+  if (top === scene.defId) top = null;
+  const within = (f: Id | null): boolean => { for (let p = f; p; p = parentOf(p)) if (p === top) return true; return false; };
+  const liftItem = (k: Id) => k === chosen || within(scene.items.get(k)?.frame ?? null);
+  const lifted = (e: End) => ("item" in e ? liftItem(e.item) : within("frame" in e ? e.frame : e.frameOut));
+  const pair = (cls?: string) => { const a = s("g", cls ? { class: cls } : {}), b = s("g", cls ? { class: cls } : {}); return (up: boolean) => (up ? b : a); };
+
   // Frames, outermost first, so inner ones sit on top.
-  const frameG = s("g", { class: "frames" });
-  const portG = s("g", { class: "ports" });
+  const frameL = pair("frames"), portL = pair("ports");
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   for (const f of [...scene.frames.values()].sort((a, b) => depth(a.parent) - depth(b.parent))) {
+    const frameG = frameL(within(f.id)), portG = portL(within(f.id));
     const b = boxes.get(f.id)!;
     const r = s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 9, class: `rg ${f.cls}${sel(f.id)}${picked.has(f.id) ? " picked" : ""}`, "data-id": f.id, "data-frame": f.id });
     if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
@@ -993,7 +1007,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
 
   // Wires: each as points, so crossings can be found; a wire that crosses
   // one drawn before it hops over it.
-  const wireG = s("g", { class: "wires" });
+  const wireL = pair("wires");
   const marks = s("g", { class: "tunnels" });
   const solid: { key: Id; box: Box }[] = [];
   for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: it.w, h: it.h } }); }
@@ -1018,6 +1032,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const hops = crossingsOf(pts, drawn.map((d) => d.pts));
     const d = hops.length || bent ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
     drawn.push({ pts });
+    const wireG = wireL(lifted(w.from) && lifted(w.to));
     if (w.use) {
       const on = hooks.selected === w.use.dot || hooks.selected === w.use.ref;
       wireG.append(s("path", { d, class: "use-hit", "data-id": w.use.ref }), s("path", { d, class: `tw use${on ? " lit" : ""}` }));
@@ -1032,15 +1047,16 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
 
   // From each step of an action to the next: straight, dashed, under the items.
   for (const [a0, b0] of scene.then ?? []) {
-    const a = point(a0), b = point(b0);
+    const a = point(a0), b = point(b0), wireG = wireL(lifted(a0) && lifted(b0));
     const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l;
     const head = (k: number) => `${(b.x - ux * 6 + k * uy * 3.5).toFixed(1)},${(b.y - uy * 6 - k * ux * 3.5).toFixed(1)}`;
     wireG.append(s("path", { d: `M${a.x.toFixed(1)},${a.y.toFixed(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)}`, class: "then" }), s("path", { d: `M${head(1)} L${b.x.toFixed(1)},${b.y.toFixed(1)} L${head(-1)}`, class: "then head" }));
   }
 
   // Items.
-  const itemG = s("g", { class: "items" });
+  const itemL = pair("items");
   for (const it of scene.items.values()) {
+    const itemG = itemL(liftItem(it.key));
     const p = pos.get(it.key)!;
     const g = s("g", { transform: `translate(${p.x},${p.y})` }) as SVGGElement;
     if (scene.faded?.has(it.key)) g.classList.add("faded");
@@ -1052,10 +1068,10 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     itemG.append(g);
   }
   // Frame parameter names, above everything in their frame.
-  const nameG = s("g");
+  const nameL = pair();
   for (const f of scene.frames.values()) f.binders.forEach((bd, i) => {
     const p = point({ frame: f.id, port: i });
-    nameG.append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl halo" }, f.labels[i]));
+    nameL(within(f.id)).append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl halo" }, f.labels[i]));
   });
 
   // The definition's result.
@@ -1098,7 +1114,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     // A title can't hang off a circle that's a sibling: put it inside.
     for (const c of vals.querySelectorAll("circle.val-more")) { const t = c.nextElementSibling; if (t?.tagName === "title") c.append(t); }
   }
-  return [frameG, wireG, portG, marks, itemG, nameG, out, vals];
+  return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals];
 }
 
 // ---------------------------------------------------------------- tidy
