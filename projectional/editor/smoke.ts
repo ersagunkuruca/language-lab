@@ -83,11 +83,17 @@ async function visit(saved: string | null, only?: string) {
       if (j === 0) {
         // The keyboard reaches the program: Tab from the blocks selects a part.
         if (await p.locator(".blocks-wrap").count()) {
-          // From the last part Tab leaves the program, so step back instead.
-          const ids = await p.locator(".blocks-wrap [data-id]:not(.op)").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id));
+          // From the last part Tab leaves the program, so step back instead;
+          // from the only part both leave, and it is selected already. The
+          // parts are the ones Tab steps through: no glyphs, no head, not
+          // the definition itself.
+          const ids = await p.locator(".blocks-wrap [data-id]:not(.op):not(.head)").evaluateAll((els) => {
+            const own = els.find((e) => e.classList.contains("def"))?.dataset.id;
+            return [...new Set(els.map((e) => (e as HTMLElement).dataset.id))].filter((id) => id !== own);
+          });
           const at = await p.locator(".blocks-wrap .sel[data-id]").first().getAttribute("data-id", { timeout: 200 }).catch(() => null);
           await p.locator(".blocks-wrap").first().focus();
-          await p.keyboard.press(at && at === ids.at(-1) ? "Shift+Tab" : "Tab");
+          if (!(ids.length === 1 && at === ids[0])) await p.keyboard.press(at && at === ids.at(-1) ? "Shift+Tab" : "Tab");
           if (!(await p.locator(".blocks-wrap .sel").count())) errors.push(`${where}: Tab in the blocks selected nothing`);
           // Shift+F10 opens the selected part's menu, and Escape closes it.
           await p.keyboard.press("Shift+F10");
