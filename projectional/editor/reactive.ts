@@ -7,7 +7,7 @@ import type { Code, Id } from "../src/model.ts";
 import type { Names, Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Cells } from "../src/lang/cells.ts";
-import { counterProgram, fractionsProgram } from "../src/lang/cells-programs.ts";
+import { counterProgram, fractionsProgram, outlineProgram } from "../src/lang/cells-programs.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { renderBlocks } from "../src/lang/render.ts";
@@ -56,3 +56,4 @@ function show(where: string, p: { code: Code; names: Names; main: Id }, defs: st
 
 show("counter", counterProgram(), ["main"]);
 show("fractions", fractionsProgram(), ["main", "CF", "square root", "root terms", "e terms", "terms", "arithmetic", "from x?"]);
+show("outline", outlineProgram(), ["main", "draw item", "tally", "place of"]);

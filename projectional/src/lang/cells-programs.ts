@@ -59,6 +59,10 @@ function widgets(k: Lang) {
     return d;
   };
   const row = box("row", "ui-row"), column = box("column", "ui-column");
+  // A column set in from the left: what belongs under the row above it, an
+  // outline's steps. Inline, so it reads the same on every page.
+  const indented = k.def("indented");
+  k.define(indented, k.fn(["items"], (items) => k.call(HTML_V.element, k.lit("div"), k.list(cls("ui-column"), prop("style", () => k.lit("padding-left: 24px"))), items)));
   // A field that hands what was typed to `on enter`, then empties.
   const entry = k.def("entry");
   k.define(entry, k.fn(["hint", "on enter"], (hint, enter) => k.let("draft", k.call(C.cell, k.lit("")), (draft) =>
@@ -84,7 +88,7 @@ function widgets(k: Lang) {
       el("output", [], [text(shown)]),
     ]);
   }));
-  return { label, button, row, column, entry, slider, part: HTML_V.part };
+  return { label, button, row, column, indented, entry, slider, part: HTML_V.part };
 }
 
 export function counterProgram() {
@@ -407,7 +411,7 @@ export function outlineProgram() {
       button("up", () => at(outline, key, (l, i) => k.call(C.moveAt, outline, l, i, k.call(I.sub, i, k.int(1))))),
       button("remove", () => at(outline, key, (l, i) => k.call(C.removeAt, outline, l, i))),
     )),
-    k.call(ui.column, k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step)))),
+    k.call(ui.indented, k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step)))),
   )))));
 
   const main = k.def("main");

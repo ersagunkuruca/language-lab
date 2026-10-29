@@ -62,6 +62,7 @@ import converterComments from "../examples/converter/comments.json" with { type:
 import conjugateCode from "../examples/conjugate/code.json" with { type: "json" };
 import conjugateNames from "../examples/conjugate/names.default.json" with { type: "json" };
 import conjugateComments from "../examples/conjugate/comments.json" with { type: "json" };
+import { outlineProgram } from "../src/lang/cells-programs.ts";
 import lockstepCode from "../examples/lockstep/code.json" with { type: "json" };
 import lockstepNames from "../examples/lockstep/names.default.json" with { type: "json" };
 import lockstepComments from "../examples/lockstep/comments.json" with { type: "json" };
@@ -147,7 +148,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -239,12 +240,20 @@ const initialFor = (program: Program): Doc =>
   : program === "mandelbrot" ? typedDoc("mandelbrot", mandelbrotCode as Code, mandelbrotNames, mandelbrotComments)
   : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
   : program === "pig" ? typedDoc("pig", pigCode as Code, pigNames, pigComments)
+  : program === "outline" ? outlineDoc()
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
   : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : program === "lockstep" ? typedDoc("lockstep", lockstepCode as Code, lockstepNames, lockstepComments)
   : program === "conjugate" ? typedDoc("conjugate", conjugateCode as Code, conjugateNames, conjugateComments)
   : initial();
+
+// The nested to-do outline is built in src/lang/cells-programs.ts, where
+// reactive.html runs it too (BACKLOG L100, I35).
+function outlineDoc(): Doc {
+  const p = outlineProgram();
+  return typedDoc("outline", p.code, p.names, { program: "Textbook: path-tracked stores and keyed rows, after Solid's createStore and mapArray, MobX and Immer's patches (STABLE-REFERENCES.md, Prior art). Our own: plain Item data in one cell, every button an edit at a path, the top-level rows an each that follows the edits, so ticking an item makes only its row again (BACKLOG L98, L99a, L100)." });
+}
 
 // The quadratic and the physics: plain arithmetic, and predicates with
 // units that run in every direction.
