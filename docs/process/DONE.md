@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E159 | A data type's panel says how main stores it, the chooser's pick as lab check prints it (Nat: stored as int), shown and never chosen | #700 |
 | E160 | A solve's badge shows its mode from modes.ts: one answer, or none, or more, any number; may not end or stuck, reasons on hover (was the solver's 'several · may have none' for every search) | #699 |
 | I65 | Several named results in the editor (RESULTS.md step 3): a predicate's Results buttons make a port a result or an input; the palette offers x, y = polar(□, □), a use in the declared direction. The graph half was I65a (#677) | #698 |
 | I62 | Every editor load logged a 404 for /favicon.ico: page.html names an inline SVG icon | #696 |

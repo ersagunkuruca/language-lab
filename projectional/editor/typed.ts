@@ -21,6 +21,7 @@ import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type
 import { ratioParts, read as readInt } from "../src/lang/int.ts";
 import type { Value } from "../src/lang/run.ts";
 import { parseValue } from "../src/lang/values.ts";
+import { choose, representationsIn } from "../src/lang/represent.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../src/lang/render.ts";
 import { shape } from "../src/lang/patterns.ts";
 
@@ -1467,4 +1468,16 @@ export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, n
   }
   const next: Code = { nodes, defs: [...code.defs, copy] };
   return guardTyped(info, next, nn, copy, `Copied ${name} into the program as ${label}${uses ? `; the ${uses === 1 ? "call" : `${uses} calls`} here now use it` : ""}. Edit it freely: the published ${name} is unchanged.`);
+}
+
+// How a data type is stored when main runs (REPRESENTATIONS.md step 3,
+// E159): the compiler's choice among the representations the program
+// writes for it, the cheapest for the jobs main uses, as `lab check`
+// says it. Shown, never chosen here. Null without a choice to show.
+export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: Id, main: Id | null): { rep: string; jobs: string[] } | null {
+  if (!main || info.errors.length) return null;
+  const reps = representationsIn(code, info, names, own).filter((r) => r.of === type);
+  if (reps.length < 2) return null;
+  const c = choose(code, main, reps);
+  return { rep: c.rep.name, jobs: c.jobs };
 }
