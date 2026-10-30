@@ -69,6 +69,9 @@ export interface GraphHooks {
   moved: (to: Record<Id, Pos>, note?: string) => void;
   // Bindings shown as a let node with get nodes instead of wires.
   named: Set<Id>;
+  // A page's main: one Html tree, opened on its top-left like any other,
+  // not on its steps (QA10 L1).
+  page?: boolean;
   // Frames drawn folded into one box, and folding or unfolding one.
   folded?: Set<Id>;
   // Groups of picked nodes (and frames) drawn in a frame of their own, by
@@ -141,10 +144,10 @@ const pickedBy = new Map<string, Set<Id>>();
 export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
   const scene = build(code, pres, info, defId, hooks);
   // An action opens on its steps, the column they run down: the
-  // definition's own, not those of an action inside it.
+  // definition's own, not those of an action inside it. A page doesn't.
   const depth = (u: Id) => { let n = 0; for (let f = scene.items.get(u)?.frame ?? scene.frames.get(u)?.parent ?? null; f; f = scene.frames.get(f)?.parent ?? null) n++; return n; };
   const top = Math.min(...[...scene.items.keys()].map(depth));
-  const steps = (scene.chains ?? []).find((c) => c.every((u) => depth(u) === top)) ?? [];
+  const steps = hooks.page ? [] : (scene.chains ?? []).find((c) => c.every((u) => depth(u) === top)) ?? [];
   const canvas = infiniteCanvas(key, "tgraph", () => steps.map((id) => canvas.world.querySelector(`[data-id="${CSS.escape(id)}"]`)).filter((e): e is Element => !!e));
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
