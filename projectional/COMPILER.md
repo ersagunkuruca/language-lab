@@ -778,12 +778,12 @@ program outside a JS host, and the C route covers that too.
 |---|---|---|
 | 0 | pure code, `Choice`, `Console`, `Diverge`, `solve` with closed-form plans; differential tests (this PR) | done |
 | 1a | relational directions and `derivative` through their interpreters, linked as the runtime; compiled functions carry their nodes | done (all five examples match the evaluator) |
-| 1b | mode analysis, so relational directions compile (`det` and `semidet` modes do, `compiler/src/modes.ts`; several answers still go to relate.ts); `derivative` at compile time when the function is known (done for WASM, WGSL and JS) | next; worth it once a backwards search shows up in a profile |
+| 1b | mode analysis, so relational directions compile (`det` and `semidet` modes do, `compiler/src/modes.ts`; several answers still go to relate.ts); `derivative` at compile time when the function is known (done for WASM, WGSL and JS) | done (MODES.md, L11e) |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
 | 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflowed at 10,000 steps, compiled calc at 5,000 lines: GAPS.md G1); then tail recursion modulo cons, so `cons(x, self(rest))` is a loop that fills the cell's last field (GAPS.md G22; Friedman and Wise 1975, OCaml's `[@tail_mod_cons]`) | done |
 | 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `lab compile` (projectional/cli/lab.ts); `Cells` as calls on one runtime `Cells` instance | done |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
-| 5 | other targets: WASM scalar profile (done), WGSL, single-file executables, native via C, WasmGC | the order in "Targets beyond JavaScript" |
+| 5 | other targets: WASM scalar profile, WGSL, single-file executables, native via C, WasmGC | done (WASM.md W1 to W4, NATIVE.md N1 to N5, shaders.html); Int past 64 bits on WASM is W5 |
 
 Things not to build: a parser, our own bytecode VM, or a typed IR separate
 from the node graph. Each would be a second copy of something we already

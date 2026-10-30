@@ -1,6 +1,11 @@
 # Audio: a sound is a function on blocks, the speaker is a world
 
-**Status.** A1 is done: `lab render` plays a sound over a WAV file, and
+**Status (2026-10-30).** All five stages are built: sounds offline
+(`lab render`), live in a page (apps/pedal.html), the compressor, the
+editor's preview, and the measurements (39× real time compiled). What
+follows is how each stage went.
+
+A1 is done: `lab render` plays a sound over a WAV file, and
 `examples/pedal` makes sound, the evaluator and compiled to the same bits.
 Compiled, it played 17 blocks a second of the 375 real time needs: both ways
 back (atanh's, Haar's) ran in the relational interpreter for each call.
