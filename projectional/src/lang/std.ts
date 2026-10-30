@@ -229,6 +229,14 @@ export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
   named(node({ id: TRIG_UNPOLAR, kind: "field", type, results: [0, 1], ports: ["length", "angle", "x", "y"] }), "unpolar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
 }
+// asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -> a like
+// sin and cos.
+export const TRIG_ASIN = `${TRIG_V}.asin`, TRIG_ACOS = `${TRIG_V}.acos`;
+for (const [id, name] of [[TRIG_ASIN, "asin"], [TRIG_ACOS, "acos"]]) {
+  const type = node({ id: `${id}.type`, kind: "tfun", params: [node({ id: `${id}.t0`, kind: "tref", target: `${TRIG}.a`, args: [] })], result: node({ id: `${id}.t1`, kind: "tref", target: `${TRIG}.a`, args: [] }), effects: [] });
+  named(node({ id, kind: "field", type }), name);
+  (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(id);
+}
 // Dual numbers (INTERFACES.md step 3, BACKLOG L40g): value + slope·ε with
 // ε² = 0, so f(dual(x, 1)) carries f′(x) along with f(x). A record of two
 // Float64s, like Complex: + and − part by part, · the product rule (the
