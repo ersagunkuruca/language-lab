@@ -16,8 +16,9 @@ says what of that is built and what isn't.
 
 ## Planning
 
-Open work from every source is in [BACKLOG.md](BACKLOG.md), in priority order
-per lane; how it's picked and run is in [WORKFLOW.md](WORKFLOW.md).
+Open work from every source is in [BACKLOG.md](BACKLOG.md): what each lane
+does next at the top, then each lane's items by theme. Finished items are in
+[DONE.md](DONE.md); how work is picked and run is in [WORKFLOW.md](WORKFLOW.md).
 
 ## Credits
 
