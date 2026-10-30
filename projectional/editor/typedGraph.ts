@@ -41,6 +41,7 @@ import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type P
 import { litLabel } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
+import { solveMode } from "../src/lang/modes.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { implementationOps, isOperation } from "../src/lang/records.ts";
 import { foldFrom, looseParts, takenApart } from "../src/lang/render.ts";
@@ -551,12 +552,20 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const givenKeys = Object.keys(n.given).filter((k) => !(declared && k === "out" && holds(n.given[k]))).sort((a, b) => at(a) - at(b));
     const inputs = givenKeys.map((k) => n.given[k]);
     const kids = inputs.map(arg);
-    let badge = "";
+    // Its mode (MODES.md, E160): how many answers it can give and whether
+    // it ends, from the analysis the relational search runs by; the
+    // solver's plan says the same of a builtin's equations.
+    let badge = "", why = "";
     try {
       const plan = planSolve(code, n);
-      badge = plan.status === "underdetermined" ? `needs ${plan.needMore} more` : plan.unique ? "one answer" : `Choice${plan.many ? " · several answers" : ""}${plan.canFail ? " · may have none" : ""}`;
+      const v = plan.mode === "relational" ? solveMode(code, n, names) : null;
+      if (v) {
+        const { fail, many } = v.answers;
+        badge = `${fail || many ? "Choice · " : ""}${many ? (fail ? "any number of answers" : "one answer or more") : fail ? "one answer or none" : "one answer"}${v.ends ? "" : " · may not end"}${v.stuck.length ? " · stuck" : ""}`;
+        why = [...v.loops.map((l) => `May not end: ${l}`), ...v.stuck.map((x) => `Stuck: ${x}`)].join("\n");
+      } else badge = plan.status === "underdetermined" ? `needs ${plan.needMore} more` : plan.unique ? "one answer" : `Choice${plan.many ? " · several answers" : ""}${plan.canFail ? " · may have none" : ""}`;
     } catch {}
-    const choice = /Choice|needs/.test(badge);
+    const choice = /Choice|needs|stuck|may not end/.test(badge);
     const title = `${declared ? "" : "solve "}${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
     const rows = Math.max(givenKeys.length, boundKeys.length);
     const lw = Math.max(0, ...givenKeys.map((k) => tw(label(k), 6.6))), rw = Math.max(0, ...boundKeys.map((k) => tw(label(k), 6.6)));
@@ -567,7 +576,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     boundKeys.forEach((k, i) => sources.set(n.binds[k], { item: id, dx: bw + 6, dy: portY(i) }));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
-      g.append(s("text", { x: bw / 2, y: 12, class: "badge", "text-anchor": "middle" }, badge));
+      g.append(titled(s("text", { x: bw / 2, y: 12, class: "badge", "text-anchor": "middle" }, badge), why));
       g.append(s("text", { x: bw / 2, y: 27, class: "cl", "text-anchor": "middle" }, title));
       givenKeys.forEach((k, i) => {
         g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
