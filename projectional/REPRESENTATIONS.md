@@ -97,8 +97,15 @@ which one each value gets. A program may still pin one, as it can today
    `binary` and `int` are now definitions in the example; they read back
    identical to the old representations.json, which is gone, and lab and
    the tests take them from the program.
-2. **L108b.** The library's Map and Set trees (library-reps.ts) move into
-   the prelude as definitions, and the side table goes.
+2. **L108b, built.** The library's Map and Set representations, the
+   weight-balanced tree and the sorted list for each, are published by the
+   trees module as four representation definitions, and `LIBRARY.reps` is
+   read off them the way a program's are (they read back identical to the
+   old rows). Four more jobs say what a tree needed besides its jobs:
+   `equal by`, `show by` and `compare by` (a representation that isn't one
+   spelling per value, whose equal, show and compare go through its
+   meaning), and `head by(of, f)` (the first item of a job that gives a
+   list, map-tree.ts).
 3. **L108c.** A program pins a representation for one value or one
    definition. This is a definition of its own, not a hint at the use. The
    editor shows what was chosen next to the value's type.

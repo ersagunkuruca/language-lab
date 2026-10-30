@@ -9,7 +9,8 @@ import { prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { buildTrees } from "./map-tree.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import type { Representation } from "./represent.ts";
+import { infer } from "./infer.ts";
+import { representationsIn } from "./represent.ts";
 import { std } from "./std.ts";
 
 export function buildTreesModule(preludeModule: Module): Module {
@@ -20,16 +21,15 @@ export function buildTreesModule(preludeModule: Module): Module {
   const p = publish(merge(base, k.code), k.names, t.defs, base);
   if (!p.ok) throw new Error(`the trees can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d) ?? d;
-  const renamed = (r: Representation): Representation => ({
-    ...r, type: at(r.type), meaning: r.meaning && at(r.meaning),
-    impl: Object.fromEntries(Object.entries(r.impl).map(([job, d]) => [job, at(d)])),
-    ...(r.byType ? { byType: { equal: at(r.byType.equal), show: at(r.byType.show), compare: at(r.byType.compare) } } : {}),
-    ...(r.heads ? { heads: Object.fromEntries(Object.entries(r.heads).map(([job, d]) => [job, at(d)])) } : {}),
-  });
+  // The rows are read off the published representation definitions
+  // (REPRESENTATIONS.md, L108b), as a program's own are.
+  const published = merge(base, p.code);
+  const info = infer(published, p.names, undefined, { insiders: t.defs.map(at) });
+  const representations = representationsIn(published, info, p.names, t.representations.map(at));
   const m = makeModule("trees", p.code, p.names, [], p.pins, {}, t.defs.map(at));
   // makeModule takes in what the trees use, the prelude's map, keep and
   // reverse among it; those stay the prelude's.
   const own = (id: Id) => !base.nodes[id];
   const code = { nodes: Object.fromEntries(Object.entries(m.code.nodes).filter(([id]) => own(id))), defs: m.code.defs.filter(own) };
-  return { ...m, code, pins: Object.fromEntries(Object.entries(m.pins).filter(([d]) => own(d))), representations: [renamed(t.map), t.mapSpec, renamed(t.set), t.setSpec] };
+  return { ...m, code, pins: Object.fromEntries(Object.entries(m.pins).filter(([d]) => own(d))), representations };
 }
