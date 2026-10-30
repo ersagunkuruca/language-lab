@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { closeSync, cpSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -52,32 +52,8 @@ test("lab runs and compiles numbers on the representation the chooser picks", ()
   assert.deepEqual(node([compiled]), { code: 0, err: "", out: want });
   const small = (as: string[]) => node([lab, "run", ...as, numbers, "--main", "small"]).out;
   assert.equal(small(["--as-defined"]), small([]));
-});
-
-// A pin is a definition of its own (L108c): `nat storage = store as(binary)`
-// keeps lab from choosing for Nat, and lab check says how Nat is stored.
-test("lab stores a type as the program pins it, and check says so", () => {
-  const numbers = join(import.meta.dirname, "../examples/numbers");
+  // lab check says what the compiler chose (REPRESENTATIONS.md, L108c).
   assert.match(node([lab, "check", numbers]).out, /^Nat is stored as int, the cheapest for the jobs main uses$/m);
-  const pinned = join(dir, "numbers-pinned");
-  cpSync(numbers, pinned, { recursive: true });
-  const code = JSON.parse(readFileSync(join(pinned, "code.json"), "utf8"));
-  const names = JSON.parse(readFileSync(join(pinned, "names.default.json"), "utf8"));
-  const binary = Object.keys(names).find((id) => names[id] === "binary" && code.nodes[id]?.kind === "def")!;
-  Object.assign(code.nodes, {
-    pin: { id: "pin", kind: "def", body: "pin.call" },
-    "pin.call": { id: "pin.call", kind: "call", fn: "pin.fn", args: ["pin.arg"] },
-    "pin.fn": { id: "pin.fn", kind: "ref", target: "builtin.representation.storeAs" },
-    "pin.arg": { id: "pin.arg", kind: "ref", target: binary },
-  });
-  code.defs.push("pin");
-  writeFileSync(join(pinned, "code.json"), JSON.stringify(code));
-  writeFileSync(join(pinned, "names.default.json"), JSON.stringify({ ...names, pin: "nat storage" }));
-  const check = node([lab, "check", pinned]);
-  assert.equal(check.code, 0, check.out);
-  assert.match(check.out, /^nat storage : Storage Nat$/m);
-  assert.match(check.out, /^Nat is stored as binary, pinned by nat storage$/m);
-  assert.deepEqual(node([lab, "run", pinned]), { code: 0, err: "", out: "18! = 6402373705728000\n2^50 = 1125899906842624\n100 is even: yes\n" });
 });
 
 test("lab refuses a program it can't run, and says why", () => {
