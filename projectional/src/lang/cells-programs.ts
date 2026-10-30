@@ -347,19 +347,16 @@ export function fractionsProgram() {
 // is pressed, not kept: positions shift, keys don't.
 export function outlineProgram() {
   const { k, lib } = lang();
-  const ui = widgets(k);
   const map = lib("map"), length = lib("length");
   const I = INT_OPS;
   const read = (c: Id) => k.call(C.read, c);
-  const text = (f: () => Id) => k.call(ui.label, k.thunk(f));
-  const button = (label: string, f: () => Id) => k.call(ui.button, k.lit(label), k.thunk(f));
 
   const Item = k.type("Item", [], [["item", [
     ["key", () => k.tref(INT)], ["title", () => k.tref(STRING)], ["done", () => k.tref(BOOL)],
     ["children", (self) => k.tref(LIST, k.tref(self))],
   ]]]);
   const F = (f: string) => Item.f[`item.${f}`];
-  const field = (f: string) => k.call(C.path, k.fn(["it"], (it) => k.call(F(f), it)));
+  const fieldPath = (f: string) => k.call(C.path, k.fn(["it"], (it) => k.call(F(f), it)));
   const whole = () => k.call(C.path, k.fn(["all"], (all) => all));
   const mk = (key: number, title: string, done: boolean, kids: Id[] = []) => k.call(Item.v.item, k.int(key), k.lit(title), done ? k.true : k.false, k.list(...kids));
 
@@ -371,7 +368,7 @@ export function outlineProgram() {
     { variant: CONS, names: ["first", "rest"], body: ([x, rest]) => k.if(k.equal(k.call(F("key"), x), key),
       k.call(PAIR_V, here, at),
       k.call(S.first,
-        k.thunk(() => k.call(place, k.call(F("children"), x), key, k.call(C.thenPath, k.call(C.itemPath, here, at), field("children")), k.int(0))),
+        k.thunk(() => k.call(place, k.call(F("children"), x), key, k.call(C.thenPath, k.call(C.itemPath, here, at), fieldPath("children")), k.int(0))),
         k.thunk(() => k.call(place, rest, key, here, k.call(I.add, at, k.int(1)))))) },
   ])));
   // How many items, and how many of them are done, at any depth.
@@ -399,21 +396,97 @@ export function outlineProgram() {
   const fresh = (nextKey: Id, title: Id, then: (item: Id) => Id) => k.let("key", read(nextKey), (key) => k.seq(
     k.call(C.write, nextKey, k.call(I.add, key, k.int(1))),
     then(k.call(Item.v.item, key, title, k.false, k.x(NIL)))));
+  // The page's own look is one style sheet below, every element just named
+  // by its class, so the view reads as what it shows. A tick is the round
+  // box before the title; the smaller buttons show when the line is
+  // hovered or focused.
+  const html = (name: string, ...args: Id[]) => k.call(lib(name), ...args);
+  const classed = (c: string, e: Id) => html("classed", k.lit(c), e);
+  const attribute = (name: string, value: string) => html("attribute", k.lit(name), k.lit(value));
+  const prop = (name: string, f: () => Id) => k.call(HTML_V.property, k.lit(name), k.thunk(f));
+  const on = (name: string, f: (e: Id) => Id) => k.call(HTML_V.on, k.lit(name), k.fn(["event"], f));
+  const words = (t: string) => html("words", k.lit(t));
+  const shows = (f: () => Id) => k.call(HTML_V.text, k.thunk(f));
+  const none = () => k.x(NIL);
+
+  // A button that shows a sign and is named for what it does, the name
+  // what a screen reader says and a pointer's tooltip shows.
+  const icon = k.def("icon button");
+  k.define(icon, k.fn(["class", "name", "sign", "then"], (c, name, sign, then) =>
+    html("with", k.list(k.call(HTML_V.property, k.lit("type"), k.thunk(() => k.lit("button"))), k.call(HTML_V.property, k.lit("title"), k.thunk(() => name)), k.call(HTML_V.property, k.lit("aria-label"), k.thunk(() => name))),
+      html("classed", c, html("button", sign, then)))));
+  const iconButton = (c: string, name: string, sign: string, f: () => Id) => k.call(icon, k.lit(c), k.lit(name), k.lit(sign), k.fn(["event"], f));
+  // A field that hands what was typed to `on enter` and empties; Escape
+  // empties it and calls `on escape`.
+  const field = k.def("field");
+  k.define(field, k.fn(["hint", "on enter", "on escape"], (hint, enter, escape) => k.let("draft", k.call(C.cell, k.lit("")), (draft) =>
+    k.call(HTML_V.element, k.lit("input"), k.list(
+      prop("class", () => k.lit("todo-field")), prop("placeholder", () => hint), prop("value", () => read(draft)),
+      on("input", (e) => k.call(C.write, draft, k.call(VALUE, e))),
+      on("keydown", (e) => k.if(k.call(S.and, k.equal(k.call(KEY, e), k.lit("Enter")), k.call(S.not, k.equal(read(draft), k.lit("")))),
+        k.let("title", read(draft), (title) => k.seq(k.call(C.write, draft, k.lit("")), k.call(enter, title))),
+        k.if(k.equal(k.call(KEY, e), k.lit("Escape")), k.seq(k.call(C.write, draft, k.lit("")), k.call(escape)), k.unitValue))),
+    ), none()))));
+
   // One item and its steps, drawn. The item is plain data; each hands the
   // row a view of it (cells.ts, L99), so a tick runs the one line that
-  // read that `done`, at any depth.
+  // read that `done`, at any depth. "+" opens a field under the item for
+  // the new step's title; Enter adds it, Escape or leaving the field closes it.
   const draw = k.def("draw item");
-  k.define(draw, k.fn(["outline", "next key", "item"], (outline, nextKey, it) => k.let("key", k.call(F("key"), it), (key) => k.call(ui.column, k.list(
-    k.call(ui.row, k.list(
-      text(() => k.text(k.if(k.call(F("done"), it), k.lit("✓ "), k.lit("○ ")), k.call(F("title"), it))),
-      button("tick", () => at(outline, key, (l, i) => k.call(C.writeAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), field("done")), k.call(S.not, k.call(F("done"), it))))),
-      button("add a step", () => fresh(nextKey, k.lit("new step"), (step) => at(outline, key, (l, i) =>
-        k.call(C.insertAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), field("children")), k.call(length, k.call(F("children"), it)), step)))),
-      button("up", () => at(outline, key, (l, i) => k.call(C.moveAt, outline, l, i, k.call(I.sub, i, k.int(1))))),
-      button("remove", () => at(outline, key, (l, i) => k.call(C.removeAt, outline, l, i))),
-    )),
-    k.call(ui.indented, k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step)))),
-  )))));
+  k.define(draw, k.fn(["outline", "next key", "item"], (outline, nextKey, it) => k.let("key", k.call(F("key"), it), (key) => k.let("adding", k.call(C.cell, k.false), (adding) =>
+    classed("todo-item", html("li", k.list(
+      html("with", k.list(prop("class", () => k.if(k.call(F("done"), it), k.lit("todo-line done"), k.lit("todo-line")))), html("div", k.list(
+        iconButton("todo-check", "Tick", "✓", () => at(outline, key, (l, i) => k.call(C.writeAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), fieldPath("done")), k.call(S.not, k.call(F("done"), it))))),
+        classed("todo-title", html("span", k.list(shows(() => k.call(F("title"), it))))),
+        classed("todo-actions", html("span", k.list(
+          iconButton("todo-act", "Add a step", "+", () => k.call(C.write, adding, k.true)),
+          iconButton("todo-act", "Move up", "↑", () => at(outline, key, (l, i) => k.call(C.moveAt, outline, l, i, k.call(I.sub, i, k.int(1))))),
+          iconButton("todo-act todo-remove", "Remove", "×", () => at(outline, key, (l, i) => k.call(C.removeAt, outline, l, i))),
+        ))),
+      ))),
+      k.call(HTML_V.part, k.thunk(() => k.if(read(adding),
+        html("with", k.list(attribute("autofocus", ""), on("blur", () => k.call(C.write, adding, k.false))),
+          k.call(field, k.lit("New step, then Enter"),
+            k.fn(["title"], (title) => k.seq(k.call(C.write, adding, k.false), fresh(nextKey, title, (step) => at(outline, key, (l, i) =>
+              k.call(C.insertAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), fieldPath("children")), k.call(length, k.call(F("children"), it)), step))))),
+            k.thunk(() => k.call(C.write, adding, k.false)))),
+        html("span", none())))),
+      classed("todo-steps", html("ul", k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step))))),
+    )))))));
+
+  const styles = k.def("styles");
+  const rule = (selector: string, declarations: string) => html("rule", k.lit(selector), k.lit(declarations));
+  k.define(styles, k.thunk(() => html("style sheet", k.list(
+    rule(".todo", "max-width: 560px; padding: 20px 20px 16px; border-radius: 16px; background: #fff; color: #1f2328; font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; box-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 6%)"),
+    rule(".todo-head", "display: flex; align-items: baseline; justify-content: space-between; gap: 12px"),
+    rule(".todo-head h1", "margin: 0; font-size: 20px; letter-spacing: -0.01em"),
+    rule(".todo-count", "color: #6b7280; font-size: 13px; font-variant-numeric: tabular-nums"),
+    rule(".todo-bar", "height: 4px; margin: 10px 0 14px; border-radius: 2px; background: #eef0f2; overflow: hidden"),
+    rule(".todo-bar-fill", "width: 0; height: 100%; background: #17a398; transition: width 0.25s ease"),
+    rule(".todo-field", "box-sizing: border-box; width: 100%; margin: 0; padding: 9px 12px; font: inherit; color: inherit; border: 1px solid #e3e5e8; border-radius: 10px; background: #f7f8f9; outline: none"),
+    rule(".todo-field:focus", "border-color: #17a398; background: #fff; box-shadow: 0 0 0 3px rgb(23 163 152 / 15%)"),
+    rule(".todo-list, .todo-steps", "list-style: none; margin: 0; padding: 0"),
+    rule(".todo-list", "margin-top: 10px"),
+    rule(".todo-steps", "margin-left: 17px; padding-left: 12px; border-left: 1px solid #eceef0"),
+    rule(".todo-item > .todo-field", "width: calc(100% - 38px); margin: 2px 0 6px 38px; padding: 6px 10px"),
+    rule(".todo-line", "display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 2px 6px; border-radius: 8px"),
+    rule(".todo-line:hover", "background: #f5f6f7"),
+    rule(".todo-check", "flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin: 0; padding: 0; border: 2px solid #c4c9cf; border-radius: 50%; background: transparent; color: transparent; font-size: 12px; line-height: 1; cursor: pointer; transition: background 0.15s, border-color 0.15s"),
+    rule(".todo-check:hover", "border-color: #17a398; background: transparent"),
+    rule(".done .todo-check, .done .todo-check:hover", "border-color: #17a398; background: #17a398; color: #fff"),
+    rule(".todo-title", "flex: 1; min-width: 0; overflow-wrap: anywhere"),
+    rule(".done .todo-title", "color: #9aa1a9; text-decoration: line-through; text-decoration-color: #c4c9cf"),
+    rule(".todo-actions", "display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s"),
+    rule(".todo-line:hover .todo-actions, .todo-line:focus-within .todo-actions", "opacity: 1"),
+    html("media", k.lit("(hover: none)"), k.list(rule(".todo-actions", "opacity: 1"))),
+    rule(".todo-act", "width: 28px; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 7px; background: transparent; color: #6b7280; font-size: 16px; line-height: 1; cursor: pointer"),
+    rule(".todo-act:hover", "background: #e9ecef; color: #1f2328"),
+    rule(".todo-remove:hover", "background: #fdece7; color: #c2410c"),
+    rule(".todo-credits", "margin: 14px 0 0; color: #8b929a; font-size: 12px"),
+  ))));
+
+  const credits = k.def("credits");
+  k.define(credits, k.thunk(() => classed("todo-credits", html("p", k.list(words("Credits: edits at a path and rows kept by key follow Solid's createStore and mapArray, MobX and Immer's patches (prior art, STABLE-REFERENCES.md). The look, round ticks and buttons that show on hover, is ours, after to-do apps such as Things and Todoist (influence)."))))));
 
   const main = k.def("main");
   k.define(main, k.thunk(() =>
@@ -423,13 +496,23 @@ export function outlineProgram() {
       mk(6, "write the report", false, [mk(7, "draft", false)]),
     )), (outline) =>
     k.let("next key", k.call(C.cell, k.int(8)), (nextKey) =>
-    k.let("rows", k.call(C.each, outline, k.fn(["item"], (it) => k.call(draw, outline, nextKey, it))), (rows) => k.call(ui.column, k.list(
-      k.call(ui.entry, k.lit("add an item, then Enter"), k.fn(["title"], (title) => fresh(nextKey, title, (x) =>
-        k.call(C.insertAt, outline, whole(), k.call(length, read(outline)), x)))),
-      k.call(ui.part, k.thunk(() => k.call(ui.column, read(rows)))),
-      text(() => k.match(k.call(tally, read(outline)), [
-        { variant: PAIR_V, names: ["done", "all"], body: ([d, n]) => k.text(k.call(SHOW_ANY, d), k.lit(" of "), k.call(SHOW_ANY, n), k.lit(" done")) },
-      ])),
-    )))))));
+    k.let("rows", k.call(C.each, outline, k.fn(["item"], (it) => k.call(draw, outline, nextKey, it))), (rows) =>
+    k.let("progress", k.call(C.formula, k.thunk(() => k.call(tally, read(outline)))), (progress) => {
+      const counts = (f: (done: Id, all: Id) => Id) => k.match(read(progress), [{ variant: PAIR_V, names: ["done", "all"], body: ([d, n]) => f(d, n) }]);
+      return classed("todo", html("div", k.list(
+        k.call(styles),
+        classed("todo-head", html("div", k.list(
+          html("h1", k.list(words("To do"))),
+          classed("todo-count", html("span", k.list(shows(() => counts((d, n) => k.text(k.call(SHOW_ANY, d), k.lit(" of "), k.call(SHOW_ANY, n), k.lit(" done"))))))),
+        ))),
+        classed("todo-bar", html("div", k.list(
+          html("with", k.list(prop("style", () => counts((d, n) => k.text(k.lit("width: calc(100% * "), k.call(SHOW_ANY, d), k.lit(" / "), k.call(SHOW_ANY, n), k.lit(")"))))),
+            classed("todo-bar-fill", html("div", none())))))),
+        k.call(field, k.lit("Add an item, then Enter"), k.fn(["title"], (title) => fresh(nextKey, title, (x) =>
+          k.call(C.insertAt, outline, whole(), k.call(length, read(outline)), x))), k.thunk(() => k.unitValue)),
+        k.call(HTML_V.part, k.thunk(() => classed("todo-list", html("ul", read(rows))))),
+        k.call(credits),
+      )));
+    }))))));
   return { code: k.code, names: k.names, main, item: Item.def };
 }

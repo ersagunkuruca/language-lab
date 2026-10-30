@@ -132,9 +132,11 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       const tag = String(d.fields[0]);
       const inSvg = svg || tag === "svg";
       const e = inSvg && doc.createElementNS ? doc.createElementNS(SVG, tag) : doc.createElement(tag);
+      let focus = false;
       for (const a of fromList(d.fields[1]) as Data[]) {
         const name = String(a.fields[0]);
         if (a.tag === HTML_V.property) {
+          if (name === "autofocus") focus = true;
           // Out of steps, an attribute keeps its last value.
           watch(e, name, () => {
             const value = String(m.call(a.fields[1]));
@@ -172,6 +174,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       }
       const kids = fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg));
       e.append(...kids);
+      // A browser focuses an autofocus field only as the page loads; one a
+      // click opens later gets it here, once it's on the page.
+      if (focus) queueMicrotask(() => (e as El & { focus?: () => void }).focus?.());
       if (kids.some((k) => moved.has(k) || holding.has(k))) holding.set(e, kids);
       return e;
     }
