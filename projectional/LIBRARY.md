@@ -197,7 +197,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 
 ## Representations
 
-A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses, unless the program pins one with store as; nothing changes where the values are used.
+A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
 
 - **Representation** (type). A way to store a type t as another type r, written as one definition: representation(meaning, space, jobs), where meaning says what an r stands for and each job says which definition does one of t's jobs at r, and at what cost. The compiler picks, per program, the representation whose jobs cost least; nothing changes where the values are used. REPRESENTATIONS.md.
 - **Cost** (type). What a job of a representation costs, in the size of the value: constant, logarithmic, polylogarithmic (log² n), linear, linearithmic (n log n) or quadratic.
@@ -211,7 +211,6 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **show by** : `((a) -> Text) -> Job b a`. For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.
 - **head by** : `(a, b) -> Job c d`. For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.
-- **store as** : `(Representation a b) -> Storage a`. Pins a representation for every value of its type in this program: nat storage = store as(binary). A definition of its own; nothing is written where the values are used, and the compiler doesn't choose for that type.
 
 ## Searching: Choice
 

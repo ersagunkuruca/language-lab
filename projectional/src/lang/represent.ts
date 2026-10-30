@@ -16,7 +16,7 @@
 
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, STORE_AS, TEXT_OPS } from "./std.ts";
+import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
 
 export interface Representation {
@@ -155,37 +155,16 @@ function directRefs(code: Code, def: Id): Id[] {
 const armsOver = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, variants: Set<Id>) =>
   n.arms.some((a) => variants.has((code.nodes[a] as NodeOf<"arm">).variant));
 
-// The representations a program pins (L108c): each definition that is
-// `store as(r)`, by the type r stores. The checker has made sure r names a
-// representation's definition and each type is pinned once.
-export interface Pin { rep: Representation; by: Id }
-export function pinsIn(code: Code, reps: Representation[], defs: Id[] = code.defs): Map<Id, Pin> {
-  const out = new Map<Id, Pin>();
-  for (const d of defs) {
-    const def = code.nodes[d];
-    const body = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
-    const f = body?.kind === "call" ? code.nodes[body.fn] : null;
-    if (body?.kind !== "call" || f?.kind !== "ref" || f.target !== STORE_AS) continue;
-    const arg = code.nodes[body.args[0]];
-    const rep = arg?.kind === "ref" ? reps.find((r) => r.def === arg.target) : undefined;
-    if (rep && !out.has(rep.of)) out.set(rep.of, { rep, by: d });
-  }
-  return out;
-}
-
 export interface Choice {
   rep: Representation;
   table: { rep: string; costs: Record<string, string> }[];
   jobs: string[];
-  // The definition that pinned rep, when the program did (L108c).
-  pinnedBy?: Id;
 }
 
 // Pick the representation whose worst job is cheapest, then the cheapest
 // in total, then the smallest. A job a representation doesn't implement is
 // done by its definition, which costs what it costs in T's own terms.
-// A pin is taken as it is; the table still says what each would cost.
-export function choose(code: Code, entry: Id, reps: Representation[], pin?: Pin): Choice {
+export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   const jobs = uses(code, entry, reps);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? spec.cost[j] ?? "?"]));
@@ -198,8 +177,7 @@ export function choose(code: Code, entry: Id, reps: Representation[], pin?: Pin)
     const [x, y] = [score(a), score(b)];
     return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
   })[0];
-  const table = reps.map((r) => ({ rep: r.name, costs: costs(r) }));
-  return pin ? { rep: pin.rep, jobs, table, pinnedBy: pin.by } : { rep: best, jobs, table };
+  return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
 }
 
 // A job does what it replaces and nothing more: its effects are the ones

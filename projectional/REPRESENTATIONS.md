@@ -44,8 +44,10 @@ at the place a value is used. Ersagun ruled out annotations and hints
 (2026-10-29, C56), and that holds here too. The chooser picks per value
 from the jobs a program uses and their costs, as it does now. The program
 says which representations exist and what they cost; the compiler says
-which one each value gets. A program may still pin one, as it can today
-(`approximate` representations such as Float32 are only ever asked for).
+which one each value gets. A program doesn't pick one either, not even as
+a definition of its own (Ersagun 2026-10-30, step 3 below). Float32 is the
+one exception today: its laws hold only approximately, so the chooser
+never picks it by cost, and the shader target asks for it.
 
 ## Why this shape
 
@@ -106,18 +108,15 @@ which one each value gets. A program may still pin one, as it can today
    spelling per value, whose equal, show and compare go through its
    meaning), and `head by(of, f)` (the first item of a job that gives a
    list, map-tree.ts).
-3. **L108c, built.** A program pins a representation with a definition of
-   its own, not a hint at the use: `nat storage = store as(binary)`, of type
-   `Storage Nat`. The chooser then takes binary for every Nat in the
-   program, as it is, and still works out the costs of the others. The
-   checker takes only a representation named by its definition, and one
-   pin per type. `lab check` says how each type is stored ("Nat is stored
-   as binary, pinned by nat storage", or "… as int, the cheapest for the
-   jobs main uses"); the editor showing the same next to a value's type is
-   E159. A pin is for the whole program: pinning one value or one
-   definition means converting where values cross into the rest, through
-   `meaning`, and is L108e. The library's Map and Set rows can't be pinned
-   yet, since a program doesn't see the trees module's definitions.
+3. **L108c, built.** The compiler chooses, and says what it chose:
+   `lab check` prints "Nat is stored as int, the cheapest for the jobs main
+   uses" for each type the program writes representations for. The editor
+   showing the same next to a value's type is E159. **No explicit
+   selection** (Ersagun 2026-10-30: "I don't want explicit selection, I
+   want the compiler to choose"). A pin written as a definition, `store
+   as(binary)`, was built in #681 and taken out in the PR after it.
+   Programs say which representations exist and what they cost, never
+   which one a value gets.
 4. **L108d, after T7.** Each job's law through `meaning` is checked as a
    law in the language.
 5. **With C30.** Lists as arrays becomes a row written this way (`array
@@ -133,6 +132,3 @@ which one each value gets. A program may still pin one, as it can today
   faster body that must agree with the meaning.
 - Self and V8's hidden classes, and Clojure's transients: one meaning, a
   storage picked from how it is used.
-- Haskell's `default` declaration: a module-level definition, not an
-  annotation at each use, saying which type an open choice gets. `store
-  as` is that for representations (L108c).

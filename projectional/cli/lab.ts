@@ -19,8 +19,7 @@
 //
 // A program that writes representations (REPRESENTATIONS.md) runs and
 // compiles on the representation the chooser picks for each type `main` uses, e.g.
-// Peano Nat stored as an Int, or on the one a `store as` definition pins
-// (L108c). `--as-defined` runs the definitions instead.
+// Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -36,7 +35,7 @@ import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
-import { choose, jobProblem, pinsIn, represent, representationsIn, type Pin, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -63,7 +62,7 @@ options:
   --as-defined     ignore the program's representations and run the definitions as written
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
-interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; pins: Map<Id, Pin>; options?: unknown }
+interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
 
 function fail(message: string): never {
   process.stderr.write(`lab: ${message}\n`);
@@ -75,16 +74,14 @@ function load(path: string): Program {
   if (statSync(path).isDirectory()) {
     const p = loadProgram(path);
     const info = infer(p.code, p.pres.names, undefined, p.options);
-    const reps = representationsIn(p.code, info, p.pres.names, p.own.defs);
-    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info, reps, pins: pinsIn(p.code, reps, p.own.defs), options: p.options };
+    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info, reps: representationsIn(p.code, info, p.pres.names, p.own.defs), options: p.options };
   }
   // opened on top of the modules, as the editor does
   const r = fromFile(readFileSync(path, "utf8"), () => LIBRARY.code);
   if ("error" in r) fail(`can't open ${path}: ${r.error}`);
   const names = baseNames(r.file.names);
   const info = infer(r.code, names, undefined, checkOptions);
-  const reps = representationsIn(r.code, info, names, r.file.code.defs);
-  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps, pins: pinsIn(r.code, reps, r.file.code.defs) };
+  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs) };
 }
 
 // The program from `main`, with each type it uses stored the way the
@@ -97,16 +94,15 @@ function represented(p: Program, main: Id): Program {
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
   // becomes the tree its code builds (GAPS.md M2).
-  // A representation's own definition says which definitions do the jobs,
-  // and a pin which representation a type gets: they are read, not
-  // rewritten or run, so the represented program leaves them out.
-  const reps = new Set([...p.reps.map((r) => r.def), ...[...p.pins.values()].map((x) => x.by)]);
+  // A representation's own definition says which definitions do the jobs:
+  // it is read, not rewritten or run, so the represented program leaves it out.
+  const reps = new Set(p.reps.map((r) => r.def));
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
   const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps);
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {
-    const rep = choose(code, main, p.reps.filter((r) => r.of === of), p.pins.get(of)).rep;
+    const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
     if (rep.type === rep.of) continue;
     const problem = jobProblem(p.info, rep, p.names);
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
@@ -294,11 +290,11 @@ switch (command) {
       console.log(`${p.names[d] ?? d} : ${t ? showType(t, p.names) : "(a type)"}`);
     }
     // How main stores each type the program writes representations for:
-    // pinned, or the chooser's pick (REPRESENTATIONS.md, L108c).
+    // the compiler's choice, never the program's (REPRESENTATIONS.md).
     const start = p.own.find((d) => p.names[d] === mainName);
     if (start && !p.info.errors.length) for (const of of new Set(p.reps.map((r) => r.of))) {
-      const c = choose(p.code, start, p.reps.filter((r) => r.of === of), p.pins.get(of));
-      console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}${c.pinnedBy ? `, pinned by ${p.names[c.pinnedBy] ?? c.pinnedBy}` : `, the cheapest for the jobs ${mainName} uses`}`);
+      const c = choose(p.code, start, p.reps.filter((r) => r.of === of));
+      console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     process.exitCode = p.info.errors.length ? 1 : 0;
     break;

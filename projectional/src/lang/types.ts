@@ -70,9 +70,6 @@ export const PATH = "type.path";
 // One job of a representation (REPRESENTATIONS.md, L108): Job t r, a job
 // on t done at r.
 export const JOB = "type.job";
-// A program's choice of representation for a type (L108c): Storage t, made
-// by `store as(r)`, one definition of its own.
-export const STORAGE = "type.storage";
 
 export class TypeError extends Error {}
 
