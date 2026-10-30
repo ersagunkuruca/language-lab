@@ -8,7 +8,7 @@
 # It only builds and deploys, so a merge is live in about two minutes. The
 # test suites run beside it in check-main.yml and report: a failure there
 # is fixed by the next pull request, but doesn't hold back the site
-# (projectional/TESTING.md, T1).
+# (docs/process/TESTING.md, T1).
 name: Pages
 
 on:

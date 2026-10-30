@@ -8,7 +8,7 @@
 // stored as a WGSL vector instead, `vec2f` to `vec4f`, its fields in order
 // as .x .y .z .w. The program doesn't say "vector": that's how this target
 // stores such a record, the way Peano naturals are stored as Ints
-// (projectional/NUMBERS.md). Building one whose parts each do the same
+// (docs/design/numbers/NUMBERS.md). Building one whose parts each do the same
 // thing to the same part of other vectors, which is how arithmetic on a
 // record is written field by field, prints as one vector expression:
 // `colour(red(a) + t · (red(b) − red(a)), …green…, …blue…)` is

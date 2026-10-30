@@ -3,7 +3,7 @@
 // produce for projectional/examples/countdown. Same program, same search,
 // same order of answers, same output. What differs is only what a compiler
 // could decide on its own; each difference is marked with the gap it stands
-// for in compiler/GAPS.md (round 2: G11, G12, …; round 1's numbers where
+// for in docs/reports/GAPS.md (round 2: G11, G12, …; round 1's numbers where
 // the same gap comes back).
 //
 // The algorithm is Graham Hutton's, from "The countdown problem", Journal

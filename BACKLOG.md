@@ -2,8 +2,8 @@
 
 Every open item from every source (Ersagun's asks, reviews, QA passes,
 bigger-program rounds, design notes), in one place. Finished items are in
-[DONE.md](DONE.md). How items are picked and run is in
-[WORKFLOW.md](WORKFLOW.md); every doc is listed in [DOCS.md](DOCS.md).
+[DONE.md](docs/process/DONE.md). How items are picked and run is in
+[WORKFLOW.md](docs/process/WORKFLOW.md); every doc is listed in [the docs index](docs/README.md).
 
 Each lane's items are grouped by theme. Within a lane, priority (P1 first)
 decides what's next, and "Next up" below names it. When the order changes,
@@ -67,7 +67,7 @@ New items land here until the next triage gives them a lane and a priority.
 ## C: Compiler and targets
 
 New targets and speed rank below every language item (Ersagun,
-2026-10-24 07:01). Measurements and rounds: compiler/GAPS.md.
+2026-10-24 07:01). Measurements and rounds: docs/reports/GAPS.md.
 
 ### Bugs and gaps found by programs
 
@@ -82,8 +82,8 @@ New targets and speed rank below every language item (Ersagun,
 |---|---|---|---|---|---|
 | C30 | Lists as arrays. Done so far: P4a, #555, #558, #561 (pedal 2.9×). The split, join and block-in-array stages pay only together (~25% more); do them as one stage when another program needs lists as arrays. The aim: an `array` representation written in the language (REPRESENTATIONS.md), so WASM, C and the editor get it too | GAPS.md round 4 P4 | P2 | L | |
 | C55 | Compile each direction of a relation a program uses as its own function (Mercury), dropping results no caller reads: `y` of `polar` alone is a plain sine, both together one sincos | Ersagun 2026-10-28 | P2 | M | |
-| C62 | IN-PLACE.md step 1: `$own` copies for the cases of any type, so the trees' put, add and remove write along their path in place (GAPS.md M6). Built only if routes measures over 10% | compiler/IN-PLACE.md | P2 | M | |
-| C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal | compiler/IN-PLACE.md | P2 | L | after C62 |
+| C62 | IN-PLACE.md step 1: `$own` copies for the cases of any type, so the trees' put, add and remove write along their path in place (GAPS.md M6). Built only if routes measures over 10% | docs/design/data/IN-PLACE.md | P2 | M | |
+| C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal | docs/design/data/IN-PLACE.md | P2 | L | after C62 |
 | C31 | A recursion that gives back a Pair returns its two fields without the record. 3% on the pedal | GAPS.md round 4 P5 | P3 | M | after C30 |
 | C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`, yet every operation goes through `$perform`'s search; calling the case directly closes most of 310 ms vs 25 ms hand-written | examples/pig | P3 | M | |
 
@@ -202,7 +202,7 @@ all of these.
 ## T: Testing and fast feedback
 
 The thread that owns `.github/workflows` and the browser checks. Plan:
-projectional/TESTING.md. T7 is in lane L.
+docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|

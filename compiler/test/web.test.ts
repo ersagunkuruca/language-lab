@@ -1,4 +1,4 @@
-// Pages (projectional/WEB.md), both ways: one page program, drawn by the
+// Pages (docs/design/targets/WEB.md), both ways: one page program, drawn by the
 // evaluator and by its compiled code into a fake document, must look the
 // same at first and after every event.
 

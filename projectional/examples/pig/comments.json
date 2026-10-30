@@ -11,7 +11,7 @@
   "nn7tc8ldbda0p28e4k283h6l6f": "Passes each Random on to whoever handles it outside, and keeps the answers in a cell.",
   "0e85tg725301i10t9anngmilth": "Answers Random from a cell of numbers kept earlier, one at a time, so the game rolls exactly what it rolled then. When they run out it asks outside.",
   "bdlg8uc08177k9ld1v4aiks276": "n games with no commentary, A holding at a and B at b, each starting in turn. Gives how many B won.",
-  "7ivqqoskl0oa912bl5u4r48d6a": "Who this page borrows from, shown on the page (projectional/CREDITS.md).",
+  "7ivqqoskl0oa912bl5u4r48d6a": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
   "v1isr9ufagrak5t5mnnred9g63": "The page. Each button runs the same play under different handlers: Play records the world's random numbers as it goes and writes the commentary onto the page; Replay answers Random from that record, so the same game comes out; the last plays games with no commentary and counts who wins.",
   "program": "Prior art: Pig is a folk dice game, described by John Scarne (Scarne on Dice, 1945); hold at 20 is the rule of thumb analysed by Todd Neller and Clifton Presser, \"Optimal Play of the Dice Game Pig\", The UMAP Journal 25(1), 2004.\nPrior art: effects answered by handlers you choose are Eff's (Andrej Bauer and Matija Pretnar) and Koka's (Daan Leijen).\nOur own: the page, and running one game under strategy, commentary, recording and replay handlers.",
   "q8rq18afpr97dmmmcdlst88mqo": "The page's style sheet: the colours (and their dark versions), the buttons, the note on the handlers, and the game's lines, the last one (who won) bold. Every element names its class."

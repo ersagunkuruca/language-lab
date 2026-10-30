@@ -66,7 +66,7 @@ self.addEventListener("fetch", (e) => {
 function readme(title: string): string {
   return `# ${title}
 
-Built by \`lab build-app\` from a program in the language (projectional/WEB.md).
+Built by \`lab build-app\` from a program in the language (docs/design/targets/WEB.md).
 
 - **As a web app (PWA):** put \`www/\` on any HTTPS host. Opened in a phone's
   browser it can be installed ("Add to Home screen"), and it runs offline.

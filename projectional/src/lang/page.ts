@@ -102,7 +102,7 @@ export function pageDocument(title: string, body: string, ...scripts: string[]):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<!-- ${esc(title)}, built from a program in the language (projectional/WEB.md). -->
+<!-- ${esc(title)}, built from a program in the language (docs/design/targets/WEB.md). -->
 <style>
 ${PAGE_BASE}
 </style>

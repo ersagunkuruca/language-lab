@@ -16,7 +16,7 @@ import "../../compiler/src/scalar.ts";
 import { SIGS, stdNames } from "../src/lang/std.ts";
 import { Subst } from "../src/lang/types.ts";
 
-const DOC = join(import.meta.dirname, "..", "LANGUAGE.md");
+const DOC = join(import.meta.dirname, "..", "..", "docs", "language", "LANGUAGE.md");
 const START = "| where | takes away | why |";
 const name = (e: string) => (e === DECLARED ? "any effect declared with operations (Abort, Log, Random, your own)" : stdNames[e] ?? e);
 

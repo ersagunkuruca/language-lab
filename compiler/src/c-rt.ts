@@ -1,4 +1,4 @@
-// The runtime of native programs' Ints and Texts (projectional/NATIVE.md,
+// The runtime of native programs' Ints and Texts (docs/design/targets/NATIVE.md,
 // stage N4), in C: what wasm-rt.ts is to WebAssembly. The meaning is the
 // evaluator's (projectional/src/lang/int.ts and text.ts), case by case.
 //

@@ -24,7 +24,7 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal" 
   const c = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const one = (vs: Iterable<Value>) => { for (const v of vs) return v; throw new Error("no value"); };
-  // WebAssembly (projectional/WASM.md, W4d): lists in and out through the
+  // WebAssembly (docs/design/targets/WASM.md, W4d): lists in and out through the
   // module's makers and readers, by their type's key where several lists share a name.
   const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
   const ex = (await instantiate(emitWasm(l))) as unknown as Record<string, (...a: unknown[]) => unknown>;

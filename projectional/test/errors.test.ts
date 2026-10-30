@@ -53,7 +53,7 @@ const ROWS: Row[] = [
 ];
 
 const here = import.meta.dirname;
-const DOC = join(here, "..", "LANGUAGE.md");
+const DOC = join(here, "..", "..", "docs", "language", "LANGUAGE.md");
 const START = "| class | status | how | shown by |", END_MARK = "\n\n";
 
 // Every test in projectional/test, by name, with its file.

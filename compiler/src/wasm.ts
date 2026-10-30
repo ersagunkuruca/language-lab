@@ -12,7 +12,7 @@
 // A record (lowered with `records`) is a WasmGC struct with immutable
 // fields, one struct type per record type, and a value of it is a
 // reference to one: built by `struct.new`, read by `struct.get`
-// (projectional/WASM.md, stage W1).
+// (docs/design/targets/WASM.md, stage W1).
 //
 // Data with several cases (lowered with `data`: lists, expression trees)
 // is a base struct holding the case's number as an i32, and one subtype

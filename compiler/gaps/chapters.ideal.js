@@ -3,7 +3,7 @@
 // produce for projectional/examples/chapters. Same program, same files
 // written in the same order, same output, same exit codes. What differs is
 // only what a compiler could decide on its own; each difference is marked
-// with the gap it stands for in compiler/GAPS.md (round 2, second program).
+// with the gap it stands for in docs/reports/GAPS.md (round 2, second program).
 //
 // `io` is the world: readFile, writeFile and appendFile (which throw an
 // Error when they can't), print and printError. A failure becomes the

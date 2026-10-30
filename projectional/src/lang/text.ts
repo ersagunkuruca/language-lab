@@ -18,7 +18,7 @@ export const length = (t: string): Int => (wide.test(t) ? Array.from(t).length :
 // The characters from `from` up to, not including, `to`. Out-of-range
 // positions are clamped, so it never fails: slice("abc", 1, 99) = "bc".
 // It walks the text only as far as `to`, so a slice near the start of a long
-// line doesn't read the whole line (compiler/GAPS.md G19).
+// line doesn't read the whole line (docs/reports/GAPS.md G19).
 export function slice(t: string, from: Int, to: Int): string {
   const a = Math.max(0, small(from)), b = small(to);
   if (b <= a) return "";

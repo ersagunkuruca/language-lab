@@ -5,7 +5,7 @@
 // frontier ordered by (distance, town), Kruskal's cheapest network (1956)
 // over a union-find forest joined by size (Galler and Fischer, 1964). What
 // differs is only what a compiler could decide on its own; each difference
-// is marked with the gap it stands for in compiler/GAPS.md (round 5).
+// is marked with the gap it stands for in docs/reports/GAPS.md (round 5).
 //
 // The program's maps and sets are persistent; each one here is used by one
 // owner at a time, so it is changed in place (R3), and keyed by the town's
