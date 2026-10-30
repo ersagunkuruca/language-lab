@@ -205,7 +205,8 @@ One PR each, in this order:
    hand back its one answer directly. (Built.)
 5. **Lane C: compile `det` and `semidet` modes** as plain functions.
    (Built.)
-6. **Lane E: the `solve` node says its mode** in the editor.
+6. **Lane E: the `solve` node says its mode** in the editor. Open, as
+   BACKLOG E160.
 
 ## How relate.ts runs a plan
 

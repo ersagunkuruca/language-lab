@@ -1,7 +1,9 @@
 # Nested patterns: a view over nested matches
 
 Design note for BACKLOG.md E61, which was L37 (LANGUAGE-REVIEW-2026-10-24.md §4).
-Written 2026-10-24. The last section is the plan.
+Written 2026-10-24. The last section is the plan. **Status (2026-10-30):
+built** (src/lang/patterns.ts for the text and the graph's rows; Match
+deeper and Join cases in the inspector, typed.ts).
 
 ## The problem
 

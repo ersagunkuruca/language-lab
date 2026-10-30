@@ -1,7 +1,9 @@
 # Operations answered later, and concurrency on them
 
-BACKLOG L54, written together with L71 as both rows ask. Step 1 (L54a) is
-built: the evaluator and the checker run it (`test/later.test.ts`). The two documents behind it say why it
+BACKLOG L54, written together with L71 as both rows ask. **Status
+(2026-10-30):** step 1 (L54a) is built: the evaluator and the checker run
+it (`test/later.test.ts`). Step 2 (C40) is mostly built, step 3 (L56,
+effects that take a type) is built, and steps 4 and 5 are open. The two documents behind it say why it
 matters: EFFECTS-REVIEW-2026-10-24 §1.5 finds the root of the page dents
 (a handler fetch runs twice, fetch-once, `Wait` apart from `Time`) in "an
 operation is answered now, or never", and LANGUAGE-NEEDS-2026-10-24 Part 1
@@ -186,10 +188,10 @@ In the order the BACKLOG wants them:
    function that waits, given where any row goes (`map`), gets a copy of
    that definition that waits too (step 2a). A handler around code that
    waits on another handler's operation passes it outward (step 2c). A
-   search written in place may wait too (step 2b). Not yet: a definition
-   with both Choice and a waiting row, and a waiting handler with a case
-   answered at once. Each says so when compiled.
-3. **L56**, effects that take a type, for `Ticket a`.
+   search written in place may wait too (step 2b), and so may a waiting
+   handler with a case answered at once (step 2d). Not yet: a definition
+   with both Choice and a waiting row, which says so when compiled.
+3. **L56**, effects that take a type, for `Ticket a`. **Built.**
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
    `together`, `race` and `within`.
 5. **WebAssembly and C**, when a program there needs it.

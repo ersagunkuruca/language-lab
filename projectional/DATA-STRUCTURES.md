@@ -5,6 +5,13 @@ being an array underneath is a good start but we need more" (2026-10-24)
 and LANGUAGE-NEEDS-2026-10-24 §1. This is the plan; each step below is one
 PR.
 
+**Status (2026-10-30).** Steps 1 to 3 are built: `Map` and `Set` in std
+(L65), the weight-balanced tree chosen by cost (L76, C47; written in the
+language since L108b, REPRESENTATIONS.md), and maps and sets drawn as
+tables (E79). Step 4, a HAMT and the in-place table, waits for a program
+that measures the need (compiler/IN-PLACE.md, C63). The rest of L61 is in
+BACKLOG.md.
+
 ## Short answer
 
 A map and a set are **ordinary data with one spelling**: a map is its
@@ -135,10 +142,10 @@ table. The graph's wire labels still show the value's text.
 
 ## Steps
 
-1. **L65**: `Map` and `Set` in std, the prelude operations above, tests
+1. **L65** (built): `Map` and `Set` in std, the prelude operations above, tests
    that each keeps the spelling canonical and agrees with a list model,
    compiled JS equal to the evaluator. LANGUAGE.md section.
-2. **L76 + C47**: the weight-balanced tree as a representation, and
+2. **L76 + C47** (built): the weight-balanced tree as a representation, and
    library representations chosen automatically.
 3. **E79** (done): maps and sets drawn as tables.
 4. HAMT and the in-place table, when a program measures the need.
