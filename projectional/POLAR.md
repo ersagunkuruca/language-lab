@@ -7,6 +7,11 @@ implement polar or sin and cos and get the rest. RESULTS.md (L95) gave a
 definition several named results, and WAYS.md (L96) lets an interface field
 come from its ways, picked by cost. This note puts the two together.
 
+**Status (2026-10-30).** Steps 1 to 3 are built (L97a to L97c3): Trig's
+`polar`, `unpolar`, `asin` and `acos`. Next is the prelude's `polar`
+relation with `unpolar` as its direction; then L97d (Fixed's CORDIC from
+its ways) and L97e (the complex laws, after T7).
+
 ## Short answer
 
 ```
