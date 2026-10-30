@@ -24,7 +24,7 @@ New items land here until the next triage gives them a lane and a priority.
 | I39 | Found while building Tumble, in the checks every example meets: (a) modes.ts read a call of a handler given a constructed value (`at once(settle(board))`, `at once` handling a recursive `play out`) as "ends, at most one answer" while the checker typed it Diverge; (b) relate overflowed the stack running Tumble's `clear` backwards from an all-holes board, and ran out of memory on an earlier `matched`, inside test/agreement.test.ts's 5000-step budget (the budget counts steps, not depth or memory). Tumble now settles with a plain recursive `settle` and keeps its board in a `Board` record, which the agreement check doesn't sample, so its rules aren't run backwards there | examples/tumble | 2026-10-29 |
 | I49 | Resize a node by hand: not now, but likely needed at some point (Ersagun 2026-10-29) | Ersagun | 2026-10-29 |
 | I40 | Add a step before this on physics `main` takes ~2 s: the palette that opens on the new hole checks each of its ~590 candidates against the whole program (E103, E133) | found fixing the smoke, 2026-10-29 | 2026-10-29 |
-| I65 | Editor for several named results (RESULTS.md step 3, L95c): a definition with results shows one node with an output wire per result in the graph (an unconnected wire is `_`), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
+| I65 | Editor for several named results (RESULTS.md step 3, L95c): ~~a definition with results shows one node with an output wire per result in the graph~~ (done in I65a, #677), and the palette and structural editing can declare results and write a use `length, angle = polar(x, y)`. The language side is L95a/L95b | Language lane, 2026-10-29 | 2026-10-29 |
 | I57 | An unfolded frame is drawn over its neighbour: Tumble `show next`'s `(…) =>` covers `lane(…) =` and its wire to result; the layout doesn't make room | QA10 M2 (QA-2026-10-29b.md) | 2026-10-29 |
 | I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA10 L1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the editor's footer hint takes a line of every embed | QA10 L3 (QA-2026-10-29b.md) | 2026-10-29 |
@@ -148,6 +148,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I65a | Graph for several named results (first half of I65): a definition's results are output ports on its frame's right edge, titled by its declared direction, Bool output labelled holds; a use in that direction reads as a call named by the definition with one output per result. Palette and structural editing for results stay in I65 | #677 |
 | I69 | Smoke red at Add a value on the canvas: a real 18 s freeze, the palette's per-filling check redid every definition's results and ways; now 2.6 s | #667 |
 | I68 | A page shown in Run gets a wider side (560 px, its own drag), so Tumble's boards are in view | #666 |
 | I70 | A page's main opens on its top-left, not on its steps' edge over empty canvas | #665 |
