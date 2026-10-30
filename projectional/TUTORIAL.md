@@ -376,9 +376,13 @@ and so does everything that calls it. `newton` in *Calculus* has `Diverge`
 because nothing in it gets smaller; `with fuel(100, …)` turns that into
 `Choice` (gives up after 100 steps).
 
-Two rules keep "smaller" honest: a data type can't take itself as an input in
-its own fields, and only functions can be recursive (`ones = cons(1, ones)`
-is refused), so all data is finite.
+Two rules keep "smaller" honest. A data type may hold itself (a list's rest,
+an outline item's `children: List Item`), but it can't take itself as the
+input of a function in one of its own fields: through `knot = wrap(f: knot →
+Float64)` a function could call itself with no recursion the checker sees.
+And only functions can be recursive (`ones = cons(1, ones)` is refused), so
+all data is finite. (The first rule is to go, with taking such a type apart
+carrying `Diverge` instead: BACKLOG L107.)
 
 ### 3.9 Effects
 
