@@ -19,7 +19,7 @@ import { planSolve } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
-import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
+import { BOOL, CELL_OPS, JOBS, REPRESENTATION_V, S, SET, SIGS, SMART, STORE_AS, TRUE } from "./std.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
@@ -1052,6 +1052,29 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!(e instanceof TypeError)) throw e;
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
+  }
+  // A pin (L108c): a definition that is `store as(r)`, where r names a
+  // representation's definition, and a type is pinned once.
+  const pinnedBy = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "call" || n.args.length !== 1) continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || f.target !== STORE_AS || !info.typeOf.has(n.id)) continue;
+    // Only the whole of a definition pins (represent.ts pinsIn); one inside
+    // another is a value like any other.
+    const owner = code.defs.find((d) => (code.nodes[d] as { body?: Id | null }).body === n.id);
+    if (!owner) continue;
+    const st = info.typeOf.get(n.id), t = st && s.zonk(st), given = info.typeOf.get(n.args[0]);
+    if (t?.t !== "con" || t.args.length !== 1 || (given && s.zonk(given).t !== "con")) continue;
+    const arg = code.nodes[n.args[0]], rep = arg?.kind === "ref" ? code.nodes[arg.target] : null;
+    const body = rep?.kind === "def" && rep.body ? code.nodes[rep.body] : null;
+    const fnOf = body?.kind === "call" ? code.nodes[body.fn] : null;
+    if (fnOf?.kind !== "ref" || fnOf.target !== REPRESENTATION_V) { err(n.args[0], "store as takes a representation by its definition's name"); continue; }
+    const of = s.zonk(t.args[0]);
+    if (of.t !== "con") continue;
+    const before = pinnedBy.get(of.id);
+    if (before) err(owner, `${show(of)} is stored as one representation, and ${nm(before)} has pinned it already`);
+    else pinnedBy.set(of.id, owner);
   }
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));

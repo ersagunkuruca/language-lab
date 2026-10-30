@@ -46,6 +46,7 @@ export const NOTES: Comments = {
   "builtin.representation.equalBy": "For a representation that isn't one spelling per value (a tree, whose shape depends on the order things went in): how equal sees two of its values, through their meaning.",
   "builtin.representation.showBy": "For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.",
   "builtin.representation.compareBy": "For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.",
+  "builtin.representation.storeAs": "Pins a representation for every value of its type in this program: nat storage = store as(binary). A definition of its own; nothing is written where the values are used, and the compiler doesn't choose for that type.",
   "builtin.representation.headBy": "For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.",
   "std.order": "What compare answers: before, same or after.",
   "std.outcome": "The result of something that may have been refused: done(value) or refused(reason). The data form of Abort, for keeping it in a list or record.",

@@ -106,9 +106,18 @@ which one each value gets. A program may still pin one, as it can today
    spelling per value, whose equal, show and compare go through its
    meaning), and `head by(of, f)` (the first item of a job that gives a
    list, map-tree.ts).
-3. **L108c.** A program pins a representation for one value or one
-   definition. This is a definition of its own, not a hint at the use. The
-   editor shows what was chosen next to the value's type.
+3. **L108c, built.** A program pins a representation with a definition of
+   its own, not a hint at the use: `nat storage = store as(binary)`, of type
+   `Storage Nat`. The chooser then takes binary for every Nat in the
+   program, as it is, and still works out the costs of the others. The
+   checker takes only a representation named by its definition, and one
+   pin per type. `lab check` says how each type is stored ("Nat is stored
+   as binary, pinned by nat storage", or "… as int, the cheapest for the
+   jobs main uses"); the editor showing the same next to a value's type is
+   E159. A pin is for the whole program: pinning one value or one
+   definition means converting where values cross into the rest, through
+   `meaning`, and is L108e. The library's Map and Set rows can't be pinned
+   yet, since a program doesn't see the trees module's definitions.
 4. **L108d, after T7.** Each job's law through `meaning` is checked as a
    law in the language.
 5. **With C30.** Lists as arrays becomes a row written this way (`array
@@ -124,3 +133,6 @@ which one each value gets. A program may still pin one, as it can today
   faster body that must agree with the meaning.
 - Self and V8's hidden classes, and Clojure's transients: one meaning, a
   storage picked from how it is used.
+- Haskell's `default` declaration: a module-level definition, not an
+  annotation at each use, saying which type an open choice gets. `store
+  as` is that for representations (L108c).
