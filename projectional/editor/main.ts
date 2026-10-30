@@ -91,7 +91,7 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, CONS, FALSE, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
+import { BOOL, CONS, FALSE, FIXED_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
@@ -1135,7 +1135,9 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     : "Tick the ports you know, the result included, and it works out the others: this function, run backwards."));
   // Only a whole number is rounded: a value that merely starts with a digit
   // (a constructor's hash, say) isn't one, and read as one it was NaN (I32).
-  const nice = (v: string) => (NUMERIC.test(v) ? fmt(Number(v)) : v.replace(/^std\.bool\./, ""));
+  // A Fixed reads as the number it stands for, as on the wires.
+  const fixedAt = new RegExp(`\\b${(pres().names[FIXED_V] ?? "fixed").replace(/\W/g, "\\$&")}\\((-?\\d+)\\)`, "g");
+  const nice = (v: string) => (NUMERIC.test(v) ? fmt(Number(v)) : v.replace(/^std\.bool\./, "").replace(fixedAt, (_, n: string) => fmt(Number(n) / 2 ** 32)));
   for (const p of ports) {
     const on = known.includes(p);
     const id = `f-port-${p}`;
@@ -2617,7 +2619,7 @@ function graphHooks(info: T.Info) {
     },
     values: (() => {
       const tr = traced(info);
-      return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names)])) : undefined;
+      return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names, true)])) : undefined;
     })(),
     at: Object.fromEntries(Object.entries(doc.layout.at ?? {}).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
     moved: (to: Record<Id, Pos>, note?: string) => {
@@ -2647,7 +2649,7 @@ function graphHooks(info: T.Info) {
 // entry in key order, as the blocks draw one written out
 // (DATA-STRUCTURES.md); anything else is its text.
 function valueView(v: Value): HTMLElement {
-  const text = (x: Value) => h("code", {}, showValue(x, doc.code, pres().names));
+  const text = (x: Value) => h("code", {}, showValue(x, doc.code, pres().names, true));
   const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
   if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
     const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));

@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -955,17 +955,20 @@ export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: 
   }
 }
 
-export function showValue(v: Value, code: Code, names: Names): string {
+// `asNumber` shows a Fixed as the number it stands for, where the text is
+// only read (the Run panel, a wire's value), not typed back in.
+export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
   if (typeof v === "bigint") return String(v);
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
-  if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names)).join(", ")}]`;
+  if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
   // Float64 types show as numbers, as `show fraction` and `show complex` do.
-  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names, asNumber)); return bottom === "1" ? top : `${top}/${bottom}`; }
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
-  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names)}i`; }
+  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names, asNumber)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names, asNumber)}i`; }
+  if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return showValue(Number(v.fields[0]) / 2 ** 32, code, names);
   const name = names[v.tag] ?? v.tag;
-  return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names)).join(", ")})` : name;
+  return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})` : name;
 }
 
