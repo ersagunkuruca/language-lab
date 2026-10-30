@@ -15,18 +15,22 @@
 // A tree's shape depends on the order keys were put in, so it isn't a
 // canonical spelling (`canonical: false`): equal, show and compare on maps
 // and sets go through `meaning`, which `byType` names for the rewrite that
-// finds them by type (C47). The library publishes both rows
-// (trees-source.ts, library/trees.json, LIBRARY.reps); `withMapTree` builds
-// them into a program for tests.
+// finds them by type (C47). The rows are written as representation
+// definitions (REPRESENTATIONS.md, L108b), which the library publishes
+// (trees-source.ts, library/trees.json) and LIBRARY.reps is read from;
+// `withMapTree` builds them into a program for tests.
 
 import { merge, type Code, type Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
-import type { Representation } from "./represent.ts";
-import { COMPARE, CONS, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
+import { LADDER, representationsIn, type Representation } from "./represent.ts";
+import { infer } from "./infer.ts";
+import { COMPARE, CONS, COST, JOBS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
 
-export interface Trees { map: Representation; set: Representation; mapSpec: Representation; setSpec: Representation; defs: Id[] }
+// `representations`: the four definitions, the tree and the sorted list
+// for Map, then for Set.
+export interface Trees { representations: Id[]; defs: Id[] }
 
 // The two rows, written into `k`. `prelude` finds a prelude definition by
 // name (the map and set operations the trees do, and map, reverse, keep).
@@ -235,16 +239,38 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     name: "sorted list", of, type: of, meaning: null, canonical: true, impl: {},
     cost: { ...at(linear, "n"), ...at(quadratic, "n²"), ...at(one, "1"), [cons]: "1", space: "n" },
   });
-  return {
-    map: { name: "weight-balanced tree", of: MAP, type: m.T.def, meaning: mapMeaning, canonical: false, impl: mapImpl, byType: mapByType, heads: mapHeads,
+  const rows: Representation[] = [
+    { name: "weight-balanced tree", of: MAP, type: m.T.def, meaning: mapMeaning, canonical: false, impl: mapImpl, byType: mapByType, heads: mapHeads,
       cost: { ...at(mapLog, "log n"), ...at(mapLin, "n"), ...at(["as map", "merge maps"], "n log n"), ...at(["empty map", "map size"], "1"), [MAP_V]: "n log n", space: "n" } },
-    set: { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType, heads: setHeads,
+    spec(MAP, MAP_V, [...mapLog, ...mapLin, "map size"], ["as map", "merge maps"], ["empty map"]),
+    { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType, heads: setHeads,
       cost: { ...at(setLog, "log n"), ...at(setLin, "n"), ...at(["as set", "set union", "set intersection", "set difference"], "n log n"), ...at(["empty set", "set size"], "1"), [SET_V]: "n log n", space: "n" } },
-    mapSpec: spec(MAP, MAP_V, [...mapLog, ...mapLin, "map size"], ["as map", "merge maps"], ["empty map"]),
-    setSpec: spec(SET_TYPE, SET_V, [...setLog, ...setLin, "set size", "set union", "set intersection", "set difference"], ["as set"], ["empty set"]),
-    defs,
-  };
+    spec(SET_TYPE, SET_V, [...setLog, ...setLin, "set size", "set union", "set intersection", "set difference"], ["as set"], ["empty set"]),
+  ];
+  return { representations: rows.map(written), defs };
+
+  // Each row written as a representation's definition (REPRESENTATIONS.md,
+  // L108b): what the library publishes, and what LIBRARY.reps is read from.
+  function written(rep: Representation): Id {
+    const cost = (c: string) => k.x(COST_NAMES[c]);
+    const jobs: Id[] = [];
+    const keys = [...new Set([...Object.keys(rep.impl), ...Object.keys(rep.cost)])].filter((j) => j !== "space");
+    for (const j of keys) {
+      const by = rep.impl[j], c = rep.cost[j];
+      if (!c) throw new Error(`${rep.name}: ${j} has no cost`);
+      if (j === "match" || j === "fold") jobs.push(by ? k.call(j === "match" ? JOBS.matchBy : JOBS.foldBy, k.x(by), cost(c)) : k.call(j === "match" ? JOBS.matchAsWritten : JOBS.foldAsWritten, cost(c)));
+      else jobs.push(by ? k.call(JOBS.job, k.x(j), k.x(by), cost(c)) : k.call(JOBS.asWritten, k.x(j), cost(c)));
+    }
+    if (rep.byType) jobs.push(k.call(JOBS.equalBy, k.x(rep.byType.equal)), k.call(JOBS.showBy, k.x(rep.byType.show)), k.call(JOBS.compareBy, k.x(rep.byType.compare)));
+    for (const [j, d] of Object.entries(rep.heads ?? {})) jobs.push(k.call(JOBS.headBy, k.x(j), k.x(d)));
+    const d = k.def(rep.name);
+    k.define(d, k.call(REPRESENTATION_V, rep.meaning ? k.x(rep.meaning) : k.fn(["value"], (v) => v), cost(rep.cost.space), k.list(...jobs)));
+    defs.push(d);
+    return d;
+  }
 }
+
+const COST_NAMES: Record<string, Id> = Object.fromEntries(LADDER.map((c, i) => [c, `${COST}.${["constant", "logarithmic", "polylogarithmic", "linear", "linearithmic", "quadratic"][i]}`]));
 
 // The trees written into a program, for tests (the library's published
 // rows are LIBRARY.reps). `prelude` finds a prelude definition by name.
@@ -253,5 +279,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
 export function withMapTree(code: Code, names: Names, prelude: (name: string) => Id) {
   const k = new Lang(code);
   const t = buildTrees(k, prelude);
-  return { code: merge(code, k.code), names: { ...names, ...k.names }, rep: t.map, spec: t.mapSpec, set: t.set, setSpec: t.setSpec, insiders: t.defs };
+  const all = merge(code, k.code), allNames = { ...names, ...k.names };
+  const [rep, spec, set, setSpec] = representationsIn(all, infer(all, allNames, undefined, { insiders: t.defs }), allNames, t.representations);
+  return { code: all, names: allNames, rep, spec, set, setSpec, insiders: t.defs };
 }

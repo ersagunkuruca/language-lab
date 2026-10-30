@@ -77,7 +77,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
     // constructors the jobs name.
     const listed: Id[] = [];
     for (let l = code.nodes[jobs]; l?.kind === "call" && refOf(l.fn) === CONS; l = code.nodes[l.args[1]]) listed.push(l.args[0]);
-    const named = listed.map((j) => { const n = code.nodes[j]; return n?.kind === "call" ? refOf(n.args[0]) : null; });
+    const named = listed.map((j) => { const n = code.nodes[j], kind = n?.kind === "call" ? refOf(n.fn) : null; return n?.kind === "call" && (kind === JOBS.job || kind === JOBS.asWritten) ? refOf(n.args[0]) : null; });
     const [ty0, as] = t.args.map((a) => info.subst.zonk(a));
     const of = ty0.t === "con" ? ty0.id : named.map((v) => v && info.owner.get(v)).find(Boolean);
     if (!of || (!same && as.t !== "con")) continue;
@@ -89,6 +89,10 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
       const j = code.nodes[id];
       if (j?.kind !== "call") continue;
       const kind = refOf(j.fn), a = j.args.map(refOf), cost = costOf(j.args[j.args.length - 1]);
+      // How equal, show and compare see it, when it isn't one spelling per value.
+      const seen = kind === JOBS.equalBy ? "equal" : kind === JOBS.showBy ? "show" : kind === JOBS.compareBy ? "compare" : null;
+      if (seen && a[0]) { rep.canonical = false; (rep.byType ??= { equal: "", show: "", compare: "" })[seen] = a[0]; continue; }
+      if (kind === JOBS.headBy && a[0] && a[1]) { (rep.heads ??= {})[a[0]] = a[1]; continue; }
       const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : null;
       if (!key) continue;
       const by = kind === JOBS.job ? a[1] : kind === JOBS.matchBy || kind === JOBS.foldBy ? a[0] : null;

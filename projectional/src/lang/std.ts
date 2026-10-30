@@ -491,6 +491,12 @@ const jobOf = (op: string, name: string, given: (s: Subst) => Type[]) => builtin
   const t = s.fresh(), r = s.fresh();
   return fn([...given(s), costType], jobType(t, r), s.freshRow());
 }, (...xs: unknown[]) => ({ tag: `builtin.${op}`, fields: xs }));
+function sameJob(op: string, name: string, given: (r: Type, s: Subst) => Type[]) {
+  return builtin(op, name, (s) => {
+    const t = s.fresh(), r = s.fresh();
+    return fn(given(r, s), jobType(t, r), s.freshRow());
+  }, (...xs: unknown[]) => ({ tag: `builtin.${op}`, fields: xs }));
+}
 export const JOBS = {
   // t's job (a constructor or a function on t) done at r by `by`.
   job: jobOf("representation.job", "job", (s) => [s.fresh(), s.fresh()]),
@@ -503,6 +509,16 @@ export const JOBS = {
   // A match or a fold on t done as t does it, at this cost.
   matchAsWritten: jobOf("representation.matchAsWritten", "match as written", () => []),
   foldAsWritten: jobOf("representation.foldAsWritten", "fold as written", () => []),
+  // A representation that isn't one spelling per value (a tree, whose shape
+  // depends on the order things went in) says how equal, show and compare
+  // see a value of r: through its meaning.
+  equalBy: sameJob("representation.equalBy", "equal by", (r) => [fn([r, r], bool, { effs: [], tail: null })]),
+  showBy: sameJob("representation.showBy", "show by", (r) => [fn([r], str, { effs: [], tail: null })]),
+  compareBy: sameJob("representation.compareBy", "compare by", (r) => [fn([r, r], { t: "con", id: ORDER, args: [] }, { effs: [], tail: null })]),
+  // For t's job that gives a list, a definition giving only its first
+  // item, as a list of one or nil (the rewrite uses it where only the
+  // first is read).
+  headBy: sameJob("representation.headBy", "head by", (_, s) => [s.fresh(), s.fresh()]),
 };
 
 export const CELL_OPS = {
