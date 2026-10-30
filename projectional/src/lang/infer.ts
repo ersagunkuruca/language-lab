@@ -17,7 +17,7 @@ import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
-import { determinism, oneAnswer, solveMode } from "./modes.ts";
+import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { ratioParts } from "./int.ts";
@@ -111,6 +111,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
+  // The modes of this program, made when a call first needs them.
+  let modes: ReturnType<typeof analyzer> | undefined;
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
   const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
   const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
@@ -608,7 +610,32 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const search = code.nodes[n.fn]?.kind === "ref" && SEARCHES.has((code.nodes[n.fn] as NodeOf<"ref">).target);
         const callRow = search ? s.freshRow() : row;
         if (search) s.subs.push({ from: callRow, to: row, at: id });
-        const fr = s.resolve(f);
+        let fr = s.resolve(f);
+        // A definition that runs a function it's given backwards (the
+        // prelude's inverse) has Choice and Diverge for any function. Given
+        // a function known here, the modes can say what it does with that
+        // one: no Diverge when it ends, no Choice when it gives exactly one
+        // answer (BACKLOG L29, L47).
+        const given = code.nodes[n.fn];
+        if (fr.t === "fn" && given?.kind === "ref" && info.schemes.has(given.target) && fr.params.length === args.length) {
+          const r = s.resolveRow(fr.eff);
+          if (r.effs.includes(CHOICE) || r.effs.includes(DIVERGE)) {
+            const spec = new Map<number, Fn>();
+            n.args.forEach((a, i) => {
+              const x = code.nodes[a], t = x?.kind === "ref" ? code.nodes[x.target] : undefined;
+              if (x?.kind === "lambda") spec.set(i, { k: "lambda", id: a });
+              else if (t && (t.kind === "def" || t.kind === "builtin" || t.kind === "variant") && !(t.kind === "def" && isTypeDef(t.id))) spec.set(i, { k: t.kind, id: t.id });
+            });
+            // Only for functions that don't act: one that does can't be run
+            // backwards at all, and is refused as before.
+            const acts = [...spec.keys()].some((i) => { const t = s.resolve(args[i]); return t.t === "fn" && s.resolveRow(t.eff).effs.some((e) => e !== CHOICE && e !== DIVERGE); });
+            if (spec.size && !acts) {
+              const v = (modes ??= analyzer(code, names)).ofMode(given.target, args.map((_, i) => String(i)), spec);
+              const drop = !v.stuck.length && !v.dynamic.length ? [...(v.ends ? [DIVERGE] : []), ...(v.ends && determinism(v.answers) === "det" ? [CHOICE] : [])] : [];
+              if (drop.length) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => !drop.includes(e)) } };
+            }
+          }
+        }
         if (fr.t === "fn" && fr.params.length !== args.length) {
           err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);
           t = fr.ret;
@@ -618,7 +645,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // one is given where something else goes.
         const someNumber = args.map((a) => { const r = s.resolve(a); return r.t === "var" && s.arith.has(r.v); });
         try {
-          s.unify(f, { t: "fn", params: args, ret, eff: callRow });
+          s.unify(fr, { t: "fn", params: args, ret, eff: callRow });
         } catch (e) {
           if (e instanceof WorldError) {
             // The callee acting itself, or a function it's given that it

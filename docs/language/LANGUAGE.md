@@ -1396,7 +1396,11 @@ complex`, `subtract complex`, `multiply complex` and `negate complex`, ·
 being the complex product, and it has no `<`), and the helpers `reverse
 onto` and `applied`. `inverse(f, y)` is the x that f takes to y:
 any function value run backwards, through `applied(f, x) = f(x)`, since
-`solve` names a definition. `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
+`solve` names a definition. Its type has Choice and Diverge for any f;
+called with a function written at the call (a definition's name or a
+lambda), the call's type says what running that one backwards does: no
+Diverge when the modes say it ends, no Choice when it gives exactly one
+answer (`inverse((p) ↦ p + 1, y)` is plain). `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
 f's space, the way back being f run backwards (`examples/conjugate`: an
 edit in linear light, a turn about a point, one band of a signal). It is written once with the DSL in
 `src/lang/prelude-source.ts` and

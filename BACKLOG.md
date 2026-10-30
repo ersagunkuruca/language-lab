@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | I29, E159, then E103/I40 (speed) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L29, L97's next step, L38, L44, L55, L58, L47 |
+| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -114,7 +114,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L29 | Function variables' rows checked in any order (the closing use should win either way), and `inverse(f, …)` typed from f at the call instead of Diverge | L14 | P3 | M | |
+| L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
 
 ### Ersagun's current asks
 
@@ -171,7 +171,7 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L46 | Bounded counting is total (an Int moving towards its bound), so raymarch loses `with fuel` | LANGUAGE-REVIEW §7 | P2 | M | |
-| L47 | `conjugate` and `inverse` without `Choice` when the mode says one answer | LANGUAGE-REVIEW §7 | P2 | M | |
+| L47 | `conjugate` without `Choice` when the mode says one answer (inverse done with L29, #701): the Choice is in the function conjugate gives back, which a call's verdict doesn't cover | LANGUAGE-REVIEW §7 | P2 | M | inverse done |
 
 ### Grammars, modules and sharing
 
