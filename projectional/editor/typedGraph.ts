@@ -127,6 +127,7 @@ let held = 0, menuAt = 0;
 // Where each graph's nodes were placed when last drawn, so an edit keeps
 // them there. Not saved: a reload lays the graph out afresh.
 const drawnAt = new Map<string, Map<Id, Pos & { frame: Id | null }>>();
+const foldedAt = new Map<string, Set<Id>>();
 
 // The longest a title or a case's row reads before it is shortened.
 const APART = 24;
@@ -202,6 +203,26 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         if (it && fresh.has(k) && Math.hypot(p.x - it.auto.x, p.y - it.auto.y) < 600) it.auto = p;
       }
   }
+  // A frame just unfolded opens where its box was, so what it now covers
+  // is spaced out from it (I57); the frame and its contents stay put.
+  const wasFolded = foldedAt.get(key);
+  const opened = [...(wasFolded ?? [])].filter((f) => scene.frames.has(f) && !hooks.folded?.has(f));
+  if (last && opened.length) {
+    const view = shown(hooks.at), { pos, boxes } = placeAll(view, hooks.at);
+    const inside = (fr: Id | null | undefined, f: Id) => { for (let p = fr; p; p = scene.frames.get(p)?.parent ?? null) if (p === f) return true; return false; };
+    const covered = new Set<Id>();
+    for (const f of opened) {
+      const b = boxes.get(f);
+      if (!b) continue;
+      for (const [k, it] of view.items) {
+        const q = pos.get(k);
+        if (!q || hooks.at[k] || !scene.items.has(k) || inside(it.frame, f)) continue;
+        if (q.x < b.x + b.w && q.x + it.w > b.x && q.y < b.y + b.h && q.y + it.h > b.y) covered.add(k);
+      }
+    }
+    if (covered.size) for (const [k, p] of Object.entries(tidyScene(view, hooks.at, covered))) if (covered.has(k)) scene.items.get(k)!.auto = p;
+  }
+  foldedAt.set(key, new Set(hooks.folded ?? []));
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
