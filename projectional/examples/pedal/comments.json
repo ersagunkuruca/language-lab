@@ -20,5 +20,6 @@
   "jub03hb981gnitgr0lv26vln43": "`wet` at the loudness of `dry`, the loudnesses carried from block to block in two cells, so it is the same whatever size the blocks are. So the drive changes the tone, not the volume, and Clean against Driven is a fair comparison: louder always sounds better, so listening tests match levels first (prior art: level-matched A/B, as in ITU-R BS.1116).",
   "jmtj0im6p5ifftn2uv0e4qe900": "One cycle of a sine in 64 steps, at 0.2, about as loud as a strum's peaks.",
   "sum8fqv8d24eten1u3t3fqpuk2": "What `wave` gives at each step, as the points of an SVG polyline 192 wide: a sample of 0.2 is 44 above the middle.",
-  "a9lrj2ll7t530juk2blhtu5qeh": "The sine through the drive, brought to the sine's loudness, as the pedal brings each block: the drive shows as its shape, flattened at the top, not as its size."
+  "a9lrj2ll7t530juk2blhtu5qeh": "The sine through the drive, brought to the sine's loudness, as the pedal brings each block: the drive shows as its shape, flattened at the top, not as its size.",
+  "bqm3nbshncld8lmtknte7nl220": "The page's style sheet: the colours (and their dark versions), the sources lit while they play, the pedal's dark top with its switch lit when driven, and the picture as a scope screen. Every element names its class."
 }
