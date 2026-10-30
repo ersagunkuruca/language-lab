@@ -111,3 +111,33 @@ test("a page shows only what changed: one line for a tick at any depth, nothing 
   p.button("ask Ana", "Tick").fire("click");
   assert.deepEqual([...p.ran].sort(), ["", "2 of 7 done", "ask Ana"]);
 });
+
+// A step added, moved or removed makes, moves or drops its own row: the
+// item it's under keeps its row and its line (each of, cells.ts).
+test("a step added, moved or removed changes its own row only, at any depth, and keeps working after its item moves", () => {
+  const p = page();
+  let rows = p.cells.rowsMade;
+  p.ran.length = 0;
+  p.addStep("find a room", "call the host");
+  assert.deepEqual(p.lines().slice(2, 5), ["○ find a room", "○ ask Ana", "○ call the host"]);
+  assert.equal(p.cells.rowsMade - rows, 1, "one row, the new step's; plan the trip and find a room keep theirs");
+  assert.ok(!p.ran.some((r) => r.includes("plan the trip") || r.includes("find a room")), `drawn again: ${JSON.stringify(p.ran)}`);
+  rows = p.cells.rowsMade;
+  p.button("call the host", "Move up").fire("click");
+  assert.deepEqual(p.lines().slice(2, 5), ["○ find a room", "○ call the host", "○ ask Ana"]);
+  assert.equal(p.cells.rowsMade - rows, 0, "a move makes no row");
+  // Its item moves; the step's buttons still act on it, wherever it is now.
+  p.button("water the plants", "Move up").fire("click");
+  p.button("water the plants", "Move up").fire("click");
+  assert.equal(p.lines()[0], "✓ water the plants");
+  p.button("call the host", "Tick").fire("click");
+  assert.deepEqual(p.lines().slice(3, 6), ["○ find a room", "✓ call the host", "○ ask Ana"]);
+  assert.equal(p.lines().at(-1), "3 of 8 done");
+  rows = p.cells.rowsMade;
+  p.button("call the host", "Remove").fire("click");
+  assert.deepEqual(p.lines().slice(3, 5), ["○ find a room", "○ ask Ana"]);
+  assert.equal(p.cells.rowsMade - rows, 0);
+  p.addStep("ask Ana", "send the dates");
+  assert.deepEqual(p.lines().slice(4, 6), ["○ ask Ana", "○ send the dates"]);
+  assert.equal(p.lines().at(-1), "2 of 8 done");
+});

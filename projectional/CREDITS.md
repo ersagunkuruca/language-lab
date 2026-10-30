@@ -146,6 +146,7 @@ Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-
 
 | `each` following the edits: one row made, moved or disposed per edit, no matching (cells.ts `each`, L99a) | Influence | Solid's `mapArray` and `<For>` with stores (Ryan Carniato), whose keyed rows this replaces matching with; differential dataflow's changes as data (McSherry et al. 2013). Written fresh. |
 | Tracked views: a row reads its item through a view, each field or list case read a place it waits on (cells.ts `view`, L99b) | Influence | Solid's `createStore` (Ryan Carniato), whose proxies track each property read; MobX's observable objects (Michel Weststrate); Vue 3's `reactive` (Evan You). Written fresh, no code taken. |
+| `each of`: rows of their own for a list inside a row's item, following the edits at that place (cells.ts `eachOf`, L99c) | Influence | Solid's nested `<For>` over a store's inner arrays (Ryan Carniato), where each level tracks its own array. Written fresh, no code taken. |
 
 | The nested to-do outline (cells-programs.ts `outlineProgram`, L100) | Influence | TodoMVC (Addy Osmani, Sindre Sorhus and others) as the shape of a to-do demo; Solid's stores demo of nested to-dos (Ryan Carniato). Written fresh. |
 | The nested to-do's look (cells-programs.ts `styles`, `draw item`) | Influence | Round ticks before the title and small actions that show on hover, as in to-do apps such as Things (Cultured Code) and Todoist (Doist). Our own rules and colours, written fresh; credited on the page. |

@@ -340,14 +340,14 @@ export function fractionsProgram() {
 // A nested to-do outline (BACKLOG L100, STABLE-REFERENCES.md "The demo"):
 // plain `Item` data with keys, any depth, in one cell, changed only by
 // edits at a path (L98). The top-level rows are an `each` that follows
-// the edits (L99a): ticking, renaming or adding a step to one item makes
-// that item's row again and nothing else, and adding or moving an item
-// makes or moves one row. The count is a formula over the whole outline.
+// the edits (L99a), and each item's steps an `each of` its children, so
+// ticking an item at any depth runs its line, and adding, moving or
+// removing an item or a step makes, moves or drops one row. The count is a formula over the whole outline.
 // An item is found by its key, so its place is worked out when a button
 // is pressed, not kept: positions shift, keys don't.
 export function outlineProgram() {
   const { k, lib } = lang();
-  const map = lib("map"), length = lib("length");
+  const length = lib("length");
   const I = INT_OPS;
   const read = (c: Id) => k.call(C.read, c);
 
@@ -430,7 +430,8 @@ export function outlineProgram() {
 
   // One item and its steps, drawn. The item is plain data; each hands the
   // row a view of it (cells.ts, L99), so a tick runs the one line that
-  // read that `done`, at any depth. "+" opens a field under the item for
+  // read that `done`, at any depth. Its steps are an each of its children
+  // (each of), so a step added makes the step's row and nothing above it. "+" opens a field under the item for
   // the new step's title; Enter adds it, Escape or leaving the field closes it.
   const draw = k.def("draw item");
   k.define(draw, k.fn(["outline", "next key", "item"], (outline, nextKey, it) => k.let("key", k.call(F("key"), it), (key) => k.let("adding", k.call(C.cell, k.false), (adding) =>
@@ -451,7 +452,8 @@ export function outlineProgram() {
               k.call(C.insertAt, outline, k.call(C.thenPath, k.call(C.itemPath, l, i), fieldPath("children")), k.call(length, k.call(F("children"), it)), step))))),
             k.thunk(() => k.call(C.write, adding, k.false)))),
         html("span", none())))),
-      classed("todo-steps", html("ul", k.call(map, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step))))),
+      k.let("steps", k.call(C.eachOf, k.call(F("children"), it), k.fn(["step"], (step) => k.call(draw, outline, nextKey, step))), (steps) =>
+        k.call(HTML_V.part, k.thunk(() => classed("todo-steps", html("ul", read(steps)))))),
     )))))));
 
   const styles = k.def("styles");

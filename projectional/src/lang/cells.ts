@@ -56,15 +56,29 @@ export interface CellNode {
   // The places it read in each source through a tracked view (L99): woken
   // only by an edit there or around it, never by one inside it.
   views?: Map<CellNode, Seen[]>;
-  // each's, given each edit as it's made: its rows' positions follow it.
-  shift?: (what: Edit) => void;
+  // each's, given each edit of a list as it's made, and where: its rows'
+  // positions follow the edits of the list it maps.
+  shift?: (what: Edit, at: Step[]) => void;
+  // A row's root: the each it's a row of, woken with it.
+  rowOf?: CellNode;
 }
 
 // A place a reader read through a view: `rel` from the row's item when
 // `row` is given (its position kept up to date by each, so a row's
-// places move with it), from the whole value otherwise.
-type Spot = { i: number };
+// places move with it), from the whole value otherwise. A row of an each
+// over a list inside another row's item (each of) has `up`, the path of
+// its list now, or null once that's gone.
+type Spot = { i: number; up?: () => Step[] | null };
 type Seen = { row: Spot | null; rel: Step[] };
+// Where a row's item is now, from the whole value; null once it's gone.
+const placeOf = (row: Spot): Step[] | null => {
+  if (row.i < 0) return null;
+  const up = row.up ? row.up() : [];
+  return up && [...up, { item: row.i }];
+};
+// A list view's place: what `each of` follows.
+type ListAt = { n: CellNode; row: Spot | null; rel: Step[] };
+const LIST_AT = new WeakMap<object, ListAt>();
 
 // What an edit did, for each (L99): at a place, a write, or in the list
 // there an insert, a remove or a move.
@@ -240,6 +254,10 @@ export class Cells {
   read(c: Value, at?: Step[]): Value {
     const n = nodeOf(c);
     if (!n) throw new Error("read needs a cell");
+    return this.readNode(n, at);
+  }
+
+  private readNode(n: CellNode, at?: Step[]): Value {
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
     const r = this.current;
@@ -278,16 +296,22 @@ export class Cells {
     // A place read through a view wakes only for an edit there or around
     // it; and a row's places don't wake when its list only moved it.
     const key = at && keyOf(at);
-    if (what && at && at.length === 0) for (const o of n.observers) o.shift?.(what);
+    if (what && at && what.kind !== "write") for (const o of n.observers) o.shift?.(what, at);
     const hits = (seen: Seen) => {
       if (!seen.row) return keyIs(at!, seen.rel);
-      if (seen.row.i < 0 || (at!.length === 0 && what && what.kind !== "write")) return false;
-      return keyIs(at!, [{ item: seen.row.i }, ...seen.rel]);
+      const place = placeOf(seen.row);
+      // An insert, remove or move in a list around the row's item only
+      // moves it (or drops it, which its each does).
+      if (!place || (what && what.kind !== "write" && at!.length < place.length)) return false;
+      return keyIs(at!, [...place, ...seen.rel]);
     };
     for (const o of n.observers) {
       if (o.edits !== undefined) o.edits = what && o.edits ? [...o.edits, what] : null;
       const ps = key === undefined ? undefined : o.paths?.get(n);
-      if (!ps || ps.some((p) => p.startsWith(key!) || key!.startsWith(p)) || o.views?.get(n)?.some(hits)) this.mark(o, DIRTY);
+      if (!ps || ps.some((p) => p.startsWith(key!) || key!.startsWith(p)) || o.views?.get(n)?.some(hits)) {
+        this.mark(o, DIRTY);
+        if (o.rowOf && !o.rowOf.disposed) this.mark(o.rowOf, DIRTY);
+      }
     }
     if (!this.batching) this.flush();
   }
@@ -329,11 +353,11 @@ export class Cells {
   // views again; anything else read is a place the reader waits on.
   private view(n: CellNode, row: Spot | null, rel: Step[], lists: Lists): Value {
     const shape = lists.views!;
-    const steps = () => (row ? [{ item: row.i }, ...rel] : rel);
+    const steps = () => { const place = row ? placeOf(row) : []; return place && [...place, ...rel]; };
     let last: Value | undefined;
     // What's there now; the last thing seen once the row is gone.
     const now = (): Value => {
-      const v = row && row.i < 0 ? undefined : partAt(n.value as Value, steps(), lists);
+      const at = steps(), v = at ? partAt(n.value as Value, at, lists) : undefined;
       if (v !== undefined) last = v;
       return last!;
     };
@@ -367,6 +391,7 @@ export class Cells {
           },
         }) as unknown as Value;
         VIEWS.set(v as unknown as object, () => lists.to(items().slice(o)));
+        if (o === 0) LIST_AT.set(v as unknown as object, { n, row, rel });
         return v;
       };
       made = from(0);
@@ -465,17 +490,42 @@ export class Cells {
   // This is Solid's mapArray, which its <For> is built on. `list` turns the
   // language's lists into arrays and back.
   each(items: Value, f: (item: Value) => Value, list: Lists, label = "each"): Value {
+    return this.mapRows(nodeOf(items), null, f, list, label);
+  }
+
+  // `each` over a list inside a cell's value (each of): a row's item's
+  // steps, say, handed to it as a view. Its rows follow the edits of that
+  // list as each's follow the cell's, and it reads only that list, so a
+  // step added makes one row and leaves the item's own row as it was.
+  // Over a plain list, the list mapped once.
+  eachOf(items: Value, f: (item: Value) => Value, list: Lists, label = "each of"): Value {
+    const at = typeof items === "object" && items !== null ? LIST_AT.get(items as unknown as object) : undefined;
+    if (at && at.n.compute === null && !at.n.disposed) return this.mapRows(at.n, at, f, list, label);
+    return this.mapRows(this.node(null, this.plainOf(items), label), null, f, list, label);
+  }
+
+  // each's rows over the list in `source`: its whole value, or the list
+  // at `base` in it.
+  private mapRows(source: CellNode | null, base: ListAt | null, f: (item: Value) => Value, list: Lists, label: string): Value {
+    if (!source) throw new Error("each needs a cell");
     type Row = { item: Value; value: Value; root: CellNode; spot: Spot };
     let rows: Row[] = [];
+    // Where the list is now: null once the row it's in is gone.
+    const path = (): Step[] | null => {
+      if (!base) return [];
+      const place = base.row ? placeOf(base.row) : [];
+      return place && [...place, ...base.rel];
+    };
+    const up = base ? path : undefined;
     // Over a cell, with views (L99): a row gets its item as a view, and
     // what it reads of it while being made is its root's, so an edit inside
     // the item makes the row again only when the row read that place; what
     // its watchers read is theirs.
-    const source = nodeOf(items), viewing = !!list.views && !!source && source.compute === null;
+    const viewing = !!list.views && source.compute === null;
     const row = (item: Value, i: number, made: CellNode[]): Row => {
-      const root: CellNode = { value: undefined, state: CLEAN, compute: null, sources: [], observers: new Set(), watcher: false, owned: [], label: `${label} row`, runs: 0, disposed: false };
+      const root: CellNode = { value: undefined, state: CLEAN, compute: null, sources: [], observers: new Set(), watcher: false, owned: [], label: `${label} row`, runs: 0, disposed: false, rowOf: cell };
       made.push(root);
-      const spot = { i };
+      const spot: Spot = { i, up };
       const [current, owner, reading] = [this.current, this.owner, this.row];
       this.current = null;
       this.owner = root;
@@ -484,8 +534,8 @@ export class Cells {
       // A text or number has no places inside: the row read all of it.
       const given = () => {
         if (!viewing) return item;
-        if (typeof item === "object" && item !== null) return this.view(source!, spot, [], list);
-        this.seen(source!, { row: spot, rel: [] });
+        if (typeof item === "object" && item !== null) return this.view(source, spot, [], list);
+        this.seen(source, { row: spot, rel: [] });
         return item;
       };
       try { value = f(given()); } finally { this.current = current; this.owner = owner; this.row = reading; }
@@ -497,9 +547,18 @@ export class Cells {
     // edit of the list itself or of one item, each follows them, one row
     // made, moved or disposed per edit, and nothing is matched. Otherwise
     // (the first run, a whole write) items are matched by equality, as
-    // Solid's mapArray does.
-    const follow = (edits: Edit[], xs: Value[], made: CellNode[]): { rows: Row[]; gone: Row[] } | null => {
-      const next = [...rows], gone: Row[] = [];
+    // Solid's mapArray does. Edits are taken from the list's own place;
+    // one elsewhere in the cell is no row's, one around the list (its row
+    // moved, say) is followed by matching.
+    const follow = (all: Edit[], xs: Value[], made: CellNode[]): { rows: Row[]; gone: Row[] } | null => {
+      const next = [...rows], gone: Row[] = [], here = path();
+      if (!here) return null;
+      const edits: Edit[] = [];
+      for (const e of all) {
+        if (!keyIs(here, e.at) && !keyIs(e.at, here)) continue;
+        if (e.at.length < here.length) return null;
+        edits.push({ ...e, at: e.at.slice(here.length) });
+      }
       for (const e of edits) {
         if (e.at.length === 0 && e.kind === "insert") next.splice(Math.min(e.i, next.length), 0, null as unknown as Row);
         else if (e.at.length === 0 && e.kind === "remove") gone.push(...next.splice(e.i, 1).filter(Boolean));
@@ -523,7 +582,12 @@ export class Cells {
       cell.edits = [];
       let gone: Row[];
       try {
-        const xs = list.from(this.read(items));
+        // A list inside the value is read as a view reads it, its cases
+        // only: an edit inside one of its items wakes this only through
+        // the row that read that place.
+        const here = path();
+        if (base) this.seen(source, { row: base.row, rel: base.rel });
+        const xs = here ? list.from(partAt(base ? (source.value as Value) : this.readNode(source), here, list) ?? list.to([])) : [];
         const followed = edits && edits.length && rows.length ? follow(edits, xs, made) : null;
         if (followed) { rows = followed.rows; gone = followed.gone; }
         else {
@@ -548,7 +612,10 @@ export class Cells {
     cell.edits = null;
     // Between an edit and the next run, rows' places follow the edits, so
     // a view read in between reads its own item.
-    if (viewing) cell.shift = (what) => { for (const r of rows) r.spot.i = shifted(r.spot.i, what); };
+    if (viewing) cell.shift = (what, at) => {
+      const here = path();
+      if (here && here.length === at.length && keyIs(here, at)) for (const r of rows) r.spot.i = shifted(r.spot.i, what);
+    };
     cell.onDispose = () => rows.forEach((r) => this.dispose(r.root));
     return this.wrap(cell);
   }

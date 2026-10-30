@@ -555,7 +555,7 @@ The effects:
 | `Time` | `now()` | a match (a test's fixed clock); at the top, the clock |
 | `Wait` | `wait(milliseconds)` | a match; at the top, the runtime (not in a page) |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
-| `Cells` | `cell(x)`, `formula(action)`, `each(items, f)`, `read(c)` | the runtime (see "Cells" below) |
+| `Cells` | `cell(x)`, `formula(action)`, `each(items, f)`, `each of(list, f)`, `read(c)` | the runtime (see "Cells" below) |
 | `Update` | `write(c, x)` | the runtime; a world effect, like `Console` |
 | yours | the operations you declare | a match on them |
 
@@ -843,6 +843,9 @@ What the types add over Solid:
   maps only new ones; each item's `f` runs in an owner of its own, so a
   cell it makes lives as long as the item. It is Solid's `mapArray`, which
   `<For>` is built on (prior art), and the html module's `for each` is it.
+  `each of(list, f)` is the same over a list inside a cell's value, as a
+  row of `each` has it (its item's steps): only that list's rows are made
+  or moved when it changes, and the row it's in stays as it was.
 - **No writes on abandoned paths.** `Update` is a world effect, so a write
   under an open `Choice` is the same error as printing there. Reading isn't
   world, so a search may read cells.
