@@ -245,16 +245,20 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 
   // A lambda's mode, or (with root a definition's body that isn't a
   // lambda) a value defined once, whose only port is "out".
-  function lambdaMode(lam: Id, known: Set<string>, spec: Map<number, Fn>, def: Id | null): Verdict {
+  const modeKey = (lam: Id, known: Set<string>, spec: Map<number, Fn>, outer: Map<Id, Fn>) =>
+    `${lam}|${[...known].sort().join(",")}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}${outer.size ? `|${[...outer].map(([b, f]) => `${b}=${fnKey(f)}`).sort().join(",")}` : ""}`;
+  // outer: functions known for binders the lambda uses from outside (a
+  // definition's parameters, for the function it gives back).
+  function lambdaMode(lam: Id, known: Set<string>, spec: Map<number, Fn>, def: Id | null, outer: Map<Id, Fn> = new Map()): Verdict {
     const l = nodes[lam].kind === "lambda" ? nodes[lam] as NodeOf<"lambda"> : { params: [] as Id[], body: lam };
-    const key = `${lam}|${[...known].sort().join(",")}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`;
+    const key = modeKey(lam, known, spec, outer);
     const ports: Port[] = [...l.params.map((_, i) => String(i)), "out"];
     const hit = memo.get(key);
     if (hit) return hit;
     if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
     running.add(key);
     const st: St = { known: new Set(), sizes: new Map(), goals: [], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
-    const fns = new Map<Id, Fn>();
+    const fns = new Map<Id, Fn>(outer);
     l.params.forEach((p, i) => {
       if (known.has(String(i))) { st.known.add(slot(p)); st.sizes.set(slot(p), new Map([[String(i), false]])); }
       const f = spec.get(i);
@@ -878,13 +882,25 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) =>
     checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!;
 
+  // The function a definition gives back (`(f, g) ↦ (x) ↦ …`), run
+  // forward with the definition's parameters at spec known to be those
+  // functions: the prelude's conjugate, given its f.
+  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => checked(() => {
+    const outerLam = nodes[(nodes[def] as NodeOf<"def">).body!];
+    const inner = outerLam?.kind === "lambda" ? nodes[outerLam.body] : undefined;
+    if (outerLam?.kind !== "lambda" || inner?.kind !== "lambda") return { v: null, key: null };
+    const outer = new Map([...spec].map(([i, f]) => [slot(outerLam.params[i]), f] as [Id, Fn]));
+    const known = new Set(inner.params.map((_, i) => String(i)));
+    return { v: lambdaMode(inner.id, known, new Map(), def, outer), key: modeKey(inner.id, known, new Map(), outer) };
+  });
+
   // The plan relate.ts runs for a function in a mode, and for a value
   // defined once (with its result known or not).
   const planOf = (f: Fn, m: Mode): Plan => { fresh(f.id); return mode(f, new Set(m.known), new Map(m.spec)).plan; };
   const planOfValue = (def: Id, known: boolean): Plan =>
     lambdaMode((nodes[def] as NodeOf<"def">).body!, new Set(known ? ["out"] : []), new Map(), def).plan;
 
-  return { ofSolve, ofMode, planOf, planOfValue, slot, isLet, fresh };
+  return { ofSolve, ofMode, ofReturned, planOf, planOfValue, slot, isLet, fresh };
 }
 
 // The verdict for one solve node, or null when it isn't run by the

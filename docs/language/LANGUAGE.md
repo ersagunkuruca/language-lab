@@ -1409,7 +1409,10 @@ lambda), the call's type says what running that one backwards does: no
 Diverge when the modes say it ends, no Choice when it gives exactly one
 answer (`inverse((p) ↦ p + 1, y)` is plain). `conjugate(f, g)` is f⁻¹ ∘ g ∘ f: g done in
 f's space, the way back being f run backwards (`examples/conjugate`: an
-edit in linear light, a turn about a point, one band of a signal). It is written once with the DSL in
+edit in linear light, a turn about a point, one band of a signal). The
+function it gives back is typed the same way from the f it is given:
+`conjugate(step, double)` with `step = (x) ↦ x + 1` is a plain function,
+`conjugate(double, step)` keeps Choice. It is written once with the DSL in
 `src/lang/prelude-source.ts` and
 published by `node library/build.ts`, which also moves the examples onto it.
 Every program is loaded with it (`src/lang/library.ts`): the editor, the

@@ -615,11 +615,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // prelude's inverse) has Choice and Diverge for any function. Given
         // a function known here, the modes can say what it does with that
         // one: no Diverge when it ends, no Choice when it gives exactly one
-        // answer (BACKLOG L29, L47).
+        // answer (BACKLOG L29, L47). The same for the function such a
+        // definition gives back, run forward (the prelude's conjugate).
         const given = code.nodes[n.fn];
         if (fr.t === "fn" && given?.kind === "ref" && info.schemes.has(given.target) && fr.params.length === args.length) {
-          const r = s.resolveRow(fr.eff);
-          if (r.effs.includes(CHOICE) || r.effs.includes(DIVERGE)) {
+          const searches = (t: Type) => { if (t.t !== "fn") return null; const r = s.resolveRow(t.eff); return r.effs.includes(CHOICE) || r.effs.includes(DIVERGE) ? r : null; };
+          const ret = s.resolve(fr.ret);
+          const r = searches(fr), rr = searches(ret);
+          if (r || rr) {
             const spec = new Map<number, Fn>();
             n.args.forEach((a, i) => {
               const x = code.nodes[a], t = x?.kind === "ref" ? code.nodes[x.target] : undefined;
@@ -629,10 +632,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             // Only for functions that don't act: one that does can't be run
             // backwards at all, and is refused as before.
             const acts = [...spec.keys()].some((i) => { const t = s.resolve(args[i]); return t.t === "fn" && s.resolveRow(t.eff).effs.some((e) => e !== CHOICE && e !== DIVERGE); });
+            const dropped = (row: Row, v: ReturnType<ReturnType<typeof analyzer>["ofMode"]> | null): Row | null => {
+              const drop = v && !v.stuck.length && !v.dynamic.length ? [...(v.ends ? [DIVERGE] : []), ...(v.ends && determinism(v.answers) === "det" ? [CHOICE] : [])] : [];
+              return drop.length ? { ...row, effs: row.effs.filter((e) => !drop.includes(e)) } : null;
+            };
             if (spec.size && !acts) {
-              const v = (modes ??= analyzer(code, names)).ofMode(given.target, args.map((_, i) => String(i)), spec);
-              const drop = !v.stuck.length && !v.dynamic.length ? [...(v.ends ? [DIVERGE] : []), ...(v.ends && determinism(v.answers) === "det" ? [CHOICE] : [])] : [];
-              if (drop.length) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => !drop.includes(e)) } };
+              modes ??= analyzer(code, names);
+              const mine = r && dropped(r, modes.ofMode(given.target, args.map((_, i) => String(i)), spec));
+              const theirs = rr && ret.t === "fn" && dropped(rr, modes.ofReturned(given.target, spec));
+              if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
             }
           }
         }
