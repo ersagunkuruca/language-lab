@@ -148,6 +148,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I74 | Editing tests implementInterface and listItems red on main: they pinned Trig's 5 operations (7 since #654's polar and unpolar) and h1 as two dice' first item (styles first since #671); now one hole per operation and any position | #678 |
 | I65a | Graph for several named results (first half of I65): a definition's results are output ports on its frame's right edge, titled by its declared direction, Bool output labelled holds; a use in that direction reads as a call named by the definition with one output per result. Palette and structural editing for results stay in I65 | #677 |
 | I69 | Smoke red at Add a value on the canvas: a real 18 s freeze, the palette's per-filling check redid every definition's results and ways; now 2.6 s | #667 |
 | I68 | A page shown in Run gets a wider side (560 px, its own drag), so Tumble's boards are in view | #666 |

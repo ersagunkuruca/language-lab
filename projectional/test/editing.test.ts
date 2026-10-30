@@ -158,7 +158,7 @@ async function implementInterface() {
   await p.locator(".structure .srow", { hasText: "Trig" }).locator("button", { hasText: "Implement" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: Wave's panel doesn't offer to implement Trig`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   // One line per operation, by its name (BACKLOG E151).
-  if (!/trig at Wave› : Trig Wave/.test(text) || !/= sin: □/.test(text) || /trig\(/.test(text) || (text.match(/□/g) ?? []).length !== 5) errors.push(`${where}: not trig(□ × 5) at Wave: ${text.slice(0, 200)}`);
+  if (!/trig at Wave› : Trig Wave/.test(text) || !/= sin: □/.test(text) || /trig\(/.test(text) || (text.match(/□/g) ?? []).length !== (text.match(/\w: □/g) ?? []).length) errors.push(`${where}: not a hole per operation at Wave: ${text.slice(0, 200)}`);
   // The graph draws it as Trig at Wave, an input per operation (BACKLOG E152).
   const impl = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
   if (!impl.includes("Trig at Wave") || !impl.includes("sin") || /\btrig\b/.test(impl)) errors.push(`${where}: the graph draws the implementation as ${impl.slice(0, 160)}`);
@@ -261,13 +261,13 @@ async function listItems() {
   const text = async () => (await p.locator(".p-text").innerText()).replace(/\s+/g, " ");
   const before = await text();
   await p.locator(".blocks-wrap .head", { hasText: /^h1$/ }).first().click();
-  const head = (await p.locator(".sub-head", { hasText: /^Item 1 of \d+ in the list/ }).count());
+  const head = (await p.locator(".sub-head", { hasText: /^Item \d+ of \d+ in the list/ }).count());
   if (!head) errors.push(`${where}: h1(…) in main's list doesn't say it's an item`);
   await p.locator("button", { hasText: /^Add one after$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Add one after`));
   if ((await p.locator(".insp-head").first().innerText()).trim() !== "Hole") errors.push(`${where}: the new item isn't a selected hole`);
   if (!/h1\(\[words\("Two dice"\)\]\), □/.test(await text())) errors.push(`${where}: no hole after h1 in ${(await text()).slice(400, 600)}`);
   await p.locator("button", { hasText: /^Earlier$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: a new item can't move earlier`));
-  if (!/\[ □\S*, h1\(/.test(await text())) errors.push(`${where}: Earlier didn't put the hole first`);
+  if (!/[\[,] □\S*, h1\(/.test(await text())) errors.push(`${where}: Earlier didn't put the hole first`);
   await p.locator("button", { hasText: /^Take it out$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Take it out`));
   if ((await text()) !== before) errors.push(`${where}: taking the new item out doesn't give back main`);
   const holes = await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").count();
