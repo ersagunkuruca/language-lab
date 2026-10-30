@@ -9,6 +9,12 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
+**Rounds so far (2026-10-30):** 1 calc, 2 Countdown and chapters, 3
+ledger, 4 the guitar pedal, 5 routes. Each round's gaps are below, as
+written then. The gaps still open are rows in BACKLOG.md, lane C (C30,
+C31, C62, C63, C64), and the next round's program is chosen when the
+weekly round is due.
+
 ## Round 1: calc (2026-10-22)
 
 `projectional/examples/calc` is a calculator for whole numbers of any size.

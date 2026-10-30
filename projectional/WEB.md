@@ -8,6 +8,15 @@ cells, and the browser is one more world, like the command line's.
 Two-way binding is the language's own running backwards. Mobile is the
 same app, packaged.
 
+**Status (2026-10-30): built.** Pages are `Html` values, `lab build-web`
+builds them, and the demos are the converter, two dice, Pig, Tumble, the
+nested to-do and the guitar pedal, restyled in one look on 2026-10-30.
+The "later" items at the end are done too: keyed lists, `inverse` over
+function values, static output from `lab run`, time, randomness and HTTP,
+and the editor's Run showing a page live. `lab build-app` packages a page
+as a phone app (RUNNING.md). Open page work is in BACKLOG.md (L59, L98,
+L99).
+
 ## Short answers
 
 - **What is a web app?** A program whose `main` returns an `Html` value.
@@ -262,9 +271,9 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 
 Later, each on its own: reactive.html's programs moved onto `Html`; keyed
 lists (done: `for each`); `solve` over function values (done: the
-prelude's `inverse`); static output (done: `lab run`)
-from `lab run`; time, randomness and HTTP world effects; the editor
-showing a page program live, like its shader picture.
+prelude's `inverse`); static output (done: `lab run`); time, randomness
+and HTTP world effects (done); the editor showing a page program live,
+like its shader picture (done: Run shows the page).
 
 ## Credits
 

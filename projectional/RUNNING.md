@@ -3,7 +3,7 @@
 One page for a newcomer: what happens when you press Run, and every other
 way a program can run. The long design notes are COMPILER.md, WASM.md,
 NATIVE.md, WEB.md and AUDIO.md; this page is their summary, current on
-2026-10-24.
+2026-10-30.
 
 ## One program, several runners
 
@@ -113,9 +113,12 @@ the output is the same either way.
 
 The compiler doesn't search. It runs a fixed series of passes over the
 checked tree, and each pass recognises some shapes and rewrites them in
-one way. Same program in, same code out, every time. Only one decision is
-made by comparing costs, and it's the representation of a type
-(above): the chooser in `src/lang/represent.ts` looks at which jobs the
+one way. Same program in, same code out, every time. Two decisions are
+made by comparing costs. One is how an interface field left to its ways
+is computed (WAYS.md: the cheapest set of ways that ends in real code, for
+each type and target). The other is the representation of a type
+(above), which is always the compiler's choice, never the program's: the
+chooser in `src/lang/represent.ts` looks at which jobs the
 program uses (`put`, `value at`, `match`, …), reads each candidate's
 declared cost per job (`1`, `log n`, `n`, …) and takes the one whose worst
 job is cheapest.
@@ -164,7 +167,8 @@ Generators are only for code that can give several answers.
 | pass | what it recognises | what it does | kind |
 |---|---|---|---|
 | one `+` per type | a generic `+ − · <` at a known type | the type's own operation; a generic definition gets a copy per type (monomorphisation, as MLton does) | fixed rule |
-| representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs | cost-based |
+| ways | an interface field left to its ways (`by its ways`) | the cheapest grounded set of ways for the type and target (Knuth 1977), `src/lang/ways.ts` | cost-based |
+| representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs; `lab check` says what it picked | cost-based |
 | derivatives and inverses | `derivative(f)`, `inverse(f, …)` of a known `f` | the derivative's code; a solve | fixed rule |
 | folds | `fold` of `range(n)` or `characters(t)`; a fold that only adds Ints | a counted loop; a loop over the text; an accumulator from the front | fixed rule (the table) |
 | list chains | `keep`- and `map`-shaped steps between `split` and `length` | one loop, no list between | fixed rule |
