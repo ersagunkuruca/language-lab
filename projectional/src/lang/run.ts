@@ -829,7 +829,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (!defs.has(target)) {
           // Definition values are pure (the checker sees to it), so exactly
           // one result.
-          for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); break; }
+          for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; }
         }
         return defs.get(target)!;
       }
@@ -954,6 +954,13 @@ export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: 
     return 1;
   }
 }
+
+// A definition named where a value is typed (values.ts): `{ tag:
+// DEF_VALUE, fields: [its id] }` until a run looks it up. A definition's
+// function value remembers which definition it is, so it shows by name.
+export const DEF_VALUE = "@definition";
+const defOf = new WeakMap<object, Id>();
+export const definedAs = (v: Value): Id | undefined => (typeof v === "function" ? defOf.get(v) : undefined);
 
 // `asNumber` shows a Fixed as the number it stands for, where the text is
 // only read (the Run panel, a wire's value), not typed back in.

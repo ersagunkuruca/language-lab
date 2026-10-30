@@ -14,7 +14,7 @@
 
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { makeRunner, type Data, type Runtime, type Value } from "./run.ts";
+import { DEF_VALUE, makeRunner, type Data, type Runtime, type Value } from "./run.ts";
 
 export interface Trace { values: Map<Id, Value>; result?: Value; error?: { id: Id; message: string } }
 
@@ -100,7 +100,9 @@ export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Ru
   try {
     if (body?.kind === "lambda") {
       const env = new Map<Id, Value>();
-      body.params.forEach((p, i) => { env.set(p, args[i]); values.set(p, args[i]); });
+      // A definition given by its name (values.ts) is its function.
+      const given = args.map((a) => (typeof a === "object" && a !== null && "tag" in a && a.tag === DEF_VALUE ? r.value(a.fields[0] as Id) : a));
+      body.params.forEach((p, i) => { env.set(p, given[i]); values.set(p, given[i]); });
       out.result = walk(body.body, env);
     } else if (body && body.kind !== "typedef") out.result = walk(body.id, new Map());
   } catch (e) {

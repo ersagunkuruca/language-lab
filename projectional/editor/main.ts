@@ -95,7 +95,7 @@ import { BOOL, CONS, FALSE, FIXED_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value } from "../src/lang/run.ts";
+import { definedAs, fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value, type World } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -981,14 +981,30 @@ function seedOf(info: T.Info, def: Id): string[] | null {
   const got = entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
   // Only values that read back as themselves: a function passed in, say,
   // has no way to be typed into a box.
-  const texts = got?.map((v) => showValue(v, doc.code, pres().names));
+  // A definition passed in (newton's f) reads as its name (values.ts).
+  const texts = got?.map((v) => { const d = definedAs(v); return d ? pres().names[d] ?? d : showValue(v, doc.code, pres().names); });
   return texts?.length && body?.kind === "lambda" && texts.length === body.params.length && texts.every((t, i) => !("error" in readPort(info, body.params[i], t))) ? texts : null;
 }
 
 // What each function was first called with when main last ran, as far as
-// it got in a few steps and MAIN_MS: printing is swallowed, and the world
-// (files, the network, a page's cells) isn't reached, so it stops there.
+// it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+// The world main runs in for that: nothing it does goes out. Printing is
+// swallowed, a file it writes is kept to itself and one it didn't isn't
+// there, the network answers nothing, so a program that saves or loads
+// its state gets as far as its parts (I29).
+function dryWorld(): World {
+  const files = new Map<string, string>();
+  let seed = 1;
+  return {
+    error() {}, log() {}, input: () => "", readLine: () => null,
+    readFile: (f) => { if (!files.has(f)) throw new Error(`there is no file ${f} here`); return files.get(f)!; },
+    writeFile: (f, t) => void files.set(f, t), appendFile: (f, t) => void files.set(f, (files.get(f) ?? "") + t),
+    fileExists: (f) => files.has(f), listFolder: () => [],
+    random: () => (seed = (seed * 16807) % 2147483647) / 2147483647, now: () => Date.now(), wait() {},
+    fetchText: () => { throw new Error("the network isn't reached here"); },
+  };
+}
 const MAIN_STEPS = 100_000, MAIN_MS = 50;
 function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   let calls = mainRuns.get(doc.code);
@@ -1000,7 +1016,7 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
     const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
     if (pixel && args.every((a) => !("error" in a))) {
       const end = performance.now() + MAIN_MS;
-      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), undefined, (l, args) => {
+      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
         if (!got.has(l)) got.set(l, args);
         if (performance.now() > end) throw new OutOfSteps();
       }));
