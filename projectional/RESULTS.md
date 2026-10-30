@@ -8,6 +8,11 @@ predicate when networks and functions were made one kind of definition
 Pair, which is nesting where we want adjacency. This note is how a
 definition gets several results without a new kind of anything.
 
+**Status (2026-10-30).** The language side is built (L95a, L95b), and
+physics' `polar` and `rotate` use it again (L95d). In the editor the graph
+draws results as output ports (I65a, #677); writing them with the palette
+is I65. Compiling each direction on its own is C55.
+
 ## The idea
 
 A definition with results is a relation whose result ports are named. Its
@@ -110,8 +115,8 @@ Mercury compiles each mode.
    difference›(s = 10, a = 3)`); and the signature line read as the
    declared direction, with the effects the checker found for it
    (`Info.directions`).
-3. **L95c (editor lane, Inbox I65).** The graph node's output wires, the
-   palette and structural editing of results.
+3. **L95c (editor lane, I65).** The graph node's output wires: **built**
+   (I65a, #677). The palette and structural editing of results: open.
 4. **C55 (compiler lane).** Each direction compiled on its own, unused
    results dropped.
 

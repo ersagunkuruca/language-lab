@@ -1,9 +1,10 @@
 # Exact reals: √2 as the number where x² = 2 (design note, 2026-10-27)
 
-BACKLOG L88. **Steps 1 and 2 are built** (`src/lang/poly.ts`,
+BACKLOG L88. **Steps 1 to 3 are built** (`src/lang/poly.ts`,
 `src/lang/factor.ts`, `src/lang/algebraic.ts`, `test/algebraic.test.ts`):
 `square root(2) · square root(2)` is 2, evaluated and compiled to
-JavaScript. Ersagun, 2026-10-26: "sqrt(2) is the number where x^2=2...
+JavaScript, and `x · x = 2` run backwards gives −√2 and √2 exactly.
+Step 4, `Real`, waits for a program that needs π exactly. Ersagun, 2026-10-26: "sqrt(2) is the number where x^2=2...
 run that backwards, and extract as much precision out of that as needed...
 when asked to take even powers of it we just simplify the definition and
 go right to an integer."
@@ -114,7 +115,7 @@ Polynomials are ordinary data: a list of Int coefficients.
   BigInt-backed path as Int, when a program needs it. That is a hosting
   choice and doesn't change the language.
 
-## The rest: `Real` (step 3)
+## The rest: `Real` (step 4)
 
 A computable real is a function from a precision n to a fraction interval
 of width at most 2⁻ⁿ. In the language that is a lazy, remembered sequence
@@ -129,7 +130,7 @@ real arithmetic.
 
 ## Steps
 
-1. **Polynomials over Int** (TypeScript beside int.ts): resultant, Sturm
+1. **Polynomials over Int. Built** (poly.ts, beside int.ts): resultant, Sturm
    count, square-free part, exact evaluation at a fraction.
 2. **`Algebraic` as a Number. Built.** Values are the minimal polynomial
    (factored by Zassenhaus's method, factor.ts) and which real root,

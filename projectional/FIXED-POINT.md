@@ -4,6 +4,10 @@ Ersagun, 2026-10-26: floats "cause precision problems with large worlds and
 they work inconsistently across different machines making multiplayer a
 harder problem" (BACKLOG L89).
 
+**Status (2026-10-30).** Steps 1, 2 and 4 are built: `Fixed` with its
+arithmetic, exact `show`, CORDIC trig, and examples/lockstep, which is in
+the editor's example menu. Step 3, `i64` on WASM and C, is open.
+
 ## Short answer
 
 Add `Fixed`, a Number that is an Int counted in steps of 2⁻³². `1.5` at Fixed
@@ -101,7 +105,7 @@ large worlds.
    end in the same state, bit for bit. **Built (L89d)**: examples/lockstep,
    a cart on a spring driven by 600 inputs. Evaluated, compiled and worked
    out by hand in BigInt it ends on the same steps (test/lockstep.test.ts).
-   It is not in the editor's menu yet; that is the editor lane's to add.
+   It is in the editor's example menu.
 
 ## Prior art
 

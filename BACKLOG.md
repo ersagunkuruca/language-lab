@@ -145,7 +145,7 @@ all of these.
 | L97 | `polar` as the relation behind Trig (POLAR.md): L97a to L97c3 done (Trig's polar, unpolar, asin, acos). Next: the prelude's polar relation with unpolar as its direction; L97d Fixed's CORDIC; L97e complex laws after T7 | Ersagun 2026-10-28 | P2 | M | 3 of 5 steps |
 | L96 | Several ways to compute one operation, the compiler choosing by cost (WAYS.md): L96a to L96c done. Left: the steps after L97 | Ersagun 2026-10-28 | P2 | L | 3 of 5 steps |
 | L88 | Exact reals (EXACT-REALS.md): `Algebraic` done (L88a to L88d, √2·√2 is the Int 2). Next: step 4, `Real` as lazy intervals, when a program needs π exactly | Ersagun 2026-10-26 | P2 | L | 3 of 4 steps |
-| L89 | Fixed point for games (FIXED-POINT.md): `Fixed`, exact show, CORDIC trig and examples/lockstep done (L89a to L89d). Next: i64 on WASM and C (lane C), lockstep in the editor's menu (lane E) | Ersagun 2026-10-26 | P3 | M | 3 of 4 steps |
+| L89 | Fixed point for games (FIXED-POINT.md): `Fixed`, exact show, CORDIC trig and examples/lockstep done (L89a to L89d). Left: i64 on WASM and C (lane C) | Ersagun 2026-10-26 | P3 | M | 3 of 4 steps |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 

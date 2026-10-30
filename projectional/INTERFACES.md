@@ -1,8 +1,11 @@
 # Interfaces and implementations (design note, 2026-10-27)
 
-BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 to 3 are
-built** (L40e to L40g, `test/interfaces.test.ts`, `test/trig.test.ts`,
-`test/dual.test.ts`). Ersagun, 2026-10-27:
+BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 to 4 are
+built** (L40e to L40h, `test/interfaces.test.ts`, `test/trig.test.ts`,
+`test/dual.test.ts`), and so is writing an implementation in the editor
+(step 5, E137); a value packed with its implementation (step 6) waits for
+a program that needs it. WAYS.md (L96) builds on this: a field may be left
+to its ways. Ersagun, 2026-10-27:
 a type's operations should be "a separate thing, because if it is separate
 you can add more interface implementations later, not just + * - /. For
 example for dual numbers we will probably need implementations of sin,

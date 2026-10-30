@@ -7,6 +7,10 @@ can come from polar, and polar from sin and cos. Each target's builtins
 are more ways of their own, so what a target lacks is filled in from the
 laws, and nothing about targets enters the language.
 
+**Status (2026-10-30).** Steps 1 and 2 are built (L96a to L96c: ways,
+"nothing grounds" in the checker, costs). Step 3 is L97, mostly built
+(POLAR.md); steps 4 and 5 are open.
+
 ## Short answer
 
 - **A way is a law that also computes.** It is an ordinary definition
@@ -181,7 +185,7 @@ That is not enough where bits matter:
    the first real one is L97's (x87's `fsincos` as one polar). Fixed needs
    no `exact` flag for now: its fields are all its own Int code, never a
    target's builtin, so its pick is target-neutral already.
-3. **Trig through polar (L97).** Designed in POLAR.md: Trig fields with
+3. **Trig through polar (L97). Mostly built** (POLAR.md's L97a to L97c3). Trig fields with
    several results (`polar`, `unpolar`) and a definition that gives a
    relation's other direction. Only the polar-first types (Fixed) need
    C55's one direction per use, so sin alone is a plain sine.
