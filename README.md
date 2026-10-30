@@ -14,6 +14,11 @@ code, because how data is stored is a separate, chosen representation.
 [projectional/NUMBERS.md](projectional/NUMBERS.md), "Where this stands",
 says what of that is built and what isn't.
 
+## Docs
+
+[DOCS.md](DOCS.md) lists every document by what you'd read it for, with
+how much of each is built.
+
 ## Planning
 
 Open work from every source is in [BACKLOG.md](BACKLOG.md): what each lane
