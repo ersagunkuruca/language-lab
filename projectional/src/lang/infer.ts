@@ -947,7 +947,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // A field with results (POLAR.md) is given by a definition that
       // declares the same results; checked in results(), with its direction.
       variant.fields.forEach((f, i) => { const fl = code.nodes[f], a = code.nodes[args[i]]; if (fl?.kind === "field" && fl.results && a?.kind === "ref" && !leftToWays(code, args[i])) resultsGiven.push({ impl: d, field: f, by: a.target }); });
-      if (args.some((a) => leftToWays(code, a))) {
+      if ((!reuse || reuse.only.has(d)) && args.some((a) => leftToWays(code, a))) {
         const pick = pickWays(code, ways ??= waysIn(code), variant, args);
         const stuck = variant.fields.filter((f) => !pick.has(f));
         if (stuck.length) err(d, `${nm(d)} leaves ${stuck.map(nm).join(", ").replace(/, ([^,]*)$/, " and $1")} to ${stuck.length === 1 ? "its ways" : "their ways"}, and none of them ends in a field it gives: give ${stuck.length === 1 ? "it, or a field its ways use" : "one of them, or a field their ways use"}`);
@@ -975,6 +975,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const d of valueDefs) {
       const def = code.nodes[d] as NodeOf<"def">;
       if (!def.results) continue;
+      // Not rechecked: its direction is as it was. (The palette's check of
+      // each filling looked again at every definition with results, 25 ms
+      // a filling: adding a value on physics fall took 18 s, I69.)
+      if (reuse && !reuse.only.has(d)) { const was = reuse.from.directions?.get(d); if (was) (info.directions ??= new Map()).set(d, was); continue; }
       const lam = def.body ? code.nodes[def.body] : null;
       if (lam?.kind !== "lambda") { err(d, `${nm(d)} has results, so it is a function of its ports`); continue; }
       const odd = def.results.filter((r, i) => !lam.params.includes(r) || def.results!.indexOf(r) !== i);
