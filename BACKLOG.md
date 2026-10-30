@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I62 (QA bug), then I65 (write several results in the editor), E160, I29, E159 |
+| E Editor | "Editor lane" | I65 (write several results in the editor), then E160, I29, E159 |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
 | L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): I39a, I39b, L29, L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -41,7 +41,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA-2026-10-29b L5 | P3 | S | |
 
 ### Writing programs in the editor
 
