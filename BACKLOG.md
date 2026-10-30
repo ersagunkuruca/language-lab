@@ -22,7 +22,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I69 | Smoke red on main: "a value added on the canvas: no Add a value on the canvas" (twice); the gesture works in a fresh browser, so likely state from earlier checks | QA10 M2 | 2026-10-30 |
 | I70 | A page's `main` opens on empty canvas (Tumble top half, Pig left 40%): #506's right-edge view suits steps, not an Html tree | QA10 L1 | 2026-10-30 |
 | I71 | Countdown `solutions` opens reading `result []` while still searching; say searching, or show answers so far | QA10 L2 | 2026-10-30 |
-| I72 | Ray marcher `trace` lists an input as `y₁` in Run | QA10 L3 | 2026-10-30 |
 | I29 | 66 of 154 definitions still open with an empty Run (shader helpers, derivatives, page parts). Step 1 (#578): a picture is run at its pixel like main, so the ray marcher's helpers open with values; left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA8 L4 | 2026-10-28 |
 | I36 | A function type written in a data type's field has a closed row, and a call's row must equal the caller's (COMPILER.md's known imprecision), so calling it fixes the caller's whole row. Tumble's `Chain.rest` is called from a page handler, so it lists all ten of a handler's effects (Cells, Update, Console, Files, …) where Diverge is all it does. Containment at calls, or L58's named row `Handler`, would fix it | examples/tumble | 2026-10-29 |
 | I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`, `chain` a thunk that waits) makes its plain callers `yield*` it, which esbuild refuses ("yield is a reserved word"), and `seeded` around such a call does the same. Tumble works round it by giving its handlers the move (board and two places) instead of a thunk. Also still not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | 2026-10-29 |
@@ -152,6 +151,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I72 | Run lists an input by its own name (x, y, time), not the text's y₁ | #662 |
 | I67 | An embed shows the definition's graph above its blocks, as the editor shows both (Ersagun 2026-10-29) | #660 |
 | I66 | The top bar's Learn button opens learn.html, the level-picking front page | #658 |
 | I61 | An action's step dashes inside a folded box go with it, not from the graph's corner | #652 |

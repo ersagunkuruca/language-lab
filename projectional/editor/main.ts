@@ -1119,6 +1119,10 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const ports = portsOfDef(ui.def);
   const known = knownPorts(info);
   const pred = returnsBool(info, ui.def);
+  // An input reads as it's named: the text's subscripts tell it from a
+  // value of the same name inside, which Run doesn't list (I72).
+  const plain = (p: Id) => pres().names[p] ?? namer.name(p);
+  const portName = (p: Id) => ports.some((q) => q !== p && q !== "out" && plain(q) === plain(p)) ? namer.name(p) : plain(p);
   const missing = known.filter((k) => !portText(info, k).trim());
   const r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
@@ -1133,7 +1137,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   for (const p of ports) {
     const on = known.includes(p);
     const id = `f-port-${p}`;
-    const label = p === "out" ? (pred ? "holds" : "result") : namer.name(p);
+    const label = p === "out" ? (pred ? "holds" : "result") : portName(p);
     const cb = h("input", { type: "checkbox", checked: on, title: on ? "Known: you give it. Untick to solve for it." : "Solved for. Tick to give it instead." }) as HTMLInputElement;
     cb.addEventListener("change", () => setKnown(info, p, cb.checked));
     const shown = r.answers[0]?.values[p];
@@ -1145,7 +1149,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
     box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
   }
-  if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : namer.name(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
+  if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : portName(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
   else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `It doesn't run backwards: ${r.error}.`) : h("p", { class: "status-line bad" }, r.error));
   else if (r.cut) box.append(h("p", { class: "status-line" }, r.answers.length ? "Still looking for other answers… " : "Looking for an answer… ",
     h("button", { class: "btn", type: "button", "data-act": "stop-search", title: "Keep what it has found so far" }, "Stop")));
@@ -1158,7 +1162,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     : h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
   if (r.answers.length > 1 || r.more) {
     const wanted = ports.filter((p) => !known.includes(p));
-    const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : namer.name(p)} ${nice(a.values[p])}`).join(", "));
+    const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : portName(p)} ${nice(a.values[p])}`).join(", "));
     box.append(h("details", { class: "alts" }, h("summary", {}, `${r.answers.length - 1}${r.more ? "+" : ""} other answer${r.answers.length > 2 || r.more ? "s" : ""} (other branches)${r.cut ? " so far" : ""}`),
       h("ul", {}, ...alt.map((a) => h("li", {}, a)))));
   }
