@@ -115,8 +115,15 @@ the last step.
    (√(x² + y²) and atan2), Dual `dual unpolar` by the chain rule, and
    Fixed `fixed unpolar`, CORDIC's vectoring mode in Ints (each of length
    and angle runs it once, until C55). No way gives unpolar yet, so every
-   Trig gives it. **Next (L97c3):** the prelude's `polar` relation with
-   `unpolar` as its direction, and asin and acos as ways of unpolar.
+   Trig gives it. **L97c3, built.** Trig's `asin` and `acos`, read
+   off unpolar: asin s is the angle of (√(1 − s²), s), acos c of (c,
+   √(1 − c²)). The ways `asin by unpolar` and `acos by unpolar` take √ as
+   e^(½ log x) from Trig's own exp and log, so Dual and any type of a
+   program's own get them; Float64 gives them with its √, and Fixed with
+   its exact one, so asin(1) is π/2 to the step (test/polar.test.ts).
+   **Next:** the prelude's `polar` relation with `unpolar` as its
+   direction (L97b's `direction`), so `length, angle = polar(x = 3, y =
+   4)` at any Trig type calls the type's unpolar.
 4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
    its ways. Cheap only with C55 (sin alone must not do the cos half).
 5. **L97e.** The complex laws, after T7.
