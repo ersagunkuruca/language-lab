@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I29, E159, then E103/I40 (speed) |
+| E Editor | "Editor lane" | I29 (needs a design step, see its row), then E103/I40 (speed) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
 | L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L29, L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -46,8 +46,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA-2026-10-28 L4 | P2 | M | step 1 done |
-| E159 | Show how a value is stored next to its type ("stored as int"), the compiler's choice from represent.ts `choose`, as `lab check` prints it. Shown only, never chosen by the user (Ersagun 2026-10-30: "I want the compiler to choose") | REPRESENTATIONS.md step 3 | P3 | S | |
+| I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton. **Counted 2026-10-30 (editor lane):** 57 still empty in converter, dice, calculus, Mandelbrot and pedal. Two causes, neither a quick fix: (a) the first call's inputs are functions (`newton(f, f′, x)`, `field(…, view, …)`), which a port's box can't hold until `parseValue` reads a definition's name as its function; (b) the call is inside a page part that runs later (`property("value", view(read(q)))`, a handler, an audio block), which main's trace never enters. Running main in a dry world (files kept in memory, no network) gets past converter's file read but fills none of these | QA-2026-10-28 L4 | P2 | M | step 1 done |
 | I49 | Resize a node by hand: "not now, but likely needed at some point" | Ersagun 2026-10-29 | P3 | S | |
 
 ### Speed of editing
