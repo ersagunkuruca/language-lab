@@ -18,7 +18,7 @@ import { relate } from "../src/lang/relate.ts";
 import { makeRunner, toList, bool } from "../src/lang/run.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { CELL_OPS, CONS, FIRST, INT_OPS, NIL, PAIR_V, S } from "../src/lang/std.ts";
-import { DIVERGE } from "../src/lang/types.ts";
+import { CHOICE, DIVERGE } from "../src/lang/types.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const params = (code: Code, def: Id) => get(code, get(code, def, "def").body!, "lambda").params;
@@ -141,6 +141,29 @@ test("Tumble's clear, run backwards from a board of holes, searches within its b
   let steps = 0;
   assert.doesNotThrow(() => { for (const _ of relate(p.code, p.named("clear"), { out }, { spend: () => ++steps < 5000 })) break; });
   assert.ok(steps >= 5000, `${steps} steps`);
+});
+
+// inverse(f, y) has Choice and Diverge for any f. Called with a function
+// known at the call, the modes say what running that one backwards does,
+// and the call's type says only that (BACKLOG L29, L47).
+test("inverse is typed from the function it's given: no Diverge when it ends, no Choice when it gives one answer", () => {
+  const lib = (n: string) => Object.keys(LIBRARY.names).find((x) => LIBRARY.names[x] === n && LIBRARY.code.nodes[x]?.kind === "def")!;
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const double = def("double", () => k.fn(["x"], (x) => k.call("builtin.mul", x, k.lit(2))));
+  const half = def("half", () => k.fn(["y"], (y) => k.call(lib("inverse"), double, y)));
+  const before = def("before", () => k.fn(["y"], (y) => k.call(lib("inverse"), k.fn(["p"], (p) => k.call("builtin.add", p, k.lit(1))), y)));
+  const lengths = def("lists of length", () => k.fn(["n"], (n) => k.call(lib("inverse"), k.fn(["l"], (l) => k.call(lib("length"), l)), n)));
+  const code = base(k.code);
+  const info = infer(code, k.names);
+  assert.deepEqual(info.errors, []);
+  const row = (d: Id) => { const t = info.typeOf.get(d)!; return t.t === "fn" ? t.eff.effs.map((e) => k.names[e] ?? e).sort() : []; };
+  assert.deepEqual(row(before), []);
+  assert.deepEqual(row(half), [CHOICE]);
+  assert.deepEqual(row(lengths), [CHOICE, DIVERGE].sort());
+  const r = makeRunner(code, info, { print: () => {} });
+  assert.deepEqual([...r.call(r.value(half), 10)], [5]);
+  assert.deepEqual([...r.call(r.value(before), 10)], [9]);
 });
 
 test("one of a list built in place, asked for what isn't in it, ends", () => {
