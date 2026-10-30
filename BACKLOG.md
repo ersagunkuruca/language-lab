@@ -150,6 +150,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| I73 | An embed puts Run in a tab beside its code (graph over blocks), so it isn't so tall (Ersagun 2026-10-30) | #664 |
 | I71 | A search cut short shows no answer it gave in a hurry: Countdown's solutions no longer reads [] while searching | #663 |
 | I72 | Run lists an input by its own name (x, y, time), not the text's y₁ | #662 |
 | I67 | An embed shows the definition's graph above its blocks, as the editor shows both (Ersagun 2026-10-29) | #660 |
