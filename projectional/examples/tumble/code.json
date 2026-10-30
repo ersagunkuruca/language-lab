@@ -4180,16 +4180,7 @@
       ],
       "result": "9hg55sfefnrsr9f8k8duc7j6cd",
       "effects": [
-        "effect.cells",
-        "effect.update",
-        "effect.console",
-        "effect.files",
-        "std.abort",
-        "effect.diverge",
-        "std.time",
-        "effect.network",
-        "std.random",
-        "std.log"
+        "effect.diverge"
       ]
     },
     "n2othodrph65sf64p6a93pdotr": {

@@ -453,8 +453,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     catch (e) { if (e instanceof TypeError) return false; throw e; }
   }
 
-  // A function in a variable whose row is already closed (it does these
-  // effects and no others) can be used where more may happen: each use
+  // A function in a variable or a definition whose row is already closed
+  // (it does these effects and no others) can be used where more may happen: each use
   // gets an open copy, so a field's `view`, closed by the page thunk it's
   // shown in, can still be handed to inverse in a handler that does more.
   // Only the outer row: its parameters keep their types. Koka's `open`
@@ -477,7 +477,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "def":
         if (isTypeDef(target)) { err(id, `${nm(target)} is a type, not a value`); return s.fresh(); }
         if (mono.has(target)) return mono.get(target)!;
-        if (info.schemes.has(target)) return instantiate(info.schemes.get(target)!, s, id);
+        // A definition whose own row came out closed (it stores its
+        // continuation in a field that says its effects) is opened the
+        // same way, so its callers may do more (BACKLOG I36).
+        if (info.schemes.has(target)) return opened(instantiate(info.schemes.get(target)!, s, id));
         return s.fresh();
       case "builtin":
         if (SIGS[target]) return SIGS[target](s);

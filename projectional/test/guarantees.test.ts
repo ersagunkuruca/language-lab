@@ -12,7 +12,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
 import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, showType } from "../src/lang/types.ts";
+import { CHOICE, CONSOLE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id | void) {
@@ -119,6 +119,28 @@ test("positivity: taking itself as an input through another type, or through a t
   assert.ok(!bad.some((m) => /^fine /.test(m)));
   assert.ok(bad.some((m) => /^odd /.test(m)), p.errors.join("\n"));
   assert.equal(bad.length, 2);
+});
+
+// A handler that parks its continuation in a field whose function type
+// says only Diverge has a closed row itself: it does Diverge and nothing
+// else. Its callers may still do more around the call (BACKLOG I36:
+// Tumble's Chain.rest had to list all ten of a page handler's effects).
+test("effects: a definition whose row is closed can be called where more happens", () => {
+  let main = "", parked = "";
+  const p = program((k) => {
+    const Ask = k.effect("Ask", [["ask", [["n", () => k.tref(NUM)]], () => k.tref(NUM), "later"]]);
+    const chain = k.type("chain", [], [["done", [["n", () => k.tref(NUM)]]], ["waiting", [["rest", (self) => k.tfun([k.tref(NUM)], k.tref(self), [DIVERGE])]]]]);
+    parked = k.def("parked");
+    k.define(parked, k.fn(["n"], (n) => k.handle(k.call(chain.v.done, k.call(Ask.op.ask, n)), [
+      { variant: Ask.op.ask, names: ["n", "rest"], body: ([, rest]) => k.call(chain.v.waiting, rest) },
+    ])));
+    main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(S.print, k.lit("start")), k.call(parked, k.lit(2)))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.equal(p.type(parked), "(Float64) -[Diverge]-> chain");
+  assert.deepEqual(p.effects(main).slice().sort(), [CONSOLE, DIVERGE].sort());
 });
 
 // ---------------------------------------------------------------- plain data

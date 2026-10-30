@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | I59, I60, I62 (QA bugs), then I65 (write several results in the editor), E160, I29, E159 |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | I36, I39 (bugs found by Tumble), then L97's last step |
+| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): I39a, I39b, L29, L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -119,7 +119,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I36 | A function type in a data type's field has a closed row, and a call's row must equal the caller's, so calling it fixes the caller's whole row: Tumble's `Chain.rest` lists all ten of a handler's effects where Diverge is all it does. Containment at calls, or L58's named row, would fix it | examples/tumble | P2 | M | |
 | I39 | Found building Tumble: (a) modes.ts reads `at once(settle(board))` as "ends, at most one answer" while the checker types it Diverge; (b) relate overflows the stack running Tumble's `clear` backwards, and test/agreement.test.ts's budget counts steps, not depth or memory | examples/tumble | P2 | M | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way), and `inverse(f, …)` typed from f at the call instead of Diverge | L14 | P3 | M | |
 

@@ -542,7 +542,11 @@ lists the most it allows.
 A function in a variable whose row ends up **closed** that way (a page
 field's `view`, once it has been shown in a text) does those effects and
 no others, so each later use of the variable gets an open copy: it can be
-called, or handed to `inverse`, where more happens. Only the outer row
+called, or handed to `inverse`, where more happens. A definition whose own
+row comes out closed gets the same at each use: a handler that parks its
+continuation in such a field (Tumble's `parked`, whose `Chain.rest` says
+only `Diverge`) does `Diverge` and nothing else, and a page handler that
+does much more may still call it. Only the outer row
 opens; its parameters keep their types. This is Koka's `open` (Leijen,
 "Type directed compilation of row-typed algebraic effects"). Uses are
 checked in order, so a use that fixes the row to something wider before
