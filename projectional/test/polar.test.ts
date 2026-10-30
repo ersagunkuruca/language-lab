@@ -47,10 +47,24 @@ test("x, y = polar(2, 0.5) at Float64: one answer, no Choice, evaluated and comp
   assert.deepEqual(compiled, evaluated);
 });
 
-test("a polar asked another way is an error that says the direction", () => {
+test("length, angle = polar(x = 3, y = 4) is answered by the type's unpolar, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.solve(TRIG_POLAR, { 2: k.lit(0), 3: k.lit(1), out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r }) => r)));
+  k.define(main, k.solve(TRIG_POLAR, { 2: k.lit(3), 3: k.lit(4), out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+    k.text(k.call(SHOW_ANY, r), k.lit(" "), k.call(SHOW_ANY, t))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(showType(info.typeOf.get(main)!, names), "Text");
+  const { evaluated, compiled } = await both(code, info, names, ["main"]);
+  const [r, t] = String(evaluated[0]).split(" ").map(Number);
+  assert.ok(Math.abs(r - 5) < 1e-9 && Math.abs(t - Math.atan2(4, 3)) < 1e-9, String(evaluated));
+  assert.deepEqual(compiled, evaluated);
+});
+
+test("a polar asked a way neither direction reads is an error that says the direction", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.solve(TRIG_POLAR, { 0: k.lit(1), 2: k.lit(1), out: k.true }, { 1: "angle", 3: "y" }, ({ 1: t }) => t)));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.ok(info.errors.some((e) => e.message === "polar gives x, y from length, angle"), String(info.errors.map((e) => e.message)));
 });

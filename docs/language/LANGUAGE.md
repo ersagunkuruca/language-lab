@@ -1105,7 +1105,10 @@ node underneath. The checker says at the definition when its inputs can't
 pin its results down. Another definition can give a relation's other
 direction (POLAR.md): `unpolar(x, y) → length, angle = √(x² + y²),
 atan2(y, x)`, marked as a direction of polar, answers every solve of polar
-given x and y, with one answer instead of a search.
+given x and y, with one answer instead of a search. Trig's own `polar`
+works the same way at any number type: `length, angle = polar(x = 3, y =
+4)` is answered by that type's `unpolar`, because unpolar is a field of
+the same interface over the same four ports, read the other way.
 
 The effect comes from the solver's static `direction()`. Exactly one answer
 that can't fail is pure: the missing addend of `+`, for instance. Several

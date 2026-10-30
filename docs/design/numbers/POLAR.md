@@ -7,9 +7,9 @@ implement polar or sin and cos and get the rest. RESULTS.md (L95) gave a
 definition several named results, and WAYS.md (L96) lets an interface field
 come from its ways, picked by cost. This note puts the two together.
 
-**Status (2026-10-30).** Steps 1 to 3 are built (L97a to L97c3): Trig's
-`polar`, `unpolar`, `asin` and `acos`. Next is the prelude's `polar`
-relation with `unpolar` as its direction; then L97d (Fixed's CORDIC from
+**Status (2026-10-30).** Steps 1 to 3 are built (L97a to L97c4): Trig's
+`polar`, `unpolar`, `asin` and `acos`, and polar asked for length and
+angle answered by unpolar. Next are L97d (Fixed's CORDIC from
 its ways) and L97e (the complex laws, after T7).
 
 ## Short answer
@@ -126,9 +126,14 @@ the last step.
    e^(½ log x) from Trig's own exp and log, so Dual and any type of a
    program's own get them; Float64 gives them with its √, and Fixed with
    its exact one, so asin(1) is π/2 to the step (test/polar.test.ts).
-   **Next:** the prelude's `polar` relation with `unpolar` as its
-   direction (L97b's `direction`), so `length, angle = polar(x = 3, y =
-   4)` at any Trig type calls the type's unpolar.
+   **L97c4, built.** `length, angle = polar(x = 3, y = 4)` at any Trig
+   type calls the type's unpolar. Rather than a prelude def marked with
+   L97b's `direction`, the rule is on the interface: another field of the
+   same interface over the same ports, whose inputs are the ports given,
+   is the field's other direction (directions.ts `fieldDirection`), so
+   each type's own unpolar (host atan2, chain rule, CORDIC vectoring)
+   answers it, evaluated and compiled. A solve neither field reads is
+   still the error that names polar's direction (test/polar.test.ts).
 4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
    its ways. Cheap only with C55 (sin alone must not do the cos half).
 5. **L97e.** The complex laws, after T7.
