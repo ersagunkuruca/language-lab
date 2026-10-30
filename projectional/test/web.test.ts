@@ -138,7 +138,7 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   const frame = (t: number) => { time = t; const fs = frames; frames = []; fs.forEach((f) => f()); };
   // each row: the total, the green bar, the red tick, then the count
   const bars = () => [...root.html().matchAll(/px"><\/span><\/span><span>(\d+)/g)].map((m) => Number(m[1]));
-  const widths = () => [...root.html().matchAll(/background: #4a7; width: ([\d.]+)px/g)].map((m) => Number(m[1]));
+  const widths = () => [...root.html().matchAll(/class="fill" style="width: ([\d.]+)px/g)].map((m) => Number(m[1]));
   assert.equal(root.find("status").textContent, "Rolls: 0"); // no "last" before any roll
   root.find("hundred").fire("click");
   const once = bars();
