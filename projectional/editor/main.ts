@@ -1402,6 +1402,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     // Enter saves (the change) and goes back to the program.
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
     out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${nameLayer(id)}.json`), input));
+    // Next to the definition it embeds, as well as in the Program tab.
+    if (n.kind === "def" && id === ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: this definition's graph, blocks and Run" }, "Copy embed link")));
   }
 
   // A dot: a let's binder, the shared output of its value.
@@ -3341,11 +3343,14 @@ function draw() {
         h("div", { class: "ins-tabs", role: "tablist" }, ...([["code", "Code"], ["run", "Run"]] as const).map(([k, label]) =>
           h("button", { type: "button", role: "tab", class: k === embedTab ? "on" : "", "aria-selected": String(k === embedTab), "data-embed-tab": k }, label))),
         ...(embedTab === "run"
-          ? [h("section", { class: "panel" }, pictureSection(info), pageSection(info), typedRunPanel(namer, info))]
+          // The page runs only in its main's embed: a data type's embed
+          // (Tumble's Board) has nothing to restart or save.
+          ? [h("section", { class: "panel" }, pictureSection(info), pageMain(ownDefs(), info, pres().names) === ui.def ? pageSection(info) : null, typedRunPanel(namer, info))]
           : [h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host" }, graphOf(info))),
             h("section", { class: "panel p-text", "aria-label": "Text" }, h("div", { class: "body" }, textView)),
             ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null])),
-      status);
+      // The opening hint takes a line of a small frame: only a real note shows.
+      ...(ui.note === OPENING ? [] : [status]));
     return restore();
   }
 
