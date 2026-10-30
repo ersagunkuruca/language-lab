@@ -96,3 +96,27 @@ test("another direction names what it's given, and binds the ports left, in orde
   assert.match(renderBlocks(code, pres, info, main), /d, b = ‹sum and difference›\(s = 10, a = 3\)/);
   assert.equal(runMain(code, info, main, { print: () => {}, names }), "-4 7");
 });
+
+// The palette writes a use (I65): where a value goes, `a, b = sum and
+// difference(□, □)` is offered, and filling it gives a use whose results
+// are named after them, inputs and body still to fill.
+test("the palette offers a use of a definition with results, and fills it in", async () => {
+  const { fillings } = await import("../src/lang/infer.ts");
+  const { fillHole } = await import("../src/lang/refactor.ts");
+  const k = new Lang();
+  const sd = k.def("sum and difference");
+  k.define(sd, k.fn(["s", "d", "a", "b"], (s, d, a, b) => k.and(k.equal(s, k.call(B.add, a, b)), k.equal(d, k.call(B.sub, a, b)))));
+  k.results(sd, "a", "b");
+  const main = k.def("main");
+  const hole = k.hole();
+  k.define(main, k.thunk(() => hole));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const use = fillings(code, info, hole).find((f) => f.kind === "use" && f.target === sd);
+  assert.ok(use, "no use of sum and difference offered");
+  const e = fillHole(code, names, hole, use);
+  const filled = infer(e.code, e.names);
+  assert.deepEqual(filled.errors.map((x) => x.message), []);
+  const pres: Presentation = { names: e.names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  assert.match(renderBlocks(e.code, pres, filled, main), /a, b = ‹sum and difference›\(□, □\)/);
+});

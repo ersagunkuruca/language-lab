@@ -116,7 +116,9 @@ Mercury compiles each mode.
    declared direction, with the effects the checker found for it
    (`Info.directions`).
 3. **L95c (editor lane, I65).** The graph node's output wires: **built**
-   (I65a, #677). The palette and structural editing of results: open.
+   (I65a, #677). The palette and structural editing of results: **built**
+   (I65, #698): a predicate's Results buttons, and the palette's `x, y =
+   polar(□, □)`.
 4. **C55 (compiler lane).** Each direction compiled on its own, unused
    results dropped.
 

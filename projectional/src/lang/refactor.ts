@@ -9,6 +9,7 @@ import { children, freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
+import { TRUE } from "./std.ts";
 
 export interface Edit { code: Code; names: Names }
 
@@ -116,6 +117,24 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
         return b;
       });
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };
+      break;
+    }
+    // A use of a definition with results (RESULTS.md): `x, y = polar(□, □)`,
+    // its inputs holes, its results bound by their names in a body still
+    // to write.
+    case "use": {
+      const d = code.nodes[f.target] as NodeOf<"def">;
+      const params = (code.nodes[d.body!] as NodeOf<"lambda">).params, results = d.results ?? [];
+      const taken = namesInScope(code, names, hole);
+      const given: Record<string, Id> = Object.fromEntries(params.filter((p) => !results.includes(p)).map((p) => [p, add({ kind: "hole" })]));
+      given.out = add({ kind: "ref", target: TRUE });
+      const binds = Object.fromEntries(results.map((r) => {
+        const b = add({ kind: "binder" });
+        nn[b] = unique({ ...library, ...names }[r] ?? "result", taken);
+        taken.add(nn[b]);
+        return [r, b];
+      }));
+      data = { kind: "solve", fn: f.target, given, binds, body: add({ kind: "hole" }) };
       break;
     }
     case "match":
