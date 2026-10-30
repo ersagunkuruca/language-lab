@@ -19,7 +19,7 @@ They are never updated, and their findings are rows in
 | [README.md](README.md) | The repository: folders, the goal, planning, credits | current |
 | [projectional/LEARN.md](projectional/LEARN.md) | The front page that picks a level ([learn.html](https://ersagunkuruca.github.io/language-lab/learn.html)) | current |
 | [projectional/GUIDE.md](projectional/GUIDE.md) | A hands-on tour of the editor, doing real edits on the dice program ([guide.html](https://ersagunkuruca.github.io/language-lab/guide.html)) | current |
-| [projectional/TUTORIAL.md](projectional/TUTORIAL.md) | The whole language, from a five-year-old's view to effects, with a list of what's still confusing ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | out of date in places (its opening note lists them) |
+| [projectional/TUTORIAL.md](projectional/TUTORIAL.md) | The whole language, from a five-year-old's view to effects, with a list of what's still confusing ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
 | [projectional/RUNNING.md](projectional/RUNNING.md) | What happens when you press Run, and every other way a program runs | current on 2026-10-24 |
 | [projectional/README.md](projectional/README.md) | The prototype: the program is the tree; layout of `projectional/`, commands | current |
 

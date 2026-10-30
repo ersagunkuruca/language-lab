@@ -54,8 +54,8 @@ behind the targets; this is its measure (LANGUAGE-REVIEW-2026-10-24, P4).
 ## Intake
 
 Everything that surfaces goes into the backlog, not into a new thread:
-Ersagun's messages in chat, ROADMAP.md, planning notes (NOTES.md, WEB.md,
-NUMBERS.md, COMPILER.md), REVIEW-\*.md, QA-\*.md, compiler/GAPS.md, and what a
+Ersagun's messages in chat, design notes (DOCS.md lists
+them), REVIEW-\*.md, QA-\*.md, compiler/GAPS.md, and what a
 lane finds while working.
 
 - **The coordinator** adds new items to the Inbox at the top of BACKLOG.md
@@ -75,8 +75,8 @@ Lanes don't re-rank their own list, except to move a bug up.
 
 ## Priority criteria
 
-From the roadmap (projectional/ROADMAP.md), the values in the project
-instructions and NOTES.md "Standing rules", and Ersagun's standing calls.
+From the values in the project instructions and NOTES.md "Standing
+rules", and Ersagun's standing calls.
 
 | priority | meaning | examples |
 |---|---|---|
