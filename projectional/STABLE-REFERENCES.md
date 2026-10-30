@@ -2,8 +2,10 @@
 
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
-and the design the repository keeps. Step 1 of §1 (L98a) and of §2 (L99a)
-and the demo (L100) are built, below; the rest is not yet. The steps
+and the design the repository keeps. **Status (2026-10-30):** built are
+§1's paths and edits by position (L98a), §2's `each` driven by edits
+(L99a), tracked views (L99b) and `each of` for nested lists (L99c), and
+the nested to-do demo (L100); the rest is not yet. The steps
 are BACKLOG rows L98-L101 and C56-C61.
 
 **In one sentence:** the window between pure functions and objects that stay

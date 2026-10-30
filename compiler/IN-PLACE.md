@@ -3,7 +3,8 @@
 A design note for BACKLOG C56 (projectional/STABLE-REFERENCES.md §3) and
 GAPS.md M6. It is written 2026-10-29, after round 5 (routes) and M1 to M4.
 It decides the order of the steps and what each one must measure. Nothing
-here changes the language.
+here changes the language. **Status (2026-10-30):** not built; steps are
+BACKLOG C62 and C63.
 
 ## The rule
 

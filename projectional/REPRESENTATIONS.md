@@ -4,6 +4,14 @@ Ersagun, 2026-10-30: "aren't we going to have the multiple representations
 the part of the language at all? Are they gonna stay only as a part of the
 compiler?"
 
+**Status (2026-10-30).** Steps 1 to 3 are built (L108a to L108c, #679 to
+#682): representations are definitions in the language, the library's Map
+and Set are written that way, and the compiler chooses and `lab check`
+says what it chose. A program never picks one. Open: showing the choice in
+the editor (E159), laws checked (L108d, after T7), and lists as arrays as
+one more representation (C30). The "Short answer" below was written
+before step 1.
+
 ## Short answer
 
 They should be part of the language, and most of one already is. Only
