@@ -10,5 +10,6 @@
   "program": "Adapted: seeded rolls use xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain): https://prng.di.unimi.it/\nPrior art: the clock that runs again each frame follows Fran (Conal Elliott and Paul Hudak, \"Functional reactive animation\", ICFP 1997) and Elm's time subscriptions.\nPrior art: randomness as an effect with a handler you choose is in Koka and Eff.\nPrior art: the page is written with the html module, each tag a function as in Elm's Html module (Evan Czaplicki).\nOur own: the dice page; the triangular spread of two dice is textbook.",
   "2im4e0li9jgbfu9afonuimq951": "The first n items of a list, or all of them if it has fewer. The page uses it to let a throw of a hundred land a few at a time.",
   "if74m49le5el4g81651fpc36jr": "The largest number in a list, 0 for an empty one.",
-  "7tf7i3ev626f8ubigbihls2spd": "The rolls so far, and as many of the hundred in flight as have landed by now, one every 20 ms. It reads now(), so whatever shows it runs again every frame."
+  "7tf7i3ev626f8ubigbihls2spd": "The rolls so far, and as many of the hundred in flight as have landed by now, one every 20 ms. It reads now(), so whatever shows it runs again every frame.",
+  "p0taaipaibvrnhk9n04m1miunt": "The page's style sheet: the colours (and their dark versions), the buttons, and the chart's rows, bars and ticks. Every element names its class; only a bar's length and a tick's place are worked out inline."
 }
