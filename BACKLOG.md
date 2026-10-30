@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I29 (needs a design step, see its row), then E103/I40 (speed) |
+| E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
 | L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
