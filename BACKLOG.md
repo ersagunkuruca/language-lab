@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L44, L55, L58 |
+| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): 7 merged; L44, L55, L58 wait on Ersagun's call (HOSTS.md, MATRICES.md) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -128,7 +128,7 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). Open: a generic op made Int by a parameter's type alone (no Int literal) is still planned as Float64's equations, because the plan reads the code and not the types | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
-| L44 | Small matrices `Mat2` to `Mat4`: types and · done (L44a). Next: `mat4x4f` on the GPU (with lane C, L41), matrix times vector | LANGUAGE-REVIEW-2026-10-24 | P1 | M | step 1 done |
+| L44 | Small matrices `Mat2` to `Mat4`: types and · done (L44a). Next: `mat4x4f` on the GPU (with lane C, L41), matrix times vector. Design and the choice it needs: [MATRICES.md](docs/design/numbers/MATRICES.md) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | step 1 done |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher, after L41 | NUMBERS.md stage 4 | P1 | M | step 1 done |
 | L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next: grade inference on the units machinery | NUMBERS.md stage 4 | P1 | L | rotors done |
 | L41 | Table products expanded at compile time, zero terms dropped (with lane C) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | |
@@ -155,10 +155,10 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L54 | Operations answered later, at most once (ANSWERED-LATER.md): step 1 done (L54a); compiled side is C40 | EFFECTS-REVIEW §1.5, §5 | P1 | L | step 1 done |
-| L55 | Console, Files and Network declared in std like Random, answered by the world when nothing handles them; only Choice and Diverge stay built in | EFFECTS-REVIEW §2.2 | P1 | M | |
+| L55 | Console, Files and Network declared in std like Random, answered by the world when nothing handles them; only Choice and Diverge stay built in. Design and the choice it needs: [HOSTS.md](docs/design/relations-and-effects/HOSTS.md) | EFFECTS-REVIEW §2.2 | P1 | M | |
 | L59 | A page's fetch and wait resume instead of re-running the handler; `Wait` folds into `Time` | EFFECTS-REVIEW §1.1-1.3 | P1 | M | after L54 |
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
-| L58 | Named rows for the hosts (`View`, `Handler`, `Main`, `Sound`) in std | EFFECTS-REVIEW §2.6 | P2 | M | |
+| L58 | Named rows for the hosts (`View`, `Handler`, `Main`, `Sound`) in std. Design and the choice it needs: [HOSTS.md](docs/design/relations-and-effects/HOSTS.md) | EFFECTS-REVIEW §2.6 | P2 | M | |
 | L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await` | LANGUAGE-NEEDS Part 1 | P2 | L | after L54 |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
 | L69 | Foreign definitions: a typed declaration with its row and a body per target (Gleam's `@external`, Elm's ports) | LANGUAGE-NEEDS §5 | P2 | M | |
