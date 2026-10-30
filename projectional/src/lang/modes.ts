@@ -615,6 +615,9 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
       const all = [...ins, o];
       return sided(text, sides, call, all.map((i) => ({ needs: all.filter((j) => j !== i), gives: [i], answers: ONE })));
     }
+    // A factor from the other and the product: at most one when it divides
+    // (relate.ts; any when both are 0, which is rare enough to call Choice).
+    if (id === INT_OPS.mul) return sided(text, sides, call, [forward, { needs: [1, o], gives: [0], answers: CHECK }, { needs: [0, o], gives: [1], answers: CHECK }]);
     if (id === TEXT_OPS.split) return sided(text, sides, call, [forward, { needs: [1, 2], gives: [0], answers: CHECK }]);
     if (id === SET || STD_IMPL[id] || STD_MANY[id]) return sided(text, sides, call, [forward]);
     return sided(text, sides, call, [forward]);

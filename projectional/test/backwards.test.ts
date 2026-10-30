@@ -515,3 +515,24 @@ test("Int polynomials run backwards: x · x + x = 12 gives 3 and −4, and = 11 
   assert.deepEqual(solve(12).sort(), [["-4", 0], ["3", 0]]);
   assert.deepEqual(solve(11), []);
 });
+
+// L38: a whole literal makes the generic ops Int's, and Int's · runs
+// backwards in the checker's modes as in relate.ts, so neither is planned
+// as Float64's equations: both check, and run in whole numbers.
+test("Int run backwards through solve: x · 3 + 1 = 13 with Int's own ops or the generic ones", () => {
+  for (const generic of [false, true]) {
+    const [add, mul] = generic ? [ARITH.add, ARITH.mul] : [INT_OPS.add, INT_OPS.mul];
+    const p = program((k) => {
+      const f = k.def("f");
+      let x = "";
+      k.define(f, k.fn(["x"], (v) => ((x = v), k.call(add, k.call(mul, v, k.int(3)), k.int(1)))));
+      const main = k.def("main");
+      k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.count, k.fn([], () => k.solve(f, { out: k.int(13) }, { [x]: "x" }, ({ [x]: v }) => v)))))));
+    });
+    assert.deepEqual(p.info.errors.map((e) => e.message), [], `generic: ${generic}`);
+    assert.equal(showType(p.info.typeOf.get(p.named("f"))!, p.names), "(Int) -> Int");
+    const out: string[] = [];
+    runMain(p.code, p.info, p.named("main"), { print: (s) => out.push(s) });
+    assert.deepEqual(out, ["1"], `generic: ${generic}`);
+  }
+});
