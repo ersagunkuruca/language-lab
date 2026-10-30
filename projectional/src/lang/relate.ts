@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, fromList, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { close, DEF_VALUE, fromList, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -1507,7 +1507,13 @@ export interface Answer {
 // search space is infinite; pass `spend` to bound it.
 export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts: Options = {}): Generator<Answer> {
   const it = interpreter(code, opts);
-  const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, fromValue(v)]));
+  // A definition given by its name (values.ts) is its function.
+  const given = (v: unknown): Term => {
+    const d = isData(v) && (v as Data).tag === DEF_VALUE ? code.nodes[(v as Data).fields[0] as Id] : null;
+    const body = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+    return body?.kind === "lambda" ? { k: "closure", lambda: body.id, env: new Map() } : fromValue(v);
+  };
+  const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, given(v)]));
   const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend };
   const ports = portsOf(code, fn, Object.keys(known));
   const [vs, s] = freshVars(start, ports.length);

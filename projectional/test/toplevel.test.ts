@@ -806,3 +806,19 @@ test("a value added before a number inside first's else is in scope for every st
     assert.ok(u.ok, `${v}: ${u.ok ? "" : u.reason}`);
   }
 });
+
+test("a function input takes a definition's name: root near given cubic and 1", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { trace } = await import("../src/lang/trace.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const { definedAs } = await import("../src/lang/run.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/calculus"));
+  const info = infer(p.code, p.pres.names);
+  const v = (t: string) => (parseValue(t, p.code, p.pres.names) as { value: never }).value;
+  const tr = trace(p.code, info, p.named("root near"), [v("cubic"), v("1")]);
+  assert.equal(tr.error, undefined);
+  assert.match(showValue(tr.result!, p.code, p.pres.names, true), /^1\.3247/);
+  const f = [...tr.values].find(([id]) => p.pres.names[id] === "f")?.[1];
+  assert.equal(definedAs(f!), p.named("cubic"));
+});

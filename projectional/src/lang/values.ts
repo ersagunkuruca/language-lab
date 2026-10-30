@@ -5,11 +5,15 @@
 
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { toList, type Value } from "./run.ts";
+import { DEF_VALUE, toList, type Value } from "./run.ts";
 
 export function parseValue(text: string, code: Code, names: Names): { value: Value } | { error: string } {
   const variants = new Map<string, Id>();
   for (const n of Object.values(code.nodes)) if (n.kind === "variant" && names[n.id] !== undefined && !variants.has(names[n.id])) variants.set(names[n.id], n.id);
+  // A definition by its name is that function (newton's f: cubic). It
+  // stands for the definition until a run looks it up (trace.ts).
+  const defs = new Map<string, Id>();
+  for (const d of code.defs) if (code.nodes[d]?.kind === "def" && names[d] !== undefined && !defs.has(names[d])) defs.set(names[d], d);
   let i = 0;
   const ws = () => { while (/\s/.test(text[i] ?? "")) i++; };
   const fail = (what: string): never => { throw new Error(`${what} at ${i + 1}`); };
@@ -45,6 +49,7 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
     const name = m[0].trim();
     i += m[0].trimEnd().length;
     const tag = variants.get(name);
+    if (!tag && defs.has(name)) return { tag: DEF_VALUE, fields: [defs.get(name)!] };
     if (!tag) return fail(`no case named ${name}`);
     const arity = (code.nodes[tag] as { fields: Id[] }).fields.length;
     ws();
