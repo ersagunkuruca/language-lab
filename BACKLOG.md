@@ -30,7 +30,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the editor's footer hint takes a line of every embed | QA10 L3 (QA-2026-10-29b.md) | 2026-10-29 |
 | I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA10 L5 (QA-2026-10-29b.md) | 2026-10-29 |
 | I64 | The browser smoke fails on main at letNodes ("a call picked in the graph"): it waits for the dice `die` call node, which since auto-fold (#619) sits inside a handler drawn folded. Pick a call that's drawn, or unfold its frame first; editor/smoke.ts is the smoke-replacement thread's, so agree with it who edits | smoke thread, 2026-10-29 | 2026-10-29 |
-| D5 | Restyle the guitar pedal page (examples/pedal) the same way | thread "Restyle the web demos" | 2026-10-30 |
 
 ## E: Editor
 
@@ -558,6 +557,7 @@ roadmap's Done table; this section keeps about a week.
 
 | id | item | PR |
 |---|---|---|
+| D5 | The guitar pedal restyled as a stompbox (Ersagun 2026-10-30): the converter's colours with a dark version; the two sources light up while they play (the page's `data-playing`); the controls are the pedal's dark top, its switch lit orange while driven (a class worked out from `driven`), the drive in a monospace readout; the waveform a scope screen with a grid. A `styles` definition of rules and every element named by its class | this PR |
 | D4 | Pig restyled in the converter's look (Ersagun 2026-10-30): its colours with a dark version, Play a game the filled button, the note on the handlers a soft card, the game's lines a card with the last line (who won) bold; the empty log and tally take no room before a game. A `styles` definition of rules and every element named by its class, no inline styles left | this PR |
 | D3 | Two dice restyled in the converter's look (Ersagun 2026-10-30: the HTML demos look too primitive): the converter's colours with a dark version, a filled Roll button, the chart a card with rounded green bars on a track and the red tick for fair dice. A `styles` definition of rules and every element named by its class; the only inline styles left are a bar's width and a tick's place, which are computed. The unit converter (D2) already had its own style sheet and this look, so it is unchanged | this PR |
 | D1 | The nested to-do restyled (Ersagun 2026-10-30: long named buttons on each item, the tick a separate button, add a step taking the top field's title). The tick is the round box before the title; ↑, + and × are small buttons that show on hover; + opens a field under the item for the step's title (Enter adds, Escape closes); a count and a bar at the top. The look is one `styles` definition of rules, every element named by its class, so the code has no inline styles. html.ts focuses an `autofocus` element mounted after the page loaded. Also closes I63 (the buttons wrapping onto 2-3 lines, QA10 L6) | this PR |
