@@ -166,6 +166,25 @@ test("inverse is typed from the function it's given: no Diverge when it ends, no
   assert.deepEqual([...r.call(r.value(before), 10)], [9]);
 });
 
+test("conjugate gives back a function typed from the f it's given: plain when f run backwards is one answer", () => {
+  const lib = (n: string) => Object.keys(LIBRARY.names).find((x) => LIBRARY.names[x] === n && LIBRARY.code.nodes[x]?.kind === "def")!;
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const step = def("step", () => k.fn(["x"], (x) => k.call("builtin.add", x, k.lit(1))));
+  const double = def("double", () => k.fn(["x"], (x) => k.call("builtin.mul", x, k.lit(2))));
+  const shifted = def("shifted double", () => k.call(lib("conjugate"), step, double));
+  const scaled = def("scaled step", () => k.call(lib("conjugate"), double, step));
+  const code = base(k.code);
+  const info = infer(code, k.names);
+  assert.deepEqual(info.errors, []);
+  const row = (d: Id) => { const t = info.typeOf.get(d)!; return t.t === "fn" ? t.eff.effs.map((e) => k.names[e] ?? e).sort() : null; };
+  assert.deepEqual(row(shifted), []);
+  assert.deepEqual(row(scaled), [CHOICE]);
+  const r = makeRunner(code, info, { print: () => {} });
+  // step⁻¹(double(step(3))) = 8 − 1
+  assert.deepEqual([...r.call(r.value(shifted), 3)], [7]);
+});
+
 test("one of a list built in place, asked for what isn't in it, ends", () => {
   const k = new Lang();
   const f = k.def("f");
