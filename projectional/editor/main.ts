@@ -1908,6 +1908,11 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(c.el, h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives), h("div", { class: "acts" }, add),
       h("p", { class: "hint" }, `Every implementation of ${dname} gets a hole for a new operation.`), implementationsPanel(info, names));
   } else if (sel === ui.def && body?.kind === "typedef") {
+    // How it's stored, when the program writes representations for it:
+    // the compiler's choice for what main does, shown and never asked for
+    // (REPRESENTATIONS.md; Ersagun 2026-10-30: "I want the compiler to choose").
+    const st = T.storedAs(code, info, names, ownDefs(), ui.def, defNamed("main") ?? null);
+    if (st) out.append(h("p", { class: "hint stored" }, `Stored as ${st.rep} when main runs: the compiler's choice, the cheapest for the jobs main uses (${st.jobs.map((j) => names[j] ?? j).join(", ")}).`));
     // An effect is a data type whose cases are operations: the same panel,
     // in its words.
     const w = words(ui.def);

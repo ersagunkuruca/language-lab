@@ -174,3 +174,11 @@ test("a builtin type can be represented too: Float64 with every job rounded, as 
     assert.equal(run(code, infer(code, names), x), x * 0.1 + 1 / 3);
   }
 });
+
+// The editor shows the same choice next to the type (E159), never asks for one.
+test("the editor's stored-as line is the chooser's: Nat is stored as int for main", async () => {
+  const { storedAs } = await import("../editor/typed.ts");
+  const nat = reps[0].of;
+  assert.equal(storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep, "int");
+  assert.equal(storedAs(p.code, info, names, p.own.defs, nat, null), null);
+});
