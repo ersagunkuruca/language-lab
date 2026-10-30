@@ -1317,8 +1317,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
   const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];
   let aroundBefore: string | undefined;
+  // A definition with results is checked by its direction's verdict too
+  // (results(), and an implementation that gives it), which its body
+  // decides: splitting an input there is checked against the program.
+  const withResults = h.group.some((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.results; });
   const safe = (s: Subst, f: Filling, risky: boolean) => {
-    if (risky || (solves.length && !samePlans(f))) return whole(f);
+    if (risky || (withResults && (f.kind === "match" || f.kind === "fold")) || (solves.length && !samePlans(f))) return whole(f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
     // one can carry a constraint, records of Float64s say.)
@@ -1431,8 +1435,11 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   for (const b of h.scope) {
     const bt = info.subst.resolve(b.type);
     if (bt.t === "con" && dataTypes.includes(bt.id)) {
-      out.push({ kind: "match", on: b.id, type: bt.id });
-      if (recursiveType(code, bt.id)) out.push({ kind: "fold", on: b.id, type: bt.id });
+      // Splitting an input of a definition with results can end its
+      // computed-forward direction, so there it is checked as well.
+      const split = (f: Filling) => { if (!withResults || whole(f)) out.push(f); };
+      split({ kind: "match", on: b.id, type: bt.id });
+      if (recursiveType(code, bt.id)) split({ kind: "fold", on: b.id, type: bt.id });
     } else if (bt.t === "var") {
       // Nothing says what it is yet (a new input, say): splitting it by the
       // cases of a type is what says so. Checked like any filling that pins

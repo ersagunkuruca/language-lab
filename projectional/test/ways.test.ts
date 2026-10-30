@@ -37,7 +37,7 @@ function program(gives: "sin" | "cos" | "neither") {
     k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
     k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
   k.results(unpolar, "length", "angle");
-  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log), left(), k.x(unpolar)));
+  def("trig at angle", () => k.call(TRIG_V, gives === "sin" ? k.x(sin) : left(), gives === "cos" ? k.x(cos) : left(), k.x(tan), k.x(exp), k.x(log), left(), k.x(unpolar), left(), left()));
   const at = (x: number) => k.call(A.v.angle, k.lit(x));
   def("the cosine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.cos, at(0.3))));
   def("the sine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.sin, at(0.3))));

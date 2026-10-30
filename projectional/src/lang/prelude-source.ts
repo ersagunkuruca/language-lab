@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRIG_POLAR, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -208,8 +208,21 @@ export function buildPrelude(): Module {
   k.define(unpolarF, k.fn(["length", "angle", "x", "y"], (r, t, x, y) =>
     k.and(k.equal(r, k.call(B.sqrt, k.call(B.add, k.call(B.mul, x, x), k.call(B.mul, y, y)))), k.equal(t, k.call(B.atan2, y, x)))));
   k.results(unpolarF, "length", "angle");
+  // asin and acos (L97c3) read the angle off unpolar: asin s is the angle
+  // of (√(1 − s²), s), acos c of (c, √(1 − c²)). A type with a square root
+  // of its own gives them with it; the ways take √x as e^(½ log x), from
+  // Trig's own exp and log, for any type that has them.
+  const onUnpolar = (x: Id, y: Id) => k.solve(TRIG_UNPOLAR, { 2: x, 3: y, out: k.true }, { 1: "angle" }, ({ 1: t }) => t);
+  const rest = (v: Id) => k.call(ARITH.sub, k.lit(1), k.call(ARITH.mul, v, v));
+  const root = (v: Id) => k.call(TRIG_OPS.exp, k.call(ARITH.mul, k.lit(0.5), k.call(TRIG_OPS.log, v)));
+  const asinBy = way("asin by unpolar", TRIG_ASIN, () => k.fn(["s"], (sv) => onUnpolar(root(rest(sv)), sv)));
+  const acosBy = way("acos by unpolar", TRIG_ACOS, () => k.fn(["c"], (cv) => onUnpolar(cv, root(rest(cv)))));
+  const asinF = k.def("float64 asin");
+  k.define(asinF, k.fn(["s"], (sv) => onUnpolar(k.call(B.sqrt, k.call(B.sub, k.lit(1), k.call(B.mul, sv, sv))), sv)));
+  const acosF = k.def("float64 acos");
+  k.define(acosF, k.fn(["c"], (cv) => onUnpolar(cv, k.call(B.sqrt, k.call(B.sub, k.lit(1), k.call(B.mul, cv, cv))))));
   const trigF = k.def("trig at float64");
-  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF].map((b) => k.x(b))));
+  k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF, asinF, acosF].map((b) => k.x(b))));
 
   // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
   // a function given dual(x, 1) gives its value and its slope at x.
@@ -250,7 +263,7 @@ export function buildPrelude(): Module {
     k.equal(t, xy(x, y, (a, a1, b, b1) => D(k.call(B.atan2, b, a), n.div(n.sub(n.mul(a, b1), n.mul(b, a1)), sq(a, b))))))));
   k.results(unpolarD, "length", "angle");
   const trigD = k.def("trig at dual");
-  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD)));
+  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
   const slopeAt = k.def("slope by duals");
   k.define(slopeAt, k.fn(["f", "x"], (f, x) => du(k.call(f, D(x, k.lit(1))), (_, a1) => a1)));
   const dualTable = k.def("dual table");
@@ -405,8 +418,6 @@ export function buildPrelude(): Module {
     k.equal(r, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (len) => F(len)), "y steps"), "x steps")),
     k.equal(t, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (_, ang) => F(ang)), "y steps"), "x steps")))));
   k.results(unpolarX, "length", "angle");
-  const trigX = k.def("trig at fixed");
-  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarX)));
   // √x: the whole square root of x's steps · 2³² by Newton's method from
   // above (Heron's), which only goes down and stops at the floor; no
   // answer below 0.
@@ -417,6 +428,18 @@ export function buildPrelude(): Module {
       { variant: CONS, names: ["step", "steps"], results: [null, "closer"], body: (_, [, g]) => k.let("next", z.down(z.add(g!, quot(nn, g!)), 1), (nx) =>
         k.if(z.less(nx, g!), nx, g!)) },
     ]))))))));
+  // asin and acos at Fixed (L97c3): the angle of (√(1 − s²), s) and of
+  // (c, √(1 − c²)) by CORDIC's vectoring, with Fixed's own exact square
+  // root, so asin(1) is π/2 to the step. Outside [−1, 1] the square root
+  // has no answer and the angle is 0's.
+  const cut = (v: Id) => only(() => k.call(sqrtX, k.call(ARITH.sub, F(k.int(ONE)), k.call(ARITH.mul, v, v))), () => F(k.int(0)));
+  const angleOf = (x: Id, y: Id) => fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (_, ang) => F(ang)), "y steps"), "x steps");
+  const asinX = k.def("fixed asin");
+  k.define(asinX, k.fn(["s"], (sv) => angleOf(cut(sv), sv)));
+  const acosX = k.def("fixed acos");
+  k.define(acosX, k.fn(["c"], (cv) => angleOf(cv, cut(cv))));
+  const trigX = k.def("trig at fixed");
+  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarX), k.x(asinX), k.x(acosX)));
 
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
@@ -930,9 +953,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX].map(at));
 }

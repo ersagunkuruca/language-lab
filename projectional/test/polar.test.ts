@@ -15,7 +15,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pickWays, waysIn } from "../src/lang/ways.ts";
-import { DUAL_V, FIXED_V, S, SHOW_ANY, TRIG_OPS, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V } from "../src/lang/std.ts";
+import { DUAL_V, FIXED_V, S, SHOW_ANY, TRIG_OPS, TRIG_ACOS, TRIG_ASIN, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V } from "../src/lang/std.ts";
 import { showType, NUMBER } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
@@ -55,7 +55,7 @@ test("a polar asked another way is an error that says the direction", () => {
   assert.ok(info.errors.some((e) => e.message === "polar gives x, y from length, angle"), String(info.errors.map((e) => e.message)));
 });
 
-function angle(declare: boolean) {
+function angle(declare: boolean, more?: (k: Lang, ctor: Id) => void) {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const A = k.type("Angle", [], [["angle", [["radians", () => k.tref(NUMBER)]]]]);
@@ -70,10 +70,11 @@ function angle(declare: boolean) {
     k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
     k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
   k.results(unpolar, "length", "angle");
-  def("trig at angle", () => k.call(TRIG_V, k.x(S.byItsWays), k.x(S.byItsWays), k.x(tan), k.x(exp), k.x(log), k.x(polar), k.x(unpolar)));
+  def("trig at angle", () => k.call(TRIG_V, k.x(S.byItsWays), k.x(S.byItsWays), k.x(tan), k.x(exp), k.x(log), k.x(polar), k.x(unpolar), k.x(S.byItsWays), k.x(S.byItsWays)));
   const at = (x: number) => k.call(A.v.angle, k.lit(x));
   def("the cosine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.cos, at(0.3))));
   def("the sine", () => k.call(SHOW_ANY, k.call(TRIG_OPS.sin, at(0.3))));
+  more?.(k, A.v.angle);
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions) };
 }
@@ -136,4 +137,36 @@ test("length, angle = unpolar(x, y) at Float64, Dual and Fixed, evaluated and co
     const [rs, ts] = String(evaluated[i]).split(" ").map((v) => Number(v) / 2 ** 32);
     near(rs, 5, 1e-6); near(ts, Math.atan2(y, -3), 1e-6);
   }
+});
+
+// asin and acos (L97c3): the angle off unpolar. Float64 and Fixed give
+// them with their own square roots; Dual, and a type of the program's own,
+// get them by their ways, √ as e^(½ log).
+test("asin and acos through unpolar: Float64, Dual, Fixed and a type of the program's own, evaluated and compiled", async () => {
+  const { code, names, info } = angle(true, (k, ctor) => {
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const show = (v: Id) => k.call(SHOW_ANY, v);
+  def("at float64 asin", () => show(k.call(TRIG_ASIN, k.lit(0.5))));
+  def("at float64 acos", () => show(k.call(TRIG_ACOS, k.lit(-0.25))));
+  def("at dual asin", () => show(k.call(TRIG_ASIN, k.call(DUAL_V, k.lit(0.6), k.lit(1)))));
+  const X = (v: number) => k.call(FIXED_V, k.int(Math.round(v * 2 ** 32)));
+  const steps = (v: Id) => k.match(v, [{ variant: FIXED_V, names: ["steps"], body: ([st]) => k.call(SHOW_ANY, st) }]);
+  def("at fixed asin one", () => steps(k.call(TRIG_ASIN, X(1))));
+  def("at fixed acos", () => steps(k.call(TRIG_ACOS, X(0.5))));
+  def("at angle asin", () => show(k.call(TRIG_ASIN, k.call(ctor, k.lit(0.5)))));
+  });
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const NAMES = ["at float64 asin", "at float64 acos", "at dual asin", "at fixed asin one", "at fixed acos", "at angle asin"];
+  const { evaluated, compiled } = await both(code, info, names, NAMES);
+  assert.deepEqual(compiled, evaluated);
+  const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
+  const nums = (v: Value) => String(v).match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
+  near(Number(evaluated[0]), Math.asin(0.5));
+  near(Number(evaluated[1]), Math.acos(-0.25));
+  // asin′(s) = 1/√(1 − s²): 1.25 at 0.6.
+  const [v, slope] = nums(evaluated[2]);
+  near(v, Math.asin(0.6)); near(slope, 1.25, 1e-6);
+  near(Number(evaluated[3]) / 2 ** 32, Math.PI / 2, 1e-8);
+  near(Number(evaluated[4]) / 2 ** 32, Math.acos(0.5), 1e-6);
+  near(nums(evaluated[5])[0], Math.asin(0.5), 1e-9);
 });
