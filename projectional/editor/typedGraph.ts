@@ -233,7 +233,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
 
 type End =
   | { item: Id; dx: number; dy: number }   // a point on an item
-  | { frame: Id; port: number }            // a frame's parameter port
+  | { frame: Id; port: number; right?: boolean } // a frame's parameter port; right: one of its results
   | { frameOut: Id };                      // a frame's output, on its right edge
 interface Item {
   key: Id;
@@ -247,7 +247,7 @@ interface Item {
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
 }
-interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
+interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
 interface Scene {
   items: Map<Id, Item>;
@@ -492,19 +492,23 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // A frame: binder ports on its left edge, the body inside, out on the right.
   const PAD = 10, HEAD = 20;
   const portsW = (binders: Id[]) => Math.max(0, ...binders.map((b) => tw(name(b), 6.8) + 18));
-  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string): Sub => {
+  // A definition's results (RESULTS.md) are ports on its right edge, one
+  // output each, as a network's outer ports were before #41.
+  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string, results: Id[] = []): Sub => {
     const outer = frame;
     frame = id;
-    const pw = portsW(binders), ph = binders.length * 22;
+    const pw = portsW(binders), ph = Math.max(binders.length, results.length && results.length + 1) * 22;
     binders.forEach((b, i) => sources.set(b, { frame: id, port: i }));
+    results.forEach((b, i) => sources.set(b, { frame: id, port: i, right: true }));
     const b = lay(body);
     frame = outer;
     const bx = Math.max(pw + 14, PAD), innerH = Math.max(ph + 8, b.h);
     const by = HEAD + (innerH - b.h) / 2;
     const at = new Map<Id, Pos>();
     shift(at, b, bx, by);
-    const w = Math.max(bx + b.w + 22, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
-    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), out: b.out, pad: [bx, HEAD, 22, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
+    const rw = results.length ? portsW(results) + 14 : 22;
+    const w = Math.max(bx + b.w + rw, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
+    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), ...(results.length ? { results, resultLabels: results.map(name) } : {}), out: b.out, pad: [bx, HEAD, rw, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
     return { w, h, outX: w, outY: by + b.outY, out: { frameOut: id }, at };
   };
 
@@ -514,7 +518,16 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // pure: Choice when the solver can find several answers or none.
   const solve = (id: Id, n: NodeOf<"solve">): Sub => {
     const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
-    const givenKeys = Object.keys(n.given), boundKeys = Object.keys(n.binds);
+    const boundKeys = Object.keys(n.binds);
+    // Used the way the definition declares (RESULTS.md), it reads as a
+    // call with one output per result, and its relation holding (= true)
+    // goes without saying; another direction says "solve".
+    const fd = code.nodes[n.fn]?.kind === "def" ? (code.nodes[n.fn] as NodeOf<"def">) : null;
+    const declared = !!fd?.results?.length && fd.results.length === boundKeys.length && fd.results.every((r) => boundKeys.includes(r));
+    const holds = (v: Id) => { const t = code.nodes[v]; return t?.kind === "ref" && t.target === "std.bool.true"; };
+    const fl = fd?.body && code.nodes[fd.body]?.kind === "lambda" ? (code.nodes[fd.body] as NodeOf<"lambda">).params : [];
+    const at = (k: string) => (fl.includes(k) ? fl.indexOf(k) : fl.length);
+    const givenKeys = Object.keys(n.given).filter((k) => !(declared && k === "out" && holds(n.given[k]))).sort((a, b) => at(a) - at(b));
     const inputs = givenKeys.map((k) => n.given[k]);
     const kids = inputs.map(arg);
     let badge = "";
@@ -523,7 +536,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       badge = plan.status === "underdetermined" ? `needs ${plan.needMore} more` : plan.unique ? "one answer" : `Choice${plan.many ? " · several answers" : ""}${plan.canFail ? " · may have none" : ""}`;
     } catch {}
     const choice = /Choice|needs/.test(badge);
-    const title = `solve ${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
+    const title = `${declared ? "" : "solve "}${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
     const rows = Math.max(givenKeys.length, boundKeys.length);
     const lw = Math.max(0, ...givenKeys.map((k) => tw(label(k), 6.6))), rw = Math.max(0, ...boundKeys.map((k) => tw(label(k), 6.6)));
     const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, lw + rw + 36);
@@ -759,8 +772,17 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // The definition itself: its parameters, its body, its result.
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
+  // A definition with results is titled by the direction it declares, as
+  // the text shows it: its inputs, the effects of finding them, the results.
+  const resultsType = (d: NodeOf<"def">, l: NodeOf<"lambda">) => {
+    const effs = info?.directions?.get(defId), bare = (p: Id) => typeOf(p).split(" where ")[0];
+    if (!effs || !l.params.every((p) => typeOf(p))) return typeOf(defId);
+    const ins = l.params.filter((p) => !d.results!.includes(p));
+    return `(${ins.map(bare).join(", ")}) ${effs.length ? `-[${effs.map(name).join(", ")}]->` : "->"} ${d.results!.map((r) => `${name(r)}: ${bare(r)}`).join(", ")}`;
+  };
   let top: Sub;
   if (lp) top = region(defId, `loose : ${typeOf(lp.expr)}, not used yet`, lp.params, lp.expr, "loose");
+  else if (body?.kind === "lambda" && def.results?.length) top = region(defId, `${name(defId)} : ${resultsType(def, body)}`, body.params.filter((p) => !def.results!.includes(p)), body.body, "def", def.results.filter((r) => body.params.includes(r)));
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);
@@ -927,9 +949,11 @@ function placeAll(scene: Scene, at: Record<Id, Pos>): Placed {
   for (const [id, b] of fb) { const f = scene.frames.get(id)!; if (b.w < f.minW) b.w = f.minW; }
   const point = (e: End): Pos => {
     if ("item" in e) { const p = pos.get(e.item) ?? { x: 0, y: 0 }; return { x: p.x + e.dx, y: p.y + e.dy }; }
-    if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x, y: b.y + HEADH + 4 + e.port * 22 + 11 }; }
+    if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x + (e.right ? b.w : 0), y: b.y + HEADH + 4 + e.port * 22 + 11 }; }
     const b = fb.get(e.frameOut)!, f = scene.frames.get(e.frameOut)!;
-    return { x: b.x + b.w, y: f.out ? point(f.out).y : b.y + b.h / 2 };
+    // Below the result ports, when there are some, so the two don't meet.
+    const y = f.out ? point(f.out).y : b.y + b.h / 2;
+    return { x: b.x + b.w, y: f.results?.length ? Math.max(y, b.y + HEADH + 4 + f.results.length * 22 + 11) : y };
   };
   return { pos, boxes: fb, point };
 }
@@ -962,10 +986,12 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
     frameG.append(r, s("text", { x: b.x + 10, y: b.y + 14, class: "rt" }, f.title));
     if (f.id !== scene.defId && hooks.fold) frameG.append(foldToggle(b.x + b.w - 16, b.y + 14, f.id, "▾", "Fold into one box"));
-    f.binders.forEach((bd, i) => {
-      const p = point({ frame: f.id, port: i });
-      portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
-    });
+    const port = (right: boolean) => (bd: Id, i: number) => {
+      const p = point({ frame: f.id, port: i, right });
+      portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${right ? " res" : ""}${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
+    };
+    f.binders.forEach(port(false));
+    f.results?.forEach(port(true));
     if (f.out) {
       const o = point({ frameOut: f.id });
       portG.append(f.cls === "loose"
@@ -1038,14 +1064,20 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   }
   // Frame parameter names, above everything in their frame.
   const nameL = pair();
-  for (const f of scene.frames.values()) f.binders.forEach((bd, i) => {
-    const p = point({ frame: f.id, port: i });
-    nameL(within(f.id)).append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl halo" }, f.labels[i]));
-  });
+  for (const f of scene.frames.values()) {
+    f.binders.forEach((bd, i) => {
+      const p = point({ frame: f.id, port: i });
+      nameL(within(f.id)).append(s("text", { x: p.x + 9, y: p.y - 6, class: "portl halo" }, f.labels[i]));
+    });
+    f.results?.forEach((bd, i) => {
+      const p = point({ frame: f.id, port: i, right: true });
+      nameL(within(f.id)).append(s("text", { x: p.x - 9, y: p.y - 6, class: "portl halo", "text-anchor": "end" }, f.resultLabels![i]));
+    });
+  }
 
   // The definition's result.
   const out = s("g");
-  if (scene.result) { const r = point(scene.result); out.append(s("text", { x: r.x + 8, y: r.y + 4, class: "portl halo" }, "result")); }
+  if (scene.result) { const r = point(scene.result); out.append(s("text", { x: r.x + 8, y: r.y + 4, class: "portl halo" }, "frameOut" in scene.result && scene.frames.get(scene.result.frameOut)?.results?.length ? "holds" : "result")); }
 
   // Values: chips near the output they label, placed where they cover no
   // node and no other chip. With no room, a chip shrinks to a dot; hover it.
@@ -1060,6 +1092,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     };
     for (const it of scene.items.values()) if (it.value && it.out) { const p = pos.get(it.key)!; add(it.value, { x: p.x + it.out.x, y: p.y + it.out.y }); }
     for (const f of scene.frames.values()) f.binders.forEach((bd, i) => add(bd, point({ frame: f.id, port: i }), true));
+    for (const f of scene.frames.values()) f.results?.forEach((bd, i) => add(bd, point({ frame: f.id, port: i, right: true })));
     for (const [b, e] of scene.sources) if ("item" in e && e.item !== b && !scene.items.has(b)) add(b, point(e));
     // Nodes, and the words already on the picture: parameter names, frame
     // titles, the result.
@@ -1108,7 +1141,7 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
   for (const w of scene.wires) {
     const end = (e: End): [string, number, number] | null => {
       if ("item" in e) return [e.item, e.dx, e.dy];
-      if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, 0, HEADH + 4 + e.port * 22 + 11] : null; }
+      if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, e.right ? b.w : 0, HEADH + 4 + e.port * 22 + 11] : null; }
       const b = boxes.get(e.frameOut);
       return b ? [e.frameOut, b.w, b.h / 2] : null;
     };
