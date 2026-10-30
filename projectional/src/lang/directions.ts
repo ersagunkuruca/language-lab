@@ -43,9 +43,32 @@ export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): str
   return null;
 }
 
+// An interface's field with results reads its ports one way; another field
+// of the same interface over the same ports, reading them the other way, is
+// its other direction (Trig's polar and unpolar, POLAR.md step 3). Ports
+// are positions there, so only the function changes.
+function fieldDirection(code: Code, n: NodeOf<"solve">, f: NodeOf<"field">): NodeOf<"solve"> | null {
+  const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
+  const reads = (g: NodeOf<"field">) => {
+    const ty = code.nodes[g.type];
+    const ins = ty?.kind === "tfun" ? ty.params.map((_, i) => i).filter((i) => !g.results!.includes(i)) : [];
+    return ins.length === given.length && ins.every((i) => given.includes(i));
+  };
+  if (reads(f)) return null;
+  const v = Object.values(code.nodes).find((x): x is NodeOf<"variant"> => x.kind === "variant" && x.fields.includes(f.id));
+  const ports = (g: NodeOf<"field">) => (g.ports ?? []).join();
+  for (const id of v?.fields ?? []) {
+    const g = code.nodes[id];
+    if (g?.kind === "field" && g.results && id !== f.id && g.ports && ports(g) === ports(f) && reads(g)) return { ...n, fn: id };
+  }
+  return null;
+}
+
 // The solve rewritten onto the direction that its given ports ask for, or
 // null when none does (the relation is then solved as it always was).
 export function directionFor(code: Code, n: NodeOf<"solve">, ways = directionsIn(code)): NodeOf<"solve"> | null {
+  const f = code.nodes[n.fn];
+  if (f?.kind === "field" && f.results) return fieldDirection(code, n, f);
   const ds = ways.get(n.fn);
   const theirs = ds && paramsOf(code, n.fn);
   if (!theirs) return null;
@@ -66,10 +89,10 @@ export function directionFor(code: Code, n: NodeOf<"solve">, ways = directionsIn
 // Every such solve rewritten; the same code back when there are none.
 export function useDirections(code: Code): Code {
   const ways = directionsIn(code);
-  if (!ways.size) return code;
+  const asked = (n: NodeOf<"solve">) => { const f = code.nodes[n.fn]; return ways.has(n.fn) || (f?.kind === "field" && !!f.results); };
   let nodes: Code["nodes"] | null = null;
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "solve" || !ways.has(n.fn)) continue;
+    if (n.kind !== "solve" || !asked(n)) continue;
     const r = directionFor(code, n, ways);
     if (r) (nodes ??= { ...code.nodes })[n.id] = r;
   }
