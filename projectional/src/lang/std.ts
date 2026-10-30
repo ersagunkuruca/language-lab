@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { CELL, PATH, JOB, STORAGE, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [STORAGE, "Storage"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
@@ -520,6 +520,16 @@ export const JOBS = {
   // first is read).
   headBy: sameJob("representation.headBy", "head by", (_, s) => [s.fresh(), s.fresh()]),
 };
+
+// A program pins one of t's representations for every value of t it has
+// (L108c): `nat storage = store as(binary)` is a definition of its own,
+// and nothing is written where the values are used. The chooser then
+// doesn't choose for t. The checker takes only a representation named by
+// its definition, and one pin per type.
+export const STORE_AS = builtin("representation.storeAs", "store as", (s) => {
+  const t = s.fresh(), r = s.fresh();
+  return fn([{ t: "con", id: REPRESENTATION, args: [t, r] }], { t: "con", id: STORAGE, args: [t] }, s.freshRow());
+}, (rep: unknown) => ({ tag: "builtin.representation.storeAs", fields: [rep] }));
 
 export const CELL_OPS = {
   cell: builtin("cells.cell", "cell", (s) => { const a = s.fresh(); return fn([a], cellOf(a), s.freshRow([CELLS])); }),

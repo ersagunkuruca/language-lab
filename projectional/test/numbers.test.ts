@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
 import { get, type Id, type NodeOf } from "../src/model.ts";
-import { JOBS } from "../src/lang/std.ts";
+import { JOBS, STORE_AS } from "../src/lang/std.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
-import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, pinsIn, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { equal, makeRunner, runMain, type Data, type Value } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
 
@@ -94,6 +94,36 @@ test("the chooser picks Int for main, and represent onto binary gives the same a
   assert.equal(showType(bi.typeOf.get(p.named("factorial"))!, names), "(Binary) -> Binary");
   assert.deepEqual(printed(bin, bi, "small"), printed(p.code, info, "small"));
   assert.deepEqual(printed(bin, bi, "main"), ["18! = 6402373705728000", "2^50 = 1125899906842624", "100 is even: yes"]);
+});
+
+// A program pins a representation with a definition of its own (L108c):
+// `nat storage = store as(binary)`. The chooser takes it as it is, and the
+// checker takes only a representation's definition, one pin per type.
+test("store as pins a representation: the chooser takes it, and only one per type", () => {
+  const pinning = (code: typeof p.code, def: string, arg: Id) => {
+    const [d, call, fn, a] = [`${def}:def`, `${def}:call`, `${def}:fn`, `${def}:arg`];
+    return { ...code, defs: [...code.defs, d], nodes: { ...code.nodes,
+      [d]: { id: d, kind: "def" as const, body: call },
+      [call]: { id: call, kind: "call" as const, fn, args: [a] },
+      [fn]: { id: fn, kind: "ref" as const, target: STORE_AS },
+      [a]: { id: a, kind: "ref" as const, target: arg } } };
+  };
+  const one = pinning(p.code, "nat storage", binary.def!);
+  const pn = { ...names, "nat storage:def": "nat storage", "again:def": "again" };
+  const pi = infer(one, pn);
+  assert.deepEqual(pi.errors, []);
+  assert.equal(showType(pi.typeOf.get("nat storage:def")!, pn), "Storage Nat");
+  const pins = pinsIn(one, representationsIn(one, pi, pn, [...p.own.defs, "nat storage:def"]), [...p.own.defs, "nat storage:def"]);
+  const pin = pins.get(unary.of)!;
+  assert.equal(pin.rep.name, "binary");
+  const c = choose(one, p.named("main"), reps, pin);
+  assert.deepEqual([c.rep.name, c.pinnedBy], ["binary", "nat storage:def"]);
+  assert.equal(choose(one, p.named("main"), reps).rep.name, "int", "without the pin, the chooser's pick");
+  // Twice for Nat, or something that isn't a representation's definition.
+  assert.deepEqual(infer(pinning(one, "again", int.def!), pn).errors.map((e) => e.message), ["Nat is stored as one representation, and nat storage has pinned it already"]);
+  assert.match(infer(pinning(p.code, "again", p.named("meaning")), pn).errors.map((e) => e.message).join("; "), /^store as needs Representation/);
+  const alias = { ...p.code, defs: [...p.code.defs, "same:def"], nodes: { ...p.code.nodes, "same:def": { id: "same:def", kind: "def" as const, body: "same:ref" }, "same:ref": { id: "same:ref", kind: "ref" as const, target: int.def! } } };
+  assert.deepEqual(infer(pinning(alias, "again", "same:def"), { ...pn, "same:def": "same" }).errors.map((e) => e.message), ["store as takes a representation by its definition's name"]);
 });
 
 // Nat stored as an Int (NUMBERS.md, "Folds run the way their value is
