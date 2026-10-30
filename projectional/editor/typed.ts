@@ -1136,6 +1136,17 @@ export function addActionStep(code: Code, names: Names, info: Info, step: Id): T
   return guardTyped(info, next, { ...names, [b]: "_" }, hole, "Added a step before it: fill the hole with what to do there.");
 }
 
+// Which of a definition's ports are its results (RESULTS.md), kept in
+// port order. With none it is the plain predicate again. The checker says
+// whether the others pin them down.
+export function setResults(code: Code, names: Names, info: Info, def: Id, results: Id[]): TEdit {
+  const { results: _, ...d } = code.nodes[def] as NodeOf<"def">;
+  const params = (code.nodes[d.body!] as NodeOf<"lambda">).params, rs = params.filter((p) => results.includes(p));
+  const nodes = { ...code.nodes, [def]: rs.length ? { ...d, results: rs } : d };
+  const nm = (id: Id) => names[id] ?? display[id] ?? id;
+  return guardTyped(info, { ...code, nodes }, names, def, rs.length ? `${nm(def)} gives ${rs.map(nm).join(", ")} from ${params.filter((p) => !rs.includes(p)).map(nm).join(", ") || "nothing"}.` : `${nm(def)} has no results: a predicate on all its ports again.`);
+}
+
 // The reverse: a dot with one wire out goes back to being a plain wire.
 export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id): TEdit {
   const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));

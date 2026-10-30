@@ -1253,7 +1253,9 @@ export type Filling =
   | { kind: "lit"; of: "number" | "text" | "int" }
   // `on` null: on a value given next (the scrutinee starts as a hole).
   | { kind: "match" | "fold"; on: Id | null; type: Id }
-  | { kind: "lambda"; arity: number; params?: Type[] };
+  | { kind: "lambda"; arity: number; params?: Type[] }
+  // A definition with results used the way it declares: `x, y = polar(□, □)`.
+  | { kind: "use"; target: Id };
 
 // Everything that can go in a hole without a type or effect error: variables
 // in scope, definitions, builtins and constructors (as values, or called with
@@ -1453,6 +1455,15 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     try { s.unify(h.expected, t); } catch (e) { if (e instanceof TypeError) continue; throw e; }
     const f: Filling = { kind: "lambda", arity };
     if (safe(s, f, false)) out.push(f);
+  }
+  // A use of a definition with results (RESULTS.md): its value is its
+  // body's, a hole of this one's type, so it fits; what its direction
+  // brings (Choice, say) is checked against the whole program.
+  for (const d of info.schemes.keys()) {
+    const n = code.nodes[d];
+    if (info.hidden.has(d) || n?.kind !== "def" || !n.results?.length || code.nodes[n.body ?? ""]?.kind !== "lambda") continue;
+    const f: Filling = { kind: "use", target: d };
+    if (whole(f)) out.push(f);
   }
   const dataTypes = [...new Set(info.owner.values())].filter((d) => !(code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect);
   // The standard library's types that are data you write programs about;

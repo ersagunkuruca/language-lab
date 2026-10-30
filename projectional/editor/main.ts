@@ -1406,6 +1406,22 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     if (n.kind === "def" && id === ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: this definition's graph, blocks and Run" }, "Copy embed link")));
   }
 
+  // A predicate's results (RESULTS.md): the ports it gives from the others,
+  // so it reads and is used as `x, y = polar(length, angle)`.
+  const fnBody = n.kind === "def" && n.body ? node(n.body) : null;
+  const dt = n.kind === "def" ? info.typeOf.get(id) : undefined, rt = dt ? info.subst.resolve(dt) : null;
+  if (n.kind === "def" && fnBody?.kind === "lambda" && fnBody.params.length > 1 && rt?.t === "fn" && info.subst.resolve(rt.ret).t === "con" && (info.subst.resolve(rt.ret) as { id: Id }).id === BOOL) {
+    const rs = n.results ?? [];
+    out.append(h("div", { class: "sub-head" }, "Results · code.json"),
+      h("p", { class: "hint" }, rs.length ? `Gives ${rs.map((r) => names[r] ?? r).join(", ")} from the other ports. Click a port to make it an input or a result.` : "A true or false of its ports. Make some of them results, and it reads as a function that gives them: x, y = polar(length, angle)."),
+      h("div", { class: "acts" }, ...fnBody.params.map((q) => {
+        const on = rs.includes(q);
+        const b = h("button", { class: `btn${on ? " on" : ""}`, type: "button", "aria-pressed": String(on), title: on ? "A result: click to make it an input" : "An input: click to make it a result" }, `${on ? "→ " : ""}${names[q] ?? q}`);
+        b.addEventListener("click", () => applyT(T.setResults(doc.code, doc.names.short, info, id, on ? rs.filter((r) => r !== q) : [...rs, q])));
+        return b;
+      })));
+  }
+
   // A dot: a let's binder, the shared output of its value.
   if (n.kind === "binder" && T.isDot(doc.code, ui.def, id)) {
     const k = T.usesOf(doc.code, id).length;
@@ -1532,6 +1548,10 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
     case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
     case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
     case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
+    case "use": {
+      const d = node(f.target) as NodeOf<"def">, ps = (node(d.body!) as NodeOf<"lambda">).params;
+      return [`${d.results!.map(nm).join(", ")} = ${nm(f.target)}(${ps.filter((q) => !d.results!.includes(q)).map(() => "□").join(", ")})`, `its results, named, in what you write next`, "results"];
+    }
     default: return words(f.type).effect
       ? [`handle ${nm(f.type)} in □`, `one case per operation of ${nm(f.type)}, on the computation you give next`, "case analysis"]
       : [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
