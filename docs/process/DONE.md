@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I65 | Several named results in the editor (RESULTS.md step 3): a predicate's Results buttons make a port a result or an input; the palette offers x, y = polar(□, □), a use in the declared direction. The graph half was I65a (#677) | #698 |
 | I62 | Every editor load logged a 404 for /favicon.ico: page.html names an inline SVG icon | #696 |
 | I60 | Embed rough edges: Copy embed link also in the Definition tab, the running page only in main's embed (not a data type's), no opening hint line in an embed | #695 |
 | I59 | Lockstep step's Run showed Fixed as raw steps, pair(fixed(3579139), …): the wires, Run and the backwards answers show a Fixed as its number | #693 |

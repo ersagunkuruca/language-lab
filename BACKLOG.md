@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I65 (write several results in the editor), then E160, I29, E159 |
+| E Editor | "Editor lane" | E160, I29, E159, then E103/I40 (speed) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
 | L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L29, L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -46,7 +46,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I65 | Several named results in the editor (RESULTS.md step 3): the palette and structural editing declare results and write a use `length, angle = polar(x, y)`. The graph half is done (I65a, #677) | Language lane, 2026-10-29 | P1 | M | half done |
 | I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton | QA-2026-10-28 L4 | P2 | M | step 1 done |
 | E160 | Show a `solve`'s mode on its node (one answer, many, may not end), from modes.ts (MODES.md; was L11's last step) | L11 | P2 | S | |
 | E159 | Show how a value is stored next to its type ("stored as int"), the compiler's choice from represent.ts `choose`, as `lab check` prints it. Shown only, never chosen by the user (Ersagun 2026-10-30: "I want the compiler to choose") | REPRESENTATIONS.md step 3 | P3 | S | |
