@@ -5,16 +5,17 @@
 > (2026-10-24). This tutorial was last brought up to date on 2026-10-22, so
 > some editor details below are out of date: the inspector's first tab is
 > now *Selected* when something is picked, Run sits above the inspector,
-> a page's `main` runs in the Run pane, and the effects table in 3.9 is
-> missing Random, Time, Wait and Network (LANGUAGE.md has them). Read it
-> for the ideas and for the list of what's confusing.
+> and a page's `main` runs in the Run pane. Read it for the ideas and for
+> the list of what's confusing. Open work is in
+> [BACKLOG.md](../BACKLOG.md).
 
 This tutorial has two jobs. Right now it's for us: to understand the language
 as it actually is in the code, and to find the parts that are confusing or
 could be simpler. Later, cleaned up, it's for showing the language to other
 people. The last part, [What's confusing, and what could be simpler](#whats-confusing-and-what-could-be-simpler),
-is the reason it exists today, and it's meant to be the project's one list of
-open problems.
+is the reason it exists today; each problem in it that is still open is
+also a row in [BACKLOG.md](../BACKLOG.md), the project's one list of open
+work.
 
 Many of the ideas here were had by other people first, and some of the code
 is adapted from theirs: [Credits](#credits) at the end says where each
@@ -397,6 +398,10 @@ effects:
 | `Log` | debugging output | `log(line)` | a `match` with a `log(line)` case; at the top, standard error |
 | `Console` | reads and prints | `print(text)`, `read line()` | the runtime |
 | `Files` | reads and writes files | `read file`, `write file`, … | the runtime |
+| `Random` | draws random numbers | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
+| `Time` | reads the clock | `now()` | a match (a test's fixed clock); at the top, the clock |
+| `Wait` | pauses | `wait(milliseconds)` | a match; at the top, the runtime |
+| `Network` | fetches over HTTP | `fetch text(url)` | the runtime |
 | `Diverge` | might not finish | recursion the checker can't see ends | the runtime, or `with fuel(n, action)` |
 | `Cells` | reads cells, makes cells and formulas | `cell(x)`, `formula(action)`, `read(c)` | the runtime (below) |
 | `Update` | changes a cell | `write(c, x)` | the runtime |
@@ -655,10 +660,10 @@ These are the words the in-editor Guide uses, one word per thing:
 
 ## What's confusing, and what could be simpler
 
-This is the candid part, and the one list of open problems. Each item says
-what's there today, why it's a problem, and a proposal. [REVIEW.md](REVIEW.md)
-has the longer review, [ROADMAP.md](ROADMAP.md) the order of work, and [NOTES.md](NOTES.md) the design discussion
-behind them. Fixed items are at the end, so the list shows what moved.
+This is the candid part. Each item says what's there today, why it's a
+problem, and a proposal. [REVIEW-2026-10-26.md](REVIEW-2026-10-26.md) has
+the latest longer review, [BACKLOG.md](../BACKLOG.md) the order of work,
+and [NOTES.md](NOTES.md) the early design discussion behind them. Fixed items are at the end, so the list shows what moved.
 
 ### 1. The graph still crosses itself
 
@@ -859,8 +864,8 @@ So the list above isn't read as "everything is wrong":
 - The language reference: [LANGUAGE.md](LANGUAGE.md). Running backwards:
   [BACKWARDS.md](BACKWARDS.md). Float64s and representations:
   [NUMBERS.md](NUMBERS.md). The compiler: [COMPILER.md](COMPILER.md). The
-  review: [REVIEW.md](REVIEW.md). What's next: [ROADMAP.md](ROADMAP.md), and
-  the discussion behind it: [NOTES.md](NOTES.md). The prototype and editor:
+  review: [REVIEW-2026-10-26.md](REVIEW-2026-10-26.md). What's next:
+  [BACKLOG.md](../BACKLOG.md). Every document: [DOCS.md](../DOCS.md). The prototype and editor:
   [README.md](README.md).
 - Screenshots are in `projectional/tutorial/`.
 

@@ -177,6 +177,12 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   hash, so the hash is its id; a reference to it is the import, and there
   are no import statements. Signatures are *pins*: inferred types, frozen.
   See "Signatures and modules" below.
+- **How is data stored?** However the compiler chooses. A type means its
+  definition (`zero`/`succ`, `cons`/`nil`, a map as sorted entries), and
+  representations, written in the language as ordinary definitions, say
+  how it may be stored and what each job costs. The compiler picks one
+  from the jobs the program uses; a program never names one, and
+  `lab check` says what was picked (REPRESENTATIONS.md).
 - **Can the editor stop type errors?** Holes have types, and the palette
   offers only fillings that keep the whole program error-free. A test punches
   holes all over both programs, tries every option the palette offers (over
@@ -1554,9 +1560,12 @@ back into the group being hashed is named by its position.
 
 ## What's next
 
-- **Numbers.** Fractions, big integers, continued fractions, Clifford
-  algebras and tensors, and running a definition like Peano naturals on a
-  fast representation chosen by cost: the plan is [NUMBERS.md](NUMBERS.md).
+- **Numbers.** Built: Int of any size, Float64, fractions, complex and
+  dual numbers, exact algebraic numbers, Fixed, Clifford tables and
+  rotors, one `+ − · <` for all of them through interfaces, and ways
+  picked by cost. Left: matrices on the GPU, grade inference, tensors and
+  lazy exact reals; the plan is [NUMBERS.md](NUMBERS.md) and BACKLOG.md
+  lane L.
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.

@@ -1,5 +1,10 @@
 # Roadmap
 
+> **History (2026-10-30).** This was the plan until 2026-10-23, when
+> [BACKLOG.md](../BACKLOG.md) replaced it: open work and what each lane
+> does next are there, finished work in [DONE.md](../DONE.md), and every
+> doc in [DOCS.md](../DOCS.md). This page stays as written.
+
 Updated 2026-10-22, after PR #51, and again after the second review
 (evening). This replaces §10 of
 [REVIEW.md](REVIEW.md), which stays as the review it was written as. The

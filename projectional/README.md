@@ -13,12 +13,10 @@ non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 How a program runs (the editor's Run, the command line, and the compiled
 targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](RUNNING.md).
-For a candid review of the whole project (holes, what's achievable, and a
-roadmap towards real programs, shaders, websites and apps), see
-[REVIEW.md](REVIEW.md) and the second one,
-[REVIEW-2026-10-22b.md](REVIEW-2026-10-22b.md). What comes next is in [ROADMAP.md](ROADMAP.md), and
-the design ideas we've discussed, with the current answer to each, are in
-[NOTES.md](NOTES.md). Where the ideas and code come from (influences, prior
+Every document, with how much of it is built, is listed in
+[DOCS.md](../DOCS.md); the latest whole-project review is
+[REVIEW-2026-10-26.md](REVIEW-2026-10-26.md). What comes next is in
+[BACKLOG.md](../BACKLOG.md). Where the ideas and code come from (influences, prior
 work, adapted code) is in [CREDITS.md](CREDITS.md).
 
 ```sh

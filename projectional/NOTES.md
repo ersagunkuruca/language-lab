@@ -3,7 +3,13 @@
 Design ideas Ersagun raised in the project chat, with the current answer to
 each. Short on purpose: the full designs live in LANGUAGE.md, NUMBERS.md,
 COMPILER.md and REVIEW.md, and what gets built when is in
-[ROADMAP.md](ROADMAP.md). Dates are when the idea was raised.
+[BACKLOG.md](../BACKLOG.md) (ROADMAP.md until 2026-10-23). Dates are when
+the idea was raised.
+
+> **History (2026-10-30).** Ideas raised after 2026-10-23 went straight
+> into BACKLOG.md rows and their design notes (listed in
+> [DOCS.md](../DOCS.md)), so the answers below are as they were then. The
+> standing rules still hold.
 
 ## Standing rules
 
