@@ -116,7 +116,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#PR) | L14 | P3 | M | |
+| L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
 
 ### Ersagun's current asks
 
@@ -173,7 +173,7 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L46 | Bounded counting is total (an Int moving towards its bound), so raymarch loses `with fuel` | LANGUAGE-REVIEW §7 | P2 | M | |
-| L47 | `conjugate` without `Choice` when the mode says one answer (inverse done with L29, #PR): the Choice is in the function conjugate gives back, which a call's verdict doesn't cover | LANGUAGE-REVIEW §7 | P2 | M | inverse done |
+| L47 | `conjugate` without `Choice` when the mode says one answer (inverse done with L29, #701): the Choice is in the function conjugate gives back, which a call's verdict doesn't cover | LANGUAGE-REVIEW §7 | P2 | M | inverse done |
 
 ### Grammars, modules and sharing
 
