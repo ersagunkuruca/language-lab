@@ -5,8 +5,10 @@ Ersagun asked for "controlled parallelism": one backlog fed by every source,
 prioritized against the roadmap and the project's values, with a fixed small
 number of things running at once.
 
-[BACKLOG.md](BACKLOG.md) is the single list of open work. Nothing is worked on
-that isn't in it (urgent bugs get written in as they're started).
+[BACKLOG.md](BACKLOG.md) is the single list of open work, grouped by lane
+and theme, with a "Next up" table at the top. Nothing is worked on that
+isn't in it (urgent bugs get written in as they're started). Finished
+items move to [DONE.md](DONE.md).
 
 ## Lanes
 
@@ -17,9 +19,9 @@ without waiting for the coordinator.
 
 | lane | owns | thread |
 |---|---|---|
-| **E: Editor** | `projectional/editor/`, the editor's tests and smoke | "Writing programs in the editor" |
-| **C: Compiler and targets** | `compiler/`, JS/WASM/WGSL output, performance, packaging | "Bigger programs and compiler gaps" |
-| **L: Language and library** | the checker, evaluator, `relate.ts`, std, effects, web runtime, examples, docs, the number systems | "Language and library lane" |
+| **E: Editor** | `projectional/editor/`, the editor's tests and smoke | "Editor lane" |
+| **C: Compiler and targets** | `compiler/`, JS/WASM/WGSL output, performance, packaging | "Compiler lane" |
+| **L: Language and library** | the checker, evaluator, `relate.ts`, std, effects, web runtime, examples, docs, the number systems | "Language lane" |
 
 Why three: the editor rule already allows only one thread in
 `projectional/editor/` at a time, and the compiler and the language core are
@@ -59,7 +61,8 @@ lane finds while working.
 - **The coordinator** adds new items to the Inbox at the top of BACKLOG.md
   (a docs-only PR, which runs no tests, batched with others when possible).
 - **A lane** that finds something outside its current item writes it into
-  its own lane's list in the PR it's working on, and keeps going.
+  its own lane's list, under the theme it belongs to, in the PR it's
+  working on, and keeps going.
 - A report (QA, review, GAPS round) lists its findings in its own doc as
   before, and its PR also adds one backlog row per finding, pointing at it.
 
@@ -67,8 +70,8 @@ lane finds while working.
 
 The coordinator triages **once a day** (with the daily QA pass) and after
 every review: Inbox items get a lane, a priority and a size, and each lane's
-list is re-ranked by the criteria below. Lanes don't re-rank their own list,
-except to move a bug up.
+list is re-ranked by the criteria below, and "Next up" is set to match.
+Lanes don't re-rank their own list, except to move a bug up.
 
 ## Priority criteria
 
@@ -100,16 +103,16 @@ Within a priority, in this order:
    language item (Ersagun, 2026-10-24).
 7. **Smaller first** when all else is equal, so lanes keep moving.
 
-The current roadmap step (set by the second review, 2026-10-22): the editor's
-can't-edit list and a bigger program built in the editor, then one page
-model, then WebAssembly. Update this line when the step changes.
+What each lane takes next is the "Next up" table at the top of BACKLOG.md;
+the coordinator updates it at triage and when Ersagun changes direction.
 
 ## Doing an item
 
 - One item, one PR (one change per PR, never bundled). An L item may be
   split into several rows first.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
-  its lane's table under **Done** with its PR number, and adds any follow-up rows it found. The
+  its lane's table in [DONE.md](DONE.md) with its PR number, updates its
+  lane's line in "Next up" at the top of BACKLOG.md, and adds any follow-up rows it found. The
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
