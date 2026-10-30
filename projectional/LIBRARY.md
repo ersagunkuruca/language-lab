@@ -260,6 +260,7 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **write** : `(Cell a, a) -[Update]-> Unit`. Puts a new value in a cell. Only event handlers can write.
 - **formula** : `(() -[Cells, Diverge]-> a) -[Cells]-> Cell a`. A cell whose value is computed from other cells, and kept up to date when they change.
 - **each** : `(Cell (List a), (a) -[Cells, Diverge]-> b) -[Cells]-> Cell (List b)`. A cell holding f of each item of a list cell, where an item that stays keeps what f gave it. After insert at, remove at, move at or an edit inside one item, only that item's row is made or dropped; nothing else runs again.
+- **each of** : `(List a, (a) -[Cells, Diverge]-> b) -[Cells]-> Cell (List b)`. each, over a list inside a cell's value as a row has it (its item's steps): after an edit of that list or inside one of its items, only that item's row is made or dropped, and the row the list is in isn't made again. Over a plain list, the list mapped once.
 - **path** : `((a) -> b) -> Path a b`. A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.
 - **item path** : `(Path a (List b), Int) -> Path a b`. Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.
 - **then path** : `(Path a b, Path b c) -> Path a c`. The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.

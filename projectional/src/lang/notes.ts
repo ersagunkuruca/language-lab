@@ -164,6 +164,7 @@ export const NOTES: Comments = {
   // --- cells: values that change, for pages
   "builtin.cells.cell": "A new cell holding a starting value: a value a page can change, and whose readers are redrawn when it does.",
   "builtin.cells.formula": "A cell whose value is computed from other cells, and kept up to date when they change.",
+  "builtin.cells.eachOf": "each, over a list inside a cell's value as a row has it (its item's steps): after an edit of that list or inside one of its items, only that item's row is made or dropped, and the row the list is in isn't made again. Over a plain list, the list mapped once.",
   "builtin.cells.each": "A cell holding f of each item of a list cell, where an item that stays keeps what f gave it. After insert at, remove at, move at or an edit inside one item, only that item's row is made or dropped; nothing else runs again.",
   "builtin.cells.read": "What a cell holds now. A page part that reads it is redrawn when it changes.",
   "builtin.cells.write": "Puts a new value in a cell. Only event handlers can write.",

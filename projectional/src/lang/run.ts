@@ -326,6 +326,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       for (const v of (f as Fn)(x)) return v;
       throw new NoValue("each gave no value for an item");
     }, { ...LISTS, views: LIST_VIEWS })),
+    [CELL_OPS.eachOf]: (items, f) => one(cells.eachOf(items, (x) => {
+      for (const v of (f as Fn)(x)) return v;
+      throw new NoValue("each of gave no value for an item");
+    }, { ...LISTS, views: LIST_VIEWS })),
     // A formula that gave no value (it ran out of `with fuel`) is a read
     // with no answer; it is computed again at the next read.
     [CELL_OPS.read]: (c) => {
