@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I62 | Every editor load logged a 404 for /favicon.ico: page.html names an inline SVG icon | #696 |
 | I60 | Embed rough edges: Copy embed link also in the Definition tab, the running page only in main's embed (not a data type's), no opening hint line in an embed | #695 |
 | I59 | Lockstep step's Run showed Fixed as raw steps, pair(fixed(3579139), …): the wires, Run and the backwards answers show a Fixed as its number | #693 |
 | I57 | An unfolded frame covered its neighbour (Tumble show next's (…) => over lane(…) =): the nodes a frame just opened covers are spaced out from it | #691 |
