@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I59, I60, I62 (QA bugs), then I65 (write several results in the editor), E160, I29, E159 |
+| E Editor | "Editor lane" | I60, I62 (QA bugs), then I65 (write several results in the editor), E160, I29, E159 |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
 | L Language and library | "Language lane" | I36, I39 (bugs found by Tumble), then L97's last step |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -41,7 +41,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA-2026-10-29b L1 | P2 | S | |
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the footer hint takes a line of every embed | QA-2026-10-29b L3 | P3 | S | |
 | I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA-2026-10-29b L5 | P3 | S | |
 
