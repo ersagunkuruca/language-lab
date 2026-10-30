@@ -325,10 +325,25 @@ type Stream = null | [State, () => Stream] | (() => Stream);
 type Goal = (s: State) => Stream;
 
 const unit = (s: State): Stream => [s, () => null];
+// How deep streams are being forced inside each other right now. A long
+// chain of goals that each answer at once (Tumble's clear run backwards
+// from a board of holes, BACKLOG I39b) nests one call per goal, both
+// running the goals and taking the rest of an answer, until the stack runs
+// out. Past a depth the work is suspended instead, and goes on from a
+// fresh stack. A suspension spends no fuel; a search shallower than that
+// runs exactly as before.
+let depth = 0;
+const DEEP = 400;
+function deeper(f: () => Stream): Stream {
+  if (depth > DEEP) return f;
+  depth++;
+  try { return f(); } finally { depth--; }
+}
 function mplus(a: Stream, b: () => Stream): Stream {
-  if (a === null) return b();
+  if (a === null) return deeper(b);
   if (typeof a === "function") return () => mplus(b(), a);
-  return [a[0], () => mplus(a[1](), b)];
+  const rest = a[1];
+  return [a[0], () => mplus(deeper(rest), b)];
 }
 function bind(a: Stream, g: Goal): Stream {
   // A run of answers that g rejects at once is walked in a loop: as
@@ -337,10 +352,11 @@ function bind(a: Stream, g: Goal): Stream {
   for (;;) {
     if (a === null) return null;
     if (typeof a === "function") { const later = a; return () => bind(later(), g); }
-    const r = g(a[0]);
+    const s = a[0];
+    const r = deeper(() => g(s));
     const rest = a[1];
     if (r !== null) return mplus(r, () => bind(rest(), g));
-    a = rest();
+    a = deeper(rest);
   }
 }
 const succeed: Goal = unit;
