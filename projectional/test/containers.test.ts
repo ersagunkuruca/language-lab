@@ -11,7 +11,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import { merge, type Code, type Id, type NodeOf } from "../src/model.ts";
 import { root } from "../src/io.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -19,7 +18,7 @@ import { infer, type Info } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { makeModule, publish } from "../src/lang/modules.ts";
-import { jobProblem, represent, type Representation } from "../src/lang/represent.ts";
+import { jobProblem, represent, representationsIn } from "../src/lang/represent.ts";
 import { CELL_OPS, HTML_V, S } from "../src/lang/std.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { CELLS, CHOICE, CONSOLE, DIVERGE, NUMBER, UPDATE } from "../src/lang/types.ts";
@@ -196,7 +195,7 @@ const places: Record<string, (eff: Effect) => { got: Got; errors: string[] }> = 
   // chosen for, so what the job does must be what the program's type says.
   "in a representation's job": (eff) => {
     const p = loadProgram(join(root, "examples", "numbers"));
-    const reps: Representation[] = JSON.parse(readFileSync(join(root, "examples", "numbers", "representations.json"), "utf8"));
+    const reps = representationsIn(p.code, infer(p.code, p.pres.names), p.pres.names, p.own.defs);
     const binary = reps.find((r) => r.name === "binary")!;
     const { k, f } = effectful(eff, p.code);
     // succ′, which does succ's job on binary numbers, also does eff.

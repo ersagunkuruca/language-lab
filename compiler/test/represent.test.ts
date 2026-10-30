@@ -9,14 +9,14 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { runMain } from "../../projectional/src/lang/run.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
-import { represent, type Representation } from "../../projectional/src/lang/represent.ts";
+import { represent, representationsIn } from "../../projectional/src/lang/represent.ts";
 import { compile } from "../src/compile.ts";
 import { examples, load } from "../src/program.ts";
 import { $setPrint } from "../src/runtime.js";
 
 async function compiledAs(rep: string) {
   const p = load("numbers");
-  const reps: Representation[] = JSON.parse(readFileSync(join(examples, "numbers/representations.json"), "utf8"));
+  const reps = representationsIn(p.code, p.info, p.pres.names, p.own.defs);
   const entries = [p.named("main"), p.named("small")];
   const code = represent(p.code, entries, reps.find((r) => r.name === rep)!);
   const info = infer(code, p.pres.names);

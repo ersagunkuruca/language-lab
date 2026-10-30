@@ -3,7 +3,7 @@
 // gets the representation the chooser picks from the costs of the jobs it
 // uses: the sorted entries or items as defined, or the library's
 // weight-balanced tree (LIBRARY.reps, from the trees module, C51). A
-// representations.json row for the type (lab, #97) still wins.
+// representation the program writes for the type (lab, #97) still wins.
 //
 // A tree isn't a canonical spelling, so equal, show and compare on one
 // are its row's `byType`, which go through its meaning (the sorted list).
@@ -32,7 +32,7 @@ const BY_VALUE: Record<Id, "equal" | "show" | "compare"> = { [S.equal]: "equal",
 export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[] }
 
 // `defs`: the program's own definitions, which the rewrite changes;
-// `asked`: rows from a representations.json, whose types are left alone.
+// `asked`: the program's own representations, whose types are left alone.
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = []): Chosen {
   const chosen: Representation[] = [];
   for (const tree of LIBRARY.reps.filter((r) => r.byType)) {

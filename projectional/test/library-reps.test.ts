@@ -174,7 +174,7 @@ test("a set of sets keeps the definition: the tree would order its items by thei
   assert.deepEqual(withLibraryRepresentations(code, info, names, main, [seen, main]).chosen, []);
 });
 
-test("a representations.json row for Map wins", () => {
+test("a representation the program writes for Map wins", () => {
   const p = program(30);
   const info = infer(p.code, p.names, undefined, checkOptions);
   const row = { name: "mine", of: "std.map", type: "std.map", meaning: null, canonical: true, impl: {}, cost: {} };
