@@ -21,7 +21,7 @@ Gant → Fallow: 70 km
 
 `--as-defined` is needed for now: without it `lab run` picks the tree
 representation for Map and Set and then refuses the program, because the
-program's own record types still say Map and Set (compiler/GAPS.md, round
+program's own record types still say Map and Set (docs/reports/GAPS.md, round
 5, M2). The editor's Run has the same problem.
 
 ## The file

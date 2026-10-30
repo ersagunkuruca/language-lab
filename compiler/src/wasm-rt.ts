@@ -1,4 +1,4 @@
-// The WebAssembly runtime for Int and Text (projectional/WASM.md, stage
+// The WebAssembly runtime for Int and Text (docs/design/targets/WASM.md, stage
 // W3): small functions written in WebAssembly's own text format, one
 // instruction per line, which wasm.ts adds to a module that uses them.
 // A tiny assembler turns each line into bytes, so the text a module prints
@@ -4785,7 +4785,7 @@ export const runtime = (name: string): RtFn => {
 };
 export const RUNTIME = Object.keys(R);
 
-// ---- the world over WASI (projectional/WASM.md, W3b-2)
+// ---- the world over WASI (docs/design/targets/WASM.md, W3b-2)
 //
 // For a module run as a WASI command (wasmtime, node:wasi): the world's
 // operations written over wasi_snapshot_preview1, as wasm.ts's "world"

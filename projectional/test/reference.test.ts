@@ -16,5 +16,5 @@ test("everything offered has a plain note and one place in LIBRARY.md", () => {
 });
 
 test("LIBRARY.md is up to date (node library/reference.ts)", () => {
-  assert.equal(readFileSync(new URL("../LIBRARY.md", import.meta.url), "utf8"), reference());
+  assert.equal(readFileSync(new URL("../../docs/language/LIBRARY.md", import.meta.url), "utf8"), reference());
 });

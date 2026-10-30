@@ -300,7 +300,7 @@ export function $setPrint(p) { printer = p; }
 export function $print(s) { printer(s); return $unit; }
 export { FN as $FN } from '../../invertible/src/expr.js';
 
-// ---- effects a program defines (projectional/LANGUAGE.md) -----------------
+// ---- effects a program defines (docs/language/LANGUAGE.md) -----------------
 // Handlers are a stack. Performing an operation finds the nearest handler
 // of its effect. An operation that returns calls that handler's case with
 // the stack cut back to below the handler (cases run outside their own
@@ -533,7 +533,7 @@ export function $optional(f) { for (const x of f()) return { tag: SOME, fields: 
 // interpreters over the node table, so a program that uses them carries
 // its node table, and its functions carry the node they came from (the
 // evaluator's META). Making these directions compile too is the next stage
-// (projectional/COMPILER.md).
+// (docs/design/targets/COMPILER.md).
 
 import { META, makeRunner } from '../../projectional/src/lang/run.ts';
 import { relate, satisfiable, toValue } from '../../projectional/src/lang/relate.ts';

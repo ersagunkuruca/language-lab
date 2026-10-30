@@ -111,6 +111,6 @@ export function reference(): string {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  writeFileSync(new URL("../LIBRARY.md", import.meta.url), reference());
-  console.log("LIBRARY.md written");
+  writeFileSync(new URL("../../docs/language/LIBRARY.md", import.meta.url), reference());
+  console.log("docs/language/LIBRARY.md written");
 }

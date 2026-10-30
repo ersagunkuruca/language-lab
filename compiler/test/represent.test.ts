@@ -1,4 +1,4 @@
-// A change of representation (projectional/NUMBERS.md) produces an ordinary
+// A change of representation (docs/design/numbers/NUMBERS.md) produces an ordinary
 // program, so it compiles like any other.
 
 import { test } from "node:test";

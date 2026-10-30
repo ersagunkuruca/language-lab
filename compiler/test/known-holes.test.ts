@@ -1,4 +1,4 @@
-// Holes in the compiler found by projectional/REVIEW-2026-10-22b.md, as todo
+// Holes in the compiler found by docs/reports/reviews/REVIEW-2026-10-22b.md, as todo
 // tests: they run, fail today, and don't fail the suite. When a fix lands,
 // drop the todo and the test guards it.
 

@@ -4,7 +4,7 @@
 // exit codes, same algorithms (totals kept in a list and updated in place
 // of a copy, insertion sort). What differs is only what a compiler could
 // decide on its own; each difference is marked with the gap it stands for
-// in compiler/GAPS.md (round 3).
+// in docs/reports/GAPS.md (round 3).
 //
 // `io` is the world: readFile (which throws an Error when it can't), print
 // and printError. A failure becomes the program's Abort.

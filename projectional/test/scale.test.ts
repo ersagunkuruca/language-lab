@@ -129,7 +129,7 @@ test("the printer is a parser at real sizes: show numbers read back from 500 num
   assert.ok(performance.now() - t < 5000, `took ${performance.now() - t} ms`);
 });
 
-test("slice near the start of a long text with emoji reads only that far (compiler/GAPS.md G19)", () => {
+test("slice near the start of a long text with emoji reads only that far (docs/reports/GAPS.md G19)", () => {
   const t = "ab😀".repeat(300_000);
   const start = performance.now();
   for (let i = 0; i < 1000; i++) assert.equal(slice(t, 1, 4), "b😀a");

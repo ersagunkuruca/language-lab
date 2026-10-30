@@ -4,7 +4,7 @@
 // and exit code, same Int representation (a number while it's a safe
 // integer, a BigInt beyond, as in projectional/src/lang/int.ts). What
 // differs is only what a compiler could decide on its own; each difference
-// is marked with the gap it stands for in compiler/GAPS.md (G1, G2, …).
+// is marked with the gap it stands for in docs/reports/GAPS.md (G1, G2, …).
 //
 // Run: node compiler/gaps/calc.ideal.js < input
 

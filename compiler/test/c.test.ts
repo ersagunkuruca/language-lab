@@ -1,4 +1,4 @@
-// The lowering compiled to C (native programs, projectional/NATIVE.md) must
+// The lowering compiled to C (native programs, docs/design/targets/NATIVE.md) must
 // give exactly the evaluator's answers, and with data, free every cell it
 // made. Each test builds a program with the system's C compiler and talks
 // to it through c.ts's harness: calls in on standard input, answers out,

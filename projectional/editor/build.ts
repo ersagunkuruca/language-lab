@@ -4,10 +4,11 @@
 // repository with these pages in it, so the editor is the site's home page.
 // They are build output, not committed (.gitignore):
 //   index.html     the editor; open it locally too
-//   learn.html     LEARN.md, the front page that picks a level
-//   tutorial.html  TUTORIAL.md as a page, its screenshots read from
-//                  projectional/tutorial/
-//   guide.html     GUIDE.md the same way (screenshots in projectional/guide/)
+//   learn.html     docs/learn/LEARN.md, the front page that picks a level
+//   tutorial.html  docs/learn/TUTORIAL.md as a page, its screenshots read
+//                  from docs/learn/tutorial/
+//   guide.html     docs/learn/GUIDE.md the same way (screenshots in
+//                  docs/learn/guide/)
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
@@ -36,10 +37,12 @@ console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
 const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[0] ?? "";
-// Links in the docs are relative to projectional/; the pages are at the root.
+// Links in a doc are relative to its folder (docs/learn/); the pages are at
+// the root.
 const docPage = (md: string, out: string, title: string) => {
-  const body = markdown(readFileSync(here + "../" + md, "utf8"))
-    .replace(/(src|href)="(?![a-z]+:|#|\/|index\.html|learn\.html|tutorial\.html|guide\.html)/g, '$1="projectional/');
+  const dir = "docs/learn/";
+  const body = markdown(readFileSync(site + dir + md, "utf8"), dir)
+    .replace(/(src|href)="(?![a-z]+:|#|\/|index\.html|learn\.html|tutorial\.html|guide\.html)/g, `$1="${dir}`);
   writeFileSync(site + out, `<!doctype html>
 <html lang="en">
 <head>

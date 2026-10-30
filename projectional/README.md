@@ -6,18 +6,18 @@ everything you normally fight about (formatting, operator symbols, infix vs
 prefix, naming style, whether to nest or use temporaries) is a *view* chosen
 per person. No parser exists, on purpose.
 
-New here? Start with [GUIDE.md](GUIDE.md): a hands-on tour of the editor
-and the language, doing real edits on the dice program. [TUTORIAL.md](TUTORIAL.md)
+New here? Start with [GUIDE.md](../docs/learn/GUIDE.md): a hands-on tour of the editor
+and the language, doing real edits on the dice program. [TUTORIAL.md](../docs/learn/TUTORIAL.md)
 is the longer read: an introduction for
 non-programmers and for people new to functional programming, a tour of the
 language in the editor, and a list of what's confusing or could be simpler.
 How a program runs (the editor's Run, the command line, and the compiled
-targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](RUNNING.md).
+targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](../docs/learn/RUNNING.md).
 Every document, with how much of it is built, is listed in
-[DOCS.md](../DOCS.md); the latest whole-project review is
-[REVIEW-2026-10-26.md](REVIEW-2026-10-26.md). What comes next is in
+[the docs index](../docs/README.md); the latest whole-project review is
+[REVIEW-2026-10-26.md](../docs/reports/reviews/REVIEW-2026-10-26.md). What comes next is in
 [BACKLOG.md](../BACKLOG.md). Where the ideas and code come from (influences, prior
-work, adapted code) is in [CREDITS.md](CREDITS.md).
+work, adapted code) is in [CREDITS.md](../docs/language/CREDITS.md).
 
 ```sh
 npm run demo   # walks through everything below (Node >= 22.18, no dependencies;
@@ -357,7 +357,7 @@ What seems less explored is putting all of it together: Unison-style
 identity, MPS-style per-user notation, and Enso-style multiple views, with
 every non-semantic thing in independent, mergeable side tables.
 The full list of influences and prior work, for every feature, is in
-[CREDITS.md](CREDITS.md).
+[CREDITS.md](../docs/language/CREDITS.md).
 
 ## Open questions
 
@@ -388,7 +388,7 @@ The full list of influences and prior work, for every feature, is in
 Data types, `match`, `fold`, inferred types with effects (`Choice`,
 `Console`, `Diverge`), typed holes with a palette that can't produce a type
 error, and two real programs (eight queens, a small computer algebra system):
-see [LANGUAGE.md](LANGUAGE.md) and `npm run lang`.
+see [LANGUAGE.md](../docs/language/LANGUAGE.md) and `npm run lang`.
 
 ## Layout
 

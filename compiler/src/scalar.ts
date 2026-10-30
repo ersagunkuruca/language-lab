@@ -6,7 +6,7 @@
 // effects, and nothing that might not finish. That's exactly what a GPU or
 // plain WebAssembly can run without a garbage collector, so this one
 // lowering feeds both: wasm.ts prints it as a WebAssembly module, and a
-// shader backend would print it as WGSL (see projectional/COMPILER.md).
+// shader backend would print it as WGSL (see docs/design/targets/COMPILER.md).
 //
 // With `records`, the profile also takes records of those: a data type
 // with one case whose fields are Float64s, Bools or records again (a
@@ -1174,7 +1174,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt ? { dflt: expr(dflt, env, f, false) } : {}) };
   }
 
-  // ---- searches with several answers (projectional/WASM.md, W4d)
+  // ---- searches with several answers (docs/design/targets/WASM.md, W4d)
   //
   // A function that chooses (`one of`), or calls one that does, outside
   // a handler, has several answers. It's lowered as the JS backend's `$k`

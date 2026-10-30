@@ -7,7 +7,7 @@ nodes are planned by the relation solver at compile time and written out as
 straight-line arithmetic; a relational one whose mode has at most one
 answer is its mode plan written out (`src/modes.ts`), and the rest run
 in the relational interpreter. Why it's built this way, and what comes next, is
-in [`projectional/COMPILER.md`](../projectional/COMPILER.md).
+in [`docs/design/targets/COMPILER.md`](../docs/design/targets/COMPILER.md).
 
 The scalar profile (Float64 and Bool functions: arithmetic, `if`, lets,
 calls) also compiles to WebAssembly (`src/scalar.ts`, `src/wasm.ts`), with
@@ -26,7 +26,7 @@ npm run gaps    # calc: evaluator vs compiled vs the hand-written ideal
 npm run gpu     # the WGSL output on a GPU (WebGPU in Chromium) vs the evaluator
 ```
 
-[`GAPS.md`](GAPS.md) compares what the compiler emits for a bigger program
+[`GAPS.md`](../docs/reports/GAPS.md) compares what the compiler emits for a bigger program
 (`examples/calc`, a calculator) with JavaScript written by hand, and ranks
 what's missing. It's redone at each compiler milestone.
 

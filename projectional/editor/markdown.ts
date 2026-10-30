@@ -2,11 +2,13 @@
 // headings (with GitHub's anchor ids), paragraphs, lists, fenced code,
 // tables, images, links, rules, and inline code, bold and italics.
 // Relative links to other .md files point at the repository on GitHub,
-// except docs that have their own page next to the editor (PAGES).
+// read from the doc's own folder (`dir`, from the repository root), except
+// docs that have their own page next to the editor (PAGES).
 // `?[caption](index.html?embed&…)` on a line of its own is the editor
 // embedded (editor/main.ts, ?embed): a live snippet in the page.
 
-const REPO = "https://github.com/ersagunkuruca/language-lab/blob/main/projectional/";
+const REPO = "https://github.com/ersagunkuruca/language-lab/blob/main/";
+let base = REPO;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -17,7 +19,8 @@ const PAGES: Record<string, string> = { "LEARN.md": "learn.html", "TUTORIAL.md":
 const href = (u: string) => {
   if (/^[a-z]+:|^#/.test(u) || !/\.md(#.*)?$/.test(u)) return u;
   const [file, hash] = u.split("#");
-  return PAGES[file] ? PAGES[file] + (hash ? "#" + hash : "") : new URL(u, REPO).href;
+  const page = PAGES[file.split("/").pop()!];
+  return page ? page + (hash ? "#" + hash : "") : new URL(u, base).href;
 };
 
 function inline(s: string): string {
@@ -32,7 +35,8 @@ function inline(s: string): string {
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
 }
 
-export function markdown(src: string): string {
+export function markdown(src: string, dir = ""): string {
+  base = REPO + dir;
   const lines = src.split("\n");
   const out: string[] = [];
   let i = 0;

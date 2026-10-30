@@ -1,5 +1,5 @@
 // C for the lowering wasm.ts, wgsl.ts and js-scalar.ts print (scalar.ts),
-// printed as C: native programs (projectional/NATIVE.md). Float64 is
+// printed as C: native programs (docs/design/targets/NATIVE.md). Float64 is
 // `double`, Bool is an `int32_t` 0 or 1, a record is a struct passed by
 // value, a let is a local, and `if` and a match are statements. Lower with
 // `{ records: true }` to have records, `{ data: true }` for data too.
