@@ -108,8 +108,9 @@ test("a clock: a part that reads now() runs again each frame, and only it, both 
   const e = draw("evaluator"), c = draw("compiled");
   assert.deepEqual(c, e);
   assert.deepEqual(e.seen, ["<p>5 seconds</p>", "<p>5 seconds</p>", "<p>6 seconds</p>", "<p>7 seconds</p>"]);
-  // Only the part reading the clock ran again, once per frame.
-  assert.equal(e.ran.length, 3);
+  // Only the part reading the clock ran again, and it is reported only
+  // when what it shows changed (L106): 5 seconds at 5400 is no change.
+  assert.deepEqual(e.ran, ["6", "7"]);
 });
 
 test("fetching in a page: a view keeps what it shows until the reply, a handler runs again then, both ways", async () => {
