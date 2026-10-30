@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, type Id } from "../src/model.ts";
+import { get, type Id, type NodeOf } from "../src/model.ts";
+import { JOBS } from "../src/lang/std.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
-import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { equal, makeRunner, runMain, type Data, type Value } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
 
@@ -15,7 +15,8 @@ const dir = join(root, "examples/numbers");
 const p = loadProgram(dir);
 const names = p.pres.names;
 const info = infer(p.code, names);
-const reps: Representation[] = JSON.parse(readFileSync(join(dir, "representations.json"), "utf8"));
+// Written in the program (REPRESENTATIONS.md, L108).
+const reps = representationsIn(p.code, info, names, p.own.defs);
 const [unary, binary, int] = reps;
 const variant = (n: string) => Object.keys(names).find((k) => names[k] === n && p.code.nodes[k]?.kind === "variant")!;
 const [ZERO, SUCC, EMPTY, EVEN, ODD] = ["zero", "succ", "empty", "even", "odd"].map(variant);
@@ -62,6 +63,21 @@ test("match and fold on Nat, done on Binary, see the same cases as on Nat", () =
     const which = call("match Nat′", bits(n), () => ["zero"], (m: Value) => [nums(m)]);
     assert.equal(which, n === 0 ? "zero" : n - 1);
   }
+});
+
+// The representations are definitions in the program (REPRESENTATIONS.md,
+// L108a): each one's jobs, read back, say which definition does what, at
+// what cost; and a job whose definition has the wrong type is refused.
+test("the program writes its representations, and a job of the wrong type is refused", () => {
+  assert.deepEqual(reps.map((r) => [r.name, names[r.type] ?? r.type, r.meaning && names[r.meaning]]), [["unary", "Nat", null], ["binary", "Binary", "meaning"], ["int", "Int", "natural"]]);
+  assert.equal(names[binary.impl[SUCC]], "succ′");
+  assert.equal(names[int.impl.match], "match Nat (Int)");
+  assert.deepEqual([binary.cost[p.named("multiply")], unary.cost.fold, binary.cost.space], ["log² n", "n", "log n"]);
+  const succJob = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
+    && (p.code.nodes[n.args[1]] as { target?: Id }).target === binary.impl[SUCC]) as NodeOf<"call">;
+  const wrong = { ...p.code, nodes: { ...p.code.nodes, [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("number′") } } };
+  const errors = infer(wrong, names).errors.map((e) => e.message);
+  assert.deepEqual(errors, ["this does (Nat) -> Nat's job at Binary, so its type is (Binary) -> Binary, not (Binary) -> Float64"]);
 });
 
 test("the chooser picks Int for main, and represent onto binary gives the same answers", () => {

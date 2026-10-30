@@ -195,6 +195,19 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
 - **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
 
+## Representations
+
+A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
+
+- **Representation** (type). A way to store a type t as another type r, written as one definition: representation(meaning, space, jobs), where meaning says what an r stands for and each job says which definition does one of t's jobs at r, and at what cost. The compiler picks, per program, the representation whose jobs cost least; nothing changes where the values are used. REPRESENTATIONS.md.
+- **Cost** (type). What a job of a representation costs, in the size of the value: constant, logarithmic, polylogarithmic (log² n), linear, linearithmic (n log n) or quadratic.
+- **job** : `(a, b, Cost) -> Job c d`. One of a representation's jobs: t's constructor or function `of`, done at r by `by`, which has of's type with r for t, at this cost.
+- **as written** : `(a, Cost) -> Job b c`. One of a representation's jobs: t's constructor or function, done by its own definition, at this cost.
+- **match by** : `(a, Cost) -> Job b c`. A representation's match: by(value, one function per case of t), at this cost.
+- **fold by** : `(a, Cost) -> Job b c`. A representation's fold: by(value, one function per case of t, given the folded rest), at this cost.
+- **match as written** : `(Cost) -> Job a b`. A representation's match, done as t's own, at this cost.
+- **fold as written** : `(Cost) -> Job a b`. A representation's fold, done as t's own, at this cost.
+
 ## Searching: Choice
 
 A computation with the Choice effect may have no answer, one, or several, like a search. one of picks any item, fail drops a path, and all, first, count and optional decide what to do with the answers, which ends the Choice. A function that may have no answer (value at, find, divide fractions) has Choice too, so first(() => value at(m, k), () => 0) gives a default.

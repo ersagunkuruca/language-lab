@@ -80,13 +80,23 @@ which one each value gets. A program may still pin one, as it can today
 
 ## Steps
 
-1. **L108a.** A std `Representation t r` record type and its constructor,
-   with jobs keyed by T's constructors, `match`, `fold` and named functions,
-   and `costs` on the ladder (1, log n, …, n²). The checker types each job at
-   R against T's. `represent.ts` reads a program's representation
-   definitions into the records it already takes. Numbers' unary, binary
-   and int Nat move from representations.json into the example as code
-   (test: same choices, same outputs).
+1. **L108a, built.** std's `Representation t r`, with one constructor,
+   `representation(meaning, space, jobs)`. Its jobs are a `List (Job t r)`:
+   - `job(add, add′, logarithmic)`: t's job done at r by another
+     definition;
+   - `as written(nat, linear)`: t's job done by its own definition;
+   - `match by(f, constant)` and `fold by(f, linear)`, with
+     `match as written` and `fold as written` for t's own.
+   Each job carries a `Cost`, which is the ladder: constant, logarithmic,
+   polylogarithmic, linear, linearithmic or quadratic. A meaning of
+   `(n) => n` is t itself. The checker says when a job's definition
+   doesn't have t's job's type with r for t ("this does (Nat) -> Nat's job
+   at Int, so its type is (Int) -> Int"). `representationsIn`
+   (represent.ts) reads a program's representation definitions into the
+   records the chooser and the rewrite already took. Numbers' `unary`,
+   `binary` and `int` are now definitions in the example; they read back
+   identical to the old representations.json, which is gone, and lab and
+   the tests take them from the program.
 2. **L108b.** The library's Map and Set trees (library-reps.ts) move into
    the prelude as definitions, and the side table goes.
 3. **L108c.** A program pins a representation for one value or one

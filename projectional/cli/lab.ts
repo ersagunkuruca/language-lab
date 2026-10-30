@@ -17,8 +17,8 @@
 // Abort nothing handles prints its reason and exits with 1 (LANGUAGE.md,
 // "The world"). `--main <name>` picks another entry point.
 //
-// A folder with a representations.json (NUMBERS.md) runs and compiles on
-// the representation the chooser picks for each type `main` uses, e.g.
+// A program that writes representations (REPRESENTATIONS.md) runs and
+// compiles on the representation the chooser picks for each type `main` uses, e.g.
 // Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -35,7 +35,7 @@ import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
-import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -59,7 +59,7 @@ const USAGE = `usage:
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
   --main <name>    the entry point (default: main)
-  --as-defined     ignore representations.json and run the definitions as written
+  --as-defined     ignore the program's representations and run the definitions as written
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
 interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
@@ -73,15 +73,15 @@ function load(path: string): Program {
   if (!existsSync(path)) fail(`no such program: ${path}`);
   if (statSync(path).isDirectory()) {
     const p = loadProgram(path);
-    const table = join(path, "representations.json");
-    const reps = existsSync(table) ? JSON.parse(readFileSync(table, "utf8")) as Representation[] : [];
-    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info: infer(p.code, p.pres.names, undefined, p.options), reps, options: p.options };
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    return { title: basename(resolve(path)), code: p.code, own: p.own.defs, names: p.pres.names, info, reps: representationsIn(p.code, info, p.pres.names, p.own.defs), options: p.options };
   }
   // opened on top of the modules, as the editor does
   const r = fromFile(readFileSync(path, "utf8"), () => LIBRARY.code);
   if ("error" in r) fail(`can't open ${path}: ${r.error}`);
   const names = baseNames(r.file.names);
-  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info: infer(r.code, names, undefined, checkOptions), reps: [] };
+  const info = infer(r.code, names, undefined, checkOptions);
+  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs) };
 }
 
 // The program from `main`, with each type it uses stored the way the
@@ -94,7 +94,10 @@ function represented(p: Program, main: Id): Program {
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
   // becomes the tree its code builds (GAPS.md M2).
-  const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return !b || p.code.nodes[b]?.kind !== "typedef"; });
+  // A representation's own definition says which definitions do the jobs:
+  // it is read, not rewritten or run, so the represented program leaves it out.
+  const reps = new Set(p.reps.map((r) => r.def));
+  const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
   const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps);
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
@@ -107,6 +110,7 @@ function represented(p: Program, main: Id): Program {
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
   if (!chosen.length) return p;
+  code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
   // The library's representations may call the constructors they stand for.
   const options = p.options as Parameters<typeof infer>[3];
   const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });

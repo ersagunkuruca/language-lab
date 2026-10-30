@@ -41,7 +41,7 @@ test("wc, run and compiled: counts, totals, options, a missing file, standard in
   }
 });
 
-// examples/numbers is written on Peano Nat; its representations.json lets
+// examples/numbers is written on Peano Nat; its representations let
 // lab store Nat as an Int (NUMBERS.md), so 18! runs, evaluated and compiled.
 test("lab runs and compiles numbers on the representation the chooser picks", () => {
   const numbers = join(import.meta.dirname, "../examples/numbers");

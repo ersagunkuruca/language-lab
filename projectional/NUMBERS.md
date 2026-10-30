@@ -63,8 +63,9 @@ value, with the cost of converting between them counted.
 - **Is this a new language feature?** No new node kinds. A representation
   is an ordinary data type, an ordinary function `meaning : R → T` (the
   *abstraction function*, Hoare 1972), and ordinary definitions that do T's
-  jobs on R. What ties them together is a side table keyed by ids
-  (`representations.json`), like names, comments and hints.
+  jobs on R. What ties them together is one more definition,
+  `representation(meaning, space, jobs)` (REPRESENTATIONS.md, L108a): it
+  was a side table keyed by ids (`representations.json`) until then.
 - **What does the program look like?** Exactly as it does now. `factorial`
   is written on Peano naturals and never mentions binary. The rewrite onto
   binary is code → code (`src/lang/represent.ts`): the result is an
@@ -301,8 +302,8 @@ thing in the evaluator (float64) and another on the GPU, and the GPU test
 can only check "close" (compiler/gpu.ts, within 2e-3). The decisions:
 
 - **A representation of `Float64`, not a new type.** The program is written
-  on `Float64` as now, and `Float32` is chosen for it in
-  `representations.json`, as Binary is for `Nat`. Uniformity: no second
+  on `Float64` as now, and `Float32` is chosen for it as a
+  representation, as Binary is for `Nat`. Uniformity: no second
   number type to convert to and from, and no node that looks different.
   It is marked approximate, so the chooser never picks it by cost alone;
   a program (or the shader page) asks for it.
@@ -549,8 +550,8 @@ from one entry in the table. The program still says `zero` and `succ`.
 The chooser now picks `int` for `numbers`' `main` (its `number` job is 1,
 against binary's log n). `main` (18!, 2⁵⁰, is 100 even) takes about 6 ms
 evaluated, against about 13 to 45 ms on binary, and about 0.03 ms compiled,
-against 0.09 ms. `lab run` and `lab compile` choose too: a program folder with a
-`representations.json` runs on the chooser's pick for each type `main`
+against 0.09 ms. `lab run` and `lab compile` choose too: a program that
+writes representations runs on the chooser's pick for each type `main`
 uses (`lab run examples/numbers` prints 18! instead of running out of
 memory), and `--as-defined` runs the definitions as written.
 
@@ -930,7 +931,7 @@ In order. Each stage says when to start it.
 NUMBERS.md                        this plan
 src/lang/represent.ts             Representation, represent() (the rewrite), choose() (the chooser)
 src/lang/numbers-demo.ts          npm run numbers
-examples/numbers/                 the example as code.json + names + comments + representations.json
+examples/numbers/                 the example as code.json + names + comments; its representations are definitions in it
 test/numbers.test.ts              laws, the rewrite, encoding by running meaning backwards
 ../compiler/test/represent.test.ts the rewritten program compiles and agrees with the evaluator
 ```

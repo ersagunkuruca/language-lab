@@ -1,14 +1,13 @@
 // One program, two representations of its numbers (NUMBERS.md).
 // Run: node src/lang/numbers-demo.ts   (or npm run numbers)
 
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../io.ts";
 import { get, ID_PATTERN } from "../model.ts";
 import { infer } from "./infer.ts";
 import { loadProgram } from "./load.ts";
 import { relate, showTerm } from "./relate.ts";
-import { choose, represent, type Representation } from "./represent.ts";
+import { choose, represent, representationsIn } from "./represent.ts";
 import { renderBlocks } from "./render.ts";
 import { runMain } from "./run.ts";
 
@@ -16,9 +15,10 @@ const section = (title: string) => console.log(`\n${"=".repeat(72)}\n${title}\n$
 const indent = (s: string) => s.replace(/^/gm, "    ");
 const dir = join(root, "examples/numbers");
 const p = loadProgram(dir);
-const reps: Representation[] = JSON.parse(readFileSync(join(dir, "representations.json"), "utf8"));
 const names = p.pres.names;
 const info = infer(p.code, names);
+// Written in the program (REPRESENTATIONS.md, L108).
+const reps = representationsIn(p.code, info, names, p.own.defs);
 const show = (d: string, i = info, code = p.code) => console.log(indent(renderBlocks(code, p.pres, i, p.named(d))) + "\n");
 const timed = (label: string, f: () => void) => { const t = performance.now(); f(); console.log(`    (${label}: ${(performance.now() - t).toFixed(1)} ms)`); };
 const out = (s: string) => console.log("    > " + s);

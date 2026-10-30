@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, PATH, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
@@ -466,6 +466,45 @@ export const IO = {
 // formula reads, it doesn't write. Writing is Update, a world effect.
 const cellOf = (a: Type): Type => ({ t: "con", id: CELL, args: [a] });
 const pathOf = (whole: Type, part: Type): Type => ({ t: "con", id: PATH, args: [whole, part] });
+// Representations (REPRESENTATIONS.md, L108): a type t stored as another
+// type r, written as one definition, `representation(meaning, space,
+// jobs)`. The meaning says what an r stands for; each job says which
+// definition does one of t's jobs at r, and at what cost; the compiler
+// picks, per program, the representation whose jobs cost least
+// (represent.ts `choose`). Costs are the ladder represent.ts orders by.
+export const COST = typedef("std.cost", "Cost", [], [
+  ["constant", []], ["logarithmic", []], ["polylogarithmic", []], ["linear", []], ["linearithmic", []], ["quadratic", []],
+]);
+const jobType = (t: Type, r: Type): Type => ({ t: "con", id: JOB, args: [t, r] });
+const costType: Type = { t: "con", id: COST, args: [] };
+export const REPRESENTATION = typedef("std.representation", "Representation", ["t", "r"], [
+  ["representation", [
+    ["meaning", ([t, r]) => tfun([tref(r)], tref(t), [])],
+    ["space", () => tref(COST)],
+    ["jobs", ([t, r]) => tref(LIST, tref(JOB, tref(t), tref(r)))],
+  ]],
+]);
+export const REPRESENTATION_V = "std.representation.representation";
+// A job's two definitions have the same type but for t, which is r in the
+// second: the checker says so (infer.ts), since a type can't.
+const jobOf = (op: string, name: string, given: (s: Subst) => Type[]) => builtin(op, name, (s) => {
+  const t = s.fresh(), r = s.fresh();
+  return fn([...given(s), costType], jobType(t, r), s.freshRow());
+}, (...xs: unknown[]) => ({ tag: `builtin.${op}`, fields: xs }));
+export const JOBS = {
+  // t's job (a constructor or a function on t) done at r by `by`.
+  job: jobOf("representation.job", "job", (s) => [s.fresh(), s.fresh()]),
+  // t's job done as t's own definition does it, at this cost.
+  asWritten: jobOf("representation.asWritten", "as written", (s) => [s.fresh()]),
+  // A match on t, done at r: by(value, one function per case of t).
+  matchBy: jobOf("representation.matchBy", "match by", (s) => [s.fresh()]),
+  // A fold on t, done at r, the same way.
+  foldBy: jobOf("representation.foldBy", "fold by", (s) => [s.fresh()]),
+  // A match or a fold on t done as t does it, at this cost.
+  matchAsWritten: jobOf("representation.matchAsWritten", "match as written", () => []),
+  foldAsWritten: jobOf("representation.foldAsWritten", "fold as written", () => []),
+};
+
 export const CELL_OPS = {
   cell: builtin("cells.cell", "cell", (s) => { const a = s.fresh(); return fn([a], cellOf(a), s.freshRow([CELLS])); }),
   formula: builtin("cells.formula", "formula", (s) => { const a = s.fresh(); return fn([fn([], a, { effs: [CELLS, DIVERGE], tail: null })], cellOf(a), s.freshRow([CELLS])); }),
@@ -639,7 +678,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

@@ -19,7 +19,7 @@ import { planSolve } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { determinism, oneAnswer, solveMode } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
-import { BOOL, CELL_OPS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
+import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
@@ -1028,6 +1028,30 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fl.results!.length && d.results.every((r, i) => lam.params.indexOf(r) === fl.results![i]);
     if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
     else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
+  }
+  // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
+  // does t's job `of` at r, so `by` has of's type with r for t.
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "call" || n.args.length !== 3) continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || f.target !== JOBS.job) continue;
+    const job = info.typeOf.get(n.id), of = info.typeOf.get(n.args[0]), by = info.typeOf.get(n.args[1]);
+    if (!job || !of || !by) continue;
+    const j = s.zonk(job);
+    if (j.t !== "con" || j.args.length !== 2) continue;
+    const t = s.zonk(j.args[0]), r = j.args[1];
+    if (t.t !== "con") continue;
+    const at = (x: Type): Type => {
+      x = s.zonk(x);
+      if (x.t === "con") return x.id === t.id ? r : { ...x, args: x.args.map(at) };
+      if (x.t === "fn") return { ...x, params: x.params.map(at), ret: at(x.ret) };
+      return x;
+    };
+    const want = at(of);
+    try { const c = s.clone(); c.unify(want, by); } catch (e) {
+      if (!(e instanceof TypeError)) throw e;
+      err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
+    }
   }
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));

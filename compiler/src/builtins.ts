@@ -9,7 +9,7 @@
 
 import type { Id } from "../../projectional/src/model.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ALGEBRAIC_OPS, ARITH, CELL_OPS, COMPARE, INT_OPS, IO, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ALGEBRAIC_OPS, ARITH, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -134,6 +134,9 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.mul]: { js: op(([a, b]) => `$int.mul(${a}, ${b})`), scalar: INT },
   [INT_OPS.neg]: { js: op(([a]) => `$int.neg(${a})`), scalar: INT },
   [INT_OPS.abs]: { js: "impl", scalar: INT },
+  // A representation's jobs (REPRESENTATIONS.md) are read by the compiler,
+  // not run; as values they are records.
+  ...Object.fromEntries(Object.values(JOBS).map((id) => [id, { js: "impl", scalar: no("a representation is read by the compiler, not run") }])),
   [INT_OPS.shiftDown]: { js: "impl", scalar: no("Fixed on WASM and C is FIXED-POINT.md step 3, an i64 where the range is known") },
   [INT_OPS.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: INT },
   [INT_OPS.quotient]: { js: "partial", scalar: INT },

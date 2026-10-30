@@ -67,6 +67,9 @@ export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 
 export const CELL = "type.cell";
 // A place inside a value (L98): Path whole part.
 export const PATH = "type.path";
+// One job of a representation (REPRESENTATIONS.md, L108): Job t r, a job
+// on t done at r.
+export const JOB = "type.job";
 
 export class TypeError extends Error {}
 

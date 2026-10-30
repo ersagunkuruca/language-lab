@@ -16,7 +16,7 @@
 
 import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { CONS, INT_OPS, LIST, S, TEXT_OPS } from "./std.ts";
+import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
 
 export interface Representation {
@@ -47,9 +47,58 @@ export interface Representation {
   // match on the job's list whose cons case doesn't use the rest is that
   // (library-reps.ts, GAPS.md M3).
   heads?: Record<Id, Id>;
+  // The definition that writes it, for one a program writes (L108).
+  def?: Id;
 }
 
 export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
+// The ladder as the language writes it: std's Cost, in the same order.
+const COSTS = ["constant", "logarithmic", "polylogarithmic", "linear", "linearithmic", "quadratic"].map((c) => `${COST}.${c}`);
+
+// The representations a program writes (REPRESENTATIONS.md, L108): each
+// definition whose body is `representation(meaning, space, jobs)`, read
+// into the record the chooser and the rewrite take. Its name is the
+// definition's; t and r are what the checker made of it. A meaning that is
+// `(x) => x` is t itself, with its own costs.
+export function representationsIn(code: Code, info: Info, names: Record<Id, string> = {}, defs: Id[] = code.defs): Representation[] {
+  const out: Representation[] = [];
+  const refOf = (id: Id): Id | null => { const n = code.nodes[id]; return n?.kind === "ref" ? n.target : null; };
+  const costOf = (id: Id): string | undefined => { const i = COSTS.indexOf(refOf(id) ?? ""); return i < 0 ? undefined : LADDER[i]; };
+  for (const d of defs) {
+    const def = code.nodes[d];
+    const body = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
+    if (body?.kind !== "call" || refOf(body.fn) !== REPRESENTATION_V) continue;
+    const ty = info.typeOf.get(body.id), t = ty && info.subst.zonk(ty);
+    if (t?.t !== "con" || t.args.length !== 2) continue;
+    const [m, space, jobs] = body.args;
+    const lam = code.nodes[m];
+    const same = lam?.kind === "lambda" && lam.params.length === 1 && refOf(lam.body) === lam.params[0];
+    // t is what the meaning gives; for `(x) => x`, the type whose
+    // constructors the jobs name.
+    const listed: Id[] = [];
+    for (let l = code.nodes[jobs]; l?.kind === "call" && refOf(l.fn) === CONS; l = code.nodes[l.args[1]]) listed.push(l.args[0]);
+    const named = listed.map((j) => { const n = code.nodes[j]; return n?.kind === "call" ? refOf(n.args[0]) : null; });
+    const [ty0, as] = t.args.map((a) => info.subst.zonk(a));
+    const of = ty0.t === "con" ? ty0.id : named.map((v) => v && info.owner.get(v)).find(Boolean);
+    if (!of || (!same && as.t !== "con")) continue;
+    const rep: Representation = { def: d, name: names[d] ?? d, of, type: same || as.t !== "con" ? of : as.id, meaning: same ? null : refOf(m), canonical: true, impl: {}, cost: {} };
+    const sp = costOf(space);
+    if (sp) rep.cost.space = sp;
+    // The jobs, a list written out: cons(job, rest) down to nil.
+    for (const id of listed) {
+      const j = code.nodes[id];
+      if (j?.kind !== "call") continue;
+      const kind = refOf(j.fn), a = j.args.map(refOf), cost = costOf(j.args[j.args.length - 1]);
+      const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : null;
+      if (!key) continue;
+      const by = kind === JOBS.job ? a[1] : kind === JOBS.matchBy || kind === JOBS.foldBy ? a[0] : null;
+      if (by) rep.impl[key] = by;
+      if (cost) rep.cost[key] = cost;
+    }
+    out.push(rep);
+  }
+  return out;
+}
 const rank = (c: string | undefined) => (c === undefined ? LADDER.length : LADDER.indexOf(c));
 
 // A builtin type such as Float64 has no cases: its jobs are its builtins.

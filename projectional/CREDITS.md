@@ -188,6 +188,7 @@ Proposed in [STABLE-REFERENCES.md](STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-
 | What | Label | Who and where |
 |---|---|---|
 | Write the mathematical definition (Peano `Nat`, cons lists) and let the compiler run a fast representation underneath; meaning vs. representation | Ersagun's idea | Prior art: Hoare, "Proof of correctness of data representations" (1972), abstraction functions; Wadler's views (POPL 1987), credited in NUMBERS.md. |
+| A representation written as one definition: `representation(meaning, space, jobs)`, each job typed as t's with r for t (std.ts, represent.ts `representationsIn`, L108a) | Prior art / Influence | Hoare's abstraction function (1972) for `meaning`; Lean's `@[implemented_by]` and GHC's rewrite rules for a definition done by a faster one; the jobs as a record, as an implementation of an interface is here (Haskell's type class dictionaries). Written fresh. |
 | `Int` as `from(Nat) \| minus one minus(Nat)` | Adapted | Lean's definition of `Int`. NUMBERS.md. |
 | Rich number systems, Clifford algebras instead of separate complex/quaternion/dual types | Ersagun's idea | Geometric algebra: W. K. Clifford (1878), David Hestenes; Dorst, Fontijne and Mann, *Geometric Algebra for Computer Science*. |
 | Exact continued-fraction arithmetic | Adapted | R. W. Gosper, HAKMEM (MIT AI Memo 239, 1972), item 101. Credited in `src/lang/cells-programs.ts`, `reactive.html`, NUMBERS.md. e's expansion is Euler's. |
