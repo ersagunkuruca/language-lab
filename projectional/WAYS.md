@@ -106,9 +106,9 @@ benchmark fits the exponent). Ways use the same ones.
 **A written field is a way like any other.** By default the cheapest way
 wins, even over a field the program wrote. That is what makes `polar`
 share one sincos when a program uses both sin and cos. The editor shows
-the pick per field, as it will show the representation chooser's, and
-lets the program pin one. A pin is kept in the side table, not in the
-code.
+the pick per field, as it will show the representation chooser's. It
+never lets a program pick one (Ersagun 2026-10-30, on representations:
+"I don't want explicit selection, I want the compiler to choose").
 
 ## The ways must agree
 
@@ -187,7 +187,8 @@ That is not enough where bits matter:
    C55's one direction per use, so sin alone is a plain sine.
 4. **Agreement checked (T7).** Each field's ways tested against each
    other, cached by hash.
-5. **The editor** shows the pick per field and lets a program pin one.
+5. **The editor** shows the pick per field. There is no explicit
+   selection: the compiler chooses (Ersagun 2026-10-30).
 
 Credit when built: Knuth, "A generalization of Dijkstra's algorithm",
 *Information Processing Letters* 6(1), 1977. Haskell's `MINIMAL` and
