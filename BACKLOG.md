@@ -29,8 +29,11 @@ New items land here until the next triage gives them a lane and a priority.
 | I59 | Lockstep `step`'s Run shows Fixed as raw integers, `pair(fixed(3579139), fixed(214748364))`, with its inputs empty; `main` prints decimals | QA10 L1 (QA-2026-10-29b.md) | 2026-10-29 |
 | I60 | Embed rough edges: Copy embed link only in the Program tab; a data type's embed (Tumble `Board`) shows the page's Restart / Save page buttons; the editor's footer hint takes a line of every embed | QA10 L3 (QA-2026-10-29b.md) | 2026-10-29 |
 | I62 | Every page load logs a 404 for /favicon.ico, the only console error | QA10 L5 (QA-2026-10-29b.md) | 2026-10-29 |
-| I63 | Nested to-do: each item's tick / add a step / up / remove wrap onto 2-3 lines in the Run pane | QA10 L6 (QA-2026-10-29b.md) | 2026-10-29 |
 | I64 | The browser smoke fails on main at letNodes ("a call picked in the graph"): it waits for the dice `die` call node, which since auto-fold (#619) sits inside a handler drawn folded. Pick a call that's drawn, or unfold its frame first; editor/smoke.ts is the smoke-replacement thread's, so agree with it who edits | smoke thread, 2026-10-29 | 2026-10-29 |
+| D2 | Restyle the unit converter page (examples/converter) to Tumble's level: its own style sheet, classes instead of inline styles (Ersagun 2026-10-30) | thread "Restyle the web demos" | 2026-10-30 |
+| D3 | Restyle the two dice page (examples/dice) the same way | thread "Restyle the web demos" | 2026-10-30 |
+| D4 | Restyle the Pig page (examples/pig) the same way | thread "Restyle the web demos" | 2026-10-30 |
+| D5 | Restyle the guitar pedal page (examples/pedal) the same way | thread "Restyle the web demos" | 2026-10-30 |
 
 ## E: Editor
 
@@ -551,6 +554,12 @@ roadmap's Done table; this section keeps about a week.
 | L92 | The Mandelbrot shader zooms (Ersagun 2026-10-27): `zoom(time)` takes the picture from 3 wide (the whole set) into Seahorse Valley at −0.7436 + 0.1318i, 0.006 wide, and back out every 30 seconds, by powers so the speed looks the same at every depth; escape allows 300 steps for the detail deep in. Deeper needs more than the GPU's f32 | #524 |
 | L93 | Bug: shaders smoke on main, the GPU 0.45 from the evaluator on the Mandelbrot shader after #524. zoom used 1 − cos(θ), which near θ = 0 keeps only the GPU cos's error (WGSL allows 2^-11), and a pixel on the set's edge then escapes on a different step. Now a smoothstep triangle wave, only + − · abs mod and one power, 0.0005 from the evaluator | #527 |
 | L94 | The Mandelbrot zoom back to Ersagun's simpler form, 3 · 0.002^((1 − cos(τ·t/30))/2), and the GPU check (editor/picture.ts) lets up to 1 point in 20 differ, because on the set's edge the GPU's cos (good to 2^-11, each vendor's own) flips a point's step count. Corrects L93's reasoning: the error is cos's, in any form, not 1 − cos's cancellation | #528 |
+
+### Demos
+
+| id | item | PR |
+|---|---|---|
+| D1 | The nested to-do restyled (Ersagun 2026-10-30: long named buttons on each item, the tick a separate button, add a step taking the top field's title). The tick is the round box before the title; ↑, + and × are small buttons that show on hover; + opens a field under the item for the step's title (Enter adds, Escape closes); a count and a bar at the top. The look is one `styles` definition of rules, every element named by its class, so the code has no inline styles. html.ts focuses an `autofocus` element mounted after the page loaded. Also closes I63 (the buttons wrapping onto 2-3 lines, QA10 L6) | this PR |
 
 ### Coordinator and process
 
