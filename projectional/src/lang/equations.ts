@@ -28,6 +28,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { ARITH, S, TRUE } from "./std.ts";
+import { INT } from "./types.ts";
 
 export type Expr = ReturnType<typeof v> | ReturnType<typeof num> | ReturnType<typeof call>;
 export interface Eq { lhs: Expr; rhs: Expr; law?: boolean }
@@ -111,6 +112,10 @@ export function numeric(code: Code, id: Id, env: Env = new Map(), ctx: Ctx = fre
   switch (n?.kind) {
     case "lit":
       if (typeof n.value !== "number") throw new NotEquations("only numbers can be solved for");
+      // A whole number makes the generic + − · around it Int's (L38), which
+      // the relational interpreter solves in whole numbers; the solver here
+      // is Float64's.
+      if (n.of === INT) throw new NotEquations("whole numbers are solved by the relational interpreter");
       return num(n.value);
     case "ref": {
       const t = code.nodes[n.target];

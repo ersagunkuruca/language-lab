@@ -283,7 +283,11 @@ Float64 never mix without `as float64` or `whole part`. Where there is no
 whole answer there is no answer: `quotient` and `remainder` by zero, a
 negative `power`, `whole part` of infinity and `read whole number` of
 "007" are `Choice`, not a crash or a NaN. Division rounds down, so
-`remainder` has the divisor's sign.
+`remainder` has the divisor's sign. Run backwards, Int stays whole: `x · 3
++ 1 = 13` gives 4 and `= 12` gives none, whether it is written with Int's
+own operations or the generic ones at an Int literal. The checker plans it
+the way it runs, in the relational interpreter, not as Float64's
+equations.
 
 Text has `length`, `slice`, `characters`, `split`, `join all`, `find`
 (`Choice`: the part may not be there), `comes before`, `character code`
