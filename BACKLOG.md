@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | I65 (write several results in the editor), then E160, I29, E159 |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): I39a, I39b, L29, L97's next step, L38, L44, L55, L58, L47 |
+| L Language and library | "Language lane" | ▶ ten tasks (Ersagun 2026-10-30 "Take 20 more tasks"): L29, L97's next step, L38, L44, L55, L58, L47 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -116,7 +116,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I39 | Found building Tumble: (a) modes.ts reads `at once(settle(board))` as "ends, at most one answer" while the checker types it Diverge; (b) relate overflows the stack running Tumble's `clear` backwards, and test/agreement.test.ts's budget counts steps, not depth or memory | examples/tumble | P2 | M | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way), and `inverse(f, …)` typed from f at the call instead of Diverge | L14 | P3 | M | |
 
 ### Ersagun's current asks

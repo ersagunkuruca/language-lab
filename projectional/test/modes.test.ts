@@ -101,6 +101,48 @@ test("a recursive call on something that isn't smaller may not end", () => {
   assert.ok(steps >= 2000, `${steps} steps`);
 });
 
+// BACKLOG I39a, found building Tumble: a handler running a recursion that
+// may not end, called on a value built at the call (`at once(settle(b))`),
+// was read as ending while the checker typed it Diverge. It doesn't happen
+// today; this keeps the verdict and the type together for that shape.
+test("a handler running a recursion that may not end, given a built value, may not end, as typed", () => {
+  const k = new Lang();
+  const Ask = k.effect("Ask", [["ask", [["n", () => k.tref("type.number")]], () => k.tref("type.number"), "later"]]);
+  const Box = k.type("Box", [], [["box", [["v", () => k.tref("type.number")]]]]);
+  const play = k.def("play out");
+  k.define(play, k.fn(["b"], (b) => k.match(b, [{ variant: Box.v.box, names: ["n"], body: ([n]) =>
+    k.if(k.call(S.less, n, k.lit(0)), n, k.call(play, k.call(Box.v.box, k.call(Ask.op.ask, n)))) }])));
+  const atOnce = k.def("at once");
+  k.define(atOnce, k.fn(["b"], (b) => k.handle(k.call(play, b), [{ variant: Ask.op.ask, names: ["n", "rest"], body: ([n, rest]) => k.call(rest, k.call("builtin.sub", n, k.lit(1))) }])));
+  const outer = k.def("outer");
+  k.define(outer, k.fn(["n"], (n) => k.call(atOnce, k.call(Box.v.box, n))));
+  const code = base(k.code);
+  const info = infer(code, k.names);
+  assert.deepEqual(info.errors, []);
+  for (const d of [atOnce, outer]) {
+    const t = info.typeOf.get(d)!;
+    assert.ok(t.t === "fn" && t.eff.effs.includes(DIVERGE), k.names[d]);
+    const v = analyzer(code, k.names).ofMode(d, ["0"]);
+    assert.equal(v.ends, false, `${k.names[d]}: ${describeVerdict(v)}`);
+  }
+});
+
+// BACKLOG I39b, found building Tumble: run backwards from a board of holes,
+// clear's goals each answer at once, and nested one call per goal until
+// the stack ran out. They now go on from a fresh stack past a depth.
+test("Tumble's clear, run backwards from a board of holes, searches within its budget instead of overflowing", () => {
+  const p = load("tumble");
+  const info = infer(p.code, p.pres.names);
+  const r = makeRunner(p.code, info, { print: () => {} });
+  const first = <T>(xs: Iterable<T>) => { for (const x of xs) return x; throw new Error("none"); };
+  const board = first(r.call(r.value(p.named("new board"))));
+  const holes = (v: unknown): unknown => typeof v === "number" ? -1 : v && typeof v === "object" && "fields" in v ? { ...v, fields: (v as { fields: unknown[] }).fields.map(holes) } : v;
+  const out = holes(first(r.call(r.value(p.named("clear")), board)));
+  let steps = 0;
+  assert.doesNotThrow(() => { for (const _ of relate(p.code, p.named("clear"), { out }, { spend: () => ++steps < 5000 })) break; });
+  assert.ok(steps >= 5000, `${steps} steps`);
+});
+
 test("one of a list built in place, asked for what isn't in it, ends", () => {
   const k = new Lang();
   const f = k.def("f");
