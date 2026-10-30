@@ -3218,7 +3218,11 @@ function navigator(p: Presentation) {
 // height. Dragging a gutter sets them; this browser remembers them.
 const DOCK = "projectional-dock";
 const dock: Record<string, number> = (() => { try { return JSON.parse(localStorage.getItem(DOCK) ?? "{}"); } catch { return {}; } })();
-const dockStyle = () => Object.entries(dock).map(([k, v]) => `--${k}: ${v}px`).join("; ");
+// A page shown in Run gets a wider side of its own, page-w, so it isn't a
+// narrow strip five screens tall (QA10 M1); dragging it sets that width.
+const PAGE_W = 560;
+const dockStyle = (page: boolean) => Object.entries({ ...dock, ...(page ? { "side-w": dock["page-w"] ?? PAGE_W } : {}) })
+  .filter(([k]) => k !== "page-w").map(([k, v]) => `--${k}: ${v}px`).join("; ");
 // The shown definition's tab: a newly opened one goes right after it.
 let openAt = -1;
 const MAX_TABS = 6;
@@ -3233,12 +3237,12 @@ document.addEventListener("pointerdown", (e) => {
   const pane = k === "text-h" ? grid.querySelector<HTMLElement>(".p-text")! : grid.querySelector<HTMLElement>(k === "nav-w" ? ".p-nav" : ".side")!;
   const r = pane.getBoundingClientRect();
   const start = k === "text-h" ? r.height : r.width;
-  const limit = k === "text-h" ? [80, grid.clientHeight - 200] : k === "nav-w" ? [140, 420] : [240, 640];
+  const limit = k === "text-h" ? [80, grid.clientHeight - 200] : k === "nav-w" ? [140, 420] : [240, k === "page-w" ? 960 : 640];
   g.classList.add("dragging");
   const mv = (ev: PointerEvent) => {
     const d = k === "text-h" ? e.clientY - ev.clientY : k === "nav-w" ? ev.clientX - e.clientX : e.clientX - ev.clientX;
     dock[k] = Math.round(Math.min(limit[1], Math.max(limit[0], start + d)));
-    grid.style.setProperty(`--${k}`, `${dock[k]}px`);
+    grid.style.setProperty(`--${k === "page-w" ? "side-w" : k}`, `${dock[k]}px`);
   };
   const up = () => {
     g.classList.remove("dragging");
@@ -3314,6 +3318,8 @@ function draw() {
     ["guide", "Guide", () => [guide()]],
   ];
   const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
+  // The program is a page, shown in Run (pageSection): the side is wider.
+  const onPage = !errorsIn(info) && !holesIn(info) && !!pageMain(ownDefs(), info, pres().names);
   const status = h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note);
   const restore = () => {
     SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
@@ -3358,7 +3364,7 @@ function draw() {
           h("a", { class: "btn", href: "learn.html", title: "Learn the language: pick where to start, from a five-year-old's first steps to the whole language (LEARN.md)" }, "Learn"),
           h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
           h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells")))),
-    h("main", { class: "grid is-typed", style: dockStyle(), "data-pane": ui.pane },
+    h("main", { class: "grid is-typed", style: dockStyle(onPage), "data-pane": ui.pane },
       navigator(p),
       graphMenu(info),
       h("div", { class: "gutter", "data-gutter": "nav-w", style: "grid-area: g1", "aria-hidden": "true" }),
@@ -3372,7 +3378,7 @@ function draw() {
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
             ui.text === "blocks" ? h("span", { class: "hint" }, TOUCH ? "tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "hover for types; click a □ to fill it; double-click a name to open it") : null),
           h("div", { class: "body" }, textView))),
-      h("div", { class: "gutter", "data-gutter": "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
+      h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
         h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
         h("section", { class: "panel", "aria-label": shown[1] },
