@@ -60,6 +60,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [WAYS.md](design/numbers/WAYS.md) | Several ways to compute one operation, the compiler picking by cost | partly built (L96) |
 | [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | partly built: language done, editor I65, compiler C55 |
 | [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | partly built (L97) |
+| [MATRICES.md](design/numbers/MATRICES.md) | Small matrices: what matrix times vector needs | partly built (L44) |
 | [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
 | [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
 
@@ -79,6 +80,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [MODES.md](design/relations-and-effects/MODES.md) | Mode analysis: in which order a function run backwards does its work, how many answers, whether it ends | built (L11; editor display E160) |
 | [PATTERNS.md](design/relations-and-effects/PATTERNS.md) | Nested patterns as a view over nested matches | partly built (E61 steps 3, 4) |
 | [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | partly built (L54, L71, C40) |
+| [HOSTS.md](design/relations-and-effects/HOSTS.md) | Hosts as handlers: named rows (L58) and Console, Files, Network declared in std (L55) | proposal |
 
 ### Compiler and targets
 
