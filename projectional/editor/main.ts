@@ -2572,6 +2572,7 @@ const shareOver = (info: T.Info, from: Id, slot: Id) =>
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
+    page: pageMain(ownDefs(), info, pres().names) === ui.def,
     select: (id: Id | null) => select(id),
     open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
     canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
