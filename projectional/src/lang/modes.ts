@@ -37,6 +37,7 @@ import { children, ownerOfTypeParts, subtree } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
+import { countedCalls } from "./counting.ts";
 import { INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
 
 // How many answers: whether there can be none, and whether there can be
@@ -225,6 +226,16 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   type Arc = [number, number, boolean];
   interface Graph { from: string; to: string; arcs: Arc[] }
   const graphs: Graph[] = [];
+  // A definition's calls of itself that count an Int towards a bound.
+  const counts = new Map<Id, Set<string>>();
+  const countedOf = (d: Id) => {
+    let c = counts.get(d);
+    if (!c) {
+      const body = nodes[(nodes[d] as NodeOf<"def">).body ?? ""];
+      counts.set(d, (c = body?.kind === "lambda" ? countedCalls(code, d, body) : new Set()));
+    }
+    return c;
+  };
   const memo = new Map<string, Verdict>();
   const running = new Set<string>();
 
@@ -547,6 +558,12 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
               if (i >= 0) arcs.push([i, j, strictly]);
             }
           });
+          // Called forward in its own mode, an Int it counts towards a
+          // bound shrinks (counting.ts, L46), as infer.ts takes it.
+          if (calleeKey === ctx.key && fn.k === "def" && fn.id === ctx.def && all.every((i) => known.has(String(i)))) {
+            const c = countedOf(fn.id);
+            all.forEach((j) => { if (c.has(`${n.id}:${j}`)) arcs.push([j, j, true]); });
+          }
           if (!plansOnly) graphs.push({ from: ctx.key, to: calleeKey, arcs });
         };
         return {
