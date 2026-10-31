@@ -458,7 +458,9 @@ class Later {
   constructor(effect, op, args) { this.effect = effect; this.op = op; this.args = args; }
 }
 export const $later = (effect, op, args) => new Later(effect, op, args);
-export function $handleL(effect, later, ops, answers, escapes, body) {
+// `done`: the case for the normal finish (L57), given the computation's
+// value however many rests ran before it, and not an escape's.
+export function $handleL(effect, later, ops, answers, escapes, body, done = null) {
   const h = { effect, answers }, it = body();
   const run = (send) => {
     const at = handlers.length, d = $rec.d;
@@ -470,7 +472,7 @@ export function $handleL(effect, later, ops, answers, escapes, body) {
       $rec.d = d;
       return escapes[e.op](...e.args);
     } finally { handlers.length = at; }
-    if (r.done) return r.value;
+    if (r.done) return done ? done(r.value) : r.value;
     const m = r.value;
     if (!(m instanceof Later) || m.effect !== effect || !(m.op in later)) throw new Error(`nothing handles ${m.op ?? m}`);
     let used = false;
@@ -488,7 +490,8 @@ export function $handleL(effect, later, ops, answers, escapes, body) {
 // generator too, which passes on what isn't its own (and the answer back
 // in), and whose cases and rest are generators. A case answered at once
 // is a plain function, answered in place as $handle's are.
-export function* $handleLG(effect, later, ops, answers, escapes, body) {
+// (`done` is a generator here when it waits too, `doneWaits`.)
+export function* $handleLG(effect, later, ops, answers, escapes, body, done = null, doneWaits = false) {
   const h = { effect, answers }, it = body();
   function* run(send) {
     for (;;) {
@@ -501,7 +504,7 @@ export function* $handleLG(effect, later, ops, answers, escapes, body) {
         $rec.d = d;
         return yield* escapes[e.op](...e.args);
       } finally { handlers.length = at; }
-      if (r.done) return r.value;
+      if (r.done) return !done ? r.value : doneWaits ? yield* done(r.value) : done(r.value);
       const m = r.value;
       if (m instanceof Later && m.effect === effect && m.op in later) {
         let used = false;
