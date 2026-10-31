@@ -467,6 +467,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| W4 | The tutorial's "What's confusing, and what could be simpler" moved to docs/design/CONFUSING.md: it's for us, not for readers; the tutorial's opening says what it is and links there | this PR |
 | W3 | GUIDE.md in plainer words: short sentences, one idea per paragraph, steps as numbered lists; section 8 adds a button with Add one after (E91) instead of the old cut-and-append detour, and section 9 quotes today's held-type refusal, not the old "pinned" one | this PR |
 | W2 | learn.html (LEARN.md): a front page that picks a level, five-year-old, new to functional programming, hands-on guide or the whole language, with a read-only `two dice` embedded; the guide links to it. The editor's Learn button still opens guide.html until the Editor lane points it here | #656 |
 | W1 | The Learn page links to the tutorial's page (tutorial.html) and the tutorial back to the guide, instead of to their markdown on GitHub; first of the Learn pages plan (thread "Make the Learn page and tutorial readable") | #655 |

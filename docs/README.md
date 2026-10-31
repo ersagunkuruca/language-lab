@@ -31,7 +31,7 @@ updated; their findings are rows in the backlog.
 | [README.md](../README.md) | The repository: folders, the goal, planning, credits | current |
 | [LEARN.md](learn/LEARN.md) | The front page that picks a level ([learn.html](https://ersagunkuruca.github.io/language-lab/learn.html)) | current |
 | [GUIDE.md](learn/GUIDE.md) | A hands-on tour of the editor, doing real edits on the dice program ([guide.html](https://ersagunkuruca.github.io/language-lab/guide.html)) | current |
-| [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects, with a list of what's still confusing ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
+| [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
 | [RUNNING.md](learn/RUNNING.md) | What happens when you press Run, and every other way a program runs | current |
 | [projectional/README.md](../projectional/README.md) | The prototype: the program is the tree; layout of `projectional/`, commands | current |
 
@@ -48,6 +48,12 @@ updated; their findings are rows in the backlog.
 ## Design notes
 
 Each note says why, then gives the plan as steps; each step is a backlog row.
+
+### Across areas
+
+| doc | what it is | status |
+|---|---|---|
+| [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
 
 ### Numbers
 
