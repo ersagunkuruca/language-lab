@@ -330,6 +330,8 @@ cancelled run loses nothing.
 
 ## 6. Later: tests in the language
 
+The design is [TESTS-IN-THE-LANGUAGE.md](../design/testing/TESTS-IN-THE-LANGUAGE.md) (T7a to T7e).
+
 The editor already keeps values to run a definition with
 (`examples.json`, by definition hash), shows what every node makes of
 them, and checks a program incrementally (`infer(code, names, {from,

@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side done (#737); Inbox triaged (this PR); next I91, I82, I81, I84, L29, L46, then P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765), I81 (#766), the L69 note (#767) and the L43 grades note (this PR) done; next L43b blade masks (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -112,7 +112,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it). `set(field, record, value)` exists (LANGUAGE.md); the demo builder didn't use it, so check what is still missing (several fields at once, the editor) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | P3 | S | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
 
 ### Ersagun's current asks
@@ -121,17 +120,16 @@ all of these.
 |---|---|---|---|---|---|
 | L107 | **Open question, not decided** (Ersagun 2026-10-30: "I didn't ask to lift strict positivity BTW, I'm not sure if we should lift that"): drop strict positivity, so a data type may take itself as a function's input in its fields (`knot = wrap(f: knot → Float64)`), with taking one apart carrying Diverge so a function without Diverge still always finishes. Recursive data types themselves (a type holding itself, directly or through others) are allowed and always were; TUTORIAL.md §3.8 says so. If decided yes: LANGUAGE.md "Two rules", TUTORIAL.md §3.8 and the guarantees test | Ersagun 2026-10-30 | P3 | S | open question |
 | L108 | Representations written in the language (REPRESENTATIONS.md). L108a to L108c done: a representation is a definition, the compiler chooses, no explicit selection (#679 to #682). Left: L108d, laws, after T7; the editor half is E159 | Ersagun 2026-10-30 | P2 | M | 3 of 4 steps |
-| T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, cached by definition hash (Unison). Design note first. Unblocks L108d, L97e | TESTING.md T7 | P2 | L | |
+| T7 | Tests in the language ([TESTS-IN-THE-LANGUAGE.md](docs/design/testing/TESTS-IN-THE-LANGUAGE.md)): T7a `Check` in std, the small-values enumerator and `lab test` (L, M); T7b accepted answers in examples.json (L, S); T7c results cached by hash, locally and in CI (L and T, M); T7d the editor's tick, difference and accept button (E, M); T7e example sweeps moved to answers and laws, `--compiled` (T, M). Unblocks L108d, L97e | TESTING.md T7 | P2 | L | design done |
 
 ### Numbers (NUMBERS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | P2 | M | |
 | L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). Open: a generic op made Int by a parameter's type alone (no Int literal) is still planned as Float64's equations, because the plan reads the code and not the types | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md), Ersagun 2026-10-31): `Mat2` to `Mat4` done (L44a). Rotors, reflections, projections and PGA motions from the Clifford tables done (L44b); reading a function's matrix done (L44c, src/lang/linear.ts). Next: the compiler stores linear functions as matrices (C lane, C30b/c); then a linear-algebra library for any size | LANGUAGE-REVIEW-2026-10-24 | P1 | M | steps 1-2 done |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher, after L41 | NUMBERS.md stage 4 | P1 | M | step 1 done |
-| L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next: grade inference on the units machinery (Bounce passes vectors, spins and rotors as one 8-part type) | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors done |
+| L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next, which parts can be nonzero ([GRADES.md](docs/design/numbers/GRADES.md)): L43b blade masks inferred in src/lang/grades.ts (L, M); L43c compiled JS and WGSL store only the masked parts, with L41 (C, M); L43d the editor names a value's mask (E, S); L43e checked masks only if Ersagun wants them. Bounce passes vectors, spins and rotors as one 8-part type | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors done, design done |
 | L41 | Table products expanded at compile time, zero terms dropped (with lane C). Measured in Bounce: a Cl(3, 0) product is 0.10 ms compiled, about 200 times a hand-written one | LANGUAGE-REVIEW-2026-10-24, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | P1 | M | |
 | L51 | Tensors as the general algebra (NUMBERS.md stage 6) | NUMBERS.md stage 6 | P1 | L | after C30 |
 | L97 | `polar` as the relation behind Trig (POLAR.md): L97a to L97c4 done (Trig's polar, unpolar, asin, acos; polar given x, y answered by unpolar). Next: L97d Fixed's CORDIC; L97e complex laws after T7 | Ersagun 2026-10-28 | P2 | M | 3 of 5 steps, step 3 finished |
@@ -160,7 +158,7 @@ all of these.
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
 | L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await` | LANGUAGE-NEEDS Part 1 | P2 | L | after L54 |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
-| L69 | Foreign definitions: a typed declaration with its row and a body per target (Gleam's `@external`, Elm's ports) | LANGUAGE-NEEDS §5 | P2 | M | |
+| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)): a program's own effect answered by a host file per target. L69a `hosts/js.js` in the evaluator and compiled JS, results checked at the border, `lab hosts` skeleton (L, M); L69b C and WebAssembly (C, M); L69c the editor's "needs its host" (E, S); L69d optional, std's world operations as host files (L, M). Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | design done |
 | L62 | Branches with no world effects marked pure by a row constraint, so the runtime may run them on another core | LANGUAGE-NEEDS Part 1 | P3 | S | after L71 |
 | L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs a pipeline | LANGUAGE-NEEDS Part 1 | P3 | M | |
 
@@ -168,9 +166,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | P2 | M | |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | P3 | L | |
-| L46 | Bounded counting is total (an Int moving towards its bound), so raymarch loses `with fuel` | LANGUAGE-REVIEW §7 | P2 | M | |
+| L46b | Raymarch's `march` and `shadow` count steps in an Int and `colour` drops `with fuel` (bounded counting is total since L46). Waits on Int in the scalar profile outside shaders (C66's WebAssembly int32 step; plain JS and C too), or the editor's CPU-side pictures and the scalar tests refuse it | L46 | P3 | S | |
 
 ### Grammars, modules and sharing
 

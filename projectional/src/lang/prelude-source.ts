@@ -700,6 +700,41 @@ export function buildPrelude(): Module {
   k.define(cliffordRegressive, k.fn(["algebra", "a", "b"], (al, a, b) =>
     k.call(cliffordUndual, al, k.call(cliffordOuter, al, k.call(cliffordDual, al, a), k.call(cliffordDual, al, b)))));
 
+  // Parts by blade (BACKLOG I81): a blade is named by its vectors,
+  // numbered from 1 in the order of the algebra's squares, so in Cl(3, 0)
+  // [1, 2] is e₁₂ and in projective geometric algebra ([1, 1, 1, 0])
+  // [1, 2, 3] is e₁₂₃ and 4 is e₀. Naming them in another order flips the
+  // sign once per swap: [2, 1] is e₂₁ = −e₁₂. Bounce wrote solid(0, 0, 0,
+  // 2, 0, 1, 0, 0) for 2e₁₂ + e₁₃, and Spacetime named all 16 parts to
+  // read one. A vector named twice, or past the last, is no blade: its
+  // part reads 0 and writing it changes nothing.
+  // How many swaps put the vectors in order: −1 for an odd count, else 1.
+  const orderSign = k.def("vectors order sign");
+  k.define(orderSign, k.fn(["vectors"], (vs) => k.fold(vs, [
+    { variant: NIL, names: [], body: () => k.lit(1) },
+    { variant: CONS, names: ["v", "later"], results: [null, "the later ones' sign"], body: ([v, later], [, r]) => k.fold(later, [
+      { variant: NIL, names: [], body: () => r! },
+      { variant: CONS, names: ["w", "more"], results: [null, "with more"], body: ([w], [, m]) => k.if(k.call(S.less, w, v), k.call(B.neg, m!), m!) },
+    ]) },
+  ])));
+  // The blade with those vectors, as clifford algebra lists them: for each
+  // position 1 … n, whether it is among them.
+  const namedBlade = (sq: Id, vs: Id) => k.call(map, k.call(S.range, k.call(INT_OPS.toNumber, k.call(length, sq))), k.fn(["position"], (i) =>
+    k.fold(vs, [
+      { variant: NIL, names: [], body: () => FALSE },
+      { variant: CONS, names: ["v", "others"], results: [null, "among the others"], body: ([v], [, r]) => k.call(S.or, k.call(S.equal, v, n.add(i, k.lit(1))), r!) },
+    ])));
+  // The sign is 0 for no blade: a blade with fewer vectors than were named.
+  const byBlade = (al: Id, x: Id, vs: Id, body: (sign: Id, element: Id) => Id) => parts(al, ({ squares: sq, blades }) =>
+    k.let("blade", namedBlade(sq, vs), (bl) =>
+      k.let("element", k.call(elementOf, blades, bl, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)), (e) =>
+        k.let("sign", k.if(k.call(S.equal, k.call(gradeOf, bl), k.call(INT_OPS.toNumber, k.call(length, vs))), k.call(orderSign, vs), k.lit(0)), (sg) => body(sg, e)))));
+  const cliffordPart = k.def("clifford part");
+  k.define(cliffordPart, k.fn(["algebra", "x", "vectors"], (al, x, vs) => byBlade(al, x, vs, (sg, e) => n.mul(sg, along(x, e)))));
+  const cliffordWithPart = k.def("clifford with part");
+  k.define(cliffordWithPart, k.fn(["algebra", "x", "vectors", "value"], (al, x, vs, v) => byBlade(al, x, vs, (sg, e) =>
+    k.if(k.call(S.equal, sg, k.lit(0)), x, added(x, scaledBy(n.sub(n.mul(sg, v), along(x, e)), e))))));
+
   // Small matrices (BACKLOG L44): the multiplication table of n × n
   // matrices from their matrix units, given as rows of basis elements.
   // E_ij · E_jl = E_il, and any other product of two units is 0, so the
@@ -1037,7 +1072,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1152,6 +1187,8 @@ export function buildPrelude(): Module {
     [cliffordDual]: "x's dual by complement: e_A becomes ± e_Ā, the blade of the vectors A doesn't have, signed so that e_A ∧ dual(e_A) is the pseudoscalar. It works in projective geometric algebra, whose pseudoscalar squares to 0.",
     [cliffordUndual]: "Undoes clifford dual: clifford undual(algebra, clifford dual(algebra, x)) is x.",
     [cliffordRegressive]: "a ∨ b, the regressive product, undual(dual(a) ∧ dual(b)): in projective geometric algebra the line through two points, or the point where two lines meet in the plane.",
+    [cliffordPart]: "x's part on a blade named by its vectors, numbered from 1 in the order of the algebra's squares: clifford part(algebra, x, [1, 2]) reads e₁₂. In projective geometric algebra ([1, 1, 1, 0]) e₀ is vector 4. Another order flips the sign once per swap ([2, 1] reads −e₁₂), and a vector named twice reads 0.",
+    [cliffordWithPart]: "x with its part on a blade, named by its vectors as clifford part names it, set to `value`, the other parts kept: clifford with part(algebra, zero, [1, 2], 2) is 2e₁₂. Several calls build a multivector by blade.",
     [cliffordProduct]: "a · b, the geometric product in the algebra (clifford algebra makes one): table product with the algebra's table.",
     [cliffordAlgebra]: "A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",

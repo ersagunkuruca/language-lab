@@ -245,3 +245,42 @@ test("clifford exp by series when b² has a pseudoscalar part, evaluated and com
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// Parts by blade (BACKLOG I81): blades named by their vectors, from 1, the
+// sign flipping once per swap; a vector named twice is no blade.
+test("clifford part and clifford with part: read and write by blade, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const M = k.type("Multivector", [], [["multivector", ["s", "e1", "e2", "e12", "e3", "e13", "e23", "e123"].map((p) => [p, num] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number>) => k.call(M.v.multivector, ...Array.from({ length: 8 }, (_, i) => k.lit(parts[i] ?? 0)));
+  const basis = def("cl3 basis", () => k.list(...Array.from({ length: 8 }, (_, i) => at({ [i]: 1 }))));
+  const algebra = def("cl3", () => k.call(lib("clifford algebra"), k.list(...[1, 1, 1].map((x) => k.lit(x))), k.x(basis)));
+  const vs = (...xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
+  const all = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8 };
+  const part = (x: Id, ...v: number[]) => k.call(lib("clifford part"), k.x(algebra), x, vs(...v));
+  const withPart = (x: Id, value: number, ...v: number[]) => k.call(lib("clifford with part"), k.x(algebra), x, vs(...v), k.lit(value));
+  const cases: [string, () => Id, string][] = [
+    ["e12", () => part(at(all), 1, 2), "4"],
+    ["e21", () => part(at(all), 2, 1), "-4"],
+    ["scalar", () => part(at(all)), "1"],
+    ["e312", () => part(at(all), 3, 1, 2), "8"],
+    ["e132", () => part(at(all), 1, 3, 2), "-8"],
+    ["e11", () => part(at(all), 1, 1), "0"],
+    ["e4", () => part(at(all), 4), "0"],
+    ["e11 written", () => withPart(at(all), 9, 1, 1), "multivector(1, 2, 3, 4, 5, 6, 7, 8)"],
+    ["2e12", () => withPart(at({}), 2, 1, 2), "multivector(0, 0, 0, 2, 0, 0, 0, 0)"],
+    ["2e12 + e13", () => withPart(withPart(at({}), 2, 1, 2), 1, 1, 3), "multivector(0, 0, 0, 2, 0, 1, 0, 0)"],
+    ["e21 set to 4", () => withPart(at(all), 4, 2, 1), "multivector(1, 2, 3, -4, 5, 6, 7, 8)"],
+  ];
+  const names = cases.map(([n, x]) => { def(`case ${n}`, () => k.call(SHOW_ANY, x())); return `case ${n}`; });
+  const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
+  assert.deepEqual(got, cases.map(([, , want]) => want));
+  const path = join(mkdtempSync(join(tmpdir(), "parts-")), "parts.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});

@@ -12,7 +12,10 @@ because the answer changes more than tables.
 reflections, projections and PGA motors, is L44b (MATRICES.md layer 2).
 The outer product, the left contraction, grade selection, the dual by
 complement and the regressive product are I89, each a table with lines
-left out or a reweighing of the blades.
+left out or a reweighing of the blades. A part is read and written by
+its blade's vectors, `clifford part(algebra, x, [1, 2])` and `clifford
+with part(algebra, x, [1, 2], 2)`, numbered from 1 in the order of the
+squares, the sign flipping once per swap (I81).
 Open: table products expanded at compile time (L41).
 
 ## The idea, briefly

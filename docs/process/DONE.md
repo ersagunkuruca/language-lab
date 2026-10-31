@@ -14,6 +14,7 @@ superseded.
 
 | id | item | why |
 |---|---|---|
+| I82 | Changing one field of a record means writing all of them (Bounce's `Body`) | Already there: `set(field, record, value)` changes one field of any record, and several fields are sets chained, `set(b, set(a, r, 1), 2)` (checked 2026-10-31 on an 8-field record). The demo builder didn't use it. Closed by the Language lane with the T7 note's PR (#764). |
 | C25 | Audio: a sound is a function on blocks of samples, played live by a page's `listen` (AUDIO.md) | all five stages done (A1 to A5 below); the pedal plays at apps/pedal.html, 39× real time compiled |
 | E77 | A fraction prints as `ratio(1, 2)` | done as L74 |
 | L19 | Numbers stage 1 (Int as data, Rational) and stage 2 (overloading by name) | superseded: Rational was L39, one `+` for every number type is L38 and L40h's interfaces |
@@ -365,6 +366,9 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I81 | Multivectors read and written by blade: `clifford part(algebra, x, [1, 2])` and `clifford with part(algebra, x, [1, 2], value)`, vectors numbered from 1 in the order of the squares, the sign flipping once per swap (`[2, 1]` reads −e₁₂); a repeated or out-of-range vector reads 0 and writes nothing (prelude, LIBRARY.md, ALGEBRA-TABLES.md). | #766 |
+| I91 | `clifford reflect` as its own definition checks in about 750 relate steps now (was 6,400, over the agreement test's 5,000): the algebra's tables are built once since I79 (#753). Constructions' `mirror` is a definition again, not written inline in `made`. | #765 |
+| L46 | Bounded counting is total: an Int counted by a positive literal towards a bound its guard compares it with (a literal, or an input kept) ends, read through and, or and not (src/lang/counting.ts, used by infer.ts `terminates` and modes.ts). Raymarch keeps `with fuel` for now: an Int step count is refused by the scalar profile outside shaders (WASM, C, plain JS), so dropping it is L46b. | #763 |
 | C30d (language side) | std Array's two ends, `first of array`, `rest of array` and `push front`, and `array of List`'s jobs rewritten on them: cons, match and length constant, fold a walk. Ersagun's two-ended array list; the compiled views are the Compiler lane's #734. | #737 |
 | I93 | The prelude's `show decimals(x, places)`: a Float64 as text with a fixed number of places, rounded half away from 0, trailing zeros kept, never -0 (as JavaScript's toFixed and C's printf("%.*f")). Spacetime wrote its own `rounded`. | #735 |
 | I83 | The prelude's `item at(list, position, otherwise)` and `replace at(list, position, by)`, counting from 0, with no Choice outside the list (the otherwise, or the list as it was). Bounce, Tumble and Constructions each wrote their own `nth`; they can use these. Evaluated and compiled. test/item-at.test.ts | #733 |

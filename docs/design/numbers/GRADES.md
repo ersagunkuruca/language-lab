@@ -1,0 +1,107 @@
+# Which parts of a multivector can be nonzero (design note, 2026-10-31)
+
+**Status (2026-10-31).** Proposal, BACKLOG L43 ("grade inference"), from
+CLIFFORD-DEMOS-2026-10-31 B3. Steps L43b to L43e are on the row. One
+question for Ersagun at the end; L43b doesn't wait on it.
+
+## The problem
+
+In Bounce a position, a spin and a rotor are all `Solid`, the whole
+8-part multivector of `Cl(3, 0)`. A position needs 3 of the 8 parts and a
+rotor 4, so every vector carries 5 zeros, and every product multiplies
+them. Nothing stops a rotor going where a vector goes either, but that
+is the smaller half: the program is right, it is only slow.
+
+## Why not units
+
+The row said "on the units machinery", and units.ts was the first place
+to look. It doesn't fit. A unit is a vector of exponents, and every rule
+is linear (a product adds exponents), so inference is solving linear
+equations. Grades aren't linear: a vector times a vector is a scalar plus
+a bivector, so the answer is a set, and `+` takes a union. That is
+abstract interpretation over a finite lattice, not a linear system.
+
+## The idea: a blade mask per value, inferred
+
+For an algebra known before running (`clifford algebra(squares, basis)`
+on literals, which stage.ts already evaluates, C65), each value of the
+algebra's type gets a **blade mask**: the set of blades its part can be
+nonzero on. There are 2ⁿ blades, so for the algebras the demos use
+(n ≤ 5) a mask is one 32-bit number. It is finer than grades, and
+exactly as cheap.
+
+| expression | its mask |
+|---|---|
+| a literal or a record built by position | the positions not written as the literal 0 |
+| `a + b`, `a − b` | mask(a) ∪ mask(b) |
+| `s · a`, `−a` for a number s | mask(a) |
+| `clifford product(al, a, b)` | every blade of `i · j` for i in mask(a), j in mask(b) whose table entry isn't 0 |
+| `clifford reverse`, `involute`, `inverse` | mask(a) |
+| `clifford exp(al, b)` | the closure of {1} ∪ mask(b) under products (a fixpoint: masks only grow, and there are 2ⁿ blades) |
+| `clifford part`, `with part` (I81) | read: a number. With part: mask(x) ∪ {that blade} |
+| a function's input | the union of what its callers give (whole-program, as stage.ts specialises) |
+| a recursion or a fold | the fixpoint, starting from the empty mask |
+
+Because the table is known, the product rule is exact, not an estimate
+from grades: in PGA a product that would land on e₀e₀ = 0 drops out by
+itself, which grade arithmetic alone can't see.
+
+In Bounce a position would come out as {e₁, e₂, e₃} and a rotor as {1,
+e₁₂, e₁₃, e₂₃}; a rotor times a position as {e₁, e₂, e₃, e₁₂₃}, and the
+whole sandwich R x R̃ back as {e₁, e₂, e₃} only if the rule knows R R̃ is
+a scalar, which a mask alone doesn't. So L43b also needs one rule for the
+sandwich: `clifford sandwich(al, r, x)` gives the blades of mask(x)'s
+grades when r is a versor, as a versor's action keeps grades. With up to three
+basis vectors every even element is one (a scaled rotor); beyond that the
+rule falls back to the product rule.
+
+## What uses it
+
+1. **The compiler stores only the masked parts.** A value whose mask is
+   {e₁, e₂, e₃} is three numbers, and a product of two masked values is
+   the products of the masked pairs only, zero terms dropped. That is
+   L41's expansion with masks as its input, and it is a representation
+   the compiler chooses, as Ersagun asked: nothing to write, nothing to
+   select (L108). This is where the 4-of-8 saving comes from.
+2. **The editor says what a value is.** Hovering a value of an algebra's
+   type shows its mask in words: "a vector", "a rotor (even)", "a point"
+   when the algebra names its blades, otherwise the blades.
+3. **Optionally, a check** (the question below).
+
+## Steps
+
+| step | what | lane | size |
+|---|---|---|---|
+| L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
+| L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 | C | M |
+| L43d | The editor shows a value's mask in words | E | S |
+| L43e | Only if Ersagun wants it: a declared mask is checked (the question) | L | S |
+
+## The question for Ersagun
+
+**Should a wrong grade be a type error?** Inferring masks only makes
+programs faster and the editor clearer; it never refuses a program. B3
+also says nothing stops a rotor going where a vector goes. Two ways:
+
+1. **Inferred only (recommended).** No new types, nothing to write.
+   Passing a rotor to a function that then treats it as a vector isn't
+   wrong to the algebra, which multiplies whatever it is given; the
+   editor's hover shows the surprise instead.
+2. **Declared masks, checked.** std gains `Vector of`, `Rotor of` and so
+   on as named masks over an algebra's type, and a definition that says
+   its input is a `Vector of space` refuses a rotor. Closer to klein's
+   separate C++ types per grade; one more thing to write.
+
+## Prior art
+
+- Gaalop (Dietmar Hildenbrand's Geometric Algebra Algorithms Optimizer)
+  works out symbolically which blades of each result can be nonzero and
+  generates code for those only. This note is that, done by the
+  language's own checker.
+- Versor (Pablo Colapinto) and Garamon (Breuils, Nozick and Fuchs) carry
+  blade lists as compile-time types in C++, and klein (Jeremy Ong) has a
+  type per PGA grade.
+- ganja.js (Steven De Keninck) generates its products from the table, as
+  `clifford algebra` does.
+- Abstract interpretation over a finite lattice (Cousot and Cousot, POPL
+  1977) for the fixpoints.
