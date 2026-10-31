@@ -75,6 +75,9 @@ export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";
+// A list's items side by side (BACKLOG C30d, REPRESENTATIONS.md step 5):
+// Array a, read by position in constant time. Plain when its items are.
+export const ARRAY = "type.array";
 // A place inside a value (L98): Path whole part.
 export const PATH = "type.path";
 // One job of a representation (REPRESENTATIONS.md, L108): Job t r, a job

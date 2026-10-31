@@ -45,7 +45,7 @@ export const SECTIONS: Section[] = [
   { title: "Text", intro: "Text is a string of characters. Positions count from 0.",
     ids: [...b("concat", "text.length", "text.slice", "text.characters", "text.split", "text.joinAll", "text.find", "text.less", "text.code", "text.fromCode"), ...prelude("not after", "comes after", "not before")] },
   { title: "Lists and pairs", intro: "A list is written [1, 2, 3]. There are no loops: map, keep and for each go through a list, and fold (a construct, not a function) walks any data.",
-    ids: [...t("list", "pair", "unit"), ...prelude("map", "for each", "keep", "length", "sum", "append", "reverse", "sort", "sort by", "show numbers")] },
+    ids: [...t("list", "pair", "unit"), ...prelude("map", "for each", "keep", "length", "sum", "append", "reverse", "sort", "sort by", "show numbers"), ...b("array.empty", "array.of", "array.items", "array.length", "array.at", "array.push")] },
   { title: "Maps and sets", intro: "A map is kept sorted by key in compare's order, so two maps with the same entries are equal and print the same, whatever order they were built in. Keys are exact: two Float64 keys are one key only when they are the same Float64.",
     ids: [...t("map"), ...prelude("empty map", "as map", "put", "update at", "value at", "remove key", "has key", "merge maps", "keys of", "values of", "entries of", "map size", "smallest key", "largest key"),
       ...t("set"), ...prelude("empty set", "as set", "add item", "remove item", "has item", "set union", "set intersection", "set difference", "items of", "set size", "smallest item", "largest item")] },

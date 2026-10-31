@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { NAMED_ROWS, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { NAMED_ROWS, ARRAY, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"]]) named(node({ id, kind: "builtin", op: id }), name);
 // (Console, Files and Network are effects declared below, with operations.)
 for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
 
@@ -687,6 +687,30 @@ export const TEXT_OPS = {
   less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
   code: choice("text.code", "character code", [str], int, T.code),
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
+};
+
+// Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
+// side, so an item is read by its position in constant time. The value is
+// { tag: ARRAY_TAG, fields: [n, item₀, …] }: the count first, so equal and
+// compare, which walk fields, tell [1] from [1, 2] and order shorter
+// arrays first. `items of array` is the meaning (Array a → List a); `push`
+// copies, and an array a program owns is the compiler's to change in
+// place (C62). Prior art: arrays as a list's representation, as Clojure's
+// vectors and Haskell's Data.Vector stand for sequences.
+export const ARRAY_TAG = "std.array";
+type ArrayValue = { tag: Id; fields: unknown[] };
+const arrayValue = (xs: unknown[]): ArrayValue => ({ tag: ARRAY_TAG, fields: [xs.length, ...xs] });
+const arrayOf = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
+const ofItem = (make: (a: Type, s: Subst) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a, s); return fn(ps, r, s.freshRow(effects)); };
+const arrayItem = builtin("array.at", "item at", ofItem((a) => [[arrayOf(a), int], a], [CHOICE]));
+STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const n = Number(i); return Number.isInteger(n) && n >= 0 && n < (arr.fields[0] as number) ? [arr.fields[n + 1]] : []; };
+export const ARRAY_OPS = {
+  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf(a)]), () => arrayValue([])),
+  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf(a)]), (l: ArrayValue) => arrayValue(itemsOf(l))),
+  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf(a)], list(a)]), (arr: ArrayValue) => listOf(arr.fields.slice(1))),
+  length: builtin("array.length", "array length", ofItem((a) => [[arrayOf(a)], int]), (arr: ArrayValue) => arr.fields[0]),
+  at: arrayItem,
+  push: builtin("array.push", "push", ofItem((a) => [[arrayOf(a), a], arrayOf(a)]), (arr: ArrayValue, x: unknown) => arrayValue([...arr.fields.slice(1), x])),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

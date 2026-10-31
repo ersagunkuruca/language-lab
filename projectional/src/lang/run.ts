@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { WORLD_OPS, ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -982,6 +982,7 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false):
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
+  if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
   // Float64 types show as numbers, as `show fraction` and `show complex` do.
   if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names, asNumber)); return bottom === "1" ? top : `${top}/${bottom}`; }

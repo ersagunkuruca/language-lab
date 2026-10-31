@@ -9,7 +9,7 @@
 
 import type { Id } from "../../projectional/src/model.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ALGEBRAIC_OPS, ARITH, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -149,6 +149,14 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.wholePart]: { js: "partial", scalar: INT },
   [INT_OPS.range]: { js: "impl", scalar: DATA },
   // Text at real sizes (projectional/src/lang/text.ts).
+  // Arrays (std.ts ARRAY_OPS, C30d): std.ts's implementation, on its
+  // { tag, fields: [n, …items] } value; push copies.
+  [ARRAY_OPS.empty]: { js: "impl", scalar: DATA },
+  [ARRAY_OPS.of]: { js: "impl", scalar: DATA },
+  [ARRAY_OPS.items]: { js: "impl", scalar: DATA },
+  [ARRAY_OPS.length]: { js: "impl", scalar: DATA },
+  [ARRAY_OPS.at]: { js: "partial", scalar: CHOOSES },
+  [ARRAY_OPS.push]: { js: "impl", scalar: DATA },
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },
