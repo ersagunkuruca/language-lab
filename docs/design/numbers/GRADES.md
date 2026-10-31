@@ -6,7 +6,8 @@ CLIFFORD-DEMOS-2026-10-31 B3. L43b is built: `src/lang/grades.ts`
 with a function's inputs every part unless the caller gives masks.
 Bounce's algebra arrives inside a `Space`, so it needs the per-space
 copies stage.ts makes (I86) before masks reach it. L43c to L43e are on
-the row; one question for Ersagun at the end.
+the row. Ersagun answered the question at the end (2026-10-31): a wrong
+grade is a type error, each blade combination its own type.
 
 ## The problem
 
@@ -70,7 +71,8 @@ rule falls back to the product rule.
 2. **The editor says what a value is.** Hovering a value of an algebra's
    type shows its mask in words: "a vector", "a rotor (even)", "a point"
    when the algebra names its blades, otherwise the blades.
-3. **Optionally, a check** (the question below).
+3. **A check: masks are types** (Ersagun's answer below). A wrong grade
+   is a type error.
 
 ## Steps
 
@@ -79,22 +81,42 @@ rule falls back to the product rule.
 | L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
 | L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 | C | M |
 | L43d | The editor shows a value's mask in words | E | S |
-| L43e | Only if Ersagun wants it: a declared mask is checked (the question) | L | S |
+| L43e | Masks are types: named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
 
-## The question for Ersagun
+## Ersagun's answer: each blade combination is its own type
 
-**Should a wrong grade be a type error?** Inferring masks only makes
-programs faster and the editor clearer; it never refuses a program. B3
-also says nothing stops a rotor going where a vector goes. Two ways:
+The question was "should a wrong grade be a type error?", with two
+options: masks inferred only, or declared masks checked. Ersagun
+(2026-10-31): "I think we need to make each blade combination a different
+type and make each operation between them keep track of the correct
+types. That's the only solution I can think of that would get rid of the
+bivector vs vector confusion."
 
-1. **Inferred only (recommended).** No new types, nothing to write.
-   Passing a rotor to a function that then treats it as a vector isn't
-   wrong to the algebra, which multiplies whatever it is given; the
-   editor's hover shows the surprise instead.
-2. **Declared masks, checked.** std gains `Vector of`, `Rotor of` and so
-   on as named masks over an algebra's type, and a definition that says
-   its input is a `Vector of space` refuses a rotor. Closer to klein's
-   separate C++ types per grade; one more thing to write.
+That is the blade mask, made a type. A mask is the set of blades a value
+can be nonzero on, so "each blade combination a different type" is one
+type per mask, and the table above is how each operation keeps track of
+it (vector · vector is scalar + bivector; a rotor's sandwich keeps a
+vector a vector). The compiler infers it, so nothing has to be written
+(Ersagun's "the compiler chooses", L108), and it is checked:
+
+- **Where a mask is named.** std gains named masks over an algebra's
+  type, `Vector of space`, `Bivector of space`, `Rotor of space` (the
+  even part), and an algebra can name its own (`Point` in PGA). A
+  definition's input, a record's field or a list's items written with
+  one refuse a value whose inferred mask isn't inside it: a rotor where a
+  `Vector of space` goes is a type error, with both masks in words.
+- **Where a part is read.** `clifford part(e₁₂, x)` when x's mask has no
+  e₁₂ is always 0, so it is refused as a mistake.
+- **Not on mixing.** Adding a vector and a bivector is meaningful in the
+  algebra (a product of two vectors is exactly that), so `+` gives the
+  union and stays allowed. What can't happen any more is that mixed value
+  silently going where a vector was named.
+
+On the GPU each mask becomes its own struct with only its parts: a
+Cl(3, 0) vector is a `vec3`, a bivector a different struct of three, a
+rotor four, and a product of two masked values computes only the pairs
+whose table entry isn't 0 (L43c with L41). Zero parts are never stored
+or multiplied, which is where the 4-of-8 saving comes from.
 
 ## Prior art
 
