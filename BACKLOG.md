@@ -122,7 +122,7 @@ all of these.
 |---|---|---|---|---|---|
 | L107 | **Open question, not decided** (Ersagun 2026-10-30: "I didn't ask to lift strict positivity BTW, I'm not sure if we should lift that"): drop strict positivity, so a data type may take itself as a function's input in its fields (`knot = wrap(f: knot → Float64)`), with taking one apart carrying Diverge so a function without Diverge still always finishes. Recursive data types themselves (a type holding itself, directly or through others) are allowed and always were; TUTORIAL.md §3.8 says so. If decided yes: LANGUAGE.md "Two rules", TUTORIAL.md §3.8 and the guarantees test | Ersagun 2026-10-30 | P3 | S | open question |
 | L108 | Representations written in the language (REPRESENTATIONS.md). L108a to L108c done: a representation is a definition, the compiler chooses, no explicit selection (#679 to #682). Left: L108d, laws, after T7; the editor half is E159 | Ersagun 2026-10-30 | P2 | M | 3 of 4 steps |
-| T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, cached by definition hash (Unison). Design note first. Unblocks L108d, L97e | TESTING.md T7 | P2 | L | |
+| T7 | Tests in the language ([TESTS-IN-THE-LANGUAGE.md](docs/design/testing/TESTS-IN-THE-LANGUAGE.md)): T7a `Check` in std, the small-values enumerator and `lab test` (L, M); T7b accepted answers in examples.json (L, S); T7c results cached by hash, locally and in CI (L and T, M); T7d the editor's tick, difference and accept button (E, M); T7e example sweeps moved to answers and laws, `--compiled` (T, M). Unblocks L108d, L97e | TESTING.md T7 | P2 | L | design done |
 
 ### Numbers (NUMBERS.md)
 
