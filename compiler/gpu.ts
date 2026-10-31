@@ -82,7 +82,9 @@ if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser
 
 // Operations WGSL does exactly as binary32 does: correctly rounded.
 const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not"]);
-function exact(funcs: SFunc[], i: number, seen = new Set<number>()): boolean {
+// A linear map printed as a matrix (C30c) sums in its own order: close, not exact.
+function exact(funcs: SFunc[], i: number, matrices: Set<number>, seen = new Set<number>()): boolean {
+  if (matrices.has(i)) return false;
   if (seen.has(i)) return true;
   seen.add(i);
   const ok = (e: SExpr): boolean => {
@@ -91,7 +93,7 @@ function exact(funcs: SFunc[], i: number, seen = new Set<number>()): boolean {
       case "op": return EXACT.has(e.op) && e.args.every(ok);
       case "if": return ok(e.cond) && ok(e.then) && ok(e.else);
       case "let": return ok(e.value) && ok(e.body);
-      case "call": return e.args.every(ok) && exact(funcs, e.fn, seen);
+      case "call": return e.args.every(ok) && exact(funcs, e.fn, matrices, seen);
       case "make": return e.args.every(ok);
       case "get": return ok(e.rec);
       // A budget counts its calls in f32 on the GPU: whole numbers, exact.
@@ -113,7 +115,7 @@ for (const c of cases) {
   const r32 = makeRunner(in32, infer(in32, w.names), { print: () => {} });
   for (const f of shader.funcs) {
     const i = lowered.funcs.findIndex((g) => g.def === f.def);
-    const isExact = exact(lowered.funcs, i);
+    const isExact = exact(lowered.funcs, i, shader.matrices);
     // Records go in and out as their numbers, in field order.
     const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);
     const inputs = c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));
