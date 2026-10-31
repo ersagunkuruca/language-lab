@@ -24,8 +24,8 @@ saving, 2026-10-27).
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | I87, I88, then I90, I85, I94 (program list) and I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
-| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), I79, C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | Clifford demo rows I95, I89, I92, I83, I93 done; idle until asked |
+| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (array ends, this PR); then Inbox triage, I79 (clifford algebra built once, agreed with the Compiler lane), I84, I82, I81, L29, L46, then P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox

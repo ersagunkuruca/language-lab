@@ -134,11 +134,14 @@ never picks it by cost, and the shader target asks for it.
    of List`), so every target can use it, not only compiled JS. **Built on
    the language side (L116, L117):** std's `Array a` (#723), and the trees
    module publishes `array of List` (src/lang/array-list.ts): meaning
-   `items of array`; nil constant, length constant, cons at the front
-   linear, append linear, match linear, fold quadratic as written; and
-   `hides(cons, 1)`, a new job saying the rest isn't kept as a value, read
-   into the row's `hidden`. The chooser picking it from use and the code
-   for each target are the Compiler lane's C30d.
+   `items of array`; and `hides(cons, 1)`, a new job saying the rest
+   isn't kept as a value, read into the row's `hidden`. Since C30d its
+   jobs are on the array's two ends (std's `first of array`, `rest of
+   array`, `push front`), Ersagun's two-ended array list: nil, length,
+   cons and match constant, fold a walk (linear), append linear. Compiled
+   JS keeps arrays as views on one buffer with free room at both ends
+   (#734). The chooser picking it from use and the code for each target
+   are the Compiler lane's C30d.
 
 ## Prior art (to credit when built)
 

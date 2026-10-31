@@ -159,6 +159,10 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.length]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.at]: { js: "partial", scalar: ARRAYS },
   [ARRAY_OPS.push]: { js: "impl", scalar: ARRAYS },
+  // The two ends (C30d): JS only until WebAssembly and C get them.
+  [ARRAY_OPS.first]: { js: "partial", scalar: no("first of array isn't in WebAssembly or C yet (C30d)") },
+  [ARRAY_OPS.rest]: { js: "impl", scalar: no("rest of array isn't in WebAssembly or C yet (C30d)") },
+  [ARRAY_OPS.pushFront]: { js: "impl", scalar: no("push front isn't in WebAssembly or C yet (C30d)") },
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },
