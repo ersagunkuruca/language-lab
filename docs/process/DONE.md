@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I77 | Graph: a page's main opens on its first rows, not on empty canvas | #741 |
 | I76 | Run: on a page program, a helper's own Run comes first and the page sits under it | #740 |
 | I75 | Run: with every input given, a plain function shows the result a run forwards gives (Tumble's clear) | #738 |
 | E159 | A data type's panel says how main stores it, the chooser's pick as lab check prints it (Nat: stored as int), shown and never chosen | #700 |
