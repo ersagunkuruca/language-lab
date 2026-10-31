@@ -1,6 +1,6 @@
 # Hosts as handlers: named rows and the world's effects in std
 
-**Status (2026-10-30).** A proposal. Nothing built. This note covers BACKLOG
+**Status (2026-10-31).** L55 built (Ersagun agreed 2026-10-31). L58 next. This note covers BACKLOG
 L58 (named rows for the hosts) and L55 (Console, Files and Network declared
 in std). Both come from EFFECTS-REVIEW-2026-10-24.md §2.2 and §2.6, whose
 single idea is: **a host is the outermost handler, and what it handles is
