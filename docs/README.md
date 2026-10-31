@@ -62,6 +62,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [NUMBERS.md](design/numbers/NUMBERS.md) | Many number systems and plain definitions (`zero`/`succ`) that compile fast; "Where this stands" says what's built | partly built (L38, L41 to L44, L51) |
 | [WHAT-NUMBER-MEANS.md](design/numbers/WHAT-NUMBER-MEANS.md) | `Float64`, not JavaScript's `Number`; Number as the family a literal belongs to | built (L85, L86) |
 | [ALGEBRA-TABLES.md](design/numbers/ALGEBRA-TABLES.md) | A type's arithmetic as a multiplication table (complex, dual, Clifford) | built (L40d); led to INTERFACES.md |
+| [GRADES.md](design/numbers/GRADES.md) | Which parts of a multivector can be nonzero: a blade mask per value, inferred from the table; the compiler stores only those parts | proposal (L43b to L43e), one question for Ersagun |
 | [INTERFACES.md](design/numbers/INTERFACES.md) | A type's operations as interfaces with implementations | built (L40e to L40h) |
 | [WAYS.md](design/numbers/WAYS.md) | Several ways to compute one operation, the compiler picking by cost | partly built (L96) |
 | [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | partly built: language done, editor I65, compiler C55 |
