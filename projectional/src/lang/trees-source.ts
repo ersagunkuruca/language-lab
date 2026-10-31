@@ -2,12 +2,14 @@
 // (map-tree.ts), published like the prelude (library/build.ts writes
 // library/trees.json). Nothing in it is offered: a program says Map and
 // Set, and the representation rows it carries (LIBRARY.reps) let the
-// chooser store them as trees (DATA-STRUCTURES.md, C47).
+// chooser store them as trees (DATA-STRUCTURES.md, C47). It also carries
+// `array of List` (array-list.ts), for the compiler's lists as arrays.
 
 import { merge, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { buildTrees } from "./map-tree.ts";
+import { buildArrayList } from "./array-list.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { infer } from "./infer.ts";
 import { representationsIn } from "./represent.ts";
@@ -17,7 +19,11 @@ export function buildTreesModule(preludeModule: Module): Module {
   const base = merge(prelude, std, preludeModule.code);
   const k = new Lang(base);
   const byName = (name: string) => preludeModule.code.defs.find((d) => preludeModule.names[d] === name)!;
-  const t = buildTrees(k, byName);
+  const trees = buildTrees(k, byName);
+  // Lists as arrays (array-list.ts, L117): after the trees, so their rows
+  // keep their places in LIBRARY.reps.
+  const arrays = buildArrayList(k, byName);
+  const t = { defs: [...trees.defs, ...arrays.defs], representations: [...trees.representations, arrays.representation] };
   const p = publish(merge(base, k.code), k.names, t.defs, base);
   if (!p.ok) throw new Error(`the trees can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d) ?? d;
