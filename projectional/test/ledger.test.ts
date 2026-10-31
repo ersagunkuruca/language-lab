@@ -12,6 +12,7 @@ import { DECLARED, LEDGER } from "../src/lang/ledger.ts";
 // Every module that calls discharge, so the ledger is whole.
 import "../src/lang/infer.ts";
 import "../src/lang/run.ts";
+import "../src/lang/tests.ts";
 import "../../compiler/src/scalar.ts";
 import { SIGS, stdNames } from "../src/lang/std.ts";
 import { Subst } from "../src/lang/types.ts";

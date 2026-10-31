@@ -6,6 +6,7 @@
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
+//   lab test <program>                   run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md)
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -47,12 +48,14 @@ import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
+import { runTests } from "../src/lang/tests.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
+  lab test <program>                    run each definition that performs Check on its saved inputs and small values
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -297,6 +300,24 @@ switch (command) {
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     process.exitCode = p.info.errors.length ? 1 : 0;
+    break;
+  }
+  case "test": {
+    // Saved inputs (examples.json, the editor's Run) first, then small values.
+    const file = join(path, "examples.json");
+    const saved: Record<Id, string[][]> = existsSync(file) && statSync(path).isDirectory()
+      ? Object.fromEntries(Object.entries(JSON.parse(readFileSync(file, "utf8")) as Record<Id, string[]>).map(([d, xs]) => [d, [xs]]))
+      : {};
+    for (const e of p.info.errors) console.log(`error  ${p.names[e.id] ?? e.id}: ${e.message}`);
+    const results = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own, saved, { world: nodeWorld() });
+    for (const r of results) {
+      if (r.error) console.log(`✗ ${r.name}: ${r.error}`);
+      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} cases)`);
+      for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
+      if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
+    }
+    if (!results.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect)");
+    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) ? 1 : 0;
     break;
   }
   default:
