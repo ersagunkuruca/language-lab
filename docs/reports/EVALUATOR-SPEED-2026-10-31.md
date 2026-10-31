@@ -45,6 +45,29 @@ once and keeps it by the table's identity, as values never change.
 Both outputs are byte-identical with and without the jet
 (test/jets.test.ts checks the charge path and random products).
 
-**Next.** The rest is the machine around the jet: `go`, `step`,
-`refValue`, `parts` and the garbage collector. That is the general interpreter cost the profile
+## Step 2: the machine itself (measured, not merged)
+
+After step 1 the charge path's time is the machine: in the profile, `go`
+12%, `step` 8%, `refValue` 5%, `apply` 4%, the garbage collector 8%, and
+no single function or definition above that. Three changes were tried and
+timed against main, interleaved, ten runs each:
+
+| change | charge path |
+|---|---|
+| main after step 1 | 460 to 520 ms |
+| a call's argument frame not copied, a call's parts array kept per node | 430 to 500 ms |
+| `map parts` and `zip parts` with a function in the language run in the same machine, not a new machine per part | 460 to 520 ms |
+
+Neither is outside the run-to-run noise (about ±10%), so by the rule
+neither was merged, and the step-by-step work stops here.
+
+**What would still buy a lot.** The machine walks the code tree and
+allocates a frame for every call and every argument, for every value. The
+known way past that is to turn each definition into JavaScript closures
+once, before running ("closure compilation", Feeley and Lapalme, 1987),
+keeping the heap continuation only where a search or a handler needs it.
+That is typically 3 to 10 times faster for code like this, and it is a
+rewrite of the machine's core (M to L), not a hotspot. It is L118c on the
+backlog, waiting on Ersagun. Pages that already run compiled code (I97)
+get the compiler's speed without it. That is the general interpreter cost the profile
 showed, and the next PR profiles it again.
