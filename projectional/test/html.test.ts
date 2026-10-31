@@ -101,3 +101,26 @@ test("for each keeps the row of an item that's still there, cells and all; new i
   click("+", a);
   assert.deepEqual(rows().map(shown), ["c0", "b1"]);
 });
+
+test("on(\"frame\") comes once each time the browser draws, while its element is on the page", () => {
+  const frames: (() => void)[] = [];
+  const g = globalThis as { requestAnimationFrame?: (f: () => void) => number };
+  const saved = g.requestAnimationFrame;
+  g.requestAnimationFrame = (f) => frames.push(f);
+  try {
+    let ticks = 0;
+    const then = () => { ticks++; return { tag: "std.unit.unit", fields: [] }; };
+    const page = { tag: HTML_V.element, fields: ["div", toList([{ tag: HTML_V.on, fields: ["frame", then as never] }]), toList([])] } as Data;
+    const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { isConnected?: boolean };
+    const draw = () => { const now = frames.splice(0); for (const f of now) f(); };
+    draw();
+    assert.equal(ticks, 0, "not on the page yet");
+    e.isConnected = true;
+    draw(); draw(); draw();
+    assert.equal(ticks, 3);
+    e.isConnected = false;
+    draw(); draw();
+    assert.equal(ticks, 3, "gone from the page: no more frames");
+    assert.equal(frames.length, 0);
+  } finally { g.requestAnimationFrame = saved; }
+});
