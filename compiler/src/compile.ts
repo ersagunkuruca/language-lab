@@ -41,6 +41,8 @@ import { INLINE, jsKind } from "./builtins.ts";
 import { CORE, MODULES } from "../../projectional/src/lang/library.ts";
 import { pointsAt } from "../../projectional/src/lang/modules.ts";
 import { foldPlan } from "../../projectional/src/lang/represent.ts";
+import { composeLinear, linearMap, type LinearMap } from "../../projectional/src/lang/linear.ts";
+import { add as addCost, less, steps as costSteps } from "../../projectional/src/lang/cost.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { expandInverses } from "./inverses.ts";
@@ -613,6 +615,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // What a JS expression is known to be: data just built, or a record whose
   // fields arrived as separate arguments.
   const pieces = new Map<string, { variant: Id; fields: string[] }>();
+  const linearMaps = new Map<Id, LinearMap | null>();
   const asValue = (s: Spec) => (s.bool ? `((...a) => $bool(${s.name}(...a)))` : s.single ? `$stream0(${s.name})` : s.name);
 
   // Does every path through this definition give one answer or none,
@@ -1620,6 +1623,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (joined) return `$text.joinAll(${inOrder(joined)}, ${ex(n.args[1])})`;
       const one = f.kind === "ref" && (f.target === TEXT_OPS.joinAll || code.nodes[f.target].kind === "def") ? fused(n) : null;
       if (one) return one;
+      const linear = linearCall(n);
+      if (linear) return linear;
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
         if (t.kind === "builtin") {
@@ -1649,6 +1654,76 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
       }
       return laterFn(ty(n.fn), sp.lat) ? `(yield* ${ex(n.fn)}(${n.args.map(ex).join(", ")}))` : `${ex(n.fn)}(${n.args.map(ex).join(", ")})`;
+    }
+
+    // Linear functions composed (MATRICES.md layer 1, C30b): f(g(x)), where
+    // f and g are definitions whose results are sums of their inputs'
+    // Float64 parts times constants (linear.ts reads them), is one matrix
+    // A·B and offset A·b + a, folded now and written as unrolled
+    // multiply-adds, when that is fewer of them than f's and g's together.
+    // A chain f(g(h(x))) folds all the way down. The folded constants are
+    // rounded once instead of at each step, so a result may differ from the
+    // evaluator's in its last bits, as any compiler's reassociation does.
+    // Prior art: constant folding of affine maps (LLVM's and MLIR's affine
+    // analysis); the product rule is the textbook matrix of a composition.
+    function linearCall(n: NodeOf<"call">): string | null {
+      const l = reflective ? null : linearOf(n.id);
+      return l && l.args !== n.args ? emitLinear(l.map, l.args) : null;
+    }
+    // A call of a linear definition, with the arguments it reads; `fold`
+    // folds its own argument in too when that is a linear call that pays.
+    function linearOf(id: Id, fold = true): { map: LinearMap; args: Id[] } | null {
+      const n = code.nodes[id];
+      if (n.kind !== "call") return null;
+      const f = code.nodes[n.fn];
+      if (f.kind !== "ref" || code.nodes[f.target]?.kind !== "def" || spends(f.target)) return null;
+      const def = node<"def">(f.target);
+      if (def.way || !def.body || code.nodes[def.body].kind !== "lambda") return null;
+      if (!linearMaps.has(f.target)) linearMaps.set(f.target, linearMap(code, f.target));
+      const map = linearMaps.get(f.target);
+      if (!map || map.params.length !== n.args.length || map.params.some((p) => p === null)) return null;
+      // Only Float64s: a generic `a + a` called on Ints stays a call.
+      if (!floats(map.output ?? "number", n.id) || !map.params.every((p, i) => floats(p, n.args[i]))) return null;
+      if (fold && n.args.length === 1) {
+        const inner = linearOf(n.args[0]);
+        const both = inner && map.params[0] === (inner.map.output ?? "number") ? composeLinear(map, inner.map) : null;
+        if (inner && both && [...both.matrix.flat(), ...both.offset].every(Number.isFinite) && less(madds(both), addCost(madds(map), madds(inner.map)))) return { map: both, args: inner.args };
+      }
+      return { map, args: n.args };
+    }
+    // A Float64, or a record of Float64s and nothing else.
+    function floats(shape: Id | "number" | null, at: Id): boolean {
+      const t = ty(at);
+      if (shape === "number") return t.t === "con" && t.id === NUMBER;
+      if (shape === null || t.t !== "con" || t.args.length) return false;
+      return node<"variant">(shape).fields.every((f) => {
+        const ft = code.nodes[node<"field">(f).type];
+        return ft?.kind === "tref" && ft.target === NUMBER && !ft.args.length;
+      });
+    }
+    // Multiplies and adds a map costs, on the shared scale (cost.ts).
+    const madds = (m: LinearMap): readonly number[] =>
+      costSteps(m.matrix.flat().filter((x) => x !== 0).length + m.offset.filter((x) => x !== 0).length);
+    function emitLinear(m: LinearMap, args: Id[]): string {
+      const simple = (js: string) => /^[\p{L}\p{N}_$]+$|^\(?-?\d[\d.e+-]*\)?$/u.test(js);
+      const bound: [string, string][] = [];
+      const vals = args.map((a, i) => {
+        const js = ex(a), p = pieces.get(js);
+        const reads = m.params[i] === "number" ? simple(js) : simple(js) || (p !== undefined && p.fields.every(simple));
+        if (reads) return js;
+        const t = temp("m");
+        bound.push([t, js]);
+        return t;
+      });
+      const input = m.inputs.map((c) => (c.field === null ? vals[c.param] : field(vals[c.param], c.field)));
+      const num = (x: number) => (Object.is(x, -0) ? "0" : String(x));
+      const rows = m.matrix.map((row, i) => {
+        const terms = row.flatMap((a, j) => (a === 0 ? [] : [a === 1 ? input[j] : a === -1 ? `-${input[j]}` : `${num(a)} * ${input[j]}`]));
+        if (m.offset[i] !== 0) terms.push(num(m.offset[i]));
+        return terms.length ? `(${terms.join(" + ")})` : "0";
+      });
+      const out = m.output === null ? rows[0] : construct(m.output, rows);
+      return bound.length ? `((${bound.map(([t]) => t).join(", ")}) => ${out})(${bound.map(([, js]) => js).join(", ")})` : out;
     }
 
     // A function that waits on an operation answered later, passed where
