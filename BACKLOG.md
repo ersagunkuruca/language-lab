@@ -34,6 +34,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I98 | The values view of Constructions' `is picked` (a match on a list with `otherwise` false, then `first = i`) says "No answer: the known values contradict each other, or would need a complex number." It fails in test/draws.test.ts whenever the sweep slice reaches it (SWEEP=all fails on main too), so Check main fails one run in eight. | Constructions circles PR, 2026-10-31 | 2026-10-31 |
 
 ## E: Editor
 
