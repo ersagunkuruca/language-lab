@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I90 | Editor: Constructions in the program list | #756 |
 | I88 | Page: a part inside a picture is an SVG group, so it can redraw only its shapes | #755 |
 | I87 | Page: an event says where the pointer is (x, y in the element's own units: SVG units in a picture, else pixels from its top-left) | #752 |
 | I80 | Page: on("frame") comes once each time the browser draws, while its element is on the page | #748 |
