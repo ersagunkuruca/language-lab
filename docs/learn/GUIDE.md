@@ -9,6 +9,10 @@ edits. Each section is short. Each one ends with one thing to try.
 New words are explained when they first come up. There's a list of them
 at the end.
 
+Each section's Try it has the editor right below it, so you can do it in
+this page. Edits there are only for trying: they aren't kept, and they
+don't change your programs in the editor.
+
 Want the ideas first? [Learn](LEARN.md) has a gentle start for new
 programmers and one for people new to functional programming. The
 [tutorial](TUTORIAL.md) goes deeper, and [LANGUAGE.md](../language/LANGUAGE.md) has
@@ -53,6 +57,8 @@ parts. So you can't make a typo or a syntax error.
 3. Click **Roll 100 with seed 7** twice. You get the same hundred rolls
    both times.
 
+?[main of two dice, read-only: the page runs under Run](index.html?embed&readonly&program=dice&def=main)
+
 ## 2. Reading one definition, two ways
 
 Click **die** in the list. The Blocks text says:
@@ -88,6 +94,8 @@ A few things to know while reading:
 both views. In `a hundred rolls`, find `seed` in the graph. An input is a
 purple **dot** on the left edge. Every place that uses it gets a wire from
 that dot.
+
+?[a hundred rolls, read-only: hover and click to read it](index.html?embed&readonly&program=dice&def=a%20hundred%20rolls)
 
 ## 3. Changing a value: holes and the palette
 
@@ -133,6 +141,8 @@ like `x + 1`.
 **Try it:** put the `7` back with Undo. Then do the edit again, but pick
 `two dice()` instead of `die()`.
 
+?[main of two dice, live: edits here stay in this page](index.html?embed&program=dice&def=main)
+
 ## 4. Reading a type
 
 Every definition's first line is its type. Read the arrow as "takes …,
@@ -159,6 +169,8 @@ updates them as you edit.
 
 **Try it:** open `times rolled`, then `bar`. Say each type out loud
 before you hover over its parts.
+
+?[times rolled, read-only: hover a part to see its type](index.html?embed&readonly&program=dice&def=times%20rolled)
 
 ## 5. Effects and handlers: the dice and the clock
 
@@ -226,6 +238,8 @@ Random.
 It tells you that nothing answers `Ask`. Then read `main` to see who
 does, and run it.
 
+?[area, live: run it and read what it says](index.html?embed&program=effects&def=area)
+
 ## 6. Choice: search without writing a search
 
 `Choice` is the effect of "pick one of these". The program can also say
@@ -260,6 +274,8 @@ it, press Delete, type `5` and press Enter. Run it again and you get ten
 boards. The heading above them still says 6, because the heading is a
 separate piece of text.
 
+?[main of eight queens, live: change the 6 and run it](index.html?embed&program=queens&def=main)
+
 ## 7. Running a function backwards
 
 Every function can run backwards. Give it the answer, and it finds the
@@ -283,6 +299,8 @@ because it's text. You get `name` is `"Ada"`.
 Nobody wrote an "un-greet" function. The editor works it out.
 
 **Try it:** run `magnitude` backwards from `5`.
+
+?[square, live: tick result, untick x, and give it 9](index.html?embed&program=backwards&def=square)
 
 ## 8. Pages
 
@@ -315,6 +333,8 @@ To add a button, copy one that's there:
 **Try it:** change the `"Roll"` label to `"Throw"`, then click it on the
 page.
 
+?[main of two dice, live: change a label and click it](index.html?embed&program=dice&def=main)
+
 ## 9. When the editor says no
 
 Every edit is checked before it happens. If an edit would break the
@@ -343,6 +363,8 @@ change.
 **Try it:** in `a hundred rolls`, clear `seed` and pick `die()`, and read
 the refusal. Then press Let it loosen, pick `die()` again, and read the
 new type. Undo twice to get back.
+
+?[a hundred rolls, live: try the refused edit here](index.html?embed&program=dice&def=a%20hundred%20rolls)
 
 ## 10. Saving, and getting back
 
