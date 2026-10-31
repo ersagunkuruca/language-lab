@@ -498,11 +498,37 @@ class Stager {
     }
   }
   wrap(body: Id): Id {
+    this.inlineSingleUse(body);
     for (let i = this.lets.length - 1; i >= 0; i--) {
       const { b, value } = this.lets[i];
       body = this.add({ kind: "call", fn: this.add({ kind: "lambda", params: [b], body }), args: [value] });
     }
     return body;
+  }
+  // A let read once is put where it's read (I96): each let nests one
+  // level, and a sandwich in PGA named over a thousand parts, past what
+  // the checker and compilers walk (LETS), most of them read once. The
+  // values are arithmetic with nothing to run twice or out of order.
+  inlineSingleUse(body: Id) {
+    const uses = new Map<Id, Id[]>();
+    const lets = new Set(this.lets.map((l) => l.b));
+    for (const root of [body, ...this.lets.map((l) => l.value)]) {
+      for (const id of subtree(this.code, root)) {
+        const n = this.code.nodes[id];
+        if (n.kind === "ref" && lets.has(n.target)) uses.set(n.target, [...(uses.get(n.target) ?? []), id]);
+      }
+    }
+    const values = new Map(this.lets.map((l) => [l.b, l.value] as const));
+    // From the last let back, so a value put in place carries the lets
+    // put into it before.
+    for (let i = this.lets.length - 1; i >= 0; i--) {
+      const { b, value } = this.lets[i];
+      const at = uses.get(b) ?? [];
+      if (at.length !== 1) continue;
+      this.code.nodes[at[0]] = { ...this.code.nodes[value], id: at[0] } as Node;
+      values.delete(b);
+    }
+    this.lets = this.lets.filter((l) => values.has(l.b));
   }
   // A value bound to a name: a later Float64 that costs something is
   // computed once, into a let.

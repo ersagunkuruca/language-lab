@@ -35,7 +35,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I97 | The editor's page preview runs main in the evaluator, and "Open in a tab" runs it compiled. Ersagun found Bounce and Spacetime much faster in a tab. Measured: Bounce's preview draws 8.5 frames a second against 60 in a tab, and the profile is all evaluator (step, apply, resume, GC). Spacetime's charge path takes 9 s evaluated against 4 ms compiled. Ersagun is willing to have the preview run compiled code. Compiling takes 2 to 7 s (Constructions 1.9, Bounce 4.0, Spacetime 7.2 s), so a way to do it is to keep the evaluator page while the compiled one builds off the main thread, then swap it in when it is ready, keeping the evaluator for what needs it (Outline updates, sound). For the Editor lane. | Ersagun 2026-10-31 "so much faster when opened on a new tab" | 2026-10-31 |
-| I96 | Bounce's Clifford calls are no longer worked out when compiled. With the algebra built once (I79), I86 makes copies for the space (`clifford sandwich at clifford sandwich's algebra`), but each copy calls the generic `table product` over the table's 64 lines, both in `step` and in drawing. Drawing the solid world is 6.4 ms a frame compiled; a sandwich with `cl3` written in place is 0.001 ms. I86's 0.06 ms step was measured before I79. | Bounce frame-rate fix, 2026-10-31 | 2026-10-31 |
 
 ## E: Editor
 
@@ -79,7 +78,7 @@ New targets and speed rank below every language item (Ersagun,
 | C55 | Compile each direction of a relation a program uses as its own function (Mercury), dropping results no caller reads: `y` of `polar` alone is a plain sine, both together one sincos | Ersagun 2026-10-28 | P2 | M | |
 | C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal. Needs step 1's one-holder analysis, not its node reuse (C62 measured no gain) | docs/design/data/IN-PLACE.md | P2 | L | |
 | C31 | A recursion that gives back a Pair returns its two fields without the record. 3% on the pedal | GAPS.md round 4 P5 | P3 | M | after C30 |
-| C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`, yet every operation goes through `$perform`'s search. Step 1 done (C64a: quiet cases skip the hiding, 330 → 270 ms). Next: pass the handler's case to the code under it (evidence passing), so a perform is a call, and a `say` whose case drops its line doesn't build it; ideal 25 ms | examples/pig | P3 | M | |
+| C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`. Done: C64a (#759, quiet cases skip the hiding, 330 → 270 ms) and C64b (handlers written into the code they handle, 270 → about 95 ms). Next: Random's perform in `die` still searches for the world's handler (about 95 ms vs the ideal 25 ms); a case written in as a function called at once could be a plain let | examples/pig | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
