@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | idle: L116 std Array and L117 `array of List` done for C30d (C lane builds the chooser and code) |
+| L Language and library | "Language lane" | Clifford demo rows: I95 done; next I89 (outer, inner, dual, regressive, grades), I92 (exp with an I part), I83 (item at), I93 (fixed decimals) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -54,7 +54,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I92 | `clifford exp` of a bivector whose square has an I part (a field with E·B ≠ 0, a screw motion): split it into commuting parts first. Spacetime offers only E ⟂ B | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S1 | 2026-10-31 |
 | I93 | Show a Float64 to a fixed number of decimals; Spacetime writes its own `rounded` | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S3 | 2026-10-31 |
 | I94 | Spacetime in the editor's program list (built into apps/ since the PR that added it); its charge path takes about 8 s in the evaluator (I79) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
-| I95 | **Bug.** relate run backwards (only the answer known) through a Cl(1, 3) table product ignores its step budget and runs out of memory (agreement.test OOM); Spacetime writes `times`, `moved by`, `along`, `velocity of` inline to avoid it | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S5 | 2026-10-31 |
 
 ## E: Editor
 

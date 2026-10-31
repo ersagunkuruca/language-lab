@@ -145,7 +145,14 @@ interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () =
 // variables wakes when one is bound; Holzbaur's attributed variables,
 // PLILP 1992), here for the solver's equations and the waits below.
 type Sleeper = { eq: Eq } | { wait: Wait };
-interface Asleep { items: Sub<Sleeper>; watch: Sub<number[]>; eqs: number; waits: number }
+// The ids asleep under one unknown, newest first, shared between states: a
+// put adds a cell in front instead of copying the list. Copying it made
+// each put cost as much as everything already asleep there, so thousands of
+// part-by-part constraints on the same few unknowns (a 16-part Clifford
+// product run backwards, BACKLOG I95) took all the memory before the
+// search spent its next step.
+type Ids = { id: number; next: Ids | null };
+interface Asleep { items: Sub<Sleeper>; watch: Sub<Ids>; eqs: number; waits: number }
 let sleeperIds = 0;
 
 // The substitution: logic variable number to term. Persistent, as a 32-way
@@ -234,8 +241,12 @@ function unify(a: Term, b: Term, s: State): State | null {
 
 function bindVar(s: State, v: LVar, t: Term): State {
   const sub = s.sub.set(v.n, t);
-  const z = s.asleep, ids = z?.watch.get(v.n);
-  if (!z || !ids) return { ...s, sub };
+  const z = s.asleep, newest = z?.watch.get(v.n);
+  if (!z || !newest) return { ...s, sub };
+  // Oldest first, the order they went to sleep in.
+  const ids: number[] = [];
+  for (let c: Ids | null = newest; c; c = c.next) ids.push(c.id);
+  ids.reverse();
   // What was waiting on v wakes.
   let items = z.items, eqsAsleep = z.eqs, waitsAsleep = z.waits;
   const eqs = s.eqs.slice(), waits = s.waits.slice();
@@ -279,14 +290,14 @@ function unknownsIn(ts: Term[], s: State): number[] {
 // solver can still take up to six equations together.
 const AWAKE = 6;
 function doze(s: State): State {
-  const z = s.asleep ?? { items: new Sub<Sleeper>(), watch: new Sub<number[]>(), eqs: 0, waits: 0 };
+  const z = s.asleep ?? { items: new Sub<Sleeper>(), watch: new Sub<Ids>(), eqs: 0, waits: 0 };
   const sleepEqs = s.eqs.length + z.eqs > AWAKE, sleepWaits = s.waits.length + z.waits > AWAKE;
   if (!sleepEqs && !sleepWaits) return s;
   let { items, watch, eqs: eqsAsleep, waits: waitsAsleep } = z;
   const put = (it: Sleeper, on: number[]) => {
     const id = sleeperIds++;
     items = items.set(id, it);
-    for (const v of on) watch = watch.set(v, [...(watch.get(v) ?? []), id]);
+    for (const v of on) watch = watch.set(v, { id, next: watch.get(v) ?? null });
   };
   const eqs: Eq[] = [], waits: Wait[] = [];
   for (const e of s.eqs) {
@@ -1528,8 +1539,13 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     const portOf = new Map<number, string>();
     for (const p of ports) { const v = values[p]; if (v instanceof LVar && !portOf.has(v.n)) portOf.set(v.n, p === "out" ? "result" : opts.names?.[p] ?? p); }
     const named = (t: string) => powers(t.replace(/(\d)(_\d+)/g, "$1 · $2").replace(/_(\d+)/g, (m, n) => portOf.get(+n) ?? m));
-    const residual = [
-      ...tidy(everyEq(st), values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
+    // Past a few dozen, what is left isn't something to read, and tidying
+    // it substitutes each into all the others, which a 16-part product run
+    // backwards (thousands of equations, BACKLOG I95) can't afford: say how
+    // many are left instead.
+    const left = everyEq(st);
+    const residual = left.length > TIDY_AT ? [`${left.length} equations are left`] : [
+      ...tidy(left, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
       ...everyWait(st).map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
     ].map(named);
     yield { values, free: ports.filter((p) => hasVars(values[p])), residual };
@@ -1544,6 +1560,7 @@ export function satisfiable(code: Code, f: unknown, opts: Options = {}): boolean
   return false;
 }
 
+const TIDY_AT = 64;
 // Leftover equations as a person would write them: unknowns that no port
 // shows are substituted away (t = y + 0 and x + t = 10 is x + y = 10).
 function tidy(eqs: Eq[], values: Record<string, Term>): Eq[] {
