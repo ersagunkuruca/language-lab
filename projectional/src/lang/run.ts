@@ -30,6 +30,7 @@ import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
+import { JETS } from "./jets.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import { Cells, NoValue, Pending, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
@@ -232,6 +233,9 @@ export interface Runtime {
   // The handler of Cells (cells.ts). Without one, each run gets its own,
   // which still computes formulas on demand and remembers them.
   cells?: Cells;
+  // false runs every library definition as written, never its jet
+  // (jets.ts); test/jets.test.ts compares the two.
+  jets?: boolean;
   // Told each time a function written as a lambda is called, with the
   // values it's called with (the editor seeds a definition's Run with them).
   entered?: (lambda: Id, args: Value[]) => void;
@@ -847,6 +851,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           // Definition values are pure (the checker sees to it), so exactly
           // one result.
           for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; }
+          // A library definition with a host way runs it (jets.ts).
+          const jet = rt.jets === false ? undefined : JETS[target], self = defs.get(target);
+          if (jet && typeof self === "function") { const j = jet(self as Fn); defs.set(target, j); defOf.set(j, target); }
         }
         return defs.get(target)!;
       }
