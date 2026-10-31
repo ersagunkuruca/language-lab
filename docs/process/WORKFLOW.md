@@ -139,6 +139,15 @@ the coordinator updates it at triage and when Ersagun changes direction.
   its result at the daily triage, and a red nightly is a P0.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
+- **Never end a turn waiting for a notice** (Ersagun, 2026-10-31: "threads
+  keep waiting for stuff that never happens"). CI, review and merge notices
+  often don't arrive. After pushing, check the PR yourself in the same
+  turn: its workflow run for the head commit, and whether it can merge. A
+  PR with a merge conflict runs no CI at all, so merge main in first. Wait
+  and re-check for up to about 15 minutes. If it's still pending, start the
+  next item and come back to the PR between steps. The same goes for
+  another lane's answer. Something only Ersagun can decide is asked once,
+  and the thread moves to its next item while it waits.
 
 ## Tests
 

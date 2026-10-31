@@ -23,7 +23,7 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.equal(rep.canonical, true);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "n", match: "n", fold: "n²", [lib("length")]: "1", [lib("append")]: "n" });
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "1", [lib("append")]: "n" });
   // The library's chooser stores only non-canonical rows by itself (C47):
   // this one waits for the compiler's lists as arrays (C30d).
   assert.equal(LIBRARY.reps.filter((r) => r.byType).some((r) => r === rep), false);

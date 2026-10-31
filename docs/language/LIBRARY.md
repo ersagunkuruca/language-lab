@@ -183,6 +183,9 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **array length** : `(Array a) -> Int`. How many items an array has, in constant time.
 - **item at** : `(Array a, Int) -[Choice]-> a`. The item at a position, counting from 0, in constant time. No answer when the position is outside the array.
 - **push** : `(Array a, a) -> Array a`. The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.
+- **first of array** : `(Array a) -[Choice]-> a`. The array's first item; none of an empty array.
+- **rest of array** : `(Array a) -> Array a`. The array without its first item; an empty array stays empty. Compiled JS shares the items rather than copying them.
+- **push front** : `(Array a, a) -> Array a`. The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.
 
 ## Maps and sets
 
@@ -314,7 +317,7 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **move at** : `(Cell a, Path a (List b), Int, Int) -[Update]-> Unit`. Moves item `from` of the list at a place to position `to`; nothing when either isn't there.
 - **Html** (type). A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
-- **Event** (type). What a page's handler is given when its event comes: the field's value and the key pressed. on("frame", …) comes once each time the browser draws, while its element is on the page: a simulation steps there.
+- **Event** (type). What a page's handler is given when its event comes: the field's value, the key pressed, and where the pointer is (x, y: in a picture's own units inside an SVG, else pixels from the element's top-left; 0, 0 without a pointer). on("frame", …) comes once each time the browser draws, while its element is on the page: a simulation steps there.
 - **Input** (type). Where a sound's samples come from: the microphone, or a recording at an address.
 - **View** (type). A named row: what a page's text, part or attribute value may do. Read cells, the clock and the web, log, and run under a step budget (Cells, Diverge, Time, Network, Log). Not print: a view runs whenever what it reads changes.
 - **Handler** (type). A named row: what a page's event handler may do. Everything a view may, and write cells, print, use files, draw random numbers and abort (the page logs the reason).

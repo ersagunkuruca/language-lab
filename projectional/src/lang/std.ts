@@ -131,7 +131,7 @@ export const VIEW_ROW = namedRow("std.row.view", "View", PAGE_VIEW);
 export const HANDLER_ROW = namedRow("std.row.handler", "Handler", PAGE_HANDLER);
 export const SOUND_ROW = namedRow("std.row.sound", "Sound", AUDIO_BLOCK);
 export const EVENT = typedef("std.event", "Event", [], [
-  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
+  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)]]],
 ]);
 // Where a sound's samples come from (AUDIO.md): the microphone, or a
 // recording the page fetches by its address and plays over and over.
@@ -709,6 +709,13 @@ const arrayOf = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
 const ofItem = (make: (a: Type, s: Subst) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a, s); return fn(ps, r, s.freshRow(effects)); };
 const arrayItem = builtin("array.at", "item at", ofItem((a) => [[arrayOf(a), int], a], [CHOICE]));
 STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const n = Number(i); return Number.isInteger(n) && n >= 0 && n < (arr.fields[0] as number) ? [arr.fields[n + 1]] : []; };
+// The two ends (C30d, Ersagun's two-ended array list): the first item
+// (none of an empty array), the array after it (empty of an empty array)
+// and an item added at the front. Here each copies; compiled JS makes them
+// views on one buffer with room at both ends (runtime.js), so all three
+// are constant there.
+const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arrayOf(a)], a], [CHOICE]));
+STD_MANY[arrayFirst] = (arr: ArrayValue) => ((arr.fields[0] as number) > 0 ? [arr.fields[1]] : []);
 export const ARRAY_OPS = {
   empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf(a)]), () => arrayValue([])),
   of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf(a)]), (l: ArrayValue) => arrayValue(itemsOf(l))),
@@ -716,6 +723,9 @@ export const ARRAY_OPS = {
   length: builtin("array.length", "array length", ofItem((a) => [[arrayOf(a)], int]), (arr: ArrayValue) => arr.fields[0]),
   at: arrayItem,
   push: builtin("array.push", "push", ofItem((a) => [[arrayOf(a), a], arrayOf(a)]), (arr: ArrayValue, x: unknown) => arrayValue([...arr.fields.slice(1), x])),
+  first: arrayFirst,
+  rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf(a)], arrayOf(a)]), (arr: ArrayValue) => arrayValue(arr.fields.slice(2))),
+  pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf(a), a], arrayOf(a)]), (arr: ArrayValue, x: unknown) => arrayValue([x, ...arr.fields.slice(1)])),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

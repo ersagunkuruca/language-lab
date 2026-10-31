@@ -148,9 +148,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
-          const handle = (ev: { key?: string; target?: unknown }) => {
+          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number }) => {
             const target = (ev.target ?? e) as El & { type?: string };
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
+            const [x, y] = pointer(e, ev);
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come is taken back (its
             // writes undone, its printing never done: cells.ts attempt) and
@@ -158,7 +159,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // event, so what it did before the fetch happens once.
             const fire = () => {
               try {
-                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? ""] })), (e) => e instanceof Pending);
+                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y] })), (e) => e instanceof Pending);
               } catch (err) {
                 if (err instanceof Pending) err.ready.then(fire);
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
@@ -187,6 +188,19 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
     }
     default: throw new Error(`not Html: ${d.tag}`);
   }
+}
+
+// Where the pointer is, in the element's own units (I87): inside a
+// picture, its SVG units, so a point lands where it's drawn; elsewhere,
+// CSS pixels from the element's top-left. 0, 0 when the event has no
+// pointer (a key, a frame).
+function pointer(e: El, ev: { clientX?: number; clientY?: number }): [number, number] {
+  if (typeof ev.clientX !== "number" || typeof ev.clientY !== "number") return [0, 0];
+  const g = e as El & { getScreenCTM?: () => DOMMatrix | null; getBoundingClientRect?: () => { left: number; top: number } };
+  const m = g.getScreenCTM?.();
+  if (m) { const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse()); return [p.x, p.y]; }
+  const r = g.getBoundingClientRect?.();
+  return r ? [ev.clientX - r.left, ev.clientY - r.top] : [0, 0];
 }
 
 // Calls `tick` once a frame from when `e` is first on the page until it

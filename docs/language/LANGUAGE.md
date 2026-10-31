@@ -214,7 +214,9 @@ is built into the language.
 `Array a` is the one data type that is a builtin (L116): a list's items side
 by side, read by position in constant time (`item at(array, i)`, no answer
 outside it). `array of(list)` makes one, `items of array(a)` is the list it
-stands for, and `push` gives a copy with one more item. It exists to be a
+stands for, and `push` gives a copy with one more item. Its two ends are
+read and grown the same way: `first of array` (no answer when empty),
+`rest of array` and `push front`. It exists to be a
 list's representation, so a program that says `List` can be stored as an
 array where the jobs it does pay for that. The compiler chooses, as it does
 for Map's trees (REPRESENTATIONS.md).
