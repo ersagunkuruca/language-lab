@@ -165,6 +165,12 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
+- **empty array** : `() -> Array a`. An array with no items.
+- **array of** : `(List a) -> Array a`. The array of a list's items, in order.
+- **items of array** : `(Array a) -> List a`. An array's items as a list, in order: what an array stands for.
+- **array length** : `(Array a) -> Int`. How many items an array has, in constant time.
+- **item at** : `(Array a, Int) -[Choice]-> a`. The item at a position, counting from 0, in constant time. No answer when the position is outside the array.
+- **push** : `(Array a, a) -> Array a`. The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.
 
 ## Maps and sets
 

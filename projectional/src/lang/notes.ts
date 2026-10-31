@@ -134,6 +134,13 @@ export const NOTES: Comments = {
   // --- text
   "builtin.concat": "Two texts one after the other.",
   "builtin.text.length": "How many characters a text has.",
+  "type.array": "Array a: a list's items side by side, read by position in constant time. Written as a list's representation (`array of List`), so the compiler can store a list this way where the jobs a program does pay for it.",
+  "builtin.array.empty": "An array with no items.",
+  "builtin.array.of": "The array of a list's items, in order.",
+  "builtin.array.items": "An array's items as a list, in order: what an array stands for.",
+  "builtin.array.length": "How many items an array has, in constant time.",
+  "builtin.array.at": "The item at a position, counting from 0, in constant time. No answer when the position is outside the array.",
+  "builtin.array.push": "The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.",
   "builtin.text.slice": "The characters from position from up to (not including) to, counting from 0.",
   "builtin.text.characters": "The text as a list of its characters.",
   "builtin.text.split": "The pieces of a text between each occurrence of a separator.",

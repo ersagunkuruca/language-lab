@@ -25,7 +25,7 @@ import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -226,6 +226,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const td = typedefOf(def);
     // a cell is a place, not a value: two of them holding the same thing differ
     if (def === CELL || def === PATH) { plainParams.set(def, null); return null; }
+    // an array is plain when its items are
+    if (def === ARRAY) { plainParams.set(def, new Set([0])); return new Set([0]); }
     plainParams.set(def, new Set()); // builtins; and a type's mention of itself adds nothing
     if (!td) return new Set();
     const need = new Set<number>();
