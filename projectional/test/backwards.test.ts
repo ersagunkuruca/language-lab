@@ -239,7 +239,7 @@ test("a function in a variable, closed where it was first used, can be used wher
       k.call(shown, view))));
   }, LIBRARY.code);
   assert.deepEqual(c.info.errors, []);
-  assert.equal(showType(c.info.typeOf.get(c.named("both"))!, c.names), "((Float64) -[Cells, Diverge, Network, Log, Time]-> Text, Text) -[Cells, Console, Diverge, Network, Log, Time]-> Html");
+  assert.equal(showType(c.info.typeOf.get(c.named("both"))!, c.names), "((Float64) -[View]-> Text, Text) -[Cells, Console, Diverge, Network, Log, Time]-> Html");
 });
 
 test("backwards: main prints what each function run backwards gives", () => {

@@ -17,7 +17,17 @@ export type Type =
 // Unison and Effekt write it; prior art, CREDITS.md): `args` holds the arguments by effect id, so
 // most code reads `effs` and never sees them (EFFECTS-REVIEW-2026-10-24
 // §2.3, BACKLOG L56).
-export interface Row { effs: Id[]; tail: number | null; args?: Record<Id, Type[]> }
+// name: the named row (HOSTS.md, L58) this one was written as, kept for
+// showing it; shown only while the row still has exactly its effects.
+export interface Row { effs: Id[]; tail: number | null; args?: Record<Id, Type[]>; name?: Id }
+
+// Named rows, by id: the effects each stands for (std.ts fills it).
+export const NAMED_ROWS = new Map<Id, readonly Id[]>();
+// A function type's written effects as a closed row, a named row expanded.
+export function writtenRow(effects: readonly Id[] = []): Row {
+  const effs = [...new Set(effects.flatMap((e) => NAMED_ROWS.get(e) ?? [e]))];
+  return effects.length === 1 && NAMED_ROWS.has(effects[0]) ? { effs, tail: null, name: effects[0] } : { effs, tail: null };
+}
 
 // The effects. Ids, like everything else; names are presentation.
 export const CHOICE = "effect.choice";
@@ -254,15 +264,20 @@ export class Subst {
     const effs = new Set(r.effs);
     const args: Record<Id, Type[]> = { ...r.args };
     let tail = r.tail;
+    let named = r.name;
     while (tail !== null && this.rows.has(tail)) {
       const next = this.rows.get(tail)!;
+      named = next.name;
       next.effs.forEach((e) => effs.add(e));
       for (const [e, xs] of Object.entries(next.args ?? {})) args[e] ??= xs;
       tail = next.tail;
     }
     const sorted = [...effs].sort();
     const kept = sorted.filter((e) => args[e]);
-    return kept.length ? { effs: sorted, tail, args: Object.fromEntries(kept.map((e) => [e, args[e]])) } : { effs: sorted, tail };
+    // A closed row keeps the name of the named row that closed it (shown
+    // only while it has exactly that row's effects).
+    const name = named !== undefined && tail === null ? { name: named } : {};
+    return kept.length ? { effs: sorted, tail, args: Object.fromEntries(kept.map((e) => [e, args[e]])), ...name } : { effs: sorted, tail, ...name };
   }
 
   // Fully substituted copy, for display and for storing results.
@@ -340,8 +355,9 @@ export class Subst {
     if (onlyA.length && b.tail === null) throw new EffectError(onlyA);
     if (onlyB.length && a.tail === null) throw new EffectError(onlyB);
     const rest = a.tail !== null && b.tail !== null ? this.next++ : null;
-    if (a.tail !== null) this.bindRow(a.tail, { effs: onlyB, tail: rest, ...argsOf(b, onlyB) });
-    if (b.tail !== null) this.bindRow(b.tail, { effs: onlyA, tail: rest, ...argsOf(a, onlyA) });
+    const nameOf = (r: Row) => (r.tail === null && r.name !== undefined ? { name: r.name } : {});
+    if (a.tail !== null) this.bindRow(a.tail, { effs: onlyB, tail: rest, ...argsOf(b, onlyB), ...nameOf(b) });
+    if (b.tail !== null) this.bindRow(b.tail, { effs: onlyA, tail: rest, ...argsOf(a, onlyA), ...nameOf(a) });
   }
 
   // A row tail given its effects, and a tail for the rest; a tail that may
@@ -412,7 +428,7 @@ export function instantiate(sc: Scheme, s: Subst, at = ""): Type {
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
     const r = s.resolveRow(t.eff);
     const args = r.args ? { args: Object.fromEntries(Object.entries(r.args).map(([e, xs]) => [e, xs.map(go)])) } : {};
-    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: r.effs, tail: r.tail === null ? null : rm.get(r.tail) ?? r.tail, ...args } };
+    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: r.effs, tail: r.tail === null ? null : rm.get(r.tail) ?? r.tail, ...args, ...(r.name !== undefined ? { name: r.name } : {}) } };
   };
   return go(sc.type);
 }
@@ -458,6 +474,9 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       if (!t.args.length) return name(t.id);
       return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
     }
+    const named = t.eff.name !== undefined && t.eff.tail === null && NAMED_ROWS.get(t.eff.name);
+    if (named && named.length === t.eff.effs.length && named.every((e) => t.eff.effs.includes(e)) && !Object.keys(t.eff.args ?? {}).length)
+      return `(${t.params.map((p) => go(p, false)).join(", ")}) -[${name(t.eff.name!)}]-> ${go(t.ret, false)}`;
     const effs = t.eff.effs.map((e) => { const xs = t.eff.args?.[e]; return xs?.length ? `${name(e)} ${xs.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}` : name(e); });
     const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
     if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {

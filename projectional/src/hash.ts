@@ -38,7 +38,7 @@ export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id
     const n = code.nodes[todo.pop()!];
     if (!n) continue;
     // A function type's effects are references too.
-    for (let t of [target(n), ...(n.kind === "tfun" ? n.effects ?? [] : [])]) {
+    for (let t of [target(n), ...(n.kind === "tfun" ? n.effects ?? [] : []), ...(n.kind === "typedef" ? n.row ?? [] : [])]) {
       if (t && owner.has(t)) t = owner.get(t)!;
       if (t && code.nodes[t]?.kind === "def") out.add(t);
     }
@@ -171,7 +171,7 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       // (Dual and Complex are both two Float64s) says so, or the two would
       // be one type by their hashes. Only written when present, so every
       // hash from before stays.
-      case "typedef": return n.unique ? ["type", n.params.map(go), n.variants.map(go), ["unique", n.unique]] : ["type", n.params.map(go), n.variants.map(go)];
+      case "typedef": return n.row ? ["row", n.row.map(defRef)] : n.unique ? ["type", n.params.map(go), n.variants.map(go), ["unique", n.unique]] : ["type", n.params.map(go), n.variants.map(go)];
       case "variant": return ["variant", n.fields.map(go)];
       case "field": return ["field", go(n.type)];
       case "tref": {
