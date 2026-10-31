@@ -965,7 +965,11 @@ types, smallest first and never random, so the first failure it prints is
 the smallest one and the same every run. A failing `expect` doesn't stop
 the test: every one is reported with the inputs it failed on. A law for
 any type (`a`) is tried at Int. A test may search (each path is checked)
-and may handle any other effect itself. Design and later steps:
+and may handle any other effect itself. Any definition, not only a test,
+can keep accepted answers in `examples.json`
+(`{ "inputs": ["2"], "answer": "3" }`): `lab test` runs it on those
+inputs and compares what it prints with the answer, first, as if it
+were `expect(f(2) = 3)`. Design and later steps:
 TESTS-IN-THE-LANGUAGE.md (T7).
 
 ### Where effects go

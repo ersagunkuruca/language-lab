@@ -11,7 +11,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { bool } from "../src/lang/run.ts";
 import { CHECK_OP, INT_OPS, LIST } from "../src/lang/std.ts";
-import { bySize, runTests, smallValues, testsIn } from "../src/lang/tests.ts";
+import { bySize, runTests, savedFrom, smallValues, testsIn } from "../src/lang/tests.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 
@@ -60,8 +60,29 @@ test("lab test: every failure, with the smallest inputs first; a law that holds 
 
 test("saved inputs run first", () => {
   const p = program();
-  const [r] = runTests(p.code, p.info, p.names, [p.defs.short], { [p.defs.short]: [["[5, 6, 7, 8]"]] });
+  const [r] = runTests(p.code, p.info, p.names, [p.defs.short], { [p.defs.short]: [{ inputs: ["[5, 6, 7, 8]"] }] });
   assert.deepEqual(r.failures[0], { inputs: ["[5, 6, 7, 8]"], what: ["shorter than 3"] });
+});
+
+test("an accepted answer makes any definition a test (T7b)", () => {
+  const p = program();
+  const d = p.defs.plain;
+  const [ok] = runTests(p.code, p.info, p.names, [d], { [d]: [{ inputs: ["2"], answer: "3" }] });
+  assert.deepEqual([ok.cases, ok.failures], [1, []]);
+  const [bad] = runTests(p.code, p.info, p.names, [d], { [d]: [{ inputs: ["2"], answer: "4" }, { inputs: ["oops"], answer: "1" }] });
+  assert.deepEqual(bad.failures, [
+    { inputs: ["2"], what: ["gives 3, accepted 4"] },
+    { inputs: ["oops"], what: ["its saved inputs don't read as values any more"] },
+  ]);
+  // Inputs without an answer don't make a plain definition a test.
+  assert.deepEqual(runTests(p.code, p.info, p.names, [d], { [d]: [{ inputs: ["2"] }] }), []);
+});
+
+test("examples.json: the old form reads as inputs, the new form keeps answers", () => {
+  assert.deepEqual(savedFrom({ a: ["1", "2"], b: [{ inputs: ["3"], answer: "4" }, { inputs: ["5"] }, { nope: 1 }] }), {
+    a: [{ inputs: ["1", "2"] }],
+    b: [{ inputs: ["3"], answer: "4" }, { inputs: ["5"] }],
+  });
 });
 
 test("small values: smallest first, and records from their fields", () => {

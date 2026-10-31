@@ -6,7 +6,10 @@ TypeScript for now: Float64 from the fixed list below, Int from −3 to 3,
 Text, Bool, lists up to three long of the first three of their items,
 the program's records and cases from their fields, and a type variable at
 Int. Running constructors backwards with relate is still the plan (§2).
-T7b to T7e are backlog rows.
+T7b built too: `lab test` reads accepted answers from `examples.json`
+in the form below (the older form, a bare list of inputs, still reads as
+inputs with no answer) and checks any definition that has one, compared
+as printed. T7c to T7e are backlog rows.
 
 [TESTING.md](../../process/TESTING.md) §6 sketched three ideas: accepted answers, laws as
 definitions, and re-checking only what changed. This note makes them a
@@ -139,7 +142,7 @@ evaluator with compiled JS.
 | step | what | lane | size |
 |---|---|---|---|
 | T7a | `Check` in std, the small-values enumerator, `lab test` in the evaluator | L | M |
-| T7b | Accepted answers in `examples.json`, read and checked by `lab test` | L | S |
+| T7b | Accepted answers in `examples.json`, read and checked by `lab test` (built) | L | S |
 | T7c | Results cached by hash, locally and in CI | L, T | M |
 | T7d | The editor: a tick or the difference on Run, and an accept button; a failing law shown on its definition | E | M |
 | T7e | Example sweeps moved to accepted answers and laws; `--compiled` | T | M |
