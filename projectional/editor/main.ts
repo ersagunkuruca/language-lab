@@ -3435,7 +3435,10 @@ function draw() {
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },
-        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info), pageSection(info), typedRunPanel(namer, info)),
+        // A helper's own Run comes first; the page, still running, sits
+        // under it (I76).
+        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info),
+          ...(info && pageMain(ownDefs(), info, pres().names) !== ui.def ? [typedRunPanel(namer, info), pageSection(info)] : [pageSection(info), typedRunPanel(namer, info)])),
         h("section", { class: "panel", "aria-label": shown[1] },
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
             h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
