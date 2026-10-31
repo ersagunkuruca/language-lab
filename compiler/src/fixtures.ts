@@ -648,3 +648,25 @@ export function pga() {
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven } };
 }
+
+// Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as
+// Float64, equal; a loop under a budget; a cube that passes 32 bits from
+// 1291 on; the lowest i32.
+export function ints() {
+  const k = new Lang();
+  const def = (name: string, params: string[], body: (...xs: string[]) => string) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const I = INT_OPS;
+  const poly = def("poly", ["a", "b"], (a, b) => k.call(I.add, k.call(I.sub, k.call(I.mul, a, b), a), k.call(I.neg, k.call(I.abs, b))));
+  const smaller = def("smaller", ["a", "b"], (a, b) => k.if(k.call(I.less, a, b), k.call(I.toNumber, a), k.call(I.toNumber, b)));
+  const same = def("same", ["a", "b"], (a, b) => k.equal(k.call(I.abs, a), b));
+  // A loop on Ints (it might not finish, as far as the checker sees), under a budget.
+  const go = k.def("go");
+  k.define(go, k.fn(["i", "acc"], (i, acc) => k.if(k.call(I.less, i, k.int(1)), acc, k.call(go, k.call(I.sub, i, k.int(1)), k.call(I.add, acc, i)))));
+  const sumTo = def("sum to", ["n"], (n) => within(k, 1000, () => k.call(go, n, k.int(0)), () => k.int(-1)));
+  // a³ past 32 bits: the budget's fallback.
+  const cube = def("cube", ["a"], (a) => within(k, 10, () => k.call(I.mul, k.call(I.mul, a, a), a), () => k.int(-1)));
+  const lowest = def("lowest", [], () => k.int(-2147483648));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
+  return { code, names, info, poly, smaller, same, sumTo, cube, lowest };
+}

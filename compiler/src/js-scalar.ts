@@ -12,8 +12,18 @@
 import { noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const INFIX: Partial<Record<Op, string>> = {
-  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||",
+  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||", iless: "<", ieq: "===",
 };
+// An Int held in 32 bits (C66c), as in WGSL: wrapped as an i32 wraps, and
+// past 32 bits it gives up as a budget running out does (wgsl.ts).
+const INT = `const $big = (r) => { if (r > 2147483647 || r < -2147483648) fuel = -1; };
+const $iadd = (a, b) => { $big(a + b); return (a + b) | 0; };
+const $isub = (a, b) => { $big(a - b); return (a - b) | 0; };
+const $imul = (a, b) => { $big(a * b); return Math.imul(a, b); };
+const $ineg = (a) => { $big(-a); return -a | 0; };
+const $iabs = (a) => { $big(Math.abs(a)); return Math.abs(a) | 0; };
+`;
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "$iadd", isub: "$isub", imul: "$imul", ineg: "$ineg", iabs: "$iabs" };
 const MATH: Partial<Record<Op, string>> = {
   sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2",
 };
@@ -24,7 +34,7 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
   const { funcs } = lowered;
   const names = new Map(funcs.map((f, i) => [i, `f${i}`]));
   const text = funcs.map((f, i) => func(f, i));
-  const js = `let fuel = 0;\n\n${text.join("\n\n")}\nreturn { ${funcs.map((_, i) => names.get(i)).join(", ")} };\n`;
+  const js = `let fuel = 0;\n${INT}\n${text.join("\n\n")}\nreturn { ${funcs.map((_, i) => names.get(i)).join(", ")} };\n`;
   return { js, names };
 
   function func(f: SFunc, i: number): string {
@@ -36,6 +46,7 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
     // An expression, with the statements it needs first.
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
+        case "int": return `(${e.v})`;
         case "num": return Object.is(e.v, -0) ? "(-0)" : e.v < 0 ? `(${e.v})` : String(e.v);
         case "bool": return String(e.v);
         case "local": return local(e.i);
@@ -61,6 +72,8 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
+          if (e.op === "itof") return xs[0];
+          if (INT_CALL[e.op]) return `${INT_CALL[e.op]}(${xs.join(", ")})`;
           return `Math.${MATH[e.op]}(${xs.join(", ")})`;
         }
         default: return noData(e);
@@ -106,7 +119,7 @@ export function loadJs(lowered: Lowered): Map<string, (...xs: number[]) => unkno
 
 // What a function that ran out gives, which the budget around it replaces.
 function zero(t: LType): string {
-  return t === "f64" ? "0" : t === "i32" ? "false" : `[${(t as RType).fields.map((x) => zero(x.t)).join(", ")}]`;
+  return t === "f64" || t === "int32" ? "0" : t === "i32" ? "false" : `[${(t as RType).fields.map((x) => zero(x.t)).join(", ")}]`;
 }
 
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {

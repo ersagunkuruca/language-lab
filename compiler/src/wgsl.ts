@@ -2,7 +2,9 @@
 // prints, printed a second time for the GPU. Float64 is `f32` (GPUs have no
 // f64 to speak of, so results are close to the evaluator's, not equal),
 // Bool is `bool`, a record is a `struct`, a let is a `let`, and `if` is an
-// `if` statement. Lower with `{ records: true }` to have records.
+// `if` statement. Lower with `{ records: true }` to have records, and with
+// `{ int32: true }` to have Ints as `i32` (C66c): past 32 bits, an Int
+// gives up as a budget running out does (INT_HELPERS below).
 //
 // A record of two to four Float64s (a point, a direction, a colour) is
 // stored as a WGSL vector instead, `vec2f` to `vec4f`, its fields in order
@@ -61,7 +63,40 @@ export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType
 // to Float32's, not exact.
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number> }
 const INFIX: Partial<Record<Op, string>> = {
-  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||",
+  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==",
+};
+// An Int in a shader is an i32 (C66c). WGSL's i32 arithmetic wraps; a
+// result past 32 bits isn't the evaluator's, so it gives up as a budget
+// running out does: lab_fuel goes below 0, the budget around it gives its
+// fallback, and outside any budget the answer isn't the evaluator's (as
+// outside a budget anywhere). The overflow tests are Hacker's Delight's
+// (Warren, 2-13): a sum overflows when both inputs' signs differ from its.
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs" };
+const INT_HELPERS: Partial<Record<Op, string>> = {
+  iadd: `fn lab_iadd(a: i32, b: i32) -> i32 {
+  let r = a + b;
+  if (((a ^ r) & (b ^ r)) < 0i) { lab_fuel = -1.0; }
+  return r;
+}`,
+  isub: `fn lab_isub(a: i32, b: i32) -> i32 {
+  let r = a - b;
+  if (((a ^ b) & (a ^ r)) < 0i) { lab_fuel = -1.0; }
+  return r;
+}`,
+  imul: `fn lab_imul(a: i32, b: i32) -> i32 {
+  let r = a * b;
+  // r / a undoes the product unless it wrapped; −1 × the lowest i32 wraps to itself.
+  if (a != 0i && (r / a != b || (a == -1i && b == -2147483647i - 1i))) { lab_fuel = -1.0; }
+  return r;
+}`,
+  ineg: `fn lab_ineg(a: i32) -> i32 {
+  if (a == -2147483647i - 1i) { lab_fuel = -1.0; }
+  return -a;
+}`,
+  iabs: `fn lab_iabs(a: i32) -> i32 {
+  if (a == -2147483647i - 1i) { lab_fuel = -1.0; }
+  return abs(a);
+}`,
 };
 // Records of 2 to 4 Float64s are vectors; their fields are these.
 const XYZW = ["x", "y", "z", "w"];
@@ -109,7 +144,7 @@ const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
 // arithmetic as written.
 function unrounded(e: SExpr): SExpr {
   switch (e.k) {
-    case "num": case "bool": case "local": return e;
+    case "num": case "bool": case "local": case "int": return e;
     case "op": return e.op === "float32" ? unrounded(e.args[0]) : { ...e, args: e.args.map(unrounded) };
     case "if": return { ...e, cond: unrounded(e.cond), then: unrounded(e.then), else: unrounded(e.else) };
     case "let": return { ...e, value: unrounded(e.value), body: unrounded(e.body) };
@@ -195,7 +230,7 @@ export function emitWgsl(lowered: Lowered): Shader {
     return structs.get(r.key)!.name;
   };
   function tname(t: LType): string {
-    return t === "f64" ? "f32" : t === "i32" ? "bool" : struct(t as RType);
+    return t === "f64" ? "f32" : t === "i32" ? "bool" : t === "int32" ? "i32" : struct(t as RType);
   }
   for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) tname(t);
 
@@ -232,7 +267,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           if (e.i >= f.params.length) return null;
           uses.set(e.i, (uses.get(e.i) ?? 0) + 1);
           return c.args[e.i];
-        case "num": case "bool": return e;
+        case "num": case "bool": case "int": return e;
         case "let": case "budget": return null;
         case "if": {
           const m = minmax(e);
@@ -370,12 +405,14 @@ export function emitWgsl(lowered: Lowered): Shader {
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
-  const needsFuel = kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
+  const intOps = (Object.keys(INT_HELPERS) as Op[]).filter((op) => kept.some((i) => usesOp(funcs[i].body, op)));
+  const needsFuel = intOps.length > 0 || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
     ...(needsMod ? [MOD] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
+    ...intOps.map((op) => INT_HELPERS[op]),
     ...structText,
     ...text,
   ].join("\n\n") + "\n";
@@ -399,6 +436,7 @@ export function emitWgsl(lowered: Lowered): Shader {
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
         case "num": return num(e.v);
+        case "int": return e.v === -(2n ** 31n) ? "(-2147483647i - 1i)" : `${e.v}i`;
         case "bool": return String(e.v);
         case "local": return local(e.i);
         case "let": {
@@ -451,6 +489,8 @@ export function emitWgsl(lowered: Lowered): Shader {
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
+          if (e.op === "itof") return `f32(${bare(xs[0])})`;
+          if (INT_CALL[e.op]) return `${INT_CALL[e.op]}(${xs.map(bare).join(", ")})`;
           if (e.op === "pow") {
             const y = e.args[1];
             // x², x³, x⁴ as products, which is what they are.
@@ -595,7 +635,7 @@ function uses(e: SExpr, i: number): number {
 function put(e: SExpr, i: number, v: SExpr): SExpr {
   switch (e.k) {
     case "local": return e.i === i ? v : e;
-    case "num": case "bool": return e;
+    case "num": case "bool": case "int": return e;
     case "op": case "call": case "make": return { ...e, args: e.args.map((a) => put(a, i, v)) };
     case "get": return { ...e, rec: put(e.rec, i, v) };
     case "if": return { ...e, cond: put(e.cond, i, v), then: put(e.then, i, v), else: put(e.else, i, v) };
