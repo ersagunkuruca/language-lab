@@ -1,8 +1,12 @@
 # Which parts of a multivector can be nonzero (design note, 2026-10-31)
 
-**Status (2026-10-31).** Proposal, BACKLOG L43 ("grade inference"), from
-CLIFFORD-DEMOS-2026-10-31 B3. Steps L43b to L43e are on the row. One
-question for Ersagun at the end; L43b doesn't wait on it.
+**Status (2026-10-31).** BACKLOG L43 ("grade inference"), from
+CLIFFORD-DEMOS-2026-10-31 B3. L43b is built: `src/lang/grades.ts`
+(`bladeMask`, `describeMask`), for algebras a definition writes down,
+with a function's inputs every part unless the caller gives masks.
+Bounce's algebra arrives inside a `Space`, so it needs the per-space
+copies stage.ts makes (I86) before masks reach it. L43c to L43e are on
+the row; one question for Ersagun at the end.
 
 ## The problem
 

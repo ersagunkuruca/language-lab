@@ -1,0 +1,344 @@
+// Which parts of a multivector can be nonzero (GRADES.md, BACKLOG L43b).
+//
+// For an algebra the program writes down (a definition with no inputs
+// whose value is `clifford algebra(squares, basis)`), each multivector a
+// function makes gets a blade mask: bit i set when its part i may be
+// nonzero. The reading is an abstract evaluation, as linear.ts reads a
+// matrix: literals and records built by position give their mask
+// directly (a part written as the literal 0 is off), + and − take the
+// union, a number times a multivector keeps its mask, and the prelude's
+// Clifford operations follow the algebra's own table. The product, the
+// outer and inner products, the regressive product, the dual, the reverse
+// and the involution are linear in each input, so their mask is the
+// union over the input blades of what each pair of basis elements gives;
+// that table of masks is worked out once per algebra by running the
+// operation on its basis elements (so in PGA a product landing on
+// e₀e₀ = 0 drops out). The sandwich, a reflection, an inverse and the
+// exponential are built from those (the exponential as a closure under
+// the product). Anything the reading doesn't follow is every part, so a
+// mask is never too small.
+//
+// Off means 0 in exact arithmetic. When a rule sees a cancellation (the
+// grade rule for a sandwich, say), Float64s may leave rounding there
+// (1e-17 of the rest), which storing only the masked parts drops.
+//
+// Lets, lambdas applied and the program's own definitions are read
+// through (inlined, up to a depth); a definition's inputs are every part
+// unless the caller says otherwise. The compiler (L43c) and the editor
+// (L43d) use the masks; nothing here refuses a program.
+//
+// Prior art: Gaalop (Dietmar Hildenbrand) finds which blades of each
+// result can be nonzero and generates code for those only; this is the
+// same, by the language's own abstract evaluation over a finite lattice
+// (Cousot and Cousot, POPL 1977). CREDITS.md.
+
+import type { Code, Id, Node, NodeOf } from "../model.ts";
+import type { Info } from "./infer.ts";
+import { LIBRARY } from "./library.ts";
+import { makeRunner, type Value } from "./run.ts";
+import { ALGEBRA_V, ARITH, CONS, NIL, S, TRUE } from "./std.ts";
+import { B } from "../prelude.ts";
+import { NUMBER } from "./types.ts";
+
+export interface Algebra {
+  // The definition whose value it is, and the record variant of its
+  // multivectors.
+  def: Id;
+  variant: Id;
+  parts: number;
+  // Each part's blade: the basis vectors in it, numbered from 1.
+  blades: number[][];
+  full: number;
+  // pairs[op][i][j]: the mask of op(eᵢ, eⱼ); unary[op][i]: of op(eᵢ).
+  pairs: Record<Binary, number[][]>;
+  unary: Record<Unary, number[]>;
+}
+type Binary = "product" | "outer" | "inner" | "regressive";
+type Unary = "reverse" | "involute" | "dual" | "undual";
+
+type V =
+  | { k: "mask"; alg: Algebra; m: number }
+  | { k: "alg"; alg: Algebra }
+  | { k: "num"; zero: boolean }
+  | { k: "closure"; lambda: NodeOf<"lambda">; env: Map<Id, V> }
+  | { k: "top" };
+
+const TOP: V = { k: "top" };
+const NUM: V = { k: "num", zero: false };
+const DEPTH = 60;
+
+const libId = (name: string): Id | undefined => Object.keys(LIBRARY.names).find((id) => LIBRARY.names[id] === name && LIBRARY.code.nodes[id]?.kind === "def");
+const CL: Record<string, Id | undefined> = Object.fromEntries(
+  ["algebra", "product", "outer", "inner", "regressive", "reverse", "involute", "dual", "undual", "inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]
+    .map((n) => [n, libId(`clifford ${n}`)]),
+);
+const byId = new Map(Object.entries(CL).flatMap(([n, id]) => (id ? [[id, n] as const] : [])));
+
+const ADD = new Set<Id>([ARITH.add, B.add]), SUB = new Set<Id>([ARITH.sub, B.sub]);
+const MUL = new Set<Id>([ARITH.mul, B.mul]), DIV = new Set<Id>([B.div]), NEG = new Set<Id>([ARITH.neg, B.neg]);
+
+const bits = (m: number) => { const out: number[] = []; for (let i = 0; m >> i; i++) if ((m >> i) & 1) out.push(i); return out; };
+const listOf = (v: Value): Value[] => { const out: Value[] = []; let c = v as { tag: Id; fields: Value[] }; while (c.tag === CONS) { out.push(c.fields[0]); c = c.fields[1] as never; } return out; };
+
+// The algebras a program writes down, each worked out once.
+const cache = new WeakMap<Code, Map<Id, Algebra>>();
+export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
+  let found = cache.get(code);
+  if (found) return found;
+  found = new Map();
+  cache.set(code, found);
+  if (!CL.algebra) return found;
+  const r = makeRunner(code, info, { print: () => {} });
+  const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
+  for (const d of code.defs) {
+    const def = code.nodes[d] as NodeOf<"def">;
+    const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (body?.kind !== "call" || (code.nodes[body.fn] as Node)?.kind !== "ref" || (code.nodes[body.fn] as NodeOf<"ref">).target !== CL.algebra) continue;
+    try {
+      const al = r.value(d) as { tag: Id; fields: Value[] };
+      if (al?.tag !== ALGEBRA_V) continue;
+      const pairs = listOf(al.fields[2]).map((p) => (p as { tag: Id; fields: Value[] }).fields);
+      const elements = pairs.map(([, e]) => e as { tag: Id; fields: number[] });
+      const parts = elements[0].fields.length;
+      // Part i's element is the one with its 1 at i.
+      const at = Array.from({ length: parts }, (_, i) => pairs.findIndex(([, e]) => (e as { fields: number[] }).fields[i] !== 0));
+      const blades = at.map((k) => listOf(pairs[k][0]).flatMap((b, j) => ((b as { tag: Id }).tag === TRUE ? [j + 1] : [])));
+      const el = (i: number) => elements[at[i]];
+      const maskOf = (v: Value) => { const f = (v as { fields: number[] }).fields; return f.reduce((m, x, i) => (x !== 0 ? m | (1 << i) : m), 0); };
+      const run = (op: string, ...xs: Value[]) => maskOf(first(r.call(r.value(CL[op]!), al, ...xs) as Iterable<Value>)!);
+      const idx = Array.from({ length: parts }, (_, i) => i);
+      const alg: Algebra = {
+        def: d, variant: elements[0].tag, parts, blades, full: (1 << parts) - 1,
+        pairs: Object.fromEntries((["product", "outer", "inner", "regressive"] as Binary[]).map((op) => [op, idx.map((i) => idx.map((j) => run(op, el(i), el(j))))])) as Algebra["pairs"],
+        unary: Object.fromEntries((["reverse", "involute", "dual", "undual"] as Unary[]).map((op) => [op, idx.map((i) => run(op, el(i)))])) as Algebra["unary"],
+      };
+      found.set(d, alg);
+    } catch { /* an algebra that doesn't run is not read */ }
+  }
+  return found;
+}
+
+const binary = (alg: Algebra, op: Binary, a: number, b: number) => {
+  let m = 0;
+  for (const i of bits(a)) for (const j of bits(b)) m |= alg.pairs[op][i][j];
+  return m;
+};
+const unary = (alg: Algebra, op: Unary, a: number) => bits(a).reduce((m, i) => m | alg.unary[op][i], 0);
+const gradeOf = (alg: Algebra, i: number) => alg.blades[i].length;
+// Every blade of the grades x has.
+const sameGrades = (alg: Algebra, x: number) => { const gs = new Set(bits(x).map((i) => gradeOf(alg, i))); return alg.blades.reduce((m, b, i) => (gs.has(b.length) ? m | (1 << i) : m), 0); };
+const versor = (alg: Algebra, r: number) => {
+  const gs = bits(r).map((i) => gradeOf(alg, i));
+  return gs.length > 0 && (gs.every((g) => g === 1) || (gs.every((g) => g % 2 === 0) && Math.log2(alg.parts) <= 3));
+};
+
+// The mask of what `fn` (a definition or a lambda) gives, each input
+// given as a mask (or every part when left out); null when it isn't a
+// multivector of an algebra the program writes down.
+export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = []): { algebra: Algebra; mask: number } | null {
+  const algebras = algebrasOf(code, info);
+  if (!algebras.size) return null;
+  const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
+  const nodes = code.nodes;
+  const lam = (id: Id): NodeOf<"lambda"> | null => {
+    let n: Node | undefined = nodes[id];
+    if (n?.kind === "def") n = n.body ? nodes[n.body] : undefined;
+    return n?.kind === "lambda" ? n : null;
+  };
+  const maskIn = (v: V, alg: Algebra) => (v.k === "mask" && v.alg === alg ? v.m : alg.full);
+  const join = (a: V, b: V): V => {
+    if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m };
+    if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
+    return TOP;
+  };
+
+  // A value the reading lost: a Float64 is still a number, and a
+  // multivector of a known algebra still has every part.
+  const byType = new Map<Id, Algebra>();
+  for (const a of algebras.values()) {
+    const t = code.defs.find((d) => { const b = (nodes[d] as NodeOf<"def">)?.body; const n = b ? nodes[b] : undefined; return n?.kind === "typedef" && n.variants.includes(a.variant); });
+    if (t) byType.set(t, a);
+  }
+  const typed = (id: Id): V => {
+    const t0 = info.typeOf.get(id), t = t0 && info.subst.zonk(t0);
+    if (t?.t !== "con") return TOP;
+    if (t.id === NUMBER) return NUM;
+    const a = byType.get(t.id);
+    return a ? { k: "mask", alg: a, m: a.full } : TOP;
+  };
+  const ev = (id: Id, env: Map<Id, V>, depth: number): V => {
+    const v = ev1(id, env, depth);
+    return v.k === "top" ? typed(id) : v;
+  };
+  const ev1 = (id: Id, env: Map<Id, V>, depth: number): V => {
+    if (depth > DEPTH) return TOP;
+    const n = nodes[id];
+    if (!n) return TOP;
+    switch (n.kind) {
+      case "lit": return typeof n.value === "number" ? { k: "num", zero: n.value === 0 } : TOP;
+      case "lambda": return { k: "closure", lambda: n, env };
+      case "ref": {
+        if (env.has(n.target)) return env.get(n.target)!;
+        const alg = algebras.get(n.target);
+        if (alg) return { k: "alg", alg };
+        const t = nodes[n.target];
+        if (t?.kind === "def" && t.body && depth < DEPTH) {
+          const b = nodes[t.body];
+          return b?.kind === "lambda" ? { k: "closure", lambda: b, env: new Map() } : ev(t.body, new Map(), depth + 1);
+        }
+        return TOP;
+      }
+      case "call": return call(n, env, depth);
+      case "match": {
+        // A record taken apart: its parts are numbers, zero where masked off.
+        const s = ev(n.scrutinee, env, depth + 1);
+        const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
+        if (s.k === "mask" && arms.length === 1 && arms[0].variant === s.alg.variant) {
+          const inner = new Map(env);
+          arms[0].binds.forEach((b, i) => inner.set(b, { k: "num", zero: !((s.m >> i) & 1) }));
+          return ev(arms[0].body, inner, depth + 1);
+        }
+        // Otherwise every arm may run: the union of what they give.
+        const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b) => [b, TOP] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
+        return outs.length ? outs.reduce(join) : TOP;
+      }
+      default: return TOP;
+    }
+  };
+
+  const apply = (f: V, args: V[], depth: number): V => {
+    if (f.k !== "closure") return TOP;
+    const env = new Map(f.env);
+    f.lambda.params.forEach((p, i) => env.set(p, args[i] ?? TOP));
+    return ev(f.lambda.body, env, depth + 1);
+  };
+
+  const call = (n: NodeOf<"call">, env: Map<Id, V>, depth: number): V => {
+    const fnNode = nodes[n.fn];
+    const target = fnNode?.kind === "ref" ? fnNode.target : null;
+    const arg = (i: number) => ev(n.args[i], env, depth + 1);
+    if (target && byVariant.has(target)) {
+      const alg = byVariant.get(target)!;
+      return { k: "mask", alg, m: n.args.reduce((m, a, i) => { const v = ev(a, env, depth + 1); return v.k === "num" && v.zero ? m : m | (1 << i); }, 0) };
+    }
+    if (target && (ADD.has(target) || SUB.has(target))) {
+      const [a, b] = [arg(0), arg(1)];
+      return a.k === "num" && b.k === "num" ? { k: "num", zero: a.zero && b.zero } : join(a, b);
+    }
+    if (target && (MUL.has(target) || DIV.has(target))) {
+      const [a, b] = [arg(0), arg(1)];
+      if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero || (MUL.has(target) && b.zero) };
+      if (a.k === "num" && b.k === "mask") return a.zero ? { ...b, m: 0 } : b;
+      if (a.k === "mask" && b.k === "num") return MUL.has(target) && b.zero ? { ...a, m: 0 } : a;
+      return TOP;
+    }
+    if (target && NEG.has(target)) { const a = arg(0); return a.k === "num" || a.k === "mask" ? a : TOP; }
+    if (target === S.zipParts) {
+      const [f, a, b] = [arg(0), arg(1), arg(2)];
+      const op = nodes[n.args[0]]?.kind === "ref" ? (nodes[n.args[0]] as NodeOf<"ref">).target : null;
+      if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) {
+        // A part is off when f of two zeros is zero, as for + and −.
+        const z = op && (ADD.has(op) || SUB.has(op)) ? { k: "num", zero: true } as V : apply(f, [{ k: "num", zero: true }, { k: "num", zero: true }], depth);
+        return z.k === "num" && z.zero ? { k: "mask", alg: a.alg, m: a.m | b.m } : { k: "mask", alg: a.alg, m: a.alg.full };
+      }
+      return TOP;
+    }
+    if (target === S.mapParts) {
+      const [f, x] = [arg(0), arg(1)];
+      if (x.k !== "mask") return TOP;
+      const z = apply(f, [{ k: "num", zero: true }], depth);
+      return z.k === "num" && z.zero ? x : { ...x, m: x.alg.full };
+    }
+    const op = target ? byId.get(target) : undefined;
+    if (op && op !== "algebra") {
+      const al = arg(0);
+      if (al.k !== "alg") return TOP;
+      const alg = al.alg;
+      const m = (i: number) => maskIn(arg(i), alg);
+      const mask = (x: number): V => ({ k: "mask", alg, m: x });
+      switch (op) {
+        case "product": case "outer": case "inner": case "regressive": return mask(binary(alg, op, m(1), m(2)));
+        case "reverse": case "involute": case "dual": case "undual": return mask(unary(alg, op, m(1)));
+        // ṽ / ⟨v ṽ⟩₀: the reverse's blades.
+        case "inverse": return mask(unary(alg, "reverse", m(1)));
+        // A reflection in a vector keeps grades (it is an outermorphism).
+        // So does R x R̃ for any even R when no blade has more than three
+        // vectors: it keeps x's parity (even · x · even) and its sign under
+        // the reverse, and grades 0 to 3 all differ in one or the other.
+        // Otherwise the products' blades.
+        case "sandwich": { const r = m(1), x = m(2); const y = binary(alg, "product", binary(alg, "product", r, x), unary(alg, "reverse", r)); return mask(versor(alg, r) ? y & sameGrades(alg, x) : y); }
+        case "reflect": { const nv = m(1), x = m(2); const y = binary(alg, "product", binary(alg, "product", unary(alg, "involute", nv), x), unary(alg, "reverse", nv)); return mask(versor(alg, nv) ? y & sameGrades(alg, x) : y); }
+        case "project": { const b = m(1), x = m(2); return mask(x | binary(alg, "product", binary(alg, "product", unary(alg, "involute", b), x), unary(alg, "reverse", b))); }
+        case "exp": {
+          // 1 and b, closed under the product: the series and the closed forms both stay inside.
+          const one = alg.blades.findIndex((b) => b.length === 0);
+          let x = (1 << one) | m(1);
+          for (;;) { const y = x | binary(alg, "product", x, x); if (y === x) return mask(x); x = y; }
+        }
+        case "grade": {
+          const g = nodes[n.args[1]];
+          const x = m(2);
+          return g?.kind === "lit" && typeof g.value === "number" ? mask(bits(x).filter((i) => gradeOf(alg, i) === g.value).reduce((a, i) => a | (1 << i), 0)) : mask(x);
+        }
+        case "part": return NUM;
+        case "with part": {
+          // The blade named by literal vectors, or any.
+          const vs = listLits(n.args[2]);
+          const i = vs ? alg.blades.findIndex((b) => b.length === vs.length && [...b].sort().join() === [...new Set(vs)].sort().join() && new Set(vs).size === vs.length) : -2;
+          return mask(m(1) | (i >= 0 ? 1 << i : i === -1 ? 0 : alg.full));
+        }
+      }
+    }
+    // A let, a lambda applied, a definition of the program: read through.
+    const f = ev(n.fn, env, depth + 1);
+    if (f.k === "closure") return apply(f, n.args.map((a) => ev(a, env, depth + 1)), depth);
+    return TOP;
+  };
+
+  // A list written out of Int or Float64 literals.
+  const listLits = (id: Id): number[] | null => {
+    const out: number[] = [];
+    let c = nodes[id];
+    for (;;) {
+      if (c?.kind === "ref" && c.target === NIL) return out;
+      if (c?.kind !== "call") return null;
+      const f = nodes[c.fn];
+      if (f?.kind === "ref" && f.target === NIL) return out;
+      if (f?.kind !== "ref" || f.target !== CONS) return null;
+      const h = nodes[c.args[0]];
+      if (h?.kind !== "lit") return null;
+      out.push(Number(h.value));
+      c = nodes[c.args[1]];
+    }
+  };
+
+  const l = lam(fn);
+  const env = new Map<Id, V>();
+  // An input given as a mask: of which algebra, if there's only one.
+  const only = algebras.size === 1 ? [...algebras.values()][0] : null;
+  l?.params.forEach((p, i) => env.set(p, given[i] != null && only ? { k: "mask", alg: only, m: given[i]! } : TOP));
+  const v = l ? ev(l.body, env, 0) : ev(fn, env, 0);
+  return v.k === "mask" ? { algebra: v.alg, mask: v.m } : null;
+}
+
+const SUB_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
+const sub = (n: number) => String(n).split("").map((d) => SUB_DIGITS[Number(d)]).join("");
+const GRADE = ["a scalar", "a vector", "a bivector", "a trivector"];
+
+// A mask in words: "a vector", "even", or its blades.
+export function describeMask(alg: Algebra, mask: number): string {
+  const on = bits(mask);
+  if (!on.length) return "0";
+  const grades = new Set(on.map((i) => gradeOf(alg, i)));
+  const all = (g: (k: number) => boolean) => alg.blades.every((b, i) => !g(b.length) || ((mask >> i) & 1));
+  if (grades.size === 1) {
+    const [g] = grades;
+    if (all((k) => k === g)) return GRADE[g] ?? `grade ${g}`;
+  }
+  if ([...grades].every((g) => g % 2 === 0) && all((k) => k % 2 === 0)) return "even (a rotor or motor)";
+  if ([...grades].every((g) => g % 2 === 1) && all((k) => k % 2 === 1)) return "odd";
+  return on.map((i) => (alg.blades[i].length ? `e${alg.blades[i].map(sub).join("")}` : "1")).join(", ");
+}
+
+// For the record: a value's mask, read off a value the evaluator gave.
+export const maskOfValue = (v: Value): number => ((v as { fields: number[] }).fields ?? []).reduce((m, x, i) => (x !== 0 ? m | (1 << i) : m), 0);
