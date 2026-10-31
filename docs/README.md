@@ -110,6 +110,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
 | [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `lab build-web` | built |
+| [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | proposal (L69a to L69d), one question for Ersagun |
 | [AUDIO.md](design/targets/AUDIO.md) | Sound as a function on blocks of samples; the guitar pedal | built (A1 to A5) |
 
 ### Editor

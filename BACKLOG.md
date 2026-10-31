@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765) and I81 (this PR) done; next the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765), I81 (#766) and the L69 note (this PR) done; next the L43 grades note, then other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -158,7 +158,7 @@ all of these.
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
 | L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await` | LANGUAGE-NEEDS Part 1 | P2 | L | after L54 |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
-| L69 | Foreign definitions: a typed declaration with its row and a body per target (Gleam's `@external`, Elm's ports) | LANGUAGE-NEEDS §5 | P2 | M | |
+| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)): a program's own effect answered by a host file per target. L69a `hosts/js.js` in the evaluator and compiled JS, results checked at the border, `lab hosts` skeleton (L, M); L69b C and WebAssembly (C, M); L69c the editor's "needs its host" (E, S); L69d optional, std's world operations as host files (L, M). Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | design done |
 | L62 | Branches with no world effects marked pure by a row constraint, so the runtime may run them on another core | LANGUAGE-NEEDS Part 1 | P3 | S | after L71 |
 | L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs a pipeline | LANGUAGE-NEEDS Part 1 | P3 | M | |
 
