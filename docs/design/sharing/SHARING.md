@@ -2,7 +2,7 @@
 
 Written 2026-10-31 from the thread "Design sharing libraries and
 versioning". **Status (2026-10-31):** proposal, nothing built. The steps
-are BACKLOG rows L109 to L114, which take over L17 and L68.
+are BACKLOG rows L109 to L115, which take over L17 and L68.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -140,6 +140,38 @@ run one. How signing and fetching work on each host is a host detail.
 its effects, so a `parse` whose pin has no Network can't reach the
 network, whatever version arrives.
 
+## 4b. The project keeps every version it has used (Ersagun, 2026-10-31)
+
+*"If we are thinking of allowing any source, even non-registry sources,
+then there is a chance that the version we are using can go away. … At
+each update from those sources we may need to save the old version, so
+that if anything that's not obvious from the tests etc drifted, Bob would
+keep the option to downgrade later."*
+
+So a project has its own **store**: every published node it has ever
+used, keyed by hash, saved with the project (a folder next to the program
+files, under git). It is filled by default, not on request, because it's
+cheap: content addressing shares every node two versions have in common,
+so keeping `@abc` after moving to `@def` costs only the nodes that
+changed. Nothing to remember, nothing to choose.
+
+- **A source goes away.** The program still opens, checks and runs from
+  the store. The editor says the version's source is gone and offers to
+  publish the kept copy somewhere else; the hash proves it's the same
+  code wherever it lands.
+- **An upgrade drifted in a way tests didn't catch.** The upgrade keeps
+  the old version in the store, and the lineage's history in the program
+  lists every version Bob has had. **Downgrade** moves the ref back the
+  same way an upgrade moves it forward (same pin rules, names restored
+  from the copy he had then), and it needs no network.
+- **Size.** The editor can show what the store holds and offer to drop
+  versions no program in the project refers to any more; dropping is the
+  only way anything leaves it.
+
+Prior art: vendoring (Go's `vendor/`, Cargo's `cargo vendor`), Nix's
+store and its garbage collection by roots, Unison's local codebase,
+which keeps every definition it has seen.
+
 ## 5. Names: pinned locally, updated by asking
 
 Names stay the human interface, and stay presentation. Bob's program
@@ -195,6 +227,7 @@ that.
 | L111 | Upgrades by pin generality (new pin at least as general), moved by the editor with a note; tests must pass once T7 is built | M |
 | L112 | Names pinned per program; one question per upgrade for the author's renames; the program's own renames win | M |
 | L113 | Structural diff and three-way merge driver for program files, by id, registered in `.gitattributes` | M |
+| L115 | A project store: every published node the project has used, kept by hash with the project; runs when a source is gone; downgrade moves a ref back to any kept version | M |
 | L114 | Lineage logs: signed, append-only, "current" and "broken" entries; fetching code by hash from any host; a browser over logs (was L68) | L |
 
 L17's data-type migrations stay as L17. L113 can go first: it needs
@@ -206,6 +239,7 @@ nothing else and helps today.
 |---|---|---|
 | Definitions named by content hash, names as metadata, upgrades that move refs | Influence | [Unison](https://www.unison-lang.org) (Paul Chiusano, Rúnar Bjarnason, Arya Irani and team) |
 | A fixed name pointing to changing content-addressed versions | Prior art | IPNS in [IPFS](https://ipfs.tech) (Juan Benet, Protocol Labs); git branches over commits (Linus Torvalds) |
+| Keeping every version used inside the project; downgrade from it | Ersagun's idea / Prior art | Ersagun, 2026-10-31; Go's and Cargo's vendoring, Nix's store and garbage collection, Unison's local codebase |
 | Imports pinned by hash, fetched from any host | Prior art | [Dhall](https://dhall-lang.org) (Gabriella Gonzalez); [Nix](https://nixos.org)'s content-addressed store (Eelco Dolstra) |
 | Signed, append-only logs saying which version a name means | Prior art | Go's checksum database (Russ Cox and team); [Sigstore](https://www.sigstore.dev)'s Rekor; Certificate Transparency |
 | Compatibility checked from types, not declared by version numbers | Influence | Elm's `elm diff` and enforced semantic versioning (Evan Czaplicki) |
