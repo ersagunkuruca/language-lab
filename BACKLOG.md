@@ -34,6 +34,10 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I75 | Tumble's `clear` and `settle` open on "The search found no result for these values": with every input known, Run should run a plain function forwards, not search | QA11 M1 | 2026-10-31 |
+| I76 | On a page program, a helper's own Run sits below the 560 px page; when the open definition isn't main, fold or shrink the page | QA11 M2 | 2026-10-31 |
+| I77 | A page's main still opens with empty canvas top-left (Tumble's first node 220 px right, 275 px down; pedal lower right); open on the first node | QA11 L1 | 2026-10-31 |
+| I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
 
 ## E: Editor
 
