@@ -343,6 +343,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I93 | The prelude's `show decimals(x, places)`: a Float64 as text with a fixed number of places, rounded half away from 0, trailing zeros kept, never -0 (as JavaScript's toFixed and C's printf("%.*f")). Spacetime wrote its own `rounded`. | #735 |
 | I83 | The prelude's `item at(list, position, otherwise)` and `replace at(list, position, by)`, counting from 0, with no Choice outside the list (the otherwise, or the list as it was). Bounce, Tumble and Constructions each wrote their own `nth`; they can use these. Evaluated and compiled. test/item-at.test.ts | #733 |
 | I92 | `clifford exp` of a bivector whose square isn't a number (a field with E·B ≠ 0 in Cl(1, 3), a screw motion in PGA): the prelude's `clifford exp by series`, halved until small, 16 terms of the series in Horner's form, squared back up. Closed forms stay where b² is a number. Checked against (cosh a + sinh a e₀₁)(cos c + sin c e₂₃), evaluated and compiled. test/clifford.test.ts | #732 |
 | I89 | The prelude's `clifford outer` (a ∧ b), `clifford inner` (the left contraction a ⌋ b), `clifford grade` (x's grade-k part), `clifford dual` and `clifford undual` (by complement, so they work in PGA) and `clifford regressive` (a ∨ b = undual(dual a ∧ dual b)), written in the language: the products are clifford table's lines with some left out (`clifford table where`). Evaluated and compiled. test/clifford.test.ts | #731 |

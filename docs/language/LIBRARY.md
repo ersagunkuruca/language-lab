@@ -37,6 +37,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **round to Float32** : `(Float64) -> Float64`. The nearest Float64 a GPU can hold (32-bit floating point).
 - **show** : `(Float64) -> Text`. A Float64 as text: show(2.5) is "2.5".
 - **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
+- **show decimals** : `(Float64, Float64) -> Text`. x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is "2.500", show decimals(-0.0004, 3) is "0.000". For when show's up to nine places would jump about.
 - **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
 - **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
 - **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
