@@ -24,7 +24,7 @@ saving, 2026-10-27).
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | I76-I78, I80, I87, I88 (Ersagun's 20 more, 2026-10-31) |
-| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), then I37 |
+| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), I79, C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
 | L Language and library | "Language lane" | Clifford demo rows I95, I89, I92, I83, I93 done; idle until asked |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -80,7 +80,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`) makes plain callers `yield*` it, which esbuild refuses; `seeded` around such a call too. Tumble works round it. Also not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | P2 | M | |
 | C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573). Next: a search whose own definitions wait; then the world's `await(any of …)` as a promise, after L71 | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
 
 ### Speed of compiled code
