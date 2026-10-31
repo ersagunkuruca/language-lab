@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, ARITH, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -679,4 +679,23 @@ export function ints() {
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
   return { code, names, info, poly, smaller, same, sumTo, cube, lowest, quot, rem, pow, whole, counted, quarter };
+}
+
+// std's Array in a shader (C66c): sizes fixed where each array is made.
+export function shaderArrays() {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, params: string[], body: (...xs: string[]) => string) => { const d = k.def(name); k.define(d, params.length ? k.fn(params, body) : body()); return d; };
+  const A = ARRAY_OPS;
+  const or = (x: () => string, y: () => string) => k.call(S.first, k.thunk(x), k.thunk(y));
+  const palette = def("palette", ["i"], (i) => or(() => k.call(A.at, k.call(A.of, k.list(k.lit(0.1), k.lit(0.5), k.lit(0.9))), i), () => k.lit(-1)));
+  const grow = def("grow", ["x"], (x) => k.let("a", k.call(A.push, k.call(A.push, k.call(A.empty), x), k.call(B.mul, x, k.lit(2))), (a) =>
+    k.call(B.add, or(() => k.call(A.at, a, k.int(1)), () => k.lit(0)), k.call(INT_OPS.toNumber, k.call(A.length, a)))));
+  const table = def("table", [], () => k.call(A.of, k.list(k.int(3), k.int(1), k.int(4), k.int(1), k.int(5))));
+  const pick = def("pick", ["i"], (i) => or(() => k.call(INT_OPS.add, k.call(A.at, table, i), k.call(A.length, table)), () => k.int(-7)));
+  const nothing = def("nothing at", ["i"], (i) => or(() => k.call(A.at, k.call(A.empty), i), () => k.lit(-1)));
+  const uneven = def("uneven", ["b"], (b) => k.call(A.length, k.if(b, k.call(A.of, k.list(k.lit(1))), k.call(A.of, k.list(k.lit(1), k.lit(2))))));
+  const listed = def("listed", ["x"], (x) => k.call(A.length, k.call(A.of, k.call(A.items, k.call(A.of, k.list(k.call(B.add, x, k.lit(1))))))));
+  const code = base(k.code), names = { ...baseNames(k.names) }, info = infer(code, names, undefined, checkOptions);
+  if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
+  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed };
 }

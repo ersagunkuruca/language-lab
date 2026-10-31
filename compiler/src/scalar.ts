@@ -437,7 +437,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (opts.data && t.id === INT) return "int";
     if (opts.shader && !opts.data && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
-    if (opts.data && t.id === ARRAY) {
+    if ((opts.data || opts.shader) && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
       if (arrays.has(key)) return arrays.get(key)!;
       const item = t.args[0] && stype(t.args[0], inside);
@@ -553,7 +553,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const lam = d?.body ? code.nodes[d.body] : null;
     const fail = (why: string): never => { refused.set(key, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
     // A constant (`data`): a function of no inputs, computed where it's used.
-    const constant = !!opts.data && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
+    const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con" && t.id === ARRAY)) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
     if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
     // An input that can be anything is one the body never looks at (∂f/∂x
@@ -632,6 +632,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (later) return { ...later, tail };
         // A case with no fields (empty, nothing) written alone.
         if (opts.data && code.nodes[n.target]?.kind === "variant") return build(n.target, zonk(id), []);
+        // A constant array in a shader (C66c): a function of no inputs.
+        if (opts.shader && !opts.data && code.nodes[n.target]?.kind === "def") {
+          const t = stype(zonk(id));
+          if (t && isArray(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
+        }
         if (opts.data && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
           if (t && isFn(t)) return named(n.target, id, t);
@@ -696,6 +701,20 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const lets: [number, SExpr][] = [[x, a], [y, b], [g, rt("int.gcd", at(x), at(y))], [p, rt("int.exact", at(x), at(g))], [q, rt("int.exact", at(y), at(g))]];
           const body: SExpr = { k: "if", cond: rt("int.less", at(y), { k: "int", v: 0n }), then: both(rt("int.neg", at(p)), rt("int.neg", at(q))), else: both(at(p), at(q)), t };
           return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), body);
+        }
+        if (opts.shader && !opts.data && ARRAY_RT[target]) {
+          // A shader's array has its size where it's made (C66c): from a
+          // list written out, empty, or a push. Its items go in as the
+          // job's inputs; there is no List to make or read.
+          const at = target === ARRAY_OPS.of || target === ARRAY_OPS.empty || target === ARRAY_OPS.push ? id : n.args[0], a = stype(zonk(at));
+          if (!a || !isArray(a)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(at))}`);
+          if (target === ARRAY_OPS.items) throw new Refused("takes an array's items as a List (a shader has no lists)");
+          if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
+          const items: Id[] = [];
+          let l = code.nodes[n.args[0]];
+          for (; l?.kind === "call" && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
+          if (!(l?.kind === "ref" && l.target === NIL)) throw new Refused("makes an array of a list that isn't written out (a shader's array has its size where it's made)");
+          return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: items.map((x) => expr(x, env, f, false)) };
         }
         if (opts.data && ARRAY_RT[target]) {
           // The array's type, from the argument or the answer that is one;
@@ -1333,6 +1352,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "set": return typeIn(e.then, g);
       case "rt": {
         const r = runtime(e.fn).result;
+        if (r === "int" && !opts.data) return "int32";
         if (r === "i32" || r === "int" || r === "f64" || r === "text") return r;
         const a = /\.a(\d+)$/.exec(e.fn) && [...arrays.values()][Number(/\.a(\d+)$/.exec(e.fn)![1])];
         if (a && r === "array") return a;
