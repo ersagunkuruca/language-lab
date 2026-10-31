@@ -31,3 +31,16 @@ export function startPage(main: () => unknown, program: string, worklet?: string
   const sound = worklet ? soundPlayer($cells(), worklet, main as never) : null;
   doc.body.append(mountHtml((sound ? sound.page : main()) as never, { cells: $cells(), doc, call: compiledCall, listen: sound?.listen }));
 }
+
+// The same page mounted into a document someone else holds: the editor's
+// preview, which shows a page interpreted at once and then swaps in this,
+// compiled off its thread, so it runs as fast as in a tab of its own
+// (editor/main.ts startPage). Each mount comes from a fresh copy of this
+// runtime, so its cells are its own; `stop` ends its clock.
+export function mountPage(main: () => unknown, program: string, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void }): { root: Node_; cells: unknown; stop(): void } {
+  let stopped = false;
+  $setWorld(browserWorld(o.store, program, console, { cells: $cells(), frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } }));
+  $setPrint((line: string) => $cells().later(() => console.log(line)));
+  const root = mountHtml(main() as never, { cells: $cells(), doc: o.doc, call: compiledCall, ran: o.ran });
+  return { root, cells: $cells(), stop: () => { stopped = true; } };
+}
