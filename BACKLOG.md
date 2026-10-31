@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 design note and I82 (this PR) done; next I91, I81, the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764) and I91 (this PR) done; next I81, the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -167,7 +167,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | P2 | M | |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | P3 | L | |
 | L46b | Raymarch's `march` and `shadow` count steps in an Int and `colour` drops `with fuel` (bounded counting is total since L46). Waits on Int in the scalar profile outside shaders (C66's WebAssembly int32 step; plain JS and C too), or the editor's CPU-side pictures and the scalar tests refuse it | L46 | P3 | S | |
 
