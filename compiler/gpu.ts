@@ -30,7 +30,7 @@ import { represent } from "../projectional/src/lang/represent.ts";
 import { infer } from "../projectional/src/lang/infer.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
-import { area, corners, ints, parts, pga, vectors } from "./src/fixtures.ts";
+import { area, corners, ints, parts, pga, shaderArrays, vectors } from "./src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 const TRUE = "std.bool.true", FALSE = "std.bool.false";
@@ -84,6 +84,12 @@ const cases: Case[] = [
       : f.name === "whole or" ? [[2.5], [-2.5], [0], [-0.5], [1e6], [NaN], [Infinity], [-Infinity]] : f.name === "power or" ? searches.slice(0, -1) : ["quotient or", "remainder or", "count quotients", "quarter or"].includes(f.name) ? searches : pairs;
     return { label: "Int in 32 bits", code: p.code, info: p.info, names: p.names, roots: [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.quot, p.rem, p.pow, p.whole, p.counted, p.quarter], shader: true, inputs };
   })(),
+  (() => {
+    // std's Array as array<T, N> (C66c): indexes in and past the ends.
+    const p = shaderArrays();
+    const at = [[-1], [0], [1], [2], [3], [4], [5]];
+    return { label: "arrays of a fixed size", code: p.code, info: p.info, names: p.names, roots: [p.palette, p.grow, p.pick, p.nothing], shader: true, inputs: (f) => (f.name === "grow" ? [[0], [1.5], [-3]] : at) };
+  })(),
 ];
 
 const browser = await chromium.launch({
@@ -107,6 +113,7 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<st
   const ok = (e: SExpr): boolean => {
     switch (e.k) {
       case "num": case "bool": case "local": case "int": case "zero": return true;
+      case "rt": return /^array\./.test(e.fn) && e.args.every(ok);
       case "attempt": return ok(e.body) && ok(e.ok) && ok(e.otherwise);
       case "op": return EXACT.has(e.op) && e.args.every(ok);
       case "if": return ok(e.cond) && ok(e.then) && ok(e.else);

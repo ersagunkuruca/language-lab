@@ -51,6 +51,20 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
         case "int": return `(${e.v})`;
+        // std's Array in a shader (C66c), here a JavaScript array.
+        case "rt": {
+          const op = /^array\.(\w+)\./.exec(e.fn)?.[1], xs = e.args.map((a) => ex(a, pre, d));
+          if (op === "of") return `[${xs.join(", ")}]`;
+          if (op === "empty") return "[]";
+          if (op === "push") return `[...${xs[0]}, ${xs[1]}]`;
+          if (op === "length") return `${xs[0]}.length`;
+          if (op === "at") {
+            const item = lowered.arrays[Number(/\.a(\d+)$/.exec(e.fn)![1])].item, a = temp(), k = temp();
+            pre.push(`${d}const ${a} = ${xs[0]}, ${k} = ${xs[1]};`, `${d}if (${k} < 0 || ${k} >= ${a}.length) none = true;`);
+            return `(${k} >= 0 && ${k} < ${a}.length ? ${a}[${k}] : ${zero(item)})`;
+          }
+          throw new Error(`${e.fn} isn't in shaders`);
+        }
         // No answer, and a zero to go on with; first or count by the flag (wgsl.ts).
         case "zero": if (e.none) pre.push(`${d}none = true;`); return zero(e.t);
         case "attempt": {
@@ -143,6 +157,7 @@ function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
     case "let": return [...calls(e.value), ...calls(e.body)];
     case "budget": return [...calls(e.body), ...calls(e.otherwise)];
     case "attempt": return [...calls(e.body), ...calls(e.ok), ...calls(e.otherwise)];
+    case "rt": return e.args.flatMap(calls);
     default: return [];
   }
 }
