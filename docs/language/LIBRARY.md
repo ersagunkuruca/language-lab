@@ -180,6 +180,9 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **array length** : `(Array a) -> Int`. How many items an array has, in constant time.
 - **item at** : `(Array a, Int) -[Choice]-> a`. The item at a position, counting from 0, in constant time. No answer when the position is outside the array.
 - **push** : `(Array a, a) -> Array a`. The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.
+- **first of array** : `(Array a) -[Choice]-> a`. The array's first item; none of an empty array.
+- **rest of array** : `(Array a) -> Array a`. The array without its first item; an empty array stays empty. Compiled JS shares the items rather than copying them.
+- **push front** : `(Array a, a) -> Array a`. The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.
 
 ## Maps and sets
 

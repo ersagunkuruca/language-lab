@@ -343,6 +343,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| C30d (language side) | std Array's two ends, `first of array`, `rest of array` and `push front`, and `array of List`'s jobs rewritten on them: cons, match and length constant, fold a walk. Ersagun's two-ended array list; the compiled views are the Compiler lane's #734. | #PR |
 | I93 | The prelude's `show decimals(x, places)`: a Float64 as text with a fixed number of places, rounded half away from 0, trailing zeros kept, never -0 (as JavaScript's toFixed and C's printf("%.*f")). Spacetime wrote its own `rounded`. | #735 |
 | I83 | The prelude's `item at(list, position, otherwise)` and `replace at(list, position, by)`, counting from 0, with no Choice outside the list (the otherwise, or the list as it was). Bounce, Tumble and Constructions each wrote their own `nth`; they can use these. Evaluated and compiled. test/item-at.test.ts | #733 |
 | I92 | `clifford exp` of a bivector whose square isn't a number (a field with E·B ≠ 0 in Cl(1, 3), a screw motion in PGA): the prelude's `clifford exp by series`, halved until small, 16 terms of the series in Horner's form, squared back up. Closed forms stay where b² is a number. Checked against (cosh a + sinh a e₀₁)(cos c + sin c e₂₃), evaluated and compiled. test/clifford.test.ts | #732 |
