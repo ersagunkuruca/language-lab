@@ -4937,6 +4937,142 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       array.get $items
       i32.const 0`,
   },
+  // The first item; no answer when empty (C30d), as `at` past the end.
+  "array.first": {
+    params: [["a", "array"]], result: "item", locals: [], uses: [], partial: true,
+    body: `
+      local.get $a
+      struct.get $arr 2
+      i32.eqz
+      if void
+        i32.const 1
+        array.new_default $items
+        i32.const 0
+        array.get $items
+        i32.const 1
+        return
+      end
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      array.get $items
+      i32.const 0`,
+  },
+  // The items after the first: a view one later on the same buffer (the
+  // empty array's rest is itself).
+  "array.rest": {
+    params: [["a", "array"]], result: "array", locals: [], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 2
+      i32.eqz
+      if void
+        local.get $a
+        return
+      end
+      local.get $a
+      struct.get $arr 0
+      local.get $a
+      struct.get $arr 1
+      i32.const 1
+      i32.add
+      local.get $a
+      struct.get $arr 2
+      i32.const 1
+      i32.sub
+      struct.new $arr`,
+  },
+  // push at the front: into the free slot before the view's start when no
+  // other view has taken it, else a copy with room on both sides.
+  "array.pushFront": {
+    params: [["a", "array"], ["x", "item"]], result: "array", locals: [["b", "buf"], ["s", "i32"], ["n", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      local.set $b
+      local.get $a
+      struct.get $arr 1
+      local.set $s
+      local.get $a
+      struct.get $arr 2
+      local.set $n
+      ;; the slot before the start is free and in the buffer: write it
+      local.get $s
+      local.get $b
+      struct.get $buf 1
+      i32.eq
+      local.get $s
+      i32.const 0
+      i32.gt_u
+      i32.and
+      if void
+        local.get $b
+        struct.get $buf 0
+        local.get $s
+        i32.const 1
+        i32.sub
+        local.get $x
+        array.set $items
+        local.get $b
+        local.get $s
+        i32.const 1
+        i32.sub
+        struct.set $buf 1
+        local.get $b
+        local.get $s
+        i32.const 1
+        i32.sub
+        local.get $n
+        i32.const 1
+        i32.add
+        struct.new $arr
+        return
+      end
+      ;; else the view's items into a new buffer, with room on both sides
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.tee $it
+      local.get $room
+      local.get $b
+      struct.get $buf 0
+      local.get $s
+      local.get $n
+      array.copy $items $items
+      local.get $it
+      local.get $room
+      i32.const 1
+      i32.sub
+      local.get $x
+      array.set $items
+      local.get $it
+      local.get $room
+      i32.const 1
+      i32.sub
+      local.get $room
+      local.get $n
+      i32.add
+      struct.new $buf
+      local.get $room
+      i32.const 1
+      i32.sub
+      local.get $n
+      i32.const 1
+      i32.add
+      struct.new $arr`,
+  },
   "array.push": {
     params: [["a", "array"], ["x", "item"]], result: "array", locals: [["b", "buf"], ["s", "i32"], ["n", "i32"], ["e", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
     body: `

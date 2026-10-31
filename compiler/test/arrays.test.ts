@@ -167,3 +167,80 @@ test("Array in C: the two-ended buffer as counted cells, the evaluator's answers
   wordsAt.forEach(([n, i], j) => assert.equal(Buffer.from(got[7 + j][0].slice(1), "hex").toString(), ev("word of", n, BigInt(i)), `word ${i} of ${n}`));
   assert.equal(got[10][0], "1000000");
 });
+
+// The two ends (C30d) in WebAssembly and C: first, rest and push front on
+// the same buffer. A push front onto the newest array writes into the free
+// slot before it, one onto an array somebody else pushed onto first copies,
+// and the evaluator's answers come out on both targets.
+test("first, rest and push front in WebAssembly and C: the evaluator's answers, shared arrays copied, a million pushes at the front (C30d)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => string) => { const d = k.def(name); k.define(d, body()); return d; };
+  const lit = (x: number) => k.lit(x);
+  const of = (...xs: number[]) => k.call(ARRAY_OPS.of, k.list(...xs.map(lit)));
+  const front = (a: string, x: string) => k.call(ARRAY_OPS.pushFront, a, x);
+  const firstOr = (a: string, none: string) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.first, a)), k.thunk(() => none));
+  const sum = def("sum", () => k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => lit(0) },
+    { variant: CONS, names: ["x", "t"], results: [null, "r"], body: ([x], [, r]) => k.call(B.add, x, r!) },
+  ])));
+  const total = (a: string) => k.call(sum, k.call(ARRAY_OPS.items, a));
+  // [1, 2, 3] pushed at the front twice: [x, 1, 2, 3] and [9, 1, 2, 3];
+  // the first after two rests; the empty array's rest has no first.
+  def("ends", () => k.fn(["x"], (x) => k.let("base", front(of(2, 3), lit(1)), (b) => k.let("a", front(b, x), (a) =>
+    k.call(B.add, k.call(B.add, k.call(B.mul, lit(1000), total(a)), k.call(B.mul, lit(10), total(front(b, lit(9))))),
+      k.call(B.add, firstOr(k.call(ARRAY_OPS.rest, k.call(ARRAY_OPS.rest, a)), lit(-1)), firstOr(k.call(ARRAY_OPS.rest, k.call(ARRAY_OPS.empty)), lit(-100))))))));
+  // n − 1, …, 1, 0 pushed at the front one by one.
+  const count = def("count", () => k.fn(["n"], (n) => k.fold(k.call(S.range, n), [
+    { variant: NIL, names: [], body: () => k.call(ARRAY_OPS.empty) },
+    { variant: CONS, names: ["i", "t"], results: [null, "a"], body: ([i], [, a]) => front(a!, i) },
+  ])));
+  def("length after", () => k.fn(["n"], (n) => k.call(ARRAY_OPS.length, k.call(count, n))));
+  // The first item after taking the rest `d` times.
+  def("first after", () => k.fn(["n", "d"], (n, d) => k.let("a", k.fold(k.call(S.range, d), [
+    { variant: NIL, names: [], body: () => k.call(count, n) },
+    { variant: CONS, names: ["i", "t"], results: [null, "a"], body: (_, [, a]) => k.call(ARRAY_OPS.rest, a!) },
+  ]), (a) => firstOr(a, lit(-1)))));
+  // Counted items in C: Texts, pushed at the front of one array twice.
+  def("word at", () => k.fn(["i"], (i) => k.let("w", front(front(k.call(ARRAY_OPS.empty), k.call(S.show, lit(2))), k.call(S.show, lit(1))), (w) =>
+    k.call(S.first, k.thunk(() => k.call(S.concat, k.call(ARRAY_OPS.at, front(w, k.lit("!")), i), k.call(ARRAY_OPS.at, front(w, k.lit("?")), i))), k.thunk(() => k.lit("none"))))));
+  const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const named = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const roots = ["ends", "length after", "first after", "word at"];
+  const lowered = lowerScalar(code, info, nm, roots.map(named), { data: true });
+  assert.deepEqual(roots.flatMap((n) => lowered.refused.has(named(n)) ? [`${n}: ${lowered.refused.get(named(n))}`] : []), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const ev = (n: string, ...xs: unknown[]) => [...r.call(r.value(named(n)), ...(xs as never[]))][0];
+  assert.equal(ev("ends", 4), 1000 * 10 + 10 * 15 + 2 - 100);
+  const drops: [number, number][] = [[10, 0], [10, 3], [10, 9], [10, 10], [10, 12], [0, 0]];
+  // WebAssembly.
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = (await instantiate(m)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
+  assert.equal(w.ends(4), ev("ends", 4));
+  for (const [n, d] of drops) assert.equal(w["first after"](n, d), ev("first after", n, d), `first after ${d} of ${n}`);
+  let t = performance.now();
+  assert.equal(fromInt(w as never, w["length after"](1_000_000)), 1_000_000n);
+  assert.ok(performance.now() - t < 5_000, `${performance.now() - t} ms`);
+  // C, where every call frees every cell it made.
+  if (!haveC) return;
+  const out = emitC(lowered, { harness: true });
+  assert.deepEqual([...out.refused.values()], []);
+  const dir = mkdtempSync(join(tmpdir(), "ends-c-")), exe = join(dir, "ends");
+  writeFileSync(`${exe}.c`, out.c);
+  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, `${exe}.c`, "-lm"]);
+  const fn = (n: string) => lowered.funcs.findIndex((f) => f.def === named(n) && !f.inner);
+  const hex = (x: number) => new BigUint64Array(new Float64Array([x]).buffer)[0].toString(16);
+  const unhex = (x: string) => new Float64Array(new BigUint64Array([BigInt(`0x${x}`)]).buffer)[0];
+  const words: number[] = [0, 1, 2, 3];
+  t = performance.now();
+  const got = execFileSync(exe, { input: [
+    `${fn("ends")} ${hex(4)}`, ...drops.map(([n, d]) => `${fn("first after")} ${hex(n)} ${hex(d)}`),
+    ...words.map((i) => `${fn("word at")} ${i}`), `${fn("length after")} ${hex(1_000_000)}`,
+  ].join("\n") + "\n", maxBuffer: 1 << 24 }).toString().trim().split("\n").map((l) => l.trim().split(/\s+/));
+  assert.deepEqual(got.map((ws) => ws.at(-1)), got.map(() => ";0"));
+  assert.equal(unhex(got[0][0]), ev("ends", 4));
+  drops.forEach(([n, d], j) => assert.equal(unhex(got[1 + j][0]), ev("first after", n, d), `first after ${d} of ${n}`));
+  words.forEach((i, j) => assert.equal(Buffer.from(got[1 + drops.length + j][0].slice(1), "hex").toString(), ev("word at", BigInt(i)), `word ${i}`));
+  assert.equal(got.at(-1)![0], "1000000");
+});

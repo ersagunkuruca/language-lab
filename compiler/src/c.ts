@@ -172,7 +172,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push"].map((op) => `array_${op}_a${i}`))]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront"].map((op) => `array_${op}_a${i}`))]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -961,6 +961,43 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   ${T} x = ${cp(`((${B} *)v->b)->it[v->s + LAB_VAL(k)]`)};
   lab_drop(a);
   return x;
+}`);
+    // The first item; none when empty (C30d).
+    if (has("first")) out.push(`static ${T} lab_array_first_a${i}(lab_cell *a) {
+  ${V} *v = (${V} *)a;
+  if (v->n == 0) { lab_drop(a); lab_st = 1; return ${zero(a.item)}; }
+  ${T} x = ${cp(`((${B} *)v->b)->it[v->s]`)};
+  lab_drop(a);
+  return x;
+}`);
+    // The items after the first, on the same buffer; the view itself
+    // moves on when nobody else holds it.
+    if (has("rest")) out.push(`static lab_cell *lab_array_rest_a${i}(lab_cell *a) {
+  ${V} *v = (${V} *)a;
+  if (v->n == 0) return a;
+  if (a->rc == 1) { v->s++; v->n--; return a; }
+  lab_cell *r = lab__view_a${i}(lab_dup(v->b), v->s + 1, v->n - 1);
+  lab_drop(a);
+  return r;
+}`);
+    // push at the front: into the free slot before the start when no other
+    // view has taken it, else a copy with room on both sides.
+    if (has("pushFront")) out.push(`static lab_cell *lab_array_pushFront_a${i}(lab_cell *a, ${T} x) {
+  ${V} *v = (${V} *)a;
+  ${B} *b = (${B} *)v->b;
+  lab_cell *r;
+  if (v->s == b->lo && v->s > 0) {
+    b->it[--b->lo] = x;
+    if (a->rc == 1) { v->s--; v->n++; return a; }
+    r = lab__view_a${i}(lab_dup(v->b), v->s - 1, v->n + 1);
+  } else {
+    r = lab__copy_a${i}(b->it + v->s, v->n);
+    ${V} *w = (${V} *)r;
+    ${B} *c = (${B} *)w->b;
+    c->it[--c->lo] = x; w->s--; w->n++;
+  }
+  lab_drop(a);
+  return r;
 }`);
     if (has("push")) out.push(`static lab_cell *lab_array_push_a${i}(lab_cell *a, ${T} x) {
   ${V} *v = (${V} *)a;

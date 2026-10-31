@@ -16,7 +16,10 @@ its lowest and highest used slots, and a view cell (its buffer, start and
 length) holding one count on it. A push writes into the free slot past the
 view's end when that slot is the buffer's edge, and reuses the view's own
 cell when nobody else holds it; otherwise it copies the view's items, dup'd,
-into a new buffer (c.ts `arrayC`, test compiler/test/arrays.test.ts).
+into a new buffer (c.ts `arrayC`, test compiler/test/arrays.test.ts). The two
+ends (C30d) work the same way at the front: `push front` writes into the
+free slot before the view's start, `rest of array` moves a view nobody else
+holds one item on, and `first of array` has no answer when it is empty.
 
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Float64s, Bools, records as structs passed by

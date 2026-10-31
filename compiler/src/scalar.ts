@@ -67,6 +67,7 @@ import { runtime } from "./wasm-rt.ts";
 const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
+  [ARRAY_OPS.first]: "array.first", [ARRAY_OPS.rest]: "array.rest", [ARRAY_OPS.pushFront]: "array.pushFront",
 };
 // Int's builtins held in 32 bits (`shader`). quotient, remainder, power
 // and whole part may have no answer, which sets the shader's flag.
@@ -709,6 +710,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const at = target === ARRAY_OPS.of || target === ARRAY_OPS.empty || target === ARRAY_OPS.push ? id : n.args[0], a = stype(zonk(at));
           if (!a || !isArray(a)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(at))}`);
           if (target === ARRAY_OPS.items) throw new Refused("takes an array's items as a List (a shader has no lists)");
+          if (target === ARRAY_OPS.first || target === ARRAY_OPS.rest || target === ARRAY_OPS.pushFront) throw new Refused(`uses ${nm(target)}, which isn't in shaders yet (a shader's array has one size where it's made)`);
           if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
           const items: Id[] = [];
           let l = code.nodes[n.args[0]];
