@@ -34,6 +34,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I97 | The editor's page preview runs main in the evaluator, and "Open in a tab" runs it compiled. Ersagun found Bounce and Spacetime much faster in a tab. Measured: Bounce's preview draws 8.5 frames a second against 60 in a tab, and the profile is all evaluator (step, apply, resume, GC). Spacetime's charge path takes 9 s evaluated against 4 ms compiled. Ersagun is willing to have the preview run compiled code. Compiling takes 2 to 7 s (Constructions 1.9, Bounce 4.0, Spacetime 7.2 s), so a way to do it is to keep the evaluator page while the compiled one builds off the main thread, then swap it in when it is ready, keeping the evaluator for what needs it (Outline updates, sound). For the Editor lane. | Ersagun 2026-10-31 "so much faster when opened on a new tab" | 2026-10-31 |
 
 ## E: Editor
 
