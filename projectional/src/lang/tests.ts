@@ -99,31 +99,65 @@ export function testsIn(info: Info, defs: Id[]): Id[] {
 
 const CASES = 200, PATHS = 100;
 
-export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, string[][]> = {}, rt: Partial<Runtime> = {}): TestResult[] {
-  return testsIn(info, defs).map((d) => {
+// What examples.json keeps for a definition: inputs, and the answer you
+// accepted for them (T7b). The editor's older form, one list of input
+// texts, reads as inputs with no answer.
+export interface Saved { inputs: string[]; answer?: string }
+export function savedFrom(json: Record<Id, unknown>): Record<Id, Saved[]> {
+  return Object.fromEntries(Object.entries(json).map(([d, v]) => {
+    if (Array.isArray(v) && v.every((x) => typeof x === "string")) return [d, [{ inputs: v as string[] }]];
+    const xs = (Array.isArray(v) ? v : []) as { inputs?: unknown; answer?: unknown }[];
+    return [d, xs.filter((x) => Array.isArray(x?.inputs)).map((x) => ({ inputs: x.inputs as string[], ...(typeof x.answer === "string" ? { answer: x.answer } : {}) }))];
+  }));
+}
+
+// Runs every test, and every definition with an accepted answer: an
+// accepted answer is a test without the word, `expect(f(inputs) =
+// answer)`, compared as printed (so how a value is stored doesn't matter).
+export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]> = {}, rt: Partial<Runtime> = {}): TestResult[] {
+  const tests = new Set(testsIn(info, defs));
+  const show = (v: Value) => showValue(v, code, names);
+  const parse = (texts: string[]) => {
+    const vs = texts.map((x) => parseValue(x, code, names));
+    return vs.every((v) => "value" in v) ? vs.map((v) => (v as { value: Value }).value) : null;
+  };
+  return defs.filter((d) => tests.has(d) || (saved[d] ?? []).some((x) => x.answer !== undefined)).map((d) => {
     const t = info.typeOf.get(d) as Type & { t: "fn" };
     const name = names[d] ?? d;
-    const show = (v: Value) => showValue(v, code, names);
-    const inputs: Value[][] = [];
-    for (const texts of saved[d] ?? []) {
-      const vs = texts.map((x) => parseValue(x, code, names));
-      if (vs.every((v) => "value" in v)) inputs.push(vs.map((v) => (v as { value: Value }).value));
-    }
-    const smalls = t.params.map((p) => smallValues(info.subst.zonk(p), code));
-    if (smalls.every((s) => s)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
     const failures: Failure[] = [];
     let failed: string[] = [];
     const r = makeRunner(code, info, { print: () => {}, ...rt, names, check: (holds, what) => { if (!holds) failed.push(what); } });
+    let cases = 0;
     try {
-      for (const args of inputs) {
+      // Accepted answers first.
+      for (const s of saved[d] ?? []) {
+        if (s.answer === undefined) continue;
+        const args = parse(s.inputs);
+        if (!args) { failures.push({ inputs: s.inputs, what: ["its saved inputs don't read as values any more"] }); continue; }
+        cases++;
         failed = [];
-        let paths = 0;
-        for (const _ of r.call(r.value(d), ...args) as Iterable<Value>) if (++paths >= PATHS) break;
-        if (failed.length) failures.push({ inputs: args.map(show), what: failed });
+        const f = r.value(d);
+        let got: string | undefined;
+        for (const v of (t?.t === "fn" ? r.call(f, ...args) : [f]) as Iterable<Value>) { got = show(v); break; }
+        if (got !== s.answer) failed.push(got === undefined ? `no answer, accepted ${s.answer}` : `gives ${got}, accepted ${s.answer}`);
+        if (failed.length) failures.push({ inputs: s.inputs, what: failed });
+      }
+      if (tests.has(d)) {
+        const inputs: Value[][] = [];
+        for (const s of saved[d] ?? []) { if (s.answer !== undefined) continue; const args = parse(s.inputs); if (args) inputs.push(args); }
+        const smalls = t.params.map((p) => smallValues(info.subst.zonk(p), code));
+        if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
+        for (const args of inputs) {
+          cases++;
+          failed = [];
+          let paths = 0;
+          for (const _ of r.call(r.value(d), ...args) as Iterable<Value>) if (++paths >= PATHS) break;
+          if (failed.length) failures.push({ inputs: args.map(show), what: failed });
+        }
       }
     } catch (e) {
-      return { def: d, name, cases: inputs.length, failures, error: (e as Error).message };
+      return { def: d, name, cases, failures, error: (e as Error).message };
     }
-    return { def: d, name, cases: inputs.length, failures };
+    return { def: d, name, cases, failures };
   });
 }
