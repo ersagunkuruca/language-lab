@@ -293,6 +293,9 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
 - **Event** (type). What a page's handler is given when its event comes: the field's value and the key pressed.
 - **Input** (type). Where a sound's samples come from: the microphone, or a recording at an address.
+- **View** (type). A named row: what a page's text, part or attribute value may do. Read cells, the clock and the web, log, and run under a step budget (Cells, Diverge, Time, Network, Log). Not print: a view runs whenever what it reads changes.
+- **Handler** (type). A named row: what a page's event handler may do. Everything a view may, and write cells, print, use files, draw random numbers and abort (the page logs the reason).
+- **Sound** (type). A named row: what a sound's block function may do on the audio thread. Read and write its cells, draw random numbers (seeded, so a render repeats), and run under a step budget. Nothing that waits or prints.
 - **div** : `(List Html) -> Html` (html module). A div with these children. To give it attributes, wrap it: styled, classed, with.
 - **span** : `(List Html) -> Html` (html module). A span element with these children: a run of text inside a line.
 - **p** : `(List Html) -> Html` (html module). A p element with these children: a paragraph.
@@ -306,14 +309,14 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **strong** : `(List Html) -> Html` (html module). A strong element with these children: important text, usually bold.
 - **tag** : `(Text, List Html) -> Html` (html module). An element with these children, for a tag that has no function of its own here (main, nav, table, …). Each tag a function, as in Elm's Html module (prior art).
 - **words** : `(Text) -> Html` (html module). Text that doesn't change. Text that does is text(() => …), which the page runs again when what it reads changes.
-- **button** : `(Text, (Event) -[Cells, Console, Diverge, Files, Network, Update, Abort, Log, Random, Time]-> Unit) -> Html` (html module). A button with this label that runs then when it's clicked.
+- **button** : `(Text, (Event) -[Handler]-> Unit) -> Html` (html module). A button with this label that runs then when it's clicked.
 - **input** : `(List Attribute) -> Html` (html module). An input field: it has attributes and no children.
 - **attribute** : `(Text, Text) -> Attribute` (html module). An attribute whose value doesn't change.
 - **with** : `(List Attribute, Html) -> Html` (html module). The same element with these attributes added after its own. Text and parts have no attributes, so they come back as they are.
 - **styled** : `(Text, Html) -> Html` (html module). The same element with this inline style (CSS declarations, such as color: #777; margin: 0).
 - **named** : `(Text, Html) -> Html` (html module). The same element with this id.
 - **classed** : `(Text, Html) -> Html` (html module). The same element in this class, for a style sheet's rules to select.
-- **for each** : `(Cell (List a), (a) -[Cells, Diverge]-> b, (List b) -[Cells, Diverge, Network, Log, Time]-> Html) -[Cells]-> Html` (html module). The items of a cell's list, each drawn by row and all put inside (ul, div, …). An item still there when the list changes keeps its row as it was; only new items get one. Solid's <For> (prior art).
+- **for each** : `(Cell (List a), (a) -[Cells, Diverge]-> b, (List b) -[View]-> Html) -[Cells]-> Html` (html module). The items of a cell's list, each drawn by row and all put inside (ul, div, …). An item still there when the list changes keeps its row as it was; only new items get one. Solid's <For> (prior art).
 - **rule** : `(Text, Text) -> Text` (html module). A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.
 - **media** : `(Text, List Text) -> Text` (html module). Rules that apply only when the query holds, such as (prefers-color-scheme: dark).
 - **style sheet** : `(List Text) -> Html` (html module). A style element holding these rules.

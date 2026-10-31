@@ -60,7 +60,10 @@ export type Node =
   //
   // `unique`: a name that keeps the type apart from another of the same
   // shape when they are hashed (src/hash.ts); Unison's `unique type`.
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string }
+  //
+  // `row` (HOSTS.md, L58): a named row, no variants, standing for these
+  // effects wherever a function type lists it (`() -[View]-> Text`).
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[] }
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
   // `results` (an interface's field, POLAR.md): the positions of the
   // ports it gives, when its type is a predicate over its ports read as a
@@ -130,7 +133,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "call": return { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
-    case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f) };
+    case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f) };
     case "field": return { ...n, id: f(n.id), type: f(n.type) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
@@ -187,7 +190,7 @@ export function dependencies(code: Code, root: Id): Id[] {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
       const target = node.kind === "ref" ? node.target : node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
-      for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : [])]) {
+      for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
         if (t && owner.has(t)) t = owner.get(t)!;
         if (!t || seen.has(t)) continue;
         const d = code.nodes[t];

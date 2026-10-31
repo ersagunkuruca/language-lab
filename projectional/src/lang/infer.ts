@@ -25,7 +25,7 @@ import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -171,7 +171,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // A function type in data lists its effects, a closed row: a function
     // put in a field can't hide what it does when it's taken out and called.
     if (n.kind === "tfun") {
-      return { t: "fn", params: n.params.map((p) => typeExpr(p, params)), ret: typeExpr(n.result, params), eff: { effs: [...(n.effects ?? [])], tail: null } };
+      return { t: "fn", params: n.params.map((p) => typeExpr(p, params)), ret: typeExpr(n.result, params), eff: writtenRow(n.effects) };
     }
     if (n.kind !== "tref") throw new Error(`${id} is not a type`);
     if (params.has(n.target)) return params.get(n.target)!;
@@ -304,7 +304,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!positive(type, self, false)) err(field, `${nm(def)} can't take itself as an input in its own field ${nm(field)}: through it, a function could call itself without recursion and never end`);
       for (const t of subtree(code, type)) {
         const n = code.nodes[t];
-        if (n?.kind === "tfun") for (const e of n.effects ?? []) if (!isEffect(e) && !BUILTIN_EFFECTS.includes(e)) err(t, `${nm(e)} is not an effect`);
+        if (n?.kind === "tfun") for (const e of n.effects ?? []) if (!isEffect(e) && !BUILTIN_EFFECTS.includes(e) && !NAMED_ROWS.has(e)) err(t, `${nm(e)} is not an effect`);
       }
     }
   }
@@ -1613,7 +1613,7 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
   const params = new Map(td.params.map((p) => [p, s.fresh()] as const));
   const te = (tid: Id): Type => {
     const t = code.nodes[tid];
-    if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: { effs: [...(t.effects ?? [])], tail: null } };
+    if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: writtenRow(t.effects) };
     const r = t as NodeOf<"tref">;
     return params.get(r.target) ?? { t: "con", id: r.target, args: r.args.map(te) };
   };

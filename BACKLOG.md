@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | ▶ HOSTS.md (Ersagun agreed 2026-10-31): L58 next; then L44 rewritten as linear maps or rotors, matrices the compiler's representation (Ersagun 2026-10-31) |
+| L Language and library | "Language lane" | idle: HOSTS.md done (L55, L58); L44's three layers (MATRICES.md) wait on Ersagun's go |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -161,7 +161,6 @@ all of these.
 | L54 | Operations answered later, at most once (ANSWERED-LATER.md): step 1 done (L54a); compiled side is C40 | EFFECTS-REVIEW §1.5, §5 | P1 | L | step 1 done |
 | L59 | A page's fetch and wait resume instead of re-running the handler; `Wait` folds into `Time` | EFFECTS-REVIEW §1.1-1.3 | P1 | M | after L54 |
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
-| L58 | Named rows for the hosts (`View`, `Handler`, `Main`, `Sound`) in std. Design and the choice it needs: [HOSTS.md](docs/design/relations-and-effects/HOSTS.md) | EFFECTS-REVIEW §2.6 | P2 | M | |
 | L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await` | LANGUAGE-NEEDS Part 1 | P2 | L | after L54 |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
 | L69 | Foreign definitions: a typed declaration with its row and a body per target (Gleam's `@external`, Elm's ports) | LANGUAGE-NEEDS §5 | P2 | M | |

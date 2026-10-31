@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { NAMED_ROWS, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -117,6 +117,19 @@ export const AUDIO_BLOCK: readonly Id[] = discharge("a sound's block function", 
   "the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence");
 export const AUDIO_MAKER: readonly Id[] = discharge("a sound's maker", [CELLS, DIVERGE],
   "the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells");
+// The hosts' rows by name (HOSTS.md, L58): Html's and Attribute's fields
+// list them, so a view's type reads `() -[View]-> Text`, and the
+// definitions are where the policy can be read. Each is the ledger's list,
+// so what the type says and what the runtime handles are one list. Prior
+// art: Koka's effect aliases (`alias io = <console, fsys, net, …>`).
+const namedRow = (id: Id, name: string, effects: readonly Id[]) => {
+  node({ id: `${id}.type`, kind: "typedef", params: [], variants: [], row: [...effects] });
+  NAMED_ROWS.set(id, effects);
+  return named(node({ id, kind: "def", body: `${id}.type` }), name);
+};
+export const VIEW_ROW = namedRow("std.row.view", "View", PAGE_VIEW);
+export const HANDLER_ROW = namedRow("std.row.handler", "Handler", PAGE_HANDLER);
+export const SOUND_ROW = namedRow("std.row.sound", "Sound", AUDIO_BLOCK);
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
 ]);
@@ -127,16 +140,16 @@ export const INPUT = typedef("std.input", "Input", [], [
   ["recording", [["address", () => tref(STRING)]]],
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
-  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
-  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [...PAGE_HANDLER])]]],
+  ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [VIEW_ROW])]]],
+  ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [HANDLER_ROW])]]],
   // A sound played from an input when the element is clicked, and stopped
   // when it's clicked again (AUDIO.md, A2).
-  ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER))], tref(LIST, tref(NUMBER)), [...AUDIO_BLOCK])]]],
+  ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER))], tref(LIST, tref(NUMBER)), [SOUND_ROW])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
-  ["text", [["shows", () => tfun([], tref(STRING), [...PAGE_VIEW])]]],
-  ["part", [["view", (_, self) => tfun([], tref(self), [...PAGE_VIEW])]]],
+  ["text", [["shows", () => tfun([], tref(STRING), [VIEW_ROW])]]],
+  ["part", [["view", (_, self) => tfun([], tref(self), [VIEW_ROW])]]],
 ]);
 // Fractions (NUMBERS.md stage 1, LANGUAGE-REVIEW-2026-10-24 L39): exact,
 // a quotient of two Ints kept in lowest terms with the bottom positive, so
@@ -728,7 +741,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

@@ -40,7 +40,7 @@ export function canonical(sc: Scheme): Pin {
   const go = (t: Type): Type => {
     if (t.t === "var") return { t: "var", v: vars.get(t.v) ?? t.v };
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
-    const eff: Row = { effs: [...t.eff.effs].sort(), tail: t.eff.tail === null ? null : rows.get(t.eff.tail) ?? t.eff.tail };
+    const eff: Row = { effs: [...t.eff.effs].sort(), tail: t.eff.tail === null ? null : rows.get(t.eff.tail) ?? t.eff.tail, ...(t.eff.tail === null && t.eff.name !== undefined ? { name: t.eff.name } : {}) };
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff };
   };
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
@@ -65,7 +65,9 @@ export function canonical(sc: Scheme): Pin {
   return out;
 }
 
-export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc)) : "");
+// A named row's name (HOSTS.md, L58) is kept in a pin for showing it, and
+// isn't part of the signature: the same effects are the same type.
+export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc), (k, v) => (k === "name" ? undefined : v)) : "");
 export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p));
 
 // Pin these definitions at the types the checker gives them now.
@@ -83,7 +85,7 @@ export function fresh(p: Pin, s: Subst): Scheme {
   const go = (t: Type): Type => {
     if (t.t === "var") return { t: "var", v: m.get(t.v) ?? t.v };
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };
-    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail } };
+    return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail, ...(t.eff.name !== undefined ? { name: t.eff.name } : {}) } };
   };
   return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
     ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),

@@ -1030,15 +1030,25 @@ A page is a program whose `main` takes nothing and returns an `Html`,
 an ordinary data type in std (WEB.md has the design and the reasons):
 
 ```
+row  View      = Cells, Diverge, Time, Network, Log
+row  Handler   = Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random, Log
+row  Sound     = Cells, Update, Random, Diverge
 type Html      = element(tag: Text, attributes: List Attribute, children: List Html)
-               | text(shows: () -[Cells, Diverge, Time, Network]-> Text)
-               | part(view: () -[Cells, Diverge, Time, Network]-> Html)
-type Attribute = property(name: Text, value: () -[Cells, Diverge, Time, Network]-> Text)
-               | on(event: Text, then: (Event) -[Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random]-> Unit)
-               | listen(to: Input, play: (List Float64) -[Cells, Update, Random, Diverge]-> List Float64)
+               | text(shows: () -[View]-> Text)
+               | part(view: () -[View]-> Html)
+type Attribute = property(name: Text, value: () -[View]-> Text)
+               | on(event: Text, then: (Event) -[Handler]-> Unit)
+               | listen(to: Input, play: (List Float64) -[Sound]-> List Float64)
 type Event     = event(value: Text, key: Text)
 type Input     = microphone | recording(address: Text)
 ```
+
+`View`, `Handler` and `Sound` are named rows in std (HOSTS.md, L58): what
+a host lets the functions it runs do, written once as a definition. Each is
+the ledger's list (below), so the type and the runtime can't disagree. A
+type shows a row by its name where the name was written, and only while it
+has exactly those effects. A function that happens to do Cells and Diverge
+isn't shown as anything but that. Koka's effect aliases are the prior art.
 
 `listen` plays a sound (AUDIO.md) when its element is clicked, and stops
 it when it's clicked again: the input, a block of 128 samples at a time,
