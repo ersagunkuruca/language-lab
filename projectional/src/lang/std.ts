@@ -777,6 +777,13 @@ export const ARRAY_OPS = {
   first: arrayFirst,
   rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)]), restOf),
   pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushFront),
+  // The first item as an Option, without Choice: `array of List`'s match
+  // (array-list.ts, C30d3b) reads it this way, so the evaluator runs a
+  // match on an array without a search around it.
+  firstIfAny: builtin("array.firstIfAny", "first of array if any", ofItem((a) => [[arrayOf_(a)], optional(a)]), (arr: ArrayValue) => {
+    const v = arrayView(arr);
+    return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
+  }),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
