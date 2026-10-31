@@ -25,7 +25,8 @@
 // Lets, lambdas applied and the program's own definitions are read
 // through (inlined, up to a depth); a definition's inputs are every part
 // unless the caller says otherwise. The compiler (L43c) and the editor
-// (L43d) use the masks; nothing here refuses a program.
+// (L43d) use the masks. `gradeMistakes` refuses one thing: reading a part
+// a value can't have (L43e's first step; `lab check` reports it).
 //
 // Prior art: Gaalop (Dietmar Hildenbrand) finds which blades of each
 // result can be nonzero and generates code for those only; this is the
@@ -135,7 +136,7 @@ const versor = (alg: Algebra, r: number) => {
 // The mask of what `fn` (a definition or a lambda) gives, each input
 // given as a mask (or every part when left out); null when it isn't a
 // multivector of an algebra the program writes down.
-export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = []): { algebra: Algebra; mask: number } | null {
+export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = [], mistakes?: Map<Id, string>): { algebra: Algebra; mask: number } | null {
   const algebras = algebrasOf(code, info);
   if (!algebras.size) return null;
   const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
@@ -280,11 +281,18 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
           const x = m(2);
           return g?.kind === "lit" && typeof g.value === "number" ? mask(bits(x).filter((i) => gradeOf(alg, i) === g.value).reduce((a, i) => a | (1 << i), 0)) : mask(x);
         }
-        case "part": return NUM;
+        case "part": {
+          // Reading a blade outside x's mask always gives 0: a wrong grade
+          // (L43e, Ersagun 2026-10-31). The mask is never too small, so
+          // this never refuses a read that could be nonzero.
+          const i = blade(alg, n.args[2]), x = m(1);
+          if (mistakes && i >= 0 && !((x >> i) & 1) && !mistakes.has(n.id))
+            mistakes.set(n.id, `reads the ${describeMask(alg, 1 << i)} part of a value that is ${describeMask(alg, x)}, so it is always 0`);
+          return NUM;
+        }
         case "with part": {
           // The blade named by literal vectors, or any.
-          const vs = listLits(n.args[2]);
-          const i = vs ? alg.blades.findIndex((b) => b.length === vs.length && [...b].sort().join() === [...new Set(vs)].sort().join() && new Set(vs).size === vs.length) : -2;
+          const i = blade(alg, n.args[2]);
           return mask(m(1) | (i >= 0 ? 1 << i : i === -1 ? 0 : alg.full));
         }
       }
@@ -293,6 +301,13 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
     const f = ev(n.fn, env, depth + 1);
     if (f.k === "closure") return apply(f, n.args.map((a) => ev(a, env, depth + 1)), depth);
     return TOP;
+  };
+
+  // The blade a list of literal vectors names: its index, -1 when it
+  // names none, -2 when the list isn't literals.
+  const blade = (alg: Algebra, id: Id): number => {
+    const vs = listLits(id);
+    return vs ? alg.blades.findIndex((b) => b.length === vs.length && [...b].sort().join() === [...new Set(vs)].sort().join() && new Set(vs).size === vs.length) : -2;
   };
 
   // A list written out of Int or Float64 literals.
@@ -319,6 +334,20 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
   l?.params.forEach((p, i) => env.set(p, given[i] != null && only ? { k: "mask", alg: only, m: given[i]! } : TOP));
   const v = l ? ev(l.body, env, 0) : ev(fn, env, 0);
   return v.k === "mask" ? { algebra: v.alg, mask: v.m } : null;
+}
+
+// Wrong grades (L43e's first step): every place a definition reads a part
+// its value can't have, which is always 0. Each definition is read with
+// its inputs every part, and what it calls with the masks it gives them.
+export function gradeMistakes(code: Code, info: Info, defs: Id[]): { at: Id; def: Id; message: string }[] {
+  const out: { at: Id; def: Id; message: string }[] = [];
+  const seen = new Set<Id>();
+  for (const d of defs) {
+    const found = new Map<Id, string>();
+    bladeMask(code, info, d, [], found);
+    for (const [at, message] of found) if (!seen.has(at)) { seen.add(at); out.push({ at, def: d, message }); }
+  }
+  return out;
 }
 
 const SUB_DIGITS = "₀₁₂₃₄₅₆₇₈₉";

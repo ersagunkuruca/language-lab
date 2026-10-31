@@ -22,6 +22,7 @@
 // compiles on the representation the chooser picks for each type `main` uses, e.g.
 // Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
+import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -288,6 +289,9 @@ switch (command) {
   }
   case "check": {
     for (const e of p.info.errors) console.log(`error  ${p.names[e.id] ?? e.id}: ${e.message}`);
+    // A part read that is always 0, a wrong grade (GRADES.md, L43e).
+    const wrongGrades = p.info.errors.length ? [] : gradeMistakes(p.code, p.info, p.own);
+    for (const g of wrongGrades) console.log(`error  ${p.names[g.def] ?? g.def}: ${g.message}`);
     for (const d of p.own) {
       const t = p.info.typeOf.get(d);
       console.log(`${p.names[d] ?? d} : ${t ? showType(t, p.names) : "(a type)"}`);
@@ -299,7 +303,7 @@ switch (command) {
       const c = choose(p.code, start, p.reps.filter((r) => r.of === of));
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
-    process.exitCode = p.info.errors.length ? 1 : 0;
+    process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
     break;
   }
   case "test": {

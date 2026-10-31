@@ -7,7 +7,9 @@ with a function's inputs every part unless the caller gives masks.
 Bounce's algebra arrives inside a `Space`, so it needs the per-space
 copies stage.ts makes (I86) before masks reach it. L43c to L43e are on
 the row. Ersagun answered the question at the end (2026-10-31): a wrong
-grade is a type error, each blade combination its own type.
+grade is a type error, each blade combination its own type. L43e's first
+step is built: `lab check` refuses reading a part a value can't have
+(`gradeMistakes` in grades.ts), since that part is always 0.
 
 ## The problem
 
@@ -81,7 +83,7 @@ rule falls back to the product rule.
 | L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
 | L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 | C | M |
 | L43d | The editor shows a value's mask in words | E | S |
-| L43e | Masks are types: named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
+| L43e | Masks are types (first step built: a part read outside a value's mask is refused by `lab check`): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
 
 ## Ersagun's answer: each blade combination is its own type
 
