@@ -35,7 +35,7 @@ definition as written.
 | benchmark | before | after |
 |---|---|---|
 | Spacetime's charge path, 400 steps | 8.3 s | 0.48 s |
-| one `clifford product`, Cl(1, 3) | 7.6 ms | about 0.2 ms |
+| one `clifford product`, Cl(1, 3), warmed up | 7.6 ms | 0.07 ms |
 | Bounce, one solid step | 14 ms | 3.7 ms |
 
 The jet first checked the table's 256 lines on every call, which a second
