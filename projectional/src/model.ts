@@ -116,9 +116,17 @@ export const isPublished = (id: Id) => id.startsWith("@");
 // "{3fa2c19e}" inside a comment is a reference to that node, shown by name.
 export const resolveRefs = (text: string, name: (id: Id) => string) =>
   text.replace(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"), (_, ref) => name(ref));
+// 26 random base-32 digits. The random bytes come from a pool filled 64 KB
+// at a time: asking the system for 26 bytes per id was an eighth of
+// compiling Bounce (C67), where staging makes hundreds of thousands.
+const DIGITS = "0123456789abcdefghijklmnopqrstuv";
+const pool = new Uint8Array(26 * 2520);
+let at = pool.length;
 export function freshId(): Id {
-  const b = crypto.getRandomValues(new Uint8Array(26));
-  return Array.from(b, (x) => (x & 31).toString(32)).join("");
+  if (at + 26 > pool.length) { crypto.getRandomValues(pool); at = 0; }
+  let id = "";
+  for (let i = 0; i < 26; i++) id += DIGITS[pool[at++] & 31];
+  return id;
 }
 
 // The same node with every id in it passed through f: its own, its
