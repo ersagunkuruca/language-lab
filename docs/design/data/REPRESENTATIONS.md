@@ -63,6 +63,9 @@ never picks it by cost, and the shader target asks for it.
   to an interface, and its costs are the costs ways already have (WAYS.md,
   L96c). The chooser and Knuth's way picker are the same kind of search
   (pick the cheapest set that covers the jobs), and could become one.
+  **C30a:** they now share one cost scale (projectional/src/lang/cost.ts):
+  steps at each order of the ladder, added up and compared from the
+  highest order down.
 - **Laws are checkable in the language.** "R's add agrees with T's add
   through meaning" is a law between two definitions, so it is a T7 law
   check like any pair of ways. Today it is a TypeScript test.
