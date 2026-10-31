@@ -55,7 +55,7 @@ import { liftLets } from "../../projectional/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
-import { stageCalls } from "../../projectional/src/lang/stage.ts";
+import { stageProgram } from "../../projectional/src/lang/stage.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { discharge } from "../../projectional/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -326,16 +326,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
-  const st = stageCalls(code, info, names);
+  // Definitions given such data get a copy for it (I86).
+  const st = stageProgram(code, info, names);
+  ({ code, names, info } = st);
   const rounded = new Set<Id>();
-  if (st.staged.length) {
-    const again = infer(st.code, st.names);
-    if (again.errors.length <= info.errors.length) {
-      ({ code, names, info } = { code: st.code, names: st.names, info: again });
-      const calls = new Set(st.rounded);
-      if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
-    }
-  }
+  const calls = new Set(st.rounded);
+  if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
   // A list named first and then walked is put where it's walked, so the
   // fold over `characters` sees it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);

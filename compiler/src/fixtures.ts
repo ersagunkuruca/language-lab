@@ -631,6 +631,20 @@ export function pga() {
   const moveBy = def("move by", () => k.fn(["m", "p"], (m, p) => call("clifford sandwich", m, p)));
   const moveFixed = def("move fixed", () => k.fn(["p"], (p) => call("clifford sandwich", k.x(motor), p)));
   const movePoint = def("move point", () => k.fn(["p"], (p) => k.call(fromPga, call("clifford sandwich", k.x(motor), k.call(toPga, p)))));
+  // Generic code given the algebra as a value (I86): a space holding its
+  // squares and basis, passed on from one function to the next.
+  const S = k.type("Space", [], [["space", [["squares", () => k.tref("std.list", num())], ["basis", () => k.tref("std.list", k.tref(M.def))]]]]);
+  const sandwichIn = def("sandwich in", () => k.fn(["s", "m", "p"], (s, m, p) => k.call(lib("clifford sandwich"), k.call(S.f["space.squares"], s), k.call(S.f["space.basis"], s), m, p)));
+  const moveIn = def("move in", () => k.fn(["s", "p"], (s, p) => k.call(fromPga, k.call(sandwichIn, s, k.x(motor), k.call(toPga, p)))));
+  const space = def("pga space", () => k.call(S.v.space, squares(), k.x(basis)));
+  const moveGiven = def("move given", () => k.fn(["p"], (p) => k.call(moveIn, k.x(space), p)));
+  // Given a list of points as well, the call can't be worked out whole:
+  // `total x in` gets a copy for the space instead.
+  const totalIn = def("total x in", () => k.fn(["s", "ps"], (s, ps) => k.fold(ps, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, k.call(coord("x"), k.call(moveIn, s, h)), r!) },
+  ])));
+  const totalGiven = def("total given", () => k.fn(["ps"], (ps) => k.call(totalIn, k.x(space), ps)));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint } };
+  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven } };
 }
