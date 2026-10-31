@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I80, I87, I88, then I90, I85, I94 (program list) and I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
+| E Editor | "Editor lane" | I87, I88, then I90, I85, I94 (program list) and I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), I79, C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
 | L Language and library | "Language lane" | Clifford demo rows I95, I89, I92, I83, I93 done; idle until asked |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -35,7 +35,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I79 | Where C65 (#724) can't work a clifford call out (the algebra isn't written down, I86; the evaluator), the call rebuilds the 64-line table every time; let the clifford functions take an algebra built once (table, reverse signs) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | 2026-10-31 |
-| I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
 | I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |

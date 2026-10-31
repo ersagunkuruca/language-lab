@@ -25,6 +25,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I80 | Page: on("frame") comes once each time the browser draws, while its element is on the page | #748 |
 | I78 | Run: newton starts from what main passes it (a function made on the way runs as itself; bounded runs may call what might not finish) | #744 |
 | I77 | Graph: a page's main opens on its first rows, not on empty canvas | #741 |
 | I76 | Run: on a page program, a helper's own Run comes first and the page sits under it | #740 |
