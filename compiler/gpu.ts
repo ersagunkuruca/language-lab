@@ -44,7 +44,7 @@ const flatten = (t: LType, v: Value): (number | boolean)[] =>
 // Inputs that f32 holds exactly, so only the computation differs.
 const GRID = [-2.5, -1.75, -1, -0.5, -0.125, 0, 0.25, 0.5, 1, 1.5, 2, 3.75];
 
-interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined; int32?: true }
+interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined; shader?: true }
 const cases: Case[] = [
   ...["calculus", "physics", "shaders", "raymarch"].map((name) => { const p = load(name); return { label: name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs }; }),
   (() => {
@@ -78,7 +78,11 @@ const cases: Case[] = [
     const p = ints();
     // Within 2²⁴, so they go in and come out through f32 exactly.
     const pairs = [[3, 4], [-7, 2], [0, -5], [4000, 4000], [-16777215, 1], [1000, -999]];
-    return { label: "Int in 32 bits", code: p.code, info: p.info, names: p.names, roots: [p.poly, p.smaller, p.same, p.sumTo, p.cube], int32: true, inputs: (f) => (f.name === "sum to" ? [[0], [1], [10], [500], [5000]] : f.name === "cube" ? [[0], [-3], [250], [-250]] : pairs) };
+    // Searches with one answer or none (C66c2): quotients by 0, odd halves, negative powers.
+    const searches = [[7, 2], [-7, 2], [7, -2], [-7, -2], [6, 3], [5, 0], [0, 0], [2, 10], [3, -1], [-3, 3], [12, 4], [8, 5], [-16777215, 7]];
+    const inputs = (f: ShaderFunc) => f.name === "sum to" ? [[0], [1], [10], [500], [5000]] : f.name === "cube" ? [[0], [-3], [250], [-250]]
+      : f.name === "whole or" ? [[2.5], [-2.5], [0], [-0.5], [1e6], [NaN], [Infinity], [-Infinity]] : f.name === "power or" ? searches.slice(0, -1) : ["quotient or", "remainder or", "count quotients", "quarter or"].includes(f.name) ? searches : pairs;
+    return { label: "Int in 32 bits", code: p.code, info: p.info, names: p.names, roots: [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.quot, p.rem, p.pow, p.whole, p.counted, p.quarter], shader: true, inputs };
   })(),
 ];
 
@@ -92,7 +96,7 @@ await page.goto(new URL("./README.md", import.meta.url).href);
 if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser has no WebGPU");
 
 // Operations WGSL does exactly as binary32 does: correctly rounded.
-const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not", "iadd", "isub", "imul", "ineg", "iabs", "iless", "ieq", "itof"]);
+const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not", "iadd", "isub", "imul", "ineg", "iabs", "iless", "ieq", "itof", "iquot", "irem", "ipow", "iwhole"]);
 // A linear map printed as a matrix (C30c) sums in its own order, and a
 // call worked out when compiled (C65) may hold a number rounded once in
 // Float64: close, not exact.
@@ -102,7 +106,8 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<st
   seen.add(i);
   const ok = (e: SExpr): boolean => {
     switch (e.k) {
-      case "num": case "bool": case "local": case "int": return true;
+      case "num": case "bool": case "local": case "int": case "zero": return true;
+      case "attempt": return ok(e.body) && ok(e.ok) && ok(e.otherwise);
       case "op": return EXACT.has(e.op) && e.args.every(ok);
       case "if": return ok(e.cond) && ok(e.then) && ok(e.else);
       case "let": return ok(e.value) && ok(e.body);
@@ -118,7 +123,7 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<st
 
 let failures = 0, compared = 0, exactly = 0;
 for (const c of cases) {
-  const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true, int32: c.int32 });
+  const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true, shader: c.shader });
   const shader = emitWgsl(lowered);
   // The lowered program: generated derivatives (∂blend/∂a …) are in it.
   const r = makeRunner(lowered.code, lowered.info, { print: () => {} });
