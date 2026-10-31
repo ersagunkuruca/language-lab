@@ -16,6 +16,7 @@ export const NOTES: Comments = {
   "std.optional": "A value that may be missing: none, or some(value). The data form of Choice, for keeping an answer that may not be there.",
   "std.abort": "An effect: abort(reason) stops the computation with a reason. A match with an abort(reason) case catches it, and attempt keeps it as an Outcome.",
   "std.log": "An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).",
+  "std.check": "An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and lab test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.",
   "std.random": "An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.",
   "std.time": "An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.",
   "std.wait": "An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.",

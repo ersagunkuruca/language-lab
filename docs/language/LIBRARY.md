@@ -285,6 +285,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **Time** (type). An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.
 - **Wait** (type). An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
+- **Check** (type). An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and lab test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.
 - **Console** (type). An effect: print, print error, read input and read line. A match with a case for each answers them (a test collects what was printed); with nothing around it, the console answers.
 - **Files** (type). An effect: read file, write file, add to file, file exists and list folder. A match with a case for each answers them (a test gives a file of its own); with nothing around it, the file system answers.
 - **Network** (type). An effect: fetch text. A match with a fetch text(url) case answers it; with nothing around it, the web answers.
