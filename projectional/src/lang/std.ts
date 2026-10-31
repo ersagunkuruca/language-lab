@@ -695,37 +695,81 @@ export const TEXT_OPS = {
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
-// side, so an item is read by its position in constant time. The value is
-// { tag: ARRAY_TAG, fields: [n, item₀, …] }: the count first, so equal and
-// compare, which walk fields, tell [1] from [1, 2] and order shorter
-// arrays first. `items of array` is the meaning (Array a → List a); `push`
-// copies, and an array a program owns is the compiler's to change in
-// place (C62). Prior art: arrays as a list's representation, as Clojure's
-// vectors and Haskell's Data.Vector stand for sequences.
+// side, so an item is read by its position in constant time. An array is
+// a view, a start and a length, on a buffer with free room at both ends,
+// so adding an item at either end, and taking the array after the first
+// item, are amortised constant, and a view's items are never copied to
+// make another view. Adding writes into the free slot just past the
+// view's end (or just before its start) when no other view has taken it,
+// as the buffer keeps its lowest and highest used slots, and copies the
+// view's items into a new buffer otherwise, so every array still never
+// changes. The evaluator and compiled JS (compiler/src/runtime.js) share
+// these. Ersagun's design, a two-ended array list from one of his Unity C#
+// projects; prior art: deques as ring buffers, gap buffers, Go's slices,
+// which share their backing array the same way at one end, and arrays as
+// a list's representation, as Clojure's vectors and Haskell's Data.Vector
+// stand for sequences. `items of array` is the meaning (Array a → List a).
+//
+// `fields` is the { tag, fields: [n, item₀, …] } value equal, compare and
+// show walk, the count first so they tell [1] from [1, 2] and order
+// shorter arrays first; it is made once, when first read.
 export const ARRAY_TAG = "std.array";
-type ArrayValue = { tag: Id; fields: unknown[] };
-const arrayValue = (xs: unknown[]): ArrayValue => ({ tag: ARRAY_TAG, fields: [xs.length, ...xs] });
-const arrayOf = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
+type Buffer = { items: unknown[]; lo: number; hi: number };
+export class ArrayView {
+  readonly tag = ARRAY_TAG;
+  readonly buf: Buffer;
+  readonly start: number;
+  readonly n: number;
+  private f: unknown[] | null = null;
+  constructor(buf: Buffer, start: number, n: number) { this.buf = buf; this.start = start; this.n = n; }
+  get fields(): unknown[] { return (this.f ??= [this.n, ...this.buf.items.slice(this.start, this.start + this.n)]); }
+  toJSON() { return { tag: this.tag, fields: this.fields }; }
+}
+type ArrayValue = ArrayView | { tag: Id; fields: unknown[] };
+// A buffer holding xs[from, to) in its middle, with room for as many
+// again on each side.
+export const arrayOf = (xs: unknown[], from = 0, to = xs.length): ArrayView => {
+  const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(undefined);
+  for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
+  return new ArrayView({ items, lo: room, hi: room + n }, room, n);
+};
+// Either kind of array value: a view, or { tag, fields } made elsewhere
+// (a value read back from JSON).
+export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
+const pushBack = (a: ArrayValue, x: unknown): ArrayView => {
+  const v = arrayView(a), b = v.buf, end = v.start + v.n;
+  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; return new ArrayView(b, v.start, v.n + 1); }
+  const w = arrayOf(b.items, v.start, end);
+  w.buf.items[w.start + w.n] = x; w.buf.hi++;
+  return new ArrayView(w.buf, w.start, w.n + 1);
+};
+const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
+  const v = arrayView(a), b = v.buf;
+  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; return new ArrayView(b, v.start - 1, v.n + 1); }
+  const w = arrayOf(b.items, v.start, v.start + v.n);
+  w.buf.items[w.start - 1] = x; w.buf.lo--;
+  return new ArrayView(w.buf, w.start - 1, w.n + 1);
+};
+const restOf = (a: ArrayValue): ArrayView => { const v = arrayView(a); return v.n === 0 ? v : new ArrayView(v.buf, v.start + 1, v.n - 1); };
+const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
+const arrayOf_ = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
 const ofItem = (make: (a: Type, s: Subst) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a, s); return fn(ps, r, s.freshRow(effects)); };
-const arrayItem = builtin("array.at", "item at", ofItem((a) => [[arrayOf(a), int], a], [CHOICE]));
-STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const n = Number(i); return Number.isInteger(n) && n >= 0 && n < (arr.fields[0] as number) ? [arr.fields[n + 1]] : []; };
-// The two ends (C30d, Ersagun's two-ended array list): the first item
-// (none of an empty array), the array after it (empty of an empty array)
-// and an item added at the front. Here each copies; compiled JS makes them
-// views on one buffer with room at both ends (runtime.js), so all three
-// are constant there.
-const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arrayOf(a)], a], [CHOICE]));
-STD_MANY[arrayFirst] = (arr: ArrayValue) => ((arr.fields[0] as number) > 0 ? [arr.fields[1]] : []);
+const arrayItem = builtin("array.at", "item at", ofItem((a) => [[arrayOf_(a), int], a], [CHOICE]));
+STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const v = arrayView(arr), k = Number(i); return Number.isInteger(k) && k >= 0 && k < v.n ? [v.buf.items[v.start + k]] : []; };
+// The two ends (C30d): the first item (none of an empty array), the array
+// after it (empty of an empty array) and an item added at the front.
+const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arrayOf_(a)], a], [CHOICE]));
+STD_MANY[arrayFirst] = (arr: ArrayValue) => { const v = arrayView(arr); return v.n > 0 ? [v.buf.items[v.start]] : []; };
 export const ARRAY_OPS = {
-  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf(a)]), () => arrayValue([])),
-  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf(a)]), (l: ArrayValue) => arrayValue(itemsOf(l))),
-  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf(a)], list(a)]), (arr: ArrayValue) => listOf(arr.fields.slice(1))),
-  length: builtin("array.length", "array length", ofItem((a) => [[arrayOf(a)], int]), (arr: ArrayValue) => arr.fields[0]),
+  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => arrayOf([])),
+  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOf(itemsOf(l))),
+  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => listOf(itemsIn(arr))),
+  length: builtin("array.length", "array length", ofItem((a) => [[arrayOf_(a)], int]), (arr: ArrayValue) => arrayView(arr).n),
   at: arrayItem,
-  push: builtin("array.push", "push", ofItem((a) => [[arrayOf(a), a], arrayOf(a)]), (arr: ArrayValue, x: unknown) => arrayValue([...arr.fields.slice(1), x])),
+  push: builtin("array.push", "push", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushBack),
   first: arrayFirst,
-  rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf(a)], arrayOf(a)]), (arr: ArrayValue) => arrayValue(arr.fields.slice(2))),
-  pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf(a), a], arrayOf(a)]), (arr: ArrayValue, x: unknown) => arrayValue([x, ...arr.fields.slice(1)])),
+  rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)]), restOf),
+  pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushFront),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

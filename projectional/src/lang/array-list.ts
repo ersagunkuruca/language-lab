@@ -3,11 +3,11 @@
 // List at std's Array, written in the language like the trees for Map and
 // Set (map-tree.ts). Its meaning is `items of array`. Its jobs are on the
 // array's two ends (first of array, rest of array, push front), which
-// compiled JS keeps as views on one buffer with free room at both ends
-// (runtime.js), so a cons, a match and the length are constant and a fold
-// is a walk. Which one a value gets is the compiler's choice, from the
-// jobs a program does and these costs; a program never picks (Ersagun,
-// 2026-10-30).
+// the evaluator and compiled JS keep as views on one buffer with free
+// room at both ends (std.ts ArrayView), so a cons, a match and the length
+// are constant and a fold is a walk. Which one a value gets is the
+// compiler's choice, from the jobs a program does and these costs; a
+// program never picks (Ersagun, 2026-10-30).
 //
 // A list's rest (cons's field 1) is `hides`: in an array it is the items
 // after a position, not a value kept.

@@ -53,3 +53,28 @@ test("Array: built, pushed, read by position and turned back into a list, evalua
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// Ersagun's two-ended buffer (C30d3a): the evaluator's arrays are views, so
+// push front, rest and push are constant, and two arrays sharing a buffer
+// never see each other's items.
+test("the evaluator's arrays share one two-ended buffer: a hundred thousand pushes at the front are quick, shared views stay apart (C30d3a)", async () => {
+  const { STD_IMPL, STD_MANY, ArrayView } = await import("../src/lang/std.ts");
+  const front = STD_IMPL[ARRAY_OPS.pushFront], back = STD_IMPL[ARRAY_OPS.push], rest = STD_IMPL[ARRAY_OPS.rest];
+  const first = STD_MANY[ARRAY_OPS.first], at = STD_MANY[ARRAY_OPS.at], length = STD_IMPL[ARRAY_OPS.length];
+  const t0 = performance.now();
+  let a = STD_IMPL[ARRAY_OPS.empty]();
+  for (let i = 0; i < 100_000; i++) a = front(a, i);
+  for (let i = 0; i < 50_000; i++) a = rest(a);
+  assert.ok(performance.now() - t0 < 1000, "constant per step");
+  assert.equal(length(a), 50_000);
+  assert.deepEqual(first(a), [49_999]);
+  assert.ok(a instanceof ArrayView);
+  // Two arrays made from one: the second copies, and neither changes.
+  const base = front(front(STD_IMPL[ARRAY_OPS.empty](), 2), 1);
+  const x = front(base, "x"), y = front(base, "y"), z = back(base, "z"), w = back(base, "w");
+  assert.deepEqual([x.fields, y.fields, z.fields, w.fields, base.fields], [[3, "x", 1, 2], [3, "y", 1, 2], [3, 1, 2, "z"], [3, 1, 2, "w"], [2, 1, 2]]);
+  assert.deepEqual(at(rest(x), 1), [2]);
+  assert.deepEqual(rest(STD_IMPL[ARRAY_OPS.empty]()).fields, [0]);
+  // A plain { tag, fields } value (read back from JSON) still works.
+  assert.deepEqual(front(JSON.parse(JSON.stringify(base)), 0).fields, [3, 0, 1, 2]);
+});
