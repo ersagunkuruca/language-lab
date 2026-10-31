@@ -19,7 +19,8 @@ const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
 for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"]]) named(node({ id, kind: "builtin", op: id }), name);
-for (const [id, name] of [[CHOICE, "Choice"], [CONSOLE, "Console"], [DIVERGE, "Diverge"], [FILES, "Files"], [CELLS, "Cells"], [UPDATE, "Update"], [NETWORK, "Network"]]) named(node({ id, kind: "builtin", op: id }), name);
+// (Console, Files and Network are effects declared below, with operations.)
+for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
 
 // --- data types, as code. A typedef's params are binders; fields point at
 // type expressions. An effect is written the same way (`effect`): its
@@ -485,6 +486,39 @@ export const REPRESENTATION = typedef("std.representation", "Representation", ["
   ]],
 ]);
 export const REPRESENTATION_V = "std.representation.representation";
+// The world's effects (HOSTS.md, BACKLOG L55): Console, Files and Network
+// are declared like Random, an operation for each builtin that acts on the
+// world. Calling `print` performs Console's print, so a match on Console's
+// operations handles it (a test collects what was printed, or gives `read
+// file` a file of its own); what nothing handles goes to the world, as
+// before. The operations are private: a program calls the builtins, whose
+// types also say they may abort, and names the operations in a handler's
+// cases. Their ids are the effects' old ids, so every row reads the same.
+// Prior art: Unison's IO ability, answered by the runtime at the top and by
+// a handler in a test; Koka's console effect. After Representation, so the
+// ids above don't move.
+const text = () => tref(STRING);
+export const CONSOLE_TYPE = typedef(CONSOLE, "Console", [], [
+  ["print", [["text", text]], () => tref(UNIT)],
+  ["print error", [["text", text]], () => tref(UNIT)],
+  ["read input", [], text],
+  ["read line", [], () => tref(OPTIONAL, tref(STRING))],
+], true);
+export const FILES_TYPE = typedef(FILES, "Files", [], [
+  ["read file", [["path", text]], text],
+  ["write file", [["path", text], ["text", text]], () => tref(UNIT)],
+  ["add to file", [["path", text], ["text", text]], () => tref(UNIT)],
+  ["file exists", [["path", text]], () => tref(BOOL)],
+  ["list folder", [["path", text]], () => tref(LIST, tref(STRING))],
+], true);
+export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [["fetch text", [["url", text]], text]], true);
+// Each builtin that acts on the world, by the operation it performs.
+export const WORLD_OPS: Record<Id, Id> = {
+  [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
+  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`,
+  [IO.fetchText]: `${NETWORK}.fetch text`,
+};
+for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 // A job's two definitions have the same type but for t, which is r in the
 // second: the checker says so (infer.ts), since a type can't.
 const jobOf = (op: string, name: string, given: (s: Subst) => Type[]) => builtin(op, name, (s) => {
@@ -694,7 +728,7 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

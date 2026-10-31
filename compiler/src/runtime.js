@@ -297,7 +297,8 @@ export function $hole(id) { throw new Error(`the program reached a hole (${id})`
 
 let printer = (s) => console.log(s);
 export function $setPrint(p) { printer = p; }
-export function $print(s) { printer(s); return $unit; }
+let printing = null;
+export function $print(s) { return (printing ??= acting(S.print, (t) => (printer(t), $unit)))(s); }
 export { FN as $FN } from '../../invertible/src/expr.js';
 
 // ---- effects a program defines (docs/language/LANGUAGE.md) -----------------
@@ -311,7 +312,8 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // abortive handlers the same way).
 
 import { Aborted, OutOfSteps, spendStep } from '../../projectional/src/lang/run.ts';
-import { ABORT, ABORT_OP, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, SOME, WAIT_OP } from '../../projectional/src/lang/std.ts';
+import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../projectional/src/lang/std.ts';
+import { CONSOLE, FILES, NETWORK } from '../../projectional/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
 export { Aborted as $Aborted };
 
@@ -494,16 +496,23 @@ const fallible = (k) => (...args) => {
   return v;
 };
 const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
+// A builtin that acts on the world performs its effect's operation when a
+// match handles that effect (HOSTS.md, L55); otherwise the world answers.
+const effectOfOp = (op) => [CONSOLE, FILES, NETWORK].find((e) => op.startsWith(`${e}.`));
+function acting(builtin, world) {
+  const op = WORLD_OPS[builtin], effect = effectOfOp(op);
+  return (...a) => (handlers.some((h) => h.effect === effect && !h.hidden) ? $perform(effect, op, a) : world(...a));
+}
 export const $io = {
-  printError: (s) => { (world.error ?? printer)(s); return $unit; },
-  readInput: fallible('input'),
-  readLine: (...a) => some(fallible('readLine')(...a)),
-  readFile: fallible('readFile'),
-  writeFile: (p, t) => (fallible('writeFile')(p, t), $unit),
-  appendFile: (p, t) => (fallible('appendFile')(p, t), $unit),
-  fileExists: (p) => $bool(!!world.fileExists?.(p)),
-  listFolder: (p) => $toList(fallible('listFolder')(p)),
-  fetchText: fallible('fetchText'),
+  printError: acting(IO.printError, (s) => { (world.error ?? printer)(s); return $unit; }),
+  readInput: acting(IO.readInput, fallible('input')),
+  readLine: acting(IO.readLine, (...a) => some(fallible('readLine')(...a))),
+  readFile: acting(IO.readFile, fallible('readFile')),
+  writeFile: acting(IO.writeFile, (p, t) => (fallible('writeFile')(p, t), $unit)),
+  appendFile: acting(IO.appendFile, (p, t) => (fallible('appendFile')(p, t), $unit)),
+  fileExists: acting(IO.fileExists, (p) => $bool(!!world.fileExists?.(p))),
+  listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
+  fetchText: acting(IO.fetchText, fallible('fetchText')),
 };
 
 // Cells' handler: one per program, or the one the host gives (a page that

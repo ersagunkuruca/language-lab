@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { WORLD_OPS, ALGEBRAIC_V, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -406,6 +406,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     return body && (code.nodes[body] as NodeOf<"typedef">).effect ? def! : null;
   };
   const operations = new Map<Fn, Id>();
+  const worldOps = new Map<Fn, Id>(Object.entries(WORLD_OPS).map(([b, op]) => [builtins[b], op]));
   // The rests of computations whose operation is answered later
   // (ANSWERED-LATER.md): the frames from the perform up to its handler and
   // the choice points made since the handler began, kept as a function
@@ -477,6 +478,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (h) return this.handle(h, args);
       const op = operations.get(f as Fn);
       if (op) return this.perform(op, args);
+      // A builtin that acts on the world performs its effect's operation
+      // when a match handles that effect (HOSTS.md, L55); otherwise the
+      // world answers, below.
+      const wop = worldOps.get(f as Fn);
+      if (wop && this.handled(effectOf(wop)!)) return this.perform(wop, args);
       ambient = this.fuel;
       if (FALLIBLE.has(f as Fn)) {
         let r: Iterable<Value>;
@@ -492,6 +498,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // further out). An operation that returns is answered and the
     // computation carries on; one that doesn't ends the handled computation,
     // with its alternatives (a cut, as in Prolog's catch/3).
+    // Whether a match around here handles the effect.
+    handled(effect: Id): boolean {
+      let f = this.k;
+      while (f && !(f.t === "handle" && f.effect === effect)) f = f.t === "answer" ? f.handler.next : f.next;
+      return !!f;
+    }
+
     perform(op: Id, args: Value[]) {
       const effect = effectOf(op)!;
       let f = this.k;

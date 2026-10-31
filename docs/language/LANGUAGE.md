@@ -561,8 +561,9 @@ The effects:
 | effect | operations | handled by |
 |---|---|---|
 | `Choice` | `one of(list)`, `fail()`, `value of(optional)` | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
-| `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | the runtime |
-| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | the runtime |
+| `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | a match; at the top, the runtime |
+| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | a match; at the top, the runtime |
+| `Network` | `fetch text(url)` | a match; at the top, the runtime |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
@@ -572,6 +573,18 @@ The effects:
 | `Cells` | `cell(x)`, `formula(action)`, `each(items, f)`, `each of(list, f)`, `read(c)` | the runtime (see "Cells" below) |
 | `Update` | `write(c, x)` | the runtime; a world effect, like `Console` |
 | yours | the operations you declare | a match on them |
+
+`Console`, `Files` and `Network` are declared in std like `Random`
+(HOSTS.md, L55). A program calls the builtins (`print`, `read file`, …),
+whose types also say they may `Abort`; each performs its effect's
+operation, so a match on that effect's operations answers it, and what
+nothing handles goes to the world as before. A test collects what was
+printed, or gives `read file` a file of its own. As for any effect, the
+match has a case for each operation, and a case that calls the builtin
+again passes it on, since a case runs outside its match. Only `Choice`,
+`Diverge`, `Cells` and `Update` are still built in. Compiled to
+WebAssembly or C, a match on these isn't supported yet (only operations
+that never return are), and the checker's targets refuse it.
 
 Two rules make this checkable. A definition's own value must be pure, and
 anything that acts is an action, a function with no inputs. `runMain`
@@ -1589,9 +1602,9 @@ back into the group being hashed is named by its position.
   editor thread owns `editor/` and has the node shapes.
 - **More of the world.** Time, randomness and HTTP GET are done (see
   "Random", "Time", "The web"), and `lab compile` bundles the runtime into
-  one portable file. Still missing: environment variables, HTTP beyond GET,
-  and handlers for `Console`/`Files` written in the program (to mock IO in
-  tests).
+  one portable file. Still missing: environment variables and HTTP beyond
+  GET. (Handlers for `Console`, `Files` and `Network` written in the
+  program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Float64 m/s`) and
   a function generic over its unit.
