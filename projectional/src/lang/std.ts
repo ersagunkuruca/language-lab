@@ -566,6 +566,11 @@ export const JOBS = {
   // item, as a list of one or nil (the rewrite uses it where only the
   // first is read).
   headBy: sameJob("representation.headBy", "head by", (_, s) => [s.fresh(), s.fresh()]),
+  // A field of t's case, by its position, that r doesn't keep as a value
+  // of t (L117): `hides(cons, 1)`, since a list's rest, in an array, is
+  // the items after a position, made only when read. A fold whose arms
+  // never read it costs what the walk costs.
+  hides: sameJob("representation.hides", "hides", (_, s) => [s.fresh(), int]),
 };
 
 export const CELL_OPS = {

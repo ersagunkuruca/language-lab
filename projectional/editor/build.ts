@@ -12,7 +12,7 @@
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
-//   apps/*.html    web apps written in the language (examples/converter, examples/dice, examples/pig, examples/tumble, examples/pedal, examples/bounce),
+//   apps/*.html    web apps written in the language (examples/converter, examples/dice, examples/pig, examples/tumble, examples/pedal, examples/bounce, examples/constructions, examples/spacetime),
 //                  each one file built like `lab build-web` (WEB.md)
 
 import { build } from "esbuild";
@@ -178,7 +178,7 @@ console.log("shaders.html");
 
 // The web apps: each example program whose main is a page, as one file.
 mkdirSync(site + "apps", { recursive: true });
-for (const name of ["converter", "dice", "pig", "tumble", "pedal", "bounce"]) {
+for (const name of ["converter", "dice", "pig", "tumble", "pedal", "bounce", "constructions", "spacetime"]) {
   const p = loadProgram(here + "../examples/" + name);
   const info = infer(p.code, p.pres.names, undefined, p.options);
   writeFileSync(site + `apps/${name}.html`, await webPage(name[0].toUpperCase() + name.slice(1), p.code, info, p.pres.names, p.named("main")));

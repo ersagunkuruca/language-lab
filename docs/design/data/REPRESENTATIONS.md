@@ -131,7 +131,14 @@ never picks it by cost, and the shader target asks for it.
 4. **L108d, after T7.** Each job's law through `meaning` is checked as a
    law in the language.
 5. **With C30.** Lists as arrays becomes a row written this way (`array
-   of List`), so every target can use it, not only compiled JS.
+   of List`), so every target can use it, not only compiled JS. **Built on
+   the language side (L116, L117):** std's `Array a` (#723), and the trees
+   module publishes `array of List` (src/lang/array-list.ts): meaning
+   `items of array`; nil constant, length constant, cons at the front
+   linear, append linear, match linear, fold quadratic as written; and
+   `hides(cons, 1)`, a new job saying the rest isn't kept as a value, read
+   into the row's `hidden`. The chooser picking it from use and the code
+   for each target are the Compiler lane's C30d.
 
 ## Prior art (to credit when built)
 

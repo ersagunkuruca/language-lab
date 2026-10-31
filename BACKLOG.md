@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | For C30d: L116 std Array done; next L117, the `hides` job and the `array of List` representation definition |
+| L Language and library | "Language lane" | idle: L116 std Array and L117 `array of List` done for C30d (C lane builds the chooser and code) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -40,11 +40,20 @@ New items land here until the next triage gives them a lane and a priority.
 | I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
 | I79 | Where C65 (#724) can't work a clifford call out (the algebra isn't written down, I86; the evaluator), the call rebuilds the 64-line table every time; let the clifford functions take an algebra built once (table, reverse signs) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | 2026-10-31 |
 | I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
-| I81 | Multivectors are written by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃); give a way to write them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
+| I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
-| I83 | No list item-at-index in the prelude: Bounce and Tumble each write their own `nth` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6 | 2026-10-31 |
+| I83 | No list item-at-index or update-at-index in the prelude: Bounce, Tumble and Constructions each write their own `nth`, and Constructions a `replaced` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6, G4 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
 | I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 375 ms (see I79, L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I87 | A page's `Event` has no pointer position: Constructions places and drags points through a grid of 576 transparent SVG squares | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G1 | 2026-10-31 |
+| I88 | A `part` can't sit inside an SVG (it is a `lab-part` HTML element), so a picture redraws whole; Constructions stacks two SVGs | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G2 | 2026-10-31 |
+| I89 | Outer and inner products, the dual, the regressive product and grade selection for the Clifford tables. Constructions writes ½(ab − ba) and a part-by-part dual for its own record | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G3 | 2026-10-31 |
+| I90 | Constructions in the editor's program list (built into apps/ since the PR that added it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | 2026-10-31 |
+| I92 | `clifford exp` of a bivector whose square has an I part (a field with E·B ≠ 0, a screw motion): split it into commuting parts first. Spacetime offers only E ⟂ B | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S1 | 2026-10-31 |
+| I93 | Show a Float64 to a fixed number of decimals; Spacetime writes its own `rounded` | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S3 | 2026-10-31 |
+| I94 | Spacetime in the editor's program list (built into apps/ since the PR that added it); its charge path takes about 8 s in the evaluator (I79) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I95 | **Bug.** relate run backwards (only the answer known) through a Cl(1, 3) table product ignores its step budget and runs out of memory (agreement.test OOM); Spacetime writes `times`, `moved by`, `along`, `velocity of` inline to avoid it | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S5 | 2026-10-31 |
 
 ## E: Editor
 
@@ -140,7 +149,6 @@ all of these.
 |---|---|---|---|---|---|
 | L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). Open: a generic op made Int by a parameter's type alone (no Int literal) is still planned as Float64's equations, because the plan reads the code and not the types | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md), Ersagun 2026-10-31): `Mat2` to `Mat4` done (L44a). Rotors, reflections, projections and PGA motions from the Clifford tables done (L44b); reading a function's matrix done (L44c, src/lang/linear.ts). Next: the compiler stores linear functions as matrices (C lane, C30b/c); then a linear-algebra library for any size | LANGUAGE-REVIEW-2026-10-24 | P1 | M | steps 1-2 done |
-| L117 | Lists as arrays written in the language (REPRESENTATIONS.md step 5, with C30d): a `hides(variant, field)` job read into `hidden`, then the `array of List` representation definition with honest costs (match linear, fold quadratic when the tail is read) | Compiler lane, 2026-10-31 | P1 | M | |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher, after L41 | NUMBERS.md stage 4 | P1 | M | step 1 done |
 | L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next: grade inference on the units machinery (Bounce passes vectors, spins and rotors as one 8-part type) | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors done |
 | L41 | Table products expanded at compile time, zero terms dropped (with lane C). Measured in Bounce: a Cl(3, 0) product is 0.10 ms compiled, about 200 times a hand-written one | LANGUAGE-REVIEW-2026-10-24, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | P1 | M | |
