@@ -7,6 +7,7 @@
 
 import { children, type Code, type Id, type NodeOf } from "../model.ts";
 import { S } from "./std.ts";
+import { add, less, possible, steps, type Cost } from "./cost.ts";
 
 // The operations of the program's interfaces (INTERFACES.md): each field
 // of an interface typedef, and the interface it belongs to.
@@ -54,26 +55,28 @@ export const NEUTRAL: BuiltinCost = () => 1;
 // of Dijkstra's algorithm (1977): the cheapest field whose way uses only
 // finished fields is finished next, so a cycle of ways is never followed.
 export function pickWays(code: Code, ways: Ways, variant: NodeOf<"variant">, args: Id[], costOf: BuiltinCost = NEUTRAL): Map<Id, Id | null> {
-  const cost = new Map<Id, number>(), pick = new Map<Id, Id | null>();
-  const given = (i: number) => {
-    if (leftToWays(code, args[i])) return Infinity;
+  // On cost.ts's scale, which the representation chooser uses too: a way's
+  // declared cost and a builtin's are constant steps.
+  const cost = new Map<Id, Cost>(), pick = new Map<Id, Id | null>();
+  const given = (i: number): Cost => {
+    if (leftToWays(code, args[i])) return steps(Infinity);
     const g = code.nodes[args[i]];
-    return g?.kind === "ref" && (code.nodes[g.target]?.kind === "builtin" || g.target.startsWith("builtin.")) ? costOf(g.target) : 1;
+    return steps(g?.kind === "ref" && (code.nodes[g.target]?.kind === "builtin" || g.target.startsWith("builtin.")) ? costOf(g.target) : 1);
   };
   for (;;) {
-    let best: { field: Id; way: Id | null; cost: number } | null = null;
+    let best: { field: Id; way: Id | null; cost: Cost } | null = null;
     variant.fields.forEach((f, i) => {
       if (cost.has(f)) return;
       const own = given(i);
-      if (own < Infinity && (!best || own < best.cost)) best = { field: f, way: null, cost: own };
+      if (possible(own) && (!best || less(own, best.cost))) best = { field: f, way: null, cost: own };
       for (const w of ways.get(f) ?? []) {
         if (![...w.uses].every((u) => cost.has(u))) continue;
-        const c = w.cost + [...w.uses].reduce((a, u) => a + cost.get(u)!, 0);
-        if (!best || c < best.cost) best = { field: f, way: w.def, cost: c };
+        const c = add(steps(w.cost), ...[...w.uses].map((u) => cost.get(u)!));
+        if (!best || less(c, best.cost)) best = { field: f, way: w.def, cost: c };
       }
     });
     if (!best) break;
-    const b = best as { field: Id; way: Id | null; cost: number };
+    const b = best as { field: Id; way: Id | null; cost: Cost };
     cost.set(b.field, b.cost);
     pick.set(b.field, b.way);
   }

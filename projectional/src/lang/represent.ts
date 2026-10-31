@@ -18,6 +18,7 @@ import { dependencies, freshId, subtree, type Code, type Id, type Node, type Nod
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
+import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
 
 export interface Representation {
   name: string;
@@ -51,7 +52,7 @@ export interface Representation {
   def?: Id;
 }
 
-export const LADDER = ["1", "log n", "log² n", "n", "n log n", "n²"];
+export { LADDER } from "./cost.ts";
 // The ladder as the language writes it: std's Cost, in the same order.
 const COSTS = ["constant", "logarithmic", "polylogarithmic", "linear", "linearithmic", "quadratic"].map((c) => `${COST}.${c}`);
 
@@ -103,7 +104,6 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
   }
   return out;
 }
-const rank = (c: string | undefined) => (c === undefined ? LADDER.length : LADDER.indexOf(c));
 
 // A builtin type such as Float64 has no cases: its jobs are its builtins.
 const variantsOf = (code: Code, type: Id) => {
@@ -161,21 +161,21 @@ export interface Choice {
   jobs: string[];
 }
 
-// Pick the representation whose worst job is cheapest, then the cheapest
-// in total, then the smallest. A job a representation doesn't implement is
-// done by its definition, which costs what it costs in T's own terms.
+// Pick the representation whose jobs cost least added up, on the scale
+// the way picker uses too (cost.ts): the highest order first, so the one
+// whose worst job is cheapest wins, then how many jobs are at that order,
+// then the next order down; then the smallest. A job a representation
+// doesn't implement is done by its definition, which costs what it costs
+// in T's own terms; one with no cost at all is NEVER.
 export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   const jobs = uses(code, entry, reps);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? spec.cost[j] ?? "?"]));
-  const score = (r: Representation) => {
-    const c = costs(r);
-    const rs = jobs.map((j) => rank(c[j]));
-    return [Math.max(...rs), rs.reduce((a, b) => a + b, 0), rank(c.space)];
-  };
+  const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
+  const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(c[j]))), space: step(c.space) }; };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
-    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    return compare(x.jobs, y.jobs) || compare(x.space, y.space);
   })[0];
   return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
 }
