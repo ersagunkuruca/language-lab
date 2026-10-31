@@ -68,6 +68,6 @@ once, before running ("closure compilation", Feeley and Lapalme, 1987),
 keeping the heap continuation only where a search or a handler needs it.
 That is typically 3 to 10 times faster for code like this, and it is a
 rewrite of the machine's core (M to L), not a hotspot. It is L118c on the
-backlog, waiting on Ersagun. Pages that already run compiled code (I97)
+backlog, kept for later: Ersagun stopped L118 here (2026-10-31). Pages that already run compiled code (I97)
 get the compiler's speed without it. That is the general interpreter cost the profile
 showed, and the next PR profiles it again.
