@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I97 | Page preview runs compiled once it's ready: interpreted at once, compiled in the run worker, swapped in (Bounce 7 → 60 fps, Spacetime slider 7.4 s → 27 ms) | #789 |
 | I94 | Editor: Spacetime in the program list (opening holds the editor ~8 s while main first runs; the products' cost is L41) | #760 |
 | I85 | Editor: Bounce in the program list | #758 |
 | I90 | Editor: Constructions in the program list | #756 |
