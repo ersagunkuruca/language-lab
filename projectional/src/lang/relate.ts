@@ -703,12 +703,25 @@ function solveFraction(op: FractionOp, at: number, xs: (Q | undefined)[]): Q | n
   }
 }
 
-export function interpreter(code: Code, opts: Options = {}) {
-  // The generic + resolved to each type's own first (arith.ts), as the
-  // evaluator does; a program from the evaluator is resolved already.
-  if (needsResolving(code)) code = resolveArithmetic(code, infer(code)).code;
+// What interpreter() works out from the whole program before it runs: the
+// program with its arithmetic resolved, and which type each variant is
+// part of. Each is a pass over every node, the prelude's too, and a page
+// that reads a slider with inverse(show, …) relates once per input, so a
+// program's are kept (as equations.ts keeps its relations). Spacetime's
+// sliders spent about 60 ms an input here.
+const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id> }>();
+
+export function interpreter(given: Code, opts: Options = {}) {
+  let ready = prepared.get(given);
+  if (!ready) {
+    // The generic + resolved to each type's own first (arith.ts), as the
+    // evaluator does; a program from the evaluator is resolved already.
+    const code = needsResolving(given) ? resolveArithmetic(given, infer(given)).code : given;
+    prepared.set(given, (ready = { code, owner: ownerOfTypeParts(code) }));
+  }
+  const code = ready.code;
   const nodes = code.nodes;
-  const owner = ownerOfTypeParts(code);
+  const owner = ready.owner;
   const spend = opts.spend ?? (() => true);
   const recursive = new Map<Id, boolean>();
   const fractionOps = new Map<Id, FractionOp>();
