@@ -59,6 +59,12 @@ import tumbleComments from "../examples/tumble/comments.json" with { type: "json
 import constructionsCode from "../examples/constructions/code.json" with { type: "json" };
 import constructionsNames from "../examples/constructions/names.default.json" with { type: "json" };
 import constructionsComments from "../examples/constructions/comments.json" with { type: "json" };
+import bounceCode from "../examples/bounce/code.json" with { type: "json" };
+import bounceNames from "../examples/bounce/names.default.json" with { type: "json" };
+import bounceComments from "../examples/bounce/comments.json" with { type: "json" };
+import spacetimeCode from "../examples/spacetime/code.json" with { type: "json" };
+import spacetimeNames from "../examples/spacetime/names.default.json" with { type: "json" };
+import spacetimeComments from "../examples/spacetime/comments.json" with { type: "json" };
 import pedalCode from "../examples/pedal/code.json" with { type: "json" };
 import pedalNames from "../examples/pedal/names.default.json" with { type: "json" };
 import pedalComments from "../examples/pedal/comments.json" with { type: "json" };
@@ -94,11 +100,11 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, CONS, FALSE, FIXED_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
+import { BOOL, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { definedAs, fromList, needsHandling, OutOfSteps, showValue, withSteps, type Value, type World } from "../src/lang/run.ts";
+import { definedAs, fromList, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../src/lang/run.ts";
 import type { RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -116,6 +122,7 @@ import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { PAGE_BASE, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
+import { evaluatorCall } from "../src/lang/html.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
@@ -156,7 +163,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"], ["constructions", "Page: constructions"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"], ["constructions", "Page: constructions"], ["bounce", "Page: bounce"], ["spacetime", "Page: spacetime"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -252,6 +259,8 @@ const initialFor = (program: Program): Doc =>
   : program === "outline" ? outlineDoc()
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "constructions" ? typedDoc("constructions", constructionsCode as Code, constructionsNames, constructionsComments)
+  : program === "bounce" ? typedDoc("bounce", bounceCode as Code, bounceNames, bounceComments)
+  : program === "spacetime" ? typedDoc("spacetime", spacetimeCode as Code, spacetimeNames, spacetimeComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
   : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : program === "lockstep" ? typedDoc("lockstep", lockstepCode as Code, lockstepNames, lockstepComments)
@@ -995,6 +1004,21 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
 }
 const PASSED = "‹what main passes›";
 
+// Calls every view in a page's Html once, outermost first, until `over`.
+function drawOnce(v: Value, over: () => boolean) {
+  const view = (f: Value): Value | undefined => { try { return evaluatorCall(f); } catch { return undefined; } };
+  const todo: Value[] = [v];
+  while (todo.length && !over()) {
+    const d = todo.shift() as Data;
+    if (d?.tag === HTML_V.text) view(d.fields[0]);
+    else if (d?.tag === HTML_V.part) { const inner = view(d.fields[0]); if (inner !== undefined) todo.push(inner); }
+    else if (d?.tag === HTML_V.element) {
+      for (const a of fromList(d.fields[1]) as Data[]) if (a.tag === HTML_V.property) view(a.fields[1]);
+      todo.push(...fromList(d.fields[2]));
+    }
+  }
+}
+
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
@@ -1031,11 +1055,16 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
       // later, from a helper's own Run, it is no longer main's run (I78).
       let done = false;
       try {
-        withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
-          if (done) return;
-          if (!got.has(l)) got.set(l, args);
-          if (performance.now() > end) throw new OutOfSteps();
-        }));
+        withSteps(MAIN_STEPS, () => {
+          const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
+            if (done) return;
+            if (!got.has(l)) got.set(l, args);
+            if (performance.now() > end) throw new OutOfSteps();
+          });
+          // A page's views run later, as it's drawn: draw it once here, so
+          // what they call has values too (I29 b). Handlers wait for an event.
+          if (tr.result !== undefined) drawOnce(tr.result, () => performance.now() > end);
+        });
       } finally { done = true; }
     }
     mainRuns.set(doc.code, (calls = got));

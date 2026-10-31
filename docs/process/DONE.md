@@ -25,6 +25,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I94 | Editor: Spacetime in the program list (opening holds the editor ~8 s while main first runs; the products' cost is L41) | #760 |
+| I85 | Editor: Bounce in the program list | #758 |
 | I90 | Editor: Constructions in the program list | #756 |
 | I88 | Page: a part inside a picture is an SVG group, so it can redraw only its shapes | #755 |
 | I87 | Page: an event says where the pointer is (x, y in the element's own units: SVG units in a picture, else pixels from its top-left) | #752 |
