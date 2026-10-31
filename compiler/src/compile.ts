@@ -1339,8 +1339,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // The array and index a matched list is, if it is one: a binder that
     // holds a part of an array, or `split` and `characters`, whose arrays
     // are made here. Only when the cons arm's rest is itself only matched.
-    function viewOf(id: Id): { pre: string; a: string; i: string } | null {
-      const m = code.nodes[up.get(id)!] as NodeOf<"match">;
+    // `m`: the match it is matched by (a node can sit under more than one
+    // parent where staging shared it, so it's passed, not looked up).
+    function viewOf(id: Id, m: NodeOf<"match">): { pre: string; a: string; i: string } | null {
       const cons = m.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
       if (cons && !onlyMatched(cons)) return null;
       const n = code.nodes[id];
@@ -1994,7 +1995,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const [t, e] = boolArms(n);
           return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out, reuse)}\n}\n${ret(e, tail, out, reuse)}`)}`;
         }
-        const view = listMatch(n) ? viewOf(n.scrutinee) : null;
+        const view = listMatch(n) ? viewOf(n.scrutinee, n) : null;
         if (view) {
           // A list that is an array from `split` (or a part of one), taken
           // apart: an index into the array, and no cells (GAPS.md G23).
