@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { runMain } from "../src/lang/run.ts";
+import { runMain, showValue } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
@@ -47,8 +47,9 @@ function program(n: number, nested = false) {
   return { code, names, main, own: [counts, ab, ba, main] };
 }
 // `insiders`: a representation's definitions, which may build a Map.
-const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
-  const info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...insiders] });
+const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = [], unpinned: Id[] = []) => {
+  const pins = Object.fromEntries(Object.entries(checkOptions.pins ?? {}).filter(([d]) => !unpinned.includes(d)));
+  const info = infer(code, names, undefined, { ...checkOptions, pins, insiders: [...checkOptions.insiders!, ...insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const lines: string[] = [];
   runMain(code, info, main, { print: (s) => lines.push(s), names });
@@ -278,4 +279,53 @@ test("a match on the items of a tree that doesn't use the rest takes the smalles
   // the four that don't use the rest take the head; the one that does, the list
   const heads = subtree(c.code, main).filter((x) => { const n = c.code.nodes[x]; return n.kind === "ref" && / head/.test(c.names[n.target] ?? ""); });
   assert.equal(heads.length, 4);
+});
+
+// Lists as arrays (C30d3b): a program reading a list by position gets
+// `array of List`, and prints what the definition prints. Builtins that
+// take or give a list (range, all) meet it through items of array and
+// array of; equal, show and compare see the list.
+test("a program that reads a list by position gets arrays, and prints what the definition prints", () => {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(200)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  const total = k.def("total");
+  k.define(total, k.fold(k.call(S.range, k.lit(200)), [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "sum"], body: ([i], [, s]) => k.call(B.add, s!, k.call(L("item at"), k.x(xs), i, k.lit(-1))) },
+  ]));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const nums = (...ns: number[]) => k.list(...ns.map((n) => k.lit(n)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(k.x(total)),
+    show(k.call(L("length"), k.x(xs))),
+    show(k.call(L("item at"), k.x(xs), k.lit(7), k.lit(-1))),
+    show(nums(1, 2, 3)),
+    show(k.call(S.equal, nums(1, 2), k.call(L("append"), nums(1), nums(2)))),
+    show(k.call(COMPARE, nums(3), nums(1, 2))),
+    show(k.call(S.all, k.thunk(() => k.call(S.oneOf, nums(4, 5))))),
+    nums(9, 8),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const before = printed(code, names, main);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, total, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+  assert.deepEqual(before, ["2646700", "200", "49", "[1, 2, 3]", "true", "after", "[4, 5]"]);
+  // main's answer is the list.
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  assert.equal(showValue(runMain(c.code, info2, main, { print: () => {}, names: c.names }), c.code, c.names), "[9, 8]");
+});
+
+test("a program whose lists meet a set as written keeps List as written", () => {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(S.range, k.lit(50)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(B.add, k.call(L("item at"), k.x(xs), k.lit(3), k.lit(0)), k.call(L("set size"), k.call(L("as set"), k.x(xs))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, main]).chosen.includes("List as array of List"));
 });

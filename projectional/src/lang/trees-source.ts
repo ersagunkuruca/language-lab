@@ -23,7 +23,7 @@ export function buildTreesModule(preludeModule: Module): Module {
   // Lists as arrays (array-list.ts, L117): after the trees, so their rows
   // keep their places in LIBRARY.reps.
   const arrays = buildArrayList(k, byName);
-  const t = { defs: [...trees.defs, ...arrays.defs], representations: [...trees.representations, arrays.representation] };
+  const t = { defs: [...trees.defs, ...arrays.defs], representations: [...trees.representations, ...arrays.representations] };
   const p = publish(merge(base, k.code), k.names, t.defs, base);
   if (!p.ok) throw new Error(`the trees can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d) ?? d;
