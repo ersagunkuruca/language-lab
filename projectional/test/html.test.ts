@@ -124,3 +124,15 @@ test("on(\"frame\") comes once each time the browser draws, while its element is
     assert.equal(frames.length, 0);
   } finally { g.requestAnimationFrame = saved; }
 });
+
+test("an event says where the pointer is: from the element's top-left, or 0, 0 without a pointer", () => {
+  let got: Data | null = null;
+  const then = (ev: Data) => { got = ev; return { tag: "std.unit.unit", fields: [] }; };
+  const page = { tag: HTML_V.element, fields: ["div", toList([{ tag: HTML_V.on, fields: ["pointerdown", then as never] }, { tag: HTML_V.on, fields: ["keydown", then as never] }]), toList([])] } as Data;
+  const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { getBoundingClientRect?: () => { left: number; top: number } };
+  e.getBoundingClientRect = () => ({ left: 100, top: 40 });
+  e.fire("pointerdown", { clientX: 130, clientY: 45 } as never);
+  assert.deepEqual(got!.fields.slice(2), [30, 5]);
+  e.fire("keydown", { key: "a" });
+  assert.deepEqual(got!.fields.slice(1), ["a", 0, 0]);
+});
