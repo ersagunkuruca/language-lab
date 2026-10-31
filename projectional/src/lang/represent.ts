@@ -48,6 +48,9 @@ export interface Representation {
   // match on the job's list whose cons case doesn't use the rest is that
   // (library-reps.ts, GAPS.md M3).
   heads?: Record<Id, Id>;
+  // Fields, by variant, that R doesn't keep as values of T (`hides`, L117):
+  // made only when an arm reads them, as Storage's `hidden` below.
+  hidden?: Record<Id, number[]>;
   // The definition that writes it, for one a program writes (L108).
   def?: Id;
 }
@@ -94,6 +97,11 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
       const seen = kind === JOBS.equalBy ? "equal" : kind === JOBS.showBy ? "show" : kind === JOBS.compareBy ? "compare" : null;
       if (seen && a[0]) { rep.canonical = false; (rep.byType ??= { equal: "", show: "", compare: "" })[seen] = a[0]; continue; }
       if (kind === JOBS.headBy && a[0] && a[1]) { (rep.heads ??= {})[a[0]] = a[1]; continue; }
+      if (kind === JOBS.hides && a[0]) {
+        const lit = code.nodes[j.args[1]], at = lit?.kind === "lit" ? Number(lit.value) : -1;
+        if (Number.isInteger(at) && at >= 0 && at < ((code.nodes[a[0]] as NodeOf<"variant"> | undefined)?.fields.length ?? 0)) (rep.hidden ??= {})[a[0]] = [...(rep.hidden?.[a[0]] ?? []), at];
+        continue;
+      }
       const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : null;
       if (!key) continue;
       const by = kind === JOBS.job ? a[1] : kind === JOBS.matchBy || kind === JOBS.foldBy ? a[0] : null;

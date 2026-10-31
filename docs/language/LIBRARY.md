@@ -221,6 +221,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **show by** : `((a) -> Text) -> Job b a`. For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.
 - **head by** : `(a, b) -> Job c d`. For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.
+- **hides** : `(a, Int) -> Job b c`. hides(case, position): that field of t's case isn't kept as a value of t at r (a list's rest, in an array, is the items after a position), so it is made only when an arm reads it, and a fold whose arms don't read it costs only its walk.
 
 ## Searching: Choice
 
