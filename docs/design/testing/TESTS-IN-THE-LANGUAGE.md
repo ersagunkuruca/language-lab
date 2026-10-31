@@ -1,6 +1,12 @@
 # Tests in the language (T7)
 
-Status (2026-10-31): proposal. Steps T7a to T7e are backlog rows.
+Status (2026-10-31): T7a built: std's `Check`, `lab test`, and small
+values (src/lang/tests.ts). The small values come from the types in
+TypeScript for now: Float64 from the fixed list below, Int from −3 to 3,
+Text, Bool, lists up to three long of the first three of their items,
+the program's records and cases from their fields, and a type variable at
+Int. Running constructors backwards with relate is still the plan (§2).
+T7b to T7e are backlog rows.
 
 [TESTING.md](../../process/TESTING.md) §6 sketched three ideas: accepted answers, laws as
 definitions, and re-checking only what changed. This note makes them a

@@ -954,6 +954,20 @@ What is deliberately not there, and why:
   in its runtime (cells.ts), so a compiled program updates and remembers
   exactly as the evaluator does.
 
+### Check: tests are definitions
+
+`Check` is std's effect for tests, with one operation, `expect(holds,
+what)`. A definition that performs it is a test, and its type says so
+(`reverse twice : (List a) -[Check]-> Unit`): no attribute, no naming
+rule. `lab test <program>` runs each one on the inputs saved with it
+(`examples.json`, the editor's Run), then on small values of its inputs'
+types, smallest first and never random, so the first failure it prints is
+the smallest one and the same every run. A failing `expect` doesn't stop
+the test: every one is reported with the inputs it failed on. A law for
+any type (`a`) is tried at Int. A test may search (each path is checked)
+and may handle any other effect itself. Design and later steps:
+TESTS-IN-THE-LANGUAGE.md (T7).
+
 ### Where effects go
 
 A function's effects show in the type of whatever calls it, all the way up
@@ -973,6 +987,7 @@ builtin's type takes away exactly what its row says.
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |
+| a test run by lab test | Check, Choice | the test runner handles Check, collecting every expect that failed, and runs each path a search takes |
 | all, count | Choice | every answer, collected into a list or counted |
 | first | Choice | the first answer, or the default when there's none |
 | formula, each | Diverge | a formula runs when it's read, so read has Diverge instead |
