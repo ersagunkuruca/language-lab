@@ -364,7 +364,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L46 | Bounded counting is total: an Int counted by a positive literal towards a bound its guard compares it with (a literal, or an input kept) ends, read through and, or and not (src/lang/counting.ts, used by infer.ts `terminates` and modes.ts). Raymarch keeps `with fuel` for now: an Int step count is refused by the scalar profile outside shaders (WASM, C, plain JS), so dropping it is L46b. | this PR |
+| L46 | Bounded counting is total: an Int counted by a positive literal towards a bound its guard compares it with (a literal, or an input kept) ends, read through and, or and not (src/lang/counting.ts, used by infer.ts `terminates` and modes.ts). Raymarch keeps `with fuel` for now: an Int step count is refused by the scalar profile outside shaders (WASM, C, plain JS), so dropping it is L46b. | #763 |
 | C30d (language side) | std Array's two ends, `first of array`, `rest of array` and `push front`, and `array of List`'s jobs rewritten on them: cons, match and length constant, fold a walk. Ersagun's two-ended array list; the compiled views are the Compiler lane's #734. | #737 |
 | I93 | The prelude's `show decimals(x, places)`: a Float64 as text with a fixed number of places, rounded half away from 0, trailing zeros kept, never -0 (as JavaScript's toFixed and C's printf("%.*f")). Spacetime wrote its own `rounded`. | #735 |
 | I83 | The prelude's `item at(list, position, otherwise)` and `replace at(list, position, by)`, counting from 0, with no Choice outside the list (the otherwise, or the list as it was). Bounce, Tumble and Constructions each wrote their own `nth`; they can use these. Evaluated and compiled. test/item-at.test.ts | #733 |
