@@ -1,0 +1,43 @@
+# Clifford algebra demos: what they found (2026-10-31)
+
+Ersagun asked (2026-10-31) for a few demos written with the prelude's
+Clifford functions (`clifford table`, `table product`, `clifford sandwich`,
+`reflect`, `project`, `exp`, #716), mainly to find where the implementation
+falls short. Three are planned, one PR each: a physics simulation that works
+in 2D and 3D, a geometry construction tool, and a relativity or
+electromagnetism calculator in spacetime algebra. This report collects what
+each one found. The gaps are rows in [BACKLOG.md](../../BACKLOG.md) and are
+not fixed in the demo PRs.
+
+## 1. Bounce: one physics step in two and three dimensions
+
+`projectional/examples/bounce`, built as `apps/bounce.html`. Rigid bodies
+bounce in a box: a triangle, a square, a pentagon and a hexagon in the plane,
+and a tetrahedron, two cubes and an octahedron in space. `step`, `moved`,
+`off the walls`, `bounced` and `outline` are written once, generic over the
+multivector type, and given a `Space` value: the signature (`[1, 1]` or
+`[1, 1, 1]`), the basis, the box's axes, which way is down, and the camera's
+rotor. Positions and velocities are vectors, turns are rotors, spins are
+bivectors (`clifford exp(−dt/2 · spin)` each frame), a wall reflects a
+velocity (`clifford reflect`), and two bodies that meet swap the part of
+their closing velocity along the line between them (`clifford project`).
+
+What worked: the same definitions run both worlds with no change, which is
+what Ersagun asked for, and the checker infers them as generic over the
+multivector (`step : (Space a, List (Body a)) -[Diverge]-> List (Body a)`).
+Composing the camera's rotor with each body's rotor once per body, so each
+corner takes one sandwich, is ordinary geometric algebra and needed nothing
+new.
+
+### Gaps
+
+| # | gap | measured | row |
+|---|---|---|---|
+| B1 | **A Clifford product costs about 200 times what it should.** `table product` folds over the table's 64 lines and makes records for each; the table itself is rebuilt by every `clifford sandwich`, `reflect`, `project` and `exp` call, which take `(squares, basis)` and not a built algebra. | Before #724, Cl(3, 0), compiled JS: one product 0.10 ms, one table 0.075 ms, one sandwich 0.28 ms (hand-written: 64 multiply-adds, well under a microsecond). One frame of the solid world: step 1.6 ms, drawing 7.3 ms. Evaluated (the editor's page preview): step about 90 ms, drawing about 285 ms, so the page would show a few frames a second there. | L41, now partly done by C65 (#724) for calls with the algebra written down; see B8 |
+| B2 | **A page has no frame event.** Stepping a simulation needs a handler (views can't write), so the page hides a `div` with an endless 16 ms CSS animation and steps on its `animationiteration`. Tumble does the same with `animationend`. | two examples write around it | new row, P2 |
+| B3 | **No grades in the types.** A position, a spin and a rotor are all `Solid`, the whole 8-part multivector. Nothing stops passing a rotor where a vector goes, and every vector carries 5 zeros. | 3D bodies carry 8 numbers per vector, 4 needed | L43 (grade inference) |
+| B4 | **Multivectors are written by position.** `vec3(x, y, z)` puts x, y, z at parts 1, 2 and 4 (the basis order is 1, e₁, e₂, e₁₂, e₃, …), and a spin in e₁₂ + e₁₃ is `solid(0, 0, 0, 2, 0, 1, 0, 0)`. A program can't write `2 e₁₂ + e₁₃`. | every literal multivector in the demo | new row |
+| B5 | **Changing one field of a record means writing all of them.** `Body` has 8 fields; moving a body rebuilds it with 7 unchanged. The builder hides this behind a helper; in the editor it is 8 ports per update. | 4 places in the demo | new row |
+| B6 | **No item-at-index for lists.** Edges name their corners by number, so the demo writes its own `nth`, as Tumble does. | two examples write around it | new row, P2 |
+| B7 | **Pairwise collision is inferred Diverge.** `bump pairs` recurses on the list `bump into each` gives back inside a Pair, which the checker can't see is shorter, so `step` says it may not finish. | `step` carries Diverge | new row, P3 |
+| B8 | **C65 (#724) doesn't reach generic code.** Since #724 a clifford call whose squares and basis are written down is worked out when compiled: a Cl(3, 0) product or sandwich written that way now takes about 1 µs. Bounce's step takes its algebra from a `Space` value, which is what lets one definition run both worlds, so none of its calls are worked out, though `flat` and `solid` are constants. Specialising a function on a constant argument (here, the space) would let generic code have both. | after #724: product and sandwich written down 0.001 ms; Bounce's step 1.6 ms and drawing 9.3 ms, unchanged | new row |
