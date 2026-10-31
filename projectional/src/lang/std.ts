@@ -131,7 +131,7 @@ export const VIEW_ROW = namedRow("std.row.view", "View", PAGE_VIEW);
 export const HANDLER_ROW = namedRow("std.row.handler", "Handler", PAGE_HANDLER);
 export const SOUND_ROW = namedRow("std.row.sound", "Sound", AUDIO_BLOCK);
 export const EVENT = typedef("std.event", "Event", [], [
-  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)]]],
+  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)]]],
 ]);
 // Where a sound's samples come from (AUDIO.md): the microphone, or a
 // recording the page fetches by its address and plays over and over.
