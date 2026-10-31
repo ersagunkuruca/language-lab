@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
+| E Editor | "Editor lane" | I76-I78, I80, I87, I88 (Ersagun's 20 more, 2026-10-31) |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), then I37 |
 | L Language and library | "Language lane" | Clifford demo rows I95, I89, I92, I83, I93 done; idle until asked |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -34,7 +34,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I75 | Tumble's `clear` and `settle` open on "The search found no result for these values": with every input known, Run should run a plain function forwards, not search | QA11 M1 | 2026-10-31 |
 | I76 | On a page program, a helper's own Run sits below the 560 px page; when the open definition isn't main, fold or shrink the page | QA11 M2 | 2026-10-31 |
 | I77 | A page's main still opens with empty canvas top-left (Tumble's first node 220 px right, 275 px down; pedal lower right); open on the first node | QA11 L1 | 2026-10-31 |
 | I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
