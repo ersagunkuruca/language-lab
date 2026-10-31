@@ -588,6 +588,83 @@ export function buildPrelude(): Module {
           k.let("a", k.call(B.sqrt, s), (a) => k.let("eᵃ", k.call(B.exp, a), (ea) => k.let("e⁻ᵃ", n.div(k.lit(1), ea), (eb) =>
             added(scaledBy(n.mul(k.lit(0.5), n.add(ea, eb)), one), scaledBy(n.div(n.mul(k.lit(0.5), n.sub(ea, eb)), a), b)))))))))));
 
+  // The other products, grades and duals (BACKLOG I89), as in Dorst,
+  // Fontijne and Mann (2007) and Gunn and De Keninck (2019). The outer and
+  // inner products are the geometric product's table with some lines left
+  // out: e_A ∧ e_B is e_A e_B when A and B share no vector, else 0; the
+  // left contraction e_A ⌋ e_B is e_A e_B when A is inside B, else 0. So
+  // each is a table for `table product`, built as clifford table is.
+  // Two blades, position by position: does any position hold `x` in a and
+  // `y` in b?
+  const anyPair = (name: string, x: boolean, y: boolean) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["a", "b"], (a, b) => k.match(a, [
+      { variant: NIL, names: [], body: () => FALSE },
+      { variant: CONS, names: ["p", "ps"], body: ([p, ps]) => k.match(b, [
+        { variant: NIL, names: [], body: () => FALSE },
+        { variant: CONS, names: ["q", "qs"], body: ([q, qs]) => k.if(k.call(S.and, x ? p : k.call(S.not, p), y ? q : k.call(S.not, q)), TRUE, k.call(d, ps, qs)) },
+      ]) },
+    ])));
+    return d;
+  };
+  const share = anyPair("blades share", true, true);
+  const sticksOut = anyPair("blade sticks out", true, false);
+  // clifford table, keeping only the lines whose blades `wanted` says yes to.
+  const tableWhere = k.def("clifford table where");
+  k.define(tableWhere, k.fn(["squares", "basis", "wanted"], (sq, es, wanted) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) =>
+    k.fold(ps, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["left", "rest"], results: [null, "the rest's lines"], body: ([l], [, r]) => k.match(l, [
+        { variant: PAIR_V, names: ["a", "ea"], body: ([a, ea]) => k.fold(ps, [
+          { variant: NIL, names: [], body: () => r! },
+          { variant: CONS, names: ["right", "more"], results: [null, "more lines"], body: ([rt], [, m]) => k.match(rt, [
+            { variant: PAIR_V, names: ["b", "eb"], body: ([b, eb]) => k.let("sign", k.call(bladeSign, sq, a, b), (sg) =>
+              k.if(k.call(S.or, k.call(S.equal, sg, k.lit(0)), k.call(S.not, k.call(wanted, a, b))), m!,
+                k.call(CONS, k.call(TIMES_V, ea, eb, k.call(S.mapParts, k.fn(["part"], (x) => n.mul(sg, x)), k.call(elementOf, ps, k.call(outer, a, b), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), ea)))), m!))) },
+          ]) },
+        ]) },
+      ]) },
+    ]))));
+  const cliffordOuter = k.def("clifford outer");
+  k.define(cliffordOuter, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
+    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(share, p, q)))), a, b)));
+  const cliffordInner = k.def("clifford inner");
+  k.define(cliffordInner, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
+    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(sticksOut, p, q)))), a, b)));
+  // How many vectors a blade has: its grade.
+  const gradeOf = k.def("blade grade");
+  k.define(gradeOf, k.fn(["blade"], (bl) => k.fold(bl, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["has", "rest"], results: [null, "the rest's grade"], body: ([h], [, r]) => k.if(h, n.add(r!, k.lit(1)), r!) },
+  ])));
+  // x's parts on the blades the function `weigh` gives each blade's
+  // weight for, summed: grade selection, dual and undual are each one.
+  const reweigh = (sq: Id, es: Id, x: Id, weigh: (blade: Id, element: Id, ps: Id) => Id) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) => k.fold(ps, [
+    { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x) },
+    { variant: CONS, names: ["pair", "rest"], results: [null, "the rest's sum"], body: ([pr], [, r]) => k.match(pr, [
+      { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => added(weigh(b, e, ps), r!) },
+    ]) },
+  ]));
+  const cliffordGrade = k.def("clifford grade");
+  k.define(cliffordGrade, k.fn(["squares", "basis", "grade", "x"], (sq, es, g, x) => reweigh(sq, es, x, (b, e) =>
+    k.if(k.call(S.equal, k.call(gradeOf, b), g), scaledBy(along(x, e), e), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))));
+  // The dual by complement, which works in degenerate algebras too
+  // (projective geometric algebra, where the pseudoscalar squares to 0):
+  // e_A goes to ± e_Ā, Ā the vectors A doesn't have, signed so that
+  // e_A ∧ dual(e_A) is the pseudoscalar. undual undoes it, and the
+  // regressive product (the join of points, the meet of planes) is
+  // undual(dual(a) ∧ dual(b)).
+  const complement = (bl: Id) => k.call(map, bl, k.fn(["has"], (h) => k.call(S.not, h)));
+  const cliffordDual = k.def("clifford dual");
+  k.define(cliffordDual, k.fn(["squares", "basis", "x"], (sq, es, x) => reweigh(sq, es, x, (b, e, ps) => k.let("other", complement(b), (c) =>
+    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, c, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))))));
+  const cliffordUndual = k.def("clifford undual");
+  k.define(cliffordUndual, k.fn(["squares", "basis", "x"], (sq, es, x) => reweigh(sq, es, x, (c, e, ps) => k.let("other", complement(c), (b) =>
+    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, b, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))))));
+  const cliffordRegressive = k.def("clifford regressive");
+  k.define(cliffordRegressive, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
+    k.call(cliffordUndual, sq, es, k.call(cliffordOuter, sq, es, k.call(cliffordDual, sq, es, a), k.call(cliffordDual, sq, es, b)))));
+
   // Small matrices (BACKLOG L44): the multiplication table of n × n
   // matrices from their matrix units, given as rows of basis elements.
   // E_ij · E_jl = E_il, and any other product of two units is 0, so the
@@ -890,7 +967,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -996,6 +1073,12 @@ export function buildPrelude(): Module {
     [cliffordReflect]: "n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.",
     [cliffordProject]: "The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).",
     [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(squares, basis, −θ/2 · B).",
+    [cliffordOuter]: "a ∧ b, the outer product in the Clifford algebra clifford table(squares, basis) makes: e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.",
+    [cliffordInner]: "a ⌋ b, the left contraction: e_A ⌋ e_B is e_A e_B when every vector of A is in B, else 0. A vector contracted with a bivector gives the vector in that plane at right angles to it (e₁ ⌋ e₁₂ = e₂); a vector with a vector is their dot product.",
+    [cliffordGrade]: "x's grade-k part: only its parts on blades of k vectors. Grade 0 is the scalar, 1 the vector, 2 the bivector.",
+    [cliffordDual]: "x's dual by complement: e_A becomes ± e_Ā, the blade of the vectors A doesn't have, signed so that e_A ∧ dual(e_A) is the pseudoscalar. It works in projective geometric algebra, whose pseudoscalar squares to 0.",
+    [cliffordUndual]: "Undoes clifford dual: clifford undual(squares, basis, clifford dual(squares, basis, x)) is x.",
+    [cliffordRegressive]: "a ∨ b, the regressive product, undual(dual(a) ∧ dual(b)): in projective geometric algebra the line through two points, or the point where two lines meet in the plane.",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",
