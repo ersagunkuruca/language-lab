@@ -34,6 +34,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I97 | The editor's page preview runs main in the evaluator, and "Open in a tab" runs it compiled. Ersagun found Bounce and Spacetime much faster in a tab. Measured: Bounce's preview draws 8.5 frames a second against 60 in a tab, and the profile is all evaluator (step, apply, resume, GC). Spacetime's charge path takes 9 s evaluated against 4 ms compiled. Ersagun is willing to have the preview run compiled code. Compiling takes 2 to 7 s (Constructions 1.9, Bounce 4.0, Spacetime 7.2 s), so a way to do it is to keep the evaluator page while the compiled one builds off the main thread, then swap it in when it is ready, keeping the evaluator for what needs it (Outline updates, sound). For the Editor lane. | Ersagun 2026-10-31 "so much faster when opened on a new tab" | 2026-10-31 |
 | I96 | Bounce's Clifford calls are no longer worked out when compiled. With the algebra built once (I79), I86 makes copies for the space (`clifford sandwich at clifford sandwich's algebra`), but each copy calls the generic `table product` over the table's 64 lines, both in `step` and in drawing. Drawing the solid world is 6.4 ms a frame compiled; a sandwich with `cl3` written in place is 0.001 ms. I86's 0.06 ms step was measured before I79. | Bounce frame-rate fix, 2026-10-31 | 2026-10-31 |
 
 ## E: Editor
