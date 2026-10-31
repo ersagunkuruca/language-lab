@@ -7,7 +7,10 @@ vector was the next step (BACKLOG L44). Layer 2 is built (L44b,
 2026-10-31): the prelude's `clifford sandwich`, `clifford reflect`,
 `clifford project` and `clifford exp` turn, mirror, project and move, for
 any signature, with PGA motors moving points (test/clifford.test.ts).
-Layers 1 and 3 are not built.
+Layer 1 has begun (L44c): src/lang/linear.ts reads a function's matrix
+and offset from its graph, or says it isn't affine. The compiler's use of
+it, choosing when the matrix form pays and generating it (JS, then WGSL),
+is the Compiler lane's C30b and C30c. Layer 3 is not built.
 
 Ersagun (2026-10-31) moved the question. A matrix shouldn't be the way a
 program says "transform this vector". Geometry has better words for it,
