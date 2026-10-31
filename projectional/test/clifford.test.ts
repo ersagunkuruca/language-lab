@@ -115,3 +115,58 @@ test("clifford reverse: rotors of Cl(3, 0) turn vectors and multiply as quaterni
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// Geometry from the tables (MATRICES.md layer 2, BACKLOG L44b): rotors from
+// clifford exp, reflections and projections in Cl(3, 0), and motors moving
+// points in projective geometric algebra, [1, 1, 1, 0] (Gunn and De
+// Keninck's point e₁₂₃ − x e₂₃₀ + y e₁₃₀ − z e₁₂₀, with e₀ here the fourth
+// vector, so e₂₃₀ is e₂e₃e₄).
+test("clifford sandwich, reflect, project and exp: rotors, mirrors and PGA motors, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const space = (name: string, size: number, squares: number[]) => {
+    const M = k.type(name, [], [[name.toLowerCase(), Array.from({ length: size }, (_, i) => [`p${i}`, num] as [string, () => Id])]]);
+    const of = (...ps: number[]) => k.call(M.v[name.toLowerCase()], ...ps.map((p) => k.lit(p)));
+    const at = (parts: Record<number, number>) => of(...Array.from({ length: size }, (_, i) => parts[i] ?? 0));
+    const basis = def(`${name} basis`, () => k.list(...Array.from({ length: size }, (_, i) => at({ [i]: 1 }))));
+    const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...squares.map((x) => k.lit(x))), k.x(basis), ...xs);
+    const mul = (a: Id, b: Id) => k.call(lib("table product"), k.call(lib("clifford table"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)), a, b);
+    return { at, call, mul };
+  };
+  const names: string[] = [];
+  const show = (name: string, x: () => Id) => { names.push(name); def(name, () => k.call(SHOW_ANY, x())); };
+  // Cl(3, 0): e1 = 1, e2 = 2, e12 = 3, e3 = 4.
+  const g = space("Cl3", 8, [1, 1, 1]);
+  show("turn by exp", () => g.call("clifford sandwich", g.call("clifford exp", g.at({ 3: -Math.PI / 4 })), g.at({ 1: 1, 4: 2 })));
+  show("mirror", () => g.call("clifford reflect", g.at({ 1: 1 }), g.at({ 1: 3, 2: 4, 4: 5 })));
+  show("onto e12", () => g.call("clifford project", g.at({ 3: 1 }), g.at({ 1: 3, 2: 4, 4: 5 })));
+  show("onto a line", () => g.call("clifford project", g.at({ 1: 1, 2: 1 }), g.at({ 1: 3, 2: 1, 4: 5 })));
+  // PGA: e123 = 7, e10 = 9, e120 = 11, e130 = 13, e230 = 14.
+  const p = space("Pga", 16, [1, 1, 1, 0]);
+  const point = (x: number, y: number, z: number) => p.at({ 7: 1, 14: -x, 13: y, 11: -z });
+  // Turn by 90° about z, then move by 5 along x: the motor is their product.
+  const motor = () => p.mul(p.call("clifford exp", p.at({ 9: 2.5 })), p.call("clifford exp", p.at({ 3: -Math.PI / 4 })));
+  show("translate", () => p.call("clifford sandwich", p.call("clifford exp", p.at({ 9: 2.5 })), point(1, 2, 3)));
+  show("turn then move", () => p.call("clifford sandwich", motor(), point(1, 2, 3)));
+  show("mirror a point", () => p.call("clifford reflect", p.at({ 1: 1 }), point(1, 2, 3)));
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const got = names.map((n) => r.value(at(n)));
+  const parts = (v: Value) => { const s = String(v); return s.slice(s.indexOf("(") + 1, -1).split(", ").map(Number); };
+  const near = (s: Value, want: Record<number, number>) => parts(s).forEach((x, i) => assert.ok(Math.abs(x - (want[i] ?? 0)) < 1e-8, `${s} at ${i}`));
+  near(got[0], { 2: 1, 4: 2 });
+  near(got[1], { 1: -3, 2: 4, 4: 5 });
+  near(got[2], { 1: 3, 2: 4 });
+  near(got[3], { 1: 2, 2: 2 });
+  near(got[4], { 7: 1, 14: -6, 13: 2, 11: -3 });
+  near(got[5], { 7: 1, 14: -3, 13: 1, 11: -3 });
+  near(got[6], { 7: -1, 14: -1, 13: -2, 11: 3 });
+  const path = join(mkdtempSync(join(tmpdir(), "geometry-")), "geometry.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});
