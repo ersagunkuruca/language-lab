@@ -113,3 +113,21 @@ test("where any type goes, a new function is offered, and fills", () => {
   const fixed = replace(code, sum.args[1], () => ({ kind: "hole" }));
   assert.ok(!fillings(fixed, infer(fixed), sum.args[1]).some((g) => g.kind === "lambda"));
 });
+
+// A definition with results has a direction its body decides, which a
+// filling can break: float64 polar with something else for its length
+// gave several answers where Trig's implementation needs one, and every
+// Float64 in scope was offered there (BACKLOG I100).
+test("in a definition with results, only fillings that keep its direction are offered", async () => {
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const polar = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "float64 polar")!;
+  const code0 = base(new Lang().code);
+  const lam = code0.nodes[(code0.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const hole = Object.values(code0.nodes).find((n) => n.kind === "ref" && n.target === lam.params[0] && n.id.startsWith(polar))!.id;
+  const code = replace(code0, hole, () => ({ kind: "hole" }));
+  const info = infer(code);
+  const offered = fillings(code, info, hole);
+  assert.ok(offered.some((f) => f.kind === "ref" && f.target === lam.params[0]), "the length itself is offered");
+  const bad = offered.filter((f) => infer(fillHole(code, {}, hole, f).code).errors.length > info.errors.length);
+  assert.deepEqual(bad.map((f) => JSON.stringify(f).slice(0, 80)), []);
+});
