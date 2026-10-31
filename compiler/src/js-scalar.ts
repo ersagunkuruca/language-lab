@@ -22,8 +22,12 @@ const $isub = (a, b) => { $big(a - b); return (a - b) | 0; };
 const $imul = (a, b) => { $big(a * b); return Math.imul(a, b); };
 const $ineg = (a) => { $big(-a); return -a | 0; };
 const $iabs = (a) => { $big(Math.abs(a)); return Math.abs(a) | 0; };
+const $iquot = (a, b) => { if (b === 0) { none = true; return 0; } $big(Math.floor(a / b)); return Math.floor(a / b) | 0; };
+const $irem = (a, b) => { if (b === 0) { none = true; return 0; } const r = a % b; return r !== 0 && (r < 0) !== (b < 0) ? r + b : r === 0 ? 0 : r; };
+const $ipow = (a, n) => { if (n < 0) { none = true; return 0; } let r = 1, b = a, k = n; while (k > 0) { if (k & 1) r = $imul(r, b); k >>= 1; if (k > 0) b = $imul(b, b); } return r; };
+const $iwhole = (x) => { if (!Number.isFinite(x)) { none = true; return 0; } const f = Math.floor(x); if (f < -2147483648 || f >= 2147483648) { fuel = -1; return 0; } return f === 0 ? 0 : f; };
 `;
-const INT_CALL: Partial<Record<Op, string>> = { iadd: "$iadd", isub: "$isub", imul: "$imul", ineg: "$ineg", iabs: "$iabs" };
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "$iadd", isub: "$isub", imul: "$imul", ineg: "$ineg", iabs: "$iabs", iquot: "$iquot", irem: "$irem", ipow: "$ipow", iwhole: "$iwhole" };
 const MATH: Partial<Record<Op, string>> = {
   sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2",
 };
@@ -34,7 +38,7 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
   const { funcs } = lowered;
   const names = new Map(funcs.map((f, i) => [i, `f${i}`]));
   const text = funcs.map((f, i) => func(f, i));
-  const js = `let fuel = 0;\n${INT}\n${text.join("\n\n")}\nreturn { ${funcs.map((_, i) => names.get(i)).join(", ")} };\n`;
+  const js = `let fuel = 0, none = false;\n${INT}\n${text.join("\n\n")}\nreturn { ${funcs.map((_, i) => names.get(i)).join(", ")} };\n`;
   return { js, names };
 
   function func(f: SFunc, i: number): string {
@@ -47,6 +51,14 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
         case "int": return `(${e.v})`;
+        // No answer, and a zero to go on with; first or count by the flag (wgsl.ts).
+        case "zero": if (e.none) pre.push(`${d}none = true;`); return zero(e.t);
+        case "attempt": {
+          const s = temp(), r = temp(), t = temp(), res = local(e.res);
+          pre.push(`${d}const ${s} = none;`, `${d}none = false;`, `${d}let ${res};`, ...block(e.body, { set: res }, d));
+          pre.push(`${d}const ${r} = none;`, `${d}none = ${s};`, `${d}let ${t};`, `${d}if (${r}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}} else {`, ...block(e.ok, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
         case "num": return Object.is(e.v, -0) ? "(-0)" : e.v < 0 ? `(${e.v})` : String(e.v);
         case "bool": return String(e.v);
         case "local": return local(e.i);
@@ -130,6 +142,7 @@ function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
     case "if": return [...calls(e.cond), ...calls(e.then), ...calls(e.else)];
     case "let": return [...calls(e.value), ...calls(e.body)];
     case "budget": return [...calls(e.body), ...calls(e.otherwise)];
+    case "attempt": return [...calls(e.body), ...calls(e.ok), ...calls(e.otherwise)];
     default: return [];
   }
 }

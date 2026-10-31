@@ -21,7 +21,7 @@ const first = <T>(xs: Iterable<T>) => { for (const x of xs) return x; };
 test("Int in a shader is an i32, with + − × negate and abs checked for overflow", () => {
   const p = ints();
   const roots = [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.lowest];
-  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, int32: true });
+  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, shader: true });
   assert.deepEqual([...lowered.refused.values()], []);
   const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.values()], []);
@@ -37,7 +37,7 @@ test("Int in a shader is an i32, with + − × negate and abs checked for overfl
 
 test("Int in 32 bits on the CPU: the evaluator's answers, and past 32 bits the budget's fallback", () => {
   const p = ints();
-  const lowered = lowerScalar(p.code, p.info, p.names, [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.lowest], { records: true, int32: true });
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.lowest], { records: true, shader: true });
   const js = loadJs(lowered);
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const ev = (d: string, ...xs: unknown[]) => first(r.call(r.value(d), ...(xs as never[])));
@@ -64,6 +64,28 @@ test("an Int literal past 32 bits is refused in a shader, with the reason", () =
   const d = k.def("huge");
   k.define(d, k.fn(["a"], (a) => k.call(INT_OPS.add, a, k.int(3_000_000_000))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
-  const lowered = lowerScalar(code, info, names, [d], { int32: true });
+  const lowered = lowerScalar(code, info, names, [d], { shader: true });
   assert.match(lowered.refused.get(d) ?? "", /past 32 bits/);
+});
+
+test("first with a fallback and count in a shader: a flag, the evaluator's answers (C66c2)", () => {
+  const p = ints();
+  const roots = [p.quot, p.rem, p.pow, p.whole, p.counted, p.quarter];
+  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, shader: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  const s = emitWgsl(lowered);
+  assert.deepEqual([...s.refused.values()], []);
+  assert.match(s.wgsl, /var<private> lab_none: bool;/);
+  assert.match(s.wgsl, /fn lab_iquot\(a: i32, b: i32\) -> i32/);
+  // half has no answer for an odd number: not a place to start, only inside a first.
+  assert.deepEqual(s.funcs.map((f) => f.name).sort(), ["count quotients", "power or", "quarter or", "quotient or", "remainder or", "whole or"]);
+  const js = loadJs(lowered);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const ev = (d: string, ...xs: unknown[]) => { const v = first(r.call(r.value(d), ...(xs as never[]))); return typeof v === "bigint" ? Number(v) : v; };
+  const pairs = [[7, 2], [-7, 2], [7, -2], [-7, -2], [6, 3], [5, 0], [0, 0], [-2147483648, 1], [2, 10], [3, -1], [-3, 3], [1, 31], [2, 31], [12, 4], [8, 5]];
+  for (const d of [p.quot, p.rem, p.pow, p.counted, p.quarter]) for (const [a, b] of pairs) {
+    if (d === p.pow && a === 2 && b === 31) continue; // 2³¹ is past 32 bits: fuel, outside any budget
+    assert.equal(js.get(d)!(a, b), ev(d, a, b), `${p.names[d]} ${a} ${b}`);
+  }
+  for (const x of [2.5, -2.5, 0, -0.5, 1e6, NaN, Infinity, -Infinity]) assert.equal(js.get(p.whole)!(x), ev(p.whole, x), `whole ${x}`);
 });

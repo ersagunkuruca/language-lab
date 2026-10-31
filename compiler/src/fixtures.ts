@@ -666,7 +666,17 @@ export function ints() {
   // a³ past 32 bits: the budget's fallback.
   const cube = def("cube", ["a"], (a) => within(k, 10, () => k.call(I.mul, k.call(I.mul, a, a), a), () => k.int(-1)));
   const lowest = def("lowest", [], () => k.int(-2147483648));
+  // Searches with one answer or none, under first with a fallback, and count.
+  const or = (x: () => string, y: () => string) => k.call(S.first, k.thunk(x), k.thunk(y));
+  const quot = def("quotient or", ["a", "b"], (a, b) => or(() => k.call(I.quotient, a, b), () => k.int(-7)));
+  const rem = def("remainder or", ["a", "b"], (a, b) => or(() => k.call(I.remainder, a, b), () => k.int(-7)));
+  const pow = def("power or", ["a", "b"], (a, b) => or(() => k.call(I.power, a, b), () => k.int(-7)));
+  const whole = def("whole or", ["x"], (x) => or(() => k.call(I.wholePart, x), () => k.int(-7)));
+  const counted = def("count quotients", ["a", "b"], (a, b) => k.call(S.count, k.thunk(() => k.call(I.quotient, a, b))));
+  // A definition with one answer or none, its none from `fail`, and two firsts inside each other.
+  const half = def("half", ["a"], (a) => k.if(k.equal(k.call(I.remainder, a, k.int(2)), k.int(0)), k.call(I.quotient, a, k.int(2)), k.call(S.fail)));
+  const quarter = def("quarter or", ["a", "b"], (a, b) => or(() => k.call(half, k.call(half, a)), () => or(() => k.call(I.add, k.call(half, b), k.int(1000)), () => k.int(-1))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
-  return { code, names, info, poly, smaller, same, sumTo, cube, lowest };
+  return { code, names, info, poly, smaller, same, sumTo, cube, lowest, quot, rem, pow, whole, counted, quarter };
 }

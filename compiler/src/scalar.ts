@@ -68,10 +68,12 @@ const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
 };
-// Int's builtins held in 32 bits (`int32`).
+// Int's builtins held in 32 bits (`shader`). quotient, remainder, power
+// and whole part may have no answer, which sets the shader's flag.
 const INT32: Record<Id, Op> = {
   [INT_OPS.add]: "iadd", [INT_OPS.sub]: "isub", [INT_OPS.mul]: "imul", [INT_OPS.neg]: "ineg", [INT_OPS.abs]: "iabs",
   [INT_OPS.less]: "iless", [INT_OPS.toNumber]: "itof",
+  [INT_OPS.quotient]: "iquot", [INT_OPS.remainder]: "irem", [INT_OPS.power]: "ipow", [INT_OPS.wholePart]: "iwhole",
 };
 // Builtins on Int and Text that are runtime functions (`data`).
 const RT: Record<Id, string> = {
@@ -279,7 +281,7 @@ export type SExpr =
   // Field i of the box rec set to value, then `then`; and the zero of t
   // (what a box starts as, before a search sets it).
   | { k: "set"; rec: SExpr; t: RType; i: number; value: SExpr; then: SExpr }
-  | { k: "zero"; t: LType };
+  | { k: "zero"; t: LType; none?: true };
 
 // Operations the targets provide. `host` ones (sin, pow, …) aren't
 // WebAssembly instructions; a WASM module imports them, a shader has them
@@ -295,6 +297,8 @@ export const OPS = {
   // budget running out does (wgsl.ts, js-scalar.ts).
   iadd: { t: "int32" }, isub: { t: "int32" }, imul: { t: "int32" }, ineg: { t: "int32" }, iabs: { t: "int32" },
   iless: { t: "i32" }, ieq: { t: "i32" }, itof: { t: "f64" },
+  // One answer or none (`shader`): none sets the shader's flag.
+  iquot: { t: "int32" }, irem: { t: "int32" }, ipow: { t: "int32" }, iwhole: { t: "int32" },
 } as const satisfies Record<string, { t: SType; host?: boolean }>;
 
 
@@ -321,9 +325,14 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
-// `int32`: without `data`, an Int is held in 32 bits (shaders, C66c), and a
-// result past them gives up as a budget running out does.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; int32?: boolean } = {}): Lowered {
+// `shader`: what a shader has without a heap (C66c). An Int is held in 32
+// bits, and a result past them gives up as a budget running out does. A
+// search with one answer or none, under `first` with a fallback or
+// `count`, is a flag the printers keep (lab_none): `fail`, a quotient by
+// 0 and the like set it, the code goes on with zeros, and the `first`
+// looks at it when its search ends. Shaders have no side effects, so going
+// on computes nothing anyone sees.
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): Lowered {
   // The generic + resolved to each type's own operation first
   // (projectional/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -426,7 +435,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
-    if (opts.int32 && t.id === INT) return "int32";
+    if (opts.shader && !opts.data && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
     if (opts.data && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
@@ -561,7 +570,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = !!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)));
+    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
     const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES)));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
@@ -703,10 +712,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
           return { k: "rt", fn: RT[target], args: args() };
         }
-        if (opts.int32 && INT32[target]) return { k: "op", op: INT32[target], args: args() };
+        if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
+        if (target === S.fail && opts.shader) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`fails as ${whyNot(zonk(id))}`);
+          return { k: "zero", t, none: true };
+        }
+        if (opts.shader && (target === S.first || target === S.count) && !isBudget(n)) return flagged(n, id, env, f);
         if (target === ABORT_OP && opts.data && n.args.length === 1) return { k: "abort", reason: expr(n.args[0], env, f, false) };
         if (opts.data && opOf.has(target)) {
           const e = opOf.get(target)!;
@@ -1230,6 +1245,20 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // search, lowered with `one of` where it chooses, and what the handler
   // makes of its answers. Once everything it calls is lowered, the pass
   // below (several) makes it code.
+  // first with a fallback, or count, in a shader: the search's flag, kept
+  // by the printer (`shader` above).
+  function flagged(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
+    const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
+    const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
+    if (!search || (target === S.first && !dflt)) throw new Refused(`uses ${nm(target)} on a search that isn't written in place (as () => …)`);
+    const t = stype(zonk(id)), bt = stype(zonk(search));
+    if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
+    const res = f.locals.push(bt) - 1, body = expr(search, env, f, false);
+    return target === S.first
+      ? { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t }
+      : { k: "attempt", body, res, ok: { k: "num", v: 1 }, otherwise: { k: "num", v: 0 }, t };
+  }
   function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };

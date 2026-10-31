@@ -3,8 +3,10 @@
 // f64 to speak of, so results are close to the evaluator's, not equal),
 // Bool is `bool`, a record is a `struct`, a let is a `let`, and `if` is an
 // `if` statement. Lower with `{ records: true }` to have records, and with
-// `{ int32: true }` to have Ints as `i32` (C66c): past 32 bits, an Int
-// gives up as a budget running out does (INT_HELPERS below).
+// `{ shader: true }` to have Ints as `i32` (C66c): past 32 bits, an Int
+// gives up as a budget running out does (INT_HELPERS below). With it, a
+// search with one answer or none under `first` or `count` is the flag
+// `lab_none` (scalar.ts `shader`).
 //
 // A record of two to four Float64s (a point, a direction, a colour) is
 // stored as a WGSL vector instead, `vec2f` to `vec4f`, its fields in order
@@ -71,7 +73,9 @@ const INFIX: Partial<Record<Op, string>> = {
 // fallback, and outside any budget the answer isn't the evaluator's (as
 // outside a budget anywhere). The overflow tests are Hacker's Delight's
 // (Warren, 2-13): a sum overflows when both inputs' signs differ from its.
-const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs" };
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs", iquot: "lab_iquot", irem: "lab_irem", ipow: "lab_ipow", iwhole: "lab_iwhole" };
+// The ones that may have no answer, which set lab_none (scalar.ts `shader`).
+const NONE_OPS = new Set<Op>(["iquot", "irem", "ipow", "iwhole"]);
 const INT_HELPERS: Partial<Record<Op, string>> = {
   iadd: `fn lab_iadd(a: i32, b: i32) -> i32 {
   let r = a + b;
@@ -96,6 +100,42 @@ const INT_HELPERS: Partial<Record<Op, string>> = {
   iabs: `fn lab_iabs(a: i32) -> i32 {
   if (a == -2147483647i - 1i) { lab_fuel = -1.0; }
   return abs(a);
+}`,
+  // Rounded down, as the evaluator's (int.ts): WGSL's / and % round toward 0.
+  iquot: `fn lab_iquot(a: i32, b: i32) -> i32 {
+  if (b == 0i) { lab_none = true; return 0i; }
+  if (b == -1i && a == -2147483647i - 1i) { lab_fuel = -1.0; return a; }
+  let q = a / b;
+  if (q * b != a && ((a < 0i) != (b < 0i))) { return q - 1i; }
+  return q;
+}`,
+  irem: `fn lab_irem(a: i32, b: i32) -> i32 {
+  if (b == 0i) { lab_none = true; return 0i; }
+  if (b == -1i) { return 0i; }
+  let r = a % b;
+  if (r != 0i && ((r < 0i) != (b < 0i))) { return r + b; }
+  return r;
+}`,
+  // By squaring; none for a negative power.
+  ipow: `fn lab_ipow(a: i32, n: i32) -> i32 {
+  if (n < 0i) { lab_none = true; return 0i; }
+  var r = 1i;
+  var b = a;
+  var k = n;
+  loop {
+    if (k == 0i) { break; }
+    if ((k & 1i) == 1i) { r = lab_imul(r, b); }
+    k = k >> 1u;
+    if (k > 0i) { b = lab_imul(b, b); }
+  }
+  return r;
+}`,
+  iwhole: `fn lab_iwhole(x: f32) -> i32 {
+  // NaN or infinite, by the bits: a GPU may take x != x to be false.
+  if ((bitcast<u32>(x) & 0x7f800000u) == 0x7f800000u) { lab_none = true; return 0i; }
+  let f = floor(x);
+  if (f < -2147483648.0 || f >= 2147483648.0) { lab_fuel = -1.0; return 0i; }
+  return i32(f);
 }`,
 };
 // Records of 2 to 4 Float64s are vectors; their fields are these.
@@ -144,7 +184,8 @@ const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
 // arithmetic as written.
 function unrounded(e: SExpr): SExpr {
   switch (e.k) {
-    case "num": case "bool": case "local": case "int": return e;
+    case "num": case "bool": case "local": case "int": case "zero": return e;
+    case "attempt": return { ...e, body: unrounded(e.body), ok: unrounded(e.ok), otherwise: unrounded(e.otherwise) };
     case "op": return e.op === "float32" ? unrounded(e.args[0]) : { ...e, args: e.args.map(unrounded) };
     case "if": return { ...e, cond: unrounded(e.cond), then: unrounded(e.then), else: unrounded(e.else) };
     case "let": return { ...e, value: unrounded(e.value), body: unrounded(e.body) };
@@ -268,7 +309,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           uses.set(e.i, (uses.get(e.i) ?? 0) + 1);
           return c.args[e.i];
         case "num": case "bool": case "int": return e;
-        case "let": case "budget": return null;
+        case "let": case "budget": case "attempt": case "zero": return null;
         case "if": {
           const m = minmax(e);
           if (m) {
@@ -405,13 +446,17 @@ export function emitWgsl(lowered: Lowered): Shader {
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
-  const intOps = (Object.keys(INT_HELPERS) as Op[]).filter((op) => kept.some((i) => usesOp(funcs[i].body, op)));
+  // power multiplies with lab_imul.
+  const intOps = (Object.keys(INT_HELPERS) as Op[]).filter((op) => kept.some((i) => usesOp(funcs[i].body, op) || (op === "imul" && usesOp(funcs[i].body, "ipow"))));
+  const flags = (e: SExpr): boolean => e.k === "attempt" || (e.k === "zero" && !!e.none) || (e.k === "op" && NONE_OPS.has(e.op)) || kids(e).some(flags);
+  const needsNone = kept.some((i) => flags(funcs[i].body));
   const needsFuel = intOps.length > 0 || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
     ...(needsMod ? [MOD] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
+    ...(needsNone ? ["// Set when a search has no answer; `first` looks at it (scalar.ts `shader`).\nvar<private> lab_none: bool;"] : []),
     ...intOps.map((op) => INT_HELPERS[op]),
     ...structText,
     ...text,
@@ -419,7 +464,8 @@ export function emitWgsl(lowered: Lowered): Shader {
   return {
     wgsl,
     // Only what can be called from outside a budget is a place to start.
-    funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
+    // A search with no answer outside any `first` isn't one either.
+    funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
     refused,
     structs,
     matrices,
@@ -436,6 +482,18 @@ export function emitWgsl(lowered: Lowered): Shader {
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
         case "num": return num(e.v);
+        // No answer (`fail`): the flag, and a zero to go on with.
+        case "zero":
+          if (e.none) pre.push(`${d}lab_none = true;`);
+          return `${tname(e.t)}()`;
+        // first with a fallback, or count: the search with the flag clear,
+        // then the answer or the fallback by the flag, put back as it was.
+        case "attempt": {
+          const s = temp(), r = temp(), t = temp(), res = local(e.res);
+          pre.push(`${d}let ${s} = lab_none;`, `${d}lab_none = false;`, `${d}var ${res}: ${tname(f.locals[e.res])};`, ...block(e.body, { set: res }, d));
+          pre.push(`${d}let ${r} = lab_none;`, `${d}lab_none = ${s};`, `${d}var ${t}: ${tname(e.t)};`, `${d}if (${r}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}} else {`, ...block(e.ok, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
         case "int": return e.v === -(2n ** 31n) ? "(-2147483647i - 1i)" : `${e.v}i`;
         case "bool": return String(e.v);
         case "local": return local(e.i);
@@ -635,7 +693,8 @@ function uses(e: SExpr, i: number): number {
 function put(e: SExpr, i: number, v: SExpr): SExpr {
   switch (e.k) {
     case "local": return e.i === i ? v : e;
-    case "num": case "bool": case "int": return e;
+    case "num": case "bool": case "int": case "zero": return e;
+    case "attempt": return { ...e, body: put(e.body, i, v), ok: put(e.ok, i, v), otherwise: put(e.otherwise, i, v) };
     case "op": case "call": case "make": return { ...e, args: e.args.map((a) => put(a, i, v)) };
     case "get": return { ...e, rec: put(e.rec, i, v) };
     case "if": return { ...e, cond: put(e.cond, i, v), then: put(e.then, i, v), else: put(e.else, i, v) };
@@ -657,6 +716,7 @@ function kids(e: SExpr): SExpr[] {
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     case "budget": return [e.body, e.otherwise];
+    case "attempt": return [e.body, e.ok, e.otherwise];
     default: return [];
   }
 }
