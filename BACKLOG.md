@@ -23,9 +23,9 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
-| C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | Clifford demo rows done; C30d language side (array ends) done; idle until asked |
+| E Editor | "Editor lane" | I76-I78, I80, I87, I88 (Ersagun's 20 more, 2026-10-31) |
+| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), then I37 |
+| L Language and library | "Language lane" | C30d language side (array ends, this PR); then I79 (clifford algebra built once), I84, I82, I81, L29, L46 (Ersagun's 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -34,7 +34,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I75 | Tumble's `clear` and `settle` open on "The search found no result for these values": with every input known, Run should run a plain function forwards, not search | QA11 M1 | 2026-10-31 |
 | I76 | On a page program, a helper's own Run sits below the 560 px page; when the open definition isn't main, fold or shrink the page | QA11 M2 | 2026-10-31 |
 | I77 | A page's main still opens with empty canvas top-left (Tumble's first node 220 px right, 275 px down; pedal lower right); open on the first node | QA11 L1 | 2026-10-31 |
 | I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
@@ -88,6 +87,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C66 | std's Array on the other targets (Ersagun 2026-10-31 "Yea"): every array builtin in compiler/src/builtins.ts is JS-only, so WASM, native C and shaders refuse Array. Bring the two-ended buffer views from #734 (a start and length on a buffer with room at both ends, a push writing into a free slot) to WASM and C, and to shaders where a fixed size fits | Ersagun | P1 | L | |
 | C30 | Lists as arrays. Done so far: P4a, #555, #558, #561 (pedal 2.9×). The split, join and block-in-array stages pay only together (~25% more); do them as one stage when another program needs lists as arrays. The aim: an `array` representation written in the language (REPRESENTATIONS.md), so WASM, C and the editor get it too. C30d (2026-10-31): Ersagun's two-ended array list; JS runtime views done (C30d1), next the Language lane's `array first`/`array rest`/`push front` with `array of List`'s costs (cons, match constant; fold linear), then the chooser picking it from use | GAPS.md round 4 P4 | P2 | L | |
 | C55 | Compile each direction of a relation a program uses as its own function (Mercury), dropping results no caller reads: `y` of `polar` alone is a plain sine, both together one sincos | Ersagun 2026-10-28 | P2 | M | |
 | C62 | IN-PLACE.md step 1: `$own` copies for the cases of any type, so the trees' put, add and remove write along their path in place (GAPS.md M6). Built only if routes measures over 10% | docs/design/data/IN-PLACE.md | P2 | M | |
