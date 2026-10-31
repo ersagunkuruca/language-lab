@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750) and L46 (this PR) done; next T7 and L69 design notes, I91, I81, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 design note and I82 (this PR) done; next I91, I81, the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -112,7 +112,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it). `set(field, record, value)` exists (LANGUAGE.md); the demo builder didn't use it, so check what is still missing (several fields at once, the editor) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | P3 | S | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
 
 ### Ersagun's current asks
@@ -121,7 +120,7 @@ all of these.
 |---|---|---|---|---|---|
 | L107 | **Open question, not decided** (Ersagun 2026-10-30: "I didn't ask to lift strict positivity BTW, I'm not sure if we should lift that"): drop strict positivity, so a data type may take itself as a function's input in its fields (`knot = wrap(f: knot → Float64)`), with taking one apart carrying Diverge so a function without Diverge still always finishes. Recursive data types themselves (a type holding itself, directly or through others) are allowed and always were; TUTORIAL.md §3.8 says so. If decided yes: LANGUAGE.md "Two rules", TUTORIAL.md §3.8 and the guarantees test | Ersagun 2026-10-30 | P3 | S | open question |
 | L108 | Representations written in the language (REPRESENTATIONS.md). L108a to L108c done: a representation is a definition, the compiler chooses, no explicit selection (#679 to #682). Left: L108d, laws, after T7; the editor half is E159 | Ersagun 2026-10-30 | P2 | M | 3 of 4 steps |
-| T7 | Tests in the language: accepted answers next to examples.json inputs, laws as definitions with a `Check` effect, cached by definition hash (Unison). Design note first. Unblocks L108d, L97e | TESTING.md T7 | P2 | L | |
+| T7 | Tests in the language ([TESTS-IN-THE-LANGUAGE.md](docs/design/testing/TESTS-IN-THE-LANGUAGE.md)): T7a `Check` in std, the small-values enumerator and `lab test` (L, M); T7b accepted answers in examples.json (L, S); T7c results cached by hash, locally and in CI (L and T, M); T7d the editor's tick, difference and accept button (E, M); T7e example sweeps moved to answers and laws, `--compiled` (T, M). Unblocks L108d, L97e | TESTING.md T7 | P2 | L | design done |
 
 ### Numbers (NUMBERS.md)
 

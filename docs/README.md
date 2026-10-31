@@ -94,6 +94,12 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 |---|---|---|
 | [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | proposal (L109 to L115) |
 
+### Testing
+
+| doc | what it is | status |
+|---|---|---|
+| [TESTS-IN-THE-LANGUAGE.md](design/testing/TESTS-IN-THE-LANGUAGE.md) | Tests as definitions doing a `Check` effect, small values from constructors run backwards, accepted answers in examples.json, results cached by hash, `lab test` | proposal (T7a to T7e) |
+
 ### Compiler and targets
 
 | doc | what it is | status |
