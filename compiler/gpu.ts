@@ -30,7 +30,7 @@ import { represent } from "../projectional/src/lang/represent.ts";
 import { infer } from "../projectional/src/lang/infer.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
-import { area, corners, parts, vectors } from "./src/fixtures.ts";
+import { area, corners, parts, pga, vectors } from "./src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 const TRUE = "std.bool.true", FALSE = "std.bool.false";
@@ -65,6 +65,10 @@ const cases: Case[] = [
     return { label: "vectors module", code: v.code, info: v.info, names: v.names, roots: Object.values(v.defs) };
   })(),
   (() => {
+    const g = pga();
+    return { label: "projective geometric algebra (staged, C65)", code: g.code, info: g.info, names: g.names, roots: Object.values(g.defs) };
+  })(),
+  (() => {
     const v = vectors();
     // walk stops once 4 away, so its step must move it away.
     return { label: "records", code: v.code, info: v.info, names: v.names, roots: Object.values(v.defs), inputs: (f) => (f.name === "walk" ? [[0, 1, 0, 0.5, 0], [2, 0, 1, 0.25, 3]] : f.name === "steps" ? [[0, 0.5], [-1, 0.125], [3, 2]] : undefined) };
@@ -82,9 +86,11 @@ if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser
 
 // Operations WGSL does exactly as binary32 does: correctly rounded.
 const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not"]);
-// A linear map printed as a matrix (C30c) sums in its own order: close, not exact.
-function exact(funcs: SFunc[], i: number, matrices: Set<number>, seen = new Set<number>()): boolean {
-  if (matrices.has(i)) return false;
+// A linear map printed as a matrix (C30c) sums in its own order, and a
+// call worked out when compiled (C65) may hold a number rounded once in
+// Float64: close, not exact.
+function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<string>, seen = new Set<number>()): boolean {
+  if (matrices.has(i) || rounded.has(funcs[i].def)) return false;
   if (seen.has(i)) return true;
   seen.add(i);
   const ok = (e: SExpr): boolean => {
@@ -93,7 +99,7 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, seen = new Set<
       case "op": return EXACT.has(e.op) && e.args.every(ok);
       case "if": return ok(e.cond) && ok(e.then) && ok(e.else);
       case "let": return ok(e.value) && ok(e.body);
-      case "call": return e.args.every(ok) && exact(funcs, e.fn, matrices, seen);
+      case "call": return e.args.every(ok) && exact(funcs, e.fn, matrices, rounded, seen);
       case "make": return e.args.every(ok);
       case "get": return ok(e.rec);
       // A budget counts its calls in f32 on the GPU: whole numbers, exact.
@@ -115,7 +121,7 @@ for (const c of cases) {
   const r32 = makeRunner(in32, infer(in32, w.names), { print: () => {} });
   for (const f of shader.funcs) {
     const i = lowered.funcs.findIndex((g) => g.def === f.def);
-    const isExact = exact(lowered.funcs, i, shader.matrices);
+    const isExact = exact(lowered.funcs, i, shader.matrices, lowered.rounded);
     // Records go in and out as their numbers, in field order.
     const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);
     const inputs = c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));

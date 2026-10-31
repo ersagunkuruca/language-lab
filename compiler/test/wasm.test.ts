@@ -542,8 +542,11 @@ test("what isn't in the profile is refused, with the reason", () => {
   const { refused } = lowerScalar(p.code, p.info, p.pres.names, p.own.defs);
   const why = (n: string) => refused.get(p.named(n));
   assert.match(why("sinc")!, /Choice/);
-  assert.match(why("parabola")!, /calls polynomial/);
+  // polynomial takes its coefficients as a list, so it isn't in the
+  // profile; parabola gives it a list written down, so its call is worked
+  // out when compiled (stage.ts, C65) and is plain arithmetic.
   assert.match(why("polynomial")!, /other than Float64 or Bool/);
+  assert.equal(why("parabola"), undefined);
 });
 
 test("Math with no JavaScript host: V8's fdlibm in WebAssembly, the same bits as Node's Math", async () => {
