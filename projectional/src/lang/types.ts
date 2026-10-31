@@ -269,7 +269,7 @@ export class Subst {
     let tail = r.tail;
     let named = r.name;
     while (tail !== null && this.rows.has(tail)) {
-      const next = this.rows.get(tail)!;
+      const next = this.flat(tail);
       named = next.name;
       next.effs.forEach((e) => effs.add(e));
       for (const [e, xs] of Object.entries(next.args ?? {})) args[e] ??= xs;
@@ -281,6 +281,27 @@ export class Subst {
     // only while it has exactly that row's effects).
     const name = named !== undefined && tail === null ? { name: named } : {};
     return kept.length ? { effs: sorted, tail, args: Object.fromEntries(kept.map((e) => [e, args[e]])), ...name } : { effs: sorted, tail, ...name };
+  }
+
+  // The row a bound tail stands for, flattened: every bound tail on its
+  // chain is set to its own flattened row, so the next look takes one step
+  // (path compression, as in union-find). Unifying makes chains hundreds of
+  // tails long, and walking them was the costliest step in compiling (C67).
+  // Rows are never changed in place, so this only adds new ones.
+  private flat(v: number): Row {
+    const first = this.rows.get(v)!;
+    if (first.tail === null || !this.rows.has(first.tail)) return first;
+    const chain = [v];
+    for (let t: number | null = first.tail; t !== null && this.rows.has(t); t = this.rows.get(t)!.tail) chain.push(t);
+    let acc = this.rows.get(chain[chain.length - 1])!;
+    for (let i = chain.length - 2; i >= 0; i--) {
+      const link = this.rows.get(chain[i])!;
+      const effs = [...new Set([...link.effs, ...acc.effs])].sort();
+      const args = link.args || acc.args ? { args: { ...acc.args, ...link.args } } : {};
+      acc = { effs, tail: acc.tail, ...args, ...(acc.name !== undefined ? { name: acc.name } : {}) };
+      this.rows.set(chain[i], acc);
+    }
+    return acc;
   }
 
   // Fully substituted copy, for display and for storing results.
