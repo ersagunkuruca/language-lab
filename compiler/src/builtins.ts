@@ -163,6 +163,7 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.first]: { js: "partial", scalar: ARRAYS },
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: { no: "first of array if any is array of List's match, which WebAssembly and C don't take yet (C30d3c)" } },
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },

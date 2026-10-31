@@ -140,8 +140,24 @@ never picks it by cost, and the shader target asks for it.
    array`, `push front`), Ersagun's two-ended array list: nil, length,
    cons and match constant, fold a walk (linear), append linear. Compiled
    JS keeps arrays as views on one buffer with free room at both ends
-   (#734). The chooser picking it from use and the code for each target
-   are the Compiler lane's C30d.
+   (#734), and the evaluator the same since #762.
+   **The chooser picks it (C30d3b, 2026-10-31)**, in the editor's
+   preview, from the jobs a program uses: the trees module publishes
+   `List as written` beside it, so `length` and `item at` (constant on an
+   array, linear on a list) tip a program to arrays and the rest tie,
+   where List stays. Equal, show and compare see the list (the row's
+   `byType`, as the trees'). The program gets its own copies of the
+   library definitions on lists it reaches (map, sum, …), which the
+   rewrite changes. Builtins that take or give a plain `List x` meet it
+   through `items of array` and `array of`; a program whose lists meet
+   anything else keeps List as written: a builtin with a list deeper in
+   its type (a Cell of a list), a library type with a list in it (Set
+   and Map as written, Algebra), a relation run backwards, a list given
+   to a definition generic in a type holding one, or another chosen
+   row. The checker reads a row's `match by` as a match, so recursion
+   through it still ends. Measured on the examples: chapters and ledger
+   get arrays, print the same, and run in under a millisecond either
+   way. Next (C30d3c): the compiled targets take the same choice.
 
 ## Prior art (to credit when built)
 

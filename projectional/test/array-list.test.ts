@@ -20,13 +20,18 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.equal(rep.of, LIST);
   assert.equal(rep.type, ARRAY);
   assert.equal(rep.meaning, ARRAY_OPS.items);
-  assert.equal(rep.canonical, true);
+  // Not one spelling per list as the chooser sees it: show says "array"
+  // and an array's compare puts shorter ones first, so equal, show and
+  // compare go through the meaning.
+  assert.equal(rep.canonical, false);
+  assert.ok(rep.byType);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "1", [lib("append")]: "n" });
-  // The library's chooser stores only non-canonical rows by itself (C47):
-  // this one waits for the compiler's lists as arrays (C30d).
-  assert.equal(LIBRARY.reps.filter((r) => r.byType).some((r) => r === rep), false);
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1" });
+  // List as written, which the chooser weighs it against (C30d3b).
+  const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
+  assert.equal(spec.type, LIST);
+  assert.deepEqual(spec.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "n", [lib("append")]: "n", [lib("item at")]: "n" });
 
   const all = merge(LIBRARY.code, TREES.code);
   const k = new Lang(all);
@@ -45,10 +50,14 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   show("fold", () => k.call(tree("array fold"), arr(1, 2, 3), k.thunk(() => k.x(NIL)), k.fn(["x", "rest", "r"], (x, rest, r) => k.call(CONS, k.call(lib("length"), items(rest)), k.call(CONS, x, r)))));
   show("length", () => k.call(tree("array length of"), arr(4, 5, 6)));
   show("append", () => items(k.call(tree("array append"), arr(1, 2), arr(3))));
+  // item at's rounding, and otherwise outside.
+  show("item at", () => k.list(...[-0.6, -0.5, 0.4, 0.5, 2.49, 2.5].map((i) => k.call(tree("array item at"), arr(10, 20, 30), k.lit(i), k.lit(0)))));
+  show("show", () => k.call(tree("array show"), arr(1, 2)));
+  show("compare", () => k.call(tree("array compare"), arr(3), arr(1, 2)));
   const code = merge(base(TREES.code), k.code), nm = { ...baseNames(k.names), ...TREES.names };
   const info = infer(code, nm, undefined, { ...checkOptions, insiders: [...(checkOptions.insiders ?? []), ...TREES.code.defs] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
-  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]"]);
+  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 10, 20, 30, 0]", "\"[1, 2]\"", "after"]);
 });

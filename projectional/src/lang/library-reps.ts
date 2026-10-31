@@ -13,14 +13,14 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { freshId, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
-import { COMPARE, CONS, LIST, MAP, MAP_V, PAIR_V, S, SHOW_ANY } from "./std.ts";
-import type { Type } from "./types.ts";
+import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SHOW_ANY, SIGS } from "./std.ts";
+import { Subst, type Type } from "./types.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
 // are its row's (byType), which go through its meaning.
@@ -39,12 +39,35 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     const spec = LIBRARY.reps.find((r) => r.of === tree.of && r.canonical)!;
     if (asked.some((r) => r.of === tree.of)) continue;
     if (!uses(code, main, [spec, tree]).length || choose(code, main, [spec, tree]).rep !== tree || keyed(info, defs, code, tree.of) || generic(info, defs, code, tree)) continue;
+    // Lists as arrays (C30d3b): alone, and only where every list the
+    // program reaches can be one (listBoundary).
+    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree))) continue;
     chosen.push(tree);
   }
   if (!chosen.length) return { code, names, chosen: [], insiders: [] };
-  // The trees' module, which the library leaves out (library.ts).
-  code = merge(TREES.code, code);
+  // The trees' module, which the library leaves out (library.ts): only
+  // the definitions the chosen rows use, since the program is checked
+  // again with them (the whole module is about 2,500 nodes).
+  code = merge(treesFor(code, chosen), code);
   names = { ...TREES.names, ...names };
+  // Lists as arrays reach the library's own definitions on lists (map,
+  // sum, …): the program gets its own copies of them, which the rewrite
+  // changes, and the library's stay as they are for everything else.
+  const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists)!;
+  let copies: Id[] = [];
+  if (boundary) {
+    const withBoundary: Code = { ...code, nodes: { ...code.nodes, ...boundary.nodes } };
+    const library = boundary.reached.filter((d) => !defs.includes(d));
+    const fresh = new Map<Id, Id>();
+    for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
+    const f = (id: Id) => fresh.get(id) ?? id;
+    const nodes = { ...withBoundary.nodes };
+    for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
+    for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);
+    code = { nodes, defs: [...code.defs, ...library.map(f)] };
+    names = { ...names, ...Object.fromEntries(library.map((d) => [f(d), names[d] ?? LIBRARY.names[d] ?? d])) };
+    copies = library.map(f);
+  }
   // equal, show and compare on a stored value: the row's own, through its
   // meaning; on a value with one inside, given that value as meanings.
   const k = new Lang(code);
@@ -86,7 +109,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   }
   // main's answer, for whoever shows it: main gives what it gave, as meanings.
   const answer = (() => { const t = typeOf(main); return t?.t === "fn" ? meanings(info.subst.zonk(t.ret)) : t ? meanings(t) : null; })();
-  let own = defs;
+  let own = [...defs, ...copies];
   if (answer) {
     const def = nodes[main] as NodeOf<"def">, inner = k.def(`${names[main] ?? "main"} as stored`);
     const body = code.nodes[def.body!];
@@ -94,11 +117,11 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     nodes[main] = { ...def, body: body?.kind === "lambda"
       ? k.fn(body.params.map((p) => names[p] ?? "x"), (...xs) => k.call(answer, k.call(inner, ...xs)))
       : k.call(answer, k.x(inner)) };
-    own = [...defs, inner];
+    own = [...own, inner];
   }
   const made = k.code.defs.filter((d) => !code.nodes[d]);
   const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...made] };
-  const out = chosen.reduce((c, rep) => represent(c, own, rep, made), all);
+  const out = chosen.reduce((c, rep) => represent(c, own, rep, made.filter((d) => !own.includes(d))), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made };
 }
 
@@ -123,6 +146,19 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
     made.set(ks, d);
     const row = chosen.find((r) => r.of === t.id);
     const args = t.args.map((a) => info.subst.zonk(a));
+    if (row?.of === LIST) {
+      // An array's items, each as its meaning when it holds some. A fold
+      // written here, not the prelude's map, which the program's arrays
+      // reach and so is rewritten.
+      const inner = meanings(args[0]);
+      k.define(d, inner
+        ? k.fn(["array"], (a) => k.fold(k.call(row.meaning!, a), [
+          { variant: NIL, names: [], body: () => k.x(NIL) },
+          { variant: CONS, names: ["item", "rest"], results: [null, "the rest's meanings"], body: ([x], [, r]) => k.call(CONS, k.call(inner, x), r!) },
+        ]))
+        : k.x(row.meaning!));
+      return d;
+    }
     if (row) {
       // A map's values that hold some: its entries' values as meanings.
       const inner = t.id === MAP ? meanings(args[1]) : null;
@@ -216,7 +252,10 @@ function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
 // the definition. The representation's own jobs are replaced, so they
 // don't count.
 function generic(info: Info, defs: Id[], code: Code, rep: Representation): boolean {
-  const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === rep.of || t.args.some(has) : t.t === "fn" ? [...t.params, t.ret].some(has) : false; };
+  // A list is in nearly every type's definition (a Set, a Map, a record
+  // with a list field), so for List the types' definitions count too.
+  const inside = rep.of === LIST ? holdsType(code, rep.of) : () => false;
+  const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === rep.of || inside(t.id) || t.args.some(has) : t.t === "fn" ? [...t.params, t.ret].some(has) : false; };
   // Where the callee's own type has a variable, does the argument's type have the type?
   const open = (param: Type, arg: Type): boolean => {
     arg = info.subst.zonk(arg);
@@ -234,4 +273,113 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
     const params = scheme.type.params;
     return n.args.some((a, i) => !!params[i] && !!info.typeOf.get(a) && open(params[i], info.typeOf.get(a)!));
   }));
+}
+
+// Lists as arrays (C30d3b): where the program's lists meet code the
+// rewrite can't change. A builtin taking or giving a `List x` (x with no
+// list in it) gets `items of array` around the argument and `array of`
+// around the answer; one that only passes a value on (first, optional,
+// all) can pass an array. Anything else that would see a list as an array
+// keeps List as written: a builtin with a list deeper in a parameter
+// (Cell (List a)), equal, show or compare on a list inside the library
+// (the program's own are rewritten by type above), a relation run
+// backwards (solve), or a definition the array's own jobs use, which the
+// rewrite leaves as it is. Null when one is found; otherwise the nodes
+// that put the boundary in.
+const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
+function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): { nodes: Record<Id, Node>; reached: Id[] } | null {
+  const program = new Set(defs), inside = holdsType(code, LIST);
+  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
+  // A type the library defines with a list in it (Set and Map as written,
+  // Algebra): its definition isn't the program's, so the rewrite leaves
+  // its fields List while the values in them would be arrays.
+  const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
+  // What the rewrite reaches (represent.ts), and what it keeps as it is.
+  const own = new Set<Id>();
+  for (const d of [...Object.values(rep.impl), rep.meaning!]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
+  const reached = new Set<Id>(), todo = [...defs];
+  while (todo.length) {
+    const d = todo.pop()!;
+    if (reached.has(d) || rep.impl[d]) continue;
+    const def = code.nodes[d];
+    if (def?.kind !== "def" || (def.body && code.nodes[def.body]?.kind === "typedef")) continue;
+    if (own.has(d)) return null;
+    reached.add(d);
+    for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") todo.push(n.target); }
+  }
+  const nodes: Record<Id, Node> = {};
+  const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
+  // `List x` with no list in x: the boundary can turn it into an array.
+  const plainList = (p: Type, t: Type) => p.t === "con" && p.id === LIST && (t = info.subst.zonk(t)).t === "con" && t.id === LIST && !t.args.some(hasList);
+  const calledBy = new Map<Id, NodeOf<"call">>();
+  for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "call") calledBy.set(n.fn, n); }
+  for (const d of reached) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n.kind === "solve") return null;
+    const ty = info.typeOf.get(id);
+    if (ty && libraryHolder(ty)) return null;
+    const target = n.kind === "ref" ? n.target : null;
+    if (!target || !SIGS[target] || code.nodes[target]?.kind === "def") continue;
+    const at = info.typeOf.get(id);
+    if (!at || !hasList(at)) continue;
+    // A builtin with a list in its type: only called, by the rules above.
+    const c = calledBy.get(id);
+    if (!c) return null;
+    if (target in BY_VALUE) { if (program.has(d)) continue; return null; }
+    const passes = PASSES_ON.has(target);
+    const sig = SIGS[target](new Subst());
+    if (sig.t !== "fn") return null;
+    const args = c.args.map((a, i) => {
+      const t = info.typeOf.get(a);
+      if (!t || !hasList(t)) return a;
+      return plainList(sig.params[i], t) ? call(ARRAY_OPS.items, a) : passes ? a : null;
+    });
+    if (args.includes(null)) return null;
+    const ret = info.typeOf.get(c.id);
+    const changed = args.some((a, i) => a !== c.args[i]);
+    if (ret && hasList(ret) && !(passes && !plainList(sig.ret, ret))) {
+      if (!plainList(sig.ret, ret)) return null;
+      // The call keeps its id, so its name and comments stay on it.
+      const inner = freshId(), of = freshId();
+      nodes[inner] = { ...c, id: inner, args: args as Id[] };
+      nodes[of] = { id: of, kind: "ref", target: ARRAY_OPS.of };
+      nodes[c.id] = { id: c.id, kind: "call", fn: of, args: [inner] };
+    } else if (changed) nodes[c.id] = { ...c, args: args as Id[] };
+  }
+  return { nodes, reached: [...reached] };
+}
+
+// Does a type's definition name `of` in its fields, itself or through
+// another type that does?
+function holdsType(code: Code, of: Id): (id: Id) => boolean {
+  const memo = new Map<Id, boolean>();
+  const holds = (id: Id): boolean => {
+    if (memo.has(id)) return memo.get(id)!;
+    memo.set(id, false);
+    const td = code.nodes[(code.nodes[id] as NodeOf<"def"> | undefined)?.body ?? ""];
+    const names = (n: Id): boolean => {
+      const x = code.nodes[n];
+      if (x?.kind === "tref") return x.target === of || holds(x.target) || x.args.some(names);
+      if (x?.kind === "tfun") return [...x.params, x.result].some(names);
+      return false;
+    };
+    const r = td?.kind === "typedef" && td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => names((code.nodes[f] as NodeOf<"field">).type)));
+    memo.set(id, r);
+    return r;
+  };
+  return holds;
+}
+
+// The part of the trees' module the rows use: their definitions (the
+// checker reads a row's match from it), their jobs, and what those
+// reach in the module.
+function treesFor(code: Code, rows: Representation[]): Code {
+  const all = merge(TREES.code, code);
+  const keep = new Set<Id>();
+  const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {})]);
+  for (const d of roots) for (const x of [d, ...dependencies(all, d)]) if (TREES.code.nodes[x]) keep.add(x);
+  const defs = TREES.code.defs.filter((d) => keep.has(d));
+  const nodes: Record<Id, Node> = {};
+  for (const d of defs) for (const id of subtree(TREES.code, d)) nodes[id] = TREES.code.nodes[id];
+  return { nodes, defs };
 }

@@ -1197,6 +1197,21 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 // Passing a function of the group around as a value counts as possibly
 // divergent.
 type Arc = [from: number, to: number, strict: boolean];
+// The definitions a representation row names as its match (`match by`).
+const matchers = new WeakMap<object, Set<Id>>();
+function matchersOf(code: Code): Set<Id> {
+  let m = matchers.get(code.nodes);
+  if (!m) {
+    m = new Set();
+    for (const n of Object.values(code.nodes)) {
+      if (n.kind !== "call") continue;
+      const f = code.nodes[n.fn], by = code.nodes[n.args[0]];
+      if (f?.kind === "ref" && f.target === JOBS.matchBy && by?.kind === "ref") m.add(by.target);
+    }
+    matchers.set(code.nodes, m);
+  }
+  return m;
+}
 interface CallGraph { from: Id; to: Id; arcs: Arc[] }
 
 // A let's function that calls itself by its name (BACKLOG L84): the let's
@@ -1241,6 +1256,16 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
           n.args.forEach(walk);
           walk(f.body);
           return;
+        }
+      }
+      // A representation's match (REPRESENTATIONS.md; array of List's,
+      // C30d3b) takes its first argument apart like a match: the
+      // parameters of the functions given to it are pieces of it.
+      if (n.kind === "call" && code.nodes[n.fn]?.kind === "ref" && matchersOf(code).has((code.nodes[n.fn] as NodeOf<"ref">).target)) {
+        const from = sizeOf(n.args[0]);
+        if (from) for (const a of n.args.slice(1)) {
+          const l = code.nodes[a];
+          if (l?.kind === "lambda") for (const p of l.params) size.set(p, new Map([...from.keys()].map((i) => [i, true])));
         }
       }
       if (n.kind === "match" || n.kind === "fold") {
