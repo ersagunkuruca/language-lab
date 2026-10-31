@@ -45,7 +45,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I83 | No list item-at-index in the prelude: Bounce and Tumble each write their own `nth` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
 | I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 375 ms (see I79, L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
-| I86 | C65 works out clifford calls only where the algebra is written down; Bounce passes it in a `Space` value so one `step` runs 2D and 3D, and gets none of it (1.6 ms step, 9.3 ms drawing a frame). Specialise a function on a constant argument (`flat`, `solid`) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B8 | 2026-10-31 |
 
 ## E: Editor
 

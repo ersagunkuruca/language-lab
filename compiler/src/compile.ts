@@ -45,7 +45,7 @@ import { composeLinear, linearMap, type LinearMap } from "../../projectional/src
 import { add as addCost, less, steps as costSteps } from "../../projectional/src/lang/cost.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
-import { stageCalls } from "../../projectional/src/lang/stage.ts";
+import { stageProgram } from "../../projectional/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
@@ -113,11 +113,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
-  const st = stageCalls(code, info, names);
-  if (st.staged.length) {
-    const again = infer(st.code, st.names);
-    if (again.errors.length <= info.errors.length) ({ code, names, info } = { code: st.code, names: st.names, info: again });
-  }
+  // Definitions given such data get a copy for it, whose calls are worked
+  // out in turn (I86).
+  ({ code, names, info } = stageProgram(code, info, names));
   // A list named first and then walked is put where it's walked, so the
   // fold or fusion sees what made it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);

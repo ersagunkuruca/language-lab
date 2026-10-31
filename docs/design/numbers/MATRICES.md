@@ -20,7 +20,9 @@ algebra as data, such as `clifford sandwich([1, 1, 1, 0], basis, motor,
 p)`, is worked out when compiled into plain arithmetic, so layer 2 reaches
 shaders, and a motor known now moving a point (x, y, z, w) prints as
 `mat4x4f(…) * p`: the homogeneous matrix of `vec4(x, y, z, 1)` is the PGA
-motor, read off by the compiler. Layer 3 is not built.
+motor, read off by the compiler. Since I86 the algebra can be a value
+passed in, as Bounce's `Space` is: a function given a known space gets a
+copy for it, and so do the functions it passes it on to. Layer 3 is not built.
 
 Ersagun (2026-10-31) moved the question. A matrix shouldn't be the way a
 program says "transform this vector". Geometry has better words for it,
