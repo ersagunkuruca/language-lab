@@ -78,7 +78,7 @@ New targets and speed rank below every language item (Ersagun,
 | C55 | Compile each direction of a relation a program uses as its own function (Mercury), dropping results no caller reads: `y` of `polar` alone is a plain sine, both together one sincos | Ersagun 2026-10-28 | P2 | M | |
 | C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal. Needs step 1's one-holder analysis, not its node reuse (C62 measured no gain) | docs/design/data/IN-PLACE.md | P2 | L | |
 | C31 | A recursion that gives back a Pair returns its two fields without the record. 3% on the pedal | GAPS.md round 4 P5 | P3 | M | after C30 |
-| C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`, yet every operation goes through `$perform`'s search. Step 1 done (C64a: quiet cases skip the hiding, 330 → 270 ms). Next: pass the handler's case to the code under it (evidence passing), so a perform is a call, and a `say` whose case drops its line doesn't build it; ideal 25 ms | examples/pig | P3 | M | |
+| C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`. Done: C64a (#759, quiet cases skip the hiding, 330 → 270 ms) and C64b (handlers written into the code they handle, 270 → about 95 ms). Next: Random's perform in `die` still searches for the world's handler (about 95 ms vs the ideal 25 ms); a case written in as a function called at once could be a plain let | examples/pig | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 

@@ -136,7 +136,42 @@ test("a handler whose cases perform nothing answers without hiding (C64)", async
     return main;
   });
   assert.deepEqual(r.lines, ["42", "14"]);
-  assert.equal(r.js.match(/\}, true\)/g)?.length, 2);
+  // The first handler is written into sum's copy (C64b); the outer one of
+  // the second has a handler for Ask inside, so it stays, quiet.
+  assert.equal(r.js.match(/\}, true\)/g)?.length, 1);
+});
+
+// A handler the compiler can see (C64b) is written into the code it
+// handles: Pig's shape, a `quietly` dropping lines and a `limit` answering
+// with values from around it, both around a recursive definition. The
+// copies answer in place: no handler, no search, no line built. Where the
+// handled code is only known when it runs, or a handler for the same
+// effect sits inside, the handler stays.
+test("handlers the compiler can see are written into the code they handle (C64b)", async () => {
+  const r = await both((k) => {
+    const say = k.effect("Say", [["say", [["line", () => k.tref("type.string")]], () => k.tref("std.unit")]]);
+    const ask = k.effect("Ask", [["go on", [["count", () => k.tref("type.number")]], () => k.tref("std.bool")]]);
+    const quietly = k.def("quietly"), limit = k.def("limit"), count = k.def("count"), loud = k.def("loud"), main = k.def("main");
+    k.define(quietly, k.fn(["game"], (g) => k.handle(k.call(g), [{ variant: say.op.say, names: ["line"], body: () => k.x("std.unit.unit") }])));
+    k.define(limit, k.fn(["most", "game"], (most, g) => k.handle(k.call(g), [{ variant: ask.op["go on"], names: ["n"], body: ([n]) => k.call(S.less, n, most) }])));
+    // count(n): says each step, asks whether to go on, and gives how far it got.
+    k.define(count, k.fn(["n"], (n) => k.seq(
+      k.call(say.op.say, k.call(S.concat, k.lit("at "), k.call(S.show, n))),
+      k.if(k.call(ask.op["go on"], n), k.call(count, k.call(B.add, n, k.lit(1))), n))));
+    // The same, but its Say is answered by a handler that prints.
+    k.define(loud, k.fn(["most"], (most) => k.handle(k.call(limit, most, k.thunk(() => k.call(count, k.lit(0)))),
+      [{ variant: say.op.say, names: ["line"], body: ([l]) => k.call(S.print, l) }])));
+    k.define(main, k.thunk(() => k.seq(
+      k.call(S.print, show(k, k.call(quietly, k.thunk(() => k.call(limit, k.lit(5), k.thunk(() => k.call(count, k.lit(0)))))))),
+      k.call(S.print, show(k, k.call(loud, k.lit(2)))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["5", "at 0", "at 1", "at 2", "2"]);
+  // main's first line: count's copy, with both cases written in.
+  assert.match(r.js, /function count_handled\(/);
+  assert.doesNotMatch(r.js.slice(r.js.indexOf("function count_handled(")).split("\n// ")[0], /\$perform|"at "/);
+  // loud's Say prints, so it stays a handler.
+  assert.match(r.js, /\$handle\(/);
 });
 
 test("an abort under Choice cuts the alternatives, compiled too", async () => {

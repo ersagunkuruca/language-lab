@@ -44,6 +44,7 @@ import { foldPlan } from "../../projectional/src/lang/represent.ts";
 import { composeLinear, linearMap, type LinearMap } from "../../projectional/src/lang/linear.ts";
 import { add as addCost, less, steps as costSteps } from "../../projectional/src/lang/cost.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { fuseHandlers } from "./handlers.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { stageProgram } from "../../projectional/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
@@ -116,6 +117,17 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Definitions given such data get a copy for it, whose calls are worked
   // out in turn (I86).
   ({ code, names, info } = stageProgram(code, info, names));
+  // Handlers the compiler can see are put into the code they handle
+  // (handlers.ts, C64b), a round at a time, each checked again; a round
+  // that doesn't check is dropped.
+  for (let round = 0; round < 8; round++) {
+    const f = fuseHandlers(code, info, names);
+    if (!f) break;
+    const checked = infer(f.code, f.names);
+    if (checked.errors.length) break;
+    ({ code, names } = f);
+    info = checked;
+  }
   // A list named first and then walked is put where it's walked, so the
   // fold or fusion sees what made it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);
