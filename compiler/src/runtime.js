@@ -377,6 +377,9 @@ export function $perform(effect, op, args) {
     const h = handlers[i];
     if (h.effect !== effect || h.hidden) continue;
     if (!(op in h.answers)) throw new Escape(h, op, args);
+    // Cases that perform nothing (C64, compile.ts performsNothing): no
+    // handler could be seen from them, so none is hidden.
+    if (h.quiet) return h.answers[op](...args);
     // The case runs outside its own handler: it and the ones above it are
     // hidden while it does, by a count rather than by taking them off the
     // stack, which cost two arrays an operation (Pig's games: 1.6x).
@@ -400,8 +403,8 @@ export function $perform(effect, op, args) {
 }
 
 // A match handling `effect` around a computation with one result.
-export function $handle(effect, answers, escapes, body) {
-  const h = { effect, answers }, at = handlers.length;
+export function $handle(effect, answers, escapes, body, quiet = false) {
+  const h = { effect, answers, quiet }, at = handlers.length;
   handlers.push(h);
   const d = $rec.d;
   try { return body(); } catch (e) {

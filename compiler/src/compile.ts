@@ -29,9 +29,9 @@ import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
 import { intLit } from "../../projectional/src/lang/int.ts";
 import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
-import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
+import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
 import { fieldPath, placePath } from "../../projectional/src/lang/records.ts";
 import { planSolve } from "../../projectional/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
@@ -1814,6 +1814,24 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       throw new Error("with fuel always has Choice");
     }
 
+    // Code that performs no operation (C64): every call in it is of a
+    // named function or constructor, taking no function, whose own type's
+    // row has no effect but Diverge (which only spends steps). The row at
+    // the call itself isn't asked: it is the caller's, joined.
+    function performsNothing(root: Id): boolean {
+      return subtree(code, root).every((id) => {
+        const c = code.nodes[id];
+        if (c.kind !== "call") return true;
+        const f = code.nodes[c.fn];
+        if (f?.kind !== "ref" || effectOf(f.target)) return false;
+        const t = ty(c.fn);
+        if (t.t !== "fn" || t.params.some((x) => sub.zonk(x).t === "fn")) return false;
+        const target = code.nodes[f.target];
+        const own = target?.kind === "builtin" ? SIGS[f.target]?.(new Subst()) : target?.kind === "def" ? info.schemes.get(f.target)?.type : target?.kind === "variant" ? t : undefined;
+        return own?.t === "fn" && own.eff.effs.every((e) => e === DIVERGE);
+      });
+    }
+
     // A handler: its cases as functions, answers and escapes apart (an
     // answer never has Choice; an escape may, when the match does).
     function handlerCases(n: NodeOf<"match">, streams: boolean): [string, string] {
@@ -1845,7 +1863,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `(() => {\nconst ${h} = $enter(${JSON.stringify(handlerOf(n))});\ntry {\n${finish(ret(n.scrutinee))}\n} catch (${e}$) {\nconst ${e} = $caught(${e}$, ${h});\n${cases}\nthrow new Error("unhandled escape");\n} finally {\n$leave(${h});\n}\n})()`;
       }
       const [answers, escapes] = handlerCases(n, false);
-      return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${finish(ret(n.scrutinee))}\n})`;
+      // Cases that answer and perform nothing (C64) run with no handlers
+      // hidden: there is nothing in them that could see one.
+      const quiet = arms.filter((a) => node<"variant">(a.variant).returns).every((a) => performsNothing(a.body));
+      return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${finish(ret(n.scrutinee))}\n}${quiet ? ", true" : ""})`;
     }
 
     // A handler with a case for an operation answered later: the handled

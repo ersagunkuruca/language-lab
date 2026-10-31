@@ -116,6 +116,27 @@ test("answers, deep handlers, and Log to the runtime", async () => {
   });
   assert.deepEqual(r.lines, ["42"]);
   assert.deepEqual(r.out, ["log: sum: asking", "log: sum: width", "log: sum: height"]);
+  // Both cases perform, so each runs with its handler hidden.
+  assert.doesNotMatch(r.js, /\}, true\)/);
+});
+
+// A case that performs nothing (C64) runs with no handler hidden: the
+// runtime calls it straight away. One that performs still hides.
+test("a handler whose cases perform nothing answers without hiding (C64)", async () => {
+  const r = await both((k) => {
+    const ask = k.effect("Ask", [["ask", [["question", () => k.tref("type.string")]], () => k.tref("type.number")]]);
+    const sum = k.def("sum");
+    k.define(sum, k.thunk(() => k.call(B.add, k.call(ask.op.ask, k.lit("width")), k.call(ask.op.ask, k.lit("height")))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(
+      k.call(S.print, show(k, k.handle(k.call(sum), [{ variant: ask.op.ask, names: ["q"], body: ([q]) => k.if(k.equal(q, k.lit("width")), k.lit(30), k.lit(12)) }]))),
+      // Ask's case asks the outer Ask: the inner handler is hidden, so 7 + 7.
+      k.call(S.print, show(k, k.handle(k.handle(k.call(sum), [{ variant: ask.op.ask, names: ["q"], body: ([q]) => k.call(ask.op.ask, q) }]),
+        [{ variant: ask.op.ask, names: ["q"], body: () => k.lit(7) }]))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["42", "14"]);
+  assert.equal(r.js.match(/\}, true\)/g)?.length, 2);
 });
 
 test("an abort under Choice cuts the alternatives, compiled too", async () => {
