@@ -39,6 +39,7 @@ const CHOOSES = no("has Choice: the scalar profile has one answer per call");
 const LOOKS = no("looks inside a function at run time; `derivative` written in place is expanded before lowering");
 const CELLS = no("cells are a runtime handler: the scalar profile has none");
 const INT = no("Int has no scalar type yet (f64 only)");
+const ARRAYS = written("scalar.ts ARRAY_RT: with `data`, runtime functions on the two-ended buffer, one copy per item type (C66)");
 
 export const TARGETS: Record<Id, Target> = {
   [B.add]: { js: op(([a, b]) => `(${a} + ${b})`), scalar: "add" },
@@ -149,14 +150,15 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.wholePart]: { js: "partial", scalar: INT },
   [INT_OPS.range]: { js: "impl", scalar: DATA },
   // Text at real sizes (projectional/src/lang/text.ts).
-  // Arrays (std.ts ARRAY_OPS, C30d): std.ts's implementation, on its
-  // { tag, fields: [n, …items] } value; push copies.
-  [ARRAY_OPS.empty]: { js: "impl", scalar: DATA },
-  [ARRAY_OPS.of]: { js: "impl", scalar: DATA },
-  [ARRAY_OPS.items]: { js: "impl", scalar: DATA },
-  [ARRAY_OPS.length]: { js: "impl", scalar: DATA },
-  [ARRAY_OPS.at]: { js: "partial", scalar: CHOOSES },
-  [ARRAY_OPS.push]: { js: "impl", scalar: DATA },
+  // Arrays (std.ts ARRAY_OPS, C30d): in JS the runtime's two-ended buffer
+  // views (runtime.js, C30d1); in WebAssembly runtime functions, one copy
+  // per item type (scalar.ts ARRAY_RT, wasm-rt.ts ARRAYS, C66).
+  [ARRAY_OPS.empty]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.of]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.items]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.length]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.at]: { js: "partial", scalar: ARRAYS },
+  [ARRAY_OPS.push]: { js: "impl", scalar: ARRAYS },
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },

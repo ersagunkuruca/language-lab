@@ -21,7 +21,14 @@ writes `src/wasm-math.ts`), the same bits as Node's Math; a JavaScript
 host still gives its own Math, so a page matches the browser. An Int grows
 past 64 bits as the evaluator's does (W5b, W5c), and folds go through
 nested data (W1d). All five stages are done; one cast per arm (W1)
-was measured and left, since skipping every cast gains nothing measurable. What runs in WebAssembly is the
+was measured and left, since skipping every cast gains nothing measurable. Since C66 std's Array is in WebAssembly too, kept as compiled JS keeps it
+(C30d1): a view (`$arrayN`: a buffer, a start and a length) on a buffer
+(`$bufN`: a mutable array of the items, and the lowest and highest slots
+in use) with free room at both ends, so a push onto the newest array
+writes into a free slot; a push onto an older one copies, and an array
+never changes. Its builtins are runtime functions written once in
+wasm-rt.ts (ARRAYS) and copied per item type (`array.push.a0`). Equal and
+compare on arrays aren't in yet. What runs in WebAssembly is the
 scalar profile (`compiler/src/scalar.ts`, `wasm.ts`) lowered with `data`:
 Float64s, Bools, records of them as immutable structs (W1a), data with
 several cases and data that contains itself, such as lists and expression

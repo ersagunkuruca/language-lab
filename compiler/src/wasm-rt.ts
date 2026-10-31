@@ -24,7 +24,8 @@ import { MATH } from "./wasm-math.ts";
 // `int` an Int (W5): an i31 while it fits in 31 bits, a $big, a $huge;
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void";
+// An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items";
 
 export interface RtFn {
   name: string;
@@ -36,6 +37,9 @@ export interface RtFn {
   uses: string[];
   // The list type `list` stands for, by key (List Text when not given).
   list?: string;
+  // An array function's copy (C66): the Array type it is for, by its
+  // place in Lowered.arrays (`array.push.a0`); `list` is then List of its items.
+  array?: number;
   // A builtin with no answer or one (Choice): it gives its answer and a
   // status, 0 for an answer and 1 for none, as the module's own
   // one-answer functions do (wasm.ts).
@@ -71,7 +75,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "ref.test": [[0xfb, 0x14], ["type"]], "ref.i31": [[0xfb, 0x1c], []], "i31.get_s": [[0xfb, 0x1d], []],
-  "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
+  "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "struct.set": [[0xfb, 0x05], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
   "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]], "array.get": [[0xfb, 0x0b], ["type"]], "array.new": [[0xfb, 0x06], ["type"]],
   "array.set": [[0xfb, 0x0e], ["type"]], "array.len": [[0xfb, 0x0f], []], "array.copy": [[0xfb, 0x11], ["type", "type"]],
 };
@@ -4760,9 +4764,290 @@ ${drop}
 // on i64s, and `name`, which takes and gives Ints and converts (int.small,
 // int.of) around a call to it. Inside the bodies every call is to the i64
 // one.
+
+// std's Array (C66): a view, a start and a length, on a buffer with free
+// room at both ends ($buf: its items, and the lowest and highest slots in
+// use), as compiled JS keeps it (runtime.js, C30d1: Ersagun's two-ended
+// array list; deques, gap buffers and Go's slices are the prior art). A
+// push writes into the free slot past the view's end when no other view
+// has taken it, and copies the view into a new buffer otherwise, so an
+// array never changes. One copy of each per item type: `array.push.a0`.
+const ARRAYS: Record<string, Omit<RtFn, "name">> = {
+  "array.empty": {
+    params: [], result: "array", locals: [], uses: [],
+    body: `
+      i32.const 8
+      array.new_default $items
+      i32.const 4
+      i32.const 4
+      struct.new $buf
+      i32.const 4
+      i32.const 0
+      struct.new $arr`,
+  },
+  "array.of": {
+    params: [["l", "list"]], result: "array", locals: [["n", "i32"], ["p", "list"], ["it", "items"], ["i", "i32"], ["room", "i32"]], uses: [],
+    body: `
+      local.get $l
+      local.set $p
+      block void
+      loop void
+        local.get $p
+        struct.get $list 0
+        i32.eqz
+        br_if 1
+        local.get $n
+        i32.const 1
+        i32.add
+        local.set $n
+        local.get $p
+        ref.cast $list.cons
+        struct.get $list.cons 2
+        local.set $p
+        br 0
+      end
+      end
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.set $it
+      local.get $l
+      local.set $p
+      block void
+      loop void
+        local.get $p
+        struct.get $list 0
+        i32.eqz
+        br_if 1
+        local.get $it
+        local.get $room
+        local.get $i
+        i32.add
+        local.get $p
+        ref.cast $list.cons
+        struct.get $list.cons 1
+        array.set $items
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        local.get $p
+        ref.cast $list.cons
+        struct.get $list.cons 2
+        local.set $p
+        br 0
+      end
+      end
+      local.get $it
+      local.get $room
+      local.get $room
+      local.get $n
+      i32.add
+      struct.new $buf
+      local.get $room
+      local.get $n
+      struct.new $arr`,
+  },
+  "array.items": {
+    params: [["a", "array"]], result: "list", locals: [["it", "items"], ["s", "i32"], ["i", "i32"], ["acc", "list"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.set $it
+      local.get $a
+      struct.get $arr 1
+      local.set $s
+      local.get $a
+      struct.get $arr 2
+      local.set $i
+      i32.const 0
+      struct.new $list.nil
+      local.set $acc
+      block void
+      loop void
+        local.get $i
+        i32.eqz
+        br_if 1
+        local.get $i
+        i32.const 1
+        i32.sub
+        local.set $i
+        i32.const 1
+        local.get $it
+        local.get $s
+        local.get $i
+        i32.add
+        array.get $items
+        local.get $acc
+        struct.new $list.cons
+        local.set $acc
+        br 0
+      end
+      end
+      local.get $acc`,
+  },
+  "array.length": {
+    params: [["a", "array"]], result: "int", locals: [], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 2
+      i64.extend_i32_s`,
+  },
+  // No answer past the end; an item type's zero, read from a new array of
+  // one, stands in for the answer.
+  "array.at": {
+    params: [["a", "array"], ["k", "int"]], result: "item", locals: [], uses: [], partial: true,
+    body: `
+      local.get $k
+      i64.const 0
+      i64.lt_s
+      local.get $k
+      local.get $a
+      struct.get $arr 2
+      i64.extend_i32_s
+      i64.ge_s
+      i32.or
+      if void
+        i32.const 1
+        array.new_default $items
+        i32.const 0
+        array.get $items
+        i32.const 1
+        return
+      end
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      local.get $k
+      i32.wrap_i64
+      i32.add
+      array.get $items
+      i32.const 0`,
+  },
+  "array.push": {
+    params: [["a", "array"], ["x", "item"]], result: "array", locals: [["b", "buf"], ["s", "i32"], ["n", "i32"], ["e", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      local.set $b
+      local.get $a
+      struct.get $arr 1
+      local.set $s
+      local.get $a
+      struct.get $arr 2
+      local.set $n
+      local.get $s
+      local.get $n
+      i32.add
+      local.set $e
+      ;; the slot past the end is free and in the buffer: write it
+      local.get $e
+      local.get $b
+      struct.get $buf 2
+      i32.eq
+      local.get $e
+      local.get $b
+      struct.get $buf 0
+      array.len
+      i32.lt_u
+      i32.and
+      if void
+        local.get $b
+        struct.get $buf 0
+        local.get $e
+        local.get $x
+        array.set $items
+        local.get $b
+        local.get $e
+        i32.const 1
+        i32.add
+        struct.set $buf 2
+        local.get $b
+        local.get $s
+        local.get $n
+        i32.const 1
+        i32.add
+        struct.new $arr
+        return
+      end
+      ;; else the view's items into a new buffer, with room on both sides
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.tee $it
+      local.get $room
+      local.get $b
+      struct.get $buf 0
+      local.get $s
+      local.get $n
+      array.copy $items $items
+      local.get $it
+      local.get $room
+      local.get $n
+      i32.add
+      local.get $x
+      array.set $items
+      local.get $it
+      local.get $room
+      local.get $room
+      local.get $n
+      i32.add
+      i32.const 1
+      i32.add
+      struct.new $buf
+      local.get $room
+      local.get $n
+      i32.const 1
+      i32.add
+      struct.new $arr`,
+  },
+};
 const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
 const raw = (n: string) => { const f = R[n] ?? WASI[n] ?? MATH[n]; return f && hasInt(f) ? `${n}.i64` : n; };
 export const runtime = (name: string): RtFn => {
+  // An array function's copy for one item type (C66): the template, told which.
+  const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
+  if (at) {
+    const f = { ...ARRAYS[at[1]], array: Number(at[2]) };
+    if (!ARRAYS[at[1]]) throw new Error(`no runtime function ${name}`);
+    if (at[3] || !hasInt(f)) {
+      const i64 = (t: VT): VT => (at[3] && t === "int" ? "i64" : t);
+      return { ...f, name, params: f.params.map(([n, t]) => [n, i64(t)]), result: i64(f.result) };
+    }
+    return {
+      name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.small", "int.of"], array: f.array, partial: f.partial,
+      body: [
+        ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.small"] : [])]),
+        `call $${name}.i64`,
+        ...(f.partial ? ["local.set $st"] : []),
+        ...(f.result === "int" ? ["call $int.of"] : []),
+        ...(f.partial ? ["local.get $st"] : []),
+      ].join("\n"),
+    };
+  }
   const base = name.endsWith(".i64") ? name.slice(0, -4) : name;
   const f = R[base] ?? WASI[base] ?? MATH[base];
   if (!f || (base !== name && !hasInt(f))) throw new Error(`no runtime function ${name}`);
