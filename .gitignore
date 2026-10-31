@@ -10,3 +10,6 @@
 
 # Scratch scripts (REVIEW-2026-10-26.md §4): keep them out of commits.
 *.tmp.ts
+
+# lab test keeps results by hash here (TESTS-IN-THE-LANGUAGE.md §4)
+.lab/

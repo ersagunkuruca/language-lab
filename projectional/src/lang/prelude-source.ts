@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -223,6 +223,21 @@ export function buildPrelude(): Module {
   k.define(acosF, k.fn(["c"], (cv) => onUnpolar(cv, k.call(B.sqrt, k.call(B.sub, k.lit(1), k.call(B.mul, cv, cv))))));
   const trigF = k.def("trig at float64");
   k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF, asinF, acosF].map((b) => k.x(b))));
+
+  // Complex laws (POLAR.md L97e), tests in the language (T7): each performs
+  // Check, so `lab test` and test/prelude-laws.test.ts run them on small
+  // complex numbers. The first is the prelude's own from polar against
+  // modulus and angle of; the second is Trig's polar and unpolar fields,
+  // one direction undoing the other.
+  const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
+  const lawFromPolar = k.def("from polar undoes modulus and angle");
+  k.define(lawFromPolar, k.fn(["z"], (z) => expect(k.equal(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) = z")));
+  const lawPolar = k.def("polar undoes unpolar");
+  k.define(lawPolar, k.fn(["z"], (z) => cx(z, (a, b) =>
+    k.solve(TRIG_UNPOLAR, { 2: a, 3: b, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+      k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
+        expect(k.equal(C(x, y), z), "polar(unpolar(x, y)) = (x, y)"))))));
+  const laws = [lawFromPolar, lawPolar];
 
   // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
   // a function given dual(x, 1) gives its value and its slope at x.
@@ -1202,9 +1217,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }

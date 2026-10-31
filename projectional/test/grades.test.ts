@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
-import { algebrasOf, bladeMask, describeMask } from "../src/lang/grades.ts";
+import { algebrasOf, bladeMask, describeMask, gradeMistakes } from "../src/lang/grades.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
@@ -116,4 +116,29 @@ test("blade masks are never too small: Constructions' functions against the eval
       f.forEach((x, i) => assert.ok((m >> i) & 1 || Math.abs(x) <= 1e-12 * big, `${n}: ${JSON.stringify(out)} outside ${m.toString(2)}`));
     }
   }
+});
+
+test("a part read outside a value's mask is a wrong grade (L43e)", () => {
+  const a = algebra([1, 1, 1]);
+  const { k, def, at, call } = a;
+  const vec = (x: Id) => at({ 1: x, 2: x, 4: x });
+  const part = (v: Id, ...b: number[]) => call("part", v, k.list(...b.map((x) => k.lit(x))));
+  const fns = {
+    // e₁₂ of a vector: always 0.
+    wrong: def("bivector of a vector", () => k.fn(["x"], (x) => part(vec(x), 1, 2))),
+    // e₁ of a vector, e₁₂ of a product of two: both fine.
+    right: def("fine", () => k.fn(["x"], (x) => k.call(ARITH.add, part(vec(x), 1), part(call("product", vec(x), vec(x)), 2, 1)))),
+    // An input is every part, so reading any of its blades is fine.
+    input: def("any input", () => k.fn(["v"], (v) => part(v, 1, 2, 3))),
+    // Through a call: the helper reads e₃ of what it is given, a bivector here.
+    helper: def("third", () => k.fn(["v"], (v) => part(v, 3))),
+  };
+  const caller = def("third of a bivector", () => k.fn(["x"], (x) => k.call(k.x(fns.helper), call("outer", vec(x), vec(x)))));
+  const { code, info } = a.done();
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const found = gradeMistakes(code, info, [...Object.values(fns), caller]);
+  assert.deepEqual(found.map((f) => [f.def, f.message]), [
+    [fns.wrong, "reads the e₁₂ part of a value that is a vector, so it is always 0"],
+    [caller, "reads the e₃ part of a value that is a bivector, so it is always 0"],
+  ]);
 });
