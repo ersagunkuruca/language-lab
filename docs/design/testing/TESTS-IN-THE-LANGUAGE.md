@@ -9,7 +9,10 @@ Int. Running constructors backwards with relate is still the plan (§2).
 T7b built too: `lab test` reads accepted answers from `examples.json`
 in the form below (the older form, a bare list of inputs, still reads as
 inputs with no answer) and checks any definition that has one, compared
-as printed. T7c to T7e are backlog rows.
+as printed. T7c's local half is built: `lab test` keeps each result in
+`.lab/checks.json` under the key below and skips a test whose key is
+kept (cli/checks.ts; `--fresh` runs everything). Keeping it in CI's cache,
+T7d and T7e are backlog rows.
 
 [TESTING.md](../../process/TESTING.md) §6 sketched three ideas: accepted answers, laws as
 definitions, and re-checking only what changed. This note makes them a
@@ -106,7 +109,10 @@ already hashes published modules with, plus the hash of the evaluator's
 own build. Same key, same result, so the check is skipped. This is
 Unison's cached test results.
 
-- **Locally**, results live in `.lab/checks.json`, which isn't committed.
+- **Locally**, results live in `.lab/checks.json`, which isn't committed
+  (built). Only a test whose row is Check, search, Abort or divergence is
+  kept; one that reads the clock, random numbers or the world isn't. The
+  evaluator's hash is that of its source files.
 - **In CI**, `lab test` runs only tests whose key isn't in the Actions
   cache. CI's cost stays near zero when nothing a test uses changed,
   which fits the budget rule (ci-cost).
@@ -144,7 +150,7 @@ evaluator with compiled JS.
 |---|---|---|---|
 | T7a | `Check` in std, the small-values enumerator, `lab test` in the evaluator | L | M |
 | T7b | Accepted answers in `examples.json`, read and checked by `lab test` (built) | L | S |
-| T7c | Results cached by hash, locally and in CI | L, T | M |
+| T7c | Results cached by hash, locally (built) and in CI | L, T | M |
 | T7d | The editor: a tick or the difference on Run, and an accept button; a failing law shown on its definition | E | M |
 | T7e | Example sweeps moved to accepted answers and laws; `--compiled` | T | M |
 
