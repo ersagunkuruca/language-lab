@@ -21,6 +21,11 @@
 // buys is the built-ins (dot, normalize, mix) and a shader that reads like
 // the maths. A record whose fields aren't all Float64s is still a struct.
 //
+// A vector whose parts are each one other vector's parts times constants,
+// plus constants, is a matrix times that vector (MATRICES.md layer 1,
+// C30c): a shear is `mat3x3f(…) * p0`, and a linear function applied to
+// another is one matrix, folded when the shader is printed.
+//
 // The one rule a shader adds: no recursion, because a GPU has no call
 // stack (WGSL forbids a function that reaches itself). A call to itself as
 // the very last step is fine, though: that's a loop, so it's printed as
@@ -51,7 +56,10 @@ import { isRecord, noData, type LType, type Lowered, type Op, type RType, type S
 type GType = Exclude<LType, DType | FType | WType>;
 export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType[]; result: GType }
 // structs: the WGSL name of each record type and of its fields.
-export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }> }
+// matrices: the functions (indices in lowered.funcs) that print a linear
+// map as a matrix (C30c); its sums are in another order, so they are close
+// to Float32's, not exact.
+export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number> }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||",
 };
@@ -71,6 +79,10 @@ type V =
 const ELEMENTWISE = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "sin", "cos", "tan", "exp", "log", "atan2"]);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+// Operations of constants the matrix reading folds (C30c).
+const FOLD: Partial<Record<Op, (...xs: number[]) => number>> = {
+  sqrt: Math.sqrt, abs: Math.abs, floor: Math.floor, sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, atan2: Math.atan2,
+};
 const CALL: Partial<Record<Op, string>> = {
   sqrt: "sqrt", abs: "abs", floor: "floor", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", atan2: "atan2", mod: "lab_mod",
 };
@@ -271,6 +283,89 @@ export function emitWgsl(lowered: Lowered): Shader {
     return p && same(p.dot[0], p.dot[1]) ? { n: p.n, length: p.dot[0] } : null;
   }
 
+  // Linear maps as matrices (MATRICES.md layer 1, C30c). A vector whose
+  // parts are each a sum of one other vector's parts times constants, plus
+  // a constant, is `mat * v + b`: `vec3f(p0.x + 0.5 * p0.y, p0.y, p0.z)` is
+  // `mat3x3f(…) * p0`. The reading looks through calls, so a function
+  // applied to another, turn(shear(v)), is one matrix (A·B, folded now),
+  // and v is computed once. This is the same reading linear.ts does on the
+  // program's graph (C30b uses it for compiled JS), done here on the
+  // lowered tree, where the calls the shader makes are. Prior art: the
+  // matrix of a linear map and of a composition (textbook); GPUs run
+  // matrix times vector as one built-in.
+  type Aff = { c: Map<number, number>; k: number };
+  type AV = Aff | AV[];
+  function affine(top: SExpr, f: SFunc): { base: SExpr; m: number; rows: Aff[] } | null {
+    let base: SExpr | null = null, m = 0;
+    const konst = (k: number): Aff => ({ c: new Map(), k });
+    const isK = (a: AV | null): a is Aff => a !== null && !Array.isArray(a) && [...a.c.values()].every((x) => x === 0);
+    const scale = (w: number, a: Aff): Aff => ({ c: new Map([...a.c].map(([j, x]) => [j, w * x])), k: w * a.k });
+    const plus = (a: Aff, b: Aff, sgn: number): Aff => {
+      const c = new Map(a.c);
+      for (const [j, x] of b.c) c.set(j, (c.get(j) ?? 0) + sgn * x);
+      return { c, k: a.k + sgn * b.k };
+    };
+    // The outer function's vector, read as its parts.
+    const opaque = (e: SExpr, t: LType | undefined): AV | null => {
+      const w = t ? vectorWidth(t) : 0;
+      if (!w || (base && (!same(base, e) || m !== w))) return null;
+      base = e; m = w;
+      return Array.from({ length: w }, (_, j) => ({ c: new Map([[j, 1]]), k: 0 }));
+    };
+    const scalar = (a: AV | null): Aff | null => (a && !Array.isArray(a) ? a : null);
+    let depth = 0;
+    const val = (e: SExpr, env: Map<number, AV>, inner: boolean): AV | null => {
+      switch (e.k) {
+        case "num": return konst(e.v);
+        case "local": return env.get(e.i) ?? (inner ? null : opaque(e, f.locals[e.i]));
+        case "let": {
+          // Lets of the outer function are statements already.
+          if (!inner) return null;
+          const v = val(e.value, env, inner);
+          return v && val(e.body, new Map(env).set(e.i, v), inner);
+        }
+        case "make": { const xs = e.args.map((a) => val(a, env, inner)); return xs.every((x) => x) ? (xs as AV[]) : null; }
+        case "get": {
+          const r = val(e.rec, env, inner) ?? (inner ? null : opaque(e.rec, e.t));
+          return Array.isArray(r) ? r[e.i] ?? null : null;
+        }
+        case "op": {
+          const xs = e.args.map((a) => scalar(val(a, env, inner)));
+          if (!xs.every((x) => x)) return null;
+          const [a, b] = xs as Aff[];
+          if (e.op === "add" && b) return plus(a, b, 1);
+          if (e.op === "sub" && b) return plus(a, b, -1);
+          if (e.op === "neg" && !b) return scale(-1, a);
+          if (e.op === "mul" && b) return isK(a) ? scale(a.k, b) : isK(b) ? scale(b.k, a) : null;
+          if (e.op === "div" && b && isK(b) && b.k !== 0) return scale(1 / b.k, a);
+          // Any other operation of constants, folded: cos(π / 6) is a number.
+          const m = FOLD[e.op];
+          return m && xs.every(isK) ? konst(m(...(xs as Aff[]).map((x) => x.k))) : null;
+        }
+        case "call": {
+          const g = funcs[e.fn];
+          if (bad.has(e.fn) || depth > 8 || calls(g.body).some((c) => c.fn === e.fn)) return null;
+          const args = e.args.map((a, j) => val(a, env, inner) ?? (inner ? null : opaque(a, g.params[j])));
+          if (!args.every((x) => x)) return null;
+          depth++;
+          const out = val(g.body, new Map(args.map((x, j) => [j, x!])), true);
+          depth--;
+          return out;
+        }
+        default: return null;
+      }
+    };
+    const out = val(top, new Map(), false);
+    if (!Array.isArray(out) || !base || !out.every((x) => x && !Array.isArray(x))) return null;
+    const rows = out as Aff[];
+    if (![...rows.flatMap((r) => [...r.c.values(), r.k])].every((x) => Number.isFinite(x) && Math.abs(x) <= 3.4e38)) return null;
+    return { base, m, rows };
+  }
+  // A matrix pays when some part mixes two or more of the input's parts
+  // (otherwise the parts, or `lift`'s vector expression, say it plainly).
+  const mixes = (a: { rows: Aff[] }) => a.rows.some((r) => [...r.c.values()].filter((x) => x !== 0).length >= 2);
+
+  const matrices = new Set<number>();
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
@@ -289,6 +384,7 @@ export function emitWgsl(lowered: Lowered): Shader {
     funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
     refused,
     structs,
+    matrices,
   };
 
   function func(f: SFunc, i: number): string {
@@ -318,6 +414,8 @@ export function emitWgsl(lowered: Lowered): Shader {
           const v = vectorWidth(e.t) ? lift(e.args) : null;
           // wide: a record whose parts are all one Float64 is that Float64 spread.
           if (v) return vtext(v, e.args.length, pre, d, true);
+          const a = vectorWidth(e.t) ? affine(e, f) : null;
+          if (a && mixes(a)) return matrix(a, pre, d);
           return `${tname(e.t)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
         case "get": {
@@ -325,7 +423,12 @@ export function emitWgsl(lowered: Lowered): Shader {
           struct(e.t);
           return `${r}.${structs.get(e.t.key)!.fields[e.i]}`;
         }
-        case "call": return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+        case "call": {
+          // A linear function of a linear function: one matrix.
+          const a = vectorWidth(funcs[e.fn].result) && e.args.some((x) => x.k === "call") ? affine(e, f) : null;
+          if (a && !a.rows.every((r) => r.c.size === 0)) return matrix(a, pre, d);
+          return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+        }
         case "budget": {
           const s = temp(), t = temp();
           pre.push(`${d}let ${s} = lab_fuel;`, `${d}lab_fuel = ${num(e.n)};`, `${d}var ${t}: ${tname(e.t)};`, ...block(e.body, { set: t }, d));
@@ -375,6 +478,14 @@ export function emitWgsl(lowered: Lowered): Shader {
       return [...out, to === "return" ? `${d}return ${bare(x)};` : `${d}${to.set} = ${bare(x)};`];
     }
 
+    // mat * v + b; WGSL's matCxR takes its columns in order.
+    function matrix(a: { base: SExpr; m: number; rows: Aff[] }, pre: string[], d: string): string {
+      matrices.add(i);
+      const n = a.rows.length;
+      const cols = Array.from({ length: a.m }, (_, j) => a.rows.map((r) => num((r.c.get(j) ?? 0) + 0)));
+      const off = a.rows.some((r) => r.k !== 0) ? ` + vec${n}f(${a.rows.map((r) => num(r.k + 0)).join(", ")})` : "";
+      return `(mat${a.m}x${n}f(${cols.flat().join(", ")}) * ${ex(a.base, pre, d)}${off})`;
+    }
     // A vector expression's text. `wide` where a function needs a vector
     // (min, mix, …): a single Float64 is then spread over the parts.
     function vtext(v: V, n: number, pre: string[], d: string, wide = false): string {

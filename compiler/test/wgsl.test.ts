@@ -198,6 +198,16 @@ test("records are structs (or vectors): built by their case, read by fields or a
   assert.match(s.wgsl, /fn walk_(\d+)\(a0: vec3f, a1: f32, a2: f32\) -> vec2f \{\n {2}var p0 = a0;[\s\S]*let t0 = vec3f\(p0\.x \+ p1, p0\.y, p0\.z \+ \(0\.5 \* p1\)\);/);
   // Under a budget whose fallback is a record too.
   assert.match(s.wgsl, /t\d+ = walk_\d+\(vec3f\(p0, 1\.0, 0\.0\), p1, 0\.0\);\n {2}if \(lab_fuel < 0\.0\) \{\n {4}t\d+ = vec2f\(0\.0, -1\.0\);\n {2}\}\n {2}lab_fuel = t\d+;\n {2}return t\d+\.y;/);
+  // Linear maps are matrices (C30c): WGSL's matCxR takes columns, so the
+  // shear's 0.5 · y in x is column 2's first entry; a move adds a vector.
+  assert.match(s.wgsl, /fn shear_\d+\(p0: vec3f\) -> vec3f \{\n {2}return mat3x3f\(1\.0, 0\.0, 0\.0, 0\.5, 1\.0, 0\.0, 0\.0, 0\.0, 1\.0\) \* p0;/);
+  assert.match(s.wgsl, /fn lifted_shear_\d+\(p0: vec3f\) -> vec3f \{\n {2}return mat3x3f\(1\.0, 0\.0, 0\.0, 0\.0, 1\.0, 0\.0, 1\.0, 0\.0, 1\.0\) \* p0 \+ vec3f\(0\.0, 0\.0, 2\.0\);/);
+  // The turn after the shear is one matrix, cos and sin of 30° folded in,
+  // and the vector it takes is built once.
+  assert.match(s.wgsl, /fn turned_shear_\d+\(p0: f32, p1: f32, p2: f32\) -> vec3f \{\n {2}return mat3x3f\(0\.866\d*, 0\.49999\d*, 0\.0, \(-0\.0669\d*\), 1\.116\d*, 0\.0, 0\.0, 0\.0, 1\.0\) \* vec3f\(p0, p1, p2\);/);
+  // A part that adds a Float64 input isn't one vector's parts times constants.
+  const walkText = s.wgsl.slice(s.wgsl.indexOf("fn walk_"));
+  assert.doesNotMatch(walkText.slice(0, walkText.indexOf("\n}\n")), /mat3x3f/);
   assert.match(why(s.refused, v.defs.sum), /List, which has 2 cases/);
   assert.match(why(s.refused, v.defs.orZero), /Optional, which has 2 cases/);
   // An input that can be anything is lowered at what each call passes:

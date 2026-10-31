@@ -126,9 +126,21 @@ export function vectors() {
   k.define(numbers, k.fn(["x"], (x) => k.call(twice, x, x)));
   const vecs = k.def("twice a vec");
   k.define(vecs, k.fn(["x"], (x) => k.call(twice, x, k.call(vec, x, x, x))));
+  // Linear maps (MATRICES.md layer 1): a shear, a turn about z by 30°
+  // that names cos and sin, the turn after the shear, and a move.
+  const shear = k.def("shear");
+  k.define(shear, k.fn(["v"], (v) => k.call(vec, k.call(B.add, k.call(X, v), k.call(B.mul, n(0.5), k.call(Y, v))), k.call(Y, v), k.call(Z, v))));
+  const turn = k.def("turn");
+  k.define(turn, k.fn(["v"], (v) => k.match(v, [{ variant: vec, names: ["x", "y", "z"], body: ([x, y, z]) =>
+    k.let("c", k.call(B.cos, k.call(B.div, n(Math.PI), n(6))), (c) => k.let("s", k.call(B.sin, k.call(B.div, n(Math.PI), n(6))), (s) =>
+      k.call(vec, k.call(B.sub, k.call(B.mul, c, x), k.call(B.mul, s, y)), k.call(B.add, k.call(B.mul, s, x), k.call(B.mul, c, y)), z))) }])));
+  const sheared = k.def("turned shear");
+  k.define(sheared, k.fn(["x", "y", "z"], (x, y, z) => k.call(turn, k.call(shear, k.call(vec, x, y, z)))));
+  const lifted = k.def("lifted shear");
+  k.define(lifted, k.fn(["v"], (v) => k.call(vec, k.call(B.add, k.call(X, v), k.call(Z, v)), k.call(Y, v), k.call(B.add, k.call(Z, v), n(2)))));
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), defs: { along, length, unit, diagonal, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs } };
+  return { code, names, info: infer(code, names), defs: { along, length, unit, diagonal, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs, shear, turn, sheared, lifted } };
 }
 
 // The vectors module (projectional/src/lang/vectors-source.ts) on a
