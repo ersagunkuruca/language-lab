@@ -34,6 +34,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I99 | Drag a built point on Constructions and Compass (a crossing, a midpoint, an inverted point), not only free ones. Running the construction backwards has endless answers (either line could turn about either of its points), so it needs a rule to pick one: proposed "least movement", moving the free points it depends on as little as possible so the point lands under the pointer (a few Newton steps on the free points' coordinates); the simpler "carry the parents" slides every free point it depends on by the same amount. Ersagun was told least movement is the recommendation. | Ersagun 2026-10-31 21:08 | 2026-10-31 |
 
 ## E: Editor
 
