@@ -49,8 +49,8 @@ import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
 import { subtree } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
-import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { ABORT, ABORT_OP, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
+import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { liftLets } from "../../projectional/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
@@ -63,6 +63,11 @@ import { runtime } from "./wasm-rt.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
+// std's Array's builtins: runtime functions, one copy per item type.
+const ARRAY_RT: Record<Id, string> = {
+  [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
+  [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
+};
 // Builtins on Int and Text that are runtime functions (`data`).
 const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
@@ -104,7 +109,14 @@ type At = Map<number, Type | Row>;
 // Int and Text (`data`): an i31 or a $big (W5), and UTF-8 bytes
 // (wasm-rt.ts).
 export type WType = "int" | "text";
-export type LType = SType | WType | RType | DType | FType;
+// std's Array (`data`, C66): a view, a start and a length, on a buffer
+// with free room at both ends, as compiled JS keeps it (runtime.js, C30d1).
+// `index`: its place in Lowered.arrays, which the runtime's array
+// functions are named by (`array.push.a0`); `list`: List of its items,
+// when a job takes or gives one.
+export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
+export type LType = SType | WType | RType | DType | FType | AType;
+export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -290,7 +302,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
 // computed a number Float32 can't hold, so a Float32 run differs from it.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id> }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id> }
 
 class Refused extends Error {}
 
@@ -357,6 +369,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const records = new Map<string, RType>();
   const datas = new Map<string, DType>();
   const fns = new Map<string, FType>();
+  const arrays = new Map<string, AType>();
   const shapes: Shape[] = [];
   // Effects whose operations all never return (Abort's shape, LANGUAGE.md
   // "Effects you define"), by their operations: each compiles as Abort does
@@ -402,6 +415,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
     if (opts.data && t.id === STRING) return "text";
+    if (opts.data && t.id === ARRAY) {
+      const key = `${t.id}<${t.args.map(show).join(",")}>`;
+      if (arrays.has(key)) return arrays.get(key)!;
+      const item = t.args[0] && stype(t.args[0], inside);
+      if (!item) return null;
+      const a: AType = { key, name: "Array", item, index: arrays.size, list: null };
+      arrays.set(key, a);
+      return a;
+    }
     if (!opts.records) return null;
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
     if (records.has(key)) return records.get(key)!;
@@ -648,6 +670,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const body: SExpr = { k: "if", cond: rt("int.less", at(y), { k: "int", v: 0n }), then: both(rt("int.neg", at(p)), rt("int.neg", at(q))), else: both(at(p), at(q)), t };
           return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), body);
         }
+        if (opts.data && ARRAY_RT[target]) {
+          // The array's type, from the argument or the answer that is one;
+          // List of its items too where the job takes or gives a list.
+          const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
+          const a = ts.find(isArray);
+          if (!a) throw new Refused(`uses ${nm(target)} on no array`);
+          const l = ts.find(isData);
+          if (l) a.list = l;
+          return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
+        }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
@@ -797,6 +829,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
     if (isFn(t)) throw new Refused("compares functions");
+    if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
@@ -834,6 +867,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "i32") return pick({ k: "op", op: "beq", args: [x, y] }, { k: "op", op: "not", args: [x] });
     if (t === "int") return pick({ k: "rt", fn: "int.equal", args: [x, y] }, { k: "rt", fn: "int.less", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
+    if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
   }
   // compared on a record or data type, a function of its own (recursive
@@ -1247,7 +1281,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "case": return e.result;
       case "let": return typeIn(e.body, g);
       case "set": return typeIn(e.then, g);
-      case "rt": { const r = runtime(e.fn).result; if (r === "i32" || r === "int" || r === "f64" || r === "text") return r; break; }
+      case "rt": {
+        const r = runtime(e.fn).result;
+        if (r === "i32" || r === "int" || r === "f64" || r === "text") return r;
+        const a = /\.a(\d+)$/.exec(e.fn) && [...arrays.values()][Number(/\.a(\d+)$/.exec(e.fn)![1])];
+        if (a && r === "array") return a;
+        if (a && r === "item") return a.item;
+        if (a && r === "list" && a.list) return a.list;
+        break;
+      }
     }
     throw new Refused("chooses after a value it can't keep (not in WebAssembly yet)");
   }
@@ -1579,5 +1621,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded };
 }

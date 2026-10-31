@@ -15,8 +15,11 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { makeRunner } from "../../projectional/src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { LIBRARY } from "../../projectional/src/lang/library.ts";
-import { ARRAY_OPS, CONS, INT_OPS, NIL, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { ARRAY_OPS, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../projectional/src/lang/std.ts";
+import { B } from "../../projectional/src/prelude.ts";
 import { compile } from "../src/compile.ts";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitWasm, fromInt, instantiate, toInt } from "../src/wasm.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 
@@ -50,5 +53,48 @@ test("an array pushed twice gives two arrays, and a long run of pushes is linear
   // A copy per push would take minutes; free slots take milliseconds.
   const t = performance.now();
   assert.equal(Number((defs["length after"] as (n: number) => unknown)(1_000_000)), 1_000_000);
+  assert.ok(performance.now() - t < 5_000, `${performance.now() - t} ms`);
+});
+
+test("Array in WebAssembly: the same two-ended buffer, the evaluator's answers, a million pushes in a loop (C66)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => string) => { const d = k.def(name); k.define(d, body()); return d; };
+  const lit = (x: number) => k.lit(x);
+  const of = (...xs: number[]) => k.call(ARRAY_OPS.of, k.list(...xs.map(lit)));
+  const sum = def("sum", () => k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => lit(0) },
+    { variant: CONS, names: ["x", "t"], results: [null, "r"], body: ([x], [, r]) => k.call(B.add, x, r!) },
+  ])));
+  const total = (a: string) => k.call(sum, k.call(ARRAY_OPS.items, a));
+  // One array pushed twice: two arrays, each with its own last item.
+  const shared = def("shared", () => k.fn(["x"], (x) => k.let("base", k.call(ARRAY_OPS.push, of(1, 2), lit(3)), (b) =>
+    k.call(B.add, k.call(B.mul, lit(100), total(k.call(ARRAY_OPS.push, b, x))), total(k.call(ARRAY_OPS.push, k.call(ARRAY_OPS.push, b, lit(5)), lit(6)))))));
+  // 0, 1, …, n − 1 pushed one by one; its length; the item at k, or −1.
+  const count = def("count", () => k.fn(["n"], (n) => k.fold(k.call(S.range, n), [
+    { variant: NIL, names: [], body: () => k.call(ARRAY_OPS.empty) },
+    { variant: CONS, names: ["i", "t"], results: [null, "a"], body: ([i], [, a]) => k.call(ARRAY_OPS.push, a!, i) },
+  ])));
+  def("length after", () => k.fn(["n"], (n) => k.call(ARRAY_OPS.length, k.call(count, n))));
+  def("item of", () => k.fn(["n", "i"], (n, i) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.call(count, n), i)), k.thunk(() => lit(-1)))));
+  def("total of", () => k.fn(["n"], (n) => total(k.call(count, n))));
+  const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const named = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const roots = ["shared", "length after", "item of", "total of"];
+  const lowered = lowerScalar(code, info, nm, roots.map(named), { data: true });
+  assert.deepEqual(roots.flatMap((n) => lowered.refused.has(named(n)) ? [`${n}: ${lowered.refused.get(named(n))}`] : []), []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  assert.match(m.wat, /\(type \$items\d+ \(array \(mut f64\)\)\)/);
+  const w = (await instantiate(m)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const ev = (n: string, ...xs: unknown[]) => [...r.call(r.value(named(n)), ...(xs as never[]))][0];
+  assert.equal(w.shared(4), ev("shared", 4));
+  assert.equal(w.shared(4), 1000 + 17);
+  assert.equal(fromInt(w as never, w["length after"](10)), BigInt(ev("length after", 10) as number));
+  for (const [n, i] of [[10, 3], [10, 10], [10, -1], [0, 0]]) assert.equal(w["item of"](n, toInt(w as never, BigInt(i))), Number(ev("item of", n, BigInt(i))), `item ${i} of ${n}`);
+  assert.equal(w["total of"](100), ev("total of", 100));
+  const t = performance.now();
+  assert.equal(fromInt(w as never, w["length after"](1_000_000)), 1_000_000n);
   assert.ok(performance.now() - t < 5_000, `${performance.now() - t} ms`);
 });

@@ -158,6 +158,7 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // is the exit code, and an Abort's reason goes to standard error, with 1.
 export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
+  if (lowered.arrays.length) throw new Error("std's Array isn't in C yet (BACKLOG C66b; WebAssembly has it)");
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
   // expression does anything: C has no value of every type to stand in.
