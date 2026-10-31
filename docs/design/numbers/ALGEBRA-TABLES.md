@@ -10,6 +10,9 @@ because the answer changes more than tables.
 `table product` (L40d), and quaternions and `Cl(p, q, r)` are tables
 (L42a, L43a). Geometry on top of them, rotors from `clifford exp`,
 reflections, projections and PGA motors, is L44b (MATRICES.md layer 2).
+The outer product, the left contraction, grade selection, the dual by
+complement and the regressive product are I89, each a table with lines
+left out or a reweighing of the blades.
 Open: table products expanded at compile time (L41).
 
 ## The idea, briefly

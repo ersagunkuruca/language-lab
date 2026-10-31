@@ -170,3 +170,44 @@ test("clifford sandwich, reflect, project and exp: rotors, mirrors and PGA motor
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// The other products, grades and duals (BACKLOG I89): outer, left
+// contraction, grade selection, the dual by complement and its undual, and
+// the regressive product, in Cl(3, 0) (s, e1, e2, e12, e3, e13, e23, e123).
+test("clifford outer, inner, grade, dual, undual and regressive, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const M = k.type("Multivector", [], [["multivector", ["s", "e1", "e2", "e12", "e3", "e13", "e23", "e123"].map((p) => [p, num] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number>) => k.call(M.v.multivector, ...Array.from({ length: 8 }, (_, i) => k.lit(parts[i] ?? 0)));
+  const basis = def("cl3 basis", () => k.list(...Array.from({ length: 8 }, (_, i) => at({ [i]: 1 }))));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...[1, 1, 1].map((x) => k.lit(x))), k.x(basis), ...xs);
+  const all = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8 };
+  const cases: [string, () => Id, Record<number, number>][] = [
+    ["e1 ∧ e2", () => call("clifford outer", at({ 1: 1 }), at({ 2: 1 })), { 3: 1 }],
+    ["e1 ∧ e1", () => call("clifford outer", at({ 1: 1 }), at({ 1: 1 })), {}],
+    ["e12 ∧ e3", () => call("clifford outer", at({ 3: 1 }), at({ 4: 1 })), { 7: 1 }],
+    ["(e1 + e2) ∧ (e1 − e2)", () => call("clifford outer", at({ 1: 1, 2: 1 }), at({ 1: 1, 2: -1 })), { 3: -2 }],
+    ["e1 ⌋ e12", () => call("clifford inner", at({ 1: 1 }), at({ 3: 1 })), { 2: 1 }],
+    ["e12 ⌋ e1", () => call("clifford inner", at({ 3: 1 }), at({ 1: 1 })), {}],
+    ["dot", () => call("clifford inner", at({ 1: 3, 2: 4 }), at({ 1: 1, 2: 2 })), { 0: 11 }],
+    ["grade 1", () => call("clifford grade", k.lit(1), at(all)), { 1: 2, 2: 3, 4: 5 }],
+    ["grade 2", () => call("clifford grade", k.lit(2), at(all)), { 3: 4, 5: 6, 6: 7 }],
+    ["dual e1", () => call("clifford dual", at({ 1: 1 })), { 6: 1 }],
+    ["dual e2", () => call("clifford dual", at({ 2: 1 })), { 5: -1 }],
+    ["undual dual", () => call("clifford undual", call("clifford dual", at(all))), all],
+    ["e12 ∨ e23", () => call("clifford regressive", at({ 3: 1 }), at({ 6: 1 })), { 2: 1 }],
+  ];
+  const names = cases.map(([n, x]) => { def(`case ${n}`, () => k.call(SHOW_ANY, x())); return `case ${n}`; });
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
+  const parts = (v: Value) => { const s = String(v); return s.slice(s.indexOf("(") + 1, -1).split(", ").map(Number); };
+  cases.forEach(([n, , want], i) => parts(got[i]).forEach((x, j) => assert.ok(Math.abs(x - (want[j] ?? 0)) < 1e-9, `${n}: ${got[i]}`)));
+  const path = join(mkdtempSync(join(tmpdir(), "products-")), "products.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});
