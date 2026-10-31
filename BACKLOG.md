@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764) and I91 (this PR) done; next I81, the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765) and I81 (this PR) done; next the L69 design note, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -126,7 +126,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | P2 | M | |
 | L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). Open: a generic op made Int by a parameter's type alone (no Int literal) is still planned as Float64's equations, because the plan reads the code and not the types | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md), Ersagun 2026-10-31): `Mat2` to `Mat4` done (L44a). Rotors, reflections, projections and PGA motions from the Clifford tables done (L44b); reading a function's matrix done (L44c, src/lang/linear.ts). Next: the compiler stores linear functions as matrices (C lane, C30b/c); then a linear-algebra library for any size | LANGUAGE-REVIEW-2026-10-24 | P1 | M | steps 1-2 done |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher, after L41 | NUMBERS.md stage 4 | P1 | M | step 1 done |
