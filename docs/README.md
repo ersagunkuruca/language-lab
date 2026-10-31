@@ -92,7 +92,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 
 | doc | what it is | status |
 |---|---|---|
-| [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | proposal (L109 to L114) |
+| [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | proposal (L109 to L115) |
 
 ### Compiler and targets
 

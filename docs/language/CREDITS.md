@@ -74,11 +74,12 @@ not only code: an influence is credited even when nothing was copied.
 
 ## Sharing, versions and merging (designed, not built)
 
-Proposed in [SHARING.md](../design/sharing/SHARING.md) (BACKLOG L109-L114); its Credits table has the full list.
+Proposed in [SHARING.md](../design/sharing/SHARING.md) (BACKLOG L109-L115); its Credits table has the full list.
 
 | What | Label | Who and where |
 |---|---|---|
 | A stable lineage id over changing version hashes; names pinned per program and offered on upgrade | Ersagun's idea / Prior art | Ersagun, 2026-10-31. IPNS in IPFS (Protocol Labs); git branches over commits; Unison's upgrades. |
+| Every version used kept in the project, downgrade from it | Ersagun's idea / Prior art | Ersagun, 2026-10-31. Go and Cargo vendoring; Nix's store and GC roots; Unison's local codebase. |
 | Imports pinned by hash from any host; signed append-only logs of which version is current | Prior art | Dhall (Gabriella Gonzalez); Nix (Eelco Dolstra); Go's checksum database; Sigstore's Rekor; Certificate Transparency. |
 | Compatibility checked from types | Influence | Elm's `elm diff` (Evan Czaplicki). |
 | Structural diff and merge; history as commuting patches | Prior art | GumTree (Falleri et al. 2014), Difftastic (Wilfred Hughes); Darcs (David Roundy), Pijul (Meunier, Becker), CRDTs (Shapiro et al. 2011), Automerge (Martin Kleppmann). |
