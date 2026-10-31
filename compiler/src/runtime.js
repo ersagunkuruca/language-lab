@@ -103,12 +103,62 @@ export function $eq(a, b) {
 // builtins compiled code calls by id.
 export * as $int from '../../projectional/src/lang/int.ts';
 export * as $text from '../../projectional/src/lang/text.ts';
-export { STD_IMPL as $impl } from '../../projectional/src/lang/std.ts';
-import { CELL_OPS, STD_MANY } from '../../projectional/src/lang/std.ts';
+import { ARRAY_OPS, ARRAY_TAG, CELL_OPS, STD_IMPL, STD_MANY } from '../../projectional/src/lang/std.ts';
+
+// Arrays (std.ts ARRAY_OPS, C30d): an array is a view, a start and a
+// length, on a buffer with free room at both ends, so adding an item at
+// either end is amortised constant and a view's items are never copied to
+// make another view. Adding writes into the free slot just past the view's
+// end when no other view has taken it (the buffer keeps its lowest and
+// highest used slots), and copies the view's items into a new buffer
+// otherwise, so every array still never changes. Ersagun's design, a
+// two-ended array list from one of his Unity C# projects; prior art:
+// deques as ring buffers, gap buffers, and Go's slices, which share their
+// backing array the same way at one end. `fields` is the evaluator's
+// { tag, fields: [n, …items] } value, made once when equal, show or the
+// evaluator read it.
+class ArrayView {
+  constructor(buf, start, n) { this.tag = ARRAY_TAG; this.buf = buf; this.start = start; this.n = n; this.f = null; }
+  get fields() { return (this.f ??= [this.n, ...this.buf.items.slice(this.start, this.start + this.n)]); }
+  toJSON() { return { tag: this.tag, fields: this.fields }; }
+}
+// A buffer holding xs in its middle, with room for as many again on each side.
+function arrayOf(xs, from = 0, to = xs.length) {
+  const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(undefined);
+  for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
+  return new ArrayView({ items, lo: room, hi: room + n }, room, n);
+}
+// Either kind of array value: a view, or one the evaluator made.
+const view = (a) => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
+function pushBack(a, x) {
+  const v = view(a), b = v.buf, end = v.start + v.n;
+  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; return new ArrayView(b, v.start, v.n + 1); }
+  const w = arrayOf(b.items, v.start, end);
+  w.buf.items[w.start + w.n] = x; w.buf.hi++;
+  return new ArrayView(w.buf, w.start, w.n + 1);
+}
+function pushFront(a, x) {
+  const v = view(a), b = v.buf;
+  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; return new ArrayView(b, v.start - 1, v.n + 1); }
+  const w = arrayOf(b.items, v.start, v.start + v.n);
+  w.buf.items[w.start - 1] = x; w.buf.lo--;
+  return new ArrayView(w.buf, w.start - 1, w.n + 1);
+}
+const arrayItems = (a) => { const v = view(a); return $toList(v.buf.items.slice(v.start, v.start + v.n)); };
+const arrayAt = (a, i) => { const v = view(a), k = Number(i); return Number.isInteger(k) && k >= 0 && k < v.n ? [v.buf.items[v.start + k]] : []; };
+const arrays = { of: (l) => arrayOf($fromList(l)), pushBack, pushFront, view };
+export const $impl = {
+  ...STD_IMPL,
+  [ARRAY_OPS.empty]: () => arrayOf([]),
+  [ARRAY_OPS.of]: (l) => arrayOf($fromList(l)),
+  [ARRAY_OPS.items]: arrayItems,
+  [ARRAY_OPS.length]: (a) => view(a).n,
+  [ARRAY_OPS.push]: pushBack,
+};
 // The Choice builtins: std.ts's, and read at (L98), which reads the
 // runtime's cells (below), so it can't live in std.ts.
 const readAt = (c, p) => { const v = $cells().readAt(c, stepsOf(p), $listArrays); return v === undefined ? [] : [v]; };
-export const $many = { ...STD_MANY, [CELL_OPS.readAt]: readAt };
+export const $many = { ...STD_MANY, [CELL_OPS.readAt]: readAt, [ARRAY_OPS.at]: arrayAt };
 // A Choice builtin's answer, or $no: each has at most one (GAPS.md G24).
 export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
