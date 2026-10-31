@@ -816,6 +816,25 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, i, k.lit(-0.5)), xs,
       k.if(k.call(S.less, i, k.lit(0.5)), k.call(CONS, by, rest), k.call(CONS, x, k.call(replaceAt, rest, n.sub(i, k.lit(1)), by)))) },
   ])));
+  // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
+  // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
+  // the last place and keeps trailing zeros, as JavaScript's toFixed and
+  // C's printf("%.*f") do, and never shows -0. "padded digits" is n, a
+  // whole number ≥ 0, in exactly `count` digits with zeros in front,
+  // digit by digit so it is a fold and not a loop on a number.
+  const paddedDigits = k.def("padded digits");
+  k.define(paddedDigits, k.fn(["n", "count"], (m, c) => k.fold(k.call(S.range, c), [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["place", "places"], results: [null, "after"], body: ([i], [, after]) => k.call(S.concat,
+      k.call(S.show, k.call(S.mod, k.call(S.floor, n.div(m, k.call(B.pow, k.lit(10), n.sub(n.sub(c, k.lit(1)), i)))), k.lit(10))), after!) },
+  ])));
+  const showDecimals = k.def("show decimals");
+  k.define(showDecimals, k.fn(["x", "places"], (x, places) => k.let("scale", k.call(B.pow, k.lit(10), places), (scale) =>
+    k.let("steps", k.call(S.floor, n.add(n.mul(k.call(S.abs, x), scale), k.lit(0.5))), (m) =>
+      k.let("whole", k.call(S.floor, n.div(m, scale)), (w) =>
+        k.let("text", k.if(k.call(S.less, places, k.lit(0.5)), k.call(S.show, w),
+          k.call(S.concat, k.call(S.show, w), k.call(S.concat, k.lit("."), k.call(paddedDigits, n.sub(m, n.mul(w, scale)), places)))), (text) =>
+          k.if(k.call(S.and, k.call(S.less, x, k.lit(0)), k.call(S.less, k.lit(0), m)), k.call(S.concat, k.lit("-"), text), text)))))));
   const sortBy = k.def("sort by");
   k.define(sortBy, k.fn(["list", "key"], (xs, key) => k.fold(
     k.fold(xs, [
@@ -1007,7 +1026,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, itemAt, replaceAt, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1046,6 +1065,7 @@ export function buildPrelude(): Module {
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
     [itemAt]: "The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.",
     [replaceAt]: "The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.",
+    [showDecimals]: "x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is \"2.500\", show decimals(-0.0004, 3) is \"0.000\". For when show's up to nine places would jump about.",
     [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.",
     [mergeByKey]: "Two lists sorted by key as one. A helper of sort by, not offered.",
     [addRunByKey]: "A helper of sort by, as add run is of sort. Not offered.",
