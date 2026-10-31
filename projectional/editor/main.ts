@@ -974,17 +974,22 @@ function seedOf(info: T.Info, def: Id): string[] | null {
     const args = n.args.map(text);
     if (args.length && args.every((v) => v !== null)) return args as string[];
   }
-  const main = defNamed("main"), body = defBody(def);
-  // A picture has no main: what the picture's function is first called
-  // with at its pixel (QA8 L4: a ray marcher's sphere, Mandelbrot's steps).
-  const entry = main ?? Object.values(pictureEntries(ownDefs(), pres().names) ?? {})[0];
-  const got = entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
-  // Only values that read back as themselves: a function passed in, say,
-  // has no way to be typed into a box.
-  // A definition passed in (newton's f) reads as its name (values.ts).
-  const texts = got?.map((v) => { const d = definedAs(v); return d ? pres().names[d] ?? d : showValue(v, doc.code, pres().names); });
+  const got = firstCall(info, def), body = defBody(def);
+  // A definition passed in (newton's f) reads as its name (values.ts). A
+  // function made on the way (newton's slope, derivative(f)) has no way
+  // to be typed into a box: it shows as PASSED and runs as itself (I78).
+  const texts = got?.map((v) => { const d = definedAs(v); return d ? pres().names[d] ?? d : typeof v === "function" ? PASSED : showValue(v, doc.code, pres().names); });
   return texts?.length && body?.kind === "lambda" && texts.length === body.params.length && texts.every((t, i) => !("error" in readPort(info, body.params[i], t))) ? texts : null;
 }
+
+// What a function is first called with when main runs (or a picture's
+// function at its pixel: QA8 L4, a ray marcher's sphere, Mandelbrot's steps).
+function firstCall(info: T.Info, def: Id): Value[] | undefined {
+  const entry = defNamed("main") ?? Object.values(pictureEntries(ownDefs(), pres().names) ?? {})[0];
+  const body = defBody(def);
+  return entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
+}
+const PASSED = "‹what main passes›";
 
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
@@ -1005,7 +1010,9 @@ function dryWorld(): World {
     fetchText: () => { throw new Error("the network isn't reached here"); },
   };
 }
-const MAIN_STEPS = 100_000, MAIN_MS = 50;
+// Once per version of the code. 50 ms often ended before main reached
+// calculus's newton on a cold page (I78).
+const MAIN_STEPS = 100_000, MAIN_MS = 120;
 function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   let calls = mainRuns.get(doc.code);
   if (!calls) {
@@ -1016,10 +1023,16 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
     const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
     if (pixel && args.every((a) => !("error" in a))) {
       const end = performance.now() + MAIN_MS;
-      withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
-        if (!got.has(l)) got.set(l, args);
-        if (performance.now() > end) throw new OutOfSteps();
-      }));
+      // A function main made (newton's slope) keeps this hook: called
+      // later, from a helper's own Run, it is no longer main's run (I78).
+      let done = false;
+      try {
+        withSteps(MAIN_STEPS, () => trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
+          if (done) return;
+          if (!got.has(l)) got.set(l, args);
+          if (performance.now() > end) throw new OutOfSteps();
+        }));
+      } finally { done = true; }
     }
     mainRuns.set(doc.code, (calls = got));
   }
@@ -1029,6 +1042,10 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
 // A port's text read as a value, the way values print. Where a Text goes,
 // what's typed is that text, quotes or not: Ersagun, or "Ersagun".
 function readPort(info: T.Info, p: Id, text: string): ReturnType<typeof parseValue> {
+  if (text === PASSED) {
+    const body = defBody(ui.def), v = body?.kind === "lambda" ? firstCall(info, ui.def)?.[body.params.indexOf(p)] : undefined;
+    return v === undefined ? { error: "main passes nothing here now" } : { value: v };
+  }
   const def = info.typeOf.get(ui.def);
   const t = p === "out" ? (def && info.subst.resolve(def).t === "fn" ? (info.subst.resolve(def) as { ret: Type }).ret : undefined) : info.typeOf.get(p);
   const z = t ? info.subst.resolve(t) : null;
@@ -1084,6 +1101,9 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
     return { answers: [], more: false, error: number ? `${who} needs a Float64, like 3 or 2.5.` : `${who}: ${(bad[1] as { error: string }).error}.` };
   }
   const values = Object.fromEntries(read.map(([k, r]) => [k, (r as { value: Value }).value]));
+  // A function main passed in (PASSED) runs only forwards, on the page:
+  // the search's equations can't take it in.
+  if (Object.values(values).some((v) => typeof v === "function")) return { answers: [], more: false };
   // When it reads as equations, the solver's plan for this direction is
   // the program it derives, shown as text.
   try {
