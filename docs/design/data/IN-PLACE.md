@@ -133,6 +133,25 @@ the two targets differ, and it's a hosting detail. The language's idea, a
 value nobody else holds may be changed, is the same on both
 (the two-landscapes rule).
 
+## Step 1, measured (C62, 2026-10-31)
+
+Before building step 1, its best case was written by hand into routes'
+compiled output: `tree put`, `set tree add` and `set tree remove` hand
+their matched node to `balance`, and `node` writes the new parts into it
+instead of making a new one (rotations still make new nodes). routes
+prints the same, so in routes nobody else holds those nodes. But the time
+didn't move: 789 ms against 790, at 3000 towns, three runs each, with
+runs varying by ±50 ms. V8 makes a short-lived object for a few
+nanoseconds, and writing into an old node costs a write barrier, so
+reuse saves nearly nothing in JavaScript. Profiled again: lookups 27%,
+the search loop with `relax` about 25%, node building 21%, the GC 9%.
+
+So step 1's reuse is not built. Its ownership analysis (one holder on
+every path) is still needed, because step 2's table may only be chosen for
+a map with one holder; that analysis is built with step 2 (C63). In C,
+nodes are reused already (N5b, N5c), where it pays because C has no
+young generation.
+
 ## What this doesn't do
 
 - **No Choice.** A search may run the rest twice, so a value held by a

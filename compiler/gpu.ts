@@ -30,7 +30,7 @@ import { represent } from "../projectional/src/lang/represent.ts";
 import { infer } from "../projectional/src/lang/infer.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
-import { area, corners, parts, pga, vectors } from "./src/fixtures.ts";
+import { area, corners, ints, parts, pga, shaderArrays, vectors } from "./src/fixtures.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 const TRUE = "std.bool.true", FALSE = "std.bool.false";
@@ -38,13 +38,13 @@ const size = (t: LType): number => (typeof t === "string" ? 1 : t.fields.reduce(
 const scalars = (ts: LType[]): SType[] => ts.flatMap((t) => (typeof t === "string" ? [t] : scalars(t.fields.map((f) => f.t))));
 // The evaluator's value as numbers and booleans, in field order.
 const flatten = (t: LType, v: Value): (number | boolean)[] =>
-  t === "f64" ? [v as number] : t === "i32" ? [(v as { tag: string }).tag === TRUE]
+  t === "f64" ? [v as number] : t === "int32" ? [Number(v)] : t === "i32" ? [(v as { tag: string }).tag === TRUE]
     : t.fields.flatMap((f, j) => flatten(f.t, (v as { fields: Value[] }).fields[j]));
 
 // Inputs that f32 holds exactly, so only the computation differs.
 const GRID = [-2.5, -1.75, -1, -0.5, -0.125, 0, 0.25, 0.5, 1, 1.5, 2, 3.75];
 
-interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined }
+interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined; shader?: true }
 const cases: Case[] = [
   ...["calculus", "physics", "shaders", "raymarch"].map((name) => { const p = load(name); return { label: name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs }; }),
   (() => {
@@ -73,6 +73,23 @@ const cases: Case[] = [
     // walk stops once 4 away, so its step must move it away.
     return { label: "records", code: v.code, info: v.info, names: v.names, roots: Object.values(v.defs), inputs: (f) => (f.name === "walk" ? [[0, 1, 0, 0.5, 0], [2, 0, 1, 0.25, 3]] : f.name === "steps" ? [[0, 0.5], [-1, 0.125], [3, 2]] : undefined) };
   })(),
+  (() => {
+    // Int as an i32 (C66c): within 32 bits, the evaluator's answers.
+    const p = ints();
+    // Within 2²⁴, so they go in and come out through f32 exactly.
+    const pairs = [[3, 4], [-7, 2], [0, -5], [4000, 4000], [-16777215, 1], [1000, -999]];
+    // Searches with one answer or none (C66c2): quotients by 0, odd halves, negative powers.
+    const searches = [[7, 2], [-7, 2], [7, -2], [-7, -2], [6, 3], [5, 0], [0, 0], [2, 10], [3, -1], [-3, 3], [12, 4], [8, 5], [-16777215, 7]];
+    const inputs = (f: ShaderFunc) => f.name === "sum to" ? [[0], [1], [10], [500], [5000]] : f.name === "cube" ? [[0], [-3], [250], [-250]]
+      : f.name === "whole or" ? [[2.5], [-2.5], [0], [-0.5], [1e6], [NaN], [Infinity], [-Infinity]] : f.name === "power or" ? searches.slice(0, -1) : ["quotient or", "remainder or", "count quotients", "quarter or"].includes(f.name) ? searches : pairs;
+    return { label: "Int in 32 bits", code: p.code, info: p.info, names: p.names, roots: [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.quot, p.rem, p.pow, p.whole, p.counted, p.quarter], shader: true, inputs };
+  })(),
+  (() => {
+    // std's Array as array<T, N> (C66c): indexes in and past the ends.
+    const p = shaderArrays();
+    const at = [[-1], [0], [1], [2], [3], [4], [5]];
+    return { label: "arrays of a fixed size", code: p.code, info: p.info, names: p.names, roots: [p.palette, p.grow, p.pick, p.nothing], shader: true, inputs: (f) => (f.name === "grow" ? [[0], [1.5], [-3]] : at) };
+  })(),
 ];
 
 const browser = await chromium.launch({
@@ -85,7 +102,7 @@ await page.goto(new URL("./README.md", import.meta.url).href);
 if (!(await page.evaluate(() => !!navigator.gpu))) throw new Error("this browser has no WebGPU");
 
 // Operations WGSL does exactly as binary32 does: correctly rounded.
-const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not"]);
+const EXACT = new Set(["add", "sub", "mul", "neg", "abs", "floor", "float32", "less", "equal", "beq", "and", "or", "not", "iadd", "isub", "imul", "ineg", "iabs", "iless", "ieq", "itof", "iquot", "irem", "ipow", "iwhole"]);
 // A linear map printed as a matrix (C30c) sums in its own order, and a
 // call worked out when compiled (C65) may hold a number rounded once in
 // Float64: close, not exact.
@@ -95,7 +112,9 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<st
   seen.add(i);
   const ok = (e: SExpr): boolean => {
     switch (e.k) {
-      case "num": case "bool": case "local": return true;
+      case "num": case "bool": case "local": case "int": case "zero": return true;
+      case "rt": return /^array\./.test(e.fn) && e.args.every(ok);
+      case "attempt": return ok(e.body) && ok(e.ok) && ok(e.otherwise);
       case "op": return EXACT.has(e.op) && e.args.every(ok);
       case "if": return ok(e.cond) && ok(e.then) && ok(e.else);
       case "let": return ok(e.value) && ok(e.body);
@@ -111,7 +130,7 @@ function exact(funcs: SFunc[], i: number, matrices: Set<number>, rounded: Set<st
 
 let failures = 0, compared = 0, exactly = 0;
 for (const c of cases) {
-  const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true });
+  const lowered = lowerScalar(c.code, c.info, c.names, c.roots, { records: true, shader: c.shader });
   const shader = emitWgsl(lowered);
   // The lowered program: generated derivatives (∂blend/∂a …) are in it.
   const r = makeRunner(lowered.code, lowered.info, { print: () => {} });
@@ -129,12 +148,14 @@ for (const c of cases) {
     const arg = (t: LType): string => {
       if (t === "i32") return `(inp[b + ${at++}u] > 0.5)`;
       if (t === "f64") return `inp[b + ${at++}u]`;
+      if (t === "int32") return `i32(inp[b + ${at++}u])`;
       return `${shader.structs.get(t.key)!.name}(${t.fields.map((x) => arg(x.t)).join(", ")})`;
     };
     const outs: string[] = [];
     const out = (t: LType, x: string) => {
       if (t === "i32") outs.push(`select(0.0, 1.0, ${x})`);
       else if (t === "f64") outs.push(x);
+      else if (t === "int32") outs.push(`f32(${x})`);
       else t.fields.forEach((y, j) => out(y.t, `${x}.${shader.structs.get(t.key)!.fields[j]}`));
     };
     out(f.result, "r");
@@ -162,6 +183,7 @@ ${outs.map((x, j) => `  outp[i * ${outWidth}u + ${j}u] = ${x};`).join("\n")}
       const value = (t: LType, round: boolean): Value => {
         if (t === "i32") return { tag: xs[j++] ? TRUE : FALSE, fields: [] };
         if (t === "f64") return round ? Math.fround(xs[j++]) : xs[j++];
+        if (t === "int32") return xs[j++];
         return { tag: t.variant, fields: t.fields.map((x) => value(x.t, round)) };
       };
       const runner = isExact ? r32 : r;

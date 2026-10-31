@@ -32,9 +32,10 @@
 import type { Runtime, World } from "../../projectional/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
-import { fails, isData, isFn, kids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { fails, isArray, isData, isFn, kids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
-const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
+// int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
+const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag";
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
@@ -121,7 +122,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
   };
 
   // ---- binary
@@ -147,7 +148,9 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A type in the group: a struct, or (`func`) a closure's code's type.
   // A field with `code` holds a closure's code, a (ref $code) of that index.
   // `bytes`: Text's array.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; u32s?: true; mutable?: true }[] = [];
+  // `items`: an Array's items (C66), a mutable array of the item type;
+  // a field with `ref` holds a (nullable) reference to that type.
+  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; u32s?: true; mutable?: true; items?: MType }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   const bytesIndex = 0, i64sIndex = structs.length;
   if (ryu) structs.push({ name: "i64s", fields: [], final: true, i64s: true });
@@ -181,12 +184,24 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     structs.push({ name: `fn${c}.closure${i}`, fields: [{ name: "code", t: "i32", code: c + 1 }, ...sh.caps.map((t, j) => ({ name: `c${j}`, t }))], sup: c, final: true });
     return structs.length - 1;
   });
+  // An Array (C66): its items, its buffer (the items, and the lowest and
+  // highest slots in use, which pushes change) and the view, which is the
+  // value: the buffer, a start and a length.
+  const arrIndex = new Map<string, number>();
+  for (const a of lowered.arrays) {
+    const k = structs.length;
+    structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
+    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }], final: true, mutable: true });
+    structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
+    arrIndex.set(a.key, k + 2);
+  }
+  const arrayOf = (f?: RtFn): AType => { const a = f?.array !== undefined ? lowered.arrays[f.array] : undefined; if (!a) throw new Error(`${f?.name}: no array type`); return a; };
   const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
-  const isRec = (t: MType): t is RType | DType | FType => typeof t !== "string";
+  const isRec = (t: MType): t is RType | DType | FType | AType => typeof t !== "string";
   // The runtime's names for types and functions.
   // `list` in a runtime function is the list type it names (List Text if none).
   const listOf = (f?: RtFn) => {
-    const key = f?.list ?? LIST_TEXT, d = datas.find((x) => x.key === key);
+    const key = f?.array !== undefined ? arrayOf(f).list?.key ?? "" : f?.list ?? LIST_TEXT, d = datas.find((x) => x.key === key);
     if (!d) throw new Error(`the runtime's ${key} isn't one of the module's types`);
     return d;
   };
@@ -196,7 +211,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -209,12 +224,17 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
+      if (t === "array" || t === "item") {
+        const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m };
+      }
+      if (t === "buf" || t === "items") { const k = arrIndex.get(arrayOf(f).key)! - (t === "buf" ? 1 : 2); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t };
     },
   });
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
-  const refIndex = (t: RType | DType | FType) => (isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
+  const refIndex = (t: RType | DType | FType | AType) => (isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
   const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
@@ -229,7 +249,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
   // A world operation giving the unit gives nothing (the module makes it);
   // one that can fail gives a status after.
-  const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && t.fields.length === 0;
+  const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && !isArray(t) && t.fields.length === 0;
   const worldSig = wasi ? [] : worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
   const reasonSig = worldReason && !wasi ? sig([], "text") : 0;
   const wasiSig = wasiImports.map((n) => sig(WASI_IMPORTS[n.slice(5)].params, WASI_IMPORTS[n.slice(5)].result));
@@ -302,15 +322,16 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       ].join("\n"),
     });
   }
-  const rtType = (f: RtFn, t: VT): MType | null => (t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t);
+  const rtType = (f: RtFn, t: VT): MType | null => (t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t);
   const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
     if (x.bytes) return [0x5e, 0x78, 0x01];
     if (x.i64s) return [0x5e, 0x7e, 0x00];
     if (x.u32s) return [0x5e, 0x7f, 0x01];
+    if (x.items) return [0x5e, ...typeOf(x.items), 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
-    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
+    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
   const typeSec = vec([
@@ -498,7 +519,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const id = (f: SFunc) => `$${f.name.replace(/[^\w]+/g, "_")}${funcs.indexOf(f)}`;
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
-  const recName = (r: RType | DType | FType) => sname(refIndex(r));
+  const recName = (r: RType | DType | FType | AType) => sname(refIndex(r));
   const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t);
   const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
@@ -591,8 +612,10 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (x.bytes) return "    (type $bytes (array (mut i8)))";
       if (x.i64s) return "    (type $i64s (array i64))";
       if (x.u32s) return "    (type $u32s (array (mut i32)))";
+      if (x.items) return `    (type $${x.name} (array (mut ${ty(x.items)})))`;
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
-      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${ty(y.t)})` : ty(y.t)})`).join("")})`;
+      const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : ty(y.t));
+      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${fty(y)})` : fty(y)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),

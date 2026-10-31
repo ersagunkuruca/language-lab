@@ -23,9 +23,9 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I76-I78, I80, I87, I88 (Ersagun's 20 more, 2026-10-31) |
-| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), then I37 |
-| L Language and library | "Language lane" | C30d language side (array ends, this PR); then I79 (clifford algebra built once), I84, I82, I81, L29, L46 (Ersagun's 20 more, 2026-10-31) |
+| E Editor | "Editor lane" | I87, I88, then I90, I85, I94 (program list) and I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
+| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays, waits on the Language lane's first/rest/push front), then C66 (Array on WASM, C and shaders), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (array ends, this PR); then Inbox triage, I79 (clifford algebra built once, agreed with the Compiler lane), I84, I82, I81, L29, L46, then P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -34,11 +34,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I76 | On a page program, a helper's own Run sits below the 560 px page; when the open definition isn't main, fold or shrink the page | QA11 M2 | 2026-10-31 |
-| I77 | A page's main still opens with empty canvas top-left (Tumble's first node 220 px right, 275 px down; pedal lower right); open on the first node | QA11 L1 | 2026-10-31 |
-| I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
 | I79 | Where C65 (#724) can't work a clifford call out (the algebra isn't written down, I86; the evaluator), the call rebuilds the 64-line table every time; let the clifford functions take an algebra built once (table, reverse signs) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | 2026-10-31 |
-| I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
 | I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
@@ -80,18 +76,16 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I37 | Compiled JS: a handler of an operation answered later written as a function of the computation (`at once(chain)`) makes plain callers `yield*` it, which esbuild refuses; `seeded` around such a call too. Tumble works round it. Also not compiled: a handler with a normal-finish case and an operation answered later (`notYet`) | examples/tumble | P2 | M | |
 | C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573). Next: a search whose own definitions wait; then the world's `await(any of …)` as a promise, after L71 | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
 
 ### Speed of compiled code
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C66 | std's Array on the other targets (Ersagun 2026-10-31 "Yea"): every array builtin in compiler/src/builtins.ts is JS-only, so WASM, native C and shaders refuse Array. Bring the two-ended buffer views from #734 (a start and length on a buffer with room at both ends, a push writing into a free slot) to WASM and C, and to shaders where a fixed size fits | Ersagun | P1 | L | |
+| C66 | std's Array on the other targets (Ersagun 2026-10-31 "Yea"). WebAssembly done (C66a), native C done (C66b). Shaders, as Ersagun chose (2026-10-31): Int as an i32 done (C66c1), `first` with a fallback and `count` done (C66c2), arrays of a fixed size done (C66c3); left: an array as a shader function's input (a copy per size), then Int in 32 bits and the flag in WebAssembly's scalar profile, so the editor's pictures (CPU side) can turn `shader` on. Also left: equal and compare on arrays in WebAssembly and C. Bring the two-ended buffer views from #734 (a start and length on a buffer with room at both ends, a push writing into a free slot) to WASM and C, and to shaders where a fixed size fits | Ersagun | P1 | L | |
 | C30 | Lists as arrays. Done so far: P4a, #555, #558, #561 (pedal 2.9×). The split, join and block-in-array stages pay only together (~25% more); do them as one stage when another program needs lists as arrays. The aim: an `array` representation written in the language (REPRESENTATIONS.md), so WASM, C and the editor get it too. C30d (2026-10-31): Ersagun's two-ended array list; JS runtime views done (C30d1), next the Language lane's `array first`/`array rest`/`push front` with `array of List`'s costs (cons, match constant; fold linear), then the chooser picking it from use | GAPS.md round 4 P4 | P2 | L | |
 | C55 | Compile each direction of a relation a program uses as its own function (Mercury), dropping results no caller reads: `y` of `polar` alone is a plain sine, both together one sincos | Ersagun 2026-10-28 | P2 | M | |
-| C62 | IN-PLACE.md step 1: `$own` copies for the cases of any type, so the trees' put, add and remove write along their path in place (GAPS.md M6). Built only if routes measures over 10% | docs/design/data/IN-PLACE.md | P2 | M | |
-| C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal | docs/design/data/IN-PLACE.md | P2 | L | after C62 |
+| C63 | IN-PLACE.md step 2: a hash table changed in place as a representation of Map and Set, where every value has one holder and keys hash as they're equal. Needs step 1's one-holder analysis, not its node reuse (C62 measured no gain) | docs/design/data/IN-PLACE.md | P2 | L | |
 | C31 | A recursion that gives back a Pair returns its two fields without the record. 3% on the pedal | GAPS.md round 4 P5 | P3 | M | after C30 |
 | C64 | Handlers the compiler can see: Pig's `quietly` and `hold at` sit right around `play`, yet every operation goes through `$perform`'s search; calling the case directly closes most of 310 ms vs 25 ms hand-written | examples/pig | P3 | M | |
 

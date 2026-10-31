@@ -4,7 +4,7 @@ import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, ARITH, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../projectional/src/lang/types.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
@@ -647,4 +647,55 @@ export function pga() {
   const totalGiven = def("total given", () => k.fn(["ps"], (ps) => k.call(totalIn, k.x(space), ps)));
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven } };
+}
+
+// Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as
+// Float64, equal; a loop under a budget; a cube that passes 32 bits from
+// 1291 on; the lowest i32.
+export function ints() {
+  const k = new Lang();
+  const def = (name: string, params: string[], body: (...xs: string[]) => string) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const I = INT_OPS;
+  const poly = def("poly", ["a", "b"], (a, b) => k.call(I.add, k.call(I.sub, k.call(I.mul, a, b), a), k.call(I.neg, k.call(I.abs, b))));
+  const smaller = def("smaller", ["a", "b"], (a, b) => k.if(k.call(I.less, a, b), k.call(I.toNumber, a), k.call(I.toNumber, b)));
+  const same = def("same", ["a", "b"], (a, b) => k.equal(k.call(I.abs, a), b));
+  // A loop on Ints (it might not finish, as far as the checker sees), under a budget.
+  const go = k.def("go");
+  k.define(go, k.fn(["i", "acc"], (i, acc) => k.if(k.call(I.less, i, k.int(1)), acc, k.call(go, k.call(I.sub, i, k.int(1)), k.call(I.add, acc, i)))));
+  const sumTo = def("sum to", ["n"], (n) => within(k, 1000, () => k.call(go, n, k.int(0)), () => k.int(-1)));
+  // a³ past 32 bits: the budget's fallback.
+  const cube = def("cube", ["a"], (a) => within(k, 10, () => k.call(I.mul, k.call(I.mul, a, a), a), () => k.int(-1)));
+  const lowest = def("lowest", [], () => k.int(-2147483648));
+  // Searches with one answer or none, under first with a fallback, and count.
+  const or = (x: () => string, y: () => string) => k.call(S.first, k.thunk(x), k.thunk(y));
+  const quot = def("quotient or", ["a", "b"], (a, b) => or(() => k.call(I.quotient, a, b), () => k.int(-7)));
+  const rem = def("remainder or", ["a", "b"], (a, b) => or(() => k.call(I.remainder, a, b), () => k.int(-7)));
+  const pow = def("power or", ["a", "b"], (a, b) => or(() => k.call(I.power, a, b), () => k.int(-7)));
+  const whole = def("whole or", ["x"], (x) => or(() => k.call(I.wholePart, x), () => k.int(-7)));
+  const counted = def("count quotients", ["a", "b"], (a, b) => k.call(S.count, k.thunk(() => k.call(I.quotient, a, b))));
+  // A definition with one answer or none, its none from `fail`, and two firsts inside each other.
+  const half = def("half", ["a"], (a) => k.if(k.equal(k.call(I.remainder, a, k.int(2)), k.int(0)), k.call(I.quotient, a, k.int(2)), k.call(S.fail)));
+  const quarter = def("quarter or", ["a", "b"], (a, b) => or(() => k.call(half, k.call(half, a)), () => or(() => k.call(I.add, k.call(half, b), k.int(1000)), () => k.int(-1))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
+  return { code, names, info, poly, smaller, same, sumTo, cube, lowest, quot, rem, pow, whole, counted, quarter };
+}
+
+// std's Array in a shader (C66c): sizes fixed where each array is made.
+export function shaderArrays() {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, params: string[], body: (...xs: string[]) => string) => { const d = k.def(name); k.define(d, params.length ? k.fn(params, body) : body()); return d; };
+  const A = ARRAY_OPS;
+  const or = (x: () => string, y: () => string) => k.call(S.first, k.thunk(x), k.thunk(y));
+  const palette = def("palette", ["i"], (i) => or(() => k.call(A.at, k.call(A.of, k.list(k.lit(0.1), k.lit(0.5), k.lit(0.9))), i), () => k.lit(-1)));
+  const grow = def("grow", ["x"], (x) => k.let("a", k.call(A.push, k.call(A.push, k.call(A.empty), x), k.call(B.mul, x, k.lit(2))), (a) =>
+    k.call(B.add, or(() => k.call(A.at, a, k.int(1)), () => k.lit(0)), k.call(INT_OPS.toNumber, k.call(A.length, a)))));
+  const table = def("table", [], () => k.call(A.of, k.list(k.int(3), k.int(1), k.int(4), k.int(1), k.int(5))));
+  const pick = def("pick", ["i"], (i) => or(() => k.call(INT_OPS.add, k.call(A.at, table, i), k.call(A.length, table)), () => k.int(-7)));
+  const nothing = def("nothing at", ["i"], (i) => or(() => k.call(A.at, k.call(A.empty), i), () => k.lit(-1)));
+  const uneven = def("uneven", ["b"], (b) => k.call(A.length, k.if(b, k.call(A.of, k.list(k.lit(1))), k.call(A.of, k.list(k.lit(1), k.lit(2))))));
+  const listed = def("listed", ["x"], (x) => k.call(A.length, k.call(A.of, k.call(A.items, k.call(A.of, k.list(k.call(B.add, x, k.lit(1))))))));
+  const code = base(k.code), names = { ...baseNames(k.names) }, info = infer(code, names, undefined, checkOptions);
+  if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
+  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed };
 }

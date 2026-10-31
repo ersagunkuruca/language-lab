@@ -143,6 +143,9 @@ function paramsTitle(names: string[], rest?: string): string {
 const pickedBy = new Map<string, Set<Id>>();
 
 // `key` names the window onto this graph, so redrawing keeps where you were.
+// How far down and across a page's first rows reach, in world units:
+// about a pane at the zoom a graph opens at.
+const PAGE_ROWS = 900, PAGE_COLS = 1000;
 export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
   const scene = build(code, pres, info, defId, hooks);
   // An action opens on its steps, the column they run down: the
@@ -150,7 +153,19 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   const depth = (u: Id) => { let n = 0; for (let f = scene.items.get(u)?.frame ?? scene.frames.get(u)?.parent ?? null; f; f = scene.frames.get(f)?.parent ?? null) n++; return n; };
   const top = Math.min(...[...scene.items.keys()].map(depth));
   const steps = hooks.page ? [] : (scene.chains ?? []).find((c) => c.every((u) => depth(u) === top)) ?? [];
-  const canvas = infiniteCanvas(key, "tgraph", () => steps.map((id) => canvas.world.querySelector(`[data-id="${CSS.escape(id)}"]`)).filter((e): e is Element => !!e));
+  const at = (id: Id) => canvas.world.querySelector(`[data-id="${CSS.escape(id)}"]`);
+  // A page's tree opens on its first rows: the leftmost node of a pane's
+  // height from the top at the left, the topmost at the top (QA
+  // 2026-10-31 L1).
+  const firstRows = () => {
+    // A frame shares its id with what it draws: not a node.
+    const els = [...scene.items.keys()].map(at).filter((e): e is Element => !!e && !e.classList.contains("rg"));
+    const a = canvas.world.getScreenCTM()?.a ?? 1, bs = els.map((e) => e.getBoundingClientRect());
+    const top = Math.min(...bs.map((b) => b.top));
+    const left = Math.min(...bs.filter((b) => b.top < top + PAGE_ROWS * a).map((b) => b.left));
+    return els.filter((_, i) => bs[i].left < left + PAGE_COLS * a && bs[i].top < top + PAGE_ROWS * a);
+  };
+  const canvas = infiniteCanvas(key, "tgraph", () => (hooks.page ? firstRows() : steps.map(at).filter((e): e is Element => !!e)));
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
   for (const l of hooks.loose ?? []) {

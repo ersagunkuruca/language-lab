@@ -2,7 +2,12 @@
 // prints, printed a second time for the GPU. Float64 is `f32` (GPUs have no
 // f64 to speak of, so results are close to the evaluator's, not equal),
 // Bool is `bool`, a record is a `struct`, a let is a `let`, and `if` is an
-// `if` statement. Lower with `{ records: true }` to have records.
+// `if` statement. Lower with `{ records: true }` to have records, and with
+// `{ shader: true }` to have Ints as `i32` (C66c): past 32 bits, an Int
+// gives up as a budget running out does (INT_HELPERS below). With it, a
+// search with one answer or none under `first` or `count` is the flag
+// `lab_none` (scalar.ts `shader`), and std's Array is `array<T, N>`, its
+// size fixed where it's made (`sizesOf` below).
 //
 // A record of two to four Float64s (a point, a direction, a colour) is
 // stored as a WGSL vector instead, `vec2f` to `vec4f`, its fields in order
@@ -50,10 +55,10 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../projectional/src/model.ts";
-import { isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType } from "./scalar.ts";
+import { isArray, isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
-type GType = Exclude<LType, DType | FType | WType>;
+type GType = Exclude<LType, DType | FType | WType | AType>;
 export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType[]; result: GType }
 // structs: the WGSL name of each record type and of its fields.
 // matrices: the functions (indices in lowered.funcs) that print a linear
@@ -61,7 +66,78 @@ export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType
 // to Float32's, not exact.
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number> }
 const INFIX: Partial<Record<Op, string>> = {
-  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||",
+  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==",
+};
+// An Int in a shader is an i32 (C66c). WGSL's i32 arithmetic wraps; a
+// result past 32 bits isn't the evaluator's, so it gives up as a budget
+// running out does: lab_fuel goes below 0, the budget around it gives its
+// fallback, and outside any budget the answer isn't the evaluator's (as
+// outside a budget anywhere). The overflow tests are Hacker's Delight's
+// (Warren, 2-13): a sum overflows when both inputs' signs differ from its.
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs", iquot: "lab_iquot", irem: "lab_irem", ipow: "lab_ipow", iwhole: "lab_iwhole" };
+// The ones that may have no answer, which set lab_none (scalar.ts `shader`).
+const NONE_OPS = new Set<Op>(["iquot", "irem", "ipow", "iwhole"]);
+const INT_HELPERS: Partial<Record<Op, string>> = {
+  iadd: `fn lab_iadd(a: i32, b: i32) -> i32 {
+  let r = a + b;
+  if (((a ^ r) & (b ^ r)) < 0i) { lab_fuel = -1.0; }
+  return r;
+}`,
+  isub: `fn lab_isub(a: i32, b: i32) -> i32 {
+  let r = a - b;
+  if (((a ^ b) & (a ^ r)) < 0i) { lab_fuel = -1.0; }
+  return r;
+}`,
+  imul: `fn lab_imul(a: i32, b: i32) -> i32 {
+  let r = a * b;
+  // r / a undoes the product unless it wrapped; −1 × the lowest i32 wraps to itself.
+  if (a != 0i && (r / a != b || (a == -1i && b == -2147483647i - 1i))) { lab_fuel = -1.0; }
+  return r;
+}`,
+  ineg: `fn lab_ineg(a: i32) -> i32 {
+  if (a == -2147483647i - 1i) { lab_fuel = -1.0; }
+  return -a;
+}`,
+  iabs: `fn lab_iabs(a: i32) -> i32 {
+  if (a == -2147483647i - 1i) { lab_fuel = -1.0; }
+  return abs(a);
+}`,
+  // Rounded down, as the evaluator's (int.ts): WGSL's / and % round toward 0.
+  iquot: `fn lab_iquot(a: i32, b: i32) -> i32 {
+  if (b == 0i) { lab_none = true; return 0i; }
+  if (b == -1i && a == -2147483647i - 1i) { lab_fuel = -1.0; return a; }
+  let q = a / b;
+  if (q * b != a && ((a < 0i) != (b < 0i))) { return q - 1i; }
+  return q;
+}`,
+  irem: `fn lab_irem(a: i32, b: i32) -> i32 {
+  if (b == 0i) { lab_none = true; return 0i; }
+  if (b == -1i) { return 0i; }
+  let r = a % b;
+  if (r != 0i && ((r < 0i) != (b < 0i))) { return r + b; }
+  return r;
+}`,
+  // By squaring; none for a negative power.
+  ipow: `fn lab_ipow(a: i32, n: i32) -> i32 {
+  if (n < 0i) { lab_none = true; return 0i; }
+  var r = 1i;
+  var b = a;
+  var k = n;
+  loop {
+    if (k == 0i) { break; }
+    if ((k & 1i) == 1i) { r = lab_imul(r, b); }
+    k = k >> 1u;
+    if (k > 0i) { b = lab_imul(b, b); }
+  }
+  return r;
+}`,
+  iwhole: `fn lab_iwhole(x: f32) -> i32 {
+  // NaN or infinite, by the bits: a GPU may take x != x to be false.
+  if ((bitcast<u32>(x) & 0x7f800000u) == 0x7f800000u) { lab_none = true; return 0i; }
+  let f = floor(x);
+  if (f < -2147483648.0 || f >= 2147483648.0) { lab_fuel = -1.0; return 0i; }
+  return i32(f);
+}`,
 };
 // Records of 2 to 4 Float64s are vectors; their fields are these.
 const XYZW = ["x", "y", "z", "w"];
@@ -109,11 +185,12 @@ const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
 // arithmetic as written.
 function unrounded(e: SExpr): SExpr {
   switch (e.k) {
-    case "num": case "bool": case "local": return e;
+    case "num": case "bool": case "local": case "int": case "zero": return e;
+    case "attempt": return { ...e, body: unrounded(e.body), ok: unrounded(e.ok), otherwise: unrounded(e.otherwise) };
     case "op": return e.op === "float32" ? unrounded(e.args[0]) : { ...e, args: e.args.map(unrounded) };
     case "if": return { ...e, cond: unrounded(e.cond), then: unrounded(e.then), else: unrounded(e.else) };
     case "let": return { ...e, value: unrounded(e.value), body: unrounded(e.body) };
-    case "call": case "make": return { ...e, args: e.args.map(unrounded) };
+    case "call": case "make": case "rt": return { ...e, args: e.args.map(unrounded) };
     case "get": return { ...e, rec: unrounded(e.rec) };
     case "budget": return { ...e, body: unrounded(e.body), otherwise: unrounded(e.otherwise) };
     default: return noData(e);
@@ -130,6 +207,62 @@ export function emitWgsl(lowered: Lowered): Shader {
   funcs.forEach((f, i) => {
     const n = numbers(f.body).find((v) => !Number.isFinite(v) || Math.abs(v) > 3.4e38);
     if (n !== undefined) bad.set(i, `uses ${n}, which a shader's f32 can't hold`);
+  });
+
+  // Arrays (C66c): a shader's array has its size where it's made (written
+  // out, empty, or pushed onto), and WGSL's array<T, N> says it. Each
+  // function's array locals and answer get theirs from the code; one that
+  // takes an array as an input, or whose size depends on the way it went,
+  // is refused with the reason.
+  const arrSizes = new Map<number, { locals: Map<number, number>; result?: number }>();
+  const sizing = new Set<number>();
+  // The size of e, an array, in a function whose array locals' sizes are known.
+  const szOf = (locals: Map<number, number>, e: SExpr): number => {
+    const sz = (x: SExpr) => szOf(locals, x);
+    switch (e.k) {
+      case "local": { const n = locals.get(e.i); if (n === undefined) throw new Error("uses an array before its size is known"); return n; }
+      case "let": return sz(e.body);
+      case "if": case "attempt": case "budget": {
+        const [a, b] = e.k === "if" ? [sz(e.then), sz(e.else)] : e.k === "attempt" ? [sz(e.ok), sz(e.otherwise)] : [sz(e.body), sz(e.otherwise)];
+        if (a !== b) throw new Error(`gives an array of ${a} items one way and of ${b} another (a shader's array has one size)`);
+        return a;
+      }
+      case "call": { const r = sizesOf(e.fn).result; if (r === undefined) throw new Error(`uses ${funcs[e.fn].name}'s array`); return r; }
+      case "rt": {
+        const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
+        if (op === "of") return e.args.length;
+        if (op === "empty") return 0;
+        if (op === "push") return sz(e.args[0]) + 1;
+        throw new Error("keeps an array in an array");
+      }
+      default: throw new Error("uses an array where a shader can't tell its size");
+    }
+  };
+  const sizesOf = (i: number): { locals: Map<number, number>; result?: number } => {
+    if (arrSizes.has(i)) return arrSizes.get(i)!;
+    const f = funcs[i];
+    if (sizing.has(i)) throw new Error("makes an array whose size depends on how far it recurses");
+    if (f.params.some(isArray)) throw new Error("takes an array as an input (a shader's array has its size where it's made)");
+    sizing.add(i);
+    const locals = new Map<number, number>();
+    const walk = (e: SExpr) => {
+      if (e.k === "let") { walk(e.value); if (isArray(f.locals[e.i])) locals.set(e.i, szOf(locals, e.value)); walk(e.body); return; }
+      if (e.k === "attempt") { walk(e.body); if (isArray(f.locals[e.res])) locals.set(e.res, szOf(locals, e.body)); walk(e.ok); walk(e.otherwise); if (isArray(e.t)) szOf(locals, e); return; }
+      if (e.k === "make" && e.t.fields.some((x) => isArray(x.t))) throw new Error("keeps an array in a record");
+      kids(e).forEach(walk);
+      // Every array the printer will need the size of.
+      if ((e.k === "if" || e.k === "budget") && isArray(e.t)) szOf(locals, e);
+      if (e.k === "rt" && /^array\.(push|length|at)\./.test(e.fn)) szOf(locals, e.args[0]);
+    };
+    walk(f.body);
+    const r = { locals, ...(isArray(f.result) ? { result: szOf(locals, f.body) } : {}) };
+    sizing.delete(i);
+    arrSizes.set(i, r);
+    return r;
+  };
+  funcs.forEach((f, i) => {
+    if (bad.has(i) || (![...f.locals, f.result].some(isArray) && !hasRt(f.body))) return;
+    try { sizesOf(i); } catch (e) { if (!(e instanceof Error)) throw e; bad.set(i, e.message); }
   });
 
   // Recursion: edges of the call graph, leaving out calls to itself in tail
@@ -194,10 +327,15 @@ export function emitWgsl(lowered: Lowered): Shader {
     }
     return structs.get(r.key)!.name;
   };
-  function tname(t: LType): string {
-    return t === "f64" ? "f32" : t === "i32" ? "bool" : struct(t as RType);
+  // An array's type needs its size, n (an empty one is held in one slot).
+  function tname(t: LType, n?: number): string {
+    if (isArray(t)) {
+      if (n === undefined) throw new Error("an array's WGSL type needs its size");
+      return `array<${tname(t.item)}, ${Math.max(1, n)}>`;
+    }
+    return t === "f64" ? "f32" : t === "i32" ? "bool" : t === "int32" ? "i32" : struct(t as RType);
   }
-  for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) tname(t);
+  for (const i of kept) for (const t of [...funcs[i].locals, funcs[i].result]) if (!isArray(t)) tname(t);
 
   // The parts of a vector, each doing the same thing to the same part of
   // other vectors (or to one Float64 shared by all), as one vector
@@ -232,8 +370,8 @@ export function emitWgsl(lowered: Lowered): Shader {
           if (e.i >= f.params.length) return null;
           uses.set(e.i, (uses.get(e.i) ?? 0) + 1);
           return c.args[e.i];
-        case "num": case "bool": return e;
-        case "let": case "budget": return null;
+        case "num": case "bool": case "int": return e;
+        case "let": case "budget": case "attempt": case "zero": case "rt": return null;
         case "if": {
           const m = minmax(e);
           if (m) {
@@ -370,19 +508,26 @@ export function emitWgsl(lowered: Lowered): Shader {
   const text = kept.map((i) => func(funcs[i], i));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
-  const needsFuel = kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
+  // power multiplies with lab_imul.
+  const intOps = (Object.keys(INT_HELPERS) as Op[]).filter((op) => kept.some((i) => usesOp(funcs[i].body, op) || (op === "imul" && usesOp(funcs[i].body, "ipow"))));
+  const flags = (e: SExpr): boolean => e.k === "attempt" || (e.k === "zero" && !!e.none) || (e.k === "op" && NONE_OPS.has(e.op)) || (e.k === "rt" && /^array\.at\./.test(e.fn)) || kids(e).some(flags);
+  const needsNone = kept.some((i) => flags(funcs[i].body));
+  const needsFuel = intOps.length > 0 || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(needsPow ? [POW] : []),
     ...(needsMod ? [MOD] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
+    ...(needsNone ? ["// Set when a search has no answer; `first` looks at it (scalar.ts `shader`).\nvar<private> lab_none: bool;"] : []),
+    ...intOps.map((op) => INT_HELPERS[op]),
     ...structText,
     ...text,
   ].join("\n\n") + "\n";
   return {
     wgsl,
     // Only what can be called from outside a budget is a place to start.
-    funcs: kept.filter((i) => !funcs[i].budgeted).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
+    // A search with no answer outside any `first` isn't one either.
+    funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial && !isArray(funcs[i].result)).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
     refused,
     structs,
     matrices,
@@ -390,6 +535,9 @@ export function emitWgsl(lowered: Lowered): Shader {
 
   function func(f: SFunc, i: number): string {
     const loops = calls(f.body).some((c) => c.fn === i && c.tail);
+    // Sizes of the array locals, and the type of e (an array: with its size).
+    const L = arrSizes.get(i)?.locals ?? new Map<number, number>();
+    const ty = (t: LType, e: SExpr) => tname(t, isArray(t) ? szOf(L, e) : undefined);
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
     let temps = 0;
     const temp = () => `t${temps++}`;
@@ -399,6 +547,42 @@ export function emitWgsl(lowered: Lowered): Shader {
     function ex(e: SExpr, pre: string[], d: string): string {
       switch (e.k) {
         case "num": return num(e.v);
+        // No answer (`fail`): the flag, and a zero to go on with.
+        case "zero":
+          if (e.none) pre.push(`${d}lab_none = true;`);
+          return `${tname(e.t)}()`;
+        // first with a fallback, or count: the search with the flag clear,
+        // then the answer or the fallback by the flag, put back as it was.
+        case "attempt": {
+          const s = temp(), r = temp(), t = temp(), res = local(e.res);
+          pre.push(`${d}let ${s} = lab_none;`, `${d}lab_none = false;`, `${d}var ${res}: ${tname(f.locals[e.res], L.get(e.res))};`, ...block(e.body, { set: res }, d));
+          pre.push(`${d}let ${r} = lab_none;`, `${d}lab_none = ${s};`, `${d}var ${t}: ${ty(e.t, e)};`, `${d}if (${r}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}} else {`, ...block(e.ok, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
+        // std's Array (C66c): array<T, N>, its size where it's made.
+        case "rt": {
+          const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
+          const at = lowered.arrays[Number(/\.a(\d+)$/.exec(e.fn)![1])];
+          if (op === "of") return `${tname(at, e.args.length)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+          if (op === "empty") return `${tname(at, 0)}()`;
+          if (op === "push") {
+            const n = szOf(L, e.args[0]), a = temp();
+            pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
+            const x = bare(ex(e.args[1], pre, d));
+            return `${tname(at, n + 1)}(${[...Array.from({ length: n }, (_, j) => `${a}[${j}]`), x].join(", ")})`;
+          }
+          if (op === "length") { ex(e.args[0], pre, d); return `${szOf(L, e.args[0])}i`; }
+          if (op === "at") {
+            // No answer past the end: the flag (scalar.ts `shader`). A var,
+            // which WGSL lets a computed index read.
+            const n = szOf(L, e.args[0]), a = temp(), k = temp();
+            pre.push(`${d}var ${a} = ${bare(ex(e.args[0], pre, d))};`, `${d}let ${k} = ${bare(ex(e.args[1], pre, d))};`);
+            pre.push(`${d}if (${k} < 0i || ${k} >= ${n}i) { lab_none = true; }`);
+            return n ? `${a}[clamp(${k}, 0i, ${n - 1}i)]` : `${tname(at.item)}()`;
+          }
+          throw new Error(`${e.fn} isn't in shaders`);
+        }
+        case "int": return e.v === -(2n ** 31n) ? "(-2147483647i - 1i)" : `${e.v}i`;
         case "bool": return String(e.v);
         case "local": return local(e.i);
         case "let": {
@@ -416,7 +600,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           const m = minmax(e);
           if (m) return `${m.op}(${m.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
           const c = ex(e.cond, pre, d), t = temp();
-          pre.push(`${d}var ${t}: ${tname(e.t)};`, `${d}if (${bare(c)}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
+          pre.push(`${d}var ${t}: ${ty(e.t, e)};`, `${d}if (${bare(c)}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "make": {
@@ -440,7 +624,7 @@ export function emitWgsl(lowered: Lowered): Shader {
         }
         case "budget": {
           const s = temp(), t = temp();
-          pre.push(`${d}let ${s} = lab_fuel;`, `${d}lab_fuel = ${num(e.n)};`, `${d}var ${t}: ${tname(e.t)};`, ...block(e.body, { set: t }, d));
+          pre.push(`${d}let ${s} = lab_fuel;`, `${d}lab_fuel = ${num(e.n)};`, `${d}var ${t}: ${ty(e.t, e)};`, ...block(e.body, { set: t }, d));
           pre.push(`${d}if (lab_fuel < 0.0) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`, `${d}lab_fuel = ${s};`);
           return t;
         }
@@ -451,6 +635,8 @@ export function emitWgsl(lowered: Lowered): Shader {
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
+          if (e.op === "itof") return `f32(${bare(xs[0])})`;
+          if (INT_CALL[e.op]) return `${INT_CALL[e.op]}(${xs.map(bare).join(", ")})`;
           if (e.op === "pow") {
             const y = e.args[1];
             // x², x³, x⁴ as products, which is what they are.
@@ -527,8 +713,9 @@ export function emitWgsl(lowered: Lowered): Shader {
     }
 
     // One from the budget per call, and per round of the loop.
-    const spend = (d: string) => (f.spends ? [`${d}lab_fuel = lab_fuel - 1.0;`, `${d}if (lab_fuel < 0.0) { return ${tname(f.result)}(); }`] : []);
-    const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t)}`).join(", ")}) -> ${tname(f.result)}`;
+    const rt = tname(f.result, arrSizes.get(i)?.result);
+    const spend = (d: string) => (f.spends ? [`${d}lab_fuel = lab_fuel - 1.0;`, `${d}if (lab_fuel < 0.0) { return ${rt}(); }`] : []);
+    const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t)}`).join(", ")}) -> ${rt}`;
     const body = loops
       ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...spend("    "), ...block(f.body, "return", "    "), "  }"]
       : [...spend("  "), ...block(f.body, "return", "  ")];
@@ -595,8 +782,9 @@ function uses(e: SExpr, i: number): number {
 function put(e: SExpr, i: number, v: SExpr): SExpr {
   switch (e.k) {
     case "local": return e.i === i ? v : e;
-    case "num": case "bool": return e;
-    case "op": case "call": case "make": return { ...e, args: e.args.map((a) => put(a, i, v)) };
+    case "num": case "bool": case "int": case "zero": return e;
+    case "attempt": return { ...e, body: put(e.body, i, v), ok: put(e.ok, i, v), otherwise: put(e.otherwise, i, v) };
+    case "op": case "call": case "make": case "rt": return { ...e, args: e.args.map((a) => put(a, i, v)) };
     case "get": return { ...e, rec: put(e.rec, i, v) };
     case "if": return { ...e, cond: put(e.cond, i, v), then: put(e.then, i, v), else: put(e.else, i, v) };
     case "let": return { ...e, value: put(e.value, i, v), body: put(e.body, i, v) };
@@ -610,13 +798,18 @@ function gets(e: SExpr): Extract<SExpr, { k: "get" }>[] {
 function hasWhole(v: V): boolean {
   return v.k === "whole" || (v.k === "op" && v.args.some(hasWhole));
 }
+function hasRt(e: SExpr): boolean {
+  return e.k === "rt" || kids(e).some(hasRt);
+}
 function kids(e: SExpr): SExpr[] {
   switch (e.k) {
+    case "rt": return e.args;
     case "op": case "call": case "make": return e.args;
     case "get": return [e.rec];
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     case "budget": return [e.body, e.otherwise];
+    case "attempt": return [e.body, e.ok, e.otherwise];
     default: return [];
   }
 }

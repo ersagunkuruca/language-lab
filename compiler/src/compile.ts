@@ -735,7 +735,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // so only positions without it tell us what the variable stands for.
       if (s.eff.tail !== null && inner.has(s.eff.tail) && !s.eff.effs.includes(CHOICE) && !out.get(s.eff.tail)) out.set(s.eff.tail, choice(t.eff, rho));
       // The same for an operation answered later: a copy that waits (C40).
-      if (s.eff.tail !== null && inner.has(s.eff.tail) && laterRow(t.eff, lat)) waits.add(s.eff.tail);
+      // Only what the variable stands for counts: the operations the
+      // position names itself (`() ->{Animate | e}`, a handler's
+      // computation) are handled inside, so they don't make it wait (I37).
+      if (s.eff.tail !== null && inner.has(s.eff.tail)) {
+        const named = new Set(sub.resolveRow(s.eff).effs), r = sub.resolveRow(t.eff);
+        if (laterRow({ ...r, effs: r.effs.filter((e) => !named.has(e)) }, lat)) waits.add(s.eff.tail);
+      }
       s.params.forEach((p, i) => walk(p, t.params[i]));
       walk(s.ret, t.ret);
     };
@@ -1826,7 +1832,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // The normal finish (L57): the computation's value comes out marked,
         // so the case for it runs outside the handler and an escape's value
         // passes as it is.
-        if (arms.some((a) => isLater(a.variant))) throw notYet("a handler with a case for the normal finish and an operation answered later");
+        if (arms.some((a) => isLater(a.variant))) return handleLater(n, arms);
         const mark = temp("finished"), r = temp("r");
         const handled = handleEx({ ...n, otherwise: null }, (body) => `return [${mark}, (() => {\n${body}\n})()];`);
         return `(() => {\nconst ${mark} = {};\nconst ${r} = ${handled};\nreturn Array.isArray(${r}) && ${r}[0] === ${mark} ? (${ex(n.otherwise)})(${r}[1]) : ${r};\n})()`;
@@ -1866,8 +1872,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ops = `{ ${arms.filter((a) => isLater(a.variant)).map((a) => `${tag(a.variant)}: ${JSON.stringify(names[a.variant] ?? a.variant)}`).join(", ")} }`;
       const body = scoped(false, () => inGen(true, () => ret(n.scrutinee)));
       try { new Function(`"use strict";\n(function* () {\n${body}\n})`); } catch { throw notYet("an operation answered later performed inside a function the compiler makes (a search, a loop)"); }
-      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${now(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}))`;
-      return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n})`;
+      // The case for the normal finish (L57) runs on the computation's value
+      // when it finishes, after however many rests (I37).
+      const done = n.otherwise ? `, ${ex(n.otherwise)}${waits && laterFn(ty(n.otherwise), sp.lat) ? ", true" : ""}` : "";
+      if (!waits && n.otherwise && laterFn(ty(n.otherwise), sp.lat)) throw notYet("a handler's case for the normal finish that waits on another handler's operation");
+      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${now(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}${done}))`;
+      return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}${done})`;
     }
 
     function match(n: NodeOf<"match">): string {

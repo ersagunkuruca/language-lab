@@ -148,7 +148,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
-          e.addEventListener(name, (ev) => {
+          const handle = (ev: { key?: string; target?: unknown }) => {
             const target = (ev.target ?? e) as El & { type?: string };
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
             // One batch per event: the page updates once, after every write.
@@ -166,7 +166,12 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
               }
             };
             fire();
-          });
+          };
+          // "frame": once each time the browser draws, while the element is
+          // on the page, so a simulation steps without a hidden CSS
+          // animation to listen to (I80). Elsewhere it never comes.
+          if (name === "frame") everyFrame(e, () => handle({}));
+          else e.addEventListener(name, handle);
         } else if (a.tag === HTML_V.listen) {
           if (m.listen) m.listen(e, a);
           else console.warn("this page can't play sound here: build it with lab build-web");
@@ -182,6 +187,20 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
     }
     default: throw new Error(`not Html: ${d.tag}`);
   }
+}
+
+// Calls `tick` once a frame from when `e` is first on the page until it
+// leaves it (a redraw that drops it, the page closing).
+function everyFrame(e: El, tick: () => void) {
+  const raf = (globalThis as { requestAnimationFrame?: (f: () => void) => number }).requestAnimationFrame;
+  if (!raf) return;
+  let seen = false;
+  const step = () => {
+    const on = (e as El & { isConnected?: boolean }).isConnected;
+    if (on) { seen = true; tick(); } else if (seen) return;
+    raf(step);
+  };
+  raf(step);
 }
 
 // The page as HTML text, every function called once: what a static site

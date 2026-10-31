@@ -261,6 +261,36 @@ test("compiled JavaScript runs an operation answered later, and says so where it
   assert.deepEqual(await mapped.compiled(), ["[2, 4]"]);
 });
 
+test("a handler written as a function of the computation, called plainly, and one with a case for the normal finish: compiled (I37)", async () => {
+  const p = program((k) => {
+    const T = k.effect("Tick", [["tick", [["n", () => k.tref(NUMBER)]], () => k.tref(NUMBER), "later"]]);
+    const work = k.def("work");
+    k.define(work, k.fn(["x"], (x) => k.let("a", k.call(T.op.tick, x), (a) => k.call(T.op.tick, k.call(B.add, a, k.lit(1))))));
+    // The handled computation is a parameter: its row is Tick and a
+    // variable, so a plain caller's copy must not wait (Tumble's `at once`).
+    const atOnce = k.def("at once");
+    k.define(atOnce, k.fn(["chain"], (c) => k.handle(k.seq(k.call(c), k.x(NIL)), [
+      { variant: T.op.tick, names: ["n", "rest"], body: ([n, rest]) => k.call(CONS, n, k.call(rest, n)) },
+    ])));
+    const caller = k.def("caller");
+    k.define(caller, k.fn(["x"], (x) => k.call(atOnce, k.thunk(() => k.call(work, x)))));
+    // The finish case runs on the value after every rest has run.
+    const withDone = k.def("with done");
+    k.define(withDone, k.fn(["chain"], (c) => k.handle(k.call(c), [
+      { variant: T.op.tick, names: ["n", "rest"], body: ([n, rest]) => k.call(CONS, n, k.call(rest, k.call(B.add, n, k.lit(10)))) },
+    ], ["r", (r) => k.call(CONS, r, k.x(NIL))])));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(
+      say(k, k.call(SHOW_ANY, k.call(caller, k.lit(5)))),
+      say(k, k.call(SHOW_ANY, k.call(S.seeded, k.lit(1), k.thunk(() => k.call(caller, k.lit(5)))))),
+      say(k, k.call(SHOW_ANY, k.call(withDone, k.thunk(() => k.call(work, k.lit(1)))))))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.deepEqual(p.run(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
+  assert.deepEqual(await p.compiled(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
+});
+
 test("an operation answered later inside a search: the rest keeps the search's other choices", async () => {
   const p = program((k) => {
     const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
