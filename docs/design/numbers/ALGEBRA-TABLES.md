@@ -8,7 +8,9 @@ because the answer changes more than tables.
 **Status (2026-10-30).** Answered and built: Ersagun chose interfaces
 (INTERFACES.md, L40h), tables are std `Table` with the prelude's
 `table product` (L40d), and quaternions and `Cl(p, q, r)` are tables
-(L42a, L43a). Open: table products expanded at compile time (L41).
+(L42a, L43a). Geometry on top of them, rotors from `clifford exp`,
+reflections, projections and PGA motors, is L44b (MATRICES.md layer 2).
+Open: table products expanded at compile time (L41).
 
 ## The idea, briefly
 

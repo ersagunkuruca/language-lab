@@ -3,7 +3,11 @@
 **Status (2026-10-31).** Partly built. L44a (#570) gave std `Mat2`, `Mat3`
 and `Mat4`: records of Float64s in rows that join the one `+ − ·`. Their
 `·` is `table product` with the prelude's `matrix table`. Matrix times
-vector was the next step (BACKLOG L44).
+vector was the next step (BACKLOG L44). Layer 2 is built (L44b,
+2026-10-31): the prelude's `clifford sandwich`, `clifford reflect`,
+`clifford project` and `clifford exp` turn, mirror, project and move, for
+any signature, with PGA motors moving points (test/clifford.test.ts).
+Layers 1 and 3 are not built.
 
 Ersagun (2026-10-31) moved the question. A matrix shouldn't be the way a
 program says "transform this vector". Geometry has better words for it,
