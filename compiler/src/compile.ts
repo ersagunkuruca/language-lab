@@ -27,7 +27,7 @@
 
 import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
 import { intLit } from "../../projectional/src/lang/int.ts";
-import { children, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
+import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../projectional/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
@@ -86,6 +86,22 @@ const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 // a BigInt beyond.
 const intJs = (v: number | string): string => { const x = intLit(v); return typeof x === "bigint" ? `${x}n` : x < 0 ? `(${x})` : String(x); };
 
+// The definitions the exports reach, every type, and the builtins (all of
+// them when an export isn't found).
+function reachedFromExports(code: Code, names: Names, exports: string[]): Code {
+  const roots = exports.map((x) => code.defs.findLast((d) => names[d] === x));
+  if (roots.some((r) => !r)) return code;
+  const reach = new Set<Id>();
+  for (const r of roots as Id[]) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
+  const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
+  const defs = code.defs.filter((d) => reach.has(d) || isType(d));
+  if (defs.length === code.defs.length) return code;
+  const nodes: Code["nodes"] = {};
+  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
+  for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
+  return { nodes, defs };
+}
+
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
   // The generic + resolved to each type's own operation first
   // (projectional/src/lang/arith.ts): nothing here sees a generic one.
@@ -111,6 +127,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     names = inv.names;
     info = infer(code, names);
   }
+  // Only what the exports reach is compiled, so it is all the passes below
+  // look at and check again (C67): the library's other definitions were
+  // over half of each check. Types stay, and the builtins. The checked
+  // types still hold for what's left, so this needs no check of its own.
+  code = reachedFromExports(code, names, opts.exports);
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
@@ -1318,8 +1339,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // The array and index a matched list is, if it is one: a binder that
     // holds a part of an array, or `split` and `characters`, whose arrays
     // are made here. Only when the cons arm's rest is itself only matched.
-    function viewOf(id: Id): { pre: string; a: string; i: string } | null {
-      const m = code.nodes[up.get(id)!] as NodeOf<"match">;
+    // `m`: the match it is matched by (a node can sit under more than one
+    // parent where staging shared it, so it's passed, not looked up).
+    function viewOf(id: Id, m: NodeOf<"match">): { pre: string; a: string; i: string } | null {
       const cons = m.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
       if (cons && !onlyMatched(cons)) return null;
       const n = code.nodes[id];
@@ -1973,7 +1995,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const [t, e] = boolArms(n);
           return `${condition(n.scrutinee, (c) => `if (${c}) {\n${ret(t, tail, out, reuse)}\n}\n${ret(e, tail, out, reuse)}`)}`;
         }
-        const view = listMatch(n) ? viewOf(n.scrutinee) : null;
+        const view = listMatch(n) ? viewOf(n.scrutinee, n) : null;
         if (view) {
           // A list that is an array from `split` (or a part of one), taken
           // apart: an index into the array, and no cells (GAPS.md G23).
