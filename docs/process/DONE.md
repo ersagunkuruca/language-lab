@@ -14,6 +14,7 @@ superseded.
 
 | id | item | why |
 |---|---|---|
+| I82 | Changing one field of a record means writing all of them (Bounce's `Body`) | Already there: `set(field, record, value)` changes one field of any record, and several fields are sets chained, `set(b, set(a, r, 1), 2)` (checked 2026-10-31 on an 8-field record). The demo builder didn't use it. Closed by the Language lane with the T7 note's PR. |
 | C25 | Audio: a sound is a function on blocks of samples, played live by a page's `listen` (AUDIO.md) | all five stages done (A1 to A5 below); the pedal plays at apps/pedal.html, 39× real time compiled |
 | E77 | A fraction prints as `ratio(1, 2)` | done as L74 |
 | L19 | Numbers stage 1 (Int as data, Rational) and stage 2 (overloading by name) | superseded: Rational was L39, one `+` for every number type is L38 and L40h's interfaces |

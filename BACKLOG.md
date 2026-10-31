@@ -112,7 +112,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it). `set(field, record, value)` exists (LANGUAGE.md); the demo builder didn't use it, so check what is still missing (several fields at once, the editor) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | P3 | S | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
 
 ### Ersagun's current asks
