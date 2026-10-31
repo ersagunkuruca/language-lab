@@ -34,7 +34,8 @@ import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isArray, isData, isFn, kids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
-const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, i64: 0x7e };
+// int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
+const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag";
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
@@ -121,7 +122,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const exportName = (f: SFunc) => {
     const i = funcs.indexOf(f);
     if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
+    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
   };
 
   // ---- binary

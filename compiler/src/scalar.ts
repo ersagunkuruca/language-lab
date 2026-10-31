@@ -68,6 +68,11 @@ const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
 };
+// Int's builtins held in 32 bits (`int32`).
+const INT32: Record<Id, Op> = {
+  [INT_OPS.add]: "iadd", [INT_OPS.sub]: "isub", [INT_OPS.mul]: "imul", [INT_OPS.neg]: "ineg", [INT_OPS.abs]: "iabs",
+  [INT_OPS.less]: "iless", [INT_OPS.toNumber]: "itof",
+};
 // Builtins on Int and Text that are runtime functions (`data`).
 const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
@@ -91,7 +96,8 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 };
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
-export type SType = "f64" | "i32"; // Float64, Bool (0 or 1)
+// Float64, Bool (0 or 1), and Int held in 32 bits (`int32`, shaders: C66c).
+export type SType = "f64" | "i32" | "int32";
 // A record: a data type with one case, at particular type arguments.
 // `mutable`: a box the lowering makes (W4d), whose one field a search sets.
 export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true }
@@ -285,6 +291,10 @@ export const OPS = {
   sin: { t: "f64", host: true }, cos: { t: "f64", host: true }, tan: { t: "f64", host: true },
   exp: { t: "f64", host: true }, log: { t: "f64", host: true }, pow: { t: "f64", host: true }, atan2: { t: "f64", host: true }, mod: { t: "f64", host: true },
   less: { t: "i32" }, equal: { t: "i32" }, beq: { t: "i32" }, and: { t: "i32" }, or: { t: "i32" }, not: { t: "i32" },
+  // Int in 32 bits (`int32`): + − × negate abs past 32 bits give up as a
+  // budget running out does (wgsl.ts, js-scalar.ts).
+  iadd: { t: "int32" }, isub: { t: "int32" }, imul: { t: "int32" }, ineg: { t: "int32" }, iabs: { t: "int32" },
+  iless: { t: "i32" }, ieq: { t: "i32" }, itof: { t: "f64" },
 } as const satisfies Record<string, { t: SType; host?: boolean }>;
 
 
@@ -311,7 +321,9 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean } = {}): Lowered {
+// `int32`: without `data`, an Int is held in 32 bits (shaders, C66c), and a
+// result past them gives up as a budget running out does.
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; int32?: boolean } = {}): Lowered {
   // The generic + resolved to each type's own operation first
   // (projectional/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -414,6 +426,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
+    if (opts.int32 && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
     if (opts.data && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
@@ -594,6 +607,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "lit": {
         const t = stype(zonk(id));
         if (t === "int") return { k: "int", v: BigInt(n.value) };
+        if (t === "int32") {
+          const v = BigInt(n.value);
+          if (v < -(2n ** 31n) || v >= 2n ** 31n) throw new Refused(`uses ${v}, which is past 32 bits (an Int in a shader is held in 32)`);
+          return { k: "int", v };
+        }
         if (t === "text" && typeof n.value === "string") return { k: "text", v: n.value };
         if (typeof n.value !== "number" || t !== "f64") throw new Refused(opts.data ? "uses a value that isn't a Float64, Int or Text" : "uses a value that isn't a Float64");
         return { k: "num", v: n.value };
@@ -685,6 +703,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
           return { k: "rt", fn: RT[target], args: args() };
         }
+        if (opts.int32 && INT32[target]) return { k: "op", op: INT32[target], args: args() };
         if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
@@ -828,6 +847,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // equal on values of type t, by the evaluator's rule (run.ts equal).
   function same(x: SExpr, y: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
+    if (t === "int32") return { k: "op", op: "ieq", args: [x, y] };
     if (isFn(t)) throw new Refused("compares functions");
     if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
@@ -866,6 +886,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     }
     if (t === "i32") return pick({ k: "op", op: "beq", args: [x, y] }, { k: "op", op: "not", args: [x] });
     if (t === "int") return pick({ k: "rt", fn: "int.equal", args: [x, y] }, { k: "rt", fn: "int.less", args: [x, y] });
+    if (t === "int32") return pick({ k: "op", op: "ieq", args: [x, y] }, { k: "op", op: "iless", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
     if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
@@ -1269,7 +1290,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     switch (e.k) {
       case "local": return g.locals[e.i];
       case "num": return "f64";
-      case "int": return "int";
+      case "int": return opts.data ? "int" : "int32";
       case "bool": case "tag": return "i32";
       case "text": return "text";
       case "op": return OPS[e.op].t;
