@@ -60,7 +60,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [WAYS.md](design/numbers/WAYS.md) | Several ways to compute one operation, the compiler picking by cost | partly built (L96) |
 | [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | partly built: language done, editor I65, compiler C55 |
 | [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | partly built (L97) |
-| [MATRICES.md](design/numbers/MATRICES.md) | Small matrices: what matrix times vector needs | partly built (L44) |
+| [MATRICES.md](design/numbers/MATRICES.md) | Linear maps, geometry and matrices: functions stored as matrices, Clifford rotors, a linear-algebra library | partly built (L44) |
 | [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
 | [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
 
