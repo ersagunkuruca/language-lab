@@ -1,0 +1,22 @@
+{
+  "ehtjt6jlgquid3b5e0kcmgv6lu": "A multivector of the spacetime algebra Cl(1, 3): γ₀ squares to 1 (time), γ₁ γ₂ γ₃ to −1 (space). 16 parts: a number, 4 vectors (events, velocities), 6 bivectors (boosts, rotations, the electromagnetic field), 4 trivectors and the pseudoscalar I = γ₀γ₁γ₂γ₃. Parts in clifford table's order.",
+  "1nqt53h2v501n4v1ho822el7tc": "The signature (+, −, −, −): Cl(1, 3).",
+  "shnk8nvqb7bpueciv0aite94jh": "The 16 basis blades, in clifford table's order.",
+  "sa5ed3m7irvecqlqgl2o0le0dd": "The algebra's multiplication table, made once from the signature.",
+  "khvo51vco74rnpaibalerp2slc": "ã, the reverse.",
+  "m663ir7dduen5d0p76fj0e6i98": "The number part of a multivector.",
+  "8at5nmfbc8t83pi437tqmspha1": "The part along I = γ₀γ₁γ₂γ₃.",
+  "ndlakh2de28umk301p6f8t0hum": "x σ₁ + y σ₂ + z σ₃, where σₖ = γₖγ₀: a vector in the space of the observer whose time is γ₀ (Hestenes' spacetime split).",
+  "jr3b9ibpq1em4sounn8ap0bsmi": "The electromagnetic field as one bivector, F = E + I B (units with c = 1).",
+  "8fuevk7pjfb88juu7u75k4uijk": "The rotor that boosts by velocity β along x: e^(φ/2 σ₁), with rapidity φ = artanh β. σ₁ squares to +1, so clifford exp gives cosh and sinh: a boost is a hyperbolic rotation.",
+  "d2h9k5nrlep6igcp9svnmcdm6g": "β, the speed of a four-velocity as a fraction of c: its γ₁ part over its γ₀ part.",
+  "fufh1lbfd2prsbtu1tlruiq4cv": "γ = 1/√(1 − β²), the four-velocity's γ₀ part.",
+  "f8bam61lfl22t9nq7ae9que204": "Where a charge goes: each proper-time step dτ turns its four-velocity by the same rotor (u → R u R̃), and its position moves by the average velocity over the step. n steps.",
+  "fgqc4op4cu7cb6pr7bl01vr8iv": "The path of a charge (charge over mass 1) starting at rest in the field F. Its four-velocity obeys du/dτ = F · u, whose answer for a constant field is u(τ) = e^(τF/2) u₀ e^(−τF/2) (Hestenes): the step rotor is e^(dτ F/2), a rotation when B > E, a boost when E > B, and 1 + F dτ/2 when they are equal.",
+  "8mpvdf7srpkqseljcb26lmqko0": "x to three decimals.",
+  "bisl4bo8qcavh377p52r83td1a": "A labelled slider for a number cell; what it says is read back with inverse(show, …), show run backwards.",
+  "781fkbrbu6319d9mj13btu4a11": "A charge's path seen from above (x across, y up), scaled to fit, with the axes through where it started.",
+  "46ngkq9ose1rg5a5l7tkspnt99": "The page's style sheet, in the house look of the other demos.",
+  "mnrbuvndlh2ens6kiji9ioackd": "Who this page borrows from, shown on the page (CREDITS.md).",
+  "v0ave5snqjc1qj886ssv6ria38": "The page: sliders for two speeds and a field, and three cards that read them."
+}

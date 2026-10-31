@@ -71,3 +71,41 @@ construction takes 0.02 ms in compiled JS (1.5 ms before #724).
 | G5 | **relate needs about 6,400 steps to check one `clifford reflect`,** over the agreement test's budget of 5,000, so the test reports a disagreement where there is none. `mirror` is written inline in `made` instead of as its own definition. | 6,395 steps for one call | new row |
 | G6 | **The agreement test skipped a NaN only when it was the whole answer, not inside a record.** A point with no weight (sampled as all zeros) gives a record of NaNs, which it reported as a disagreement. Fixed in this PR, since it is the test's own rule, applied one level down. | `midpoint` and `turned` | fixed here |
 
+## 3. Spacetime: relativity and electromagnetism in Cl(1, 3)
+
+`projectional/examples/spacetime`, built as `apps/spacetime.html`. Sliders
+set two speeds β₁ and β₂ and a field (E along y, B along z). The page has
+three cards:
+
+- **Boosts.** A boost along x is `clifford exp(φ/2 · σ₁)`, and the speed
+  after two boosts is read off R₂R₁ γ₀ (R₂R₁)~. It equals (β₁ + β₂)/(1 + β₁β₂)
+  without that formula being written anywhere.
+- **The field a moving observer sees.** It is F′ = R̃ F R. E′ and B′ are read
+  off as ⟨F′σₖ⟩ and the I part of F′σₖ, and the two invariants of F²
+  stay the same.
+- **A charge in that field.** It starts at rest, and each proper-time step
+  turns its four-velocity by the one step rotor e^(dτF/2) (Hestenes). With
+  B > E it loops and drifts along E × B, with E > B it runs away, and
+  with E = B the rotor is 1 + dτF/2. These are the three cases of
+  `clifford exp`, shown live.
+
+What worked:
+
+- Every number on the page is a product in one algebra, and the formulas
+  shown beside them are only there to compare.
+- Reading a typed number back with `inverse(show, …)`, the converter's
+  trick, works for the sliders too.
+- With the algebra written down, C65 (#724) makes the 400-step path take
+  2 ms in compiled JS. The same path took about 300 ms for 240 steps
+  before #724.
+
+### Gaps
+
+| # | gap | measured | row |
+|---|---|---|---|
+| S1 | **`clifford exp` needs a bivector whose square is a number.** An electromagnetic field with E·B ≠ 0 squares to a number plus an I part, so the charge's step rotor can't be made, and the page only offers E ⟂ B. Splitting F into commuting parts (F = F₁ + I F₂ … the invariant decomposition) or a series would cover it. | E and B fixed at right angles | new row |
+| S2 | **The evaluator doesn't get C65.** The path that compiled JS makes in 2 ms takes about 8 s in the evaluator, so the page can't run in the editor's preview. | 8 s against 2 ms | I79 |
+| S3 | **No way to show a number to a fixed number of decimals.** The page writes `rounded` (floor(1000x + ½)/1000), as other pages do with their own helpers. | one helper | new row |
+| S4 | **Reading a blade's part means matching all 16 parts.** `scalar part` and `pseudoscalar part` each name 16 fields to take one, and E′ and B′ need a product with σₖ to get at a part (see B4). | two helpers | I81 widened |
+| S5 | **relate run backwards through a Cl(1, 3) product doesn't stop at its step budget.** Given only the answer, relating `times` (a 256-line table product of two unknowns) ran for minutes, and the agreement test ran out of memory. Run forwards, it stays within budget (4,753 steps). Constructions' 8-part product was fine. The demo writes `times`, `moved by`, `along` and `velocity of` inline instead of as definitions. | the agreement test runs out of memory | new row, P2 (a bug) |
+
