@@ -211,3 +211,33 @@ test("clifford outer, inner, grade, dual, undual and regressive, evaluated and c
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
+
+// clifford exp of a bivector whose square isn't a number (BACKLOG I92): in
+// Cl(1, 3), F = a e₀₁ + c e₂₃ (E along x, B along x: E·B ≠ 0) squares to
+// a² − c² + 2ac e₀₁₂₃. Its two parts commute, so e^F is
+// (cosh a + sinh a e₀₁)(cos c + sin c e₂₃), which the series must give.
+test("clifford exp by series when b² has a pseudoscalar part, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const M = k.type("Spacetime", [], [["spacetime", Array.from({ length: 16 }, (_, i) => [`p${i}`, num] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number>) => k.call(M.v.spacetime, ...Array.from({ length: 16 }, (_, i) => k.lit(parts[i] ?? 0)));
+  const basis = def("sta basis", () => k.list(...Array.from({ length: 16 }, (_, i) => at({ [i]: 1 }))));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...[1, -1, -1, -1].map((x) => k.lit(x))), k.x(basis), ...xs);
+  const cases: [number, number][] = [[0.3, 0.7], [1.5, -2], [0, 3]];
+  const names = cases.map(([a, c], i) => { def(`field ${i}`, () => k.call(SHOW_ANY, call("clifford exp", at({ 3: a, 12: c })))); return `field ${i}`; });
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  const nm = baseNames(k.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
+  const parts = (v: Value) => { const s = String(v); return s.slice(s.indexOf("(") + 1, -1).split(", ").map(Number); };
+  cases.forEach(([a, c], i) => {
+    const want: Record<number, number> = { 0: Math.cosh(a) * Math.cos(c), 3: Math.sinh(a) * Math.cos(c), 12: Math.cosh(a) * Math.sin(c), 15: Math.sinh(a) * Math.sin(c) };
+    parts(got[i]).forEach((x, j) => assert.ok(Math.abs(x - (want[j] ?? 0)) < 1e-9, `e^(${a} e01 + ${c} e23): ${got[i]}`));
+  });
+  const path = join(mkdtempSync(join(tmpdir(), "series-")), "series.js");
+  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+});
