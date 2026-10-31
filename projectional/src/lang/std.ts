@@ -780,7 +780,22 @@ export const SET = builtin("set", "set", (s) => {
   return fn([fn([r], a, s.freshRow()), r, a], r, s.freshRow());
 });
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
+// A Clifford algebra built once (BACKLOG I79): its signature (the squares
+// of its basis vectors), its basis, each blade beside its basis element,
+// and its multiplication table, so the prelude's clifford functions don't
+// build one on every call. (clifford outer and inner still build theirs:
+// three tables made eagerly cost relate's checks more than they saved.)
+// `clifford algebra(squares, basis)` makes one.
+export const ALGEBRA = typedef("std.algebra", "Algebra", ["a"], [
+  ["algebra", [
+    ["squares", () => tref(LIST, tref(NUMBER))],
+    ["basis", ([a]) => tref(LIST, tref(a))],
+    ["blades", ([a]) => tref(LIST, tref(PAIR, tref(LIST, tref(BOOL)), tref(a)))],
+    ["table", ([a]) => tref(LIST, tref(TABLE_ENTRY, tref(a)))],
+  ]],
+]);
+export const ALGEBRA_V = "std.algebra.algebra";
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

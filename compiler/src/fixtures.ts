@@ -618,8 +618,9 @@ export function pga() {
   const at = (parts: Record<number, number>) => of(...Array.from({ length: size }, (_, i) => k.lit(parts[i] ?? 0)));
   const basis = def("pga basis", () => k.list(...Array.from({ length: size }, (_, i) => at({ [i]: 1 }))));
   const squares = () => k.list(...[1, 1, 1, 0].map((x) => k.lit(x)));
-  const call = (f: string, ...xs: Id[]) => k.call(lib(f), squares(), k.x(basis), ...xs);
-  const mul = (a: Id, b: Id) => k.call(lib("table product"), k.call(lib("clifford table"), squares(), k.x(basis)), a, b);
+  const algebra = def("pga", () => k.call(lib("clifford algebra"), squares(), k.x(basis)));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.x(algebra), ...xs);
+  const mul = (a: Id, b: Id) => call("clifford product", a, b);
   const P = k.type("Point", [], [["point", ["x", "y", "z", "w"].map((p) => [p, num] as [string, () => Id])]]);
   const part = (i: number) => M.f[`pga.p${i}`], coord = (c: string) => P.f[`point.${c}`];
   const neg = (x: Id) => k.call(B.neg, x);
@@ -631,12 +632,12 @@ export function pga() {
   const moveBy = def("move by", () => k.fn(["m", "p"], (m, p) => call("clifford sandwich", m, p)));
   const moveFixed = def("move fixed", () => k.fn(["p"], (p) => call("clifford sandwich", k.x(motor), p)));
   const movePoint = def("move point", () => k.fn(["p"], (p) => k.call(fromPga, call("clifford sandwich", k.x(motor), k.call(toPga, p)))));
-  // Generic code given the algebra as a value (I86): a space holding its
-  // squares and basis, passed on from one function to the next.
-  const S = k.type("Space", [], [["space", [["squares", () => k.tref("std.list", num())], ["basis", () => k.tref("std.list", k.tref(M.def))]]]]);
-  const sandwichIn = def("sandwich in", () => k.fn(["s", "m", "p"], (s, m, p) => k.call(lib("clifford sandwich"), k.call(S.f["space.squares"], s), k.call(S.f["space.basis"], s), m, p)));
+  // Generic code given the algebra as a value (I86): a space holding it,
+  // passed on from one function to the next.
+  const S = k.type("Space", [], [["space", [["algebra", () => k.tref("std.algebra", k.tref(M.def))]]]]);
+  const sandwichIn = def("sandwich in", () => k.fn(["s", "m", "p"], (s, m, p) => k.call(lib("clifford sandwich"), k.call(S.f["space.algebra"], s), m, p)));
   const moveIn = def("move in", () => k.fn(["s", "p"], (s, p) => k.call(fromPga, k.call(sandwichIn, s, k.x(motor), k.call(toPga, p)))));
-  const space = def("pga space", () => k.call(S.v.space, squares(), k.x(basis)));
+  const space = def("pga space", () => k.call(S.v.space, k.x(algebra)));
   const moveGiven = def("move given", () => k.fn(["p"], (p) => k.call(moveIn, k.x(space), p)));
   // Given a list of points as well, the call can't be worked out whole:
   // `total x in` gets a copy for the space instead.

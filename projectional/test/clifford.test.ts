@@ -89,7 +89,8 @@ test("clifford reverse: rotors of Cl(3, 0) turn vectors and multiply as quaterni
   const basis = def("cl3 basis", () => k.list(...Array.from({ length: 8 }, (_, i) => of(...Array.from({ length: 8 }, (_, j) => (j === i ? 1 : 0))))));
   const table = def("cl3 table", () => k.call(lib("clifford table"), squares(), k.x(basis)));
   const mul = (a: Id, b: Id) => k.call(lib("table product"), k.x(table), a, b);
-  const rev = (a: Id) => k.call(lib("clifford reverse"), squares(), k.x(basis), a);
+  const algebra = def("cl3", () => k.call(lib("clifford algebra"), squares(), k.x(basis)));
+  const rev = (a: Id) => k.call(lib("clifford reverse"), k.x(algebra), a);
   const rotor = (t: number) => of(Math.cos(t / 2), 0, 0, -Math.sin(t / 2), 0, 0, 0, 0);
   const quat = ([w, i, j, q]: number[]) => [w, 0, 0, -q, 0, j, -i, 0];
   const names: string[] = [];
@@ -130,8 +131,9 @@ test("clifford sandwich, reflect, project and exp: rotors, mirrors and PGA motor
     const of = (...ps: number[]) => k.call(M.v[name.toLowerCase()], ...ps.map((p) => k.lit(p)));
     const at = (parts: Record<number, number>) => of(...Array.from({ length: size }, (_, i) => parts[i] ?? 0));
     const basis = def(`${name} basis`, () => k.list(...Array.from({ length: size }, (_, i) => at({ [i]: 1 }))));
-    const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...squares.map((x) => k.lit(x))), k.x(basis), ...xs);
-    const mul = (a: Id, b: Id) => k.call(lib("table product"), k.call(lib("clifford table"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)), a, b);
+    const algebra = def(`${name} algebra`, () => k.call(lib("clifford algebra"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)));
+    const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.x(algebra), ...xs);
+    const mul = (a: Id, b: Id) => call("clifford product", a, b);
     return { at, call, mul };
   };
   const names: string[] = [];
@@ -181,7 +183,8 @@ test("clifford outer, inner, grade, dual, undual and regressive, evaluated and c
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const at = (parts: Record<number, number>) => k.call(M.v.multivector, ...Array.from({ length: 8 }, (_, i) => k.lit(parts[i] ?? 0)));
   const basis = def("cl3 basis", () => k.list(...Array.from({ length: 8 }, (_, i) => at({ [i]: 1 }))));
-  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...[1, 1, 1].map((x) => k.lit(x))), k.x(basis), ...xs);
+  const algebra = def("cl3", () => k.call(lib("clifford algebra"), k.list(...[1, 1, 1].map((x) => k.lit(x))), k.x(basis)));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.x(algebra), ...xs);
   const all = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8 };
   const cases: [string, () => Id, Record<number, number>][] = [
     ["e1 ∧ e2", () => call("clifford outer", at({ 1: 1 }), at({ 2: 1 })), { 3: 1 }],
@@ -223,7 +226,8 @@ test("clifford exp by series when b² has a pseudoscalar part, evaluated and com
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const at = (parts: Record<number, number>) => k.call(M.v.spacetime, ...Array.from({ length: 16 }, (_, i) => k.lit(parts[i] ?? 0)));
   const basis = def("sta basis", () => k.list(...Array.from({ length: 16 }, (_, i) => at({ [i]: 1 }))));
-  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.list(...[1, -1, -1, -1].map((x) => k.lit(x))), k.x(basis), ...xs);
+  const algebra = def("sta", () => k.call(lib("clifford algebra"), k.list(...[1, -1, -1, -1].map((x) => k.lit(x))), k.x(basis)));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.x(algebra), ...xs);
   const cases: [number, number][] = [[0.3, 0.7], [1.5, -2], [0, 3]];
   const names = cases.map(([a, c], i) => { def(`field ${i}`, () => k.call(SHOW_ANY, call("clifford exp", at({ 3: a, 12: c })))); return `field ${i}`; });
   const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);

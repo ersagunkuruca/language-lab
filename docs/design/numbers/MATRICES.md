@@ -16,8 +16,8 @@ constants round once, so the last bits can differ from the evaluator's.
 In WGSL (C30c) a vector whose parts are one other vector's parts times
 constants prints as `mat3x3f(…) * v + b`, and a composition is one matrix
 there too (wgsl.ts `affine`). Since C65 (stage.ts) a call given its
-algebra as data, such as `clifford sandwich([1, 1, 1, 0], basis, motor,
-p)`, is worked out when compiled into plain arithmetic, so layer 2 reaches
+algebra as data, such as `clifford sandwich(pga, motor, p)` with
+`pga = clifford algebra([1, 1, 1, 0], basis)`, is worked out when compiled into plain arithmetic, so layer 2 reaches
 shaders, and a motor known now moving a point (x, y, z, w) prints as
 `mat4x4f(…) * p`: the homogeneous matrix of `vec4(x, y, z, 1)` is the PGA
 motor, read off by the compiler. Since I86 the algebra can be a value
