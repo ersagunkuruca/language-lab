@@ -469,7 +469,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| W6 | Every Try it in GUIDE.md (sections 1 to 9) has the editor embedded under it: read-only where the step only reads, live where it edits (main of two dice, Effects area, queens main, square backwards, a hundred rolls); edits there aren't kept | this PR |
+| W7 | The tutorial's pictures, case by case: each picture of a definition is now that definition embedded (discriminant, magnitude, queens, fall live, rotate, to polar, cubic, cubic′; fall's Run picture folded into its live embed); the editor, the right-click menu and the let/get view are retaken from today's editor | this PR |
+| W6 | Every Try it in GUIDE.md (sections 1 to 9) has the editor embedded under it: read-only where the step only reads, live where it edits (main of two dice, Effects area, queens main, square backwards, a hundred rolls); edits there aren't kept | #714 |
 | W5 | TUTORIAL.md in plainer words, like the guide (W3): short sentences, one idea per paragraph, lists for gestures and steps; the out-of-date banner is gone (its points were already fixed in the text), the editor tour is its own short section, and the screenshots are marked as from 2026-10-22 | #713 |
 | W4 | The tutorial's "What's confusing, and what could be simpler" moved to docs/design/CONFUSING.md: it's for us, not for readers; the tutorial's opening says what it is and links there | #712 |
 | W3 | GUIDE.md in plainer words: short sentences, one idea per paragraph, steps as numbered lists; section 8 adds a button with Add one after (E91) instead of the old cut-and-append detour, and section 9 quotes today's held-type refusal, not the old "pinned" one | this PR |

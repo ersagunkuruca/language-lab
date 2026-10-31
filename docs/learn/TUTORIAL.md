@@ -53,8 +53,9 @@ Colour means something in only a few places. Blue is what's selected, and
 values. Purple is dots. Amber is holes and refusals. Everything else is
 grey.
 
-*The screenshots are from the editor as it was on 2026-10-22. A few
-details have moved since, but what they show still works.*
+Most of the pictures below are the editor itself, embedded in the page.
+The read-only ones can't be changed, but you can click and hover in them.
+The live ones can be edited; nothing you do there is kept.
 
 ---
 
@@ -110,7 +111,7 @@ changes once it's made.
 That's why a program can be drawn. Every value is a node, and every use of
 it is a wire.
 
-![The discriminant: three inputs, four calls, one result. The blue chips are the values for the example inputs 1, −3, 2.](tutorial/discriminant.png)
+?[discriminant, read-only: three inputs, four calls, one result; the blue chips are the values for the example inputs 1, −3, 2](index.html?embed&readonly&program=numbers&def=%CE%94)
 
 ### 2. Functions are values too
 
@@ -257,7 +258,7 @@ wire runs under a node, its hidden stretch shows faintly on top, like a
 tunnel. [NODE-EDITOR.md](../design/editor/NODE-EDITOR.md) has the
 reasons.
 
-![Right-clicking the column dot in queens](tutorial/menu.png)
+![Right-clicking column in queens](tutorial/menu.png)
 
 ### 3.3 Dots: where a value starts and branches
 
@@ -384,7 +385,7 @@ frame per case, and that frame's inputs are the case's fields.
 **`if`** is a match on `Bool`. It's drawn the same way, with inputs
 labelled `condition`, `then` and `else`.
 
-![magnitude: an if whose then case negates x](tutorial/magnitude.png)
+?[magnitude, read-only: an if whose then case negates x](index.html?embed&readonly&program=backwards&def=magnitude)
 
 Two gestures make sure a match never misses a case:
 
@@ -441,7 +442,7 @@ children is the list of their results.
 The eight queens program is a fold over the rows. For each row, it picks a
 column, and keeps it only if it's safe.
 
-![queens: a fold over range(size), with one of, if and fail inside the cons case](tutorial/queens.png)
+?[queens, read-only: a fold over range(size), with one of, if and fail inside the cons case; click ▸ on the folded box to open it](index.html?embed&readonly&program=queens&def=queens)
 
 **A function can call itself.** The checker looks at every chain of calls
 that comes back to where it started. Along each one, some input must get
@@ -612,7 +613,7 @@ search says so instead of guessing.
 **A function that says true or false is a set of equations.** `fall` has
 four inputs:
 
-![fall: distance = drift + drop, where drift and drop are dots](tutorial/fall.png)
+?[fall, live: distance = drift + drop, where drift and drop are dots; open Run to solve it](index.html?embed&program=numbers&def=fall)
 
 Each `=` in it is an equation. `and` puts several together. A dot on a
 wire, like `drift` or `drop`, is just a name for part of an equation.
@@ -625,8 +626,6 @@ Give it `distance` and ask for `time`. Thrown down at 5 m/s, a fall of
 answer. *The program it derives for this direction* shows the quadratic
 formula the solver worked out.
 
-![The Run panel for fall: distance ticked, time solved](tutorial/fall-run.png)
-
 Two more words make true-or-false functions as expressive as wiring:
 
 - **`for some`** names a value that isn't an input.
@@ -638,7 +637,7 @@ Two more words make true-or-false functions as expressive as wiring:
   and `y`, it finds `length` with a square root, with no search. It
   doesn't count as an extra condition.
 
-![rotate: two polars that share a length and an angle, inside for some](tutorial/rotate.png)
+?[rotate, read-only: two polars that share a length and an angle, inside for some](index.html?embed&readonly&program=numbers&def=rotate)
 
 **Units are part of the type.** Put `m` on `distance` and `m/s²` on
 `gravity`, and the rest is worked out: `period` comes out in seconds, and
@@ -657,7 +656,7 @@ can be solved and then checked.
 programs*). The ports you give it are its inputs. The ones it solves for
 come out on its right, all from the same solution.
 
-![to polar as a solve node inside a program](tutorial/to-polar-solve.png)
+?[to polar, read-only: a solve node inside a program](index.html?embed&readonly&program=relations&def=to%20polar)
 
 Its effect depends on the direction. If there's always exactly one answer,
 like the missing number in a sum, it's pure. If there may be several, or
@@ -677,8 +676,9 @@ another function.
 node. Each operation's slopes come from the same table that runs it
 forwards and backwards.
 
-![cubic](tutorial/cubic.png)
-![cubic′, generated from cubic](tutorial/cubic-prime.png)
+?[cubic, read-only](index.html?embed&readonly&program=calculus&def=cubic)
+
+?[cubic′, read-only: generated from cubic](index.html?embed&readonly&program=calculus&def=cubic%E2%80%B2)
 
 It works through lets, calls of other definitions (each gets its own
 generated derivative), `if` and `match` (each case is differentiated), and
@@ -806,7 +806,7 @@ These are the words the editor's *Guide* tab uses, one word per thing:
 - What's still confusing is in [CONFUSING.md](../design/CONFUSING.md), and
   what's next is in [BACKLOG.md](../../BACKLOG.md). Every document is in
   [the docs index](../README.md).
-- The screenshots are in `docs/learn/tutorial/`.
+- The screenshots are in `docs/learn/tutorial/`, retaken on 2026-10-31.
 
 ## Credits
 
