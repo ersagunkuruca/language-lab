@@ -306,9 +306,12 @@ export function emitWgsl(lowered: Lowered): Shader {
       return { c, k: a.k + sgn * b.k };
     };
     // The outer function's vector, read as its parts.
-    const opaque = (e: SExpr, t: LType | undefined): AV | null => {
+    // (Not one that reads a let this reading has looked through: that let
+    // isn't printed when the matrix is.)
+    const opaque = (e: SExpr, t: LType | undefined, env: Map<number, AV>): AV | null => {
       const w = t ? vectorWidth(t) : 0;
       if (!w || (base && (!same(base, e) || m !== w))) return null;
+      if (reads(e).some((i) => env.has(i))) return null;
       base = e; m = w;
       return Array.from({ length: w }, (_, j) => ({ c: new Map([[j, 1]]), k: 0 }));
     };
@@ -317,16 +320,14 @@ export function emitWgsl(lowered: Lowered): Shader {
     const val = (e: SExpr, env: Map<number, AV>, inner: boolean): AV | null => {
       switch (e.k) {
         case "num": return konst(e.v);
-        case "local": return env.get(e.i) ?? (inner ? null : opaque(e, f.locals[e.i]));
+        case "local": return env.get(e.i) ?? (inner ? null : opaque(e, f.locals[e.i], env));
         case "let": {
-          // Lets of the outer function are statements already.
-          if (!inner) return null;
           const v = val(e.value, env, inner);
           return v && val(e.body, new Map(env).set(e.i, v), inner);
         }
         case "make": { const xs = e.args.map((a) => val(a, env, inner)); return xs.every((x) => x) ? (xs as AV[]) : null; }
         case "get": {
-          const r = val(e.rec, env, inner) ?? (inner ? null : opaque(e.rec, e.t));
+          const r = val(e.rec, env, inner) ?? (inner ? null : opaque(e.rec, e.t, env));
           return Array.isArray(r) ? r[e.i] ?? null : null;
         }
         case "op": {
@@ -345,7 +346,7 @@ export function emitWgsl(lowered: Lowered): Shader {
         case "call": {
           const g = funcs[e.fn];
           if (bad.has(e.fn) || depth > 8 || calls(g.body).some((c) => c.fn === e.fn)) return null;
-          const args = e.args.map((a, j) => val(a, env, inner) ?? (inner ? null : opaque(a, g.params[j])));
+          const args = e.args.map((a, j) => val(a, env, inner) ?? (inner ? null : opaque(a, g.params[j], env)));
           if (!args.every((x) => x)) return null;
           depth++;
           const out = val(g.body, new Map(args.map((x, j) => [j, x!])), true);
@@ -400,9 +401,17 @@ export function emitWgsl(lowered: Lowered): Shader {
         case "num": return num(e.v);
         case "bool": return String(e.v);
         case "local": return local(e.i);
-        case "let":
+        case "let": {
+          // Lets that end in a vector made from one vector's parts: the
+          // matrix, and none of the lets (staged code, stage.ts, is this).
+          let tail: SExpr = e;
+          while (tail.k === "let") tail = tail.body;
+          const t = tail.k === "make" ? tail.t : tail.k === "call" ? funcs[tail.fn].result : null;
+          const a = t && vectorWidth(t) ? affine(e, f) : null;
+          if (a && mixes(a)) return matrix(a, pre, d);
           pre.push(`${d}let ${local(e.i)} = ${bare(ex(e.value, pre, d))};`);
           return ex(e.body, pre, d);
+        }
         case "if": {
           const m = minmax(e);
           if (m) return `${m.op}(${m.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
@@ -424,8 +433,8 @@ export function emitWgsl(lowered: Lowered): Shader {
           return `${r}.${structs.get(e.t.key)!.fields[e.i]}`;
         }
         case "call": {
-          // A linear function of a linear function: one matrix.
-          const a = vectorWidth(funcs[e.fn].result) && e.args.some((x) => x.k === "call") ? affine(e, f) : null;
+          // A linear function of a linear function (or of staged code): one matrix.
+          const a = vectorWidth(funcs[e.fn].result) && e.args.some((x) => x.k === "call" || x.k === "let") ? affine(e, f) : null;
           if (a && !a.rows.every((r) => r.c.size === 0)) return matrix(a, pre, d);
           return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
@@ -545,6 +554,10 @@ function num(v: number): string {
   return v < 0 || Object.is(v, -0) ? `(-${lit})` : lit;
 }
 
+// The locals e reads.
+function reads(e: SExpr): number[] {
+  return [...(e.k === "local" ? [e.i] : []), ...kids(e).flatMap(reads)];
+}
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
   return [...(e.k === "call" ? [e] : []), ...kids(e).flatMap(calls)];
 }

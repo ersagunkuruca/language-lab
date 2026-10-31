@@ -15,7 +15,12 @@ multiply-adds, when that is fewer of them (compile.ts `linearCall`). Its
 constants round once, so the last bits can differ from the evaluator's.
 In WGSL (C30c) a vector whose parts are one other vector's parts times
 constants prints as `mat3x3f(…) * v + b`, and a composition is one matrix
-there too (wgsl.ts `affine`). Layer 3 is not built.
+there too (wgsl.ts `affine`). Since C65 (stage.ts) a call given its
+algebra as data, such as `clifford sandwich([1, 1, 1, 0], basis, motor,
+p)`, is worked out when compiled into plain arithmetic, so layer 2 reaches
+shaders, and a motor known now moving a point (x, y, z, w) prints as
+`mat4x4f(…) * p`: the homogeneous matrix of `vec4(x, y, z, 1)` is the PGA
+motor, read off by the compiler. Layer 3 is not built.
 
 Ersagun (2026-10-31) moved the question. A matrix shouldn't be the way a
 program says "transform this vector". Geometry has better words for it,

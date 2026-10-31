@@ -39,15 +39,22 @@
     local.get $l1
     local.get $l1
     f64.mul)
+  ;; parabola
+  (func $parabola4 (export "parabola") (param $p0 f64) (result f64)
+    f64.const -2
+    local.get $p0
+    local.get $p0
+    f64.mul
+    f64.add)
   ;; x² − 2
-  (func $x_24 (export "x² − 2") (param $p0 f64) (result f64)
+  (func $x_25 (export "x² − 2") (param $p0 f64) (result f64)
     local.get $p0
     local.get $p0
     f64.mul
     f64.const 2
     f64.sub)
   ;; cubic′
-  (func $cubic_5 (export "cubic′") (param $p0 f64) (result f64)
+  (func $cubic_6 (export "cubic′") (param $p0 f64) (result f64)
     local.get $p0
     local.get $p0
     local.get $p0
@@ -60,14 +67,14 @@
     f64.const 1
     f64.sub)
   ;; wave′
-  (func $wave_6 (export "wave′") (param $p0 f64) (result f64)
+  (func $wave_7 (export "wave′") (param $p0 f64) (result f64)
     local.get $p0
     call $Math.sin
     f64.neg
     f64.const 1
     f64.sub)
   ;; kink′
-  (func $kink_7 (export "kink′") (param $p0 f64) (result f64)
+  (func $kink_8 (export "kink′") (param $p0 f64) (result f64)
     local.get $p0
     f64.const 0
     f64.lt
@@ -79,7 +86,7 @@
         local.get $p0
         f64.add)))
   ;; bump′
-  (func $bump_8 (export "bump′") (param $p0 f64) (result f64) (local $l1 f64) (local $l2 f64)
+  (func $bump_9 (export "bump′") (param $p0 f64) (result f64) (local $l1 f64) (local $l2 f64)
     local.get $p0
     call $Math.sin
     local.set $l1
@@ -92,5 +99,10 @@
     local.get $l1
     local.get $l2
     f64.mul
+    f64.add)
+  ;; parabola′
+  (func $parabola_10 (export "parabola′") (param $p0 f64) (result f64)
+    local.get $p0
+    local.get $p0
     f64.add)
 )

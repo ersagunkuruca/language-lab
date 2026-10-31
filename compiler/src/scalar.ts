@@ -46,6 +46,7 @@
 
 import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
+import { subtree } from "../../projectional/src/model.ts";
 import type { Names } from "../../projectional/src/presentation.ts";
 import type { Info } from "../../projectional/src/lang/infer.ts";
 import { CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
@@ -54,6 +55,7 @@ import { liftLets } from "../../projectional/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fieldIndex } from "../../projectional/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
+import { stageCalls } from "../../projectional/src/lang/stage.ts";
 import { infer } from "../../projectional/src/lang/infer.ts";
 import { discharge } from "../../projectional/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -286,7 +288,9 @@ export const OPS = {
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[] }
+// rounded: definitions with a call worked out when compiled (stage.ts) that
+// computed a number Float32 can't hold, so a Float32 run differs from it.
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id> }
 
 class Refused extends Error {}
 
@@ -318,6 +322,19 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     code = x.code;
     names = x.names;
     info = infer(code, names);
+  }
+  // Calls given data written down (an algebra's signature and basis) are
+  // worked out as far as that data goes (stage.ts, C65): what's left is
+  // arithmetic, with no lists. Kept only if the program still checks.
+  const st = stageCalls(code, info, names);
+  const rounded = new Set<Id>();
+  if (st.staged.length) {
+    const again = infer(st.code, st.names);
+    if (again.errors.length <= info.errors.length) {
+      ({ code, names, info } = { code: st.code, names: st.names, info: again });
+      const calls = new Set(st.rounded);
+      if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
+    }
   }
   // A list named first and then walked is put where it's walked, so the
   // fold over `characters` sees it (inline-lets.ts, C49).
@@ -1566,5 +1583,5 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType) };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded };
 }

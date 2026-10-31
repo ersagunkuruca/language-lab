@@ -601,3 +601,36 @@ export function recursiveLets() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names), scaledSum };
 }
+
+// Projective geometric algebra, [1, 1, 1, 0], on a record of 16 Float64s
+// (C65): the product with the algebra given as data, a motor given later,
+// a motor known now, and a point (x, y, z, w) moved by it, w e₁₂₃ − x e₂₃₀
+// + y e₁₃₀ − z e₁₂₀ (Gunn and De Keninck's point; e₀ is the fourth vector
+// here). The motor turns by 90° about z, then moves by 5 along x.
+export function pga() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const num = () => k.tref(NUMBER);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const size = 16;
+  const M = k.type("Pga", [], [["pga", Array.from({ length: size }, (_, i) => [`p${i}`, num] as [string, () => Id])]]);
+  const of = (...ps: Id[]) => k.call(M.v.pga, ...ps);
+  const at = (parts: Record<number, number>) => of(...Array.from({ length: size }, (_, i) => k.lit(parts[i] ?? 0)));
+  const basis = def("pga basis", () => k.list(...Array.from({ length: size }, (_, i) => at({ [i]: 1 }))));
+  const squares = () => k.list(...[1, 1, 1, 0].map((x) => k.lit(x)));
+  const call = (f: string, ...xs: Id[]) => k.call(lib(f), squares(), k.x(basis), ...xs);
+  const mul = (a: Id, b: Id) => k.call(lib("table product"), k.call(lib("clifford table"), squares(), k.x(basis)), a, b);
+  const P = k.type("Point", [], [["point", ["x", "y", "z", "w"].map((p) => [p, num] as [string, () => Id])]]);
+  const part = (i: number) => M.f[`pga.p${i}`], coord = (c: string) => P.f[`point.${c}`];
+  const neg = (x: Id) => k.call(B.neg, x);
+  const toPga = def("to pga", () => k.fn(["p"], (p) => of(...Array.from({ length: size }, (_, i) =>
+    i === 7 ? k.call(coord("w"), p) : i === 14 ? neg(k.call(coord("x"), p)) : i === 13 ? k.call(coord("y"), p) : i === 11 ? neg(k.call(coord("z"), p)) : k.lit(0)))));
+  const fromPga = def("from pga", () => k.fn(["m"], (m) => k.call(P.v.point, neg(k.call(part(14), m)), k.call(part(13), m), neg(k.call(part(11), m)), k.call(part(7), m))));
+  const motor = def("motor", () => mul(call("clifford exp", at({ 9: 2.5 })), call("clifford exp", at({ 3: -Math.PI / 4 }))));
+  const product = def("product", () => k.fn(["a", "b"], (a, b) => mul(a, b)));
+  const moveBy = def("move by", () => k.fn(["m", "p"], (m, p) => call("clifford sandwich", m, p)));
+  const moveFixed = def("move fixed", () => k.fn(["p"], (p) => call("clifford sandwich", k.x(motor), p)));
+  const movePoint = def("move point", () => k.fn(["p"], (p) => k.call(fromPga, call("clifford sandwich", k.x(motor), k.call(toPga, p)))));
+  const code = base(k.code), names = baseNames(k.names);
+  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint } };
+}
