@@ -19,7 +19,9 @@ import { CONS, NIL } from "./std.ts";
 type Data = { tag: Id; fields: Value[] };
 const nums = (v: Value): number[] | null => {
   const f = (v as Data)?.fields;
-  return Array.isArray(f) && f.every((x) => typeof x === "number") ? (f as number[]) : null;
+  if (!Array.isArray(f)) return null;
+  for (let i = 0; i < f.length; i++) if (typeof f[i] !== "number") return null;
+  return f as number[];
 };
 
 // The prelude's `table product` (ALGEBRA-TABLES.md): a fold over the
@@ -28,27 +30,41 @@ const nums = (v: Value): number[] | null => {
 // part and added left to right. The fold builds the sum from the last line
 // back, starting from a's shape with every part 0.
 export const TABLE_PRODUCT = "@ilortmfvkbjt9bs8q02goksirf";
-function tableProduct(table: Value, a: Value, b: Value): Value | null {
-  const av = nums(a), bv = nums(b);
-  if (!av || !bv) return null;
-  const lines: [number[], number[], Data][] = [];
+// A table read once: values don't change, so each line's e, f and g are
+// checked and kept by the table's identity.
+type Line = { e: number[]; f: number[]; g: Data; gs: number[] };
+const tables = new WeakMap<object, Line[] | null>();
+function linesOf(table: Value): Line[] | null {
+  if (typeof table !== "object" || table === null) return null;
+  const kept = tables.get(table);
+  if (kept !== undefined) return kept;
+  let lines: Line[] | null = [];
   let d = table as Data;
   for (; d?.tag === CONS; d = d.fields[1] as Data) {
-    const line = d.fields[0] as Data;
-    const [e, f, g] = line.fields;
+    const [e, f, g] = (d.fields[0] as Data).fields;
     const ev = nums(e), fv = nums(f), gv = nums(g);
-    if (!ev || !fv || !gv || ev.length !== av.length || fv.length !== bv.length) return null;
-    lines.push([ev, fv, g as Data]);
+    if (!ev || !fv || !gv) { lines = null; break; }
+    lines.push({ e: ev, f: fv, g: g as Data, gs: gv });
   }
-  if (d?.tag !== NIL) return null;
+  if (lines && d?.tag !== NIL) lines = null;
+  tables.set(table, lines);
+  return lines;
+}
+function tableProduct(table: Value, a: Value, b: Value): Value | null {
+  const av = nums(a), bv = nums(b);
+  const lines = av && bv ? linesOf(table) : null;
+  if (!av || !bv || !lines) return null;
   const along = (x: number[], e: number[]) => { let s = x[0] * e[0]; for (let i = 1; i < x.length; i++) s = s + x[i] * e[i]; return s; };
   let acc: Data = { ...(a as Data), fields: av.map(() => 0) };
   for (let l = lines.length - 1; l >= 0; l--) {
-    const [e, f, g] = lines[l];
+    const { e, f, g, gs } = lines[l];
+    if (e.length !== av.length || f.length !== bv.length) return null;
     const w = along(av, e) * along(bv, f);
-    const gs = g.fields as number[], rest = acc.fields as number[];
+    const rest = acc.fields as number[];
     if (rest.length !== gs.length) return null;
-    acc = { ...g, fields: gs.map((x, i) => w * x + rest[i]) };
+    const out = new Array<number>(gs.length);
+    for (let i = 0; i < gs.length; i++) out[i] = w * gs[i] + rest[i];
+    acc = { ...g, fields: out };
   }
   return acc;
 }

@@ -34,14 +34,17 @@ definition as written.
 
 | benchmark | before | after |
 |---|---|---|
-| Spacetime's charge path, 400 steps | 8.3 s | 0.95 s |
-| one `clifford product`, Cl(1, 3) | 7.6 ms | 0.40 ms |
-| Bounce, one solid step | 14 ms | 4 ms |
+| Spacetime's charge path, 400 steps | 8.3 s | 0.48 s |
+| one `clifford product`, Cl(1, 3) | 7.6 ms | about 0.2 ms |
+| Bounce, one solid step | 14 ms | 3.7 ms |
+
+The jet first checked the table's 256 lines on every call, which a second
+profile showed as 28% of the charge path (0.78 s); it now reads a table
+once and keeps it by the table's identity, as values never change.
 
 Both outputs are byte-identical with and without the jet
 (test/jets.test.ts checks the charge path and random products).
 
-**Next.** The rest of a product, 0.4 ms against the jet's few
-microseconds, is the machine around it: `parts`, matching the algebra
-record, the closures. That is the general interpreter cost the profile
+**Next.** The rest is the machine around the jet: `go`, `step`,
+`refValue`, `parts` and the garbage collector. That is the general interpreter cost the profile
 showed, and the next PR profiles it again.

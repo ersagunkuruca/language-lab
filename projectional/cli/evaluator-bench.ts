@@ -25,7 +25,8 @@ const time = (what: string, n: number, f: () => unknown) => {
   const id = (n: string) => p.code.defs.find((d) => p.pres.names[d] === n)!;
   const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names, jets });
   const F = first(r.call(r.value(id("field")), 0, 0.5, 0, 0, 0, 1) as Iterable<Value>)!;
-  time("Spacetime's charge path, 400 steps", 1, () => first(r.call(r.value(id("motion")), F, 400, 0.06) as Iterable<Value>));
+  const reps = Number(process.env.REPS ?? 1);
+  time(`Spacetime's charge path, 400 steps${reps > 1 ? ` × ${reps}` : ""}`, reps, () => { for (let i = 0; i < reps; i++) first(r.call(r.value(id("motion")), F, 400, 0.06) as Iterable<Value>); });
 }
 {
   const p = loadProgram("examples/bounce");
