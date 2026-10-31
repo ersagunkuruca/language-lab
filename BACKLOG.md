@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | Clifford demo rows: I95, I89, I92 done; next I83 (item at), I93 (fixed decimals) |
+| L Language and library | "Language lane" | Clifford demo rows: I95, I89, I92, I83 done; next I93 (fixed decimals) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -42,7 +42,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
 | I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
-| I83 | No list item-at-index or update-at-index in the prelude: Bounce, Tumble and Constructions each write their own `nth`, and Constructions a `replaced` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6, G4 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
 | I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 375 ms (see I79, L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
 | I87 | A page's `Event` has no pointer position: Constructions places and drags points through a grid of 576 transparent SVG squares | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G1 | 2026-10-31 |

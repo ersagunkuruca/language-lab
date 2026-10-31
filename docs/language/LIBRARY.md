@@ -170,6 +170,8 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
+- **item at** : `(List a, Float64, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
+- **replace at** : `(List a, Float64, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
 - **array of** : `(List a) -> Array a`. The array of a list's items, in order.
