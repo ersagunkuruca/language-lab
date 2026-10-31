@@ -59,6 +59,7 @@ import tumbleComments from "../examples/tumble/comments.json" with { type: "json
 import constructionsCode from "../examples/constructions/code.json" with { type: "json" };
 import constructionsNames from "../examples/constructions/names.default.json" with { type: "json" };
 import constructionsComments from "../examples/constructions/comments.json" with { type: "json" };
+import constructionsExamples from "../examples/constructions/examples.json" with { type: "json" };
 import bounceCode from "../examples/bounce/code.json" with { type: "json" };
 import bounceNames from "../examples/bounce/names.default.json" with { type: "json" };
 import bounceComments from "../examples/bounce/comments.json" with { type: "json" };
@@ -258,7 +259,7 @@ const initialFor = (program: Program): Doc =>
   : program === "tumble" ? typedDoc("tumble", tumbleCode as Code, tumbleNames, tumbleComments)
   : program === "outline" ? outlineDoc()
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
-  : program === "constructions" ? typedDoc("constructions", constructionsCode as Code, constructionsNames, constructionsComments)
+  : program === "constructions" ? typedDoc("constructions", constructionsCode as Code, constructionsNames, constructionsComments, { examples: constructionsExamples })
   : program === "bounce" ? typedDoc("bounce", bounceCode as Code, bounceNames, bounceComments)
   : program === "spacetime" ? typedDoc("spacetime", spacetimeCode as Code, spacetimeNames, spacetimeComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
