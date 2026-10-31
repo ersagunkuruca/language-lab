@@ -6,7 +6,8 @@
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
-//   lab test <program>                   run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md)
+//   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
+//                                        results kept by hash in .lab/checks.json, --fresh ignores them
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -50,13 +51,15 @@ import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
+import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
-  lab test <program>                    run each definition that performs Check, and check each accepted answer in examples.json
+  lab test <program> [--fresh]          run each definition that performs Check, and check each accepted answer in examples.json;
+                                        an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -311,10 +314,20 @@ switch (command) {
     const file = join(path, "examples.json");
     const saved = existsSync(file) && statSync(path).isDirectory() ? savedFrom(JSON.parse(readFileSync(file, "utf8"))) : {};
     for (const e of p.info.errors) console.log(`error  ${p.names[e.id] ?? e.id}: ${e.message}`);
-    const results = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own, saved, { world: nodeWorld() });
+    // A test whose key is kept isn't run again (T7c).
+    const keys = p.info.errors.length ? new Map<Id, string>() : resultKeys(p.code, p.info, p.own, saved, evaluatorHash());
+    const kept = rest.includes("--fresh") ? {} : readKept();
+    const old = new Map(p.own.filter((d) => kept[keys.get(d) ?? ""]).map((d) => [d, { def: d, ...kept[keys.get(d)!], kept: true }]));
+    const ran = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own.filter((d) => !old.has(d)), saved, { world: nodeWorld() });
+    const results = [...ran, ...old.values()].sort((a, b) => p.own.indexOf(a.def) - p.own.indexOf(b.def));
+    if (ran.some((r) => keys.has(r.def))) {
+      const now = readKept();
+      for (const { def, ...r } of ran) if (keys.has(def)) now[keys.get(def)!] = r;
+      writeKept(now);
+    }
     for (const r of results) {
       if (r.error) console.log(`✗ ${r.name}: ${r.error}`);
-      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} cases)`);
+      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} cases${"kept" in r ? ", unchanged since it last ran" : ""})`);
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }

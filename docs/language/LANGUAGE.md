@@ -969,7 +969,9 @@ and may handle any other effect itself. Any definition, not only a test,
 can keep accepted answers in `examples.json`
 (`{ "inputs": ["2"], "answer": "3" }`): `lab test` runs it on those
 inputs and compares what it prints with the answer, first, as if it
-were `expect(f(2) = 3)`. Design and later steps:
+were `expect(f(2) = 3)`. A result is kept under the hash of the test and
+everything it uses (`.lab/checks.json`), so a test nothing changed under
+isn't run again; `lab test --fresh` runs them all. Design and later steps:
 TESTS-IN-THE-LANGUAGE.md (T7).
 
 ### Where effects go
