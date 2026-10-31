@@ -41,3 +41,33 @@ new.
 | B6 | **No item-at-index for lists.** Edges name their corners by number, so the demo writes its own `nth`, as Tumble does. | two examples write around it | new row, P2 |
 | B7 | **Pairwise collision is inferred Diverge.** `bump pairs` recurses on the list `bump into each` gives back inside a Pair, which the checker can't see is shorter, so `step` says it may not finish. | `step` carries Diverge | new row, P3 |
 | B8 | **C65 (#724) doesn't reach generic code.** Since #724 a clifford call whose squares and basis are written down is worked out when compiled: a Cl(3, 0) product or sandwich written that way now takes about 1 µs. Bounce's step takes its algebra from a `Space` value, which is what lets one definition run both worlds, so none of its calls are worked out, though `flat` and `solid` are constants. Specialising a function on a constant argument (here, the space) would let generic code have both. | after #724: product and sandwich written down 0.001 ms; Bounce's step 1.6 ms and drawing 9.3 ms, unchanged | new row |
+
+## 2. Constructions: ruler-and-set-square geometry in plane PGA
+
+`projectional/examples/constructions`, built as `apps/constructions.html`. A
+small dynamic geometry tool, of the kind GeoGebra is, written from scratch
+in Cl(2, 0, 1). Lines are vectors a e₁ + b e₂ + c e₀ and points are
+bivectors e₁₂ + x e₂₀ − y e₁₀. The tools are new point, line (join),
+intersection (meet), perpendicular (l · P), parallel, midpoint, mirror
+point (`clifford reflect`) and turn by 60° (`clifford exp` and
+`clifford sandwich`). A construction is a list of steps that name earlier
+shapes. It opens on a triangle with its altitudes and orthocentre, and
+dragging a corner rebuilds everything, so the third altitude stays on H.
+Parallel lines meet at a point at infinity, with no special case.
+
+What worked: every construction is one or two products. With the algebra
+written down as definitions (`squares`, `basis`, `table`), C65 (#724)
+works the products out when compiling, and building the whole opening
+construction takes 0.02 ms in compiled JS (1.5 ms before #724).
+
+### Gaps
+
+| # | gap | measured | row |
+|---|---|---|---|
+| G1 | **A page's events don't say where the pointer is.** `Event` has only `value` and `key`. Placing and dragging points uses a grid of 576 transparent SVG squares, each with its own `pointerdown` and `pointerenter`, so points snap to half units. | 576 elements of workaround | new row |
+| G2 | **A `part` can't sit inside an SVG.** A part is a `lab-part` HTML element, so the picture can't redraw only the shapes. The page stacks two SVGs: the paper, drawn once, and the shapes, redrawn as a whole. | two SVGs and `pointer-events` rules | new row |
+| G3 | **The prelude has the geometric product, but not the outer or inner product, the dual, the regressive product or grade selection.** The demo writes ½(ab − ba) and ½(lP − Pl), which only work for vectors and for vector-on-bivector, and writes the Poincaré dual out part by part for its own record type. | 3 helpers written around it; `dual` works only for this record | new row |
+| G4 | **No list update-at-index.** Dragging replaces one step, so the demo writes `replaced` beside its own `nth` (B6). | third example writing `nth` | I83 widened |
+| G5 | **relate needs about 6,400 steps to check one `clifford reflect`,** over the agreement test's budget of 5,000, so the test reports a disagreement where there is none. `mirror` is written inline in `made` instead of as its own definition. | 6,395 steps for one call | new row |
+| G6 | **The agreement test skipped a NaN only when it was the whole answer, not inside a record.** A point with no weight (sampled as all zeros) gives a record of NaNs, which it reported as a disagreement. Fixed in this PR, since it is the test's own rule, applied one level down. | `midpoint` and `turned` | fixed here |
+

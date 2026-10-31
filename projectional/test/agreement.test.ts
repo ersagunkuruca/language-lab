@@ -60,6 +60,9 @@ const same = (a: Value, b: Value): boolean => {
   return key(a) === key(b);
 };
 
+const notFinite = (v: Value): boolean => typeof v === "number" ? !Number.isFinite(v)
+  : !!v && typeof v === "object" && "fields" in v && (v as { fields: Value[] }).fields.some(notFinite);
+
 const STEPS = 5000;
 
 function disagreements(ex: string): { checked: string[]; problems: string[] } {
@@ -87,8 +90,10 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
       const at = `${name}(${args.map(key).join(", ")})`;
       let fwd: Value[];
       try { fwd = forward(args); } catch { continue; } // fails forward, e.g. a division by zero
-      // NaN equals nothing, itself included, so there's nothing to find.
-      if (fwd.some((v) => typeof v === "number" && !Number.isFinite(v))) continue;
+      // NaN equals nothing, itself included, so there's nothing to find;
+      // the same for a NaN inside a record or a list (a point with no
+      // weight, in examples/constructions).
+      if (fwd.some(notFinite)) continue;
       const given = Object.fromEntries(params.map((q, i) => [q, args[i]]));
       let steps = 0;
       const spend = () => ++steps < STEPS;

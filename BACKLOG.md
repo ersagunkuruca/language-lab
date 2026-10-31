@@ -42,10 +42,15 @@ New items land here until the next triage gives them a lane and a priority.
 | I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
 | I81 | Multivectors are written by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃); give a way to write them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
-| I83 | No list item-at-index in the prelude: Bounce and Tumble each write their own `nth` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6 | 2026-10-31 |
+| I83 | No list item-at-index or update-at-index in the prelude: Bounce, Tumble and Constructions each write their own `nth`, and Constructions a `replaced` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6, G4 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
 | I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 375 ms (see I79, L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
 | I86 | C65 works out clifford calls only where the algebra is written down; Bounce passes it in a `Space` value so one `step` runs 2D and 3D, and gets none of it (1.6 ms step, 9.3 ms drawing a frame). Specialise a function on a constant argument (`flat`, `solid`) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B8 | 2026-10-31 |
+| I87 | A page's `Event` has no pointer position: Constructions places and drags points through a grid of 576 transparent SVG squares | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G1 | 2026-10-31 |
+| I88 | A `part` can't sit inside an SVG (it is a `lab-part` HTML element), so a picture redraws whole; Constructions stacks two SVGs | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G2 | 2026-10-31 |
+| I89 | Outer and inner products, the dual, the regressive product and grade selection for the Clifford tables. Constructions writes ½(ab − ba) and a part-by-part dual for its own record | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G3 | 2026-10-31 |
+| I90 | Constructions in the editor's program list (built into apps/ since the PR that added it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | 2026-10-31 |
 
 ## E: Editor
 
