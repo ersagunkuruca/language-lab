@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side done (#737); Inbox triaged (this PR); next I91, I82, I81, I84, L29, L46, then P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750) and L46 (this PR) done; next T7 and L69 design notes, I91, I81, then L43 and other P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -170,7 +170,7 @@ all of these.
 |---|---|---|---|---|---|
 | I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | P2 | M | |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | P3 | L | |
-| L46 | Bounded counting is total (an Int moving towards its bound), so raymarch loses `with fuel` | LANGUAGE-REVIEW §7 | P2 | M | |
+| L46b | Raymarch's `march` and `shadow` count steps in an Int and `colour` drops `with fuel` (bounded counting is total since L46). Waits on Int in the scalar profile outside shaders (C66's WebAssembly int32 step; plain JS and C too), or the editor's CPU-side pictures and the scalar tests refuse it | L46 | P3 | S | |
 
 ### Grammars, modules and sharing
 

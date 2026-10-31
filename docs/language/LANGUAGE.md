@@ -428,6 +428,15 @@ recursion, and rejects "ping-pong" recursion, where each call shrinks one
 argument while growing the other. A let (a dot) is transparent: naming the
 smaller piece keeps it the smaller piece.
 
+A count is a measure too (L46). A function that calls itself with an
+`Int` input moved by a positive whole number, `steps + 1`, under a test
+that compares it with a bound the call keeps (`steps < 120`, or the
+otherwise of `120 < steps`; a literal, or an input passed on as it is),
+ends: the distance to the bound shrinks with every call and can't go
+below 0. Counting down towards a lower bound is the same, and running
+forward in modes.ts takes it the same way. A `Float64` count isn't accepted: `2⁵³ + 1` is `2⁵³`, and `NaN`
+compares false with everything, so such a count can stop moving.
+
 Two rules make "a piece is smaller" true. Data types are strictly
 positive: a type may not take itself as an input in its own fields
 (`knot = wrap(f: knot → Float64)` is refused, since through it a function
@@ -1518,7 +1527,7 @@ a row's test is missing or the table here differs from the rows.
 | side effects on abandoned search paths | checked | world effects (`Console`, `Files`) may not run while a `Choice` is open (see "The world and Choice") | "the world isn't touched while a Choice is open" (`test/effects.test.ts`) |
 | unhandled effect (printing from a pure value, failing with no handler) | checked | effect rows; a definition's value must be pure; `runMain` refuses leftover effects, and a program that doesn't type-check | "effects: a definition's value must be pure, and run refuses unhandled Choice" (`test/lang.test.ts`) |
 | effects hidden where a function waits | checked | a function kept in a field, a list, a cell, a formula or a page keeps its effects: they reach the type, are refused, or are the page runtime's on purpose (`test/containers.test.ts` checks 40 cases) | "a function in a field can't hide its effects" (`test/effects.test.ts`) |
-| non-termination | inferred | recursion that size-change termination accepts is total; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards is `Diverge` only when its mode may not end (the same size-change check on the known ports, modes.ts), and spends a step budget, solver answers included | "size-change: a call that keeps every argument the same size is Diverge" (`test/guarantees.test.ts`) |
+| non-termination | inferred | recursion that size-change termination accepts is total, and so is an Int counted towards a bound its guard compares it with; everything else carries `Diverge`, which `with fuel` turns into `Choice`. Data types are strictly positive, and values can't be recursive. Reading a formula carries `Diverge` too, and a page runs each update under a step budget; the shader profile takes `Diverge` only under a literal `with fuel`; running backwards is `Diverge` only when its mode may not end (the same size-change check on the known ports, modes.ts), and spends a step budget, solver answers included | "size-change: a call that keeps every argument the same size is Diverge" (`test/guarantees.test.ts`) |
 | arithmetic on records that aren't vectors | checked | `map parts`, `zip parts`, `total` and the vectors module take only records of Float64s, a constraint type variables carry; both sides of `plus` are the same type, so a colour and a point don't add | "adding a colour to a point, or taking the parts of text, is a type error" (`test/parts.test.ts`) |
 | comparing functions | checked | `equal` needs plain data (no functions inside), a constraint type variables carry like a type class: `same(x, y) = equal(x, y)` is `(a, a) → Bool` for plain `a` only | "§1.3 equal on functions should be refused, not compare by identity" (`test/known-holes.test.ts`) |
 | a derivative that can't be read | runtime, but typed | `derivative`'s result may fail (`Choice`): where the slope can't be read (through `floor`, or data with several cases built from x), there is none; `gradient` the same | "derivative never throws: where a slope can't be read there is none" (`test/guarantees.test.ts`) |

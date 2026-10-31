@@ -662,7 +662,8 @@ export function ints() {
   const same = def("same", ["a", "b"], (a, b) => k.equal(k.call(I.abs, a), b));
   // A loop on Ints (it might not finish, as far as the checker sees), under a budget.
   const go = k.def("go");
-  k.define(go, k.fn(["i", "acc"], (i, acc) => k.if(k.call(I.less, i, k.int(1)), acc, k.call(go, k.call(I.sub, i, k.int(1)), k.call(I.add, acc, i)))));
+  // `i = 0`, not `i < 1`: a count the checker can bound (L46) needs no budget, and this one is here to run out of it.
+  k.define(go, k.fn(["i", "acc"], (i, acc) => k.if(k.equal(i, k.int(0)), acc, k.call(go, k.call(I.sub, i, k.int(1)), k.call(I.add, acc, i)))));
   const sumTo = def("sum to", ["n"], (n) => within(k, 1000, () => k.call(go, n, k.int(0)), () => k.int(-1)));
   // a³ past 32 bits: the budget's fallback.
   const cube = def("cube", ["a"], (a) => within(k, 10, () => k.call(I.mul, k.call(I.mul, a, a), a), () => k.int(-1)));

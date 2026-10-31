@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, NIL, PAIR_V, S } from "../src/lang/std.ts";
+import { CONS, INT_OPS as I, NIL, PAIR_V, S } from "../src/lang/std.ts";
 import { CHOICE, CONSOLE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -83,6 +83,34 @@ test("size-change: a call that keeps every argument the same size is Diverge", (
     ])));
   });
   assert.ok(p.effects(spin).includes(DIVERGE));
+});
+
+// Bounded counting (BACKLOG L46): an Int moving towards a bound its guard
+// compares it with ends; a Float64 count, a bound that moves, or one input
+// counted towards two bounds stays Diverge.
+test("bounded counting: an Int counted towards a bound it is compared with is total", () => {
+  const defs: Record<string, Id> = {};
+  const p = program((k) => {
+    const def = (name: string, params: string[], body: (self: Id, ...ps: Id[]) => Id) => { const d = k.def(name); defs[name] = d; k.define(d, k.fn(params, (...ps) => body(d, ...ps))); };
+    const lessI = (a: Id, b: Id) => k.call(I.less, a, b), plus = (a: Id, c: number) => k.call(I.add, a, k.int(c)), minus = (a: Id, c: number) => k.call(I.sub, a, k.int(c));
+    // up to a literal, as raymarch's march: the else of 120 < steps
+    def("up", ["steps", "x"], (self, s, x) => k.if(k.call(S.or, k.call(S.less, x, k.lit(0)), lessI(k.int(120), s)), x, k.call(self, plus(s, 1), k.call(B.add, x, k.lit(1)))));
+    // up to a bound passed on unchanged
+    def("up to n", ["i", "n"], (self, i, nn) => k.if(lessI(i, nn), k.call(self, plus(i, 2), nn), i));
+    // down to 0
+    def("down", ["i"], (self, i) => k.if(k.call(S.not, lessI(k.int(0), i)), i, k.call(self, minus(i, 1))));
+    // the bound grows with the count: never ends
+    def("chase", ["i", "n"], (self, i, nn) => k.if(lessI(i, nn), k.call(self, plus(i, 1), plus(nn, 1)), i));
+    // up under one guard and down under another: 5, 6, 5, 6, …
+    def("ping pong", ["i"], (self, i) => k.if(lessI(i, k.int(10)), k.call(self, plus(i, 1)), k.if(lessI(k.int(0), i), k.call(self, minus(i, 1)), i)));
+    // a Float64 count can be NaN, which no comparison stops
+    def("float count", ["i"], (self, i) => k.if(k.call(S.less, i, k.lit(10)), k.call(self, k.call(B.add, i, k.lit(1))), i));
+    // counted without a guard
+    def("unguarded", ["i"], (self, i) => k.call(self, plus(i, 1)));
+  });
+  assert.deepEqual(p.errors, []);
+  for (const d of ["up", "up to n", "down"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+  for (const d of ["chase", "ping pong", "float count", "unguarded"]) assert.ok(p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
 });
 
 test("only functions can be recursive: a value defined in terms of itself is refused", () => {

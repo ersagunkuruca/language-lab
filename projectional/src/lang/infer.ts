@@ -20,6 +20,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
 import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
+import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
@@ -1195,7 +1196,8 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 // orders (ackermann), and arguments that swap places, and rejects ping-pong
 // recursion where each call shrinks one argument while growing the other.
 // Passing a function of the group around as a value counts as possibly
-// divergent.
+// divergent. An Int counted towards a bound its guard compares it with
+// (counting.ts, L46) strictly shrinks too: its distance to the bound does.
 type Arc = [from: number, to: number, strict: boolean];
 interface CallGraph { from: Id; to: Id; arcs: Arc[] }
 
@@ -1217,6 +1219,8 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
   for (const d of group) {
     const lam = lambdaOf(d);
     if (lam?.kind !== "lambda") return false;
+    // An Int counted towards a bound shrinks at that call (L46, counting.ts).
+    const counted = group.length === 1 ? countedCalls(code, d, lam) : new Set<string>();
     // size.get(b): for each input i that b is (false) or is a piece of (true)
     const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));
     const sizeOf = (id: Id | undefined) => {
@@ -1232,6 +1236,7 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
         if (f.kind === "ref" && inGroup.has(f.target)) {
           const arcs: Arc[] = [];
           n.args.forEach((a, j) => sizeOf(a)?.forEach((strict, i) => arcs.push([i, j, strict])));
+          n.args.forEach((_, j) => { if (counted.has(`${n.id}:${j}`)) arcs.push([j, j, true]); });
           graphs.push({ from: d, to: f.target, arcs });
           n.args.forEach(walk);
           return;
