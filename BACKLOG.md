@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765), I81 (#766), the L69 note (#767), the L43 grades note (#768), L43b blade masks (#770), T7a tests in the language (#771), T7b accepted answers (#772) and L97e complex laws (#775) and Ersagun's grades answer in GRADES.md (#776) L43e's first step, a part read outside the mask refused (#777), and T7c's local half, results kept by hash (this PR) done (Ersagun's 20 + 20 more, 2026-10-31) |
+| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765), I81 (#766), the L69 note (#767), the L43 grades note (#768), L43b blade masks (#770), T7a tests in the language (#771), T7b accepted answers (#772) and L97e complex laws (#775) and Ersagun's grades answer in GRADES.md (#776) L43e's first step, a part read outside the mask refused (#777), T7c's local half, results kept by hash (#778), and I98, Constructions' `is picked` opening with a contradiction (this PR) done (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -34,8 +34,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I98 | The values view of Constructions' `is picked` (a match on a list with `otherwise` false, then `first = i`) says "No answer: the known values contradict each other, or would need a complex number." It fails in test/draws.test.ts whenever the sweep slice reaches it (SWEEP=all fails on main too), so Check main fails one run in eight. | Constructions circles PR, 2026-10-31 | 2026-10-31 |
-| I97 | The editor's page preview runs main in the evaluator, and "Open in a tab" runs it compiled. Ersagun found Bounce and Spacetime much faster in a tab. Measured: Bounce's preview draws 8.5 frames a second against 60 in a tab, and the profile is all evaluator (step, apply, resume, GC). Spacetime's charge path takes 9 s evaluated against 4 ms compiled. Ersagun is willing to have the preview run compiled code. Compiling takes 2 to 7 s (Constructions 1.9, Bounce 4.0, Spacetime 7.2 s), so a way to do it is to keep the evaluator page while the compiled one builds off the main thread, then swap it in when it is ready, keeping the evaluator for what needs it (Outline updates, sound). For the Editor lane. | Ersagun 2026-10-31 "so much faster when opened on a new tab" | 2026-10-31 |
 
 ## E: Editor
 

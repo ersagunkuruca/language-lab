@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I97 | Page preview runs compiled once it's ready: interpreted at once, compiled in the run worker, swapped in (Bounce 7 → 60 fps, Spacetime slider 7.4 s → 27 ms) | #789 |
 | I94 | Editor: Spacetime in the program list (opening holds the editor ~8 s while main first runs; the products' cost is L41) | #760 |
 | I85 | Editor: Bounce in the program list | #758 |
 | I90 | Editor: Constructions in the program list | #756 |
@@ -368,7 +369,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| T7c (local) | `lab test` keeps each result under a key, the content hash of the test and everything it uses (hash.ts), what examples.json saves for it and the evaluator's source hash, in `.lab/checks.json` (gitignored), and skips a test whose key is kept: "unchanged since it last ran". Tests that read the clock, random numbers or the world are never kept; `--fresh` runs all (cli/checks.ts). CI's cache is the T half. | this PR |
+| I98 | Check main failed one run in eight: the values view of Constructions' `is picked` opened on the values of its first call from main, an empty list with `holds` true, which no `i` satisfies, so it said "No answer: the known values contradict each other" (right, for those values). Constructions now saves values for it in examples.json (`[2, 5]`, solved `i` = 2), as Numbers and Insertion sort do; draws.test with SWEEP=all passes on Constructions. | this PR |
+| T7c (local) | `lab test` keeps each result under a key, the content hash of the test and everything it uses (hash.ts), what examples.json saves for it and the evaluator's source hash, in `.lab/checks.json` (gitignored), and skips a test whose key is kept: "unchanged since it last ran". Tests that read the clock, random numbers or the world are never kept; `--fresh` runs all (cli/checks.ts). CI's cache is the T half. | #778 |
 | L43e1 | Wrong grades, first step: reading a part a value can't have (`clifford part` of e₁₂ on a vector, always 0) is an error in `lab check`, "reads the e₁₂ part of a value that is a vector, so it is always 0", through calls too (grades.ts `gradeMistakes`). Masks never under-count, so nothing that could be nonzero is refused; no example has one. | #777 |
 | L43 answer | GRADES.md records Ersagun's answer (2026-10-31): each blade combination is its own type. Blade masks become types the compiler infers; a named mask (`Vector of space`) on an input, field or list refuses another grade, and reading a part outside a value's mask is refused; mixing with `+` stays allowed. L43e rewritten to match (L, M). | #776 |
 | L97e | The complex laws as tests in the prelude, its first: `from polar undoes modulus and angle` and `polar undoes unpolar` (Trig's polar and unpolar at Float64) perform Check; test/prelude-laws.test.ts runs every prelude definition that does on small complex numbers, as `lab test` runs a program's. Both hold. | #775 |

@@ -244,7 +244,12 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   the evaluator against the browser world and mounts it into any
   document, so the editor can show a page live and redraw it after each
   edit without compiling. `stop()` ends its clock. `pageMain` finds the
-  `main` that makes a program a page.
+  `main` that makes a program a page. The evaluator is slow for an
+  animation (Bounce drew 7 frames a second), so the editor shows this at
+  once and compiles the same program off its thread
+  (`editor/runWorker.ts`, as Save page does); when that's ready, a fresh
+  copy of page-runtime's `mountPage` mounts the compiled page in its
+  place, as fast as in a tab (I97). A page with sound stays evaluated.
 - **Save page** (`src/lang/page.ts` pageFile): the same one-file page
   made in a browser, with no bundler. `cli/web.ts` pageRuntime prebuilds
   `src/lang/page-runtime.ts` (runtime, mount, browser world, startPage) as
