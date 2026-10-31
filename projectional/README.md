@@ -10,7 +10,8 @@ New here? Start with [GUIDE.md](../docs/learn/GUIDE.md): a hands-on tour of the 
 and the language, doing real edits on the dice program. [TUTORIAL.md](../docs/learn/TUTORIAL.md)
 is the longer read: an introduction for
 non-programmers and for people new to functional programming, a tour of the
-language in the editor, and a list of what's confusing or could be simpler.
+language in the editor. What's confusing or could be simpler is in
+[CONFUSING.md](../docs/design/CONFUSING.md).
 How a program runs (the editor's Run, the command line, and the compiled
 targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](../docs/learn/RUNNING.md).
 Every document, with how much of it is built, is listed in
