@@ -1392,7 +1392,9 @@ moves a program over: every ref, and the ports of every place it's run
 backwards. It does it only when the two have the same pin, so nothing that
 uses it can break and nothing needs checking again; a changed type is
 refused with both types named. Data type upgrades (where constructors and
-fields move too) need a migration, which is a next step.
+fields move too) need a migration, which is a next step. How others share and version code (a lineage id kept
+for life, a version hash per publish, names pinned per program) is
+proposed in [SHARING.md](../design/sharing/SHARING.md).
 
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
 numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate`, the

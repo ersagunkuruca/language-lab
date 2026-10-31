@@ -68,7 +68,7 @@ never picks it by cost, and the shader target asks for it.
   check like any pair of ways. Today it is a TypeScript test.
 - **Modules can publish them.** A library's Map-as-tree or
   List-as-array becomes an export like any other definition, hashed and
-  shared (L68).
+  shared (L114, SHARING.md).
 - **The editor shows it as code.** The program's own representations
   appear as definitions. Where a value got one, the editor can say so (the
   Program tab already lists what was chosen), without anything written at

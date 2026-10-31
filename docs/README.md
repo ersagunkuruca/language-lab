@@ -82,6 +82,12 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | partly built (L54, L71, C40) |
 | [HOSTS.md](design/relations-and-effects/HOSTS.md) | Hosts as handlers: named rows (L58) and Console, Files, Network declared in std (L55) | partly built (L55) |
 
+### Sharing and versions
+
+| doc | what it is | status |
+|---|---|---|
+| [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | proposal (L109 to L114) |
+
 ### Compiler and targets
 
 | doc | what it is | status |
