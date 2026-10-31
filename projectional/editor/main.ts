@@ -1142,7 +1142,14 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const plain = (p: Id) => pres().names[p] ?? namer.name(p);
   const portName = (p: Id) => ports.some((q) => q !== p && q !== "out" && plain(q) === plain(p)) ? namer.name(p) : plain(p);
   const missing = known.filter((k) => !portText(info, k).trim());
-  const r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
+  let r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
+  // Every input given: a run forwards has the answer the search can miss
+  // (relate's limits, I39), so a plain function shows its result (I75).
+  const forwards = ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out");
+  if (forwards && !missing.length && !r.answers.length && !r.error) {
+    const tr = traced(info);
+    if (tr?.result !== undefined && !tr.error) r = { ...r, answers: [{ values: { out: showValue(tr.result, doc.code, pres().names) }, free: [], residual: [] }] };
+  }
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
   const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
   if (pixelSeed(ui.def) && !doc.examples?.[ui.def]) box.append(h("p", { class: "hint" }, "The picture above is this function at every pixel. Here it runs at one of them: change x, y or time to look at another."));
@@ -1177,7 +1184,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   // Every input given and none found: the search missed the one answer a
   // run forwards gives (relate's limits, I39), not a contradiction.
-  else if (!r.answers.length) box.append(ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out")
+  else if (!r.answers.length) box.append(forwards
     ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
     : h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
   if (r.answers.length > 1 || r.more) {
