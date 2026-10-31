@@ -10,6 +10,14 @@ cells come from free lists. N5b and N5c are done: a match on a cell nobody else 
 moves its fields out, and the cell becomes the arm's next cell of the same
 fields (below).
 
+std's Array (C66b) is the two-ended buffer compiled JavaScript and
+WebAssembly have: per item type, a buffer cell that owns its items between
+its lowest and highest used slots, and a view cell (its buffer, start and
+length) holding one count on it. A push writes into the free slot past the
+view's end when that slot is the buffer's edge, and reuses the view's own
+cell when nobody else holds it; otherwise it copies the view's items, dup'd,
+into a new buffer (c.ts `arrayC`, test compiler/test/arrays.test.ts).
+
 - **N1.** The scalar profile and its records print as C
   (`compiler/src/c.ts`): Float64s, Bools, records as structs passed by
   value, lets, ifs, calls, self tail calls as loops, and budgets. calculus,

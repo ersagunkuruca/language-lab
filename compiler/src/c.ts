@@ -53,7 +53,7 @@
 import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
-import { fails, isData, isFn, isRecord, kids, mapKids, OPS, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isArray, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -72,6 +72,8 @@ const PRINTED = new Set<SExpr["k"]>([
   "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "field", "tag", "case",
   "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world",
 ]);
+// std's Array's runtime functions, one copy per item type (scalar.ts).
+const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 
 // The runtime of counted cells. A null cell (a box's value before the
@@ -158,7 +160,6 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // is the exit code, and an Abort's reason goes to standard error, with 1.
 export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
-  if (lowered.arrays.length) throw new Error("std's Array isn't in C yet (BACKLOG C66b; WebAssembly has it)");
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
   // expression does anything: C has no value of every type to stand in.
@@ -171,7 +172,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push"].map((op) => `array_${op}_a${i}`))]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -187,11 +188,12 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     t === "f64" || t === "i32" || t === "int" || t === "text" ? null
     : isRecord(t) ? t.fields.map((x) => why(x.t)).find(Boolean) ?? null
     : isData(t) ? null
+    : isArray(t) ? why(t.item)
     : [...(t as FType).params, (t as FType).result].map(why).find(Boolean) ?? null;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -207,8 +209,9 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.
-  const records = new Map<string, RType>(), data = new Map<string, DType>(), fns = new Map<string, FType>();
+  const records = new Map<string, RType>(), data = new Map<string, DType>(), fns = new Map<string, FType>(), arrays = new Map<string, AType>();
   const collect = (t: LType) => {
+    if (isArray(t) && !arrays.has(t.key)) { arrays.set(t.key, t); collect(t.item); if (t.list) collect(t.list); }
     if (isRecord(t) && !records.has(t.key)) { records.set(t.key, t); t.fields.forEach((x) => collect(x.t)); }
     if (isData(t) && !data.has(t.key)) { data.set(t.key, t); t.cases.forEach((c) => c.fields.forEach((x) => collect(x.t))); }
     if (isFn(t) && !fns.has(t.key)) { fns.set(t.key, t); [...t.params, t.result].forEach(collect); }
@@ -219,6 +222,8 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     walk(funcs[i].body).forEach((e) => {
       if ("t" in e && typeof e.t === "object") collect(e.t as LType);
       if (e.k === "closure" || e.k === "cap") shaped.add(e.shape);
+      const a = e.k === "rt" ? ARRAY_FN.exec(e.fn) : null;
+      if (a) collect(lowered.arrays[Number(a[2])]);
     });
   }
   shaped.forEach((s) => { collect(shapes[s].t); shapes[s].caps.forEach(collect); });
@@ -229,7 +234,8 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const shapeName = new Map([...shaped].map((s) => [s, ident(`Closure`)]));
   // Cell types, numbered: data types, boxes, closures' shapes.
   const tnum = new Map<string, number>();
-  [...data.keys(), ...boxes.map((b) => b.key), ...[...shaped].map((s) => `shape ${s}`)].forEach((k, j) => tnum.set(k, j));
+  [...data.keys(), ...boxes.map((b) => b.key), ...[...shaped].map((s) => `shape ${s}`), ...[...arrays.keys()].flatMap((k) => [`array ${k}`, `buf ${k}`])].forEach((k, j) => tnum.set(k, j));
+  const aname = new Map([...arrays.keys()].map((k) => [k, { view: ident("Array"), buf: ident("Buffer") }]));
   const cname = (t: DType, c: number) => `${dname.get(t.key)}_${t.cases[c].name.replace(/[^A-Za-z0-9_]/g, "_")}`;
   const names = new Map(kept.map((i) => [i, `lab_${ident(funcs[i].name)}`]));
 
@@ -237,14 +243,18 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const layout = (fs: { t: LType }[]) => fs.map((x) => ty(x.t)).join(", ");
   const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
-  const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || (isRecord(t) && !!t.mutable);
+  const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || (isRecord(t) && t.fields.some((x) => counted(x.t)));
   const dup = (t: LType, x: string) => (cell(t) ? `lab_dup(${x})` : t === "int" ? `lab_int_dup(${x})` : isRecord(t) && counted(t) ? `${sname.get(t.key)}_dup(${x})` : x);
   const drop = (t: LType, x: string) => (cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`);
   const dec = (t: LType, x: string) => (cell(t) ? `lab_dec(${x});` : t === "int" ? `lab_int_dec(${x});` : `${sname.get((t as RType).key)}_dec(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
-    const r = runtime(fn);
+    const r = runtime(fn), a = ARRAY_FN.exec(fn);
+    if (a) {
+      const t = lowered.arrays[Number(a[2])];
+      return r.result === "array" ? t : r.result === "item" ? t.item : r.result === "list" ? t.list! : r.result as LType;
+    }
     if (r.result !== "list") return r.result as LType;
     const d = data.get(r.list ?? LIST_TEXT);
     if (!d) throw new Error(`${fn}'s list type isn't one the program has`);
@@ -258,7 +268,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   };
   // Text and big Int constants, as static cells that are never counted;
   // and the runtime functions called.
-  const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>();
+  const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   const textLit = (v: string) => {
     const k = `t ${v}`;
     if (!statics.has(k)) {
@@ -282,7 +292,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     if (t === "int" || t === "text") return true;
     if (typeof t !== "object" || seen.has(t.key)) return false;
     seen.add(t.key);
-    return isRecord(t) ? t.fields.some((x) => mentions(x.t, seen)) : isData(t) ? t.cases.some((c) => c.fields.some((x) => mentions(x.t, seen))) : [...(t as FType).params, (t as FType).result].some((x) => mentions(x, seen));
+    return isRecord(t) ? t.fields.some((x) => mentions(x.t, seen)) : isArray(t) ? mentions(t.item, seen) : isData(t) ? t.cases.some((c) => c.fields.some((x) => mentions(x.t, seen))) : [...(t as FType).params, (t as FType).result].some((x) => mentions(x, seen));
   };
 
   const header = (i: number) => {
@@ -292,7 +302,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
   const text = kept.map((i) => func(funcs[i], i));
-  const ints = opts.main !== undefined || rts.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
+  const ints = opts.main !== undefined || rts.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
   const tests = opts.harness ? harness() : "";
 
@@ -313,6 +323,11 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     });
   }
   // A function type's code takes the closure, then the inputs.
+  for (const a of arrays.values()) {
+    const n = aname.get(a.key)!;
+    types.push(`typedef struct { lab_cell h; uint32_t lo, hi, cap; ${ty(a.item)} it[]; } ${n.buf}; // an array's buffer: items lo..hi used`,
+      `typedef struct { lab_cell h; lab_cell *b; uint32_t s, n; } ${n.view}; // an array: n items from s`);
+  }
   for (const [k, t] of fns) types.push(`typedef ${ty(t.result)} (*${fname.get(k)})(${["lab_cell *", ...t.params.map(ty)].join(", ")});`);
   for (const s of shaped) types.push(`typedef struct { lab_cell h; void (*code)(void); ${shapes[s].caps.map((x, j) => `${ty(x)} c${j};`).join(" ")} } ${shapeName.get(s)};`);
   // Dup and drop for records that hold counts, and each cell type's
@@ -337,6 +352,11 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     fieldsOf.push(arms.length ? `case ${tnum.get(d.key)}: switch (c->tag) { ${arms.join(" ")} } break;` : "");
   }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
+  for (const a of arrays.values()) {
+    const n = aname.get(a.key)!;
+    fieldsOf.push(`case ${tnum.get(`array ${a.key}`)}: lab_dec(((${n.view} *)c)->b); break;`);
+    if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
+  }
   for (const s of shaped) {
     const ks = shapes[s].caps.map((x, j) => (counted(x) ? dec(x, `((${shapeName.get(s)} *)c)->c${j}`) : "")).filter(Boolean);
     fieldsOf.push(ks.length ? `case ${tnum.get(`shape ${s}`)}: ${ks.join(" ")} break;` : "");
@@ -368,6 +388,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
+    ...[...arrays.values()].flatMap((a) => arrayC(a)),
     "",
     ...kept.map((i) => `${header(i)};`),
     "",
@@ -550,7 +571,7 @@ int main(int argc, char **argv) {
         case "int": return intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
-          rts.add(e.fn);
+          (ARRAY_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
         }
@@ -882,6 +903,84 @@ int main(int argc, char **argv) {
   // and what a box holds before a search sets it.
   function zero(t: LType): string {
     return t === "f64" || t === "i32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
+  }
+
+  // std's Array (C66b), as in runtime.js and WebAssembly: a view (a
+  // counted cell: its buffer, start and length) on a buffer with free room
+  // at both ends, which keeps its lowest and highest used slots and owns
+  // the items between them. A push writes into the slot past the view's end
+  // when no other view has taken it, and copies the view's items (dup'd)
+  // into a new buffer otherwise; a view nobody else holds is reused for the
+  // longer one. Ersagun's two-ended array list; prior art: deques as ring
+  // buffers, gap buffers, Go's slices, and Perceus's reuse of a cell whose
+  // count is 1 (Reinking, Xie, de Moura and Leijen, PLDI 2021).
+  function arrayC(a: AType): string[] {
+    const fns = [...arrayFns].filter((f) => Number(ARRAY_FN.exec(f)![2]) === a.index);
+    if (!fns.length) return [];
+    const { view: V, buf: B } = aname.get(a.key)!, T = ty(a.item), i = a.index;
+    const tv = tnum.get(`array ${a.key}`), tb = tnum.get(`buf ${a.key}`);
+    const cp = (x: string) => (counted(a.item) ? dup(a.item, x) : x);
+    const l = a.list && (() => { const d = a.list!, tag = d.cases.findIndex((c) => c.fields.length > 0); return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) }; })();
+    const out = [`// Array ${i}: of ${T}.
+static lab_cell *lab__view_a${i}(lab_cell *b, uint32_t s, uint32_t n) { ${V} *v = lab_new(sizeof(${V}), ${tv}, 0); v->b = b; v->s = s; v->n = n; return (lab_cell *)v; }
+// A buffer holding a copy of n items in its middle, with room for as many again on each side.
+static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
+  uint32_t room = n > 4 ? n : 4;
+  if ((uint64_t)n + 2 * (uint64_t)room > UINT32_MAX) lab_oom();
+  ${B} *b = lab_new(sizeof(${B}) + ((size_t)n + 2 * (size_t)room) * sizeof(${T}), ${tb}, 0);
+  b->lo = room; b->hi = room + n; b->cap = n + 2 * room;
+  for (uint32_t k = 0; k < n; k++) b->it[room + k] = ${cp("xs[k]")};
+  return lab__view_a${i}((lab_cell *)b, room, n);
+}`];
+    const has = (op: string) => arrayFns.has(`array.${op}.a${i}`);
+    if (has("empty")) out.push(`static lab_cell *lab_array_empty_a${i}(void) { return lab__copy_a${i}(0, 0); }`);
+    if (has("of")) out.push(`static lab_cell *lab_array_of_a${i}(lab_cell *l) {
+  uint32_t n = 0;
+  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) n++;
+  uint32_t room = n > 4 ? n : 4, k = room;
+  ${B} *b = lab_new(sizeof(${B}) + ((size_t)n + 2 * (size_t)room) * sizeof(${T}), ${tb}, 0);
+  b->lo = room; b->hi = room + n; b->cap = n + 2 * room;
+  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) b->it[k++] = ${cp(`((${l!.cons} *)p)->f${l!.head}`)};
+  lab_cell *a = lab__view_a${i}((lab_cell *)b, room, n);
+  lab_drop(l);
+  return a;
+}`);
+    if (has("items")) out.push(`static lab_cell *lab_array_items_a${i}(lab_cell *a) {
+  ${V} *v = (${V} *)a;
+  ${T} *it = ((${B} *)v->b)->it + v->s;
+  lab_cell *acc = &${l!.nil};
+  for (uint32_t k = v->n; k-- > 0;) { ${l!.cons} *c = lab_new(sizeof(${l!.cons}), ${l!.type}, ${l!.tag}); c->f${l!.head} = ${cp("it[k]")}; c->f${1 - l!.head} = acc; acc = (lab_cell *)c; }
+  lab_drop(a);
+  return acc;
+}`);
+    if (has("length")) out.push(`static lab_int lab_array_length_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
+    // No answer past the end.
+    if (has("at")) out.push(`static ${T} lab_array_at_a${i}(lab_cell *a, lab_int k) {
+  ${V} *v = (${V} *)a;
+  if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); lab_drop(a); lab_st = 1; return ${zero(a.item)}; }
+  ${T} x = ${cp(`((${B} *)v->b)->it[v->s + LAB_VAL(k)]`)};
+  lab_drop(a);
+  return x;
+}`);
+    if (has("push")) out.push(`static lab_cell *lab_array_push_a${i}(lab_cell *a, ${T} x) {
+  ${V} *v = (${V} *)a;
+  ${B} *b = (${B} *)v->b;
+  uint32_t end = v->s + v->n;
+  lab_cell *r;
+  if (end == b->hi && end < b->cap) {
+    b->it[end] = x; b->hi++;
+    if (a->rc == 1) { v->n++; return a; }
+    r = lab__view_a${i}(lab_dup(v->b), v->s, v->n + 1);
+  } else {
+    r = lab__copy_a${i}(b->it + v->s, v->n);
+    ${V} *w = (${V} *)r;
+    ${B} *c = (${B} *)w->b;
+    c->it[c->hi++] = x; w->n++;
+  }
+  lab_drop(a);
+  return r;
+}`);
+    return out;
   }
 
   function harness(): string {
