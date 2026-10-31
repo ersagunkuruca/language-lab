@@ -120,10 +120,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       return t;
     }
     case HTML_V.part: {
-      // An element that doesn't take part in the layout; what it draws
-      // belongs to its watcher, whose next run disposes of it first.
-      const e = doc.createElement("lab-part");
-      e.setAttribute("style", "display: contents");
+      // An element that doesn't take part in the layout, or inside a
+      // picture an SVG group, so a part can redraw some shapes and not the
+      // rest (I88). What it draws belongs to its watcher, whose next run
+      // disposes of it first.
+      const inSvg = svg && !!doc.createElementNS;
+      const e = inSvg ? doc.createElementNS!(SVG, "g") : doc.createElement("lab-part");
+      if (!inSvg) e.setAttribute("style", "display: contents");
       let now: Node_ | undefined;
       watch(e, "part", () => { e.replaceChildren((now = mountHtml(m.call(d.fields[0]), m, svg))); }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); }, () => (now ? fresh(now) : []));
       return e;

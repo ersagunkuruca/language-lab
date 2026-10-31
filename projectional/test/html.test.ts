@@ -136,3 +136,12 @@ test("an event says where the pointer is: from the element's top-left, or 0, 0 w
   e.fire("keydown", { key: "a" });
   assert.deepEqual(got!.fields.slice(1), ["a", 0, 0]);
 });
+
+test("a part inside a picture is an SVG group; elsewhere a lab-part", () => {
+  const circle = () => ({ tag: HTML_V.element, fields: ["circle", toList([]), toList([])] });
+  const part = { tag: HTML_V.part, fields: [circle as never] } as Data;
+  const el = (tag: string) => ({ tag: HTML_V.element, fields: [tag, toList([]), toList([part])] }) as Data;
+  const mount = (h: Data) => mountHtml(h, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl;
+  assert.equal(mount(el("svg")).html(), "<svg><g><circle></circle></g></svg>");
+  assert.equal(mount(el("div")).html(), '<div><lab-part style="display: contents"><circle></circle></lab-part></div>');
+});
