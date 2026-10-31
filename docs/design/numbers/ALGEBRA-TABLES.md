@@ -109,7 +109,8 @@ and wrong for quaternions.
    equal to Hamilton's product; `[−1]` is Complex, `[0]` Dual, `[1]`
    split-complex, `[1, 1, 1]` Cl(3, 0) and `[1, 1, 1, 0]` PGA. A
    quaternion record whose `arithmetic` uses the table gets the one `·`
-   (test/clifford.test.ts). `clifford reverse(squares, basis, x)` is x̃,
+   (test/clifford.test.ts). `clifford reverse(algebra, x)` is x̃ (since I79 the clifford
+   functions take `clifford algebra(squares, basis)`, its tables built once),
    so a rotor R turns a vector v into R · v · R̃; Cl(3, 0)'s rotors
    1, e₂₃, e₁₃, e₁₂ multiply as the quaternions (L43a). Next: a PGA motor in the ray marcher, which
    needs L41's expansion of the fold on the GPU.

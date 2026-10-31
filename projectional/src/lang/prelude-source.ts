@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -526,17 +526,25 @@ export function buildPrelude(): Module {
   // (BACKLOG L43): in Cl(3, 0) the rotors are the even part 1, e₁₂, e₁₃,
   // e₂₃, which multiplies as the quaternions do (Hamilton, 1843; Clifford,
   // 1878; Hestenes, New Foundations for Classical Mechanics, 1986).
+  // An algebra's parts, by name (std's Algebra, BACKLOG I79).
+  type Parts = { squares: Id; basis: Id; blades: Id; table: Id };
+  const parts = (al: Id, body: (p: Parts) => Id) => k.match(al, [{ variant: ALGEBRA_V, names: ["squares", "basis", "blades", "table"],
+    body: ([squares, basis, blades, table]) => body({ squares, basis, blades, table }) }]);
+  // The algebra of a signature and basis, its table built once: what the
+  // clifford functions below take (BACKLOG I79).
+  const cliffordAlgebra = k.def("clifford algebra");
+  k.define(cliffordAlgebra, k.fn(["squares", "basis"], (sq, es) => k.call(ALGEBRA_V, sq, es, k.call(pairUp, k.call(bladesOf, sq), es), k.call(cliffordTable, sq, es))));
   const cliffordReverse = k.def("clifford reverse");
-  k.define(cliffordReverse, k.fn(["squares", "basis", "x"], (sq, es, x) => k.let("ones", k.fold(sq, [
+  k.define(cliffordReverse, k.fn(["algebra", "x"], (al, x) => parts(al, ({ squares: sq, blades }) => k.let("ones", k.fold(sq, [
     { variant: NIL, names: [], body: () => NIL },
     { variant: CONS, names: ["square", "rest"], results: [null, "the rest's ones"], body: (_, [, r]) => k.call(CONS, k.lit(1), r!) },
-  ]), (ones) => k.fold(k.call(pairUp, k.call(bladesOf, sq), es), [
+  ]), (ones) => k.fold(blades, [
     { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x) },
     { variant: CONS, names: ["pair", "rest"], results: [null, "the rest reversed"], body: ([pr], [, r]) => k.match(pr, [
       { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => k.let("weight", n.mul(k.call(bladeSign, ones, b, b), along(x, e)), (w) =>
         k.call(S.zipParts, B.add, k.call(S.mapParts, k.fn(["part"], (y) => n.mul(w, y)), e), r!)) },
     ]) },
-  ]))));
+  ])))));
 
   // Geometry from the tables (MATRICES.md layer 2, BACKLOG L44b): turning,
   // reflecting, projecting and moving are products in the algebra, so they
@@ -554,27 +562,29 @@ export function buildPrelude(): Module {
   ]);
   // x̂: each blade times −1 for each of its vectors, so odd grades flip.
   const cliffordInvolute = k.def("clifford involute");
-  k.define(cliffordInvolute, k.fn(["squares", "basis", "x"], (sq, es, x) => k.fold(k.call(pairUp, k.call(bladesOf, sq), es), [
+  k.define(cliffordInvolute, k.fn(["algebra", "x"], (al, x) => parts(al, ({ blades }) => k.fold(blades, [
     { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x) },
     { variant: CONS, names: ["pair", "rest"], results: [null, "the rest involuted"], body: ([pr], [, r]) => k.match(pr, [
       { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => added(scaledBy(n.mul(k.call(flips, b), along(x, e)), e), r!) },
     ]) },
-  ])));
+  ]))));
   // A versor's inverse, ṽ / ⟨v ṽ⟩₀: a vector's, a rotor's or a blade's.
   const cliffordInverse = k.def("clifford inverse");
-  k.define(cliffordInverse, k.fn(["squares", "basis", "v"], (sq, es, v) => k.let("ṽ", k.call(cliffordReverse, sq, es, v), (rv) =>
-    scaledBy(n.div(k.lit(1), along(k.call(tableProduct, k.call(cliffordTable, sq, es), v, rv), scalarOne(es, v))), rv))));
+  k.define(cliffordInverse, k.fn(["algebra", "v"], (al, v) => parts(al, ({ basis: es, table: t }) => k.let("ṽ", k.call(cliffordReverse, al, v), (rv) =>
+    scaledBy(n.div(k.lit(1), along(k.call(tableProduct, t, v, rv), scalarOne(es, v))), rv)))));
+  const cliffordProduct = k.def("clifford product");
+  k.define(cliffordProduct, k.fn(["algebra", "a", "b"], (al, a, b) => parts(al, ({ table: t }) => k.call(tableProduct, t, a, b))));
   const cliffordSandwich = k.def("clifford sandwich");
-  k.define(cliffordSandwich, k.fn(["squares", "basis", "r", "x"], (sq, es, r, x) => k.let("table", k.call(cliffordTable, sq, es), (t) =>
-    k.call(tableProduct, t, k.call(tableProduct, t, r, x), k.call(cliffordReverse, sq, es, r)))));
+  k.define(cliffordSandwich, k.fn(["algebra", "r", "x"], (al, r, x) => parts(al, ({ table: t }) =>
+    k.call(tableProduct, t, k.call(tableProduct, t, r, x), k.call(cliffordReverse, al, r)))));
   const cliffordReflect = k.def("clifford reflect");
-  k.define(cliffordReflect, k.fn(["squares", "basis", "n", "x"], (sq, es, nv, x) => k.let("table", k.call(cliffordTable, sq, es), (t) =>
-    k.call(tableProduct, t, k.call(tableProduct, t, k.call(cliffordInvolute, sq, es, nv), x), k.call(cliffordInverse, sq, es, nv)))));
+  k.define(cliffordReflect, k.fn(["algebra", "n", "x"], (al, nv, x) => parts(al, ({ table: t }) =>
+    k.call(tableProduct, t, k.call(tableProduct, t, k.call(cliffordInvolute, al, nv), x), k.call(cliffordInverse, al, nv)))));
   // x's part in the blade b: ½(x − b̂ x b⁻¹), since b̂ x b⁻¹ keeps the
   // part outside b and flips the part in it.
   const cliffordProject = k.def("clifford project");
-  k.define(cliffordProject, k.fn(["squares", "basis", "b", "x"], (sq, es, b, x) =>
-    scaledBy(k.lit(0.5), k.call(S.zipParts, B.sub, x, k.call(cliffordReflect, sq, es, b, x)))));
+  k.define(cliffordProject, k.fn(["algebra", "b", "x"], (al, b, x) =>
+    scaledBy(k.lit(0.5), k.call(S.zipParts, B.sub, x, k.call(cliffordReflect, al, b, x)))));
   // e^b for a bivector b whose square is a number s: cos √−s + sin √−s / √−s · b
   // when s < 0 (a rotor), 1 + b when s = 0 (a translator in projective
   // geometric algebra), cosh √s + sinh √s / √s · b when s > 0. The rotor
@@ -601,7 +611,7 @@ export function buildPrelude(): Module {
           { variant: CONS, names: ["_", "rest"], results: [null, "half as far"], body: (_, [, r]) => k.call(tableProduct, t, r!, r!) },
         ])))));
   const cliffordExp = k.def("clifford exp");
-  k.define(cliffordExp, k.fn(["squares", "basis", "b"], (sq, es, b) => k.let("one", scalarOne(es, b), (one) => k.let("table", k.call(cliffordTable, sq, es), (t) =>
+  k.define(cliffordExp, k.fn(["algebra", "b"], (al, b) => parts(al, ({ basis: es, table: t }) => k.let("one", scalarOne(es, b), (one) =>
     k.let("b²", k.call(tableProduct, t, b, b), (bb) => k.let("s", along(bb, one), (s) =>
       k.let("the rest of b²", k.call(S.zipParts, B.sub, bb, scaledBy(s, one)), (rest) =>
       k.if(k.call(S.less, k.lit(1e-18), n.sub(sumOfSquares(rest), k.call(B.mul, k.lit(1e-18), n.mul(s, s)))),
@@ -650,11 +660,12 @@ export function buildPrelude(): Module {
       ]) },
     ]))));
   const cliffordOuter = k.def("clifford outer");
-  k.define(cliffordOuter, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
-    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(share, p, q)))), a, b)));
+  k.define(cliffordOuter, k.fn(["algebra", "a", "b"], (al, a, b) => parts(al, ({ squares: sq, basis: es }) =>
+    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(share, p, q)))), a, b))));
   const cliffordInner = k.def("clifford inner");
-  k.define(cliffordInner, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
-    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(sticksOut, p, q)))), a, b)));
+  k.define(cliffordInner, k.fn(["algebra", "a", "b"], (al, a, b) => parts(al, ({ squares: sq, basis: es }) =>
+    k.call(tableProduct, k.call(tableWhere, sq, es, k.fn(["p", "q"], (p, q) => k.call(S.not, k.call(sticksOut, p, q)))), a, b))));
+
   // How many vectors a blade has: its grade.
   const gradeOf = k.def("blade grade");
   k.define(gradeOf, k.fn(["blade"], (bl) => k.fold(bl, [
@@ -663,15 +674,15 @@ export function buildPrelude(): Module {
   ])));
   // x's parts on the blades the function `weigh` gives each blade's
   // weight for, summed: grade selection, dual and undual are each one.
-  const reweigh = (sq: Id, es: Id, x: Id, weigh: (blade: Id, element: Id, ps: Id) => Id) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) => k.fold(ps, [
+  const reweigh = (ps: Id, x: Id, weigh: (blade: Id, element: Id, ps: Id) => Id) => k.fold(ps, [
     { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x) },
     { variant: CONS, names: ["pair", "rest"], results: [null, "the rest's sum"], body: ([pr], [, r]) => k.match(pr, [
       { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => added(weigh(b, e, ps), r!) },
     ]) },
-  ]));
+  ]);
   const cliffordGrade = k.def("clifford grade");
-  k.define(cliffordGrade, k.fn(["squares", "basis", "grade", "x"], (sq, es, g, x) => reweigh(sq, es, x, (b, e) =>
-    k.if(k.call(S.equal, k.call(gradeOf, b), g), scaledBy(along(x, e), e), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))));
+  k.define(cliffordGrade, k.fn(["algebra", "grade", "x"], (al, g, x) => parts(al, ({ blades }) => reweigh(blades, x, (b, e) =>
+    k.if(k.call(S.equal, k.call(gradeOf, b), g), scaledBy(along(x, e), e), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x))))));
   // The dual by complement, which works in degenerate algebras too
   // (projective geometric algebra, where the pseudoscalar squares to 0):
   // e_A goes to ± e_Ā, Ā the vectors A doesn't have, signed so that
@@ -680,14 +691,14 @@ export function buildPrelude(): Module {
   // undual(dual(a) ∧ dual(b)).
   const complement = (bl: Id) => k.call(map, bl, k.fn(["has"], (h) => k.call(S.not, h)));
   const cliffordDual = k.def("clifford dual");
-  k.define(cliffordDual, k.fn(["squares", "basis", "x"], (sq, es, x) => reweigh(sq, es, x, (b, e, ps) => k.let("other", complement(b), (c) =>
-    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, c, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))))));
+  k.define(cliffordDual, k.fn(["algebra", "x"], (al, x) => parts(al, ({ squares: sq, blades }) => reweigh(blades, x, (b, e, ps) => k.let("other", complement(b), (c) =>
+    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, c, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x))))))));
   const cliffordUndual = k.def("clifford undual");
-  k.define(cliffordUndual, k.fn(["squares", "basis", "x"], (sq, es, x) => reweigh(sq, es, x, (c, e, ps) => k.let("other", complement(c), (b) =>
-    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, b, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x)))))));
+  k.define(cliffordUndual, k.fn(["algebra", "x"], (al, x) => parts(al, ({ squares: sq, blades }) => reweigh(blades, x, (c, e, ps) => k.let("other", complement(c), (b) =>
+    scaledBy(n.mul(k.call(bladeSign, sq, b, c), along(x, e)), k.call(elementOf, ps, b, k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x))))))));
   const cliffordRegressive = k.def("clifford regressive");
-  k.define(cliffordRegressive, k.fn(["squares", "basis", "a", "b"], (sq, es, a, b) =>
-    k.call(cliffordUndual, sq, es, k.call(cliffordOuter, sq, es, k.call(cliffordDual, sq, es, a), k.call(cliffordDual, sq, es, b)))));
+  k.define(cliffordRegressive, k.fn(["algebra", "a", "b"], (al, a, b) =>
+    k.call(cliffordUndual, al, k.call(cliffordOuter, al, k.call(cliffordDual, al, a), k.call(cliffordDual, al, b)))));
 
   // Small matrices (BACKLOG L44): the multiplication table of n × n
   // matrices from their matrix units, given as rows of basis elements.
@@ -1026,7 +1037,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1130,17 +1141,19 @@ export function buildPrelude(): Module {
     [trigD]: "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
     [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
-    [cliffordReverse]: "x̃, the reverse of x in the Clifford algebra clifford table(squares, basis) makes: each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
-    [cliffordSandwich]: "r · x · r̃ in the Clifford algebra clifford table(squares, basis) makes: how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
+    [cliffordReverse]: "x̃, the reverse of x in the algebra (clifford algebra makes one): each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
+    [cliffordSandwich]: "r · x · r̃ in the algebra (clifford algebra makes one): how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
     [cliffordReflect]: "n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.",
     [cliffordProject]: "The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).",
-    [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(squares, basis, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.",
-    [cliffordOuter]: "a ∧ b, the outer product in the Clifford algebra clifford table(squares, basis) makes: e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.",
+    [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(algebra, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.",
+    [cliffordOuter]: "a ∧ b, the outer product in the algebra (clifford algebra makes one): e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.",
     [cliffordInner]: "a ⌋ b, the left contraction: e_A ⌋ e_B is e_A e_B when every vector of A is in B, else 0. A vector contracted with a bivector gives the vector in that plane at right angles to it (e₁ ⌋ e₁₂ = e₂); a vector with a vector is their dot product.",
     [cliffordGrade]: "x's grade-k part: only its parts on blades of k vectors. Grade 0 is the scalar, 1 the vector, 2 the bivector.",
     [cliffordDual]: "x's dual by complement: e_A becomes ± e_Ā, the blade of the vectors A doesn't have, signed so that e_A ∧ dual(e_A) is the pseudoscalar. It works in projective geometric algebra, whose pseudoscalar squares to 0.",
-    [cliffordUndual]: "Undoes clifford dual: clifford undual(squares, basis, clifford dual(squares, basis, x)) is x.",
+    [cliffordUndual]: "Undoes clifford dual: clifford undual(algebra, clifford dual(algebra, x)) is x.",
     [cliffordRegressive]: "a ∨ b, the regressive product, undual(dual(a) ∧ dual(b)): in projective geometric algebra the line through two points, or the point where two lines meet in the plane.",
+    [cliffordProduct]: "a · b, the geometric product in the algebra (clifford algebra makes one): table product with the algebra's table.",
+    [cliffordAlgebra]: "A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε.",

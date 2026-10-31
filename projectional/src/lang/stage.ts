@@ -1,7 +1,8 @@
 // Calls with data known now, worked out now (C65, Ersagun 2026-10-31:
 // "Clifford tables first"). A call of a definition given data the program
 // writes down, such as an algebra's signature and basis,
-// `clifford sandwich([1, 1, 1, 0], pga basis, motor, point)`, is evaluated
+// `clifford sandwich(clifford algebra([1, 1, 1, 0], pga basis), motor,
+// point)`, is evaluated
 // as far as that data goes: the table is built, the folds over it are
 // unrolled, the matches on it are decided, and what is left is the
 // arithmetic on the parts that are only known when the program runs. The
@@ -238,7 +239,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   const known = (a: Id): string | null => {
     if (!closedTree(out, a)) return null;
     try {
-      const v = new Stager(ctx, 50_000).closed(a);
+      const v = new Stager(ctx, LIMIT).closed(a);
       if (!plainData(v) || !numbersIn(v, lists)) return null;
       return hasList(v, lists) ? JSON.stringify(v, (_, x) => (x && typeof x === "object" && x.k === "lit" ? { lit: String(x.node.value), of: x.node.of } : x)) : null;
     } catch (e) { if (stopped(e)) return null; throw e; }

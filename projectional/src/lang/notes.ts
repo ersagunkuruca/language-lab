@@ -29,6 +29,7 @@ export const NOTES: Comments = {
   "std.input": "Where a sound's samples come from: the microphone, or a recording at an address.",
   "std.attribute": "Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.",
   "std.html": "A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.",
+  "std.algebra": "A Clifford algebra built once by clifford algebra(squares, basis): its signature, its basis, each blade beside its basis element, and its multiplication table. The clifford functions take one, so a product, sandwich, reflection or exp doesn't build a table on every call.",
   "std.tableEntry": "One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.",
   "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
   "std.arithmetic": "An interface: the one + − · and −x, for any type that implements them. Float64, Int, Rational, Complex, Dual and Algebraic implement it in the prelude; a type of your own joins with a definition of type Arithmetic T, written arithmetic(its +, its −, its ·, its −x). A record of numbers without one gets them part by part. Resolved before the program runs, so it costs nothing (INTERFACES.md).",
