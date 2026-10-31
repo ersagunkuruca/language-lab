@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -235,6 +235,9 @@ export interface Runtime {
   // Told each time a function written as a lambda is called, with the
   // values it's called with (the editor seeds a definition's Run with them).
   entered?: (lambda: Id, args: Value[]) => void;
+  // Check's handler when the program has none (`lab test`, tests.ts):
+  // each expect, whether it held, and what it says.
+  check?: (holds: boolean, what: string) => void;
 }
 
 // What the world effects do. A failure throws, with a message that becomes
@@ -561,6 +564,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
+      if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       throw new Error(`nothing handles ${op}`);
     }
 

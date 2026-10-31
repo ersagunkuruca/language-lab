@@ -74,6 +74,13 @@ export const ABORT_OP = "std.abort.abort", LOG_OP = "std.log.log";
 // what nothing handles, the world answers.
 export const RANDOM = typedef("std.random", "Random", [], [["random", [], () => tref(NUMBER)]], true);
 export const RANDOM_OP = "std.random.random";
+// Check (TESTS-IN-THE-LANGUAGE.md, BACKLOG T7a): a test is a definition
+// that performs `expect(holds, what)`. Its handler decides what a failure
+// means: `lab test` collects every one (a failing expect doesn't stop the
+// test), the editor shows them on the definition. Not a world effect, so a
+// test may search (Choice) and is checked on every path.
+export const CHECK = typedef("std.check", "Check", [], [["expect", [["holds", () => tref(BOOL)], ["what", () => tref(STRING)]], () => tref(UNIT)]], true);
+export const CHECK_OP = "std.check.expect";
 // Time: `now()` is the time in milliseconds since 1970 (UTC). Reading the
 // clock changes nothing, so like Random it may run under Choice, and a
 // match can answer it (a test's fixed clock). In a page, a part that reads
@@ -839,7 +846,7 @@ export const ALGEBRA = typedef("std.algebra", "Algebra", ["a"], [
   ]],
 ]);
 export const ALGEBRA_V = "std.algebra.algebra";
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
