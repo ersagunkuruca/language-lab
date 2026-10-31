@@ -21,16 +21,18 @@ export interface Trace { values: Map<Id, Value>; result?: Value; error?: { id: I
 // `world` is what the world effects do (run.ts Runtime); without one they
 // abort saying so.
 // `entered`: told of every call to a function written as a lambda (run.ts).
+// A caller that bounds the run with it (throwing when time is up) may run
+// one that might not finish (newton, I78).
 export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"], entered?: Runtime["entered"]): Trace {
   const values = new Map<Id, Value>();
   const out: Trace = { values };
-  if (info.divergent.has(def)) { out.error = { id: def, message: "it might not finish, so it isn't run here" }; return out; }
+  if (info.divergent.has(def) && !entered) { out.error = { id: def, message: "it might not finish, so it isn't run here" }; return out; }
   const r = makeRunner(code, info, { print: () => {}, world, entered });
   const first = (xs: Iterable<Value>, id: Id): Value => {
     for (const x of xs) return x;
     throw Object.assign(new Error("no answer (a Choice with none)"), { id });
   };
-  const divergent = (id: Id) => { const n = code.nodes[id]; return n.kind === "call" && code.nodes[n.fn].kind === "ref" && info.divergent.has((code.nodes[n.fn] as NodeOf<"ref">).target); };
+  const divergent = (id: Id) => { if (entered) return false; const n = code.nodes[id]; return n.kind === "call" && code.nodes[n.fn].kind === "ref" && info.divergent.has((code.nodes[n.fn] as NodeOf<"ref">).target); };
 
   const handler = (n: NodeOf<"match">) => {
     const owner = n.arms.length ? info.owner.get((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : undefined;
