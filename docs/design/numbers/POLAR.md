@@ -136,7 +136,10 @@ the last step.
    still the error that names polar's direction (test/polar.test.ts).
 4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
    its ways. Cheap only with C55 (sin alone must not do the cos half).
-5. **L97e.** The complex laws, after T7.
+5. **L97e, built.** The complex laws, as tests in the prelude (T7):
+   `from polar undoes modulus and angle` and `polar undoes unpolar` (Trig's
+   two fields at Float64) perform Check, and test/prelude-laws.test.ts runs
+   them on small complex numbers the way `lab test` runs a program's.
 
 Steps 1 to 3 (and L97c2) do not need C55; C55 only makes the polar-first types (Fixed)
 as cheap as they should be.
