@@ -132,7 +132,8 @@ evaluator with compiled JS.
   writes the law `job(meaning(x)) = meaning(job′(x))` as a test definition,
   and the same runner checks it with small values of the stored type.
 - **L97e**, the complex laws: `polar` and `unpolar` round trips as tests in
-  the prelude.
+  the prelude (built: the prelude's first laws, run by
+  test/prelude-laws.test.ts).
 - **The library checks itself.** Prelude laws (`append` associative,
   `sort` sorted and a permutation) ship as definitions, cached like the
   rest.
