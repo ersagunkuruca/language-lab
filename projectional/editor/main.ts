@@ -105,7 +105,7 @@ import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../sr
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { definedAs, fromList, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../src/lang/run.ts";
-import type { RunAsk, RunSays } from "./runWorker.ts";
+import type { CompileAsk, CompileSays, RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
 import { parseValue } from "../src/lang/values.ts";
@@ -119,7 +119,7 @@ import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
-import { PAGE_BASE, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
+import { PAGE_BASE, hasSound, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
 import { evaluatorCall } from "../src/lang/html.ts";
@@ -2962,21 +2962,81 @@ function startPage(info: T.Info, main: Id) {
     page.now = showPage({
       code: prog(), info, names: pres().names, main, program: titleOf(doc),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME, recordings: "apps/",
-      frame: (f) => requestAnimationFrame(f),
-      ran: (n: Node_) => {
-        if (!page.flashBox.checked) return;
-        const e = (n as unknown as globalThis.Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as unknown as globalThis.Node).parentElement;
-        // A part's own element takes no space (display: contents): its children flash.
-        for (const x of e?.tagName === "LAB-PART" ? [...e.children] as HTMLElement[] : e ? [e] : []) {
-          x.style.outline = "2px solid #e8a33d";
-          setTimeout(() => { x.style.outline = ""; }, 400);
-        }
-      },
+      frame: (f) => requestAnimationFrame(f), ran: flashRan,
     });
     page.root = page.now.root as unknown as globalThis.Node;
   } catch (e) {
     page.status.textContent = `The page stopped: ${e instanceof Error ? e.message : String(e)}.`;
+    return;
   }
+  compilePage(main);
+}
+// Each time a part of the page runs again, outlined when "Outline updates" is on.
+function flashRan(n: Node_) {
+  if (!page.flashBox.checked) return;
+  const e = (n as unknown as globalThis.Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as unknown as globalThis.Node).parentElement;
+  // A part's own element takes no space (display: contents): its children flash.
+  for (const x of e?.tagName === "LAB-PART" ? [...e.children] as HTMLElement[] : e ? [e] : []) {
+    x.style.outline = "2px solid #e8a33d";
+    setTimeout(() => { x.style.outline = ""; }, 400);
+  }
+}
+
+// The preview runs compiled, as "Open in a tab" does (I97). The evaluator
+// walks the program's tree on every step, which an animation feels: Bounce
+// drew 8 frames a second here and 60 in a tab. So the page shows at once,
+// interpreted, while the same program is compiled off the editor's thread
+// (runWorker.ts, a few seconds for a big one), and the compiled page takes
+// its place when it's ready, started afresh. Once per version of the
+// program: Restart swaps it in at once. A page with sound stays
+// interpreted, since its sound plays from the evaluator's page
+// (audio-page.ts). Runs and inspection don't use the page, so they don't change.
+const compiledPages = new WeakMap<Code, string | null>(); // null: it didn't compile
+let compiling: Worker | null = null;
+function compilePage(main: Id) {
+  compiling?.terminate();
+  compiling = null;
+  const code = prog();
+  if (!page.now || page.now.hush || hasSound(code)) return;
+  const made = compiledPages.get(code);
+  if (made !== undefined) { if (made) swapCompiled(code, made, main); return; }
+  page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds.";
+  const w = (compiling = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const done = (m: CompileSays) => {
+    w.terminate();
+    if (compiling !== w) return;
+    compiling = null;
+    compiledPages.set(code, "program" in m ? m.program : null);
+    if (page.for !== code) return;
+    if ("program" in m) swapCompiled(code, m.program, main);
+    else page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
+  };
+  w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data);
+  w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
+  const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, main };
+  w.postMessage(ask);
+}
+// The compiled program and a fresh copy of the page runtime (cli/web.ts
+// pageRuntime) evaluated here, so the page's elements are made in the
+// same document as the interpreted page's and go into the frame the same way.
+function swapCompiled(code: Code, program: string, main: Id) {
+  type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; stop(): void } };
+  let m;
+  try {
+    const lab = new Function(`${PAGE_RUNTIME}\nreturn $lab;`)() as Lab;
+    const defs = new Function("$lab", `${program}\nreturn defs;`)(lab) as Record<string, unknown>;
+    m = lab.mountPage(defs[pres().names[main]], titleOf(doc), { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan });
+  } catch (e) {
+    compiledPages.set(code, null);
+    page.status.textContent = `Interpreted: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`;
+    return;
+  }
+  const old = page.root;
+  page.now?.stop();
+  page.now = { root: m.root, cells: null as never, stop: m.stop };
+  page.root = m.root as unknown as globalThis.Node;
+  if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
+  page.status.textContent = "";
 }
 
 // The page compiled (page.ts pageFile): saved, or opened in a tab.
