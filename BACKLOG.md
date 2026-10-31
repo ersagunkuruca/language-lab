@@ -38,6 +38,14 @@ New items land here until the next triage gives them a lane and a priority.
 | I76 | On a page program, a helper's own Run sits below the 560 px page; when the open definition isn't main, fold or shrink the page | QA11 M2 | 2026-10-31 |
 | I77 | A page's main still opens with empty canvas top-left (Tumble's first node 220 px right, 275 px down; pedal lower right); open on the first node | QA11 L1 | 2026-10-31 |
 | I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
+| I79 | Where C65 (#724) can't work a clifford call out (the algebra isn't written down, I86; the evaluator), the call rebuilds the 64-line table every time; let the clifford functions take an algebra built once (table, reverse signs) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | 2026-10-31 |
+| I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
+| I81 | Multivectors are written by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃); give a way to write them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
+| I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
+| I83 | No list item-at-index in the prelude: Bounce and Tumble each write their own `nth` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6 | 2026-10-31 |
+| I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
+| I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 375 ms (see I79, L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I86 | C65 works out clifford calls only where the algebra is written down; Bounce passes it in a `Space` value so one `step` runs 2D and 3D, and gets none of it (1.6 ms step, 9.3 ms drawing a frame). Specialise a function on a constant argument (`flat`, `solid`) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B8 | 2026-10-31 |
 
 ## E: Editor
 
@@ -135,8 +143,8 @@ all of these.
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md), Ersagun 2026-10-31): `Mat2` to `Mat4` done (L44a). Rotors, reflections, projections and PGA motions from the Clifford tables done (L44b); reading a function's matrix done (L44c, src/lang/linear.ts). Next: the compiler stores linear functions as matrices (C lane, C30b/c); then a linear-algebra library for any size | LANGUAGE-REVIEW-2026-10-24 | P1 | M | steps 1-2 done |
 | L117 | Lists as arrays written in the language (REPRESENTATIONS.md step 5, with C30d): a `hides(variant, field)` job read into `hidden`, then the `array of List` representation definition with honest costs (match linear, fold quadratic when the tail is read) | Compiler lane, 2026-10-31 | P1 | M | |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher, after L41 | NUMBERS.md stage 4 | P1 | M | step 1 done |
-| L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next: grade inference on the units machinery | NUMBERS.md stage 4 | P1 | L | rotors done |
-| L41 | Table products expanded at compile time, zero terms dropped (with lane C) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | |
+| L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next: grade inference on the units machinery (Bounce passes vectors, spins and rotors as one 8-part type) | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors done |
+| L41 | Table products expanded at compile time, zero terms dropped (with lane C). Measured in Bounce: a Cl(3, 0) product is 0.10 ms compiled, about 200 times a hand-written one | LANGUAGE-REVIEW-2026-10-24, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | P1 | M | |
 | L51 | Tensors as the general algebra (NUMBERS.md stage 6) | NUMBERS.md stage 6 | P1 | L | after C30 |
 | L97 | `polar` as the relation behind Trig (POLAR.md): L97a to L97c4 done (Trig's polar, unpolar, asin, acos; polar given x, y answered by unpolar). Next: L97d Fixed's CORDIC; L97e complex laws after T7 | Ersagun 2026-10-28 | P2 | M | 3 of 5 steps, step 3 finished |
 | L96 | Several ways to compute one operation, the compiler choosing by cost (WAYS.md): L96a to L96c done. Left: the steps after L97 | Ersagun 2026-10-28 | P2 | L | 3 of 5 steps |
