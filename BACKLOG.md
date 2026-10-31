@@ -40,7 +40,7 @@ New items land here until the next triage gives them a lane and a priority.
 | I78 | `newton` opens with an empty Run; since #703 its function input could start from what main passes it (see I29) | QA11 L2 | 2026-10-31 |
 | I79 | Where C65 (#724) can't work a clifford call out (the algebra isn't written down, I86; the evaluator), the call rebuilds the 64-line table every time; let the clifford functions take an algebra built once (table, reverse signs) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B1 | 2026-10-31 |
 | I80 | A page has no frame event: a simulation steps from a handler, so Bounce and Tumble hide a CSS animation and step on `animationiteration`/`animationend`. Two examples write around it (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B2 | 2026-10-31 |
-| I81 | Multivectors are written by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃); give a way to write them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
+| I81 | Multivectors are written and read by position (`solid(0, 0, 0, 2, 0, 1, 0, 0)` for 2e₁₂ + e₁₃; Spacetime names all 16 parts to read one); give a way to write and read them by blade | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B4 | 2026-10-31 |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body` has 8; 4 places rebuild it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B5 | 2026-10-31 |
 | I83 | No list item-at-index or update-at-index in the prelude: Bounce, Tumble and Constructions each write their own `nth`, and Constructions a `replaced` (P2 by the rule) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B6, G4 | 2026-10-31 |
 | I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | 2026-10-31 |
@@ -51,6 +51,10 @@ New items land here until the next triage gives them a lane and a priority.
 | I89 | Outer and inner products, the dual, the regressive product and grade selection for the Clifford tables. Constructions writes ½(ab − ba) and a part-by-part dual for its own record | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G3 | 2026-10-31 |
 | I90 | Constructions in the editor's program list (built into apps/ since the PR that added it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
 | I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | 2026-10-31 |
+| I92 | `clifford exp` of a bivector whose square has an I part (a field with E·B ≠ 0, a screw motion): split it into commuting parts first. Spacetime offers only E ⟂ B | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S1 | 2026-10-31 |
+| I93 | Show a Float64 to a fixed number of decimals; Spacetime writes its own `rounded` | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S3 | 2026-10-31 |
+| I94 | Spacetime in the editor's program list (built into apps/ since the PR that added it); its charge path takes about 8 s in the evaluator (I79) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
+| I95 | **Bug.** relate run backwards (only the answer known) through a Cl(1, 3) table product ignores its step budget and runs out of memory (agreement.test OOM); Spacetime writes `times`, `moved by`, `along`, `velocity of` inline to avoid it | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S5 | 2026-10-31 |
 
 ## E: Editor
 
