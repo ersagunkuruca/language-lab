@@ -23,7 +23,7 @@ saving, 2026-10-27).
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I88, then I90, I85, I94 (program list) and I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
+| E Editor | "Editor lane" | I90, I85, I94 (program list), then I29 cause (b) (Ersagun's 20 + 20 more, 2026-10-31) |
 | C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
 | L Language and library | "Language lane" | C30d language side done (#737); Inbox triaged (this PR); next I91, I82, I81, I84, L29, L46, then P1/P2 rows (Ersagun's 20 + 20 more, 2026-10-31) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -46,7 +46,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I88 | A `part` can't sit inside an SVG (it is a `lab-part` HTML element), so a picture redraws whole; Constructions stacks two SVGs | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G2 | P2 | M | |
 | I94 | Spacetime in the editor's program list (built into apps/ since the PR that added it); its charge path takes about 6 s in the evaluator, all of it products (L41) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | P2 | S | |
 | I90 | Constructions in the editor's program list (built into apps/ since the PR that added it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | P2 | S | |
 | I85 | Bounce in the editor's program list (apps/bounce.html is built since the PR that added it); in the evaluator a solid-world frame takes about 90 ms since I79 (L41 for the rest) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | P2 | S | |
