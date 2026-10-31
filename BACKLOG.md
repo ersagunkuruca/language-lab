@@ -34,7 +34,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I96 | Bounce's Clifford calls are no longer worked out when compiled. With the algebra built once (I79), I86 makes copies for the space (`clifford sandwich at clifford sandwich's algebra`), but each copy calls the generic `table product` over the table's 64 lines, both in `step` and in drawing. Drawing the solid world is 6.4 ms a frame compiled; a sandwich with `cl3` written in place is 0.001 ms. I86's 0.06 ms step was measured before I79. | Bounce frame-rate fix, 2026-10-31 | 2026-10-31 |
 
 ## E: Editor
 
