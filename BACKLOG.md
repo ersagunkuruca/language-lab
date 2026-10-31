@@ -25,7 +25,7 @@ saving, 2026-10-27).
 |---|---|---|
 | E Editor | "Editor lane" | Idle. I29 cause (b) needs a design step (see its row); E103/I40 wait on the held E133 design (the 10% rule stopped them) |
 | C Compiler and targets | "Compiler lane" | idle; when restarted: I37, then C30 |
-| L Language and library | "Language lane" | Clifford demo rows: I95, I89 done; next I92 (exp with an I part), I83 (item at), I93 (fixed decimals) |
+| L Language and library | "Language lane" | Clifford demo rows: I95, I89, I92 done; next I83 (item at), I93 (fixed decimals) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -49,7 +49,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I88 | A `part` can't sit inside an SVG (it is a `lab-part` HTML element), so a picture redraws whole; Constructions stacks two SVGs | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G2 | 2026-10-31 |
 | I90 | Constructions in the editor's program list (built into apps/ since the PR that added it) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
 | I91 | relate needs ~6,400 steps to check one `clifford reflect` (over the agreement test's 5,000), so Constructions writes `mirror` inline instead of as a definition | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) G5 | 2026-10-31 |
-| I92 | `clifford exp` of a bivector whose square has an I part (a field with E·B ≠ 0, a screw motion): split it into commuting parts first. Spacetime offers only E ⟂ B | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S1 | 2026-10-31 |
 | I93 | Show a Float64 to a fixed number of decimals; Spacetime writes its own `rounded` | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) S3 | 2026-10-31 |
 | I94 | Spacetime in the editor's program list (built into apps/ since the PR that added it); its charge path takes about 8 s in the evaluator (I79) | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) | 2026-10-31 |
 

@@ -579,14 +579,38 @@ export function buildPrelude(): Module {
   // when s < 0 (a rotor), 1 + b when s = 0 (a translator in projective
   // geometric algebra), cosh √s + sinh √s / √s · b when s > 0. The rotor
   // turning by θ in the plane B (B² = −1) is clifford exp(−θ/2 · B).
+  // When b² isn't a number (an electromagnetic field with E·B ≠ 0 squares
+  // to a number plus a pseudoscalar part; a screw motion in projective
+  // geometric algebra), the series instead (BACKLOG I92): halved until
+  // small, Horner's form of 1 + b + b²/2! + … to 16 terms, then squared
+  // back up, e^b = (e^(b/2ᵏ))^(2ᵏ). That is scaling and squaring, as for
+  // the matrix exponential (Moler and Van Loan, "Nineteen dubious ways to
+  // compute the exponential of a matrix", 1978/2003).
+  const sumOfSquares = (x: Id) => k.call(S.total, k.call(S.zipParts, B.mul, x, x));
+  const cliffordSeries = k.def("clifford exp by series");
+  k.define(cliffordSeries, k.fn(["table", "one", "b"], (t, one, b) =>
+    k.let("halvings", k.let("size", k.call(B.sqrt, sumOfSquares(b)), (size) =>
+      k.if(k.call(S.less, size, k.lit(0.25)), k.lit(0), n.add(k.call(S.floor, n.div(k.call(B.log, n.div(size, k.lit(0.25))), k.call(B.log, k.lit(2)))), k.lit(1)))), (h) =>
+      k.let("small", scaledBy(n.div(k.lit(1), k.call(B.pow, k.lit(2), h)), b), (x) =>
+        k.fold(k.call(S.range, h), [
+          { variant: NIL, names: [], body: () => k.fold(k.call(S.range, k.lit(16)), [
+            { variant: NIL, names: [], body: () => one },
+            { variant: CONS, names: ["i", "rest"], results: [null, "the rest's terms"], body: ([i], [, r]) =>
+              added(one, scaledBy(n.div(k.lit(1), n.add(i, k.lit(1))), k.call(tableProduct, t, x, r!))) },
+          ]) },
+          { variant: CONS, names: ["_", "rest"], results: [null, "half as far"], body: (_, [, r]) => k.call(tableProduct, t, r!, r!) },
+        ])))));
   const cliffordExp = k.def("clifford exp");
-  k.define(cliffordExp, k.fn(["squares", "basis", "b"], (sq, es, b) => k.let("one", scalarOne(es, b), (one) =>
-    k.let("s", along(k.call(tableProduct, k.call(cliffordTable, sq, es), b, b), one), (s) =>
+  k.define(cliffordExp, k.fn(["squares", "basis", "b"], (sq, es, b) => k.let("one", scalarOne(es, b), (one) => k.let("table", k.call(cliffordTable, sq, es), (t) =>
+    k.let("b²", k.call(tableProduct, t, b, b), (bb) => k.let("s", along(bb, one), (s) =>
+      k.let("the rest of b²", k.call(S.zipParts, B.sub, bb, scaledBy(s, one)), (rest) =>
+      k.if(k.call(S.less, k.lit(1e-18), n.sub(sumOfSquares(rest), k.call(B.mul, k.lit(1e-18), n.mul(s, s)))),
+        k.call(cliffordSeries, t, one, b),
       k.if(k.call(S.equal, s, k.lit(0)), added(one, b),
         k.if(k.call(S.less, s, k.lit(0)),
           k.let("a", k.call(B.sqrt, k.call(B.neg, s)), (a) => added(scaledBy(k.call(B.cos, a), one), scaledBy(n.div(k.call(B.sin, a), a), b))),
           k.let("a", k.call(B.sqrt, s), (a) => k.let("eᵃ", k.call(B.exp, a), (ea) => k.let("e⁻ᵃ", n.div(k.lit(1), ea), (eb) =>
-            added(scaledBy(n.mul(k.lit(0.5), n.add(ea, eb)), one), scaledBy(n.div(n.mul(k.lit(0.5), n.sub(ea, eb)), a), b)))))))))));
+            added(scaledBy(n.mul(k.lit(0.5), n.add(ea, eb)), one), scaledBy(n.div(n.mul(k.lit(0.5), n.sub(ea, eb)), a), b)))))))))))))));
 
   // The other products, grades and duals (BACKLOG I89), as in Dorst,
   // Fontijne and Mann (2007) and Gunn and De Keninck (2019). The outer and
@@ -1072,7 +1096,7 @@ export function buildPrelude(): Module {
     [cliffordSandwich]: "r · x · r̃ in the Clifford algebra clifford table(squares, basis) makes: how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
     [cliffordReflect]: "n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.",
     [cliffordProject]: "The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).",
-    [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(squares, basis, −θ/2 · B).",
+    [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(squares, basis, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.",
     [cliffordOuter]: "a ∧ b, the outer product in the Clifford algebra clifford table(squares, basis) makes: e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.",
     [cliffordInner]: "a ⌋ b, the left contraction: e_A ⌋ e_B is e_A e_B when every vector of A is in B, else 0. A vector contracted with a bivector gives the vector in that plane at right angles to it (e₁ ⌋ e₁₂ = e₂); a vector with a vector is their dot product.",
     [cliffordGrade]: "x's grade-k part: only its parts on blades of k vectors. Grade 0 is the scalar, 1 the vector, 2 the bivector.",
