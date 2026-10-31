@@ -62,6 +62,9 @@ import constructionsComments from "../examples/constructions/comments.json" with
 import bounceCode from "../examples/bounce/code.json" with { type: "json" };
 import bounceNames from "../examples/bounce/names.default.json" with { type: "json" };
 import bounceComments from "../examples/bounce/comments.json" with { type: "json" };
+import spacetimeCode from "../examples/spacetime/code.json" with { type: "json" };
+import spacetimeNames from "../examples/spacetime/names.default.json" with { type: "json" };
+import spacetimeComments from "../examples/spacetime/comments.json" with { type: "json" };
 import pedalCode from "../examples/pedal/code.json" with { type: "json" };
 import pedalNames from "../examples/pedal/names.default.json" with { type: "json" };
 import pedalComments from "../examples/pedal/comments.json" with { type: "json" };
@@ -159,7 +162,7 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"], ["constructions", "Page: constructions"], ["bounce", "Page: bounce"]];
+const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"], ["constructions", "Page: constructions"], ["bounce", "Page: bounce"], ["spacetime", "Page: spacetime"]];
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -256,6 +259,7 @@ const initialFor = (program: Program): Doc =>
   : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
   : program === "constructions" ? typedDoc("constructions", constructionsCode as Code, constructionsNames, constructionsComments)
   : program === "bounce" ? typedDoc("bounce", bounceCode as Code, bounceNames, bounceComments)
+  : program === "spacetime" ? typedDoc("spacetime", spacetimeCode as Code, spacetimeNames, spacetimeComments)
   : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
   : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
   : program === "lockstep" ? typedDoc("lockstep", lockstepCode as Code, lockstepNames, lockstepComments)
