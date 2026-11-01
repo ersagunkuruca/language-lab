@@ -7,6 +7,7 @@
 // A function returning Bool built from equal and and is what used to be a
 // network; its result is known to be true.
 
+import { handOver, type Cells } from "../src/lang/cells.ts";
 import quadCode from "../examples/quadratic/code.json" with { type: "json" };
 import quadShort from "../examples/quadratic/names.short.json" with { type: "json" };
 import quadDescriptive from "../examples/quadratic/names.descriptive.json" with { type: "json" };
@@ -3065,7 +3066,7 @@ function startPage(info: T.Info, main: Id) {
     page.now = showPage({
       code: prog(), info, names: pres().names, main, program: titleOf(doc),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME, recordings: "apps/",
-      frame: (f) => requestAnimationFrame(f), ran: flashRan,
+      frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true,
     });
     page.root = page.now.root as unknown as globalThis.Node;
   } catch (e) {
@@ -3090,20 +3091,22 @@ function flashRan(n: Node_) {
 // drew 8 frames a second here and 60 in a tab. So the page shows at once,
 // interpreted, while the same program is compiled off the editor's thread
 // (runWorker.ts, a few seconds for a big one), and the compiled page takes
-// its place when it's ready, started afresh. Once per version of the
-// program: Restart swaps it in at once. A page with sound stays
-// interpreted, since its sound plays from the evaluator's page
-// (audio-page.ts). Runs and inspection don't use the page, so they don't change.
+// its place when it's ready. What was done on the page meanwhile goes
+// with it: the cells that changed are handed across (cells.ts handOver,
+// I109). Once per version of the program: Restart swaps it in at once. A
+// page with sound stays interpreted, since here its sound plays from the
+// evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
 const compiledPages = new WeakMap<Code, string | null>(); // null: it didn't compile
 let compiling: Worker | null = null;
 function compilePage(main: Id) {
   compiling?.terminate();
   compiling = null;
   const code = prog();
-  if (!page.now || page.now.hush || hasSound(code)) return;
+  if (!page.now) return;
+  if (page.now.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
   const made = compiledPages.get(code);
   if (made !== undefined) { if (made) swapCompiled(code, made, main); return; }
-  page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds.";
+  page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
   const w = (compiling = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
   const done = (m: CompileSays) => {
     w.terminate();
@@ -3123,13 +3126,15 @@ function compilePage(main: Id) {
 // pageRuntime) evaluated here, so the page's elements are made in the
 // same document as the interpreted page's and go into the frame the same way.
 function swapCompiled(code: Code, program: string, main: Id) {
-  type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; stop(): void } };
+  type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void } };
   let m;
   try {
     const lab = new Function(`${PAGE_RUNTIME}\nreturn $lab;`)() as Lab;
     const defs = new Function("$lab", `${program}\nreturn defs;`)(lab) as Record<string, unknown>;
     m = lab.mountPage(defs[pres().names[main]], titleOf(doc), { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan });
+    if (page.now?.kept) handOver(page.now.kept, m.kept, m.cells);
   } catch (e) {
+    m?.stop();
     compiledPages.set(code, null);
     page.status.textContent = `Interpreted: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`;
     return;
