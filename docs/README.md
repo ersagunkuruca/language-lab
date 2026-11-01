@@ -69,6 +69,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | partly built (L97) |
 | [MATRICES.md](design/numbers/MATRICES.md) | Linear maps, geometry and matrices: functions stored as matrices, Clifford rotors, a linear-algebra library | partly built (L44) |
 | [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
+| [FLOAT-VALUES-2026-11-01.md](design/numbers/FLOAT-VALUES-2026-11-01.md) | Which IEEE values `Float64` keeps: finite with one zero, ±∞ as `Extended a`, NaN as stored "no answer" (Rust-style niches) | proposal (L125), two decisions for Ersagun |
 | [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
 
 ### Representations, data and cells
