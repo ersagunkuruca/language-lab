@@ -2406,6 +2406,8 @@ function groupPicked(picked: Id[]) {
 // just it.
 function fnSet(id: Id, picked: Id[]): { members: Id[]; what: string; group?: Id } | null {
   if (picked.includes(id)) return { members: picked, what: picked.length > 1 ? `The ${picked.length} picked` : "This node" };
+  // A menu opened on a node beside the picked ones takes it with them.
+  if (picked.length) return { members: [...picked, id], what: `The ${picked.length} picked and this one` };
   const g = Object.entries(doc.layout.groups ?? {}).find(([, ms]) => ms.includes(id) || ms.some((m) => subtree(doc.code, m).includes(id)));
   if (g) return { members: g[1], what: "The group it's in", group: g[0] };
   return doc.code.nodes[id] ? { members: [id], what: "This node" } : null;

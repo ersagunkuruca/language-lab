@@ -1298,7 +1298,15 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     const t = (e.target as Element).closest("[data-move], [data-id]");
     if (e.shiftKey) {
       const k = t?.getAttribute("data-move") ?? t?.getAttribute("data-id");
-      if (k && (scene.items.has(k) || scene.frames.has(k))) { picked.has(k) ? picked.delete(k) : picked.add(k); draw(hooks.at); }
+      if (k && (scene.items.has(k) || scene.frames.has(k))) {
+        // The node selected before the first shift-click is the first of
+        // the picked, so the order of clicks doesn't change what's picked
+        // (Ersagun 2026-11-01).
+        const sel = hooks.selected;
+        if (!picked.size && sel && sel !== k && (scene.items.has(sel) || scene.frames.has(sel))) picked.add(sel);
+        picked.has(k) ? picked.delete(k) : picked.add(k);
+        draw(hooks.at);
+      }
       return;
     }
     const id = (e.target as Element).closest("[data-id]")?.getAttribute("data-id");
