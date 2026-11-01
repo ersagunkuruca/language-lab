@@ -24,7 +24,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 |---|---|---|
 | E Editor | "Editor lane" | I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
 | C Compiler and targets | "Compiler lane" | C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
-| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a Yesterday's run ended with I100 (#805) |
+| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
