@@ -211,6 +211,18 @@ a stable id:
   conflict only happens when both sides changed the same field of the
   same draft node, and the driver says which node in which definition.
 
+**Built (L113).** `lab merge %O %A %B %P` is the merge driver
+(ters/src/merge-files.ts): objects merge key by key, `defs` and other lists
+of ids merge as ordered sets (ours' order, theirs' additions before the
+item that follows them there), and any other value that both sides
+changed differently is a conflict: ours is kept, the driver exits with 1,
+and it says "`area`: node f: both changed its target". `.gitattributes`
+names it for ters/examples and ters/library; each clone turns it on once
+with `git config merge.ters.driver "node ters/cli/lab.ts merge %O %A %B
+%P"` (until then git merges those files by line, as before). `lab diff
+before.json after.json` says what changed: definitions added, removed and
+changed (with how many nodes), renames, and side-table entries.
+
 A new version-control system is not needed now. The principled long-term
 form is history as the editor's own edits (edits at a path,
 STABLE-REFERENCES.md §1) that commute when they touch different nodes:

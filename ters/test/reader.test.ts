@@ -95,3 +95,33 @@ test("typed text reads a function's named results back in", async () => {
   // As many parts as results, or it says so.
   assert.equal(fillValue(open, made.names, info, lam.id, "(saturation, hue) → red, green => saturation", hsi).ok, false);
 });
+
+// A tuple's part reads by its result port's name (BACKLOG I131): after
+// Make it a function on HSI colour's r and g, the blocks print results.r
+// where first(results) is, and results.g typed back is second(results).
+test("the blocks read a tuple's parts by their result ports' names", async () => {
+  const { makeFunction } = await import("../../editor/typed.ts");
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
+  const valueOf = (n: string) => {
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
+    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+  };
+  const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  const pres = { ...p.pres, names: made.names };
+  const text = renderBlocks(made.code, pres, infer(made.code, made.names), hsi);
+  assert.match(text, /r = results\.r\n/);
+  assert.match(text, /g = results\.g\n/);
+  const reads = subtree(made.code, hsi).map((x) => made.code.nodes[x]).filter((n): n is NodeOf<"call"> => n.kind === "call" && /^std\.tuple2\.tuple\.(first|second)$/.test((made.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""));
+  assert.equal(reads.length, 2);
+  const g = reads.find((n) => (made.code.nodes[n.fn] as NodeOf<"ref">).target.endsWith("second"))!;
+  const open = replace(made.code, g.id, () => ({ kind: "hole" }));
+  const r = fillValue(open, made.names, infer(open, made.names), g.id, "results.g", hsi);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  assert.equal(renderBlocks(r.code, { ...p.pres, names: r.names }, infer(r.code, r.names), hsi), text);
+  assert.equal(fillValue(open, made.names, infer(open, made.names), g.id, "results.nope", hsi).ok, false);
+});

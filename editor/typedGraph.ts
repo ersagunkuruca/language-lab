@@ -35,10 +35,11 @@
 import type { Code, Id, NodeOf } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
-import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
+import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType } from "./typed.ts";
+import { partPort, resultPorts } from "../ters/src/lang/results.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { B } from "../ters/src/prelude.ts";
@@ -554,33 +555,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // A part of a tuple read by position, named as the function that gave
   // it named that result (L128b): first(r) reads .drift. What it's read
   // from is followed through lets and definitions to that function.
-  let letValues: Map<Id, Id> | null = null;
-  const valueOf = (b: Id): Id | undefined => {
-    if (!letValues) {
-      letValues = new Map();
-      for (const c of Object.values(code.nodes)) if (c.kind === "call") { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && letValues!.set(p, c.args[i])); }
-    }
-    return letValues.get(b);
-  };
-  const follow_ = (e: Id | undefined): NodeOf<"lambda"> | NodeOf<"call"> | null => {
-    for (let hops = 0; e && hops < 8; hops++) {
-      const x = node(e);
-      if (x?.kind === "lambda" || x?.kind === "call") return x;
-      if (x?.kind !== "ref") return null;
-      const t = node(x.target);
-      e = t?.kind === "def" ? t.body ?? undefined : t?.kind === "binder" ? valueOf(x.target) : undefined;
-    }
-    return null;
-  };
-  const partName = (field: Id, from: Id): string | null => {
-    let k = -1, size = 0;
-    for (let m = 2; m <= TUPLE_MAX && k < 0; m++) for (let i = 0; i < m; i++) if (tuplePart(m, i) === field) { k = i; size = m; }
-    if (k < 0) return null;
-    const c = follow_(from);
-    const fn = c?.kind === "call" ? follow_(c.fn) : null;
-    const rs = fn?.kind === "lambda" ? fn.results : undefined;
-    return rs?.length === size && names[rs[k]] ? names[rs[k]] : null;
-  };
+  const partName = (field: Id, from: Id): string | null => { const port = partPort(code, field, from); return port && names[port] ? names[port] : null; };
   const call = (id: Id, n: NodeOf<"call">): Sub => {
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
@@ -736,8 +711,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const choice = /Choice|needs|stuck|may not end/.test(badge);
     const title = `${declared ? "" : "solve "}${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
     const rows = Math.max(givenKeys.length, boundKeys.length);
-    const lw = Math.max(0, ...givenKeys.map((k) => tw(label(k), 6.6))), rw = Math.max(0, ...boundKeys.map((k) => tw(label(k), 6.6)));
-    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, lw + rw + 36);
+    // A solved port reads "port → its name" when the two differ: sized as
+    // drawn, so a row's two labels don't run together (BACKLOG I132).
+    const outLabel = (k: string) => { const b = n.binds[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
+    const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : 0);
+    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: Math.max(givenKeys.length, boundKeys.length) }, (_, i) => lw(i) + rw(i) + 36));
     const top = 34;
     const bh = top + rows * 20 + 6;
     const portY = (i: number) => top + i * 20 + 8;
@@ -752,7 +730,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       });
       boundKeys.forEach((k, i) => {
         const b = n.binds[k];
-        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
+        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outLabel(k)));
         g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
       });
     }, { name: title });
@@ -999,8 +977,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const v = w.use?.ref ?? w.edge, t = v && info?.typeOf.get(v);
     const z = t ? info!.subst.zonk(t) : null;
     if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id)) continue;
-    const c = follow_(v), fn = c?.kind === "call" ? follow_(c.fn) : null;
-    const rs = fn?.kind === "lambda" && fn.results?.length === z.args.length ? fn.results.map((r) => names[r]) : null;
+    const ports = resultPorts(code, v!);
+    const rs = ports?.length === z.args.length ? ports.map((r) => names[r]) : null;
     w.parts = rs && rs.every(Boolean) ? rs : z.args.map((a) => showIn(a, names, info!.subst));
     w.value = v;
   }

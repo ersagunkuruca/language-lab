@@ -16,6 +16,7 @@ import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
+import { partNamed } from "../ters/src/lang/results.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
@@ -409,6 +410,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const alts = Object.keys(names).filter((id) => names[id] === field && code.nodes[id]?.kind === "field");
     const of = typedOut(t.slice(0, dot), code, names, scope);
     if (alts.length && !("error" in of)) return { op: alts[0], args: [of], alts };
+    // results.drift: a tuple's part by the result port it came out of (I131).
+    const part = !("error" in of) && "ref" in of ? partNamed(code, names, of.ref, field) : null;
+    if (part) return { op: part, args: [of as Typed] };
   }
   // A name may be several words, as fraction(3), or quoted as the blocks
   // draw it, ‹show numbers›(x).
@@ -1355,7 +1359,27 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   }
   next.nodes[outer] = { id: outer, kind: "lambda", params: [fn], body: one ? (at === roots[0] ? call : at) : pLet };
   next.nodes[let_] = { id: let_, kind: "call", fn: outer, args: [lam] };
-  params.forEach((q, i) => { const x = code.nodes[firsts[i]]; nn[q] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
+  // An input that isn't a variable (0.5 · gravity) is named for the input
+  // it fills, where that has a name (a definition's parameter); else it's
+  // in, numbered among such inputs only: (speed, time, in1, in2), not in3
+  // and in4 (BACKLOG I131).
+  const fills = (x: Id): string | undefined => {
+    const at = parentOf(code, x), c = at && code.nodes[at.parent];
+    if (at?.slot !== "args" || c?.kind !== "call") return undefined;
+    const f = code.nodes[c.fn], d = f?.kind === "ref" ? code.nodes[f.target] : undefined;
+    const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    const q = lam?.kind === "lambda" ? lam.params[at.index ?? 0] : undefined;
+    return q && names[q] && names[q] !== "_" ? names[q] : undefined;
+  };
+  const unnamed = params.filter((_, i) => { const x = code.nodes[firsts[i]]; return !(x.kind === "ref" && names[x.target]); });
+  const taken = new Set<string>();
+  params.forEach((q, i) => {
+    const x = code.nodes[firsts[i]];
+    let nm = x.kind === "ref" && names[x.target] ? names[x.target] : fills(firsts[i]) ?? `in${unnamed.length > 1 ? unnamed.indexOf(q) + 1 : ""}`;
+    for (let k = 2; taken.has(nm); k++) nm = `${nm.replace(/ \d+$/, "")} ${k}`;
+    taken.add(nm);
+    nn[q] = nm;
+  });
   const what = one ? "" : tuple ? ` Its ${roots.length} values go out together, as one tuple, and each is read where it was.` : ` Its ${roots.length} values go out together as Part results, and each is read where it was.`;
   const r = guardTyped(info, collect(next), nn, fn, `Made it a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}.${what} Name it, fold it, or Undo to put it back.`);
   return r.ok ? { ...r, fn: lam } : r;
