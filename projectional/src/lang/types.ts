@@ -78,6 +78,19 @@ export const CELL = "type.cell";
 // A list's items side by side (BACKLOG C30d, REPRESENTATIONS.md step 5):
 // Array a, read by position in constant time. Plain when its items are.
 export const ARRAY = "type.array";
+// Named blade masks (GRADES.md, BACKLOG L43e, Ersagun 2026-10-31: "each
+// blade combination a different type"): `Vector of T` is a T, a record type
+// of an algebra's multivectors, that can be nonzero only on T's vectors.
+// To the type checker it is T itself; grades.ts checks the mask, so a
+// rotor put where a `Vector of T` goes is refused. Each names the grades
+// it allows ("even" is every even grade: a rotor or motor).
+export const MASK_TYPES: Record<string, { name: string; grades: number[] | "even" }> = {
+  "type.scalar of": { name: "Scalar of", grades: [0] },
+  "type.vector of": { name: "Vector of", grades: [1] },
+  "type.bivector of": { name: "Bivector of", grades: [2] },
+  "type.trivector of": { name: "Trivector of", grades: [3] },
+  "type.rotor of": { name: "Rotor of", grades: "even" },
+};
 // A place inside a value (L98): Path whole part.
 export const PATH = "type.path";
 // One job of a representation (REPRESENTATIONS.md, L108): Job t r, a job
