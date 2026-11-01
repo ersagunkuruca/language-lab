@@ -1,7 +1,9 @@
 # Which IEEE float values the language keeps (design note, 2026-11-01)
 
-**Status (2026-11-01): proposal, nothing built. Two decisions for Ersagun
-at the end.** Rows L125a to L125f in BACKLOG.md.
+**Status (2026-11-01): decided, nothing built yet.** Ersagun chose both
+recommendations (10:28 and 10:29): `Float64` is the finite floats with one
+zero, ±∞ move to `Extended a`, and `x / 0` has no answer (`Choice`). Rows
+L125a to L125f in BACKLOG.md.
 
 Ersagun, 2026-11-01: "Shall we put the problems with IEEE floats into a
 discussion. Maybe we should use a subset of them (probably excluding
@@ -265,7 +267,7 @@ the folds matter, there are no divisions at all, so no checks.
 
 ## Steps (BACKLOG L125)
 
-Nothing starts until Ersagun answers decision 1.
+Decided 2026-11-01; L125a goes first.
 
 1. **L125a** `Float64` means finite with one zero, in LANGUAGE.md and
    NUMBERS.md; the evaluator fails on overflow, and `/`, `sqrt`, `log`,
@@ -285,7 +287,7 @@ Nothing starts until Ersagun answers decision 1.
    to a test instead of a handler (C, M).
 6. **L125f** host values checked on entry (`hosts/js.js`, JSON, bytes) (L, S).
 
-## Decisions for Ersagun
+## Decisions (both taken 2026-11-01, as recommended)
 
 1. **Does `Float64` become the finite floats with one zero, with ±∞ moved
    to `Extended a`?** Recommended: yes. It makes the type's laws true,
