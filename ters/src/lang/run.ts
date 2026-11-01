@@ -1120,7 +1120,10 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false):
   // An Extended number reads as the number, or −∞ and +∞ (L125d).
   if (asNumber && v.tag === EXTENDED_V.finite) return showValue(v.fields[0], code, names, asNumber);
   if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";
+  // A tuple reads as its type does, (1, "a") for an (Int, Text) (L143).
+  if (TUPLE_TAG.test(v.tag)) return `(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})`;
   const name = names[v.tag] ?? v.tag;
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})` : name;
 }
+const TUPLE_TAG = /^std\.tuple[2-8]\.tuple$/;
 
