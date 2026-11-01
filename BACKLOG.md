@@ -18,13 +18,13 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 
 ## Next up
 
-Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
+Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Language 14.
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Idle (Ersagun's 20, 2026-11-01, done). Open for the lane: I109 (the compiled preview restarts the page) |
-| C Compiler and targets | "Compiler lane" | I107 settled by L125 (close #834), C63, L125c after L125a, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
-| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down; then L125a (finite `Float64`, Ersagun's decision 2026-11-01), then L71a. Yesterday's run ended with I100 (#805) |
+| E Editor | "Editor lane" | I109 (the compiled preview restarts the page), I29 (empty Runs: what only a handler calls), E103 and I40 (slow palette on physics), E133 (fillings share nodes, design), L69c (a definition whose host is missing says so; the host file in the Program tab), E160 (the mode on a solve node), I49 (resize a node), and the editor half of L125 (a `Choice` from `/` shown where it comes from) and of L125d (`Extended` values shown as ±∞); then the next QA round's findings |
+| C Compiler and targets | "Compiler lane" | I107 settled by L125 (close #834), L125c after L125a, L125e (niche representations), I111 (one agreement test over every example), I106b (a measured cost test per representation row), C63, L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
+| L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a (finite `Float64`: the meaning, in the evaluator and the docs), I108 (`clifford inverse` of a non-versor), L125b (the inferred nonzero fact), L125d (`Extended a`), L125f (host floats checked on entry), L71a (an operation's own type variables), L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L38's open end, L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -33,7 +33,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I106b | A measured cost test per representation row (each job at n and 4n, the ratio checked against the cost the row claims), so a row can't drift from the code again. I106a (the chooser counting cons onto a match's rest as the array's space) is done. Also: a rest keeps the whole buffer alive (Go's slices leak the same way) | REVIEW-2026-11-01 §2 | 2026-11-01 |
+| I106c | A rest of a two-ended array is a view on the whole buffer, so after a million `rest`s a one-item array still holds 1.5 M slots (Go's slices leak the same way, which is why Go has `copy`). Copying when a view is much smaller than its buffer would make a repeated match on one small view linear, so it needs a rule that keeps match constant | REVIEW-2026-11-01 §2 | 2026-11-01 |
 | I107 | Staging folds `0 · x` to 0 and `x + 0` to x (stage.ts, "as fast-math"), so compiled answers differ from the evaluator's for ∞, NaN and −0, and the preview swaps between the two. Fold only when x is known finite; a test with ∞ and NaN inputs. Settled by L125 (finite `Float64`, decided 2026-11-01): the folds are the type's laws, #834 closes, the checks move to L125c | REVIEW-2026-11-01 §3 | 2026-11-01 |
 | I108 | `clifford inverse` is ṽ/⟨vṽ⟩₀, right only for versors: it gives 1 + e₁ (which has no inverse) the value (1 + e₁)/2. Name it for what it is, or make it general, with an empty answer when there is none; it has no doc string | REVIEW-2026-11-01 §4 | 2026-11-01 |
 | I109 | The compiled preview (#789) starts the page afresh, losing what the user did in its first 2 to 7 s; hand the cells across, or hold input until the swap. Pages with sound stay interpreted with nothing saying why | REVIEW-2026-11-01 §5 | 2026-11-01 |
