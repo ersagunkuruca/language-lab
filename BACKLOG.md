@@ -43,11 +43,13 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E170 | Touch on phones: one finger pans or drags a node, two pinch to zoom, a long press opens the node's menu, taps hit ports and the resize corner without a mouse's precision | Ersagun 2026-11-01 ("on mobile the editor acts very weird") | P1 | M | |
 
 ### Writing programs in the editor
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E171 | A frame around a multiple selection: dragging its corners spreads the picked nodes apart or draws them together; with Shift held the nodes grow and shrink with it too | Ersagun 2026-11-01 | P2 | M | after E170 |
 | E161 | **"Same as the library's" line** (SHARING.md §7): when a draft's hash equals a library definition's, or another draft's, its header shows a quiet "Same as `magnitude` in vectors" linking to it; never merges; goes away on the edit that stops the match. Optional "Use the library's" button runs `adopt` on that one definition, on click only. Credit Unison (prior art) where the line is explained | Ersagun 2026-11-01 | P2 | M | after L126 |
 | E165 | **Several values out stay several results** ([PORTS-2026-11-01.md](docs/design/relations-and-effects/PORTS-2026-11-01.md) §2): Make it a function and Make it a definition on nodes with two or more values going out give a function with several results (a frame with an output port each, `→ drift, drop`), not a generated `Part results` type | Ersagun 2026-11-01 19:27 | P1 | M | after L128's lambdas step |
 | E166 | A list port drawn on the node itself ([PORTS-2026-11-01.md](docs/design/relations-and-effects/PORTS-2026-11-01.md) §4): a socket per item and an empty one that adds an item when wired; text `sum(1, 2, 3)` for a list written in place. Credit Blender's multi-input sockets (prior art) | Ersagun 2026-11-01 19:27; he chose list-port sockets 19:35 | P2 | M | |

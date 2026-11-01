@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E169 | Resizing a node: the corner is a square drawn over the node's words and ports, so it is easy to grab; a node shrinks back as far as its own size; its wires follow while dragging, not only on release | #914 |
 | E103d | A filled program's solves and calls (model.ts `nodesWhere`) start from the program's own lists and its changed nodes, so a palette offer's whole check no longer scans ~10,000 nodes in `useDirections` and in the jobs check. physics `fall`: 23 holes 50 → 30 s, the worst 10.6 → 4.2 s, the same offers. Test: derived-slots.test.ts | #902 |
 | I29 (later states) | Run's first values reach what only a later state of a page calls: after each handler the dry run draws the page again and runs the handlers it shows for the first time next, up to three of each place, within 250 ms; and a call into a definition generic in its number type, which runs as a copy (arith.ts), is reported as the definition's own (`Info.copyOf`). Tumble's neighbours, duration, where, three from, marks and between links now open filled. Test: ters/test/copy-entered.test.ts | #900 |
 | E103c | The palette asks one whole check for every offer that makes the same of the group's types (and of its solves' plans, where it changes one); units, which a call decides for itself, are checked per offer. Before, a ref or call was checked once per thing it named. physics `fall`: 23 holes 80 → 47 s, the worst 16 → 8 s, the same offers on every hole | #898 |
