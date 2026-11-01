@@ -26,7 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E133b | The palette's plan check per offer starts from the program's own slots and scans only the filling (physics fall's worst hole 20 → 12.7 s, all 23 holes 67 s) | #874 |
+| E133b | The palette's plan check per offer starts from the program's own slots and scans only the filling (physics fall's worst hole 20 → 12.7 s, all 23 holes 67 s) | #875 |
 | E164 | Make it a definition: any function inside a definition, a picked set or a group becomes a definition of its own in the side menu, called where it was; what it uses from around it becomes its first inputs (lambda lifting, Johnsson 1985) | #873 |
 | E163 | The context menu opens at once (~1 s → ~70 ms on Mandelbrot `escape`): the whole-program checks that grey out an item run after it shows | #872 |
 | E162 | Make it a function on picked nodes no longer depends on the order they were clicked: the node selected before the first shift-click is picked with them, and a menu opened beside the picked takes that node too | #871 |
