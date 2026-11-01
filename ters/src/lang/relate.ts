@@ -208,11 +208,32 @@ const walk = (t: Term, s: State): Term => {
 };
 
 // Fully resolved, with any logic variables still unbound left in place.
+// With a stack of its own, not JavaScript's: a list of 100,000 items is
+// that deep (L18).
 function deep(t: Term, s: State): Term {
   t = walk(t, s);
-  return isData(t) ? dataT(t.tag, t.fields.map((f) => deep(f, s))) : t;
+  if (!isData(t)) return t;
+  const root: DataT = dataT(t.tag, t.fields.slice());
+  const todo: DataT[] = [root];
+  while (todo.length) {
+    const d = todo.pop()!;
+    for (let i = 0; i < d.fields.length; i++) {
+      const f = walk(d.fields[i], s);
+      if (isData(f)) { const c = dataT(f.tag, f.fields.slice()); d.fields[i] = c; todo.push(c); }
+      else d.fields[i] = f;
+    }
+  }
+  return root;
 }
-const hasVars = (t: Term): boolean => t instanceof LVar || (isData(t) && t.fields.some(hasVars));
+const hasVars = (t: Term): boolean => {
+  const todo = [t];
+  while (todo.length) {
+    const x = todo.pop()!;
+    if (x instanceof LVar) return true;
+    if (isData(x)) todo.push(...x.fields);
+  }
+  return false;
+};
 const ground = (t: Term, s: State): Term | undefined => { const d = deep(t, s); return hasVars(d) ? undefined : d; };
 
 
@@ -356,13 +377,33 @@ function mplus(a: Stream, b: () => Stream): Stream {
   const rest = a[1];
   return [a[0], () => mplus(deeper(rest), b)];
 }
+// A suspension that bind put goals after: the suspension underneath and
+// the goals, last first. bind on one adds its goal to the list instead of
+// wrapping it, so a long list read back (a bind on a bind on … a
+// suspension, one per item) is forced in a loop, not one call per item
+// (L18).
+type Later = (() => Stream) & { under?: () => Stream; goals?: Goals };
+type Goals = { g: Goal; before: Goals } | null;
+function suspendBind(later: Later, g: Goal): Stream {
+  const under = later.under ?? later, goals: Goals = { g, before: later.under ? later.goals! : null };
+  const t: Later = () => {
+    const gs: Goal[] = [];
+    for (let x: Goals = goals; x; x = x.before) gs.push(x.g);
+    let r = under();
+    for (let i = gs.length - 1; i >= 0; i--) r = bind(r, gs[i]);
+    return r;
+  };
+  t.under = under;
+  t.goals = goals;
+  return t;
+}
 function bind(a: Stream, g: Goal): Stream {
   // A run of answers that g rejects at once is walked in a loop: as
   // recursion, eight thousand of them in a row (queens' safe, backwards)
   // overflow the stack.
   for (;;) {
     if (a === null) return null;
-    if (typeof a === "function") { const later = a; return () => bind(later(), g); }
+    if (typeof a === "function") return suspendBind(a, g);
     const s = a[0];
     const r = deeper(() => g(s));
     const rest = a[1];
@@ -443,8 +484,12 @@ function settle(s: State): Stream {
     const g = wake(s.waits[i], s);
     // A check that passes changes nothing, so what else woke with it is
     // looked at again before the state goes on.
-    if (g === succeed) return settle({ ...s, waits: s.waits.filter((_, j) => j !== i) });
-    if (g) return g({ ...s, waits: s.waits.filter((_, j) => j !== i) });
+    // Through deeper: a wait that wakes the next (a long list read back,
+    // each item's equation waking the one after) nests one settle per
+    // item (L18).
+    const rest = { ...s, waits: s.waits.filter((_, j) => j !== i) };
+    if (g === succeed) return deeper(() => settle(rest));
+    if (g) return deeper(() => g(rest));
   }
   return unit(doze(s));
 }
@@ -1582,8 +1627,8 @@ const TIDY_AT = 64;
 // shows are substituted away (t = y + 0 and x + t = 10 is x + y = 10).
 function tidy(eqs: Eq[], values: Record<string, Term>): Eq[] {
   const seen = new Set<string>();
-  const collect = (t: Term) => { if (t instanceof LVar) seen.add(`?${t.n}`); else if (isData(t)) t.fields.forEach(collect); };
-  Object.values(values).forEach(collect);
+  const todo = Object.values(values);
+  while (todo.length) { const t = todo.pop()!; if (t instanceof LVar) seen.add(`?${t.n}`); else if (isData(t)) todo.push(...t.fields); }
   const sub = (e: Expr, x: string, by: Expr): Expr => e.k === "var" && e.name === x ? by : e.k === "call" ? { ...e, args: e.args!.map((a) => sub(a, x, by)) } : e;
   let out = eqs.slice();
   for (let changed = true; changed;) {
