@@ -1022,6 +1022,56 @@ export function useVar(code: Code, names: Names, info: Info, defId: Id, binder: 
   return guardTyped(info, next, names, slot, `Wired ${display[binder] ?? names[binder] ?? "the variable"} in. Same as picking it from the palette: by id, type-checked.`);
 }
 
+// A call turned around (E168, PORTS-2026-11-01.md §3): one input swaps
+// sides with the result. What went into that input is now the result
+// given, and the node gives what that input would have to be, as a solve
+// does. f(a, b) with b turned becomes `solve f given a and the result b,
+// for b'`: the wire into b now feeds the result, the wire out carries b'.
+// Turned back, it is the call again. Only a definition's call (a builtin
+// has no body to run backwards), one result, every input filled; refused
+// when what reads it no longer type-checks (a Choice where one value was).
+export function turnable(code: Code, call: Id): { def: NodeOf<"def">; params: Id[] } | null {
+  const n = code.nodes[call];
+  if (n?.kind !== "call") return null;
+  const f = code.nodes[n.fn];
+  const d = f?.kind === "ref" ? code.nodes[f.target] : null;
+  if (d?.kind !== "def" || !d.body || d.results?.length) return null;
+  const lam = code.nodes[d.body];
+  if (lam?.kind !== "lambda" || lam.params.length !== n.args.length || !n.args.length) return null;
+  return { def: d, params: lam.params };
+}
+
+export function turnAround(code: Code, names: Names, info: Info, call: Id, k: number): TEdit {
+  const t = turnable(code, call);
+  if (!t) return { ok: false, reason: "only a call of a definition with one result can be turned around" };
+  const n = code.nodes[call] as NodeOf<"call">;
+  if (n.args.some((a) => code.nodes[a]?.kind === "hole")) return { ok: false, reason: "fill its inputs first: the one turned becomes the result given, the others stay given" };
+  const p = t.params[k], nm = (id: Id) => names[id] ?? display[id] ?? "it";
+  const b = freshId(), use = freshId();
+  const given: Record<string, Id> = { out: n.args[k] };
+  t.params.forEach((q, i) => { if (i !== k) given[q] = n.args[i]; });
+  const next = replace(code, call, () => ({ kind: "solve", fn: t.def.id, given, binds: { [p]: b }, body: use }));
+  next.nodes[b] = { id: b, kind: "binder" };
+  next.nodes[use] = { id: use, kind: "ref", target: b };
+  return guardTyped(info, next, { ...names, [b]: nm(p) }, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Turn it back from its menu; Undo puts it back too.`);
+}
+
+// The other way: a solve that works out one input of a definition from
+// its result and the rest, and gives just that, is the call again.
+export function turnBack(code: Code, names: Names, info: Info, solve: Id): TEdit {
+  const n = code.nodes[solve];
+  if (n?.kind !== "solve") return { ok: false, reason: "it isn't turned around" };
+  const d = code.nodes[n.fn], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+  const bound = Object.keys(n.binds), body = code.nodes[n.body];
+  if (lam?.kind !== "lambda" || bound.length !== 1 || bound[0] === "out" || !("out" in n.given)) return { ok: false, reason: "it works out more than one input, or the result" };
+  if (body?.kind !== "ref" || body.target !== n.binds[bound[0]]) return { ok: false, reason: "it does more with what it works out than give it" };
+  if (lam.params.some((q) => q !== bound[0] && !(q in n.given))) return { ok: false, reason: "not every other input is given" };
+  const fn = freshId();
+  const next = replace(code, solve, () => ({ kind: "call", fn, args: lam.params.map((q) => (q === bound[0] ? n.given.out : n.given[q])) }));
+  next.nodes[fn] = { id: fn, kind: "ref", target: d!.id };
+  return guardTyped(info, collect(next), names, solve, `Turned ${names[d!.id] ?? display[d!.id] ?? "it"} back: a call again, its result out.`);
+}
+
 // ---------------------------------------------------------------- dots
 //
 // A let is a dot on a wire, as in a node editor: one value, branching to

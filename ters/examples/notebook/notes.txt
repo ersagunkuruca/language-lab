@@ -1,0 +1,14 @@
+# a few notes, then questions about them
+note harbour The tide comes in twice a day, and the boats in the harbour rise with it.
+note lighthouse A lighthouse keeps ships off the rocks; its light turns all night, tide or no tide.
+note moon The moon pulls the sea, which makes the tides. A full moon makes the highest tides.
+note bakery The bakery on the harbour opens at five. Its bread is gone by nine.
+note ferries Ferries cross the bay every hour, but not at low tide, when the bay is mud.
+note owls Owls hunt at night by sound; their faces gather it like dishes.
+
+find tide
+find tide harbour
+any moon bread
+like harbour
+seen tide
+find whales

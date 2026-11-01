@@ -115,7 +115,7 @@ import { parseValue } from "../ters/src/lang/values.ts";
 import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
-import { type Pos } from "./canvas.ts";
+import { follow, type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -129,6 +129,7 @@ import { browserWorld } from "../ters/src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
+import { sameAs, type Same } from "../ters/src/lang/modules.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -1480,6 +1481,25 @@ function unitSection(info: T.Info, id: Id): HTMLElement | null {
   return box;
 }
 
+// What the open definition is the same as, by hash (SHARING.md §7, E161):
+// a library definition, or another of the program's. Shown, never
+// merged: the draft stays as it is, and the edit that moves its hash ends
+// the line. Worked out once per version of the code. Prior art: Unison's
+// codebase manager, which reports it as another name (CREDITS.md).
+const sameMemo = new WeakMap<Code, Map<Id, Same>>();
+function sameLine(namer: Namer): HTMLElement | null {
+  let all = sameMemo.get(doc.code);
+  if (!all) { try { all = sameAs(doc.code, LIBRARY); } catch { all = new Map(); } sameMemo.set(doc.code, all); }
+  const same = all.get(ui.def);
+  if (!same) return null;
+  const link = (d: Id) => h("button", { type: "button", class: "link", "data-act": "goto", "data-target": d, title: "Open it" }, namer.name(d));
+  const where = (d: Id) => { const m = LIBRARY.modules.find((x) => x.code.nodes[d])?.title; return m ? ` in ${m}` : " in the library"; };
+  const parts: (HTMLElement | string)[] = [];
+  for (const d of same.library) parts.push(...(parts.length ? [", "] : []), link(d), where(d));
+  for (const d of same.drafts) parts.push(...(parts.length ? [", "] : []), link(d), " (yours)");
+  return h("p", { class: "hint same", title: "The same code as this one, names aside (its meaning hash). Nothing is merged: edit this one and the line goes when it stops matching. Prior art: Unison's codebase manager names such a definition as another name for the existing one." }, "Same as ", ...parts);
+}
+
 function filesPanel(): HTMLElement {
   const box = h("div", { class: "files" });
   const meaning = semanticHash();
@@ -2634,6 +2654,11 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
+    // Turn a call around (E168): an input swaps sides with the result.
+    const turn = n?.kind === "call" ? T.turnable(doc.code, id) : null;
+    const pName = (p: Id) => names[p] ?? "it";
+    if (turn) turn.params.forEach((p, k) => rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
+    if (n?.kind === "solve") rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc.code, doc.names.short, info, id))));
     if (kind === "node") rows.push(...stepRows(id));
     // Cases that share this value, read once as the otherwise: each can
     // have its own (BACKLOG I117); an edit here is otherwise made in all.
@@ -2700,6 +2725,8 @@ function menuAction(act: string, target: Id | undefined) {
   };
   const own = /^own-case-(\d+)$/.exec(act);
   if (own && target) { const c = T.sharedCases(doc.code, doc.names.short, info, target)[+own[1]]; if (c) applyT(T.ownBody(doc.code, doc.names.short, info, c)); return; }
+  const turn = /^turn-(\d+)$/.exec(act);
+  if (turn && target) { applyT(T.turnAround(doc.code, doc.names.short, info, target, +turn[1])); return; }
   switch (act) {
     case "add": case "add-before": {
       // On the graph's canvas a new value is a loose part, where you clicked
@@ -2788,6 +2815,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "group-fn": return groupToFunction(info, target!);
     case "group-def": return groupToFunction(info, target!, true);
     case "lambda-def": return applyT(T.liftToDefinition(doc.code, doc.names.short, info, ui.def, target!));
+    case "turn-back": return applyT(T.turnBack(doc.code, doc.names.short, info, target!));
     case "picked-def": {
       const set = fnSet(target!, graph?.picked() ?? []);
       if (!set) return;
@@ -2924,6 +2952,13 @@ function graphHooks(info: T.Info) {
       const { [lkey(id)]: _, ...rest } = doc.layout.size ?? {};
       commit({ layout: { ...doc.layout, size: to ? { ...rest, [lkey(id)]: to } : rest } }, ["layout.json"],
         to ? "Resized a node. Its size lives in layout.json; double-click the corner to give it its own size again." : "The node has its own size again.");
+    },
+    spread: (to: Record<Id, Pos>, sizes: Record<Id, { w: number; h: number } | null>) => {
+      const size = { ...(doc.layout.size ?? {}) };
+      for (const [id, z] of Object.entries(sizes)) { if (z) size[lkey(id)] = z; else delete size[lkey(id)]; }
+      const n = Object.keys(to).length, r = Object.values(sizes).filter(Boolean).length;
+      commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) }, size } }, ["layout.json"],
+        `Spread the picked: ${n === 1 ? "a node" : `${n} nodes`} moved${r ? `, ${r} resized` : ""}. Only layout.json changed; hold Shift while dragging a corner to resize them too.`);
     },
     named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
@@ -3638,13 +3673,10 @@ document.addEventListener("pointerdown", (e) => {
     dock[k] = Math.round(Math.min(limit[1], Math.max(limit[0], start + d)));
     grid.style.setProperty(`--${k === "page-w" ? "side-w" : k}`, `${dock[k]}px`);
   };
-  const up = () => {
+  follow(e, mv, () => {
     g.classList.remove("dragging");
-    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
     try { localStorage.setItem(DOCK, JSON.stringify(dock)); } catch {}
-  };
-  window.addEventListener("pointermove", mv);
-  window.addEventListener("pointerup", up);
+  });
 });
 
 // A view that throws leaves the page as it was, so every click after it
@@ -3774,6 +3806,7 @@ function draw() {
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
             ui.text === "blocks" ? h("span", { class: "hint" }, TOUCH ? "tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "hover for types; click a □ to fill it; double-click a name to open it") : null),
+          sameLine(namer),
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },

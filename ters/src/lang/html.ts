@@ -173,20 +173,23 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
             const [x, y] = pointer(e, ev);
             // One batch per event: the page updates once, after every write.
-            // A handler that fetched what hasn't come is taken back (its
-            // writes undone, its printing never done: cells.ts attempt) and
-            // runs again from the start when the reply lands, with the same
-            // event, so what it did before the fetch happens once.
-            const fire = () => {
+            // A handler that fetched what hasn't come stops there, what it
+            // did so far kept, and goes on from the fetch when the reply
+            // lands (L59: the evaluator keeps its machine, Pending.resume).
+            // Where it can't be kept (compiled code, or a fetch inside a
+            // builtin's call) the run is taken back (its writes undone, its
+            // printing never done: cells.ts attempt) and runs again from
+            // the start, with the same event, so it still happens once.
+            const fire = (run: () => unknown) => {
               try {
-                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] })), (e) => e instanceof Pending);
+                cells.attempt(() => withSteps(steps, run), (e) => e instanceof Pending && !e.resume);
               } catch (err) {
-                if (err instanceof Pending) err.ready.then(fire);
+                if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
                 else console.error(err);
               }
             };
-            fire();
+            fire(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] }));
           };
           // "frame": once each time the browser draws, while the element is
           // on the page, so a simulation steps without a hidden CSS
