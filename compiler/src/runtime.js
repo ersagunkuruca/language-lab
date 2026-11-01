@@ -107,6 +107,18 @@ export const $pow = (a, b) => {
     : $stop(OVERFLOW);
 };
 
+// The same where the call isn't known to have an answer (L125c3): no
+// answer is $no, the Choice the evaluator gives (L125b), which the nearest
+// first, optional, all or count sees. An overflow still stops.
+export const $divN = (a, b) => (b === 0 ? $no : a / $fin(b));
+export const $sqrtN = (a) => (a < 0 ? $no : Math.sqrt(a));
+export const $logN = (a) => (a <= 0 ? $no : Math.log(a));
+export const $powN = (a, b) => {
+  const r = a ** b;
+  if (r - r === 0 && a - a === 0 && b - b === 0) return r;
+  return (a === 0 && b < 0) || (a < 0 && b - b === 0 && !Number.isInteger(b)) ? $no : $stop(OVERFLOW);
+};
+
 // With its own stack, so two long lists can be compared.
 export function $eq(a, b) {
   // Text, numbers and other plain values answer at once, with no stack of
@@ -168,6 +180,7 @@ export const $textOrder = (a, b) => {
 
 export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round($fin(x) * 1e9) / 1e9));
 export const $mod = (a, b) => (b === 0 ? $stop('x mod 0 has no answer') : ((a % $fin(b)) + b) % b);
+export const $modN = (a, b) => (b === 0 ? $no : ((a % $fin(b)) + b) % b);
 // A record of Float64s part by part (std.ts); a Float64 is one part.
 export const $mapParts = (f, r) => (typeof r === 'number' ? f(r) : { tag: r.tag, fields: r.fields.map((x) => f(x)) });
 export const $zipParts = (f, a, b) => (typeof a === 'number' ? f(a, b) : { tag: a.tag, fields: a.fields.map((x, i) => f(x, b.fields[i])) });
