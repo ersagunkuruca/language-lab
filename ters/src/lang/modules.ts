@@ -261,9 +261,11 @@ function indexOf(lib: Library) {
 // library hashes only itself.
 class Over extends Map<Id, string> {
   under: Map<Id, string>;
+  // One whose hash underneath isn't read (orderFreeHash).
+  hidden: Id | null = null;
   constructor(under: Map<Id, string>) { super(); this.under = under; }
-  override has(k: Id) { return super.has(k) || this.under.has(k); }
-  override get(k: Id) { return super.get(k) ?? this.under.get(k); }
+  override has(k: Id) { return super.has(k) || (k !== this.hidden && this.under.has(k)); }
+  override get(k: Id) { return super.get(k) ?? (k !== this.hidden ? this.under.get(k) : undefined); }
 }
 // `memo` carries the drafts' hashes from one call to the next while their
 // code is the same (hash.ts `hashes`): the editor keeps it per version.
@@ -283,16 +285,82 @@ export function sameAs(code: Code, lib: Library, memo?: Map<Id, string>): Map<Id
   return out;
 }
 
+// The same up to the order of its inputs (PORTS-2026-11-01.md §7, L131):
+// `f(x, y)` and the same body written `g(y, x)` are one function with its
+// inputs in another order. A definition's hash stays what it is, its order
+// included (it is the identity of published code, and two orders are two
+// functions to call); this is a second hash beside it, taken with its
+// inputs as a set: the least hash over every order of the inputs. Inputs
+// the body treats alike tie, and any order of them gives the same least
+// hash, so this is the canonical form of tree canonization (Aho, Hopcroft
+// and Ullman) found by trying the orders, which is cheap for the few
+// inputs a definition has. A recursive definition is left out: its own
+// calls would need their arguments reordered too.
+const MAX_ORDERED = 5;
+const permutations = <T>(xs: T[]): T[][] => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p])));
+export function orderFreeHash(code: Code, d: Id, memo: Map<Id, string>): string | null {
+  const def = code.nodes[d];
+  const lam = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+  if (lam?.kind !== "lambda" || lam.params.length < 2 || lam.params.length > MAX_ORDERED) return null;
+  const group = defGroups(code, [d]).find((g) => g.includes(d));
+  if (!group || group.length > 1 || subtree(code, lam.body).some((id) => { const n = code.nodes[id]; return n?.kind === "ref" && n.target === d; })) return null;
+  let least: string | null = null;
+  for (const order of permutations(lam.params)) {
+    const swapped: Code = { ...code, nodes: { ...code.nodes, [lam.id]: { ...lam, params: order } } };
+    // d's own hash must be taken again: hidden from what memo holds.
+    const fresh = new Over(memo);
+    fresh.hidden = d;
+    const h = hashes(swapped, [d], fresh).get(d)!;
+    if (least === null || h < least) least = h;
+  }
+  return least;
+}
+const reorderIndex = new WeakMap<Code, Map<string, Id[]>>();
+// Each draft that matches a library definition or another draft only with
+// its inputs in another order (an exact match is sameAs's).
+export function sameUpToOrder(code: Code, lib: Library): Map<Id, Same> {
+  const { index: exact, memo: libMemo } = indexOf(lib);
+  let index = reorderIndex.get(lib.code);
+  if (!index) {
+    index = new Map();
+    for (const d of lib.code.defs) {
+      if (!valueDef(lib.code, d) || lib.hidden.has(d)) continue;
+      const k = orderFreeHash(lib.code, d, libMemo);
+      if (k) index.set(k, [...(index.get(k) ?? []), d]);
+    }
+    reorderIndex.set(lib.code, index);
+  }
+  const memo = new Over(libMemo);
+  const drafts = code.defs.filter((d) => !isPublished(d) && !lib.code.nodes[d] && valueDef(code, d));
+  const h = hashes(code, drafts, memo);
+  const free = new Map(drafts.map((d) => [d, orderFreeHash(code, d, memo)] as const));
+  const byFree = new Map<string, Id[]>();
+  for (const [d, k] of free) if (k) byFree.set(k, [...(byFree.get(k) ?? []), d]);
+  const out = new Map<Id, Same>();
+  for (const [d, k] of free) {
+    if (!k) continue;
+    const exactly = new Set([...(exact.get(h.get(d)!) ?? [])]);
+    const library = (index.get(k) ?? []).filter((x) => !exactly.has(x) && libMemo.get(x) !== h.get(d));
+    const drafts_ = (byFree.get(k) ?? []).filter((x) => x !== d && h.get(x) !== h.get(d));
+    if (library.length || drafts_.length) out.set(d, { library, drafts: drafts_ });
+  }
+  return out;
+}
+
 // sameAs said in words, one line per draft that has a match, for `lab
 // check` and the MCP server's check: "`sq` is the same as `square`
 // (yours)", "`transform` is the same as `map` in the library".
 export function sameLines(code: Code, names: Names, lib: Library): string[] {
   const where = (d: Id) => lib.modules.find((m) => m.code.nodes[d])?.title;
   const nm = (d: Id) => `\`${names[d] ?? lib.names[d] ?? d}\``;
-  return [...sameAs(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${[
+  const say = (s: Same) => [
     ...s.library.map((x) => { const m = where(x); return `${nm(x)} ${m ? `in ${m}` : "in the library"}`; }),
     ...s.drafts.map((x) => `${nm(x)} (yours)`),
-  ].join(" and ")}`);
+  ].join(" and ");
+  return [
+    ...[...sameAs(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${say(s)}`),
+    ...[...sameUpToOrder(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${say(s)} with its inputs in another order`),
+  ];
 }
 
 // ------------------------------------------------------------------ upgrade
