@@ -54,10 +54,9 @@ test("Int division rounds down; dividing by zero and a negative power have no an
     orNone(k, () => k.text(k.call(I.show, k.call(I.quotient, k.int(-7), k.int(2))), k.lit(" "), k.call(I.show, k.call(I.remainder, k.int(-7), k.int(2))))),
     orNone(k, () => k.call(I.show, k.call(I.quotient, k.int(1), k.int(0)))),
     orNone(k, () => k.call(I.show, k.call(I.power, k.int(2), k.int(-1)))),
-    orNone(k, () => k.call(I.show, k.call(I.wholePart, k.call(B.div, k.lit(1), k.lit(0))))),
   ));
   assert.deepEqual(p.info.errors, []);
-  assert.deepEqual(p.run(), ["-4 1", "none", "none", "none"]);
+  assert.deepEqual(p.run(), ["-4 1", "none", "none"]);
 });
 
 // WHAT-NUMBER-MEANS.md (L86): a plain 2 is some Number, so it is an Int
@@ -194,12 +193,25 @@ test("an Int past 2^28 is a BigInt, so equal is exact on Ints and near on Float6
 });
 
 // BACKLOG L81: past the largest float the tolerance is itself ∞, so only a
-// finite gap is near: ∞ is equal to ∞ alone, not to −∞, 0 or 1e308.
+// finite gap is near: ∞ is equal to ∞ alone, not to −∞, 0 or 1e308. Since
+// L125a no Float64 is ∞ (it lives in Extended, L125d), but the host's
+// nearness keeps the rule.
 test("infinities are equal only to themselves", () => {
   assert.deepEqual([[Infinity, -Infinity], [Infinity, 0], [1e308, Infinity], [-1e308, -Infinity], [1e308, -1e308], [NaN, NaN], [Infinity, NaN]].map(([a, b]) => close(a, b)), [false, false, false, false, false, false, false]);
   assert.deepEqual([[Infinity, Infinity], [-Infinity, -Infinity], [1e308, 1e308 * (1 + 1e-12)], [0.1 + 0.2, 0.3]].map(([a, b]) => close(a, b)), [true, true, true, true]);
-  const inf = (k: Lang, s: number) => k.call(B.div, k.lit(s), k.lit(0));
-  const p = program((k) => lines(k, k.call(SHOW_ANY, k.list(k.equal(inf(k, 1), inf(k, -1)), k.equal(k.lit(1e308), inf(k, 1)), k.equal(inf(k, 1), inf(k, 1))))));
-  assert.deepEqual(p.info.errors, []);
-  assert.deepEqual(p.run(), ["[false, false, true]"]);
+});
+
+// L125a (FLOAT-VALUES-2026-11-01.md): Float64 is the finite floats. An
+// answer outside them stops the program with the reason: no answer (x/0,
+// √ of a negative, log of 0, 0 to a negative power) or overflow.
+test("a Float64 is always finite: no answer and overflow stop the program with the reason", () => {
+  const cases: [(k: Lang) => Id, RegExp][] = [
+    [(k) => k.call(B.div, k.lit(1), k.lit(0)), /x \/ 0 has no answer/],
+    [(k) => k.call(B.div, k.lit(0), k.lit(0)), /x \/ 0 has no answer/],
+    [(k) => k.call(B.sqrt, k.lit(-4)), /square root of a negative number/],
+    [(k) => k.call(B.log, k.lit(0)), /log of 0 or less/],
+    [(k) => k.call(B.mul, k.lit(1e308), k.lit(10)), /too big for a Float64/],
+  ];
+  for (const [make, why] of cases) assert.throws(() => program((k) => lines(k, k.call(S.show, make(k)))).run(), why);
+  assert.deepEqual(program((k) => lines(k, k.call(S.show, k.call(B.mul, k.lit(-0), k.lit(1))))).run(), ["0"]);
 });

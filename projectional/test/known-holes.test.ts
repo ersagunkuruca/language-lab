@@ -220,16 +220,14 @@ test("R3 §1.2 a set of Float64s has the same size whatever order its items come
   assert.equal(new Set(out).size, 1, `sizes by order: ${out.join(", ")}`);
 });
 
-test("R3 §1.3 NaN, which 0/0 and sqrt(−1) make in typed code, doesn't break compare or sets", () => {
-  const nan = (k: Lang) => k.call(B.div, k.lit(0), k.lit(0));
-  const { errors, out } = printed((k, L) => [
-    k.call(COMPARE, nan(k), k.lit(1)), k.call(COMPARE, k.lit(1), nan(k)),
-    k.call(L("has item"), k.call(L("as set"), k.list(nan(k), k.lit(1))), nan(k)),
-  ]);
-  assert.deepEqual(errors, []);
-  // Before L78 (#443): ["after", "after", "false"].
-  assert.notEqual(out[0], out[1], "compare isn't antisymmetric on NaN");
-  assert.equal(out[2], "true", "a set doesn't find the NaN put in it");
+// L125a (FLOAT-VALUES-2026-11-01.md): NaN isn't a Float64 any more. 0/0 and
+// sqrt(−1) stop the program with the reason, so no NaN reaches compare or a set.
+test("R3 §1.3 NaN, which 0/0 and sqrt(−1) made in typed code, can't reach compare or sets", () => {
+  for (const [make, why] of [[(k: Lang) => k.call(B.div, k.lit(0), k.lit(0)), /x \/ 0 has no answer/], [(k: Lang) => k.call(B.sqrt, k.lit(-1)), /square root of a negative number has no answer/]] as const) {
+    assert.throws(() => printed((k, L) => [k.call(L("has item"), k.call(L("as set"), k.list(make(k), k.lit(1))), make(k))]), why);
+    // Before L78 (#443) compare said ["after", "after"] both ways; before L125a it ran.
+    assert.throws(() => printed((k) => [k.call(COMPARE, make(k), k.lit(1))]), why);
+  }
 });
 
 test("R3 §2.1 a set made with its constructor keeps the set's rule (sorted, no item twice)", () => {
