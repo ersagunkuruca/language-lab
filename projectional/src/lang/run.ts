@@ -296,6 +296,7 @@ export function finiteFloat(op: string, r: number, args: number[]): number {
     : op === "pow" && a === 0 && b < 0 ? "0 to a negative power has no answer"
     : op === "pow" && a < 0 && !Number.isInteger(b) ? "a negative number to a fractional power has no answer"
     : args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
+    : op === S.float32 ? "the number is too big for a Float32 (overflow)"
     : "the answer is too big for a Float64 (overflow)";
   throw new Error(why);
 }
@@ -327,7 +328,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
     ? (y, x) => one(f((y as number) + 0, (x as number) + 0)) // −0 is 0: atan2(−0, −1) is π
     : (...a) => one(finiteFloat(op, f(...(a as number[])), a as number[]));
-  for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor
+  for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
     ? (...a) => one(finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[]))
     : (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
@@ -434,7 +435,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];

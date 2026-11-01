@@ -854,7 +854,18 @@ export const ALGEBRA = typedef("std.algebra", "Algebra", ["a"], [
   ]],
 ]);
 export const ALGEBRA_V = "std.algebra.algebra";
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
+// A number type with its two infinities (FLOAT-VALUES-2026-11-01.md §3,
+// BACKLOG L125d): ordinary data, for any ordered number type. Float64 has
+// no ∞ of its own; a bound with no end, the least of no numbers, or "not
+// reached yet" is an Extended. Declared low to high, so `compare` and
+// `sort` order them as numbers. After Algebra, so ids above don't move.
+export const EXTENDED = typedef("std.extended", "Extended", ["a"], [
+  ["minus infinity", []],
+  ["finite", [["value", ([a]) => tref(a)]]],
+  ["plus infinity", []],
+]);
+export const EXTENDED_V = { minus: "std.extended.minus infinity", finite: "std.extended.finite", plus: "std.extended.plus infinity" } as const;
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

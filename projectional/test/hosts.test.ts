@@ -59,6 +59,22 @@ test("without a host the effect is still unhandled; a wrong answer is an Abort w
   assert.deepEqual(out, ["aborted: the host's name of gave 42, not a text", `aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
 });
 
+// L125f: a Float64 is finite, so NaN or ±∞ from the host is refused at
+// the border, like any wrong answer; float32's overflow stops the program.
+test("a host's NaN or ∞ is refused at the border; float32 overflow stops the program", () => {
+  const p = program();
+  for (const bad of [Infinity, -Infinity, NaN]) {
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names, hosts: {
+      [p.dev.op.battery]: () => bad, [p.dev.op["name of"]]: () => "x", [p.dev.op.ready]: () => true,
+    } }), new RegExp(`the host's battery gave ${String(JSON.stringify(bad))}, not a finite number`));
+  }
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.float32, k.lit(1e39))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.throws(() => runMain(code, info, main, { print: () => {}, names }), /too big for a Float32/);
+});
+
 test("lab hosts: a skeleton with each operation's id, name and types", () => {
   const p = program();
   const text = hostSkeleton(p.code, p.names, p.k.code.defs as Id[]);

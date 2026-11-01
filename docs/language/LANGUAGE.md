@@ -88,7 +88,10 @@ zero: NaN and ±∞ are not values. An answer outside the finite floats
 stops the program with the reason: no answer (`x / 0`, the square root of
 a negative, the log of 0 or less, 0 to a negative power) or overflow. Today
 both stop it; with L125b "no answer" becomes `Choice`, so a handler can
-catch it (FLOAT-VALUES-2026-11-01.md).
+catch it (FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
+end, the least of no numbers), it is ordinary data: `Extended a` is
+`minus infinity`, `finite(value)` or `plus infinity`, for any ordered
+number type, and `minimum` of no numbers is `plus infinity`.
 
 **Data.** You make a type by listing its cases, each with named fields:
 
@@ -686,6 +689,16 @@ is generic over them: `pass on(x) = yield(x)` is `(a) -[Yield a]-> Unit`.
 This is how Koka, Unison (`{Stream a}`) and Effekt write it. One limit for
 now: a function type written inside a data type can name such an effect
 but not its argument, which is left open there.
+
+An operation can also have **type variables of its own** (L71a): `effect
+Pick = pick(first: a, others: List a) returns a`, where `a` is pick's and
+not Pick's. Each call chooses it, so `pick(1, [2])` is an Int and
+`pick("x", ["y"])` a Text under one handler, and the row says just `Pick`.
+The case that handles it works for every `a`: it can give back `first`,
+but not a Text. This is what `await(ticket: Ticket a) returns a` needs
+(OCaml 5's effects as GADT constructors; Koka's polymorphic operations).
+An effect used at two types in one place (`Yield Int` here, `Yield Text`
+there) is an error at the call.
 
 **Answered later** (ANSWERED-LATER.md) is the third shape, for waiting:
 `effect Yield = yield(item: Float64) returns Unit, later`. Its case is given
