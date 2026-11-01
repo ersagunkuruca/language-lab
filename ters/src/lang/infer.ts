@@ -110,7 +110,7 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
-export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore }, opts: Options = {}): Info {
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean }, opts: Options = {}): Info {
   // A solve that one of its relation's directions answers is checked as a
   // solve of that direction (directions.ts, POLAR.md).
   code = useDirections(code);
@@ -1126,7 +1126,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // Units are part of a number's type: a conflict is a type error.
-  for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
+  // (Not when the palette checks a filling's units on their own: E103e.)
+  if (!reuse?.noUnits) for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
   // Definitions with results (RESULTS.md, L95): a predicate whose result
   // ports are named, in order. The direction they declare must be one the
@@ -1604,9 +1605,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const byKind = (key: string, f: Filling): boolean => {
     let ok = checked.get(key);
     if (ok === undefined) {
-      const unit = unitsOf(filled(f));
-      checked.set(key, (ok = noNew(recheck(filled(f)).filter((e) => !unit.has(e.message)))));
-      return ok && noNewUnits(unit);
+      checked.set(key, (ok = noNew(infer(filled(f), {}, { from: info, only: affected, units, noUnits: true }, info.options).errors)));
+      return ok && noNewUnits(unitsOf(filled(f)));
     }
     return ok && noNewUnits(unitsOf(filled(f)));
   };

@@ -121,3 +121,8 @@ from the program's own list, scanned once, and the changed nodes.
 `useDirections` marks what it returns as derived too. fall's 23 holes went
 from 50 s to 30 s, the worst from 10.6 s to 4.2 s, with the same offers.
 
+E103e: after E103d the unit checks were a third of a hole, and an offer
+that was the first of its kind had its units checked twice, inside the
+whole check and on their own. The whole check now leaves units out
+(`noUnits`): 30 s to 23 s for the 23 holes, the worst 4.2 s to 3.7 s.
+
