@@ -403,6 +403,10 @@ export function $perform(effect, op, args) {
   throw new Error(`nothing handles ${op}`);
 }
 
+// Random where nothing in the program handles it: the world's (C64d).
+// Set with the world, so a draw is one call.
+export let $random = worldRandom;
+
 // A match handling `effect` around a computation with one result.
 export function $handle(effect, answers, escapes, body, quiet = false) {
   const h = { effect, answers, quiet }, at = handlers.length;
@@ -541,7 +545,7 @@ export const $seededS = (seed, body) => $handleS(RANDOM, draws(seed), {}, body);
 // operations abort saying so. Failures are an Abort where they were called.
 
 let world = {};
-export function $setWorld(w) { world = w ?? {}; }
+export function $setWorld(w) { world = w ?? {}; $random = world.random ?? worldRandom; }
 const fallible = (k) => (...args) => {
   const f = world[k];
   let v;

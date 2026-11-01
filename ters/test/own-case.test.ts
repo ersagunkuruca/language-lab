@@ -6,7 +6,9 @@ import { root } from "../src/io.ts";
 import { subtree, type NodeOf } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { matchRows, sharedOtherwise } from "../src/lang/patterns.ts";
-import { infer, ownBody, sharedCases } from "../../editor/typed.ts";
+import { infer, ownBody, sharedCases, splitOn, untyped } from "../../editor/typed.ts";
+import { newDefinition } from "../src/lang/toplevel.ts";
+import { CONS } from "../src/lang/std.ts";
 
 // Cases that give the same value read once as the otherwise, and an edit
 // to it is made in all of them; each can still be given a body of its own
@@ -30,4 +32,28 @@ test("one of the cases an otherwise stands for gets its own body", () => {
   assert.equal(r.code.nodes[at(cases[0])].kind, "hole");
   // The others keep the value they shared.
   for (const c of cases.slice(1)) assert.equal(at(c), (code.nodes[c.parent] as unknown as Record<string, string>)[c.slot]);
+});
+
+// A new function's input has no type until its body fixes one, so Split
+// offers the data types to split it as, and the split fixes it (BACKLOG
+// I116): tumble's new `f(board)`, split as a List, is a match on board
+// with an empty and a non-empty case.
+test("an input with no type yet splits as a chosen data type", () => {
+  const p = loadProgram(join(root, "examples", "tumble"));
+  const made = newDefinition(p.code, p.pres.names, "f", { kind: "function", params: ["board"] });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  const def = made.code.defs.find((d) => made.names[d] === "f")!;
+  const lam = made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const info = infer(made.code, made.names);
+  const board = lam.params[0];
+  assert.ok(untyped(info, board));
+  assert.equal(splitOn(made.code, made.names, info, lam.body, board).ok, false);
+  const list = info.owner.get(CONS)!;
+  const r = splitOn(made.code, made.names, info, lam.body, board, list);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const m = r.code.nodes[lam.body] as NodeOf<"match">;
+  assert.equal(m.kind, "match");
+  assert.equal(m.arms.length, 2);
 });

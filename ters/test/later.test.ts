@@ -328,6 +328,28 @@ test("a search defined on its own that waits: compiled, its answers and its wait
   assert.deepEqual(await p.compiled(), want);
 });
 
+// A search that waits inside a fold over its list (C40): the fold is a
+// generator whose waits are passed on, not taken for answers.
+test("a search that waits in a fold over its list: compiled, each wait reaches the handler (C40)", async () => {
+  const p = program((k) => {
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
+    const some = k.def("some of"), main = k.def("main");
+    k.define(some, k.fn(["xs"], (xs) => k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["x", "more"], results: [null, "others"], body: ([x], [, o]) => k.seq(k.call(Y.op.yield, x), k.call(B.add, k.call(S.oneOf, k.list(x, k.lit(0))), o!)) },
+    ])));
+    k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(
+      k.call(S.all, k.thunk(() => k.call(some, k.list(k.lit(1), k.lit(2), k.lit(3))))),
+      [{ variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.seq(say(k, k.lit("saw "), k.call(S.show, item)), k.call(rest, k.x(UNIT_V))) }],
+    )))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  const want = ["saw 3", "saw 2", "saw 1", "saw 1", "saw 2", "saw 1", "saw 1", "[6, 5, 4, 3, 3, 2, 1, 0]"];
+  assert.deepEqual(p.run(), want);
+  assert.deepEqual(await p.compiled(), want);
+});
+
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.
 // Every case handling the operation gets a name for the rest, kept after
 // its inputs; answered at once again, it loses it, unless a case uses it.
