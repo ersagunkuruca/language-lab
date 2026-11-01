@@ -329,3 +329,18 @@ test("a program whose lists meet a set as written keeps List as written", () => 
   const info = infer(code, names, undefined, checkOptions);
   assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, main]).chosen.includes("List as array of List"));
 });
+
+// I105: a choice that doesn't check is no choice. chapters' `keep` is
+// pinned to List, so lists as arrays would make it fail; the chooser drops
+// that row and the program checks, as written.
+test("a representation the program doesn't check on is dropped, not reported (chapters, I105)", async () => {
+  const { join } = await import("node:path");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples/chapters"));
+  const names = p.pres.names, info = infer(p.code, names, undefined, p.options);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const main = p.named("main");
+  const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs);
+  assert.ok(!c.chosen.some((x) => /array/.test(x)), String(c.chosen));
+  if (c.info) assert.deepEqual(c.info.errors.map((e) => e.message), []);
+});
