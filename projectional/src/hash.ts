@@ -55,7 +55,7 @@ function kids(n: Node): Id[] {
     case "call": return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "typedef": return [...n.params, ...n.variants];
-    case "variant": return n.fields;
+    case "variant": return [...(n.params ?? []), ...n.fields];
     case "field": return [n.type];
     case "tref": return n.args;
     case "tfun": return [...n.params, n.result];
@@ -172,7 +172,9 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       // be one type by their hashes. Only written when present, so every
       // hash from before stays.
       case "typedef": return n.row ? ["row", n.row.map(defRef)] : n.unique ? ["type", n.params.map(go), n.variants.map(go), ["unique", n.unique]] : ["type", n.params.map(go), n.variants.map(go)];
-      case "variant": return ["variant", n.fields.map(go)];
+      // An operation's own type variables, only when it has some, so every
+      // hash from before stays.
+      case "variant": return n.params?.length ? ["variant", ["own", n.params.map(go)], n.fields.map(go)] : ["variant", n.fields.map(go)];
       case "field": return ["field", go(n.type)];
       case "tref": {
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);

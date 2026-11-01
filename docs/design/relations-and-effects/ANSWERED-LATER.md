@@ -240,9 +240,10 @@ together(actions) =
 
 **The steps this gives** (BACKLOG):
 
-- **L71a**, an operation's own type variables, in the checker (fresh per
-  call, rigid in its case, absent from the row), the evaluator untouched
-  (it is untyped). Tested on a program's own `ask(question: Ticket a) → a`.
+- **L71a** (done, 2026-11-01), an operation's own type variables, in the
+  checker (fresh per call, rigid in its case, absent from the row), the
+  evaluator untouched (it is untyped): a variant's `params`. Tested on a
+  program's own `pick(first: a, others: List a) → a` (test/own-type-vars.test.ts).
 - **L71b**, std's `Await` (`await`, later), `Ticket a`, `ticket id` and
   `any of`, and `together` in the prelude as above, tested with a handler
   that answers `await` from a list of ready tickets (a fake world, in the

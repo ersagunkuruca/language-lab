@@ -505,11 +505,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // An operation: calling it performs the effect. One that never
         // returns has a result of any type, since nobody receives it.
         if (isEffect(def)) {
-          const { fields, params, self } = dataType(def);
-          const r = (code.nodes[target] as NodeOf<"variant">).returns;
+          const { params, self } = dataType(def);
+          const op = code.nodes[target] as NodeOf<"variant">;
+          // Its own type variables are fresh at each call and not in the row (L71a).
+          const own = new Map([...params, ...(op.params ?? []).map((p) => [p, s.fresh()] as const)]);
           const eff = s.freshRow([def]);
           if (params.size) eff.args = { [def]: (self as { args: Type[] }).args };
-          return { t: "fn", params: fields(target), ret: r ? typeExpr(r, params) : s.fresh(), eff };
+          return { t: "fn", params: op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, own)), ret: op.returns ? typeExpr(op.returns, own) : s.fresh(), eff };
         }
         if ((t as NodeOf<"variant">).private && insiders && !current.every((d) => insiders.has(d)))
           err(id, `${nm(target)} is private to the library, which keeps ${nm(def)}'s rule: build a ${nm(def)} with the library's functions (${SMART[target] ?? "see LIBRARY.md"})`);
@@ -694,7 +696,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             // Find the argument that's wrong, for a useful message.
             const ft = s.resolve(f);
             if (ft.t !== "fn") err(id, `${callee(n)} is ${show(f)}, not a function`);
-            else ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
+            else {
+              let found = false;
+              ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { found = true; err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
+              // Every input fits, so it's the effects: an effect's type
+              // argument here differs from the one it has around this call
+              // (Yield Int there, Yield Text here).
+              if (!found) err(id, `${callee(n)} is ${show(ft)} here, and its effects don't fit the ones around it: an effect is used at two types`);
+            }
           } else throw e;
         }
         // An update needs to know which field it changes, so its first input
@@ -927,7 +936,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (n.kind === "fold") err(n.id, `${nm(effect)} is an effect; its operations are handled with a match, not folded`);
     const rest = s.next++;
     s.unifyRow({ effs: [], tail: rest }, row);
-    const { fields, params, self } = dataType(effect);
+    const { params, self } = dataType(effect);
     const handled: Row = { effs: [effect], tail: rest, ...(params.size ? { args: { [effect]: (self as { args: Type[] }).args } } : {}) };
     const done = n.kind === "match" ? n.otherwise : null;
     const value = done ? s.fresh() : result;
@@ -941,8 +950,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (owner.get(arm.variant) !== effect) { err(arm.id, `${nm(arm.variant)} is not an operation of ${nm(effect)}`); continue; }
       if (seen.has(arm.variant)) err(arm.id, `${nm(arm.variant)} is handled twice`);
       seen.add(arm.variant);
-      const fs = fields(arm.variant);
       const op = code.nodes[arm.variant] as NodeOf<"variant">;
+      // The operation's own type variables are rigid here: the case works
+      // for every one of them (L71a), so it can pass a ticket on but can't
+      // take its answer to be a Text.
+      const opParams = new Map([...params, ...(op.params ?? []).map((p) => [p, { t: "con", id: `${RIGID}any.${p}`, args: [] } as Type] as const)]);
+      const fs = op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, opParams));
       // An operation answered later: one more binder, the rest of the
       // computation, (answer) -[the match's row]-> the match's value. It
       // resumes under this same match (deep), so it can do what the match
@@ -954,7 +967,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const r = op.returns;
       if (later && arm.binds.length === fs.length + 1) {
         const rest = arm.binds[fs.length];
-        const t: Type = { t: "fn", params: [typeExpr(r!, params)], ret: result, eff: row };
+        const t: Type = { t: "fn", params: [typeExpr(r!, opParams)], ret: result, eff: row };
         inner.set(rest, t);
         info.typeOf.set(rest, t);
         // A case gives one value, so a search can't resume the rest once
@@ -970,7 +983,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!r) { unifyAt(arm.body, result, expr(arm.body, inner, row), "this case"); continue; }
       // An answer is one value: the computation carries on once with it.
       const own = s.freshRow();
-      unifyAt(arm.body, typeExpr(r, params), expr(arm.body, inner, own), `the answer to ${nm(arm.variant)}`);
+      unifyAt(arm.body, typeExpr(r, opParams), expr(arm.body, inner, own), `the answer to ${nm(arm.variant)}`);
       if (s.resolveRow(own).effs.includes(CHOICE)) err(arm.body, `the answer to ${nm(arm.variant)} must be one value, and this may give several or none: handle the Choice here (first, optional)`);
       try { s.unifyRow(own, row); } catch (e) { if (e instanceof EffectError) err(arm.body, `this case performs ${effName(e)}, which nothing here handles`); else throw e; }
     }

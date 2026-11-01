@@ -64,7 +64,11 @@ export type Node =
   // `row` (HOSTS.md, L58): a named row, no variants, standing for these
   // effects wherever a function type lists it (`() -[View]-> Text`).
   | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[] }
-  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true }
+  // An operation's own type variables (BACKLOG L71a, ANSWERED-LATER.md):
+  // binders its fields and result may name besides its effect's, fresh at
+  // each call and rigid in the case that handles it. `await(ticket: Ticket
+  // a) → a` has its own a.
+  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true; params?: Id[] }
   // `results` (an interface's field, POLAR.md): the positions of the
   // ports it gives, when its type is a predicate over its ports read as a
   // function with several results; `ports` names them for the text.
@@ -142,7 +146,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
-    case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f) };
+    case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
     case "field": return { ...n, id: f(n.id), type: f(n.type) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
     case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
@@ -166,7 +170,7 @@ export function children(n: Node): Id[] {
     case "lambda": return [...n.params, n.body];
     case "def": return n.body ? [n.body] : [];
     case "typedef": return [...n.params, ...n.variants];
-    case "variant": return n.returns ? [...n.fields, n.returns] : n.fields;
+    case "variant": return [...(n.params ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];
     case "field": return [n.type];
     case "tref": return n.args;
     case "tfun": return [...n.params, n.result];
