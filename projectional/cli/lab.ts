@@ -56,7 +56,8 @@ import { representationLaws } from "../src/lang/rep-laws.ts";
 import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
-const USAGE = `usage:
+const USAGE = `lab: the command line for Ters, the language
+usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)

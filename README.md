@@ -1,16 +1,19 @@
-# language-lab
+# language-lab: home of Ters
 
-Experiments with new programming language paradigms. Each experiment lives in
-its own top-level folder with its own README.
+**Ters** is the language this repo builds. *Ters* is Turkish for "reverse" or
+"inside out", because its definitions run backwards as well as forwards, and it
+rhymes with *terse*. The repo keeps the name language-lab: experiments with new
+programming language paradigms, each in its own top-level folder with its own
+README.
 
-- `projectional/`: the language. The program is a tree edited in a browser structure editor, [the site itself](https://ersagunkuruca.github.io/language-lab/); the checker, the evaluator, running backwards, the library and the examples (see `projectional/README.md`, and [learn.html](https://ersagunkuruca.github.io/language-lab/learn.html) to start).
+- `projectional/`: Ters, the language. The program is a tree edited in a browser structure editor, [the site itself](https://ersagunkuruca.github.io/language-lab/); the checker, the evaluator, running backwards, the library and the examples (see `projectional/README.md`, and [learn.html](https://ersagunkuruca.github.io/language-lab/learn.html) to start).
 - `compiler/`: compiles the typed core of `projectional/` to JavaScript, guided by its effect types (see `docs/design/targets/COMPILER.md`), to WebAssembly and native code through C, and its numeric part to WGSL for the GPU ([shaders.html](https://ersagunkuruca.github.io/language-lab/shaders.html)).
 - `invertible/`: the relation solver that arithmetic runs backwards with.
 - Web apps written in the language, built onto the site by `projectional/editor/build.ts` (`lab build-web`, see `docs/design/targets/WEB.md`): [the unit converter](https://ersagunkuruca.github.io/language-lab/apps/converter.html), [two dice](https://ersagunkuruca.github.io/language-lab/apps/dice.html), [Pig](https://ersagunkuruca.github.io/language-lab/apps/pig.html) (effects with handlers), [Tumble](https://ersagunkuruca.github.io/language-lab/apps/tumble.html) (a match-three puzzle), [the guitar pedal](https://ersagunkuruca.github.io/language-lab/apps/pedal.html) (live sound), [Bounce](https://ersagunkuruca.github.io/language-lab/apps/bounce.html) (one physics step over Clifford algebras, in 2D and 3D), [Constructions](https://ersagunkuruca.github.io/language-lab/apps/constructions.html) (geometry in projective geometric algebra), [Spacetime](https://ersagunkuruca.github.io/language-lab/apps/spacetime.html) (relativity and electromagnetism as rotors) and the nested to-do in [reactive.html](https://ersagunkuruca.github.io/language-lab/reactive.html).
 
 ## Goals
 
-One goal runs through the language: programs written in plain functional
+One goal runs through Ters: programs written in plain functional
 style (lists as `cons`/`nil`, numbers as `zero`/`succ`) that compile to fast
 code, because how data is stored is a separate, chosen representation.
 [docs/design/numbers/NUMBERS.md](docs/design/numbers/NUMBERS.md), "Where this stands",

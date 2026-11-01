@@ -1,6 +1,7 @@
-# A tutorial for the projectional language
+# A tutorial for Ters
 
-This tutorial explains the language in three parts:
+Ters is the language this repo builds (the name is Turkish for "reverse").
+This tutorial explains it in three parts:
 
 1. [For a five-year-old](#part-1-for-a-five-year-old): what this is, with
    no programming words at all.
