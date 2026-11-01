@@ -186,3 +186,19 @@ test("lab run on a page prints it once as static HTML: values drawn, no script",
   assert.match(r.stdout, /<style>[^<]*"Segoe UI"/);
   assert.doesNotMatch(r.stdout, /<script/);
 });
+
+// Every app the site builds (editor/build.ts) compiles: a compiled page
+// that can't be built stops the site's deploy, as bounce's did after L125b.
+test("every example app the site builds compiles to a page", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const { webPage } = await import("../cli/web.ts");
+  const build = readFileSync(join(import.meta.dirname, "../../editor/build.ts"), "utf8");
+  const apps = JSON.parse(/for \(const name of (\[[^\]]*\])\) \{\n  const p = loadProgram/.exec(build)![1].replace(/'/g, '"')) as string[];
+  assert.ok(apps.includes("bounce"), apps.join(" "));
+  for (const name of apps) {
+    const p = loadProgram(join(import.meta.dirname, "../examples", name));
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    await assert.doesNotReject(webPage(name, p.code, info, p.pres.names, p.named("main")), name);
+  }
+});
