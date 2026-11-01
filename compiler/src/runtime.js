@@ -366,6 +366,7 @@ import { Aborted, OutOfSteps, spendStep } from '../../ters/src/lang/run.ts';
 import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
+import { answerByShapes } from '../../ters/src/lang/hosts.ts';
 export { Aborted as $Aborted };
 
 const handlers = [];
@@ -400,8 +401,19 @@ export function $perform(effect, op, args) {
     world.wait(args[0]);
     return $unit;
   }
+  // A program's own effect, answered by its host (FOREIGN.md, L69a2):
+  // checked at the border, a wrong or missing answer the program's Abort.
+  if (hostOps && op in hostOps) {
+    let v;
+    try { v = answerByShapes(hostOps[op], hostAnswers, op, args); } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
+    return v;
+  }
   throw new Error(`nothing handles ${op}`);
 }
+// The host's answers (hosts/js.js) and what the border needs of each
+// operation, given by the compiled module (compile.ts, `hosts`).
+let hostAnswers = {}, hostOps = null;
+export function $setHosts(answers, ops) { hostAnswers = answers ?? {}; hostOps = ops; }
 
 // Random where nothing in the program handles it: the world's (C64d).
 // Set with the world, so a draw is one call.
