@@ -31,6 +31,7 @@ import * as Alg from "./algebraic.ts";
 import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
+import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import { Cells, NoValue, Pending, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
@@ -242,6 +243,9 @@ export interface Runtime {
   // Check's handler when the program has none (`lab test`, tests.ts):
   // each expect, whether it held, and what it says.
   check?: (holds: boolean, what: string) => void;
+  // The host's answers to the program's own effects (hosts.ts, FOREIGN.md):
+  // hosts/js.js's default export, by operation id.
+  hosts?: Hosts;
 }
 
 // What the world effects do. A failure throws, with a message that becomes
@@ -400,6 +404,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel, S.seeded].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
+  const hosted = hostedEffects(code, rt.hosts);
   const FALLIBLE = new Set<Fn>([IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
@@ -562,13 +567,20 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // What the program leaves unhandled, the runtime handles: Log goes to
     // standard error, an Abort ends the run, and the world draws Random's
     // numbers, reads the clock and waits.
-    unhandled(op: Id, args: Value[]) {
+    unhandled(op: Id, args: Value[]): void {
       if (op === LOG_OP) return ((rt.world?.log ?? rt.print)(args[0] as string), this.ret(unit));
       if (op === ABORT_OP) throw new Aborted(args[0] as string);
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
+      // A program's own effect, answered by its host (L69a); a missing or
+      // wrong answer is an Abort, performed where the operation was.
+      if (rt.hosts && hosted.has(effectOfOperation(code, op) ?? "")) {
+        let v: Value;
+        try { v = answerFromHost(code, rt.names ?? {}, rt.hosts, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        return this.ret(v);
+      }
       throw new Error(`nothing handles ${op}`);
     }
 
@@ -910,7 +922,7 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 }
 
 function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
-  const problem = typeError(code, info, def, rt.names ?? {}) ?? leftover(t, rt.names ?? {});
+  const problem = typeError(code, info, def, rt.names ?? {}) ?? leftover(t, rt.names ?? {}, hostedEffects(code, rt.hosts));
   if (problem) throw new Error(problem);
   const r = makeRunner(code, info, rt);
   for (const v of r.call(r.value(def), ...args)) return v;
@@ -938,9 +950,9 @@ export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter(
 
 // Why an action can't be run as it is: an effect only the program could
 // handle is left over. Null when it can.
-function leftover(t: Type, names: Names): string | null {
+function leftover(t: Type, names: Names, hosted: Set<Id> = new Set()): string | null {
   if (t.t !== "fn") return "not a function";
-  const extra = needsHandling(t);
+  const extra = needsHandling(t).filter((e) => !hosted.has(e));
   if (!extra.length) return null;
   return `unhandled effect: ${extra.map((e) => names[e] ?? e).join(", ")}; ${extra.includes(CHOICE) ? "wrap it in first, all, count or optional" : "handle it with a match on its operations"}`;
 }
