@@ -83,7 +83,12 @@ needed, a Float64 where a Float64 is, and so on, while `0.5` can be
 anything but an Int. One that nothing fixes is exact where it can be: `2 +
 3` alone is the Int 5, `0.5` alone a Float64. Values don't mix
 by themselves: `as float64`, `whole part`, `as fraction` and `as complex`
-convert. (WHAT-NUMBER-MEANS.md.)
+convert. (WHAT-NUMBER-MEANS.md.) A `Float64` is always finite, with one
+zero: NaN and ±∞ are not values. An answer outside the finite floats
+stops the program with the reason: no answer (`x / 0`, the square root of
+a negative, the log of 0 or less, 0 to a negative power) or overflow. Today
+both stop it; with L125b "no answer" becomes `Choice`, so a handler can
+catch it (FLOAT-VALUES-2026-11-01.md).
 
 **Data.** You make a type by listing its cases, each with named fields:
 
@@ -334,9 +339,9 @@ a is the same as b and b as c, a has to be the same as c, or a sorted list
 and a set fall apart (with nearness, three Float64s a step of 1.5e-6 apart
 near 1000 made a set of 2 or of 1 depending on the order they came in;
 REVIEW-2026-10-26.md §1.1). So `compare` is exact: `compare(0.1 + 0.2,
-0.3)` is `after`, though `equal` says they are equal. NaN (from `0 / 0` or
-`sqrt(−1)`) comes after every other Float64 and is the same as itself, as
-in IEEE 754's totalOrder; −0 is the same as 0, as `equal` says. A map's
+0.3)` is `after`, though `equal` says they are equal. There is no NaN or
+∞ to place: a `Float64` is always finite (L125a, FLOAT-VALUES-2026-11-01.md),
+and −0 is the same as 0, as `equal` says. A map's
 keys and a set's items are told apart this exact way, and `equal` on two
 maps compares their entries with its own nearness.
 
@@ -1559,8 +1564,8 @@ a row's test is missing or the table here differs from the rows.
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error | "scope: a variable moved out of the case that binds it is caught" (`test/lang.test.ts`) |
 | incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
 | integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |
-| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` is IEEE (Infinity/NaN) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
-| other domain errors (`sqrt` of a negative) | runtime | builtins are IEEE; a `Choice`-returning `sqrt` (both roots, or none) is the natural fix | no test: not addressed beyond IEEE |
+| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` by 0 stops the program with the reason (L125a; `Choice` with L125b) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
+| other domain errors (`sqrt` of a negative) | runtime | a Float64 is always finite (L125a): `sqrt` of a negative, `log` of 0 or less, 0 to a negative power and overflow stop the program with the reason, never a NaN or ∞; `Choice` for no answer with L125b | "a Float64 is always finite: no answer and overflow stop the program with the reason" (`test/data.test.ts`) |
 | unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one | "units: declared on parameters and numbers, inferred through predicates and functions" (`test/oneworld.test.ts`) |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) | no test: not addressed |
 

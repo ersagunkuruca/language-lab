@@ -15,7 +15,6 @@ import { runMain, sameNumber } from "../src/lang/run.ts";
 import { S, SHOW_ANY, STD_IMPL } from "../src/lang/std.ts";
 import { get, type Id } from "../src/model.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { B } from "../src/prelude.ts";
 import { PAIRS } from "./helpers.ts";
 
 test("equal says the same directly, through a generic function, inside data, and run backwards", () => {
@@ -23,7 +22,8 @@ test("equal says the same directly, through a generic function, inside data, and
   const same = k.def("same");
   k.define(same, k.fn(["x", "y"], (x, y) => k.equal(x, y)));
   // At Float64: a whole literal left open would be an Int, compared exactly.
-  const lit = (v: number) => (Number.isFinite(v) ? k.at(NUMBER, v) : k.call(B.div, k.lit(Number.isNaN(v) ? 0 : 1), k.lit(0)));
+  // Every Float64 is finite (L125a): NaN and ∞ aren't values to compare.
+  const lit = (v: number) => k.at(NUMBER, v);
   const backs: Id[] = [];
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...PAIRS.flatMap(([a, b]) => [
@@ -44,7 +44,6 @@ test("equal says the same directly, through a generic function, inside data, and
     const want = sameNumber(a, b);
     assert.deepEqual(got.slice(3 * i, 3 * i + 3), [want, want, want], `${a} = ${b}: direct, generic, in a list`);
     // Backwards: one of([b]) asked for a has an answer exactly when a = b.
-    if (Number.isNaN(a)) return; // NaN can't be asked for: it's no value to unify with
     let steps = 0;
     const answers = [...relate(code, backs[i], { out: a }, { spend: () => ++steps < 1000 })];
     assert.equal(answers.length > 0, want, `one of([${b}]) = ${a} backwards`);

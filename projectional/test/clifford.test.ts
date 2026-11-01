@@ -173,6 +173,35 @@ test("clifford sandwich, reflect, project and exp: rotors, mirrors and PGA motor
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
+// BACKLOG I108 (REVIEW-2026-11-01 §4): ṽ / (v ṽ) is the inverse only of a
+// versor, whose v ṽ is a number, so `clifford versor inverse` has no answer
+// for anything else: 1 + e₁ has no inverse at all, and 2 + e₁, which has
+// one, isn't a versor. A null vector (v ṽ = 0) has none either.
+test("clifford versor inverse: a vector's, a rotor's and a blade's; no answer when v ṽ isn't a nonzero number", () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const M = k.type("Mv", [], [["mv", ["s", "e1", "e2", "e12", "e3", "e13", "e23", "e123"].map((p) => [p, num] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number>) => k.call(M.v.mv, ...Array.from({ length: 8 }, (_, i) => k.lit(parts[i] ?? 0)));
+  const basis = def("cl basis", () => k.list(...Array.from({ length: 8 }, (_, i) => at({ [i]: 1 }))));
+  const cl = (squares: number[]) => def(`cl ${squares.join(" ")}`, () => k.call(lib("clifford algebra"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)));
+  const cl3 = cl([1, 1, 1]), cl20 = cl([1, 1, 0]);
+  const inverse = (al: Id, v: Record<number, number>) => def(`inverse ${JSON.stringify(v)} ${al}`, () => k.thunk(() => k.call(SHOW_ANY, k.call(lib("clifford versor inverse"), k.x(al), at(v)))));
+  const c = Math.SQRT1_2;
+  const cases: [Id, string[]][] = [
+    [inverse(cl3, { 1: 2 }), ["mv(0, 0.5, 0, 0, 0, 0, 0, 0)"]],
+    [inverse(cl3, { 0: c, 3: -c }), [`mv(${(+c.toFixed(9))}, 0, 0, ${(+c.toFixed(9))}, 0, 0, 0, 0)`]],
+    [inverse(cl3, { 3: 2 }), ["mv(0, 0, 0, -0.5, 0, 0, 0, 0)"]],
+    [inverse(cl3, { 0: 1, 1: 1 }), []],
+    [inverse(cl3, { 0: 2, 1: 1 }), []],
+    [inverse(cl20, { 4: 1 }), []],
+  ];
+  const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  for (const [d, want] of cases) assert.deepEqual([...(r.call(r.value(d)) as Iterable<Value>)], want, nm[d]);
+});
+
 // The other products, grades and duals (BACKLOG I89): outer, left
 // contraction, grade selection, the dual by complement and its undual, and
 // the regressive product, in Cl(3, 0) (s, e1, e2, e12, e3, e13, e23, e123).
