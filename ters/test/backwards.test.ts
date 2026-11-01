@@ -45,6 +45,18 @@ test("a printer run backwards is a parser: show numbers, unfolded", () => {
   assert.deepEqual([...relate(p.code, show, { out: "" })].map((a) => shown(a, numbers)), ["[]"]);
 });
 
+test("a long list read back doesn't run out of stack: show numbers on 4,000 numbers (L18)", () => {
+  // Past about 2,000 numbers the interpreter's own recursion overflowed:
+  // copying a term out, forcing a bind on a bind on … a suspension, and
+  // a waiting equation waking the next one.
+  const p = load("backwards");
+  const show = p.named("show numbers");
+  const [numbers] = params(p.code, show);
+  const xs = Array.from({ length: 4000 }, (_, i) => i % 97);
+  const [a] = take(relate(p.code, show, { out: xs.join(" ") }), 1);
+  assert.equal(shown(a, numbers), `[${xs.join(", ")}]`);
+});
+
 test("map run backwards with its function known enumerates every preimage", () => {
   const p = load("backwards");
   const r = makeRunner(p.code, infer(p.code, p.pres.names), { print: () => {} });
