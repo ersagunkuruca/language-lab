@@ -11,6 +11,7 @@
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
+//   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
 //   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
 //                                        play a sound over a WAV file (AUDIO.md)
 //
@@ -68,6 +69,7 @@ usage:
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
+  lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
@@ -202,6 +204,8 @@ if (defined >= 0) argv.splice(defined, 1);
 const at = argv.indexOf("--main");
 if (at >= 0) { mainName = argv[at + 1] ?? fail("--main needs a name"); argv.splice(at, 2); }
 const [command, path, ...rest] = argv;
+// An MCP server for an LLM to read, change and run programs (mcp/server.ts).
+if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
 if (!command || command === "help" || command === "--help" || !path) {
   process.stdout.write(USAGE + "\n");
   process.exit(command && command !== "help" && command !== "--help" ? 2 : 0);
