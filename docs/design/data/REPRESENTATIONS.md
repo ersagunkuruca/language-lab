@@ -134,8 +134,10 @@ never picks it by cost, and the shader target asks for it.
    inputs are small values (tests.ts), and each T input is built by T's
    own jobs that give one (zero, succ; nil, cons; empty map, put), run at
    T and at R side by side, so an R input is always one R's jobs make (an
-   Int standing for a Nat is never negative). A job taking a function
-   (match, fold, update at) isn't tried yet. Numbers' binary and int, the
+   Int standing for a Nat is never negative). match and fold are given
+   cases that report what they get, and must call the same case with the
+   same values as T's own, recursive fields read through `meaning`
+   (L108d2). Another job taking a function (update at) isn't tried yet. Numbers' binary and int, the
    trees and array of List all hold; a job swapped for another is caught
    with its inputs ("at int gives …, Nat's own …").
 5. **With C30.** Lists as arrays becomes a row written this way (`array

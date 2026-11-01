@@ -21,7 +21,7 @@ test("Numbers' binary and int Nats agree with Nat through their meaning", () => 
   const { p, info, reps } = numbers();
   const laws = representationLaws(p.code, info, p.pres.names, reps);
   assert.deepEqual(laws.filter((l) => l.failures.length), []);
-  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["add", "zero", "succ", "multiply", "number"]);
+  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["add", "zero", "succ", "multiply", "number", "match", "fold"]);
   assert.ok(laws.every((l) => l.cases > 0));
   assert.ok(laws.find((l) => l.rep === "binary" && l.job === "add")!.cases >= 20);
 });
@@ -44,6 +44,23 @@ test("the library's Map and Set trees and array of List agree through their mean
   const laws = representationLaws(code, info, names, LIBRARY.reps);
   assert.deepEqual(laws.filter((l) => l.failures.length).map((l) => [l.rep, l.job, l.failures[0]]), []);
   const jobs = (rep: string) => laws.filter((l) => l.rep === rep && l.cases > 0).map((l) => l.job);
-  assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "item at"]);
+  assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "item at", "match", "fold"]);
   assert.ok(jobs("weight-balanced tree").includes("put") && jobs("weight-balanced tree").includes("set union"));
+});
+
+// match and fold (L108d2): given cases that report what they get, the
+// representation's must call the same case with the same values as T's own.
+test("match and fold agree too, and a match that calls the wrong case is caught", () => {
+  const { p, info, reps } = numbers();
+  const laws = representationLaws(p.code, info, p.pres.names, reps);
+  for (const rep of ["int", "binary"]) for (const job of ["match", "fold"]) {
+    const law = laws.find((l) => l.rep === rep && l.job === job);
+    assert.ok(law && law.cases >= 5 && !law.failures.length, `${rep} ${job}`);
+  }
+  // fold where match goes: the cases get one more input each.
+  const int = reps.find((r) => r.name === "int")!;
+  const wrong = { ...int, impl: { ...int.impl, match: int.impl.fold } };
+  const law = representationLaws(p.code, info, p.pres.names, [wrong]).find((l) => l.job === "match")!;
+  assert.ok(law.failures.length > 0);
+  assert.match(law.failures[0].what, /^at int match (calls case|stops)/);
 });
