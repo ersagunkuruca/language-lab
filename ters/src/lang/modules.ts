@@ -296,12 +296,20 @@ export function sameAs(code: Code, lib: Library, memo?: Map<Id, string>): Map<Id
 // and Ullman) found by trying the orders, which is cheap for the few
 // inputs a definition has. A recursive definition is left out: its own
 // calls would need their arguments reordered too.
+//
+// The operands of + and · are sorted too, where the operation commutes
+// (§7 part 2, L132): `x·x + y·y` and `y·y + x·x` are one. The generic +
+// commutes for every number type the library has; the generic · doesn't
+// (matrices, quaternions), so only Int's, Float64's and Algebraic's own
+// · are sorted, which draft code reaches once its numbers are pinned.
+// Sorting only: Float64's + doesn't associate, so sums aren't flattened.
+export const COMMUTES: ReadonlySet<string> = new Set(["arith.add", "add", "mul", "int.add", "int.mul", "algebraic.add", "algebraic.mul"]);
 const MAX_ORDERED = 5;
 const permutations = <T>(xs: T[]): T[][] => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p])));
 export function orderFreeHash(code: Code, d: Id, memo: Map<Id, string>): string | null {
   const def = code.nodes[d];
   const lam = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-  if (lam?.kind !== "lambda" || lam.params.length < 2 || lam.params.length > MAX_ORDERED) return null;
+  if (lam?.kind !== "lambda" || lam.params.length > MAX_ORDERED) return null;
   const group = defGroups(code, [d]).find((g) => g.includes(d));
   if (!group || group.length > 1 || subtree(code, lam.body).some((id) => { const n = code.nodes[id]; return n?.kind === "ref" && n.target === d; })) return null;
   let least: string | null = null;
@@ -310,7 +318,7 @@ export function orderFreeHash(code: Code, d: Id, memo: Map<Id, string>): string 
     // d's own hash must be taken again: hidden from what memo holds.
     const fresh = new Over(memo);
     fresh.hidden = d;
-    const h = hashes(swapped, [d], fresh).get(d)!;
+    const h = hashes(swapped, [d], fresh, COMMUTES).get(d)!;
     if (least === null || h < least) least = h;
   }
   return least;
@@ -359,7 +367,7 @@ export function sameLines(code: Code, names: Names, lib: Library): string[] {
   ].join(" and ");
   return [
     ...[...sameAs(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${say(s)}`),
-    ...[...sameUpToOrder(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${say(s)} with its inputs in another order`),
+    ...[...sameUpToOrder(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${say(s)} with its inputs or operands in another order`),
   ];
 }
 

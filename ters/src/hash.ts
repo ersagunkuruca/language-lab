@@ -104,17 +104,19 @@ export function defGroups(code: Code, roots: Id[], owner = ownerOfTypeParts(code
 
 // The hash of every def reachable from `roots`. `memo` carries hashes
 // between calls on the same code.
-export function hashes(code: Code, roots: Id[], memo = new Map<Id, string>()): Map<Id, string> {
+// `commutes`: builtin ops whose two operands are sorted (modules.ts
+// orderFreeHash); left out, every hash is the exact one.
+export function hashes(code: Code, roots: Id[], memo = new Map<Id, string>(), commutes?: ReadonlySet<string>): Map<Id, string> {
   const owner = ownerOfTypeParts(code);
   for (const group of defGroups(code, roots.filter((r) => !memo.has(r)), owner)) {
     if (group.every((d) => memo.has(d))) continue;
     const anon = new Map(group.map((d) => [d, null as number | null]));
     const sorted = group
-      .map((d, i) => ({ d, i, key: digest(canon(code, d, anon, memo, owner)) }))
+      .map((d, i) => ({ d, i, key: digest(canon(code, d, anon, memo, owner, commutes)) }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i))
       .map((x) => x.d);
     const place = new Map(sorted.map((d, i) => [d, i as number | null]));
-    const groupHash = digest(["group", sorted.map((d) => canon(code, d, place, memo, owner))]);
+    const groupHash = digest(["group", sorted.map((d) => canon(code, d, place, memo, owner, commutes))]);
     sorted.forEach((d, i) => memo.set(d, group.length === 1 ? groupHash : digest(["member", groupHash, i])));
   }
   return memo;
@@ -127,7 +129,7 @@ export function hashDef(code: Code, defId: Id, memo?: Map<Id, string>): string {
 
 // The canonical form of one def. `group` gives the place of each def in the
 // group being hashed (null: anonymous); every other def is already in memo.
-function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<Id, string>, owner: Map<Id, Id>): Canon {
+function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<Id, string>, owner: Map<Id, Id>, commutes?: ReadonlySet<string>): Canon {
   const def = code.nodes[defId] as { body: Id | null };
   const binders = new Map<Id, number>();
   const defRef = (id: Id): Canon => {
@@ -165,7 +167,16 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
         if (t?.kind === "variant" || t?.kind === "field") return [t.kind, part(n.target)];
         return defRef(n.target);
       }
-      case "call": return ["call", go(n.fn), ...n.args.map(go)];
+      case "call": {
+        const f = go(n.fn), args = n.args.map(go);
+        // Operands of a commutative op sorted by their own form (PORTS
+        // §7 part 2): `x·x + y·y` and `y·y + x·x` come out the same.
+        if (commutes && args.length === 2 && f[0] === "builtin" && commutes.has(f[1] as string)) {
+          const keyed = args.map((a) => [JSON.stringify(a), a] as const).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+          return ["call", f, ...keyed.map(([, a]) => a)];
+        }
+        return ["call", f, ...args];
+      }
       case "lambda": return ["lam", n.params.map(go), go(n.body)];
       // `unique`: a type that has the same shape as another but isn't it
       // (Dual and Complex are both two Float64s) says so, or the two would
