@@ -223,9 +223,17 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       case "lambda": {
         enter(n.params);
         const params = n.params.map(bind);
-        const body = inline(n.body).p;
+        // Named result ports (L128b) after the inputs, as a definition's
+        // read: `(a, b) → r1, r2 => e1, e2` when the body is the tuple of
+        // them written out, `=> body` otherwise (editor/typed.ts reads both).
+        const ports = n.results?.length ? n.results : null;
+        const b = ports ? node(n.body) : undefined;
+        const f = b?.kind === "call" ? node(b.fn) : undefined;
+        const parts = !ports ? null : ports.length === 1 ? [n.body] : b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
+        const named = ports ? [pn(" → "), ...commas(ports.map((r) => [bind(r)]))] : [];
+        const body = parts ? commas(parts.map((e) => inline(e).p)) : inline(n.body).p;
         leave(n.params);
-        return { p: [part("lam", [pn("("), ...commas(params.map((b) => [b])), pn(") => "), ...body], id)], prec: 0 };
+        return { p: [part("lam", [pn("("), ...commas(params.map((b) => [b])), pn(")"), ...named, pn(" => "), ...body], id)], prec: 0 };
       }
       case "call": {
         const items = listItems(id);
