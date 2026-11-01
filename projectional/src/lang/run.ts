@@ -104,12 +104,15 @@ export function equal(a: Value, b: Value): boolean {
 // How two Float64s are ordered: exactly, and totally. Unlike `equal`'s
 // nearness this is an order a sorted list, a set or a map's keys can rely
 // on (REVIEW-2026-10-26.md §1.1): every Float64 is before, the same as or
-// after every other, and "the same" is transitive. NaN (from 0/0 or
-// sqrt(−1)) is after every other Float64 and the same as itself, as in
-// IEEE 754's totalOrder; −0 and 0 are the same, unlike totalOrder, because
-// `equal` says so and nothing a program does tells them apart.
+// after every other, and "the same" is transitive. −0 and 0 are the same,
+// unlike IEEE 754's totalOrder, because `equal` says so and nothing a
+// program does tells them apart. Every Float64 is finite (L125a); compiled
+// code checks an overflow late, and this is one of the places (L125c).
 export const numberOrder = (a: number, b: number): number =>
-  a < b ? -1 : a > b ? 1 : a === b ? 0 : Number.isNaN(a) ? (Number.isNaN(b) ? 0 : 1) : -1;
+  a - a !== 0 || b - b !== 0 ? overflowed() : a < b ? -1 : a > b ? 1 : 0;
+// An overflow compiled code finds late (L125c), as the evaluator's
+// finiteFloat would have said at the operation.
+export const overflowed = (): never => { throw new Aborted("the answer is too big for a Float64 (overflow)"); };
 
 // The order on plain data (L66): numbers by value (Int, Float64 and
 // fractions; Float64 exactly, numberOrder), text by code point, and other
@@ -293,6 +296,7 @@ export function finiteFloat(op: string, r: number, args: number[]): number {
     : op === "pow" && a === 0 && b < 0 ? "0 to a negative power has no answer"
     : op === "pow" && a < 0 && !Number.isInteger(b) ? "a negative number to a fractional power has no answer"
     : args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
+    : op === S.float32 ? "the number is too big for a Float32 (overflow)"
     : "the answer is too big for a Float64 (overflow)";
   throw new Error(why);
 }
@@ -324,7 +328,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
     ? (y, x) => one(f((y as number) + 0, (x as number) + 0)) // −0 is 0: atan2(−0, −1) is π
     : (...a) => one(finiteFloat(op, f(...(a as number[])), a as number[]));
-  for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor
+  for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
     ? (...a) => one(finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[]))
     : (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
@@ -431,7 +435,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
@@ -1028,7 +1032,7 @@ export const definedAs = (v: Value): Id | undefined => (typeof v === "function" 
 // only read (the Run panel, a wire's value), not typed back in.
 export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
   if (typeof v === "bigint") return String(v);
-  if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v - v === 0 ? String(Math.round(v * 1e9) / 1e9) : overflowed();
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;

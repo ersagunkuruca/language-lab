@@ -5,7 +5,7 @@
 // rename changes nothing).
 //
 // What goes out is the operation's fields as JavaScript (Text a string,
-// Float64 and small Int a number, big Int a bigint, Bool a boolean, Unit
+// Float64 a finite number and small Int a number, big Int a bigint, Bool a boolean, Unit
 // undefined, a List an array, a record an object by field name). What
 // comes back is checked against the operation's result type at the border
 // before the program sees it (Elm's ports): a wrong answer is the
@@ -66,7 +66,7 @@ function shapeOf(code: Code, names: Names, tid: Id | undefined): Shape {
   return { k: "any" };
 }
 
-const describe = (s: Shape): string => s.k === "list" ? `a list of ${describe(s.of)}` : s.k === "record" ? "a record" : ({ int: "a whole number", float: "a number", text: "a text", bool: "true or false", unit: "nothing", any: "a value" } as const)[s.k];
+const describe = (s: Shape): string => s.k === "list" ? `a list of ${describe(s.of)}` : s.k === "record" ? "a record" : ({ int: "a whole number", float: "a finite number", text: "a text", bool: "true or false", unit: "nothing", any: "a value" } as const)[s.k];
 
 function inward(s: Shape, x: unknown, where: string): Value {
   const wrong = () => { throw new Border(`${where} gave ${JSON.stringify(x) ?? String(x)}, not ${describe(s)}`); };
@@ -76,7 +76,8 @@ function inward(s: Shape, x: unknown, where: string): Value {
       if (typeof x === "number" && Number.isInteger(x) && isInt(x)) return x;
       if (typeof x === "number" && Number.isSafeInteger(x)) return norm(BigInt(x));
       return wrong();
-    case "float": return typeof x === "number" ? x : wrong();
+    // A Float64 is finite (L125f): NaN and ±∞ from the host are refused here.
+    case "float": return typeof x === "number" && Number.isFinite(x) ? x : wrong();
     case "text": return typeof x === "string" ? x : wrong();
     case "bool": return typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : wrong();
     case "unit": return x === undefined || x === null ? { tag: UNIT_V, fields: [] } : wrong();

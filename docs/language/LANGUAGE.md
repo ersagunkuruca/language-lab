@@ -690,6 +690,16 @@ This is how Koka, Unison (`{Stream a}`) and Effekt write it. One limit for
 now: a function type written inside a data type can name such an effect
 but not its argument, which is left open there.
 
+An operation can also have **type variables of its own** (L71a): `effect
+Pick = pick(first: a, others: List a) returns a`, where `a` is pick's and
+not Pick's. Each call chooses it, so `pick(1, [2])` is an Int and
+`pick("x", ["y"])` a Text under one handler, and the row says just `Pick`.
+The case that handles it works for every `a`: it can give back `first`,
+but not a Text. This is what `await(ticket: Ticket a) returns a` needs
+(OCaml 5's effects as GADT constructors; Koka's polymorphic operations).
+An effect used at two types in one place (`Yield Int` here, `Yield Text`
+there) is an error at the call.
+
 **Answered later** (ANSWERED-LATER.md) is the third shape, for waiting:
 `effect Yield = yield(item: Float64) returns Unit, later`. Its case is given
 the rest of the computation as a function, `| yield(item) with rest → …`,

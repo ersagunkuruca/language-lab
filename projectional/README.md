@@ -1,6 +1,6 @@
-# projectional: the program is the tree
+# projectional: Ters, where the program is the tree
 
-A small prototype of a language whose source of truth is an AST, not text.
+Ters (Turkish for "reverse", rhymes with *terse*) is a small prototype of a language whose source of truth is an AST, not text.
 Identifiers are opaque IDs, names are free text kept in a separate table, and
 everything you normally fight about (formatting, operator symbols, infix vs
 prefix, naming style, whether to nest or use temporaries) is a *view* chosen

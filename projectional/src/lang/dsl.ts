@@ -60,13 +60,16 @@ export class Lang extends Builder {
   // one its handler may answer later, at most once (ANSWERED-LATER.md).
   // `params`: an effect can take types, as `Yield a` does; the inputs' and
   // answers' types are built from them.
-  effect(name: string, ops: [string, [string, (ps: Id[]) => Id][], ((ps: Id[]) => Id) | null, "later"?][], params: string[] = []) {
+  // An operation's own type variables (L71a) come after the effect's in
+  // the binders its types are given: ["ask", …, null, undefined, ["a"]].
+  effect(name: string, ops: [string, [string, (ps: Id[]) => Id][], ((ps: Id[]) => Id) | null, ("later" | undefined)?, string[]?][], params: string[] = []) {
     const def = this.def(name);
     const ps = params.map((p) => this.binder(p));
     const ids: Record<string, Id> = {};
-    const vs = ops.map(([oname, fs, returns, later]) => {
-      const fids = fs.map(([fname, ty]) => this.named(this.add({ kind: "field", type: ty(ps) }), fname));
-      return (ids[oname] = this.named(this.add({ kind: "variant", fields: fids, ...(returns ? { returns: returns(ps) } : {}), ...(later ? { later: true as const } : {}) }), oname));
+    const vs = ops.map(([oname, fs, returns, later, own]) => {
+      const mine = (own ?? []).map((p) => this.binder(p)), all = [...ps, ...mine];
+      const fids = fs.map(([fname, ty]) => this.named(this.add({ kind: "field", type: ty(all) }), fname));
+      return (ids[oname] = this.named(this.add({ kind: "variant", fields: fids, ...(returns ? { returns: returns(all) } : {}), ...(later ? { later: true as const } : {}), ...(mine.length ? { params: mine } : {}) }), oname));
     });
     this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: ps, variants: vs, effect: true }) };
     return { def, op: ids };

@@ -15,7 +15,7 @@ import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
-import { planSolve, solvesInWholeNumbers } from "./solve.ts";
+import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
@@ -118,6 +118,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const show = (t: Type) => showT(s.zonk(t), names);
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
+  // Solves waiting on their givens' types (L38), and whether one turned out
+  // to be in whole numbers, so the program is checked again with it so.
+  const waiting: { solve: Id; givens: [Id, Type][] }[] = [];
+  let again = false;
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
   const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
   const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
@@ -389,6 +393,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
       }
     }
+    // Solves whose givens waited for the definition's types (L38).
+    for (const w of waiting.splice(0)) {
+      if (w.givens.some(([, t]) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) { solvesInWholeNumbers(code, w.solve); again = true; }
+      else for (const [g, t] of w.givens) unifyAt(g, num, t, "a given port");
+    }
     settle();
     const generalized = new Set<number>();
     for (const d of group) freeVars(s.zonk(mono.get(d)!), s, new Set(), generalized);
@@ -505,11 +514,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // An operation: calling it performs the effect. One that never
         // returns has a result of any type, since nobody receives it.
         if (isEffect(def)) {
-          const { fields, params, self } = dataType(def);
-          const r = (code.nodes[target] as NodeOf<"variant">).returns;
+          const { params, self } = dataType(def);
+          const op = code.nodes[target] as NodeOf<"variant">;
+          // Its own type variables are fresh at each call and not in the row (L71a).
+          const own = new Map([...params, ...(op.params ?? []).map((p) => [p, s.fresh()] as const)]);
           const eff = s.freshRow([def]);
           if (params.size) eff.args = { [def]: (self as { args: Type[] }).args };
-          return { t: "fn", params: fields(target), ret: r ? typeExpr(r, params) : s.fresh(), eff };
+          return { t: "fn", params: op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, own)), ret: op.returns ? typeExpr(op.returns, own) : s.fresh(), eff };
         }
         if ((t as NodeOf<"variant">).private && insiders && !current.every((d) => insiders.has(d)))
           err(id, `${nm(target)} is private to the library, which keeps ${nm(def)}'s rule: build a ${nm(def)} with the library's functions (${SMART[target] ?? "see LIBRARY.md"})`);
@@ -694,7 +705,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             // Find the argument that's wrong, for a useful message.
             const ft = s.resolve(f);
             if (ft.t !== "fn") err(id, `${callee(n)} is ${show(f)}, not a function`);
-            else ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
+            else {
+              let found = false;
+              ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { found = true; err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
+              // Every input fits, so it's the effects: an effect's type
+              // argument here differs from the one it has around this call
+              // (Yield Int there, Yield Text here).
+              if (!found) err(id, `${callee(n)} is ${show(ft)} here, and its effects don't fit the ones around it: an effect is used at two types`);
+            }
           } else throw e;
         }
         // An update needs to know which field it changes, so its first input
@@ -795,7 +813,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
-    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
+    // A given whose type isn't known yet may turn out an Int later in the
+    // definition (L38's open end): it waits until the definition is read,
+    // and an Int then makes this a whole-number solve, checked again.
+    const open = Object.entries(n.given).filter(([k]) => !outTrue(k) && s.resolve(givenTypes.get(k)!).t === "var");
+    if (open.length && runsBackwards(code, n.fn)) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
+    for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, n.fn)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
@@ -927,7 +950,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (n.kind === "fold") err(n.id, `${nm(effect)} is an effect; its operations are handled with a match, not folded`);
     const rest = s.next++;
     s.unifyRow({ effs: [], tail: rest }, row);
-    const { fields, params, self } = dataType(effect);
+    const { params, self } = dataType(effect);
     const handled: Row = { effs: [effect], tail: rest, ...(params.size ? { args: { [effect]: (self as { args: Type[] }).args } } : {}) };
     const done = n.kind === "match" ? n.otherwise : null;
     const value = done ? s.fresh() : result;
@@ -941,8 +964,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (owner.get(arm.variant) !== effect) { err(arm.id, `${nm(arm.variant)} is not an operation of ${nm(effect)}`); continue; }
       if (seen.has(arm.variant)) err(arm.id, `${nm(arm.variant)} is handled twice`);
       seen.add(arm.variant);
-      const fs = fields(arm.variant);
       const op = code.nodes[arm.variant] as NodeOf<"variant">;
+      // The operation's own type variables are rigid here: the case works
+      // for every one of them (L71a), so it can pass a ticket on but can't
+      // take its answer to be a Text.
+      const opParams = new Map([...params, ...(op.params ?? []).map((p) => [p, { t: "con", id: `${RIGID}any.${p}`, args: [] } as Type] as const)]);
+      const fs = op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, opParams));
       // An operation answered later: one more binder, the rest of the
       // computation, (answer) -[the match's row]-> the match's value. It
       // resumes under this same match (deep), so it can do what the match
@@ -954,7 +981,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const r = op.returns;
       if (later && arm.binds.length === fs.length + 1) {
         const rest = arm.binds[fs.length];
-        const t: Type = { t: "fn", params: [typeExpr(r!, params)], ret: result, eff: row };
+        const t: Type = { t: "fn", params: [typeExpr(r!, opParams)], ret: result, eff: row };
         inner.set(rest, t);
         info.typeOf.set(rest, t);
         // A case gives one value, so a search can't resume the rest once
@@ -970,7 +997,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!r) { unifyAt(arm.body, result, expr(arm.body, inner, row), "this case"); continue; }
       // An answer is one value: the computation carries on once with it.
       const own = s.freshRow();
-      unifyAt(arm.body, typeExpr(r, params), expr(arm.body, inner, own), `the answer to ${nm(arm.variant)}`);
+      unifyAt(arm.body, typeExpr(r, opParams), expr(arm.body, inner, own), `the answer to ${nm(arm.variant)}`);
       if (s.resolveRow(own).effs.includes(CHOICE)) err(arm.body, `the answer to ${nm(arm.variant)} must be one value, and this may give several or none: handle the Choice here (first, optional)`);
       try { s.unifyRow(own, row); } catch (e) { if (e instanceof EffectError) err(arm.body, `this case performs ${effName(e)}, which nothing here handles`); else throw e; }
     }
@@ -1094,6 +1121,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
   }
+  if (again) return infer(code, names, reuse, opts);
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {

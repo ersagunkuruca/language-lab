@@ -1,4 +1,4 @@
-# A hands-on guide to the editor and the language
+# A hands-on guide to the editor and Ters, the language
 
 Do this tour with the editor open beside it:
 https://ersagunkuruca.github.io/language-lab/.
