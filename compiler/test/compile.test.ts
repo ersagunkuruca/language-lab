@@ -983,7 +983,6 @@ test("a fold over range(n) counts down from n − 1, without the list, for Float
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...[
     ...[4, 2.5, 0, -3].map((x) => k.call(num, k.lit(x))),
-    k.call(num, k.call(B.div, k.lit(0), k.lit(0))),
     ...[4, 0].map((x) => k.call(int, k.int(x))),
     k.call(tails, k.lit(3)),
   ].map((x) => k.call(SHOW_ANY, x)))))));
@@ -991,7 +990,7 @@ test("a fold over range(n) counts down from n − 1, without the list, for Float
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
-  assert.equal(want[0], '["[0, 1, 2, 3]", "[0, 1]", "[]", "[]", "[]", "[0, 1, 2, 3]", "[]", "[\\"[1, 2]\\", \\"[2]\\", \\"[]\\"]"]');
+  assert.equal(want[0], '["[0, 1, 2, 3]", "[0, 1]", "[]", "[]", "[0, 1, 2, 3]", "[]", "[\\"[1, 2]\\", \\"[2]\\", \\"[]\\"]"]');
   const fn = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
   assert.doesNotMatch(fn("numbers"), /\$range/);
   assert.doesNotMatch(fn("ints"), /range/);
@@ -1041,13 +1040,12 @@ test("equal compares Ints exactly and Float64s to float precision, at every type
     k.equal(big(), big()), k.call(same, big(), big()),
     k.equal(third(), k.lit(0.3)), k.equal(k.list(third()), k.list(k.lit(0.3))), k.call(same, third(), k.lit(0.3)),
     k.equal(k.at(NUMBER, 1e12), k.at(NUMBER, 1e12 + 1)), k.call(same, k.at(NUMBER, 1e12), k.at(NUMBER, 1e12 + 1)),
-    // BACKLOG L81: ∞ isn't −∞, nor near 1e308.
-    k.call(same, k.call(B.div, k.lit(1), k.lit(0)), k.call(B.div, k.lit(-1), k.lit(0))), k.call(same, k.lit(1e308), k.call(B.div, k.lit(1), k.lit(0))),
+    // No ∞ to compare: every Float64 is finite (L125a); 1 / 0 stops (finite.test.ts).
   )))));
   const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
-  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true, false, false]"]);
+  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true]"]);
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
 });
 
