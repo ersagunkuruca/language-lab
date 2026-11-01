@@ -307,3 +307,25 @@ export function merge(...codes: Code[]): Code {
 }
 
 const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);
+
+// A program made from another by changing a few nodes (the palette's
+// filled programs, BACKLOG E133b), and those nodes: what is found by
+// scanning every node can start from the other program's.
+export const derived = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
+export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
+const picked = new WeakMap<Code, Map<string, Id[]>>();
+// The ids of the nodes `keep` picks, `kind` naming the pick. For a derived
+// program: its base's (scanned once), those still there and still picked,
+// and the changed nodes picked (E103d: a whole check of each palette offer
+// scanned the ~10,000 nodes twice).
+export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean): Id[] {
+  const from = derived.get(code);
+  if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
+  let all = picked.get(from.base);
+  if (!all) picked.set(from.base, (all = new Map()));
+  let base = all.get(kind);
+  if (!base) all.set(kind, (base = nodesWhere(from.base, kind, keep)));
+  const out = base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
+  for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);
+  return out;
+}

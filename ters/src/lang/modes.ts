@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { children, ownerOfTypeParts, subtree } from "../model.ts";
+import { children, derived, derivedFrom, ownerOfTypeParts, subtree } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -160,10 +160,9 @@ interface St {
 const strict = (s: Size | undefined): Size => new Map([...(s ?? new Map()).keys()].map((p) => [p, true]));
 const same = (s: Size | undefined): Size => new Map(s ?? []);
 
-// A program made from another by changing a few nodes, and those nodes:
-// its analyzer starts from the other's slots (BACKLOG E133b).
-const derived = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
-export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
+// A program made from another by changing a few nodes (model.ts
+// `derived`): its analyzer starts from the other's slots (BACKLOG E133b).
+export { derivedFrom };
 const slotsOf = new WeakMap<Code, { parent: Map<Id, Id>; seen: Set<Id> }>();
 function baseSlots(code: Code) {
   if (!slotsOf.has(code)) analyzer(code);

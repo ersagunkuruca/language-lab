@@ -111,3 +111,13 @@ from 80 s to 47 s in all, the worst from 16 s to 8 s, with the same offers
 on every hole. What's left is the whole checks themselves, `infer` and
 `useDirections`, about half each.
 
+## E103d: lists, not scans
+
+The next profile put half of a whole check in two loops over every node:
+`useDirections` looking for solves, and the jobs check (L108) looking for
+calls. A filled program is made from the program by a few nodes
+(`derivedFrom`, now in model.ts), so `nodesWhere` lists what a loop wants
+from the program's own list, scanned once, and the changed nodes.
+`useDirections` marks what it returns as derived too. fall's 23 holes went
+from 50 s to 30 s, the worst from 10.6 s to 4.2 s, with the same offers.
+

@@ -12,7 +12,7 @@
 
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { ownerOfTypeParts, subtree } from "../model.ts";
+import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
@@ -1152,8 +1152,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
   // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
   // does t's job `of` at r, so `by` has of's type with r for t.
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call" || n.args.length !== 3) continue;
+  for (const id of nodesWhere(code, "call", (n) => n.kind === "call")) {
+    const n = code.nodes[id] as NodeOf<"call">;
+    if (n.args.length !== 3) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || f.target !== JOBS.job) continue;
     const job = info.typeOf.get(n.id), of = info.typeOf.get(n.args[0]), by = info.typeOf.get(n.args[1]);

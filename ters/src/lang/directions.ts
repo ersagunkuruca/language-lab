@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { subtree } from "../model.ts";
+import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
 const paramsOf = (code: Code, d: Id): Id[] | null => {
@@ -91,12 +91,19 @@ export function useDirections(code: Code): Code {
   const ways = directionsIn(code);
   const asked = (n: NodeOf<"solve">) => { const f = code.nodes[n.fn]; return ways.has(n.fn) || (f?.kind === "field" && !!f.results); };
   let nodes: Code["nodes"] | null = null;
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "solve" || !asked(n)) continue;
+  const rewritten: Id[] = [];
+  for (const id of nodesWhere(code, "solve", (n) => n.kind === "solve")) {
+    const n = code.nodes[id] as NodeOf<"solve">;
+    if (!asked(n)) continue;
     const r = directionFor(code, n, ways);
-    if (r) (nodes ??= { ...code.nodes })[n.id] = r;
+    if (r) { (nodes ??= { ...code.nodes })[n.id] = r; rewritten.push(n.id); }
   }
-  return nodes ? { ...code, nodes } : code;
+  if (!nodes) return code;
+  // Derived from this program by the solves rewritten, so a scan of the
+  // result can start from this one's (model.ts nodesWhere).
+  const out = { ...code, nodes };
+  derivedFrom(out, code, rewritten);
+  return out;
 }
 
 // A body that gives each result as an expression of the other ports,
