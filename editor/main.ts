@@ -115,7 +115,7 @@ import { parseValue } from "../ters/src/lang/values.ts";
 import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
-import { type Pos } from "./canvas.ts";
+import { follow, type Pos } from "./canvas.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -3638,13 +3638,10 @@ document.addEventListener("pointerdown", (e) => {
     dock[k] = Math.round(Math.min(limit[1], Math.max(limit[0], start + d)));
     grid.style.setProperty(`--${k === "page-w" ? "side-w" : k}`, `${dock[k]}px`);
   };
-  const up = () => {
+  follow(e, mv, () => {
     g.classList.remove("dragging");
-    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
     try { localStorage.setItem(DOCK, JSON.stringify(dock)); } catch {}
-  };
-  window.addEventListener("pointermove", mv);
-  window.addEventListener("pointerup", up);
+  });
 });
 
 // A view that throws leaves the page as it was, so every click after it
