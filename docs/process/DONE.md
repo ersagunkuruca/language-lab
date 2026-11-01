@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I109 | The compiled preview keeps what was done on the interpreted page: changed cells handed across by place (cells.ts handOver); a page with sound says why it stays interpreted | #841 |
 | L43d | Editor: a multivector of an algebra the program writes down says what it is ("a vector", "a bivector", "even (a rotor or motor)") after Run's result and on a wire's hover | #831 |
 | T7d | Run: accept an answer for given inputs (kept in examples.json for lab test), a tick or both values side by side after; a test (Check) opens on its run, the failures smallest first | #829 |
 | I99 | Constructions and Compass: drag a built point; the free points it's made from move as little as they can (Newton steps through the pseudo-inverse), so it lands under the pointer | #826 |
