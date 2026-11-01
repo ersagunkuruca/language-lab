@@ -363,6 +363,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     for (const x of [c, a, b]) if ("error" in x) return x;
     return { cond: c as Typed, then: a as Typed, else: b as Typed };
   }
+  let inner: { error: string } | undefined;
   for (const level of OPS) {
     let depth = 0, quoted = false;
     for (let i = t.length - 1; i > 0; i--) {
@@ -379,6 +380,8 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
       if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      // What's wrong in an operand says more than a position in the whole.
+      inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
     }
   }
   const neg = /^[-−]\s*(.+)$/s.exec(t);
@@ -413,8 +416,40 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
     const args = parts.map((a) => typedOut(a, code, names, scope));
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
+    // What's wrong, not where (BACKLOG I115): the name, or what's wrong
+    // inside its inputs.
+    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
+    return args.find((a) => "error" in a) as { error: string };
   }
-  return r;
+  if (dot > 0) {
+    const field = t.slice(dot + 1).trim();
+    if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
+    return typedOut(t.slice(0, dot), code, names, scope);
+  }
+  if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
+  return inner ?? r;
+}
+
+// The names closest to one that isn't there, to say "did you mean": in
+// scope first, then any definition or builtin, at most three, each at most
+// a third of the name's letters away (Levenshtein's distance, 1966, with
+// Damerau's swaps).
+function closest(word: string, among: Iterable<string>, scope: Map<string, Id>): string {
+  const far = Math.max(1, Math.floor(word.length / 3));
+  const pool = new Set(among);
+  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far);
+  scored.sort((a, b) => a[1] - b[1] || +scope.has(b[0]) - +scope.has(a[0]));
+  const near = scored.slice(0, 3).map(([n]) => n);
+  return near.length ? `; did you mean ${near.join(", ")}?` : "";
+}
+// Two letters swapped count as one edit (Damerau, 1964).
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
 }
 
 // A field of an interface's record is one of its operations (INTERFACES.md).

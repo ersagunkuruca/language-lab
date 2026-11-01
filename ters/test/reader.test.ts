@@ -49,3 +49,18 @@ test("typed text reads if c then a else b", () => {
   // A then and an else that don't agree are refused.
   assert.equal(fillValue(open, names, info, lam.body, 'if 299 < steps then steps else "no"', escape).ok, false);
 });
+
+// What's wrong, not where (BACKLOG I115): a function, a field or a name
+// that isn't there is named, with the nearest ones.
+test("typed text that doesn't read says what's missing", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const lam = code.nodes[(code.nodes[escape] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const open = replace(code, lam.body, () => ({ kind: "hole" }));
+  const info = infer(open, names);
+  const why = (text: string) => { const r = fillValue(open, names, info, lam.body, text, escape); return r.ok ? "" : r.reason; };
+  assert.match(why("kep(steps)"), /^there.s no function named kep; did you mean .*keep/);
+  assert.match(why("z.nope + 1"), /^there's no field named nope/);
+  assert.match(why("stpes + 1"), /^nothing is named stpes here; did you mean steps\?/);
+  assert.match(why("escape(z, c, stpes)"), /^nothing is named stpes here/);
+});
