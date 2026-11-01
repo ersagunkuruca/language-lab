@@ -155,6 +155,7 @@ Kept as written; the newer document is named in each.
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
+| Using Ters as an LLM, through its MCP server | [MCP-TRIAL-2026-11-01](reports/MCP-TRIAL-2026-11-01.md) |
 | Editor QA passes | [10-22](reports/qa/QA-2026-10-22.md), [10-23](reports/qa/QA-2026-10-23.md), [10-23b](reports/qa/QA-2026-10-23b.md), [10-24](reports/qa/QA-2026-10-24.md), [10-24b](reports/qa/QA-2026-10-24b.md), [10-26](reports/qa/QA-2026-10-26.md), [10-27](reports/qa/QA-2026-10-27.md), [10-28](reports/qa/QA-2026-10-28.md), [10-29](reports/qa/QA-2026-10-29.md), [10-29b](reports/qa/QA-2026-10-29b.md), [10-30](reports/qa/QA-2026-10-30.md) |
 
 A new dated report goes in its folder and in this table, in its own PR. A QA pass keeps its screenshots in `reports/qa/screenshots/<date>/`.
