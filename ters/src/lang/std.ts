@@ -957,7 +957,28 @@ export const BRANCH = typedef("std.branch", "Branch", ["r"], [
   ["parked", [["ticket", () => tref(TICKET, tref(UNIT))], ["resume", ([r], self) => tfun([], tref(self, tref(r)), [AWAIT])]]],
 ]);
 export const BRANCH_V = { done: "std.branch.done", parked: "std.branch.parked" } as const;
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
+// Tuples (PORTS-2026-11-01.md §1, L128): the inputs of a function, or its
+// results, as one value. Structural, as every data type here is: two
+// tuples of the same types are one type wherever they come from. A tuple
+// of one is its value and of none is Unit, so only 2 to 8 parts are types
+// of their own. Shown as (A, B); the parts' names come from the ports of
+// the function they go in or come out of. After every other type, so ids
+// above don't move. Prior art: Standard ML's tuples (every function takes
+// one value, which may be a tuple).
+const PART_NAMES = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"];
+export const TUPLE_MAX = 8;
+export const TUPLES: Id[] = [];
+for (let n = 2; n <= TUPLE_MAX; n++) {
+  TUPLES.push(typedef(`std.tuple${n}`, `Tuple${n}`, PART_NAMES.slice(0, n).map((_, i) => "abcdefgh"[i]), [
+    ["tuple", PART_NAMES.slice(0, n).map((f, i) => [f, (ps: Id[]) => tref(ps[i])] as [string, TypeOf])],
+  ]));
+}
+export const tupleType = (n: number): Id => `std.tuple${n}`;
+export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
+export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
+export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
+
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

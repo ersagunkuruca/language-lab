@@ -20,7 +20,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
-import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
+import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
@@ -70,6 +70,8 @@ export interface Info {
   // Calls whose Choice was dropped because their inputs answer them
   // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
   answered?: Set<Id>;
+  // Calls given one tuple for several inputs, f(p) for f(x, y) (L128).
+  spread?: Set<Id>;
   // Each definition with results (RESULTS.md): the effects of the direction
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
@@ -120,7 +122,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set() };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set() };
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -629,7 +631,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const subsBefore = s.subs.length;
         const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
         for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
-        const args = early ?? applied ?? n.args.map((a, i) => {
+        let args = early ?? applied ?? n.args.map((a, i) => {
           // A recursive let (BACKLOG L84): a let is `(name ↦ body)(value)`,
           // and a value that's a function may call itself by the name, as
           // ML's `let rec` (monomorphic inside, as there). It's checked for
@@ -714,6 +716,18 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             };
             if (signs.totalCall(id, searches)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
           }
+        }
+        // One value given for several inputs (PORTS-2026-11-01.md §1, L128):
+        // the inputs are one tuple, so f(p) is f(x, y) when p is an (x, y).
+        // A function's one input is never a tuple of one, so this can't be
+        // read two ways (Swift's SE-0110 problem).
+        if (fr.t === "fn" && args.length === 1 && fr.params.length >= 2 && fr.params.length <= TUPLE_MAX) {
+          const whole: Type = { t: "con", id: tupleType(fr.params.length), args: fr.params };
+          try { s.clone().unify(args[0], whole); }
+          catch { err(n.args[0], `${callee(n)} takes ${fr.params.length} inputs: given one, it needs ${show(whole)} here, got ${show(args[0])}`); t = fr.ret; break; }
+          s.unify(args[0], whole);
+          info.spread!.add(id);
+          args = fr.params;
         }
         if (fr.t === "fn" && fr.params.length !== args.length) {
           err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);

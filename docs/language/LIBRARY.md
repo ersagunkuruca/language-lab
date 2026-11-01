@@ -181,6 +181,13 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **List** (type). A list: nil (empty), or cons(head, tail), an item in front of a list. [1, 2, 3] is how one is written.
 - **Pair** (type). Two values together: pair(fst, snd).
 - **Unit** (type). The type with one value, unit: what an action that only does something gives back.
+- **Tuple2** (type). 2 values side by side, shown (A, B): the inputs or the results of a function as one value. A function of 2 inputs given one tuple takes it apart, so f(p) is f(x, y) when p is a tuple of them.
+- **Tuple3** (type). 3 values side by side, shown (A, B, C): the inputs or the results of a function as one value. A function of 3 inputs given one tuple takes it apart, so f(p) is f(x, y, z) when p is a tuple of them.
+- **Tuple4** (type). 4 values side by side, shown (A, B, C, D): the inputs or the results of a function as one value. A function of 4 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u) when p is a tuple of them.
+- **Tuple5** (type). 5 values side by side, shown (A, B, C, D, E): the inputs or the results of a function as one value. A function of 5 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u, v) when p is a tuple of them.
+- **Tuple6** (type). 6 values side by side, shown (A, B, C, D, E, F): the inputs or the results of a function as one value. A function of 6 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u, v, w) when p is a tuple of them.
+- **Tuple7** (type). 7 values side by side, shown (A, B, C, D, E, F, G): the inputs or the results of a function as one value. A function of 7 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u, v, w, s) when p is a tuple of them.
+- **Tuple8** (type). 8 values side by side, shown (A, B, C, D, E, F, G, H): the inputs or the results of a function as one value. A function of 8 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u, v, w, s, t) when p is a tuple of them.
 - **map** : `(List a, (a) -[e]-> b) -[e]-> List b`. The list of f(item) for each item, in the same order.
 - **for each** : `(List a, (a) -[e]-> b) -[e]-> Unit`. Runs the action on each item of the list in turn, for what it does (prints, writes a cell).
 - **keep** : `(List a, (a) -[Choice]-> Bool) -> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
