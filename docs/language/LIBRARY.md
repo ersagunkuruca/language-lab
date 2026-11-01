@@ -318,6 +318,17 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
 - **fetch text** : `(Text) -[Network, Abort]-> Text`. The text at a web address. Aborts if the request fails.
 
+## Waiting for several things: Await
+
+A Ticket a is something that will give an a later: a timer, or something the world started. await(ticket) waits for it. together runs several actions side by side, each until it awaits, and whichever ticket is ready first goes on. Something around it answers await: a test's handler, and later the world (L71c).
+
+- **Ticket** (type). Something that will give an a later: await(ticket) waits for it. A timer(milliseconds, value) gives value after that long; the world's tickets (L71c) come from what it started; first ready is any of's.
+- **Await** (type). Waiting: await(ticket) gives the ticket's value once it is ready. A handler answers it later, at most once: a test's, together's, or the world's.
+- **Branch** (type). What together keeps of one action: done with its value, or parked on a ticket with how to go on.
+- **ticket id** : `(Ticket a) -> Ticket Unit`. The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.
+- **any of** : `(List (Ticket Unit)) -> Ticket Int`. A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.
+- **together** : `(List (() -[Await]-> a)) -[Diverge, Await]-> List a`. Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).
+
 ## Cells and pages
 
 A page is a value of type Html that main returns. Cells hold what changes; a part of the page that reads a cell is drawn again when the cell changes, and a button's handler writes cells.

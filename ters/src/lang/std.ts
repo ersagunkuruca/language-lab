@@ -28,12 +28,16 @@ for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cel
 // variants are operations, and an operation's third entry is the type it
 // returns (none: it never returns).
 type TypeOf = (p: Id[], self: Id) => Id;
-function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?][], effect = false, iface = false, unique?: string) {
+// An operation's fourth entry: answered `later` (ANSWERED-LATER.md), and
+// its `own` type variables (L71a), given to its types after the effect's.
+type OpExtra = { later?: true; own?: string[] };
+function typedef(id: Id, name: string, params: string[], variants: [string, [string, TypeOf][], TypeOf?, OpExtra?][], effect = false, iface = false, unique?: string) {
   const ps = params.map((p) => named(node({ id: `${id}.${p}`, kind: "binder" }), p));
-  const vs = variants.map(([vname, fields, returns]) => {
+  const vs = variants.map(([vname, fields, returns, extra]) => {
     const vid = `${id}.${vname}`;
-    const fs = fields.map(([fname, ty]) => named(node({ id: `${vid}.${fname}`, kind: "field", type: ty(ps, id) }), fname));
-    return named(node({ id: vid, kind: "variant", fields: fs, ...(returns ? { returns: returns(ps, id) } : {}) }), vname);
+    const mine = (extra?.own ?? []).map((p) => named(node({ id: `${vid}.${p}`, kind: "binder" }), p)), all = [...ps, ...mine];
+    const fs = fields.map(([fname, ty]) => named(node({ id: `${vid}.${fname}`, kind: "field", type: ty(all, id) }), fname));
+    return named(node({ id: vid, kind: "variant", fields: fs, ...(returns ? { returns: returns(all, id) } : {}), ...(extra?.later ? { later: true as const } : {}), ...(mine.length ? { params: mine } : {}) }), vname);
   });
   node({ id: `${id}.type`, kind: "typedef", params: ps, variants: vs, ...(effect ? { effect: true as const } : {}), ...(iface ? { interface: true as const } : {}), ...(unique ? { unique } : {}) });
   return named(node({ id, kind: "def", body: `${id}.type` }), name);
@@ -910,7 +914,32 @@ export const EXTENDED = typedef("std.extended", "Extended", ["a"], [
   ["plus infinity", []],
 ]);
 export const EXTENDED_V = { minus: "std.extended.minus infinity", finite: "std.extended.finite", plus: "std.extended.plus infinity" } as const;
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
+// Waiting for several things at once (BACKLOG L71b, ANSWERED-LATER.md
+// "Typing await and together"). A Ticket a is something that will give an
+// a: the world's (L71c answers those), a `timer` of some milliseconds with
+// a value (a timer), or the first ready of some tickets, given as its
+// position through `which` (so `any of(tickets)` is a Ticket Int without
+// a type that depends on its case). `await` is one operation for every
+// type: its a is its own (L71a), and it is answered later, so `together`
+// can park a branch's rest. A Branch is what `together` keeps of one
+// action: its value, or the ticket it waits for and how to go on. After
+// Extended, so ids above don't move.
+export const TICKET = typedef("std.ticket", "Ticket", ["a"], [
+  ["ticket", [["number", () => tref(INT)]]],
+  ["timer", [["milliseconds", () => tref(NUMBER)], ["value", ([a]) => tref(a)]]],
+  ["first ready", [["tickets", (_, self) => tref(LIST, tref(self, tref(UNIT)))], ["which", ([a]) => tfun([tref(INT)], tref(a), [])]]],
+]);
+export const TICKET_V = { ticket: "std.ticket.ticket", timer: "std.ticket.timer", firstReady: "std.ticket.first ready" } as const;
+export const AWAIT = typedef("std.await", "Await", [], [
+  ["await", [["ticket", ([a]) => tref(TICKET, tref(a))]], ([a]) => tref(a), { later: true, own: ["a"] }],
+], true);
+export const AWAIT_OP = "std.await.await";
+export const BRANCH = typedef("std.branch", "Branch", ["r"], [
+  ["done", [["value", ([r]) => tref(r)]]],
+  ["parked", [["ticket", () => tref(TICKET, tref(UNIT))], ["resume", ([r], self) => tfun([], tref(self, tref(r)), [AWAIT])]]],
+]);
+export const BRANCH_V = { done: "std.branch.done", parked: "std.branch.parked" } as const;
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
