@@ -109,3 +109,24 @@ test("a value given to a solve can be made a function", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (r.ok) assert.deepEqual(infer(r.code, r.names).errors, []);
 });
+
+// QA-2026-11-01b F9 (BACKLOG I131): fall's drift and the last · of drop,
+// made a function. What comes in that isn't a variable is in1 and in2,
+// counted among those only, and the text reads the results by name.
+test("a function of drift and drop names its inputs and reads its results by name", async () => {
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const p = loadProgram(join(root, "examples", "physics"));
+  const { code } = p, names = p.pres.names, fall = p.named("fall");
+  const info = infer(code, names);
+  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is NodeOf<"call"> => n.kind === "call" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
+  const drift = muls.find((m) => m.args.some((a) => names[(code.nodes[a] as NodeOf<"ref">).target] === "speed"))!;
+  const drop = muls.find((m) => m !== drift && !muls.some((x) => x.args.includes(m.id)))!;
+  const r = makeFunction(code, names, info, fall, [drift.id, drop.id]);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const text = renderBlocks(r.code, { ...p.pres, names: r.names }, infer(r.code, r.names), fall);
+  assert.match(text, /\(speed, time, in1, in2\)/);
+  assert.match(text, /drift = results\.drift/);
+  assert.match(text, /drop = results\.drop/);
+  assert.deepEqual(infer(r.code, r.names).errors, []);
+});
