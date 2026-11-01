@@ -89,7 +89,11 @@ export const $sameNumber = (a, b) => $near($fin(a), $fin(b));
 // (builtins.ts says where); before then IEEE keeps it ∞ or NaN, and an
 // overflow nothing uses isn't reported (Haskell's imprecise exceptions).
 // Only an overflow makes one, so that's the reason $fin gives.
-const $stop = (why) => { throw new Aborted(why); };
+// An Abort performed where the operation was, as in the evaluator, so a
+// handler of Abort in the program gets it.
+const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
+// run.ts's own late checks (numberOrder, showValue) throw; the same Abort.
+const performed = (f) => (...xs) => { try { return f(...xs); } catch (e) { if (e instanceof Aborted) return $stop(e.reason); throw e; } };
 const OVERFLOW = 'the answer is too big for a Float64 (overflow)';
 export const $fin = (x) => (x - x === 0 ? x : $stop(OVERFLOW));
 export const $div = (a, b) => (b === 0 ? $stop('x / 0 has no answer') : a / $fin(b));
@@ -139,17 +143,18 @@ export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) =
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
 import { showValue, compareValues, ORDER_VALUES } from '../../projectional/src/lang/run.ts';
-export const $showAny = (v, names) => showValue(v, null, names);
+export const $showAny = performed((v, names) => showValue(v, null, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
-export const $compare = (a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1];
+export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1]);
 // `compare` at its type (compile.ts, GAPS.md M4): -1, 0 or 1. An Int has
 // one spelling (a number while small, a BigInt beyond), and < works across
 // the two. A text by code point: `<` on code units agrees unless one of
 // them has a character past the basic plane.
 export const $ORDER = ORDER_VALUES;
-export const $compareN = compareValues;
-export { numberOrder as $numberOrder } from '../../projectional/src/lang/run.ts';
+export const $compareN = performed(compareValues);
+import { numberOrder } from '../../projectional/src/lang/run.ts';
+export const $numberOrder = (a, b) => (a - a !== 0 || b - b !== 0 ? $stop(OVERFLOW) : numberOrder(a, b));
 export const $intOrder = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
 import { less as textLess } from '../../projectional/src/lang/text.ts';
 export const $textOrder = (a, b) => {

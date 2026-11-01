@@ -15,7 +15,7 @@ import { infer } from "../../projectional/src/lang/infer.ts";
 import { Lang } from "../../projectional/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
 import { Aborted, makeRunner } from "../../projectional/src/lang/run.ts";
-import { S } from "../../projectional/src/lang/std.ts";
+import { ABORT_OP, S } from "../../projectional/src/lang/std.ts";
 import { B } from "../../projectional/src/prelude.ts";
 import type { Id } from "../../projectional/src/model.ts";
 import { compile } from "../src/compile.ts";
@@ -47,6 +47,11 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
   const less = k.def("less");
   k.define(less, k.fn(["a", "b"], (a, b) => k.if(LESS(k, k.call(B.add, a, k.lit(0)), k.call(B.add, b, k.lit(0))), k.lit(1), k.lit(2))));
   defs.push(["less", less]);
+  // The stop is an Abort performed where the division was: a handler in
+  // the program gets it, in both.
+  const caught = k.def("caught");
+  k.define(caught, k.fn(["a", "b"], (a, b) => k.handle(k.call(S.show, k.call(B.div, k.call(B.add, a, k.lit(0)), b)), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }])));
+  defs.push(["caught", caught]);
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const path = join(mkdtempSync(join(tmpdir(), "finite-")), "finite.js");
@@ -64,6 +69,7 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
     else assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
     if (want.startsWith("stops")) stops.add(want);
   }
+  assert.equal(said(() => js.caught(1, 0)), "x / 0 has no answer");
   // Every reason the evaluator gives came up, so each was compared.
   assert.deepEqual([...stops].sort(), [
     "stops: 0 to a negative power has no answer",
