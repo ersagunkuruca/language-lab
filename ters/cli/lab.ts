@@ -12,6 +12,10 @@
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
+//   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
+//   lab merge <base> <ours> <theirs> [path]
+//                                        git's merge driver for program files: id by id, ours
+//                                        written with theirs taken in (SHARING.md §6)
 //   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
 //                                        play a sound over a WAV file (AUDIO.md)
 //
@@ -212,6 +216,30 @@ if (at >= 0) { mainName = argv[at + 1] ?? fail("--main needs a name"); argv.spli
 const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
+// Program files compared and merged id by id (merge-files.ts, L113).
+if (command === "diff" || command === "merge") {
+  const { describe, diffLines, merge3 } = await import("../src/merge-files.ts");
+  const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
+  if (command === "diff") {
+    if (!path || !rest[0]) fail("diff needs two files: before and after");
+    const beside = join(dirname(rest[0]), "names.default.json");
+    const lines = diffLines(json(path), json(rest[0]), basename(rest[0]) === "code.json" && existsSync(beside) ? json(beside) : {});
+    process.stdout.write(lines.length ? lines.join("\n") + "\n" : "no changes\n");
+    process.exit(0);
+  }
+  const [ours, theirs, shown] = rest;
+  if (!path || !ours || !theirs) fail("merge needs base, ours and theirs (git passes %O %A %B)");
+  const o = json(ours), t = json(theirs);
+  const { merged, conflicts } = merge3(json(path), o, t);
+  // git reads the result from ours' file.
+  writeFileSync(ours, JSON.stringify(merged, null, 2) + "\n");
+  if (!conflicts.length) process.exit(0);
+  // Names for the message: a code.json's are beside it.
+  const beside = shown ? join(dirname(shown), "names.default.json") : "";
+  const named = beside && existsSync(beside) ? { names: json(beside), ...(o && typeof o === "object" ? o : {}) } : o;
+  process.stderr.write(`lab: ${shown ?? ours}: ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}, ours kept:\n${describe(conflicts, named, t).map((l) => `  ${l}\n`).join("")}`);
+  process.exit(1);
+}
 if (!command || command === "help" || command === "--help" || !path) {
   process.stdout.write(USAGE + "\n");
   process.exit(command && command !== "help" && command !== "--help" ? 2 : 0);
