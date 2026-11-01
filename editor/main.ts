@@ -2889,6 +2889,12 @@ function graphHooks(info: T.Info) {
     page: pageMain(ownDefs(), info, pres().names) === ui.def,
     select: (id: Id | null) => select(id),
     open: (id: Id) => { const d = calleeDef(id); if (d && d !== ui.def) openDef(d); },
+    turn: (id: Id) => {
+      const up = parentOf(doc.code, id);
+      if (up?.slot === "args" && T.turnable(doc.code, up.parent)) return (applyT(T.turnAround(doc.code, doc.names.short, info, up.parent, up.index!)), true);
+      const s = Object.values(doc.code.nodes).find((n) => n.kind === "solve" && Object.values(n.binds).includes(id));
+      return s ? (applyT(T.turnBack(doc.code, doc.names.short, info, s.id)), true) : false;
+    },
     canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(useOver(info, b, slot)),
     clear: (slot: Id) => void applyT(T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot)),

@@ -1053,7 +1053,7 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
   const next = replace(code, call, () => ({ kind: "solve", fn: t.def.id, given, binds: { [p]: b }, body: use }));
   next.nodes[b] = { id: b, kind: "binder" };
   next.nodes[use] = { id: use, kind: "ref", target: b };
-  return guardTyped(info, next, { ...names, [b]: nm(p) }, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Turn it back from its menu; Undo puts it back too.`);
+  return guardTyped(info, next, { ...names, [b]: nm(p) }, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Double-click what it gives, or use its menu, to turn it back; Undo does too.`);
 }
 
 // The other way: a solve that works out one input of a definition from

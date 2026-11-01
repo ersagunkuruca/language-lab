@@ -66,6 +66,10 @@ export interface GraphHooks {
   selected: Id | null;
   select: (id: Id | null) => void;
   open: (id: Id) => void;
+  // A double-click on a definition call's filled input turns the call
+  // around at that input; on what a turned call gives, turns it back
+  // (E168b). False when it isn't one.
+  turn?: (id: Id) => boolean;
   // null when allowed, else why not
   canUse: (binder: Id, slot: Id) => string | null;
   use: (binder: Id, slot: Id) => void;
@@ -1451,6 +1455,9 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     else if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) { if (picked.size) { picked.clear(); draw(hooks.at); } hooks.select(null); }
   });
   root.addEventListener("dblclick", (e) => {
+    const port = (e.target as Element).closest("circle.inp[data-slot], circle.src[data-src]");
+    const at = port?.getAttribute("data-slot") ?? port?.getAttribute("data-src");
+    if (at && hooks.turn?.(at)) return;
     const t = (e.target as Element).closest("[data-id]");
     if (t) hooks.open(t.getAttribute("data-id")!);
   });
