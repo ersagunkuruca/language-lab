@@ -254,6 +254,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         const it = scene.items.get(k);
         if (it && fresh.has(k) && Math.hypot(p.x - it.auto.x, p.y - it.auto.y) < 600) it.auto = p;
       }
+    if (fresh.size) clearFreshFrames(scene, shown, hooks.at, fresh);
   }
   // A frame just unfolded opens where its box was, over whatever it now
   // covers: nothing else moves (Ersagun 2026-11-01, replacing I57's
@@ -1492,6 +1493,36 @@ function arrangeInside(scene: Scene, at: Record<Id, Pos>, folded: Set<Id> | unde
 
 // Tidy everything lays it all out afresh (arrange), the same every time;
 // tidying some only spaces those out from where they are.
+// A frame whose nodes are all new (a group just made a function) is spaced
+// out as one: tidy moves its nodes one at a time, each a short way, so the
+// frame drawn around them could still cover what stays. It moves down
+// past whatever it covers, nothing inside it moving apart (BACKLOG I126).
+function clearFreshFrames(scene: Scene, shown: (at: Record<Id, Pos>) => Scene, at: Record<Id, Pos>, fresh: Set<Id>) {
+  const GAP = 24;
+  for (let round = 0; round < 8; round++) {
+    const { nodes, frames } = asLayout(shown(at), at);
+    const parent = new Map(frames.map((f) => [f.id, f.parent]));
+    const ups = (id: Id | null | undefined) => { const out: Id[] = []; for (let p = id; p; p = parent.get(p) ?? null) out.push(p); return out; };
+    const boxes = frameBoxes(nodes, frames);
+    const inside = new Map(frames.map((f) => [f.id, nodes.filter((n) => ups(n.frame).includes(f.id))]));
+    const own = frames.filter((f) => { const ns = inside.get(f.id)!; return ns.length && ns.every((n) => fresh.has(n.id)) && !(f.parent && inside.get(f.parent)!.every((n) => fresh.has(n.id))); });
+    let moved = false;
+    for (const f of own) {
+      const b = boxes.get(f.id)!, mine = new Set(inside.get(f.id)!.map((n) => n.id)), around = ups(f.parent);
+      const hit = (o: Box) => o.x < b.x + b.w && b.x < o.x + o.w && o.y < b.y + b.h && b.y < o.y + o.h;
+      const others: Box[] = [
+        ...nodes.filter((n) => !mine.has(n.id)),
+        ...frames.filter((g) => g.id !== f.id && !around.includes(g.id) && !ups(g.parent).includes(f.id)).map((g) => boxes.get(g.id)!),
+      ].filter(hit);
+      if (!others.length) continue;
+      const dy = Math.max(...others.map((o) => o.y + o.h)) + GAP - b.y;
+      for (const id of mine) { const it = scene.items.get(id)!; it.auto = { x: it.auto.x, y: it.auto.y + dy }; }
+      moved = true;
+    }
+    if (!moved) return;
+  }
+}
+
 function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Record<Id, Pos> {
   const { pos, nodes, frames, wires } = asLayout(scene, at);
   if (only) return Object.fromEntries(tidy(nodes, frames, wires, only));
