@@ -94,3 +94,20 @@ test("the weight-balanced trees: lookups and changes grow as a logarithm, walks 
   check("tree of Set", "has item", costOf(set, "has item"), growth(setOf, (t, i) => call(has, t, i % 1000), 1000, 2000));
   check("tree of Set", "add item", costOf(set, "add item"), growth(setOf, (t, i) => call(add, t, -1 - (i % 1000)), 1000, 2000));
 });
+
+// C45: lists as trees by position. Every job on one end or one position
+// grows as a logarithm, the fold (each arm's rest a tree again) as n log n.
+test("tree of List: changes by position grow as a logarithm, the fold as n log n", () => {
+  const row = rep("tree of List"), cons = def("list tree cons");
+  const tree = (n: number) => { let t = def("list tree nil"); for (let i = 0; i < n; i++) t = call(cons, i, t); return t; };
+  const jobs: Record<string, [(v: Value, i: number) => unknown, number]> = {
+    cons: [(t, i) => call(cons, i, t), 2000],
+    match: [(t) => call(def("list tree match"), t, () => [0], (_x: Value, more: Value) => [more]), 2000],
+    length: [(t) => call(def("list tree size"), t), 2000],
+    "item at": [(t, i) => call(def("list tree item at"), t, (i * 7919) % 1000, -1), 2000],
+    "replace at": [(t, i) => call(def("list tree replace at"), t, (i * 7919) % 1000, -1), 2000],
+    append: [(t) => call(def("list tree append"), t, t), 2000],
+    fold: [(t) => call(def("list tree fold"), t, () => [0], (_x: Value, _r: Value, s: Value) => [s]), 3],
+  };
+  for (const [job, [run, m]] of Object.entries(jobs)) check("tree of List", job, costOf(row, job), growth(tree, run, 1000, m));
+});

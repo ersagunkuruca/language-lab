@@ -570,18 +570,25 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const kids = rows.map((r) => (r.add || empty(r.a) ? null : arg(r.a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
-    const portNames = ops && ops.length === n.args.length ? ops.map(name) : null;
+    // A definition's call names its ports, as its solve does, so a call and
+    // the same box used another way read alike (E168b, PORTS-2026-11-01.md
+    // §3): fall(distance, speed, gravity, time). One input, an operator's
+    // glyph, or a list on a port goes without.
+    const d = f.kind === "ref" ? node(f.target) : null;
+    const params = d?.kind === "def" && d.body && node(d.body)?.kind === "lambda" ? (node(d.body) as NodeOf<"lambda">).params : null;
+    const named = !!params && params.length === n.args.length && params.length > 1 && !nota?.glyph?.trim() && rows.length === inputs.length && inputs === n.args;
+    const portNames = ops && ops.length === n.args.length ? ops.map(name) : named ? params!.map(name) : null;
     // A list, or a chain of one operation, takes one more input at its +.
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
     const [bw, bh] = sized(id, Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
-      portNames ? 30 + rows.length * 20 : Math.max(30, rows.length * 18 + 12) + (badge ? 14 : 0) + plus);
+      (portNames ? 30 + rows.length * 20 : Math.max(30, rows.length * 18 + 12)) + (badge ? 14 : 0) + plus);
     const top = badge ? 14 : 0;
-    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (rows.length + 1)) * (i + 1));
+    const portY = (i: number) => (portNames ? top + 30 + i * 20 : top + ((bh - top - plus) / (rows.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
-      g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
+      g.append(s("text", { x: bw / 2, y: portNames ? top + 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
       // Each list's bracket, under its sockets.
       for (const l of new Set(rows.flatMap((r) => (r.list ? [r.list] : [])))) {
@@ -1256,6 +1263,33 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       g.append(s("rect", { x: x - 9, y: y - 9, width: 18, height: 18, class: "grip-hit" }), s("rect", { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, class: "spread-dot" }), s("title", {}, "Drag to spread the picked nodes apart or draw them together; hold Shift to resize them too"));
       spread.append(g);
     }
+    // The frame's ports (E167, PORTS-2026-11-01.md §5): each value wired
+    // in from outside on its left, each value wired out on its right,
+    // one port per value: the inputs and results Make it a function
+    // would give the picked nodes.
+    const items = new Set(units.flatMap((u) => u.keys));
+    const frames = new Set<Id>();
+    for (const f of scene.frames.values()) for (let p: Id | null = f.id; p; p = scene.frames.get(p)?.parent ?? null) if (picked.has(p)) { frames.add(f.id); break; }
+    const inside = (e: End) => ("item" in e ? items.has(e.item) : frames.has("frame" in e ? e.frame : e.frameOut));
+    const ins = new Map<string, number>(), outs = new Map<string, number>();
+    for (const w of scene.wires) {
+      const a = inside(w.from), z = inside(w.to);
+      if (!a && z && !ins.has(JSON.stringify(w.from))) ins.set(JSON.stringify(w.from), point(w.to).y);
+      if (a && !z && !outs.has(JSON.stringify(w.from))) outs.set(JSON.stringify(w.from), point(w.from).y);
+    }
+    const ports = (ys: number[], x: number, cls: string, title: string) => {
+      // Spread along the edge in the order the wires meet it, never closer than 14.
+      let last = -Infinity;
+      for (const y0 of ys.sort((p, q) => p - q)) {
+        const y = Math.min(b.y + b.h + m - 6, Math.max(y0, last + 14, b.y - m + 6));
+        last = y;
+        const c = s("circle", { cx: x, cy: y, r: 4, class: `spread-port ${cls}` });
+        c.append(s("title", {}, title));
+        spread.append(c);
+      }
+    };
+    ports([...ins.values()], b.x - m, "in", "A value wired in from outside: an input Make it a function would give");
+    ports([...outs.values()], b.x + b.w + m, "out", "A value wired out: a result Make it a function would give");
   }
   return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }

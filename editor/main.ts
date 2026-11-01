@@ -2654,6 +2654,11 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
+    // Turn a call around (E168): an input swaps sides with the result.
+    const turn = n?.kind === "call" ? T.turnable(doc.code, id) : null;
+    const pName = (p: Id) => names[p] ?? "it";
+    if (turn) turn.params.forEach((p, k) => rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
+    if (n?.kind === "solve") rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc.code, doc.names.short, info, id))));
     if (kind === "node") rows.push(...stepRows(id));
     // Cases that share this value, read once as the otherwise: each can
     // have its own (BACKLOG I117); an edit here is otherwise made in all.
@@ -2720,6 +2725,8 @@ function menuAction(act: string, target: Id | undefined) {
   };
   const own = /^own-case-(\d+)$/.exec(act);
   if (own && target) { const c = T.sharedCases(doc.code, doc.names.short, info, target)[+own[1]]; if (c) applyT(T.ownBody(doc.code, doc.names.short, info, c)); return; }
+  const turn = /^turn-(\d+)$/.exec(act);
+  if (turn && target) { applyT(T.turnAround(doc.code, doc.names.short, info, target, +turn[1])); return; }
   switch (act) {
     case "add": case "add-before": {
       // On the graph's canvas a new value is a loose part, where you clicked
@@ -2808,6 +2815,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "group-fn": return groupToFunction(info, target!);
     case "group-def": return groupToFunction(info, target!, true);
     case "lambda-def": return applyT(T.liftToDefinition(doc.code, doc.names.short, info, ui.def, target!));
+    case "turn-back": return applyT(T.turnBack(doc.code, doc.names.short, info, target!));
     case "picked-def": {
       const set = fnSet(target!, graph?.picked() ?? []);
       if (!set) return;

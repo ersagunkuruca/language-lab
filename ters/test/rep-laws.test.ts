@@ -1,7 +1,7 @@
 // A representation's laws (REPRESENTATIONS.md step 4, BACKLOG L108d): each
 // job done at R agrees with T's own through meaning, on small values built
-// by T's own jobs. Numbers' binary and int Nats, and the library's trees
-// and array of List, hold; a job swapped for another is caught.
+// by T's own jobs. Numbers' binary and int Nats, and the library's trees,
+// array of List and tree of List, hold; a job swapped for another is caught.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -37,7 +37,7 @@ test("a job that doesn't agree is caught, with its inputs", () => {
   assert.equal(law.failures[0].inputs.length, 2);
 });
 
-test("the library's Map and Set trees and array of List agree through their meaning", () => {
+test("the library's Map and Set trees, array of List and tree of List agree through their meaning", () => {
   const code = base(TREES.code), names = { ...baseNames({}), ...TREES.names, ...LIBRARY.names };
   const info = infer(code, names, undefined, { ...checkOptions, insiders: [...(checkOptions.insiders ?? []), ...TREES.code.defs] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
@@ -45,6 +45,7 @@ test("the library's Map and Set trees and array of List agree through their mean
   assert.deepEqual(laws.filter((l) => l.failures.length).map((l) => [l.rep, l.job, l.failures[0]]), []);
   const jobs = (rep: string) => laws.filter((l) => l.rep === rep && l.cases > 0).map((l) => l.job);
   assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "item at", "match", "fold"]);
+  assert.deepEqual(jobs("tree of List"), ["nil", "cons", "length", "append", "item at", "replace at", "match", "fold"]);
   assert.ok(jobs("weight-balanced tree").includes("put") && jobs("weight-balanced tree").includes("set union"));
 });
 

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { runMain, showValue } from "../src/lang/run.ts";
+import { makeRunner, runMain, showValue } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
@@ -118,6 +118,39 @@ test("a set given to a generic helper keeps the definition", () => {
   const c = withLibraryRepresentations(code, info, names, main, [seen, ab, describe, main]);
   assert.deepEqual(c.chosen, []);
   assert.deepEqual(printed(c.code, c.names, main), ["true", 'set of(["a", "b"])']);
+});
+
+// C70 (GAPS.md round 6 N1): a generic definition that only passes its
+// values on (`map` over pairs holding a set, a helper giving the pair's
+// second) never sees the tree, so it doesn't keep the definition; one
+// that shows them, through another definition, still does.
+test("a set handed to definitions that never look at it keeps the tree (C70)", () => {
+  const program = (look: boolean) => {
+    const k = new Lang(LIBRARY.code);
+    const seen = k.def("seen");
+    k.define(seen, k.fold(k.call(S.range, k.lit(300)), [
+      { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+      { variant: CONS, names: ["i", "rest"], results: [null, "s"], body: ([i], [, s]) => k.call(L("add item"), s!, i) },
+    ]));
+    const second = k.def("second");
+    k.define(second, k.fn(["p"], (p) => k.match(p, [{ variant: PAIR_V, names: ["a", "b"], body: ([, b]) => b }])));
+    const describe = k.def("describe");
+    k.define(describe, k.fn(["x"], (x) => k.call(SHOW_ANY, x)));
+    const via = k.def("via");
+    k.define(via, k.fn(["x"], (x) => k.call(describe, x)));
+    const sizes = k.call(L("map"), k.list(k.call(PAIR_V, k.lit("s"), k.x(seen))), k.fn(["e"], (e) =>
+      look ? k.call(via, e) : k.call(SHOW_ANY, k.call(L("set size"), k.call(second, e)))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(PAIR_V, k.call(L("has item"), k.x(seen), k.lit(42)), sizes)))));
+    const code = base(k.code), names = baseNames(k.names);
+    const info = infer(code, names, undefined, checkOptions);
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    return { code, names, main, c: withLibraryRepresentations(code, info, names, main, [seen, second, describe, via, main]) };
+  };
+  const { code, names, main, c } = program(false);
+  assert.deepEqual(c.chosen, ["Set as weight-balanced tree"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), printed(code, names, main));
+  assert.deepEqual(program(true).c.chosen, []);
 });
 
 // C52: a map inside another value takes the tree too; what shows,
@@ -416,4 +449,65 @@ test("a program that conses onto a match's rest keeps List as written, and the c
   assert.equal(row("List as written"), "1");
   assert.equal(c.rep.name, "List as written");
   assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, bump, main]).chosen.includes("List as array of List"));
+});
+
+// C45: a program that changes a list by position in a loop gets `tree of
+// List`, where each change is log n (the array copies, the cons cells
+// walk: n² both), and prints what the definition prints.
+function byPosition(n: number) {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(n)), k.fn(["i"], (i) => k.call(B.mul, i, k.lit(0)))));
+  // Each i adds i to the item at 7i mod n.
+  const counted = k.def("counted");
+  k.define(counted, k.fold(k.call(S.range, k.lit(3 * n)), [
+    { variant: NIL, names: [], body: () => k.x(xs) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.mod, k.call(B.mul, i, k.lit(7)), k.lit(n)), (at) =>
+      k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), i))) },
+  ]));
+  const at = k.def("at");
+  k.define(at, k.fn(["i"], (i) => k.call(L("item at"), k.x(counted), i, k.lit(-1))));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(k.call(at, k.lit(3))),
+    show(k.call(L("length"), k.call(L("append"), k.x(counted), k.x(xs)))),
+    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.lit(1.4), k.lit(9))),
+    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2)), k.lit(5), k.lit(9))),
+    show(k.call(S.equal, k.x(counted), k.call(L("reverse"), k.call(L("reverse"), k.x(counted))))),
+    show(k.call(L("sum"), k.x(counted))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  return { code, names, main, at, defs: [xs, counted, at, main], info: infer(code, names, undefined, checkOptions) };
+}
+
+test("a program that changes a list by position in a loop gets trees, and prints what the definition prints (C45)", () => {
+  const { code, names, main, defs, info } = byPosition(40);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const before = printed(code, names, main);
+  const c = withLibraryRepresentations(code, info, names, main, defs);
+  assert.deepEqual(c.chosen, ["List as tree of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+  assert.deepEqual(before.slice(1, 5), ["80", "[1, 9, 3]", "[1, 2]", "true"]);
+  assert.equal(before[5], String((120 * 119) / 2));
+});
+
+test("lists as trees lower to WebAssembly and C too, with the evaluator's answers (C45)", async () => {
+  const { lowerScalar } = await import("../../compiler/src/scalar.ts");
+  const { emitC } = await import("../../compiler/src/c.ts");
+  const { emitWasm, instantiate } = await import("../../compiler/src/wasm.ts");
+  const { code, names, main, at, defs, info } = byPosition(40);
+  const c = withLibraryRepresentations(code, info, names, main, defs);
+  assert.deepEqual(c.chosen, ["List as tree of List"]);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const want = (i: number) => { let s = 0; for (let j = 0; j < 120; j++) if ((j * 7) % 40 === i) s += j; return i >= 0 && i < 40 ? s : -1; };
+  const run = (i: number) => { const r = makeRunner(c.code, info2, { print: () => {}, names: c.names }); for (const v of r.call(r.value(at), i) as Iterable<unknown>) return v; };
+  for (const i of [0, 3, 39, 40]) assert.equal(run(i), want(i));
+  const lowered = lowerScalar(c.code, info2, c.names, [at], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.deepEqual([...emitC(lowered).refused.values()], []);
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
+  const fn = w[lowered.funcs.find((g) => g.def === at)!.name];
+  const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+  for (const i of [0, 3, 39, 40]) assert.equal(one(fn(i)), want(i));
 });

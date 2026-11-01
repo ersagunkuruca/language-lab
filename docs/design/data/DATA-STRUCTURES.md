@@ -126,8 +126,15 @@ and `compare` on a map through `meaning`, since the tree isn't canonical:
   only when a program does many lookups and few folds.
 - A hash table changed in place when nobody else holds the map: Perceus
   reuse analysis (#202, native N5c) already finds where a value is unique.
-- Arrays aren't a type: they are C30's representation of `List`. A
-  persistent vector (RRB trees, Bagwell and Rompf, 2012) is C45.
+- Arrays aren't a type: they are C30's representation of `List`.
+- **Done (C45):** `tree of List` (ters/src/lang/list-tree.ts), a list
+  stored as a weight-balanced tree by position: a cons, a match, `item at`,
+  `replace at` and an append are log n, a fold n log n. The chooser takes
+  it where a program changes items by position in a loop (the array
+  copies and the cons cells walk, n² both). It is the binary cousin of a
+  persistent vector (RRB trees, Bagwell and Rompf, 2012); RRB's 32-wide
+  nodes are the same costs in fewer steps, a later step if a program
+  needs the constant.
 
 ## The editor
 
