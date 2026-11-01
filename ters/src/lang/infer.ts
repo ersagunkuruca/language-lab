@@ -611,7 +611,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const inner = new Map(env);
         const params = n.params.map((p) => { const pt = s.fresh(); inner.set(p, pt); info.typeOf.set(p, pt); return pt; });
         const bodyRow = s.freshRow();
-        t = { t: "fn", params, ret: expr(n.body, inner, bodyRow), eff: bodyRow };
+        const ret = expr(n.body, inner, bodyRow);
+        // Named result ports (L128b): the body gives a tuple of that many,
+        // each part named by its binder; one result is the value itself.
+        if (n.results?.length) {
+          const parts = n.results.map((r) => { const rt = s.fresh(); info.typeOf.set(r, rt); return rt; });
+          const want: Type = parts.length === 1 ? parts[0] : parts.length <= TUPLE_MAX ? { t: "con", id: tupleType(parts.length), args: parts } : s.fresh();
+          if (parts.length > TUPLE_MAX) err(id, `a function gives at most ${TUPLE_MAX} results`);
+          else unifyAt(n.body, want, ret, `this function gives ${parts.length} results`);
+        }
+        t = { t: "fn", params, ret, eff: bodyRow };
         break;
       }
       case "call": {

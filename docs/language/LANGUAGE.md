@@ -239,9 +239,12 @@ results, given as a tuple, go straight on to the next function's inputs
 one value with the tuple of the inputs' types; `src/lang/spread.ts` takes
 the tuple apart before anything runs, so the evaluator and every compiler
 target see an ordinary call. Standard ML is the prior art (every function
-takes one value, which may be a tuple). Still to come (L128b): naming a
-function's result ports, so `r.length` reads a part by the name the
-function gave it.
+takes one value, which may be a tuple). A function can name its result
+ports (L128b): a lambda's `results` are binders, one per part, and its body
+gives a tuple of that many (one result is the value itself), so
+`part(speed, time) → drift, drop` reads `r.drop` as the second part.
+`src/lang/ports.ts` finds the names from a use. Still to come: `= e1, e2`
+in the text (L128c).
 
 `Array a` is the one data type that is a builtin (L116): a list's items side
 by side, read by position in constant time (`item at(array, i)`, no answer
