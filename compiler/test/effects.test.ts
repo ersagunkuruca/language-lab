@@ -308,6 +308,21 @@ test("Random: seeded draws are the evaluator's bit for bit, with and without Cho
   assert.equal(r.lines[0], "5950297428061403 1006121846472570");
   assert.equal(r.lines[1], r.lines[2]);
   assert.deepEqual(r.lines.slice(3), ["0.25", "0.75"]);
+  assert.doesNotMatch(r.js, /\$random\(/);
+});
+
+// Random that nothing in the program handles (C64d) is drawn from the
+// world straight away; where a match or `seeded` could answer it, it is
+// still performed.
+test("Random with no handler in the program is the world's draw, without a perform (C64d)", async () => {
+  const r = await both((k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(S.print, show(k, k.call(RANDOM_OP))), k.call(S.print, show(k, k.call(B.add, k.call(RANDOM_OP), k.lit(1)))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["0.75", "1.75"]);
+  assert.match(r.js, /\$random\(\)/);
+  assert.doesNotMatch(r.js, /\$perform\(/);
 });
 
 test("Time and Wait: the world's clock, a match's clock, and waiting", async () => {

@@ -31,7 +31,7 @@ import { children, dependencies, subtree, type Code, type Id, type Node, type No
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
-import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
+import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
 import { fieldPath, placePath } from "../../ters/src/lang/records.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
@@ -193,7 +193,23 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   };
   const laterFn = (t: Type, lat: Set<number> = NO_LAT) => t.t === "fn" && laterRow(t.eff, lat);
   const notYet = (what: string) => new Error(`${what}: compiled JavaScript doesn't run that yet (BACKLOG C40); the evaluator does`);
-  const perform = (op: Id, args: string[]) => (isLater(op) ? `(yield $later(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`);
+  // Random with no handler for it anywhere in the program (none written,
+  // no `seeded`) is the world's: a perform would look through the handler
+  // stack for nothing each time (C64d, a third of Pig's games).
+  let unhandled: Set<Id> | null = null;
+  const worldOnly = (op: Id) => {
+    if (op !== RANDOM_OP) return false;
+    if (!unhandled) {
+      const handled = new Set<Id>();
+      for (const n of Object.values(code.nodes)) {
+        if (n.kind === "match") for (const a of n.arms) { const e = effectOf((code.nodes[a] as NodeOf<"arm">).variant); if (e) handled.add(e); }
+        if (n.kind === "ref" && n.target === S.seeded) handled.add(RANDOM);
+      }
+      unhandled = new Set([RANDOM].filter((e) => !handled.has(e)));
+    }
+    return unhandled.has(effectOf(op)!);
+  };
+  const perform = (op: Id, args: string[]) => (worldOnly(op) ? "$random()" : isLater(op) ? `(yield $later(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`);
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   // Which possibly-divergent definitions spend a step per call (GAPS.md G1,
   // fuel). Only those that can run under a `with fuel`, or under a page's
@@ -3008,7 +3024,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));
