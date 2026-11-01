@@ -23,7 +23,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | Idle (Ersagun's 20, 2026-11-01, done). Open for the lane: I109 (the compiled preview restarts the page) |
-| C Compiler and targets | "Compiler lane" | I106 (match-then-cons copies the array), I107 (0 · x folded), C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
+| C Compiler and targets | "Compiler lane" | I107 (0 · x folded), C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
 | L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -33,7 +33,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I106 | **Bug.** `array of List` says cons is constant, but a cons onto a match's rest copies the array: match-then-cons is quadratic (16,000 steps 6 s, against <1 ms as a cons list), and the chooser picks the array by itself. A measured cost test per representation row (each job at n and 4n), then the chooser counting cons onto a rest as linear. Also: a rest keeps the whole buffer alive | REVIEW-2026-11-01 §2 | 2026-11-01 |
+| I106b | A measured cost test per representation row (each job at n and 4n, the ratio checked against the cost the row claims), so a row can't drift from the code again. I106a (the chooser counting cons onto a match's rest as the array's space) is done. Also: a rest keeps the whole buffer alive (Go's slices leak the same way) | REVIEW-2026-11-01 §2 | 2026-11-01 |
 | I107 | Staging folds `0 · x` to 0 and `x + 0` to x (stage.ts, "as fast-math"), so compiled answers differ from the evaluator's for ∞, NaN and −0, and the preview swaps between the two. Fold only when x is known finite; a test with ∞ and NaN inputs | REVIEW-2026-11-01 §3 | 2026-11-01 |
 | I108 | `clifford inverse` is ṽ/⟨vṽ⟩₀, right only for versors: it gives 1 + e₁ (which has no inverse) the value (1 + e₁)/2. Name it for what it is, or make it general, with an empty answer when there is none; it has no doc string | REVIEW-2026-11-01 §4 | 2026-11-01 |
 | I109 | The compiled preview (#789) starts the page afresh, losing what the user did in its first 2 to 7 s; hand the cells across, or hold input until the swap. Pages with sound stay interpreted with nothing saying why | REVIEW-2026-11-01 §5 | 2026-11-01 |
