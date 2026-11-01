@@ -4,7 +4,9 @@
 // Set (map-tree.ts). Its meaning is `items of array`. Its jobs are on the
 // array's two ends (first of array, rest of array, push front), which
 // the evaluator and compiled JS keep as views on one buffer with free
-// room at both ends (std.ts ArrayView), so a cons, a match and the length
+// room at both ends (std.ts ArrayView), so a cons (onto an array nobody
+// else sees: onto a match's rest it copies, which the chooser counts,
+// represent.ts ontoField), a match and the length
 // are constant and a fold is a walk. Which one a value gets is the
 // compiler's choice, from the jobs a program does and these costs; a
 // program never picks (Ersagun, 2026-10-30).

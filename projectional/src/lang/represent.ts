@@ -123,6 +123,10 @@ const literalOf = (n: Node, t: Id) => n.kind === "lit" && (n.of ? n.of === t : t
 
 // The jobs on T a definition uses, transitively: constructors, matches,
 // folds, and calls to functions some representation implements.
+// The job of building a v whose field i is that field taken out of another
+// v by a match (`x :: rest` in a cons arm).
+export const ontoField = (v: Id, i: number) => `${v} onto its field ${i}`;
+
 export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   const t = reps[0].of;
   const variants = new Set(variantsOf(code, t));
@@ -134,8 +138,19 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
       const n = code.nodes[id];
       if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(n.kind);
+      // A constructor given a field a match took out of another value
+      // (`x :: rest` in a cons arm): its own job, since a representation
+      // that hides that field shares it with the value it came from.
+      if (n.kind === "call") {
+        const c = code.nodes[n.fn];
+        const v = c?.kind === "ref" && variants.has(c.target) ? c.target : null;
+        if (v) n.args.forEach((a, i) => { const r = code.nodes[a], f = r?.kind === "ref" ? fieldOf.get(r.target) : undefined; if (f?.[0] === v && f[1] === i) out.add(ontoField(v, i)); });
+      }
     }
   };
+  // Which variant's field each binder of a match arm over T is.
+  const fieldOf = new Map<Id, [Id, number]>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && variants.has(n.variant)) n.binds.forEach((b, i) => fieldOf.set(b, [n.variant, i]));
   // A function some representation implements is one job: don't look
   // inside it, since its body is what gets replaced (`add item` builds a
   // `set of`, which the tree never does).
@@ -172,18 +187,32 @@ export interface Choice {
 // Pick the representation whose jobs cost least added up, on the scale
 // the way picker uses too (cost.ts): the highest order first, so the one
 // whose worst job is cheapest wins, then how many jobs are at that order,
-// then the next order down; then the smallest. A job a representation
-// doesn't implement is done by its definition, which costs what it costs
+// then the next order down; then the smallest; and on a tie the
+// definition as written, since a rewrite has to buy something. A job a
+// representation doesn't implement is done by its definition, which costs what it costs
 // in T's own terms; one with no cost at all is NEVER.
 export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   const jobs = uses(code, entry, reps);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
-  const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? spec.cost[j] ?? "?"]));
+  // Building a v onto a field taken out of another value costs v's
+  // constructor where the field is a value kept (the definition as
+  // written: a cons cell points at its rest). Where the representation
+  // hides that field, the field is a view into the value it came from,
+  // which still sees the same slots, so the constructor copies: the
+  // representation's space, n for `array of List` (std.ts pushFront
+  // writes in place only at the buffer's free end, REVIEW-2026-11-01 §2).
+  const onto = (r: Representation, j: string) => {
+    const at = variantsOf(code, r.of).flatMap((v) => (code.nodes[v] as NodeOf<"variant">).fields.map((_, i) => [v, i] as const)).find(([v, i]) => ontoField(v, i) === j);
+    if (!at) return undefined;
+    const [v, i] = at;
+    return r.hidden?.[v]?.includes(i) ? (r.cost.space ?? "n") : (r.cost[v] ?? spec.cost[v]);
+  };
+  const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? onto(r, j) ?? spec.cost[j] ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
   const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(c[j]))), space: step(c.space) }; };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
-    return compare(x.jobs, y.jobs) || compare(x.space, y.space);
+    return compare(x.jobs, y.jobs) || compare(x.space, y.space) || Number(b === spec) - Number(a === spec);
   })[0];
   return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
 }
