@@ -48,3 +48,20 @@ test("an array as a shader function's input: a copy per size it is called with (
   const r = makeRunner(p.code, p.info, { print: () => {} });
   for (const x of [0, 1.5, -3]) assert.equal(js.get(p.twoSizes)!(x), first(r.call(r.value(p.twoSizes), x as never)), `two sizes ${x}`);
 });
+
+test("an array's two ends in a shader at fixed sizes: first, rest and push front (C66)", () => {
+  const p = shaderArrays();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.ends, p.firstOfNone], { records: true, shader: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  const s = emitWgsl(lowered);
+  assert.deepEqual([...s.refused.values()], []);
+  // A push at the front is one longer, the item first; a rest one shorter.
+  assert.match(s.wgsl, /array<f32, 3>\(\(?p0 \* 3\.0\)?, t\d+\[0\], t\d+\[1\]\)/);
+  assert.match(s.wgsl, /array<f32, 2>\(t\d+\[1\], t\d+\[2\]\)/);
+  const js = loadJs(lowered);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const x of [0, 1.5, -3]) {
+    assert.equal(js.get(p.ends)!(x), first(r.call(r.value(p.ends), x as never)), `ends ${x}`);
+    assert.equal(js.get(p.firstOfNone)!(x), first(r.call(r.value(p.firstOfNone), x as never)), `first of none ${x}`);
+  }
+});

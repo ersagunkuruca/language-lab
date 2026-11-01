@@ -716,9 +716,16 @@ export function shaderArrays() {
   const headSize = def("head and size", ["a"], (a) => k.call(B.add, or(() => k.call(A.at, a, k.int(0)), () => k.lit(0)), k.call(INT_OPS.toNumber, k.call(A.length, a))));
   const twoSizes = def("two sizes", ["x"], (x) => k.call(B.add, k.call(headSize, k.call(A.of, k.list(x))), k.call(headSize, k.call(A.push, k.call(A.of, k.list(x, k.lit(2))), x))));
   const loose = def("loose", ["a"], (a) => k.call(INT_OPS.toNumber, k.call(A.length, a)));
+  // The two ends at fixed sizes (C66): [3x, x, 2]'s rest's first is x; the
+  // rest of [1] three times is empty (the empty array's rest is itself);
+  // the first of an empty array is no answer.
+  const ends = def("ends", ["x"], (x) => k.call(B.add,
+    or(() => k.call(A.first, k.call(A.rest, k.call(A.pushFront, k.call(A.of, k.list(x, k.lit(2))), k.call(B.mul, x, k.lit(3))))), () => k.lit(-1)),
+    k.call(INT_OPS.toNumber, k.call(A.length, k.call(A.rest, k.call(A.rest, k.call(A.rest, k.call(A.of, k.list(x)))))))));
+  const firstOfNone = def("first of none", ["x"], (x) => or(() => k.call(A.first, k.call(A.rest, k.call(A.of, k.list(x)))), () => k.lit(-1)));
   const code = base(k.code), names = { ...baseNames(k.names) }, info = infer(code, names, undefined, checkOptions);
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
-  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed, headSize, twoSizes, loose };
+  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed, headSize, twoSizes, loose, ends, firstOfNone };
 }
 
 // Why `maths()`'s op stops on x and y, the program's answer where a Float64

@@ -119,7 +119,7 @@ test("Int in 32 bits and the flag in WebAssembly: js-scalar.ts's answers", async
 // end raising the flag, so the editor's picture uses WebAssembly for them.
 test("a shader's arrays in WebAssembly: js-scalar.ts's answers", async () => {
   const p = shaderArrays();
-  const roots = [p.palette, p.grow, p.pick, p.nothing, p.twoSizes];
+  const roots = [p.palette, p.grow, p.pick, p.nothing, p.twoSizes, p.ends, p.firstOfNone];
   const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, shader: true });
   const m = emitWasm(lowered);
   assert.match(m.wat, /array\.new_fixed \$items\d* 3/);
@@ -128,5 +128,8 @@ test("a shader's arrays in WebAssembly: js-scalar.ts's answers", async () => {
   const js = loadJs(lowered);
   const same = (d: string, x: number) => assert.equal(w[p.names[d]](x), Number(js.get(d)!(x)), `${p.names[d]} ${x}`);
   for (const i of [-1, 0, 1, 2, 3, 4, 5]) for (const d of [p.palette, p.pick, p.nothing]) same(d, i);
-  for (const x of [0, 1.5, -3]) for (const d of [p.grow, p.twoSizes]) same(d, x);
+  for (const x of [0, 1.5, -3]) for (const d of [p.grow, p.twoSizes, p.ends]) same(d, x);
+  // The two ends (C66): the rest and a push at the front are the data
+  // lowering's, on the same buffer.
+  for (const x of [0, 2, -3]) same(p.firstOfNone, x);
 });
