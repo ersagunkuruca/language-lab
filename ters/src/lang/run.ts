@@ -583,8 +583,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       const arm = h.arms.get(op)!;
       const variant = code.nodes[op] as NodeOf<"variant">;
       // Answered later: the case runs outside the match, as for one that
-      // never returns, and is given the rest to resume once, or drop.
-      if (variant.later && variant.returns) {
+      // never returns, and is given the rest to resume once, or drop. A
+      // case that leaves the rest out answers at once (L63).
+      if (variant.later && variant.returns && arm.binds.length === variant.fields.length + 1) {
         const rest = restOf({ top: this.k, h, cps: this.cps.splice(h.base), fuel: this.fuel, used: false, op });
         this.k = h.next;
         this.fuel = h.fuel;
@@ -642,6 +643,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         const ready = (t: Data): number => {
           if (t.tag === TICKET_V.ticket) { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
           if (t.tag === TICKET_V.timer) return now + (t.fields[0] as number);
+          if (t.tag === TICKET_V.at) return t.fields[0] as number;
           throw new Aborted("any of a ticket that is itself an any of can't be awaited yet");
         };
         const t = args[0] as Data;
@@ -655,7 +657,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return this.apply(t.fields[1], [i]);
         }
         waitUntil(ready(t));
-        return this.ret(t.tag === TICKET_V.timer ? t.fields[1] : unit);
+        return this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : unit);
       }
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       // A program's own effect, answered by its host (L69a); a missing or

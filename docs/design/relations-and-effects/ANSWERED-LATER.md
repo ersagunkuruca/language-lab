@@ -165,7 +165,9 @@ In the order the BACKLOG wants them:
    a timeout is no answer (`Choice`), not an error. The full design is
    LANGUAGE-NEEDS-2026-10-24 Part 1.
 5. **Tests with a fake clock and network (L55).** A test answers `await`
-   from a virtual clock, in the language.
+   from a virtual clock, in the language. Done for the clock (L63): the prelude's `simulated(seed, action)`
+   keeps a virtual clock as its rests resume, and picks among tickets
+   ready at once with the seed.
 
 ## Steps
 

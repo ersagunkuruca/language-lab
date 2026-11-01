@@ -1052,8 +1052,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // computation, (answer) -[the match's row]-> the match's value. It
       // resumes under this same match (deep), so it can do what the match
       // does and gives what the match gives (ANSWERED-LATER.md).
+      // Its case may also leave the rest out and answer at once, as any
+      // operation's does (L63): resuming at once is answering.
       const later = op.later && op.returns ? 1 : 0;
-      if (arm.binds.length !== fs.length + later) err(arm.id, later ? `${nm(arm.variant)} has ${fs.length} inputs and the rest of the computation, ${arm.binds.length} bound` : `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
+      if (arm.binds.length !== fs.length + later && !(later && arm.binds.length === fs.length)) err(arm.id, later ? `${nm(arm.variant)} has ${fs.length} inputs and the rest of the computation (or only its inputs, to answer at once), ${arm.binds.length} bound` : `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
       const inner = new Map(env);
       arm.binds.forEach((b, i) => { if (fs[i]) { inner.set(b, fs[i]); info.typeOf.set(b, fs[i]); } });
       const r = op.returns;

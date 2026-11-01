@@ -1983,7 +1983,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // the rest as its last input, a function that resumes the generator
     // once under the same handler (deep).
     function handleLater(n: NodeOf<"match">, arms: NodeOf<"arm">[]): string {
-      const rests = arms.filter((a) => isLater(a.variant)).map((a) => a.binds[a.binds.length - 1]);
+      // A case for an operation answered later that leaves the rest out
+      // answers at once (L63), as any other operation's does.
+      const resumes = (a: NodeOf<"arm">) => isLater(a.variant) && a.binds.length === node<"variant">(a.variant).fields.length + 1;
+      const rests = arms.filter(resumes).map((a) => a.binds[a.binds.length - 1]);
       // The match itself may wait on another handler's operation (the rest's
       // row says so): then it is a generator too ($handleLG). Its cases are
       // generators, it passes what it doesn't handle outward, and the rest
@@ -1991,7 +1994,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const waits = rests.some((r) => laterFn(ty(r), sp.lat));
       const fn = (a: NodeOf<"arm">) => (waits ? `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})` : `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`);
       const table = (as: NodeOf<"arm">[]) => `{ ${as.map((a) => `${tag(a.variant)}: ${fn(a)}`).join(", ")} }`;
-      const returns = (a: NodeOf<"arm">) => !isLater(a.variant) && !!node<"variant">(a.variant).returns;
+      const returns = (a: NodeOf<"arm">) => !resumes(a) && !!node<"variant">(a.variant).returns;
       // A case answered at once answers in place, as a plain function, even
       // where the match waits: one that would wait itself isn't compiled yet.
       const now = (as: NodeOf<"arm">[]) => {
@@ -1999,15 +2002,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         try { new Function(`"use strict";\n(${t})`); } catch { throw notYet("a handler that waits, with a case answered at once that waits too"); }
         return t;
       };
-      const ops = `{ ${arms.filter((a) => isLater(a.variant)).map((a) => `${tag(a.variant)}: ${JSON.stringify(names[a.variant] ?? a.variant)}`).join(", ")} }`;
+      const ops = `{ ${arms.filter(resumes).map((a) => `${tag(a.variant)}: ${JSON.stringify(names[a.variant] ?? a.variant)}`).join(", ")} }`;
       const body = scoped(false, () => inGen(true, () => ret(n.scrutinee)));
       try { new Function(`"use strict";\n(function* () {\n${body}\n})`); } catch { throw notYet("an operation answered later performed inside a function the compiler makes (a search, a loop)"); }
       // The case for the normal finish (L57) runs on the computation's value
       // when it finishes, after however many rests (I37).
       const done = n.otherwise ? `, ${ex(n.otherwise)}${waits && laterFn(ty(n.otherwise), sp.lat) ? ", true" : ""}` : "";
       if (!waits && n.otherwise && laterFn(ty(n.otherwise), sp.lat)) throw notYet("a handler's case for the normal finish that waits on another handler's operation");
-      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${now(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}${done}))`;
-      return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter((a) => isLater(a.variant)))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !isLater(a.variant) && !returns(a)))}, function* () {\n${body}\n}${done})`;
+      if (waits) return `(yield* $handleLG(${JSON.stringify(handlerOf(n))}, ${table(arms.filter(resumes))}, ${ops}, ${now(arms.filter(returns))}, ${table(arms.filter((a) => !resumes(a) && !returns(a)))}, function* () {\n${body}\n}${done}))`;
+      return `$handleL(${JSON.stringify(handlerOf(n))}, ${table(arms.filter(resumes))}, ${ops}, ${table(arms.filter(returns))}, ${table(arms.filter((a) => !resumes(a) && !returns(a)))}, function* () {\n${body}\n}${done})`;
     }
 
     function match(n: NodeOf<"match">): string {
