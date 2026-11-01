@@ -1,7 +1,7 @@
 // How much the compiler buys: the same programs, evaluated and compiled.
 // Run: node bench.ts   (or npm run bench)
 
-import { makeRunner, runMain, type Value } from "../projectional/src/lang/run.ts";
+import { makeRunner, runMain, type Value } from "../ters/src/lang/run.ts";
 import { load } from "./src/program.ts";
 import { $setPrint } from "./src/runtime.js";
 import { mkdtempSync, writeFileSync } from "node:fs";

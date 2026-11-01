@@ -35,12 +35,12 @@ at a time):
 
 | file | s | what is slow |
 |---|---:|---|
-| projectional `palette.test.ts` | 120 | every palette filling in calculus (59), backwards (49), queens (18) |
-| projectional `lang.test.ts` | 95 | one test, 97 s: every third filling in algebra and **queens again** |
-| projectional `agreement.test.ts` | 60 | forward and backwards agree: raymarch (30), wc (19), chapters (4) |
-| projectional `dots.test.ts` | 58 | a dot on every wire: physics (33), relations (14), queens (12) |
-| projectional `toplevel.test.ts` | 18 | |
-| the other 30 projectional files | 40 | most are under 1 s, mostly Node starting up |
+| ters `palette.test.ts` | 120 | every palette filling in calculus (59), backwards (49), queens (18) |
+| ters `lang.test.ts` | 95 | one test, 97 s: every third filling in algebra and **queens again** |
+| ters `agreement.test.ts` | 60 | forward and backwards agree: raymarch (30), wc (19), chapters (4) |
+| ters `dots.test.ts` | 58 | a dot on every wire: physics (33), relations (14), queens (12) |
+| ters `toplevel.test.ts` | 18 | |
+| the other 30 ters files | 40 | most are under 1 s, mostly Node starting up |
 | compiler, 16 files | 23 | |
 | invertible | 2 | |
 
@@ -68,7 +68,7 @@ example, about 2.2 s each, most of it waiting out 500 ms click timeouts.
 
 **What merges touch** (the ~50 merges since 2026-10-22 12:00, ignoring
 `.md` and pictures): compiler only 12, editor only 14, docs only 4, and
-the language core (`projectional/src`, `library`) about 20. So more than
+the language core (`ters/src`, `library`) about 20. So more than
 half of the merges cannot affect most of the suite: a compiler-only change
 can't change what the editor's palette offers, and an editor-only change
 can't change whether forward and backwards agree in `wc`.
@@ -165,7 +165,7 @@ passed), used by CI and by every thread before pushing:
 5. A change to the language core reaches every example, so it runs every
    test, but the sweeps in their per-change size (T3).
 6. A change to `editor/` runs the unit tests that import it and the quick
-   smoke (T4); `compiler/` runs compiler tests plus the three projectional
+   smoke (T4); `compiler/` runs compiler tests plus the three ters
    tests that import it.
 
 Expected on the runner: compiler-only change about 40 s, editor-only

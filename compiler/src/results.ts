@@ -22,12 +22,12 @@
 // procedure, and drops outputs no caller reads (Somogyi, Henderson and
 // Conway, 1996); dead-result elimination is the same idea in any optimiser.
 
-import type { Code, Id, Node, NodeOf } from "../../projectional/src/model.ts";
-import { freshId, mapIds, subtree } from "../../projectional/src/model.ts";
-import type { Names } from "../../projectional/src/presentation.ts";
-import { TRUE } from "../../projectional/src/lang/std.ts";
-import { computedForward, givenBy } from "../../projectional/src/lang/directions.ts";
-import { planSolve } from "../../projectional/src/lang/solve.ts";
+import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
+import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
+import type { Names } from "../../ters/src/presentation.ts";
+import { TRUE } from "../../ters/src/lang/std.ts";
+import { computedForward, givenBy } from "../../ters/src/lang/directions.ts";
+import { planSolve } from "../../ters/src/lang/solve.ts";
 
 export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };

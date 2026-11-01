@@ -180,7 +180,7 @@ real program.
    Haar, but a filter's state makes its join a sum, not its inverse.)
 4. **A4. In the editor.** A Run panel for sound like the one for pages
    (Editor lane, thread "Writing programs in the editor"; this lane's edits
-   to projectional/editor purely additive).
+   to editor purely additive).
 5. **A5. Measure.** Blocks per second against the 375 real time needs, in
    compiled JS and, if it is short, WebAssembly in the worklet.
 

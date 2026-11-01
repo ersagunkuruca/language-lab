@@ -9,16 +9,16 @@ import { emitWgsl } from "../src/wgsl.ts";
 import { examples, load } from "../src/program.ts";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DIVERGE } from "../../projectional/src/lang/types.ts";
-import { makeRunner } from "../../projectional/src/lang/run.ts";
+import { DIVERGE } from "../../ters/src/lang/types.ts";
+import { makeRunner } from "../../ters/src/lang/run.ts";
 import { area, corners, vectors, within } from "../src/fixtures.ts";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import { S } from "../../projectional/src/lang/std.ts";
-import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
-import { merge, type Id, type NodeOf } from "../../projectional/src/model.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { B } from "../../ters/src/prelude.ts";
+import { S } from "../../ters/src/lang/std.ts";
+import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { merge, type Id, type NodeOf } from "../../ters/src/model.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");

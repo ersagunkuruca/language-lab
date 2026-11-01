@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { book as ledgerBook } from "./ledger.ts";
 import { book as chaptersBook } from "./chapters.ts";
 
-const root = join(import.meta.dirname, "../.."), lab = join(root, "projectional/cli/lab.ts");
+const root = join(import.meta.dirname, "../.."), lab = join(root, "ters/cli/lab.ts");
 const dir = mkdtempSync(join(tmpdir(), "bench-native-"));
 const cc = process.env.CC ?? "cc";
 
@@ -50,7 +50,7 @@ process.exitCode = wasi.start(m);
 
 const quiet = { cwd: dir, stdio: ["ignore", "ignore", "ignore"] as ["ignore", "ignore", "ignore"] };
 const commands = (name: string): Record<string, string[]> => {
-  const example = join(root, "projectional/examples", name);
+  const example = join(root, "ters/examples", name);
   execFileSync("node", [lab, "native", example, "-o", join(dir, name)], quiet);
   execFileSync("node", [lab, "compile", example, "-o", join(dir, `${name}.mjs`)], quiet);
   execFileSync("node", ["wasi.ts", name, join(dir, `${name}.wasm`)], { ...quiet, cwd: join(root, "compiler") });

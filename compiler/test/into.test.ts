@@ -9,11 +9,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { CONS, NIL, PAIR_V } from "../../projectional/src/lang/std.ts";
-import { B } from "../../projectional/src/prelude.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { CONS, NIL, PAIR_V } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $arrayOf, $fromList, $toList } from "../src/runtime.js";
 

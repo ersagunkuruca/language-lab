@@ -5,7 +5,7 @@ node editors, Houdini, Max/MSP, Unity Shader Graph, World Machine and many
 more. The same complaints come up about all of them. This note lists the
 ones that matter for our graph view, says what the usual fixes are and where
 they come from, and says what we do. The graph code is
-`projectional/editor/typedGraph.ts` (what to draw), `editor/graphLayout.ts`
+`editor/typedGraph.ts` (what to draw), `editor/graphLayout.ts`
 (where things go and how wires cross; plain geometry, no DOM, unit-tested in
 `test/graphLayout.test.ts`) and `editor/canvas.ts` (the window onto it).
 

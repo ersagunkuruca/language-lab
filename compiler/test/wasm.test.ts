@@ -3,14 +3,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Aborted, bool, fromList, makeRunner, runProgram, toList, type Value, type World } from "../../projectional/src/lang/run.ts";
-import { TRUE } from "../../projectional/src/lang/std.ts";
-import { norm } from "../../projectional/src/lang/int.ts";
+import { Aborted, bool, fromList, makeRunner, runProgram, toList, type Value, type World } from "../../ters/src/lang/run.ts";
+import { TRUE } from "../../ters/src/lang/std.ts";
+import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
-import { nodeWorld } from "../../projectional/src/lang/world.ts";
+import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -248,11 +248,11 @@ const bigPairs = bigs.flatMap((a, i) => [[a, bigs[(i * 7 + 3) % bigs.length]], [
 
 // BACKLOG C49: a fold over characters named by a let first is fused too.
 test("a fold over characters named by a let first walks the text in WebAssembly, with no list", async () => {
-  const { Lang } = await import("../../projectional/src/lang/dsl.ts");
-  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
-  const { base, baseNames } = await import("../../projectional/src/lang/load.ts");
-  const { infer } = await import("../../projectional/src/lang/infer.ts");
-  const { CONS, INT_OPS, NIL, S, TEXT_OPS } = await import("../../projectional/src/lang/std.ts");
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { base, baseNames } = await import("../../ters/src/lang/load.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { CONS, INT_OPS, NIL, S, TEXT_OPS } = await import("../../ters/src/lang/std.ts");
   const k = new Lang(LIBRARY.code);
   const count = k.def("count");
   k.define(count, k.fn(["t"], (t) => k.let("cs", k.call(TEXT_OPS.characters, k.call(S.concat, t, k.lit(""))), (cs) => k.fold(cs, [

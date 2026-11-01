@@ -1,7 +1,7 @@
 // A list named first and then walked (BACKLOG C49): `let xs = range(n)`
 // and then `fold xs` built the list and walked it, where `fold range(n)`
 // is a counted loop with no list. The loops are chosen from what made the
-// fold's input (projectional/src/lang/represent.ts, `foldPlan`; the
+// fold's input (ters/src/lang/represent.ts, `foldPlan`; the
 // scalar profile's fold over `characters`), so a let whose value is such a
 // list, with no effects in what it's made from, and whose name is used
 // once where it runs at most once (not inside a function, nor in a fold's
@@ -11,9 +11,9 @@
 // at most once (Peyton Jones and Marlow, "Secrets of the Glasgow Haskell
 // Compiler inliner", JFP 2002), kept to the lists a fold or fusion looks for.
 
-import { subtree, type Code, type Id, type NodeOf } from "../../projectional/src/model.ts";
-import type { Info } from "../../projectional/src/lang/infer.ts";
-import { STORAGES } from "../../projectional/src/lang/represent.ts";
+import { subtree, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
+import { STORAGES } from "../../ters/src/lang/represent.ts";
 
 const MAKERS = new Set<Id>(STORAGES.flatMap((s) => (s.meaning ? [s.meaning] : [])));
 

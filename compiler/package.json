@@ -2,7 +2,7 @@
   "name": "compiler",
   "private": true,
   "type": "module",
-  "description": "Compiles the typed core of projectional/ to JavaScript, guided by effect types",
+  "description": "Compiles the typed core of ters/ to JavaScript, guided by effect types",
   "scripts": {
     "build": "node build.ts",
     "test": "node --test test/*.test.ts",

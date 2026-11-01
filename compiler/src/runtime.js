@@ -2,7 +2,7 @@
 // compiler can decide before running is already in the generated code, so
 // this file only holds what has to happen at run time.
 //
-// Values have the same shape as in the evaluator (projectional/src/lang/
+// Values have the same shape as in the evaluator (ters/src/lang/
 // run.ts): numbers, strings, functions, and data as { tag, fields }, so the
 // two can be compared directly and can call each other.
 
@@ -124,11 +124,11 @@ export function $eq(a, b) {
   return true;
 }
 
-// Int and text (projectional/src/lang/int.ts, text.ts), and the std
+// Int and text (ters/src/lang/int.ts, text.ts), and the std
 // builtins compiled code calls by id.
-export * as $int from '../../projectional/src/lang/int.ts';
-export * as $text from '../../projectional/src/lang/text.ts';
-import { CELL_OPS, INT_OPS, STD_IMPL, STD_MANY } from '../../projectional/src/lang/std.ts';
+export * as $int from '../../ters/src/lang/int.ts';
+export * as $text from '../../ters/src/lang/text.ts';
+import { CELL_OPS, INT_OPS, STD_IMPL, STD_MANY } from '../../ters/src/lang/std.ts';
 
 // Arrays (std.ts ARRAY_OPS, C30d): views on a buffer with free room at
 // both ends, the same as the evaluator's (std.ts ArrayView).
@@ -141,8 +141,8 @@ export const $many = { ...STD_MANY, [CELL_OPS.readAt]: readAt };
 export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
 // A Float64 made a whole number is a conversion: it must be finite (L125c).
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
-export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
-import { showValue, compareValues, ORDER_VALUES } from '../../projectional/src/lang/run.ts';
+export { setPath as $setPath } from '../../ters/src/lang/records.ts';
+import { showValue, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
 export const $showAny = performed((v, names) => showValue(v, null, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
@@ -153,10 +153,10 @@ export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a,
 // them has a character past the basic plane.
 export const $ORDER = ORDER_VALUES;
 export const $compareN = performed(compareValues);
-import { numberOrder } from '../../projectional/src/lang/run.ts';
+import { numberOrder } from '../../ters/src/lang/run.ts';
 export const $numberOrder = (a, b) => (a - a !== 0 || b - b !== 0 ? $stop(OVERFLOW) : numberOrder(a, b));
 export const $intOrder = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
-import { less as textLess } from '../../projectional/src/lang/text.ts';
+import { less as textLess } from '../../ters/src/lang/text.ts';
 export const $textOrder = (a, b) => {
   if (a === b) return 0;
   for (let i = 0, n = Math.min(a.length, b.length); i < n; i++) {
@@ -201,8 +201,8 @@ export const $outOfFuel = (e) => e === OUT;
 // How many calls of definitions with a heap copy are on JavaScript's stack
 // (run.ts keeps it, so a page's update starts where it was even when one
 // is cut off). A catch that goes on puts back what it was at its try.
-export { depth as $rec } from '../../projectional/src/lang/run.ts';
-import { depth as $rec } from '../../projectional/src/lang/run.ts';
+export { depth as $rec } from '../../ters/src/lang/run.ts';
+import { depth as $rec } from '../../ters/src/lang/run.ts';
 // Runs a heap copy: each yield names a heap copy to call and its arguments,
 // whose answer (or exception) goes back in where it yielded. The calls
 // waiting are an array here, not frames on the stack.
@@ -314,7 +314,7 @@ export function $one(results) {
 }
 // Folds over nested data (a rose tree's List Tree): the trees inside a
 // field, and the field rebuilt from their folded values.
-export { spread as $spread } from '../../projectional/src/lang/nested.ts';
+export { spread as $spread } from '../../ters/src/lang/nested.ts';
 export const $self = (v) => ({ children: [v], rebuild: (r) => r[0] });
 // With Choice: every combination of the children's folded values.
 export function* $foldNested(fold, part) {
@@ -342,10 +342,10 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // two shapes of operation buy (Koka and Effekt compile tail-resumptive and
 // abortive handlers the same way).
 
-import { Aborted, OutOfSteps, spendStep } from '../../projectional/src/lang/run.ts';
-import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../projectional/src/lang/std.ts';
-import { CONSOLE, FILES, NETWORK } from '../../projectional/src/lang/types.ts';
-import { seededGenerator, worldRandom } from '../../projectional/src/lang/random.ts';
+import { Aborted, OutOfSteps, spendStep } from '../../ters/src/lang/run.ts';
+import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
+import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
+import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
 export { Aborted as $Aborted };
 
 const handlers = [];
@@ -508,7 +508,7 @@ export function* $handleLG(effect, later, ops, answers, escapes, body, done = nu
   return yield* run(undefined);
 }
 
-// `seeded`: Random answered from a generator (projectional/src/lang/random.ts,
+// `seeded`: Random answered from a generator (ters/src/lang/random.ts,
 // the evaluator's too, so both give the same numbers), around a computation
 // with one result or with Choice.
 const draws = (seed) => { const g = seededGenerator(seed); return { [RANDOM_OP]: () => g.next() }; };
@@ -517,7 +517,7 @@ export const $seededS = (seed, body) => $handleS(RANDOM, draws(seed), {}, body);
 
 // ---- the world ---------------------------------------------------------------
 // The world effects' one handler. A program compiled for the command line
-// sets Node's (projectional/src/lang/world.ts); without one, the
+// sets Node's (ters/src/lang/world.ts); without one, the
 // operations abort saying so. Failures are an Abort where they were called.
 
 let world = {};
@@ -557,7 +557,7 @@ export const $io = {
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells, Pending, listEdits, pathValue, stepsOf } from '../../projectional/src/lang/cells.ts';
+import { Cells, Pending, listEdits, pathValue, stepsOf } from '../../ters/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }
@@ -584,9 +584,9 @@ export function $optional(f) { for (const x of f()) return { tag: SOME, fields: 
 // evaluator's META). Making these directions compile too is the next stage
 // (docs/design/targets/COMPILER.md).
 
-import { META, makeRunner } from '../../projectional/src/lang/run.ts';
-import { relate, satisfiable, toValue } from '../../projectional/src/lang/relate.ts';
-import { ownerOfTypeParts } from '../../projectional/src/model.ts';
+import { META, makeRunner } from '../../ters/src/lang/run.ts';
+import { relate, satisfiable, toValue } from '../../ters/src/lang/relate.ts';
+import { ownerOfTypeParts } from '../../ters/src/model.ts';
 
 export function $loadProgram(code, divergent) {
   let runner;

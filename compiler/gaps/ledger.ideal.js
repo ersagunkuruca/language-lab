@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ledger, written by hand: the JavaScript the compiler should aim to
-// produce for projectional/examples/ledger. Same program, same output, same
+// produce for ters/examples/ledger. Same program, same output, same
 // exit codes, same algorithms (totals kept in a list and updated in place
 // of a copy, insertion sort). What differs is only what a compiler could
 // decide on its own; each difference is marked with the gap it stands for

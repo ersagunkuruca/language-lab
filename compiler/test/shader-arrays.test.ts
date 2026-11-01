@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeRunner } from "../../projectional/src/lang/run.ts";
+import { makeRunner } from "../../ters/src/lang/run.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";

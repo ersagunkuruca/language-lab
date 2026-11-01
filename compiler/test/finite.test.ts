@@ -11,13 +11,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
-import { Aborted, makeRunner } from "../../projectional/src/lang/run.ts";
-import { ABORT_OP, S } from "../../projectional/src/lang/std.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import type { Id } from "../../projectional/src/model.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { Aborted, makeRunner } from "../../ters/src/lang/run.ts";
+import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 
 // Each definition takes two Float64s and shows its answer.

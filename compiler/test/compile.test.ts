@@ -8,14 +8,14 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { runMain, makeRunner, fromList, toList, type Value } from "../../projectional/src/lang/run.ts";
-import type { Id } from "../../projectional/src/model.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { CONS, FALSE, NIL, S, SHOW_ANY, TRUE } from "../../projectional/src/lang/std.ts";
-import { NUMBER } from "../../projectional/src/lang/types.ts";
-import { B } from "../../projectional/src/prelude.ts";
+import { runMain, makeRunner, fromList, toList, type Value } from "../../ters/src/lang/run.ts";
+import type { Id } from "../../ters/src/model.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { CONS, FALSE, NIL, S, SHOW_ANY, TRUE } from "../../ters/src/lang/std.ts";
+import { NUMBER } from "../../ters/src/lang/types.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { compileProgram, load } from "../src/program.ts";
 import { $setPrint } from "../src/runtime.js";
@@ -51,7 +51,7 @@ for (const name of ["queens", "algebra", "relations", "backwards", "calculus", "
 // A program that runs relations at run time carries the interpreter's copy
 // of itself: what it reaches, not every library module.
 test("backwards: the compiled program's own copy holds what it reaches, not the html module", async () => {
-  const { HTML_MODULE } = await import("../../projectional/src/lang/library.ts");
+  const { HTML_MODULE } = await import("../../ters/src/lang/library.ts");
   const source = compileProgram("backwards", ["main"], runtime);
   assert.match(source, /\$loadProgram\(/);
   const unused = HTML_MODULE.code.defs.filter((d) => source.includes(JSON.stringify(d)));
@@ -162,7 +162,7 @@ async function compiledDefs(k: Lang, exports: string[], file: string, steps?: bo
 }
 
 test("partial builtins give their answer or none, and `first` over one runs no search (GAPS.md G24)", async () => {
-  const { INT_OPS: I, TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   // the number in a text, or -1
   const number = k.def("number");
@@ -183,8 +183,8 @@ test("partial builtins give their answer or none, and `first` over one runs no s
 });
 
 test("Bool parameters and tests passed to keep are JS booleans, and boxed where used as data (GAPS.md G3)", async () => {
-  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
-  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const { TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
   const k = new Lang(LIBRARY.code);
   const keep = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "keep")!;
   const pick = k.def("pick");
@@ -219,8 +219,8 @@ test("Bool parameters and tests passed to keep are JS booleans, and boxed where 
 });
 
 test("a step straight over split or characters, with nothing after it, still takes its step (GAPS.md M1)", async () => {
-  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
-  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const { TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
   const k = new Lang(LIBRARY.code);
   const keep = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "keep")!;
   const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
@@ -238,8 +238,8 @@ test("a step straight over split or characters, with nothing after it, still tak
 });
 
 test("compare at its type gives the evaluator's order: numbers, texts past the basic plane, big Ints, cases, records and lists (GAPS.md M4)", async () => {
-  const { COMPARE, ORDER_V, PAIR_V } = await import("../../projectional/src/lang/std.ts");
-  const { STRING, INT } = await import("../../projectional/src/lang/types.ts");
+  const { COMPARE, ORDER_V, PAIR_V } = await import("../../ters/src/lang/std.ts");
+  const { STRING, INT } = await import("../../ters/src/lang/types.ts");
   const k = new Lang();
   const Shape = k.type("Shape", [], [["circle", [["radius", () => k.tref(NUMBER)]]], ["square", [["side", () => k.tref(INT)]]], ["named", [["label", () => k.tref(STRING)]]]]);
   // generic: a copy for each type it is used at
@@ -297,7 +297,7 @@ test("running out of fuel in plain code inside a search fails that branch only, 
 });
 
 test("a list from split matched and handed back to its own definition is the array and an index (GAPS.md G23)", async () => {
-  const { INT_OPS: I, TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   // the lines that aren't empty: a loop and holes
   const full = k.def("full");
@@ -397,8 +397,8 @@ test("outside a page, only calls that can be under a `with fuel` spend (GAPS.md 
 });
 
 test("a fold whose answer is one record carries its fields in locals, and builds it once (GAPS.md G13 again)", async () => {
-  const { INT } = await import("../../projectional/src/lang/types.ts");
-  const { INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const { INT } = await import("../../ters/src/lang/types.ts");
+  const { INT_OPS: I } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const deal = k.type("deal", [], [["hands", [["mine", () => k.tref("std.list", k.tref(INT))], ["yours", () => k.tref("std.list", k.tref(INT))]]]]);
   const mine = deal.f["hands.mine"], yours = deal.f["hands.yours"];
@@ -456,7 +456,7 @@ test("a derivative of a function written in the program is compiled as its code,
 });
 
 test("a list from split taken apart by matches is an index into the array, with no cells (GAPS.md G23)", async () => {
-  const { TEXT_OPS: T, INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const { TEXT_OPS: T, INT_OPS: I } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   // the second field of a comma line, or "none"
   const second = k.def("second");
@@ -585,8 +585,8 @@ test("a function with one answer or none, all one record, leaves its fields for 
 });
 
 test("steps over a list run as one loop: no list between split, keep and length (GAPS.md G16)", async () => {
-  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
-  const { LIBRARY } = await import("../../projectional/src/lang/library.ts");
+  const { TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
   const k = new Lang(LIBRARY.code);
   const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
   const [keep, map, length] = [lib("keep"), lib("map"), lib("length")];
@@ -610,7 +610,7 @@ test("steps over a list run as one loop: no list between split, keep and length 
 });
 
 test("lists that are only walked stay the arrays split makes (GAPS.md G21)", async () => {
-  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   // A fold from the end, so the order of the items shows.
   const rev = k.def("rev");
@@ -643,7 +643,7 @@ test("lists that are only walked stay the arrays split makes (GAPS.md G21)", asy
 });
 
 test("a list that is consed onto and only walked is kept from the other end (GAPS.md G21)", async () => {
-  const { TEXT_OPS: T } = await import("../../projectional/src/lang/std.ts");
+  const { TEXT_OPS: T } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const rev = k.def("rev");
   k.define(rev, k.fn(["xs"], (xs) => k.fold(xs, [
@@ -688,7 +688,7 @@ test("a fold over a million items compiles to a loop", async () => {
 });
 
 test("a fold that only adds Int items runs from the front, with no spine (GAPS.md G15)", async () => {
-  const { INT_OPS: I } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   // How many items are below 3: `if item < 3 then rest + 1 else rest`.
   const small = k.def("small");
@@ -889,8 +889,8 @@ test("$eq compares long lists without the JS stack", async () => {
 });
 
 test("Int, text and set compile to what the evaluator does", async () => {
-  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../projectional/src/lang/std.ts");
-  const { INT, STRING } = await import("../../projectional/src/lang/types.ts");
+  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../ters/src/lang/std.ts");
+  const { INT, STRING } = await import("../../ters/src/lang/types.ts");
   const k = new Lang();
   const orNone = (body: () => string) => k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")));
   const fact = k.def("factorial");
@@ -921,7 +921,7 @@ test("Int, text and set compile to what the evaluator does", async () => {
 });
 
 test("comes before, against a constant below the surrogates, is JS's < and still orders by code point", async () => {
-  const { TEXT_OPS: T, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const { TEXT_OPS: T, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const inputs = ["", "a", "m", "z", "", "￿", "𝄞", "ma", "퟿"];
   const main = k.def("main");
@@ -942,7 +942,7 @@ test("comes before, against a constant below the surrogates, is JS's < and still
 // characters(t) runs on t's characters from the end, without the list,
 // unless an arm reads the rest of the list itself.
 test("a fold over characters(t) runs on the text, and splits it as characters does", async () => {
-  const { TEXT_OPS: T, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const { TEXT_OPS: T, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const inputs = ["", "abc", "a𝄞b", "\uD834", "\uDD1Ex\uD834", "👋👋", "\uD834\uD834\uDD1E"];
   const marks = k.def("marks");
@@ -969,7 +969,7 @@ test("a fold over characters(t) runs on the text, and splits it as characters do
 });
 
 test("a fold over range(n) counts down from n − 1, without the list, for Float64 and Int", async () => {
-  const { INT_OPS: I, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const marks = (name: string, range: Id, raw: boolean) => {
     const d = k.def(name);
@@ -999,7 +999,7 @@ test("a fold over range(n) counts down from n − 1, without the list, for Float
 
 // BACKLOG C49: the same with the list named first, `let xs = range(n)`.
 test("a fold over a range named by a let first is a counted loop too, and a range used twice is still made", async () => {
-  const { INT_OPS: I, SHOW_ANY } = await import("../../projectional/src/lang/std.ts");
+  const { INT_OPS: I, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
   const k = new Lang();
   const sum = (xs: Id) => k.fold(xs, [
     { variant: NIL, names: [], body: () => k.int(0) },
@@ -1094,7 +1094,7 @@ test("a recursive let compiles: the helper calls itself and uses the inputs arou
 // it's off, is written into the array the audio runtime hands it, with no
 // list cells for its answer (P4a; #338's off switch had lost it, about 20%
 // of a block's time). Its samples are checked against the evaluator in
-// projectional/test/audio.test.ts.
+// ters/test/audio.test.ts.
 test("the pedal's block function writes into an array, and gives the same samples either way", async () => {
   const p = load("pedal");
   const dir = mkdtempSync(join(tmpdir(), "pedal-"));

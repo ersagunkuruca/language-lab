@@ -6,9 +6,9 @@ An LLM reads, changes, runs and tests a Ters program through the
 [Model Context Protocol](https://modelcontextprotocol.io). It is also how we
 find out what working on Ters is like for an LLM.
 
-    lab mcp [program]        # or: node projectional/mcp/server.ts [program]
+    lab mcp [program]        # or: node ters/mcp/server.ts [program]
 
-For Claude Code: `claude mcp add ters -- node /path/to/projectional/cli/lab.ts mcp`.
+For Claude Code: `claude mcp add ters -- node /path/to/ters/cli/lab.ts mcp`.
 
 ## Principles
 
@@ -63,7 +63,7 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 
 `find` picks a part inside `at` by its text, copied from `view` (the `#id`s
 in it are ignored, `*` reads as `·`). Each edit is one of the editor's own
-gestures (`editor/typed.ts`, `src/lang/toplevel.ts`); it is kept only if the
+gestures (`editor/typed.ts`, `ters/src/lang/toplevel.ts`); it is kept only if the
 program has no more type errors than before, then saved, and the answer is
 the changed lines of the definition or the reason it was refused. An edit to
 an otherwise that stands for several cases is made in each (the editor's

@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { makeRunner, type Value } from "../../projectional/src/lang/run.ts";
+import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";

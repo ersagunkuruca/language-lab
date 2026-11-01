@@ -17,7 +17,7 @@ weekly round is due.
 
 ## Round 1: calc (2026-10-22)
 
-`projectional/examples/calc` is a calculator for whole numbers of any size.
+`ters/examples/calc` is a calculator for whole numbers of any size.
 It reads lines from standard input. A line can be an expression with
 `+ - * / % ^` and parentheses, `let name = expression`, or `? expression`,
 which shows how the expression was read with every operation in
@@ -26,7 +26,7 @@ standard error, and the session carries on. The exit code is 1 if any line
 failed.
 
 ```
-$ printf 'let x = 2 ^ 100\nx * x - 1\n? -2 ^ 2 + 3 * (4 - 5)\n7 / 0\n' | node projectional/cli/lab.ts run projectional/examples/calc
+$ printf 'let x = 2 ^ 100\nx * x - 1\n? -2 ^ 2 + 3 * (4 - 5)\n7 / 0\n' | node ters/cli/lab.ts run ters/examples/calc
 x = 1267650600228229401496703205376
 1606938044258990275541962092341162602522202993782792835301375
 ((-(2 ^ 2)) + (3 * (4 - 5)))
@@ -294,7 +294,7 @@ picks, typed values, the case and field forms, renames, *Add a value
 here*), then *Save file* and `examples/unpack.ts`. Nothing was edited by
 hand. What the editor made hard is listed at the end.
 
-`projectional/examples/countdown` is the Countdown numbers game: every way
+`ters/examples/countdown` is the Countdown numbers game: every way
 to reach a target from some of the numbers with `+ − × ÷`, each number used
 at most once. The search is Graham Hutton's, from "The countdown problem",
 *Journal of Functional Programming* 12(6), 2002
@@ -303,7 +303,7 @@ which skips answers that only differ by commutativity or by 1. For 765 from
 1, 3, 7, 10, 25 and 50 it finds his 49 solutions.
 
 ```
-$ node projectional/cli/lab.ts run projectional/examples/countdown | head -2
+$ node ters/cli/lab.ts run ters/examples/countdown | head -2
 (((3 − 1) + 7) × (10 + (25 + 50)))
 (((3 − 1) + 7) × ((10 + 25) + 50))
 ```
@@ -453,7 +453,7 @@ value here* plus a rename gave `main` its named list. What got in the way:
 ## Round 2, second program: chapters (2026-10-22)
 
 Countdown was all `Choice` and no world. The second program is the other
-kind: plain text work that ends in files. `projectional/examples/chapters`
+kind: plain text work that ends in files. `ters/examples/chapters`
 splits a Markdown book into one file per chapter (at each `# ` heading),
 writes `contents.md`, a list of them with links and word counts, and adds a
 line per chapter to `chapters.log`. It reads with `read file`, writes with
@@ -462,7 +462,7 @@ missing or has no text. `main` handles that `Abort` and turns it into a
 message and exit code 1 (2 for a wrong command line).
 
 ```
-$ mkdir out && node projectional/cli/lab.ts run projectional/examples/chapters book.md out
+$ mkdir out && node ters/cli/lab.ts run ters/examples/chapters book.md out
 wrote 4 chapters and contents.md to out (36 words)
 $ cat out/contents.md
 # Contents
@@ -672,7 +672,7 @@ eight alternating runs against main, noisy).
 ### Running it backwards
 
 Not a compiler gap, but this round found it. The check that runs every
-example's functions backwards (`projectional/test/agreement.test.ts`) fails on
+example's functions backwards (`ters/test/agreement.test.ts`) fails on
 three of chapters' text functions in `relate.ts`:
 
 1. `words` backwards from 0 overflows the stack. (`words` is
@@ -686,14 +686,14 @@ bound this search. These went to `relate.ts`, not to the compiler, and are fixed
 
 ## Round 3: ledger (2026-10-23)
 
-`projectional/examples/ledger` reads a file of money entries, one per line
+`ters/examples/ledger` reads a file of money entries, one per line
 (`date,account,cents,memo`; blank lines and `#` comments skipped), and
 prints totals by account, largest first, totals by month, the smallest
 entry and the grand total. A line that doesn't have four fields, or whose
 amount isn't a whole number of cents, stops the run with its line number.
 
 ```
-$ node projectional/cli/lab.ts run projectional/examples/ledger ledger.csv
+$ node ters/cli/lab.ts run ters/examples/ledger ledger.csv
 By account
 salary             7000.00 × 2
 coffee               -4.50 × 1
@@ -881,7 +881,7 @@ What got in the way, roughly in order of cost:
 
 ## Round 4: the pedal (2026-10-24)
 
-`projectional/examples/pedal` is a guitar pedal (AUDIO.md). Each block of
+`ters/examples/pedal` is a guitar pedal (AUDIO.md). Each block of
 128 samples goes through four steps:
 
 1. Haar's split into a slow band and a fast band, written as lifting steps.
@@ -894,7 +894,7 @@ It is the first program of the rounds that has to keep up with a clock:
 
 Unlike rounds 2 and 3, the pedal was not built in the editor: a script
 wrote it with the TypeScript DSL (`Lang`) and saved it
-(`projectional/gen-pedal.tmp.ts`, committed by accident in #332 and
+(`ters/gen-pedal.tmp.ts`, committed by accident in #332 and
 removed later; it is in the history). So this round says nothing about
 what the editor makes hard (REVIEW-2026-10-26.md §3).
 
@@ -1054,7 +1054,7 @@ rounding (`$clean`, about 6% of the time) to be cheaper or not needed.
 
 ## Round 5: routes (2026-10-29)
 
-`projectional/examples/routes` reads a file of roads between towns and
+`ters/examples/routes` reads a file of roads between towns and
 answers questions about them. It prints how many towns, roads and parts
 there are, the length of the cheapest network that joins every town that
 can be joined (Kruskal's method, 1956, over a union-find forest joined by
@@ -1063,7 +1063,7 @@ Then, for each `trip` line, it prints the shortest route (Dijkstra's
 method, 1959), and for each `near` line, the towns within so many km.
 
 ```
-$ node projectional/cli/lab.ts run --as-defined projectional/examples/routes projectional/examples/routes/roads.txt
+$ node ters/cli/lab.ts run --as-defined ters/examples/routes ters/examples/routes/roads.txt
 7 towns, 8 roads, 2 parts
 cheapest network: 570 km in 5 roads
 farthest from Arden: Eskar, 460 km

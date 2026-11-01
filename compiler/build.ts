@@ -1,4 +1,4 @@
-// Compiles the example programs of projectional/examples to out/*.js.
+// Compiles the example programs of ters/examples to out/*.js.
 // Run: node build.ts   (or npm run build)
 
 import { writeFileSync } from "node:fs";

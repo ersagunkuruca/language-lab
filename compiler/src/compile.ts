@@ -1,4 +1,4 @@
-// A compiler from the typed core (projectional/src/lang) to JavaScript.
+// A compiler from the typed core (ters/src/lang) to JavaScript.
 //
 // The evaluator (run.ts) treats every expression as a lazy stream of
 // results, because any of them might be a Choice. The compiler doesn't have
@@ -25,31 +25,31 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
-import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
-import { intLit } from "../../projectional/src/lang/int.ts";
-import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
-import type { Names } from "../../projectional/src/presentation.ts";
-import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { fieldShapes, shapeOf, type Shape } from "../../projectional/src/lang/nested.ts";
-import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../projectional/src/lang/std.ts";
-import { fieldPath, placePath } from "../../projectional/src/lang/records.ts";
-import { planSolve } from "../../projectional/src/lang/solve.ts";
-import { oneAnswer as solvedOnce } from "../../projectional/src/lang/modes.ts";
+import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
+import { intLit } from "../../ters/src/lang/int.ts";
+import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import type { Names } from "../../ters/src/presentation.ts";
+import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
+import { ALGEBRAIC_V, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
+import { fieldPath, placePath } from "../../ters/src/lang/records.ts";
+import { planSolve } from "../../ters/src/lang/solve.ts";
+import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
 import { modeCompiler, type ModeEmit } from "./modes.ts";
 import { INLINE, jsKind } from "./builtins.ts";
-import { CORE, MODULES } from "../../projectional/src/lang/library.ts";
-import { pointsAt } from "../../projectional/src/lang/modules.ts";
-import { foldPlan } from "../../projectional/src/lang/represent.ts";
-import { composeLinear, linearMap, type LinearMap } from "../../projectional/src/lang/linear.ts";
-import { add as addCost, less, steps as costSteps } from "../../projectional/src/lang/cost.ts";
+import { CORE, MODULES } from "../../ters/src/lang/library.ts";
+import { pointsAt } from "../../ters/src/lang/modules.ts";
+import { foldPlan } from "../../ters/src/lang/represent.ts";
+import { composeLinear, linearMap, type LinearMap } from "../../ters/src/lang/linear.ts";
+import { add as addCost, less, steps as costSteps } from "../../ters/src/lang/cost.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fuseHandlers } from "./handlers.ts";
-import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
-import { stageProgram } from "../../projectional/src/lang/stage.ts";
+import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
 import { solvesAsCalls } from "./results.ts";
-import { infer, type Info } from "../../projectional/src/lang/infer.ts";
+import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
 const NO_LAT: Set<number> = new Set();
@@ -105,7 +105,7 @@ function reachedFromExports(code: Code, names: Names, exports: string[]): Code {
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
   // The generic + resolved to each type's own operation first
-  // (projectional/src/lang/arith.ts): nothing here sees a generic one.
+  // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
   // derivative(f) and gradient(f) of a function written right there become
   // the code of its derivative (derive.ts), checked again, as in the scalar
@@ -2223,10 +2223,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     //  - Otherwise (trees), keep an explicit stack of values whose children
     //    are being folded.
     //  - When a field holds the type nested in a container (a rose tree's
-    //    List Tree), `parts` lists the trees inside it (projectional/src/
+    //    List Tree), `parts` lists the trees inside it (ters/src/
     //    lang/nested.ts) and puts their results back in a copy of it.
     // How it loops is the fold job of the storage its input has
-    // (projectional/src/lang/represent.ts, `foldPlan`).
+    // (ters/src/lang/represent.ts, `foldPlan`).
     function foldLoop(n: NodeOf<"fold">): string {
       const plan = foldPlan(code, n);
       switch (plan.rep.jobs.fold) {

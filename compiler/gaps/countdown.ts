@@ -8,7 +8,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { makeRunner, fromList, toList, type Value } from "../../projectional/src/lang/run.ts";
+import { makeRunner, fromList, toList, type Value } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar, type DType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";

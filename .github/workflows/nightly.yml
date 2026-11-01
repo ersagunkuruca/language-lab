@@ -31,13 +31,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: projectional/package-lock.json
+          cache-dependency-path: ters/package-lock.json
       - if: steps.changed.outputs.run == 'yes'
         run: npm ci
-        working-directory: projectional
+        working-directory: ters
       - if: steps.changed.outputs.run == 'yes'
         name: Everything
-        run: node projectional/test/affected.ts --all
+        run: node ters/test/affected.ts --all
       - if: steps.changed.outputs.run == 'yes'
         name: Move the good tag
         run: |
