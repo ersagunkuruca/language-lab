@@ -18,14 +18,13 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 
 ## Next up
 
-Tidied 2026-10-30. The Compiler lane is idle until Ersagun asks (token
-saving, 2026-10-27).
+Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Idle. Left on I29: what only a handler calls; E103/I40 wait on the held E133 design |
-| C Compiler and targets | "Compiler lane" | C30d (lists as two-ended arrays: the chooser, and the array ends in WASM and C), C63 (hash table), C64, C55 (Ersagun's "take 20 more", 2026-10-31) |
-| L Language and library | "Language lane" | C30d language side (#737), Inbox triage (#750), L46 (#763), the T7 note and I82 (#764), I91 (#765), I81 (#766), the L69 note (#767), the L43 grades note (#768), L43b blade masks (#770), T7a tests in the language (#771), T7b accepted answers (#772) and L97e complex laws (#775) and Ersagun's grades answer in GRADES.md (#776) L43e's first step, a part read outside the mask refused (#777), T7c's local half, results kept by hash (#778), I98, Constructions' `is picked` opening with a contradiction (#790), done. Now L118, a faster evaluator (Ersagun 2026-10-31): L118a table product as a jet (#794); L118b measured and stopped (#796); L118 stopped by Ersagun, L118c kept for later (#801); I100, the palette offering fillings that break a definition with results (this PR) (Ersagun's 20 + 20 more, 2026-10-31) |
+| E Editor | "Editor lane" | I101, I102, I103, I104 (QA12), I99 (drag a built point), T7d (the editor's tick and accept button), L43d (the editor names a value's mask) |
+| C Compiler and targets | "Compiler lane" | L41 (table products expanded at compile time), L43c (store only the masked parts), C40's next step, C66 on shaders, C55, C63, C64's next step |
+| L Language and library | "Language lane" | Next up for all lanes (this PR), L43e (next step of masks as types), L38 (Int from a parameter's type alone), L54b, L108d (representation laws), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host). Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
