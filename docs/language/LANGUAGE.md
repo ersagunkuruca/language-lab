@@ -238,7 +238,14 @@ results, given as a tuple, go straight on to the next function's inputs
 (`times(sum and difference(5, 2))`). The checker does it by unifying the
 one value with the tuple of the inputs' types; `src/lang/spread.ts` takes
 the tuple apart before anything runs, so the evaluator and every compiler
-target see an ordinary call. Standard ML is the prior art (every function
+target see an ordinary call. The same holds for a function given as a
+value (L137): a function of two inputs fits where a function of one pair
+goes, and the other way round, so `map(pairs, times)`, `apply(times, p)`
+and a record's function field all take it. The checker lets the two
+shapes meet while it matches a call's inputs and marks the input, and
+spread.ts wraps it where it is given (`p ↦ times(p.first, p.second)`, or
+`(x, y) ↦ f(tuple(x, y))`); a meeting deeper inside other data (a list of
+functions) is still refused. Standard ML is the prior art (every function
 takes one value, which may be a tuple). A function can name its result
 ports (L128b): a lambda's `results` are binders, one per part, and its body
 gives a tuple of that many (one result is the value itself), so

@@ -14,7 +14,9 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
-import { ARITH, tuplePart, tupleVariant } from "../../ters/src/lang/std.ts";
+import { ARITH, tuplePart, tupleType, tupleVariant } from "../../ters/src/lang/std.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { INT } from "../../ters/src/lang/types.ts";
 import { showType } from "../../ters/src/lang/types.ts";
 import { compile } from "../src/compile.ts";
 
@@ -70,4 +72,43 @@ test("a tuple of the wrong shape, or a value that isn't one, says what the input
   assert.equal(msgs.length, 2, msgs.join("\n"));
   assert.match(msgs[0], /takes 2 inputs: given one, it needs \(a, a\) here, got \(.*, .*, .*\)/);
   assert.match(msgs[1], /takes 2 inputs: given one, it needs \(a, a\) here, got Text/);
+});
+
+// L137 (REVIEW-2026-11-01b §1): a function of two inputs given where a
+// function of one pair goes, and the other way round, wherever the callee
+// isn't known yet: apply, map, keep, a record's field.
+test("a function of two inputs and a function of one pair meet anywhere a function is given (L137)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const pair = (a: Id, b: Id) => k.call(tupleVariant(2), a, b);
+  const mul = def("times", () => k.fn(["a", "b"], (a, b) => k.call(ARITH.mul, a, b)));
+  const onPair = def("on pair", () => k.fn(["p"], (p) => k.call(ARITH.sub, k.call(tuplePart(2, 0), p), k.call(tuplePart(2, 1), p))));
+  const apply = def("apply", () => k.fn(["f", "p"], (f, p) => k.call(f, p)));
+  const both = def("both", () => k.fn(["f", "x", "y"], (f, x, y) => k.call(f, x, y)));
+  const Holder = k.type("Holder", [], [["holder", [["run", () => k.tfun([k.tref(tupleType(2), k.tref(INT), k.tref(INT))], k.tref(INT))]]]]);
+  def("use apply", () => k.fn(["x"], (x) => k.call(apply, mul, pair(x, k.int(3)))));
+  def("use map", () => k.thunk(() => k.call(lib("sum"), k.call(lib("map"), k.list(pair(k.int(2), k.int(3)), pair(k.int(4), k.int(5))), mul))));
+  def("use keep", () => k.thunk(() => k.call(lib("length"), k.call(lib("keep"), k.list(pair(k.int(2), k.int(3)), pair(k.int(5), k.int(4))), def("smaller first", () => k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b)))))));
+  def("use record", () => k.fn(["x"], (x) => k.call(k.call(Holder.f["holder.run"], k.call(Holder.v.holder, mul)), pair(x, k.int(2)))));
+  def("other way", () => k.fn(["x"], (x) => k.call(both, onPair, x, k.int(1))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const exports = ["use apply", "use map", "use keep", "use record", "other way"];
+  const js = compile(code, info, names, { runtime, exports });
+  const path = join(mkdtempSync(join(tmpdir(), "reshape-")), "reshape.js");
+  writeFileSync(path, js);
+  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const at = (n: string) => code.defs.find((d) => names[d] === n)!;
+  const first = (v: unknown) => (v && typeof v === "object" && Symbol.iterator in (v as object) ? [...(v as Iterable<unknown>)][0] : v);
+  const want: Record<string, [unknown[], unknown]> = { "use apply": [[4n], 12n], "use map": [[], 26n], "use keep": [[], 1n], "use record": [[7n], 14n], "other way": [[9n], 8n] };
+  for (const n of exports) {
+    const [args, w] = want[n];
+    const ev = first(r.call(r.value(at(n)), ...(args as never[])));
+    const co = typeof out[n] === "function" ? (out[n] as (...a: unknown[]) => unknown)(...args) : out[n];
+    assert.equal(String(ev), String(w), `evaluated ${n}`);
+    assert.equal(String(co), String(w), `compiled ${n}`);
+  }
 });

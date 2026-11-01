@@ -202,6 +202,12 @@ export class Subst {
   // The node being checked, for a want that comes from unifying (infer's
   // unifyAt sets it).
   site: Id = "";
+  // While a call's inputs are matched (infer.ts): a function of n ≥ 2
+  // inputs meets a function of one n-tuple (PORTS §1, L137). tupleOf names
+  // the tuple type; each meeting is counted in reshaped, and the call
+  // wraps the input where it happened.
+  tupleOf: ((n: number) => Id) | null = null;
+  reshaped = 0;
 
   clone(): Subst {
     const s = new Subst();
@@ -413,7 +419,15 @@ export class Subst {
       return;
     }
     if (a.t === "fn" && b.t === "fn") {
-      if (a.params.length !== b.params.length) throw new TypeError(`takes ${a.params.length} inputs, not ${b.params.length}`);
+      if (a.params.length !== b.params.length) {
+        const [one, many] = a.params.length === 1 ? [a, b] : [b, a];
+        if (!this.tupleOf || one.params.length !== 1 || many.params.length < 2 || many.params.length > 8) throw new TypeError(`takes ${a.params.length} inputs, not ${b.params.length}`);
+        this.unify(one.params[0], { t: "con", id: this.tupleOf(many.params.length), args: many.params });
+        this.reshaped++;
+        this.unify(a.ret, b.ret);
+        this.unifyRow(a.eff, b.eff);
+        return;
+      }
       a.params.forEach((x, i) => this.unify(x, b.params[i]));
       this.unify(a.ret, b.ret);
       this.unifyRow(a.eff, b.eff);
