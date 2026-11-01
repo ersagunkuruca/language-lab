@@ -34,6 +34,7 @@ import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { sameLines } from "../src/lang/modules.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
@@ -316,6 +317,9 @@ switch (command) {
       const t = p.info.typeOf.get(d);
       console.log(`${p.names[d] ?? d} : ${t ? showType(t, p.names) : "(a type)"}`);
     }
+    // Drafts the same as a library definition or another draft, by hash
+    // (SHARING.md §7): said, never merged, and not an error.
+    for (const l of sameLines(p.code, p.names, LIBRARY)) console.log(`same   ${l}`);
     // How main stores each type the program writes representations for:
     // the compiler's choice, never the program's (REPRESENTATIONS.md).
     const start = p.own.find((d) => p.names[d] === mainName);

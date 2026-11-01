@@ -18,6 +18,7 @@ import type { Comments, Names, Presentation, Style } from "../src/presentation.t
 import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { sameLines } from "../src/lang/modules.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
 import { showType } from "../src/lang/types.ts";
@@ -224,8 +225,11 @@ export class Session {
   }
 
   errors(): string {
-    if (!this.info.errors.length) return "ok";
-    return this.info.errors.map((e) => { const d = this.defOf(e.id); return `✗ ${d ? this.name(d) : "?"} #${this.id(e.id)}: ${e.message}`; }).join("\n");
+    // Drafts the same as a library definition or another draft (SHARING.md
+    // §7): said, never merged.
+    const same = sameLines(this.code, this.allNames, LIBRARY).map((l) => `= ${l}`);
+    if (!this.info.errors.length) return ["ok", ...same].join("\n");
+    return [...this.info.errors.map((e) => { const d = this.defOf(e.id); return `✗ ${d ? this.name(d) : "?"} #${this.id(e.id)}: ${e.message}`; }), ...same].join("\n");
   }
 
   // ---------------------------------------------------------------- editing
