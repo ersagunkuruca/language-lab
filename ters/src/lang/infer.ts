@@ -123,6 +123,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
   let signs: ReturnType<typeof signAnalysis> | undefined;
+  const builtinSearches = new Map<Id, boolean>();
   // Solves waiting on their givens' types (L38), and whether one turned out
   // to be in whole numbers, so the program is checked again with it so.
   const waiting: { solve: Id; givens: [Id, Type][] }[] = [];
@@ -700,8 +701,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               const k = code.nodes[f]?.kind;
               if (k === "def") return true;
               if (k === "variant" || k === "field") return false;
-              const sig = SIGS[f]?.(s.clone());
-              return !sig || (sig.t === "fn" && sig.eff.effs.includes(CHOICE));
+              // A builtin's own type says it, read once, on a Subst of its
+              // own: cloning the program's for it cost seconds (C67e).
+              if (!builtinSearches.has(f)) { const sig = SIGS[f]?.(new Subst()); builtinSearches.set(f, !sig || (sig.t === "fn" && sig.eff.effs.includes(CHOICE))); }
+              return builtinSearches.get(f)!;
             };
             if (signs.totalCall(id, searches)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
           }
