@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I49 | A selected call node is resized by dragging its corner, never smaller than what it shows; two presses on the corner give it its own size again; kept in layout.json | #864 |
 | I112 | The editor and its pages are titled Ters (page title, the brand, Learn, tutorial, guide, shaders) | #863 |
 | L69c | A definition whose host is missing says it needs its host; the Program tab shows the host file lab hosts writes | #860 |
 | I40 | The palette on physics main's new step: 2.9 → 1.1 s, the same 961 offers (Subst.trial reads through instead of copying; one whole check per effect mix) | #846 |

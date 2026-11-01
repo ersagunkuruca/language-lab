@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863) done; then I49 (resize a node), L125d's editor half (±∞), E133a (one copy of the nodes per palette), then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863), I49 (#864) done; then L125d's editor half (±∞), E133a (one copy of the nodes per palette), then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | L125c2 (WASM and C), L125e (niche representations), C63b (hash table), L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b (the inferred nonzero fact; asked Ersagun how a page shows no answer), L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done, L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -56,7 +56,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton. **Counted 2026-10-30 (editor lane):** 57 still empty in converter, dice, calculus, Mandelbrot and pedal. Two causes, neither a quick fix: (a) the first call's inputs are functions (`newton(f, f′, x)`, `field(…, view, …)`), **done in #703**: a port's box takes a definition's name as its function, so newton's helpers now open filled; (b) **views done in #761** (empty Runs in converter, dice, Tumble, Pig 47 → 28); **handlers done in #845**: each handler runs once in the dry run as if its event came (Tumble 24 → 17 empty, Pig 4 → 1); left: what runs only in a later state (a Tumble move in progress). Was: the call is inside a page part that runs later (`property("value", view(read(q)))`, a handler, an audio block), which main's trace never enters. Running main in a dry world (files kept in memory, no network) gets past converter's file read but fills none of these | QA-2026-10-28 L4 | P2 | M | step 1 done |
-| I49 | Resize a node by hand: "not now, but likely needed at some point" | Ersagun 2026-10-29 | P3 | S | |
 
 ### Speed of editing
 
