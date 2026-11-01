@@ -215,3 +215,27 @@ test("a field named List (Vector of T) holds only vectors, item by item (L43e3)"
   ].sort());
   assert.ok(wrongItem && setItem);
 });
+
+test("the mask tables worked out from the blades are what running each operation gives (L43c)", () => {
+  // Euclidean, Lorentzian and degenerate (2D PGA, where e₀ squares to 0).
+  for (const squares of [[1, 1, 1], [1, -1, -1], [0, 1, 1], [-1, 0]]) {
+    const a = algebra(squares);
+    const { code, info } = a.done();
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const alg = [...algebrasOf(code, info).values()][0];
+    const r = makeRunner(code, info, { print: () => {} });
+    const al = r.value(alg.def);
+    const basis = [...Array(alg.parts).keys()].map((i) => {
+      const fields = Array.from({ length: alg.parts }, (_, j) => (j === i ? 1 : 0));
+      return { tag: alg.variant, fields } as unknown as Value;
+    });
+    const maskOf = (v: Value) => (v as unknown as { fields: number[] }).fields.reduce((m, x, i) => (x !== 0 ? m | (1 << i) : m), 0);
+    const libDef = (name: string) => Object.keys(LIBRARY.names).find((id) => LIBRARY.names[id] === name && LIBRARY.code.nodes[id]?.kind === "def")!;
+    const run = (op: string, ...xs: Value[]) => maskOf(first(r.call(r.value(libDef(`clifford ${op}`)), al, ...xs) as Iterable<Value>)!);
+    for (let i = 0; i < alg.parts; i++) {
+      for (const op of ["reverse", "involute", "dual", "undual"] as const) assert.equal(alg.one(op, i), run(op, basis[i]), `${squares} ${op} ${i}`);
+      for (let j = 0; j < alg.parts; j++)
+        for (const op of ["product", "outer", "inner", "regressive"] as const) assert.equal(alg.pair(op, i, j), run(op, basis[i], basis[j]), `${squares} ${op} ${i} ${j}`);
+    }
+  }
+});
