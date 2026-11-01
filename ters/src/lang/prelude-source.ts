@@ -25,7 +25,8 @@ export function buildPrelude(): Module {
   const sum = k.def("sum");
   k.define(sum, k.fn(["numbers"], (xs) => k.fold(xs, [
     { variant: NIL, names: [], body: () => k.lit(0) },
-    { variant: CONS, names: ["n", "rest"], results: [null, "sum of rest"], body: ([n], [, r]) => k.call(B.add, n, r!) },
+    // + for every number type, as + itself is (BACKLOG L136).
+    { variant: CONS, names: ["n", "rest"], results: [null, "sum of rest"], body: ([n], [, r]) => k.call(ARITH.add, n, r!) },
   ])));
 
   const append = k.def("append");
@@ -1274,7 +1275,7 @@ export function buildPrelude(): Module {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     [map]: "The list of f(item) for each item, in the same order.",
     [length]: "How many items the list has.",
-    [sum]: "The Float64s of the list added up; 0 for an empty list.",
+    [sum]: "The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.",
     [append]: "The items of the first list, then the items of the second.",
     [reverse]: "The list back to front.",
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",

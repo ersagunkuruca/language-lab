@@ -192,7 +192,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **for each** : `(List a, (a) -[e]-> b) -[e]-> Unit`. Runs the action on each item of the list in turn, for what it does (prints, writes a cell).
 - **keep** : `(List a, (a) -[Choice]-> Bool) -> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
 - **length** : `(List a) -> Int`. How many items the list has.
-- **sum** : `(List Float64) -> Float64`. The Float64s of the list added up; 0 for an empty list.
+- **sum** : `(List a) -> a`. The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.

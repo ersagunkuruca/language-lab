@@ -667,99 +667,99 @@
         ],
         "body": "@ms3a2v8ka09mr0hqvm9t2d4mq4:3"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo",
+      "@5ii78ipiq33sn2mknatb2pbsnm": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm",
         "kind": "def",
-        "body": "@cci1a6fll2qmphm2sgtabs53qo:1"
+        "body": "@5ii78ipiq33sn2mknatb2pbsnm:1"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:2": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:2",
+      "@5ii78ipiq33sn2mknatb2pbsnm:2": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:2",
         "kind": "binder"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:4": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:4",
+      "@5ii78ipiq33sn2mknatb2pbsnm:4": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:4",
         "kind": "ref",
-        "target": "@cci1a6fll2qmphm2sgtabs53qo:2"
+        "target": "@5ii78ipiq33sn2mknatb2pbsnm:2"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:6": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:6",
+      "@5ii78ipiq33sn2mknatb2pbsnm:6": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:6",
         "kind": "lit",
         "value": 0
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:5": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:5",
+      "@5ii78ipiq33sn2mknatb2pbsnm:5": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:5",
         "kind": "arm",
         "variant": "std.list.nil",
         "binds": [],
         "results": [],
-        "body": "@cci1a6fll2qmphm2sgtabs53qo:6"
+        "body": "@5ii78ipiq33sn2mknatb2pbsnm:6"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:8": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:8",
+      "@5ii78ipiq33sn2mknatb2pbsnm:8": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:8",
         "kind": "binder"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:9": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:9",
+      "@5ii78ipiq33sn2mknatb2pbsnm:9": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:9",
         "kind": "binder"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:10": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:10",
+      "@5ii78ipiq33sn2mknatb2pbsnm:10": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:10",
         "kind": "binder"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:12": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:12",
+      "@5ii78ipiq33sn2mknatb2pbsnm:12": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:12",
         "kind": "ref",
-        "target": "builtin.add"
+        "target": "builtin.arith.add"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:13": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:13",
+      "@5ii78ipiq33sn2mknatb2pbsnm:13": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:13",
         "kind": "ref",
-        "target": "@cci1a6fll2qmphm2sgtabs53qo:8"
+        "target": "@5ii78ipiq33sn2mknatb2pbsnm:8"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:14": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:14",
+      "@5ii78ipiq33sn2mknatb2pbsnm:14": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:14",
         "kind": "ref",
-        "target": "@cci1a6fll2qmphm2sgtabs53qo:10"
+        "target": "@5ii78ipiq33sn2mknatb2pbsnm:10"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:11": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:11",
+      "@5ii78ipiq33sn2mknatb2pbsnm:11": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:11",
         "kind": "call",
-        "fn": "@cci1a6fll2qmphm2sgtabs53qo:12",
+        "fn": "@5ii78ipiq33sn2mknatb2pbsnm:12",
         "args": [
-          "@cci1a6fll2qmphm2sgtabs53qo:13",
-          "@cci1a6fll2qmphm2sgtabs53qo:14"
+          "@5ii78ipiq33sn2mknatb2pbsnm:13",
+          "@5ii78ipiq33sn2mknatb2pbsnm:14"
         ]
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:7": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:7",
+      "@5ii78ipiq33sn2mknatb2pbsnm:7": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:7",
         "kind": "arm",
         "variant": "std.list.cons",
         "binds": [
-          "@cci1a6fll2qmphm2sgtabs53qo:8",
-          "@cci1a6fll2qmphm2sgtabs53qo:9"
+          "@5ii78ipiq33sn2mknatb2pbsnm:8",
+          "@5ii78ipiq33sn2mknatb2pbsnm:9"
         ],
         "results": [
           null,
-          "@cci1a6fll2qmphm2sgtabs53qo:10"
+          "@5ii78ipiq33sn2mknatb2pbsnm:10"
         ],
-        "body": "@cci1a6fll2qmphm2sgtabs53qo:11"
+        "body": "@5ii78ipiq33sn2mknatb2pbsnm:11"
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:3": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:3",
+      "@5ii78ipiq33sn2mknatb2pbsnm:3": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:3",
         "kind": "fold",
-        "scrutinee": "@cci1a6fll2qmphm2sgtabs53qo:4",
+        "scrutinee": "@5ii78ipiq33sn2mknatb2pbsnm:4",
         "arms": [
-          "@cci1a6fll2qmphm2sgtabs53qo:5",
-          "@cci1a6fll2qmphm2sgtabs53qo:7"
+          "@5ii78ipiq33sn2mknatb2pbsnm:5",
+          "@5ii78ipiq33sn2mknatb2pbsnm:7"
         ]
       },
-      "@cci1a6fll2qmphm2sgtabs53qo:1": {
-        "id": "@cci1a6fll2qmphm2sgtabs53qo:1",
+      "@5ii78ipiq33sn2mknatb2pbsnm:1": {
+        "id": "@5ii78ipiq33sn2mknatb2pbsnm:1",
         "kind": "lambda",
         "params": [
-          "@cci1a6fll2qmphm2sgtabs53qo:2"
+          "@5ii78ipiq33sn2mknatb2pbsnm:2"
         ],
-        "body": "@cci1a6fll2qmphm2sgtabs53qo:3"
+        "body": "@5ii78ipiq33sn2mknatb2pbsnm:3"
       },
       "@c9sa21p6t34r9bf9cjcm8h2101": {
         "id": "@c9sa21p6t34r9bf9cjcm8h2101",
@@ -53592,7 +53592,7 @@
       "@17uq2ffqdsbb6kikljtkeco9v1",
       "@su0m8djlkg5cq4b68i0klesqia",
       "@ms3a2v8ka09mr0hqvm9t2d4mq4",
-      "@cci1a6fll2qmphm2sgtabs53qo",
+      "@5ii78ipiq33sn2mknatb2pbsnm",
       "@c9sa21p6t34r9bf9cjcm8h2101",
       "@9q8d7m9gld6fvdr2gj63v34sgq",
       "@egedg16di7hp3kq2u7ghqi8dbd",
@@ -54405,10 +54405,12 @@
       },
       "plain": []
     },
-    "@cci1a6fll2qmphm2sgtabs53qo": {
-      "vars": [],
-      "rows": [
+    "@5ii78ipiq33sn2mknatb2pbsnm": {
+      "vars": [
         0
+      ],
+      "rows": [
+        1
       ],
       "type": {
         "t": "fn",
@@ -54418,24 +54420,27 @@
             "id": "std.list",
             "args": [
               {
-                "t": "con",
-                "id": "type.number",
-                "args": []
+                "t": "var",
+                "v": 0
               }
             ]
           }
         ],
         "ret": {
-          "t": "con",
-          "id": "type.number",
-          "args": []
+          "t": "var",
+          "v": 0
         },
         "eff": {
           "effs": [],
-          "tail": 0
+          "tail": 1
         }
       },
-      "plain": []
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
     },
     "@c9sa21p6t34r9bf9cjcm8h2101": {
       "vars": [
@@ -63048,11 +63053,11 @@
     "@ms3a2v8ka09mr0hqvm9t2d4mq4:8": "item",
     "@ms3a2v8ka09mr0hqvm9t2d4mq4:9": "rest",
     "@ms3a2v8ka09mr0hqvm9t2d4mq4:10": "length of rest",
-    "@cci1a6fll2qmphm2sgtabs53qo": "sum",
-    "@cci1a6fll2qmphm2sgtabs53qo:2": "numbers",
-    "@cci1a6fll2qmphm2sgtabs53qo:8": "n",
-    "@cci1a6fll2qmphm2sgtabs53qo:9": "rest",
-    "@cci1a6fll2qmphm2sgtabs53qo:10": "sum of rest",
+    "@5ii78ipiq33sn2mknatb2pbsnm": "sum",
+    "@5ii78ipiq33sn2mknatb2pbsnm:2": "numbers",
+    "@5ii78ipiq33sn2mknatb2pbsnm:8": "n",
+    "@5ii78ipiq33sn2mknatb2pbsnm:9": "rest",
+    "@5ii78ipiq33sn2mknatb2pbsnm:10": "sum of rest",
     "@c9sa21p6t34r9bf9cjcm8h2101": "append",
     "@c9sa21p6t34r9bf9cjcm8h2101:2": "front",
     "@c9sa21p6t34r9bf9cjcm8h2101:3": "back",
@@ -64464,7 +64469,7 @@
     "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
     "@9902gjnadddgv3jrh6ir29nf4q": "The list of f(item) for each item, in the same order.",
     "@ms3a2v8ka09mr0hqvm9t2d4mq4": "How many items the list has.",
-    "@cci1a6fll2qmphm2sgtabs53qo": "The Float64s of the list added up; 0 for an empty list.",
+    "@5ii78ipiq33sn2mknatb2pbsnm": "The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.",
     "@c9sa21p6t34r9bf9cjcm8h2101": "The items of the first list, then the items of the second.",
     "@egedg16di7hp3kq2u7ghqi8dbd": "The list back to front.",
     "@17uq2ffqdsbb6kikljtkeco9v1": "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
@@ -64656,7 +64661,7 @@
     "@17uq2ffqdsbb6kikljtkeco9v1",
     "@su0m8djlkg5cq4b68i0klesqia",
     "@ms3a2v8ka09mr0hqvm9t2d4mq4",
-    "@cci1a6fll2qmphm2sgtabs53qo",
+    "@5ii78ipiq33sn2mknatb2pbsnm",
     "@c9sa21p6t34r9bf9cjcm8h2101",
     "@egedg16di7hp3kq2u7ghqi8dbd",
     "@8ilsm74pnh52dq99esfelgj2nh",
