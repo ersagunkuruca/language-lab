@@ -1388,7 +1388,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     return t.t !== "con" || !!info.implementations?.has(implementationKey(w.iface, t));
   });
   const fits = (t: Type, asCall: boolean): Subst | null => {
-    const s = info.subst.clone();
+    const s = info.subst.trial();
     const from = s.wanted.length;
     try {
       if (!asCall) { s.unify(h.expected, t); return implemented(s, from) ? s : null; }
@@ -1413,10 +1413,27 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // the other.
   let last: [Filling, Code] | undefined;
   const filled = (f: Filling) => (last?.[0] === f ? last[1] : (last = [f, fillHole(code, {}, hole, f).code])[1]);
-  let before: number | undefined;
+  let before: Problem[] | undefined;
   const units = new UnitsBefore(code);
-  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors.length;
-  const whole = (f: Filling) => recheck(filled(f)) <= (before ??= recheck(code));
+  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors;
+  const baseline = () => (before ??= recheck(code));
+  const whole = (f: Filling) => recheck(filled(f)).length <= baseline().length;
+  // A function that brings Choice where the world is (or the world under
+  // a Choice) is checked against the whole program, and what that check
+  // finds about the mix is the same for every function bringing the same
+  // effects here: the first one's answer is kept for the rest (I40). A
+  // pass says the mix is fine, so the others are checked like any other
+  // filling; a failure only of the world under a Choice refuses them all.
+  const mixing = new Map<string, boolean>();
+  const mixChecked = (f: Filling, mix: string): boolean | undefined => {
+    const k = `${mix}|${f.kind}`, known = mixing.get(k);
+    if (known !== undefined) return known ? undefined : false;
+    const errs = recheck(filled(f));
+    if (errs.length <= baseline().length) { mixing.set(k, true); return true; }
+    const was = new Set(baseline().map((e) => e.message));
+    if (errs.every((e) => was.has(e.message) || e.message.includes("while a Choice is open"))) mixing.set(k, false);
+    return false;
+  };
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge, a square
   // makes the answer two). What the check makes of the body is its plan,
@@ -1464,7 +1481,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     }
     return out;
   };
-  const safe = (s: Subst, f: Filling, risky: boolean) => {
+  const safe = (s: Subst, f: Filling, risky: boolean, mix?: string) => {
+    if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
     if (dir === "changed") return whole(f);
@@ -1502,14 +1520,15 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));
   const consider = (target: Id, t: Type, risky = false) => {
     const ft = info.subst.resolve(t);
-    if (ft.t === "fn" && mixes(info.subst.resolveRow(ft.eff).effs)) risky = true;
+    const effs = ft.t === "fn" ? info.subst.resolveRow(ft.eff).effs : [];
+    const mix = mixes(effs) ? [...effs].sort().join(",") : undefined;
     const asRef = fits(t, false);
     const ref: Filling = { kind: "ref", target, type: t };
-    if (asRef && safe(asRef, ref, risky)) out.push(ref);
+    if (asRef && safe(asRef, ref, risky, mix)) out.push(ref);
     const r = info.subst.resolve(t);
     const asCall = r.t === "fn" ? fits(t, true) : null;
     const call: Filling = { kind: "call", target, arity: r.t === "fn" ? r.params.length : 0, type: t };
-    if (asCall && safe(asCall, call, risky)) out.push(call);
+    if (asCall && safe(asCall, call, risky, mix)) out.push(call);
   };
   for (const b of h.scope) consider(b.id, b.type);
   // An input nothing has given a type yet can still be called: calling it
