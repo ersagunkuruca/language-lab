@@ -36,11 +36,13 @@ export function buildVectors(): Module {
   const dot = k.def("dot");
   k.define(dot, k.fn(["a", "b"], (a, b) => k.call(S.total, zip(B.mul, a, b))));
   const magnitude = k.def("magnitude");
-  k.define(magnitude, k.fn(["v"], (v) => k.call(B.sqrt, k.call(dot, v, v))));
+  // √ of a sum of squares, which is never negative (signs.ts).
+  k.define(magnitude, k.fn(["v"], (v) => k.call(B.sqrt, k.call(S.total, k.call(S.zipParts, B.mul, v, v)))));
   const distance = k.def("distance");
   k.define(distance, k.fn(["a", "b"], (a, b) => k.call(magnitude, k.call(ARITH.sub, a, b))));
   const unit = k.def("unit");
-  k.define(unit, k.fn(["v"], (v) => k.let("length", k.call(magnitude, v), (l) => k.call(S.mapParts, k.fn(["x"], (x) => k.call(B.div, x, l)), v))));
+  // No answer for the zero vector, which has no direction (L125b).
+  k.define(unit, k.fn(["v"], (v) => k.let("1 / length", k.call(B.div, k.lit(1), k.call(magnitude, v)), (l) => k.call(S.mapParts, k.fn(["x"], (x) => k.call(B.mul, x, l)), v))));
   const mix = k.def("mix");
   k.define(mix, k.fn(["a", "b", "amount"], (a, b, t) => k.call(S.zipParts, k.fn(["x", "y"], (x, y) => k.call(B.add, x, k.call(B.mul, t, k.call(B.sub, y, x)))), a, b)));
   const clamp = k.def("clamp");

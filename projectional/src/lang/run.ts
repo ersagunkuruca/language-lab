@@ -285,20 +285,24 @@ export class Aborted extends Error {
 // A Float64 operation's answer, which must be finite (L125a). Why there
 // is none, when it isn't: no answer mathematically (x / 0, the square root
 // of a negative), or one too big to hold (overflow).
-export function finiteFloat(op: string, r: number, args: number[]): number {
-  if (Number.isFinite(r)) return r;
+export function noAnswer(op: string, args: number[]): string | null {
   const [a, b] = args;
-  const why =
-    op === "div" && b === 0 ? "x / 0 has no answer"
+  return op === "div" && b === 0 ? "x / 0 has no answer"
     : op === "mod" && b === 0 ? "x mod 0 has no answer"
     : op === "sqrt" && a < 0 ? "the square root of a negative number has no answer"
     : op === "log" && a <= 0 ? "the log of 0 or less has no answer"
     : op === "pow" && a === 0 && b < 0 ? "0 to a negative power has no answer"
     : op === "pow" && a < 0 && !Number.isInteger(b) ? "a negative number to a fractional power has no answer"
-    : args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
-    : op === S.float32 ? "the number is too big for a Float32 (overflow)"
-    : "the answer is too big for a Float64 (overflow)";
-  throw new Error(why);
+    : null;
+}
+// The answers of a Float64 operation: none where it has none (`/`, `sqrt`,
+// `log`, `^` and `mod` carry Choice for it, L125b), and an overflow, or a
+// value that isn't finite, stops the program with the reason.
+export function finiteFloat(op: string, r: number, args: number[]): Iterable<number> {
+  if (Number.isFinite(r)) return [r];
+  if (noAnswer(op, args)) return [];
+  throw new Error(args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
+    : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
@@ -322,14 +326,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const builtins: Record<Id, Fn> = {};
   let cmpOrder: Map<Id, number> | undefined;
   // Float64 is the finite floats with one zero (FLOAT-VALUES-2026-11-01.md,
-  // L125a): an operation whose answer would be ∞ or NaN has none. Until
-  // `/`, `sqrt` and `log` carry Choice in their types (with L125b), both
-  // kinds are an Abort, performed where the operation was, with the reason.
+  // L125a, L125b): an operation with no answer at its inputs fails (its
+  // Choice), and an overflow is an Abort, performed where it was.
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
     ? (y, x) => one(f((y as number) + 0, (x as number) + 0)) // −0 is 0: atan2(−0, −1) is π
-    : (...a) => one(finiteFloat(op, f(...(a as number[])), a as number[]));
+    : (...a) => finiteFloat(op, f(...(a as number[])), a as number[]);
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
-    ? (...a) => one(finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[]))
+    ? (...a) => finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[])
     : (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {

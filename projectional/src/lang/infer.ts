@@ -10,6 +10,7 @@
 // effect: totality is inferred, not promised. Data types must be strictly
 // positive, so data can't be used to recurse without recursion.
 
+import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -118,6 +119,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const show = (t: Type) => showT(s.zonk(t), names);
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
+  let signs: ReturnType<typeof signAnalysis> | undefined;
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
   const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
   const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
@@ -657,6 +659,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
             }
           }
+        }
+        // `/`, `sqrt`, `log`, `^` and `mod` have no answer at some inputs,
+        // so Choice, unless the inputs here are known to be fine (L125b).
+        if (fr.t === "fn" && given?.kind === "ref" && PARTIAL[given.target]) {
+          signs ??= signAnalysis(code);
+          const r = s.resolveRow(fr.eff);
+          if (r.effs.includes(CHOICE) && signs.answered(id)) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } };
         }
         if (fr.t === "fn" && fr.params.length !== args.length) {
           err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);
