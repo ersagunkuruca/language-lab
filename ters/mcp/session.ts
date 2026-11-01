@@ -26,9 +26,9 @@ import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { equal, mainProblem, pageProblem, runProgram, runMain, showValue, withSteps, OutOfSteps, type World } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
-import * as T from "../editor/typed.ts";
+import * as T from "../../editor/typed.ts";
 import { SIGS } from "../src/lang/std.ts";
-import { setDisplayNames } from "../editor/typed.ts";
+import { setDisplayNames } from "../../editor/typed.ts";
 import { addParameter, deleteDefinition, nameClash, newDefinition, type Shape } from "../src/lang/toplevel.ts";
 
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
