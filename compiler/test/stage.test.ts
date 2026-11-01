@@ -2,7 +2,8 @@
 // C65): projective geometric algebra with its signature and basis given
 // as lists reaches JavaScript and WGSL as plain arithmetic, with the
 // evaluator's numbers exactly but for the sign of a zero (staging only
-// folds what is known and drops zero terms), and a motor known now moving a point (x, y, z, w) is the
+// folds what is known and drops zero terms, checking that what they
+// multiplied was finite, I107), and a motor known now moving a point (x, y, z, w) is the
 // 4 × 4 matrix a shader writes for vec4(x, y, z, 1).
 
 import { test } from "node:test";
@@ -51,6 +52,17 @@ test("PGA products and motors: compiled with no lists, the evaluator's numbers, 
   // Exactly, but for the sign of a zero: dropping a `+ 0` can turn −0 into 0.
   const unsigned = (v: Value): Value => (typeof v === "number" ? v + 0 : { ...(v as { fields: number[] }), fields: (v as { fields: number[] }).fields.map((x) => x + 0) });
   for (const [n, args] of cases) assert.deepEqual(unsigned(defs[n](...args)), unsigned(first(r.call(r.value(def(n)), ...args))!), n);
+  // A part given ∞ or NaN: a zero term dropped when compiled is NaN where
+  // the evaluator's is (I107: 0 · ∞ is NaN, not 0).
+  const odd = (s: number, x: number) => ({ tag: p.pga, fields: Array.from({ length: 16 }, (_, i) => (i === s ? x : Math.sin(s * 7 + i * 1.3))) });
+  for (const [n, args] of [
+    ["product", [odd(0, Infinity), mv(2)]], ["product", [mv(1), odd(5, NaN)]], ["move by", [odd(3, -Infinity), mv(4)]], ["move fixed", [odd(9, NaN)]],
+    ["move point", [{ tag: p.point, fields: [1, Infinity, 3, 1] }]], ["move given", [{ tag: p.point, fields: [NaN, 4, 0, 1] }]],
+  ] as [string, Value[]][]) {
+    const want = unsigned(first(r.call(r.value(def(n)), ...args))!);
+    assert.ok(JSON.stringify(want).includes("null"), `${n}: the evaluator gives NaN or ∞ somewhere`);
+    assert.deepEqual(unsigned(defs[n](...args)), want, `${n} given ∞ or NaN`);
+  }
   // Turn by 90° about z, then move by 5 along x: (1, 2, 3) goes to (3, 1, 3).
   const moved = (defs["move point"]({ tag: p.point, fields: [1, 2, 3, 1] }) as { fields: number[] }).fields;
   [3, 1, 3, 1].forEach((w, i) => assert.ok(Math.abs(moved[i] - w) < 1e-12, `${moved}`));

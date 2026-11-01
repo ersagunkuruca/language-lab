@@ -20,8 +20,16 @@
 // staging, and the call stays as it was. Effects, Choice and ways stop it
 // too. Arithmetic with 0 and 1 known now is simplified (0 · x is 0, x + 0
 // is x), so a sum over a table's lines keeps only the lines that matter.
-// For a later x that is ∞ or NaN, 0 · x is NaN, not 0; staging assumes
-// finite numbers, as compilers' fast-math does.
+// 0 · x is 0 only while x is finite: for ∞ or NaN it is NaN (I107). So a
+// zero dropped this way keeps what it was multiplied by, and what is
+// left is checked for it, once: `part − ((x − x) + (y − y))` is the part
+// when x and y are finite and NaN otherwise, as the evaluator's sum would
+// be. Shaders skip the check: WGSL lets a GPU assume there is no ∞ or NaN
+// (the WGSL spec's "finite math assumption"), so the target already means that. Two
+// differences remain: a sum's zero may lose its sign (−0 + 0 is 0), which
+// equal and compare don't see (LANGUAGE.md), and a dropped product of
+// finite parts that would overflow past 1.8e308 is checked by its parts,
+// so it gives 0 where the evaluator's 0 · ∞ is NaN.
 //
 // Prior art: partial evaluation (Futamura 1971; Jones, Gomard and Sestoft,
 // "Partial Evaluation and Automatic Program Generation", 1993), here
@@ -45,7 +53,10 @@ const stop = (): never => { throw new Stop(); };
 // Running out of stack is running out of patience too.
 const stopped = (e: unknown) => e instanceof Stop || e instanceof RangeError;
 
-type Dyn = { k: "dyn"; make: () => Id; cheap: boolean; op?: Op; args?: PV[] };
+// `poison`: a part known now to be `base`, as long as each of these later
+// Float64s is finite (a 0 · x dropped); NaN otherwise.
+// `named`: what a let's name stands for, so its checks are its parts'.
+type Dyn = { k: "dyn"; make: () => Id; cheap: boolean; op?: Op; args?: PV[]; base?: PV; poison?: Dyn[]; named?: Dyn };
 type PV =
   | number
   | { k: "data"; tag: Id; fields: PV[] }
@@ -63,7 +74,9 @@ const LIMIT = 400_000, NODES = 40_000, LETS = 800;
 // caller; staged is empty when nothing changed.
 // `rounded`: the staged calls that worked out a number Float32 can't hold,
 // so a Float32 run of the same program rounds it differently.
-export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set()): { code: Code; names: Names; staged: Id[]; rounded: Id[] } {
+// `finite`: the target assumes there is no ∞ or NaN (a shader), so a
+// dropped 0 · x needs no check.
+export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set(), finite = false): { code: Code; names: Names; staged: Id[]; rounded: Id[] } {
   const nodes = code.nodes;
   const staged: Id[] = [], rounded: Id[] = [];
   const out: Code = { nodes: { ...nodes }, defs: [...code.defs] };
@@ -80,7 +93,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
     if (t.variants.some((v) => (nodes[v] as NodeOf<"variant">).fields.some((f) => refers((nodes[f] as NodeOf<"field">).type)))) t.variants.forEach((v) => lists.add(v));
   }
   const closedMemo = new Map<Id, PV | null>();
-  const ctx: Ctx = { code: out, names: outNames, defValues, effectOps, ty };
+  const ctx: Ctx = { code: out, names: outNames, defValues, effectOps, ty, finite };
 
   const shape = shapeOf(code, info);
 
@@ -141,7 +154,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
 // still checks: calls given their data worked out (stageCalls), then
 // copies for data known at a call (specialiseCalls), and the calls inside
 // those copies worked out in turn. `rounded` as stageCalls's.
-export function stageProgram(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names; rounded: Id[] } {
+export function stageProgram(code: Code, info: Info, names: Names, { finite = false }: { finite?: boolean } = {}): { code: Code; info: Info; names: Names; rounded: Id[] } {
   const base = info.errors.length;
   // The last state that checked, and what is pending on top of it.
   let good = { code, names, info, rounded: [] as Id[] };
@@ -175,7 +188,7 @@ export function stageProgram(code: Code, info: Info, names: Names): { code: Code
   const copied = new Set<Id>();
   const staged = new Set<Id>();
   const stage = (only?: Id[]) => {
-    const st = stageCalls(code, info, names, only, copied);
+    const st = stageCalls(code, info, names, only, copied, finite);
     st.staged.forEach((id) => staged.add(id));
     if (!st.staged.length) return;
     ({ code, names } = st);
@@ -437,7 +450,7 @@ function hasList(v: PV, lists: Set<Id>): boolean {
   return typeof v === "object" && v.k === "data" && (lists.has(v.tag) || v.fields.some((f) => hasList(f, lists)));
 }
 
-interface Ctx { code: Code; names: Names; defValues: Map<Id, PV | null>; effectOps: Set<Id>; ty: (id: Id) => Type }
+interface Ctx { code: Code; names: Names; defValues: Map<Id, PV | null>; effectOps: Set<Id>; ty: (id: Id) => Type; finite?: boolean }
 
 class Stager {
   steps = 0;
@@ -534,11 +547,13 @@ class Stager {
   // computed once, into a let.
   bind(v: PV): PV {
     if (typeof v !== "object") return v;
-    if (v.k === "data") return v.fields.some((f) => typeof f === "object" && f.k === "dyn" && !f.cheap) ? { ...v, fields: v.fields.map((f) => this.bind(f)) } : v;
+    if (v.k === "data") return v.fields.some((f) => typeof f === "object" && f.k === "dyn" && !f.cheap && !(f.poison && (typeof f.base !== "object" || f.base.k !== "dyn" || f.base.cheap))) ? { ...v, fields: v.fields.map((f) => this.bind(f)) } : v;
+    // A part known but for a check stays known: only what it is gets a name.
+    if (v.k === "dyn" && v.poison) { const b = this.bind(v.base!); return b === v.base ? v : this.poisoned(b, v.poison); }
     if (v.k !== "dyn" || v.cheap) return v;
     const b = this.binder("part");
     this.lets.push({ b, value: v.make() });
-    return { k: "dyn", make: () => this.ref(b), cheap: true };
+    return { k: "dyn", make: () => this.ref(b), cheap: true, named: v };
   }
 
   tick() { if (++this.steps > this.limit) stop(); }
@@ -683,6 +698,57 @@ class Stager {
       return r;
     }
     if (!args.every(float)) return stop();
+    // Parts known now but for a check (a dropped 0 · x): worked on as what
+    // they are known to be, the checks carried along.
+    const poison = new Set<Dyn>();
+    args = args.map((x) => { if (typeof x === "object" && x.k === "dyn" && x.poison) { x.poison.forEach((p) => poison.add(p)); return x.base!; } return x; });
+    const r = this.arith0(op, args, poison);
+    if (!poison.size) return r;
+    if (typeof r === "object" && r.k === "dyn" && r.poison) { r.poison.forEach((p) => poison.add(p)); return this.poisoned(r.base!, [...poison]); }
+    return this.poisoned(r, [...poison]);
+  }
+  // `base`, unless one of `ps` isn't finite: then NaN. The check is
+  // part − Σ (p − p), each p worked out once (a let), and the same checks
+  // summed once for every part that has them.
+  poisoned(base: PV, ps: Dyn[]): Dyn {
+    return { k: "dyn", base, poison: ps, cheap: false, make: () => this.add({ kind: "call", fn: this.ref("builtin.sub"), args: [this.residual(base), this.check(ps)] }) };
+  }
+  // What x is finite by: x itself, or for a sum, difference or product,
+  // its parts (a product of finite parts is finite unless it overflows,
+  // past 1.8e308). A quotient, a root or a sine is checked itself.
+  private leafMemo = new Map<Dyn, Dyn[]>();
+  leaves(x: Dyn): Dyn[] {
+    let got = this.leafMemo.get(x);
+    if (got) return got;
+    if (x.named) { const of = this.leaves(x.named); got = of.length === 1 && of[0] === x.named ? [x] : of; this.leafMemo.set(x, got); return got; }
+    const ring = x.op === "add" || x.op === "sub" || x.op === "mul" || x.op === "neg";
+    got = ring && x.args!.every((a) => (typeof a === "number" ? Number.isFinite(a) : a.k === "dyn"))
+      ? [...new Set(x.args!.flatMap((a) => (typeof a === "number" ? [] : this.leaves(a as Dyn))))]
+      : [x];
+    this.leafMemo.set(x, got);
+    return got;
+  }
+  private bound = new Map<Dyn, Dyn>();
+  private checks = new Map<string, Dyn>();
+  private ids = new Map<Dyn, number>();
+  check(ps: Dyn[]): Id {
+    const id = (p: Dyn) => this.ids.get(p) ?? (this.ids.set(p, this.ids.size), this.ids.size - 1);
+    const sorted = [...ps].sort((x, y) => id(x) - id(y)), key = sorted.map(id).join(" ");
+    let c = this.checks.get(key);
+    if (!c) {
+      const terms = sorted.map((p) => {
+        let q = this.bound.get(p);
+        if (!q) { q = this.bind(p) as Dyn; this.bound.set(p, q); }
+        return { k: "dyn", cheap: false, make: () => this.add({ kind: "call", fn: this.ref("builtin.sub"), args: [q!.make(), q!.make()] }) } as Dyn;
+      });
+      const sum = terms.reduce((x, y) => ({ k: "dyn", cheap: false, make: () => this.add({ kind: "call", fn: this.ref("builtin.add"), args: [x.make(), y.make()] }) }) as Dyn);
+      c = this.bind(sum) as Dyn;
+      this.checks.set(key, c);
+    }
+    return c.make();
+  }
+  arith0(op: Op, args: PV[], poison: Set<Dyn>): PV {
+    if (args.every((a) => typeof a === "number")) return impl[op](...(args as number[]));
     const [a, b] = args;
     const is = (x: PV, c: number) => typeof x === "number" && x === c;
     // −(c · x) is (−c) · x, exactly.
@@ -698,7 +764,8 @@ class Stager {
       case "add": if (is(a, 0)) return b; if (is(b, 0)) return a; break;
       case "sub": if (is(b, 0)) return a; if (is(a, 0)) return neg(b); break;
       case "mul":
-        if (is(a, 0) || is(b, 0)) return 0;
+        if (is(a, 0) && is(b, 0)) return 0;
+        if (is(a, 0) || is(b, 0)) { if (!this.ctx.finite) this.leaves((is(a, 0) ? b : a) as Dyn).forEach((p) => poison.add(p)); return 0; }
         if (is(a, 1)) return b;
         if (is(b, 1)) return a;
         if (is(a, -1)) return neg(b);
