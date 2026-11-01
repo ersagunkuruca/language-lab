@@ -297,7 +297,8 @@ negative `power`, `whole part` of infinity and `read whole number` of
 + 1 = 13` gives 4 and `= 12` gives none, whether it is written with Int's
 own operations or the generic ones at an Int literal. The checker plans it
 the way it runs, in the relational interpreter, not as Float64's
-equations.
+equations. A generic function solved with an Int given, `x · n + n` at
+`n = 3`, runs at Int too: `= 12` gives 3 and `= 13` gives none.
 
 Text has `length`, `slice`, `characters`, `split`, `join all`, `find`
 (`Choice`: the part may not be there), `comes before`, `character code`

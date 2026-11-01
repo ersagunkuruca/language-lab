@@ -24,7 +24,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 |---|---|---|
 | E Editor | "Editor lane" | I102, I103, I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
 | C Compiler and targets | "Compiler lane" | C55, C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
-| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (this PR), L38 (Int from a parameter's type alone), L54b, L108d (representation laws), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host). Yesterday's run ended with I100 (#805) |
+| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (this PR), L54b, L108d (representation laws), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host). Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -130,7 +130,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). Open: a generic op made Int by a parameter's type alone (no Int literal) is still planned as Float64's equations, because the plan reads the code and not the types | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
+| L38 | One `+ − · −x <` for every number type: steps 1 to 4 done, now the std interfaces Arithmetic and Ordered (L40h). A generic function solved with an Int given runs in whole numbers (L38j). Open: an Int input of the enclosing definition whose type is only fixed after the solve is read still plans as Float64's equations | LANGUAGE-REVIEW-2026-10-24 | P1 | S | open ends |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md), Ersagun 2026-10-31): `Mat2` to `Mat4` done (L44a). Rotors, reflections, projections and PGA motions from the Clifford tables done (L44b); reading a function's matrix done (L44c, src/lang/linear.ts). Next: the compiler stores linear functions as matrices (C lane, C30b/c); then a linear-algebra library for any size | LANGUAGE-REVIEW-2026-10-24 | P1 | M | steps 1-2 done |
 | L42 | `Cl(p, q, r)`: `clifford table` done (L42a). Next: a PGA motor in the ray marcher (L41 is done) | NUMBERS.md stage 4 | P1 | M | step 1 done |
 | L43 | Rotors done (L43a: quaternions as the even part of `Cl(3, 0)`). Next, which parts can be nonzero ([GRADES.md](docs/design/numbers/GRADES.md)): L43b blade masks done (src/lang/grades.ts); L43c compiled JS and WGSL store only the masked parts, with L41 (C, M); L43d the editor names a value's mask (E, S); L43e masks are types, a wrong grade is a type error (done: a part read outside the mask; named masks on record fields, `Vector of T` and the others; next: on lists' items, then where the editor names an input's type) (Ersagun 2026-10-31: "each blade combination a different type") (L, M). Bounce passes vectors, spins and rotors as one 8-part type | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors and masks done |

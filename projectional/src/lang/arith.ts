@@ -292,6 +292,24 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
   };
 
+  // A relational solve of a generic definition runs it at the types the
+  // solve gives it, as a call would (L38: x · n + 1 = 13 with n an Int is
+  // solved in whole numbers), its ports moved to the copy's parameters.
+  const instanceSolve = (id: Id, env: Env) => {
+    const n = nodes[id] as NodeOf<"solve">;
+    const sc = schemes.get(n.fn), t = info.solveAt?.get(id);
+    if (!sc || !t || !constrained(sc).length || nodes[n.fn]?.kind !== "def") return;
+    const at: Env = new Map();
+    bind(sc.type, close(t, env), new Set(constrained(sc)), at);
+    const target = instance(n.fn, at, sc);
+    if (target === n.fn) return;
+    const from = nodes[(nodes[n.fn] as NodeOf<"def">).body!], to = nodes[(nodes[target] as NodeOf<"def">).body!];
+    if (from?.kind !== "lambda" || to?.kind !== "lambda") return;
+    const key = (k: string) => (k === "out" ? k : to.params[from.params.indexOf(k)] ?? k);
+    const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
+    nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
+  };
+
   // Resolve every use under `root`, at these types.
   const resolve = (root: Id, env: Env) => {
     const walk = (id: Id, parent: Id | null) => {
@@ -304,6 +322,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
       if (nodes[id].kind === "solve" && ops.has((nodes[id] as NodeOf<"solve">).fn)) implementSolve(id, env);
+      else if (nodes[id].kind === "solve") instanceSolve(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {
         const t = typeOf.get(id);
