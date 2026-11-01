@@ -19,7 +19,7 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, worldly } from "../src/fixtures.ts";
+import { area, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, stopsWith, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -101,7 +101,9 @@ for (const name of ["calculus", "physics"]) {
     const calls: [number, Value[]][] = [];
     lowered.funcs.forEach((f, i) => { for (const x of [-2.5, -1, 0, 0.5, 2, 3.7, 1e6]) calls.push([i, f.params.map((_, j) => x + j)]); });
     const got = run(calls);
-    calls.forEach(([i, xs], k) => assert.deepStrictEqual(got[k].value, first(r.call(r.value(lowered.funcs[i].def), ...xs)), `${lowered.funcs[i].name}(${xs})`));
+    // A stop (L125a) is the evaluator's Abort, and C's "!".
+    const want = (d: string, xs: Value[]) => { try { return first(r.call(r.value(d), ...xs)); } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; } };
+    calls.forEach(([i, xs], k) => assert.deepStrictEqual(got[k].value, want(lowered.funcs[i].def, xs), `${lowered.funcs[i].name}(${xs})`));
     assert.ok(calls.length > 10);
   });
 }
@@ -123,22 +125,25 @@ test("sin, cos, tan, exp, log, pow and atan2 in C: V8's fdlibm, the same bits as
   const p = maths();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs));
   const run = build(lowered);
-  const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 } as Record<string, (x: number, y: number) => number>;
+  const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: (y: number, x: number) => Math.atan2(y + 0, x + 0) } as Record<string, (x: number, y: number) => number>; // −0 is 0 (L125a): atan2(−0, −1) is π
   let seed = 11n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
   const anyBits = () => new Float64Array(new BigUint64Array([BigInt(Math.floor(next() * 2 ** 32)) << 32n | BigInt(Math.floor(next() * 2 ** 32))]).buffer)[0];
-  const pick = () => { const k = next(); return k < 0.3 ? (next() - 0.5) * 20 : k < 0.5 ? (next() - 0.5) * 2e7 : k < 0.6 ? next() * 1e-5 : k < 0.65 ? [0, -0, NaN, Infinity, -Infinity, 1, -1, 0.5, 2, 1e22, 1e300, 5e-324][Math.floor(next() * 12)] : anyBits(); };
-  const calls: [number, Value[]][] = [], want: number[] = [];
+  const pick = () => { const k = next(); return k < 0.3 ? (next() - 0.5) * 20 : k < 0.5 ? (next() - 0.5) * 2e7 : k < 0.6 ? next() * 1e-5 : k < 0.65 ? [0, -0, 1, -1, 0.5, 2, 1e22, 1e300, 5e-324][Math.floor(next() * 9)] : finiteBits(); };
+  // Every Float64 is finite (L125a): any bits but NaN's and the infinities'.
+  const finiteBits = (): number => { const x = anyBits(); return Number.isFinite(x) ? x : finiteBits(); };
+  const calls: [number, Value[]][] = [], want: Value[] = [];
   for (const [op, f] of Object.entries(F)) {
     const i = lowered.funcs.findIndex((g) => g.def === p.defs[op as keyof typeof p.defs]);
     for (let k = 0; k < 20000; k++) {
       const x = pick(), y = op === "pow" && next() < 0.4 ? Math.round(pick() % 20) : pick();
       calls.push([i, lowered.funcs[i].params.length === 2 ? [x, y] : [x]]);
-      want.push(f(x, y));
+      const why = stopsWith(op, x, y);
+      want.push(why ? { aborted: why } as unknown as Value : f(x, y));
     }
   }
   const got = run(calls);
-  calls.forEach(([i, xs], k) => assert.ok(Object.is(got[k].value, want[k]), `${lowered.funcs[i].name}(${xs}): ${got[k].value}, not ${want[k]}`));
+  calls.forEach(([i, xs], k) => assert.ok(typeof want[k] === "number" ? Object.is(got[k].value, want[k]) : JSON.stringify(got[k].value) === JSON.stringify(want[k]), `${lowered.funcs[i].name}(${xs}): ${JSON.stringify(got[k].value)}, not ${JSON.stringify(want[k])}`));
 });
 
 test("tail calls are loops in C, and a budget runs out where the evaluator's does", { skip }, () => {
@@ -205,7 +210,7 @@ test("equal on data in C, and folds over nested data: a rose tree's List of chil
   const ls = lowerScalar(s.code, s.info, s.names, [s.same], { data: true });
   const same = ls.funcs.findIndex((f) => f.name === "same");
   const rs = makeRunner(s.code, s.info, { print: () => {} });
-  const pairs = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[Infinity], [-Infinity]], [[1e308], [Infinity]], [[Infinity], [Infinity]], [[1e308], [-1e308]]];
+  const pairs = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[1e308], [-1e308]]];
   sameAndFreed(build(ls), pairs.map(([a, b]) => [same, [toList(a), toList(b)]]), (_, xs) => first(rs.call(rs.value(s.same), ...xs))!, () => "same");
 
   const p = roses();
@@ -245,17 +250,17 @@ test("one answer or none in C: partial functions say they have none, and the clo
   const es = fromList(a.r.value(a.p.named("samples")));
   const evaluate = a.at("evaluate"), constant = a.at("constant"), simplify = a.at("simplify"), derivative = a.at("derivative"), newton = a.at("newton");
   const derive = (e: Value) => a.want(derivative, [e]);
-  // newton on 1/x (the fourth sample) doubles its guess to ∞ and then runs
-  // on NaN for ever, as it should now that ∞ isn't near 0 (BACKLOG L81):
-  // the program calls it within a budget (`root near`), so this leaves it out.
+  // newton on 1/x (the fourth sample) doubles its guess until it overflows
+  // (a stop since L125a): the program calls it within a budget (`root
+  // near`), so this leaves it out.
   const calls: [number, Value[]][] = [
-    ...es.flatMap((e) => [0, -1.5, 2, 1e-300, Infinity].map((x): [number, Value[]] => [evaluate, [e, x]])),
+    ...es.flatMap((e) => [0, -1.5, 2, 1e-300, 1e300].map((x): [number, Value[]] => [evaluate, [e, x]])),
     ...es.flatMap((e, n): [number, Value[]][] => [[constant, [e]], [simplify, [e]], [simplify, [derive(e)]], ...(n === 3 ? [] : [[newton, [e, derive(e), 1]], [newton, [e, derive(e), -3]]] as [number, Value[]][])]),
   ];
   sameAndFreed(build(a.lowered), calls, a.want, a.label);
   const c = inC("calculus");
   const sinc = c.at("sinc"), parabola = c.at("parabola", true), x2 = c.at("x² − 2");
-  sameAndFreed(build(c.lowered), [-2, 0, -0, 1e-9, 3, NaN].flatMap((x): [number, Value[]][] => [[sinc, [x]], [parabola, [x]], [x2, [x]]]), c.want, c.label);
+  sameAndFreed(build(c.lowered), [-2, 0, -0, 1e-9, 3, 1e300].flatMap((x): [number, Value[]][] => [[sinc, [x]], [parabola, [x]], [x2, [x]]]), c.want, c.label);
 });
 
 test("searches in C: Countdown's solutions, every answer in the evaluator's order, and every cell freed", { skip }, () => {
@@ -334,7 +339,7 @@ test("Float64s shown in C: JavaScript's shortest digits, rounded as the evaluato
   const v = inC("converter");
   let seed = 3n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
-  const xs = [0, -0, 1, -1, 0.5, 1e21, 1e-7, 123.456, 1 / 3, NaN, Infinity, -Infinity, 5e-324, 1.7976931348623157e308, 0.1 + 0.2, 2 ** 53, 4.35, 1e-10, 0.0000005,
+  const xs = [0, -0, 1, -1, 0.5, 1e21, 1e-7, 123.456, 1 / 3, 5e-324, 1.7976931348623157e308, 0.1 + 0.2, 2 ** 53, 4.35, 1e-10, 0.0000005,
     ...Array.from({ length: 300 }, (_, k) => (next() - 0.5) * 10 ** Math.floor(next() * 40 - 20) * (k % 3 ? 1 : 1e9))];
   sameAndFreed(build(v.lowered), ["as °C", "as cups", "as min/km"].flatMap((fn) => xs.map((x): [number, Value[]] => [v.at(fn), [x]])), v.want, v.label);
 });

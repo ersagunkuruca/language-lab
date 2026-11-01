@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { close, makeRunner, type Value } from "../../ters/src/lang/run.ts";
+import { Aborted, close, makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -56,8 +56,10 @@ test("inverse and conjugate of a named function: the evaluator's answers, as pla
   // The same numbers as the language compares them (within 1e-9): the
   // interpreter solves with fractions, the plan with floats.
   for (const name of exports) for (const v of [0, 0.25, -0.5, 0.9, 3, -7]) {
-    const [got, want] = [defs[name](v) as number, ev(name, v) as number];
-    assert.ok(close(got, want), `${name}(${v}): ${got} against ${want}`);
+    // A stop (L125c, the log of 0 or less) is an Abort with its reason, on both.
+    const said = (run: () => unknown) => { try { return run(); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
+    const [got, want] = [said(() => defs[name](v)), said(() => ev(name, v))];
+    assert.ok(typeof got === "number" && typeof want === "number" ? close(got, want) : got === want, `${name}(${v}): ${got} against ${want}`);
   }
   const line = r.value(Object.keys(names).find((d) => names[d] === "line" && code.nodes[d]?.kind === "def")!);
   assert.equal(ev("back of", line, 7), 2);

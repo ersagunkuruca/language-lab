@@ -53,6 +53,7 @@ import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, 
 import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { STOPS } from "./stops.ts";
 import { fieldIndex } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
@@ -230,8 +231,12 @@ export type SExpr =
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }
-  | { k: "if"; cond: SExpr; then: SExpr; else: SExpr; t: LType }
-  | { k: "let"; i: number; value: SExpr; body: SExpr }
+  // `check`: a finiteness check (L125c2), `then` the stop, `else` the
+  // value; a shader takes `else` alone (unchecked).
+  | { k: "if"; cond: SExpr; then: SExpr; else: SExpr; t: LType; check?: true }
+  // `check`: a value named for a finiteness check (L125c2), used once
+  // without it.
+  | { k: "let"; i: number; value: SExpr; body: SExpr; check?: true }
   // `cps`: a call of a function with several answers (W4d), the rest of
   // the search passed as its last input.
   | { k: "call"; fn: number; args: SExpr[]; tail: boolean; cps?: true }
@@ -300,6 +305,9 @@ export const OPS = {
   iless: { t: "i32" }, ieq: { t: "i32" }, itof: { t: "f64" },
   // One answer or none (`shader`): none sets the shader's flag.
   iquot: { t: "int32" }, irem: { t: "int32" }, ipow: { t: "int32" }, iwhole: { t: "int32" },
+  // stop(i): the program stops with STOPS[i] (L125c2, finite() below):
+  // a WebAssembly host's import, WASI's own line and exit, C's lab_stop.
+  stop: { t: "f64" },
 } as const satisfies Record<string, { t: SType; host?: boolean }>;
 
 
@@ -679,6 +687,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const t = stype(zonk(n.args[0]));
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Float64s or Bools");
           const [x, y] = args();
+          // Each checked once, named, so equal's rule reads locals (L125c2).
+          if (t === "f64" && !opts.shader) return held(f, fin(f, x), (lx: SExpr) => held(f, fin(f, y), (ly: SExpr) => same(lx, ly, t, f, tail)));
           return same(x, y, t, f, tail);
         }
         if (opts.data && target === COMPARE) {
@@ -686,7 +696,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           // own order, then the Order case.
           const t = stype(zonk(n.args[0])), o = stype(zonk(id));
           if (!t || !o || !isData(o)) throw new Refused(`compares ${whyNot(zonk(n.args[0]))}`);
-          const [x, y] = args(), [lx, ly] = [f.locals.push(t) - 1, f.locals.push(t) - 1], c = f.locals.push("f64") - 1, at: SExpr = { k: "local", i: c };
+          const [x, y] = args().map((a) => (t === "f64" ? fin(f, a) : a)), [lx, ly] = [f.locals.push(t) - 1, f.locals.push(t) - 1], c = f.locals.push("f64") - 1, at: SExpr = { k: "local", i: c };
           const order = (v: Id): SExpr => build(v, zonk(id), []);
           const num = (v: number): SExpr => ({ k: "num", v });
           return { k: "let", i: lx, value: x, body: { k: "let", i: ly, value: y, body: { k: "let", i: c, value: compared({ k: "local", i: lx }, { k: "local", i: ly }, t, f, false), body: { k: "if", cond: { k: "op", op: "less", args: [at, num(0)] }, then: order(ORDER_V.before), else: { k: "if", cond: { k: "op", op: "equal", args: [at, num(0)] }, then: order(ORDER_V.same), else: order(ORDER_V.after), t: o }, t: o } } } };
@@ -731,10 +741,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
-          return { k: "rt", fn: RT[target], args: args() };
+          return { k: "rt", fn: RT[target], args: RT_LATE.has(RT[target]) ? args().map((a, i) => (stype(zonk(n.args[i])) === "f64" ? fin(f, a) : a)) : args() };
         }
         if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
-        if (scalarOp(target)) return { k: "op", op: scalarOp(target)!, args: args() };
+        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e); }
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === S.fail && opts.shader) {
@@ -1659,7 +1669,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const ls = fnNode.params.map((p, k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(p, i); return { i, value: xs[k] }; });
           return ls.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(fnNode.body, inner, f, false));
         }
-        if (fnNode.kind === "ref" && scalarOp(fnNode.target)) return { k: "op", op: scalarOp(fnNode.target)!, args: xs };
+        if (fnNode.kind === "ref" && scalarOp(fnNode.target)) { const e = { k: "op" as const, op: scalarOp(fnNode.target)!, args: xs }; return opts.shader ? e : checked(f, e); }
         if (fnNode.kind === "ref" && code.nodes[fnNode.target]?.kind === "def") return { k: "call", fn: func(fnNode.target), args: xs, tail: false };
         throw new Refused("takes the parts with a function that isn't written here (that needs closures)");
       };
@@ -1694,4 +1704,72 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
   return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded };
+}
+
+// A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on
+// WebAssembly and C as on the evaluator (run.ts finiteFloat) and compiled
+// JavaScript (runtime.js $fin): the reasons a program stops, by number.
+export { STOPS };
+const [DIV0, MOD0, SQRT, LOG, POW0, POWNEG, OVERFLOW] = STOPS.map((_, i) => i);
+
+// The checks for a Float64 operation the program calls (`call`, made in
+// f), as it is lowered. No answer is checked on the argument, unless it's
+// a literal that can't be one; an overflow late, where it could vanish or
+// decide something: a comparison (less, equal, compare), a divisor, exp
+// and atan2 (which turn ∞ into finite values), show, range and a
+// conversion. Through + − · IEEE keeps it ∞ or NaN, so a chain is checked
+// once, and one nothing uses isn't reported. Only the program's own
+// operations are checked: the lowering's own arithmetic (equal's nearness,
+// which subtracts) is left alone. A shader has no checks: a GPU can't stop.
+// Unlike on the evaluator and in compiled JavaScript, the stop isn't an
+// Abort a handler in the program gets: it ends the program.
+const num = (v: number): SExpr => ({ k: "num", v });
+const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
+const stop = (i: number): SExpr => op("stop", num(i));
+const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", cond, then, else: otherwise, t: "f64" });
+// When bad, the stops in why; otherwise ok.
+const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
+// e without its checks: what a GPU runs, which can't stop.
+export const unchecked = (e: SExpr): SExpr => {
+  if (e.k === "if" && e.check) return unchecked(e.else);
+  if (e.k === "let" && e.check) {
+    const value = unchecked(e.value), body = unchecked(e.body);
+    return value.k === "local" || value.k === "num" || reads(body, e.i) <= 1 ? put(body, e.i, value) : { k: "let", i: e.i, value, body };
+  }
+  return mapKids(e, unchecked);
+};
+const reads = (e: SExpr, i: number): number => (e.k === "local" ? Number(e.i === i) : kids(e).reduce((n, x) => n + reads(x, i), 0));
+// e with local i read as v (held's locals, read once the checks are gone).
+const put = (e: SExpr, i: number, v: SExpr): SExpr => (e.k === "local" && e.i === i ? v : mapKids(e, (x) => put(x, i, v)));
+const lit = (e: SExpr) => (e.k === "num" ? e.v : e.k === "op" && e.op === "neg" && e.args[0].k === "num" ? -e.args[0].v : null);
+// x as a local of f, then body given it.
+const held = (f: SFunc, x: SExpr, body: (l: SExpr) => SExpr): SExpr => {
+  if (x.k === "local" || x.k === "num") return body(x);
+  const i = f.locals.push("f64") - 1;
+  return { k: "let", i, value: x, body: body({ k: "local", i }), check: true };
+};
+const isFinite = (l: SExpr) => op("equal", op("sub", l, l), num(0));
+// x, which must be finite here.
+export const fin = (f: SFunc, x: SExpr): SExpr => (lit(x) !== null ? x : held(f, x, (l) => guard(op("not", isFinite(l)), stop(OVERFLOW), l)));
+const LATE: Partial<Record<Op, true>> = { less: true, equal: true, exp: true };
+export const RT_LATE = new Set(["number.show", "number.range", "int.wholePart"]);
+function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>): SExpr {
+  const [a, b] = r.args;
+  switch (r.op) {
+    case "div": case "mod": {
+      const v = lit(b);
+      if (v !== null && v !== 0) return r;
+      return held(f, b, (lb) => guard(op("equal", lb, num(0)), stop(r.op === "div" ? DIV0 : MOD0), op(r.op, a, fin(f, lb))));
+    }
+    case "sqrt": { const v = lit(a); return v !== null && v >= 0 ? r : held(f, a, (l) => guard(op("less", l, num(0)), stop(SQRT), op("sqrt", l))); }
+    case "log": return held(f, a, (l) => guard(op("or", op("less", l, num(0)), op("equal", l, num(0))), stop(LOG), op("log", l)));
+    case "pow": return held(f, a, (la) => held(f, b, (lb) => held(f, op("pow", la, lb), (p) =>
+      guard(op("not", op("and", isFinite(p), op("and", isFinite(la), isFinite(lb)))),
+        iff(op("and", op("equal", la, num(0)), op("less", lb, num(0))), stop(POW0),
+          iff(op("and", op("less", la, num(0)), op("and", isFinite(lb), op("not", op("equal", op("floor", lb), lb)))), stop(POWNEG), stop(OVERFLOW))),
+        p))));
+    // −0 is 0, as on the evaluator: atan2(−0, −1) is π.
+    case "atan2": return { ...r, args: r.args.map((x) => (lit(x) !== null ? num(lit(x)! + 0) : op("add", fin(f, x), num(0)))) };
+    default: return LATE[r.op] ? { ...r, args: r.args.map((x) => fin(f, x)) } : r;
+  }
 }

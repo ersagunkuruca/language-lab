@@ -14,7 +14,7 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { NotInvertible, relate } from "../../ters/src/lang/relate.ts";
-import { makeRunner } from "../../ters/src/lang/run.ts";
+import { Aborted, makeRunner } from "../../ters/src/lang/run.ts";
 import { NUMBER, Subst } from "../../ters/src/lang/types.ts";
 import { differentiate, NotDifferentiable } from "../../ters/src/lang/derive.ts";
 import { constraints } from "../../ters/src/units.ts";
@@ -162,8 +162,10 @@ test("every number builtin lowers to the scalar profile (WASM, WGSL), or says wh
     const r = makeRunner(code, info, { print: () => {} });
     for (const x of [-2.5, -1, 0.5, 3.7]) {
       const xs = SAMPLE.slice(0, arity(id)).map((v, i) => (i === 0 ? x : v));
-      const want = r.call(r.value(f), ...xs).next().value;
-      assert.ok(Object.is(w.f(...xs), want), `${name(id)}(${xs}) in WASM: ${w.f(...xs)} ≠ ${want}`);
+      // A stop (L125c) is an Abort with its reason, on both.
+      const said = (run: () => unknown) => { try { return run(); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
+      const want = said(() => r.call(r.value(f), ...xs).next().value), got = said(() => w.f(...xs));
+      assert.ok(Object.is(got, want), `${name(id)}(${xs}) in WASM: ${got} ≠ ${want}`);
     }
   }
 });

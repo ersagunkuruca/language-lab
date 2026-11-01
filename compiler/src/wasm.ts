@@ -29,10 +29,10 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
-import type { Runtime, World } from "../../ters/src/lang/run.ts";
+import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
-import { fails, isArray, isData, isFn, kids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { fails, isArray, isData, isFn, kids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -42,6 +42,9 @@ const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.st
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
+  // The program stops with STOPS[i] (L125c2): the host throws its Abort;
+  // under WASI, wasi.stop writes the reason and exits.
+  stop: { name: "stop", params: 1 },
 };
 // Float64 arithmetic the runtime writes itself (mod, from musl's fmod): it
 // alone doesn't make a module need texts.
@@ -66,7 +69,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
   const maths = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
-  const hosts = wasi ? [] : maths, math = wasi && maths.length > 0;
+  const hosts = wasi ? [] : maths, math = wasi && maths.some((op) => op !== "stop");
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
   // The runtime functions used, with the ones they use.
   // WASI's functions it uses (wasi_fd_write …) are imports, and the
@@ -85,7 +88,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     kids(e).forEach(rtCalls);
   };
   funcs.forEach((f) => rtCalls(f.body));
-  if (math) maths.forEach((op) => need(`math.${op}`));
+  if (math) maths.forEach((op) => op !== "stop" && need(`math.${op}`));
+  if (wasi && maths.includes("stop")) need("wasi.stop");
   // The world's operations used, imported from "world" in the order first
   // used, then "reason" (the last failure's) when one can fail.
   const worldOps: Extract<SExpr, { k: "world" }>[] = [];
@@ -476,6 +480,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "op": {
         const args = e.args.flatMap(code1);
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
+        if (e.op === "stop") return [...args, 0x10, ...u(rtIndex("wasi.stop"))];
         if (math && HOST[e.op]) return [...args, 0x10, ...u(rtIndex(`math.${e.op}`))];
         if (e.op === "mod") return [...args, 0x10, ...u(rtIndex("number.mod"))];
         return [...args, ...[INSTR[e.op]![0]].flat()];
@@ -602,7 +607,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
       case "zero": return `${d}${zeroText(e.t)}`;
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
-      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
+      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "stop" ? "call $wasi.stop" : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
@@ -660,7 +665,7 @@ const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some
 // operation the world doesn't have fails saying so, as there.
 export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 }, world: worldOf(rt, () => ex) });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw new Aborted(STOPS[i]); } }, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
   return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
 }
@@ -707,7 +712,9 @@ export async function runMain(lowered: Lowered, m: Module, name: string, args: s
   const f = lowered.funcs.find((g) => g.name === name && !g.inner && !g.budgeted);
   if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
   const ex = (await instantiate(m, rt)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
-  const got = ex[name](...(f.params.length ? [textList(ex, args)] : []));
+  let got: unknown;
+  // A Float64 with no answer or too big (L125c2): the host's stop threw.
+  try { got = ex[name](...(f.params.length ? [textList(ex, args)] : [])); } catch (e) { if (!(e instanceof Aborted)) throw e; (rt.world?.error ?? rt.print)(e.reason); return 1; }
   const [v, st] = f.partial ? (got as [unknown, number]) : [got, 0];
   if (st === 2) { (rt.world?.error ?? rt.print)(fromText(ex, ex["Abort.reason"]())); return 1; }
   if (st !== 0) throw new Error(`${name} had no answer`);
