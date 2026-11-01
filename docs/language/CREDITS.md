@@ -347,6 +347,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | What | Label | Who and where |
 |---|---|---|
 | A let is a reroute dot on a wire | Influence | Blender's node editor reroutes (also Unreal and Houdini). Credited in `editor/typedGraph.ts`, README.md. |
+| A list written in place as an input drawn on the node itself: a socket per item, and an empty one that adds an item (E166) | Prior art | Blender's multi-input sockets (the Join Geometry node's input takes any number of links). `editor/typedGraph.ts` `call`, PORTS-2026-11-01.md §4. |
 | Named let/get nodes, wire portals | Influence | Unreal Blueprints' local variables and named reroutes, Max/MSP send/receive, World Machine portals. NODE-EDITOR.md. |
 | Bridges over crossing wires, tunnels under nodes | Ersagun's idea | Prior art: line hops in circuit schematics and Visio. |
 | Tidy reorders columns to cut crossings | Prior art | The barycenter step of layered graph drawing: K. Sugiyama, S. Tagawa, M. Toda, "Methods for Visual Understanding of Hierarchical System Structures", IEEE Trans. SMC, 1981. Credited in `editor/graphLayout.ts`. |
