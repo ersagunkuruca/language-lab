@@ -20,7 +20,8 @@ import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SHOW_ANY, SIGS } from "./std.ts";
-import { Subst, type Type } from "./types.ts";
+import { INT, STRING, Subst, type Type } from "./types.ts";
+import { oneHolder } from "./one-holder.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
 // are its row's (byType), which go through its meaning.
@@ -37,24 +38,38 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // written, so a rewrite that makes it fail (a signature it pins to List,
 // say) is dropped, the list row first, and the program runs as written.
 // The check made is handed back as `info`.
-export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = []): Chosen {
+// `hostMaps`: the program runs where std's Table is (the evaluator and
+// compiled JavaScript), so a Map may be a hash table changed in place
+// (C63b); WebAssembly, C and shaders have none.
+export interface LibraryOptions { hostMaps?: boolean }
+
+export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
   for (;;) {
-    const r = choiceOf(code, info, names, main, defs, asked, skip);
+    const r = choiceOf(code, info, names, main, defs, asked, skip, options);
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
     const checked = infer(r.code, r.names, undefined, { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] });
     if (checked.errors.length <= info.errors.length) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
     const list = r.reps.find((x) => x.of === LIST);
-    for (const x of list ? [list] : r.reps) skip.add(x.of);
+    // A hash table that doesn't check gives way to the tree, not to the
+    // definition.
+    const table = r.reps.find((x) => x.oneHolder);
+    for (const x of table ? [table] : list ? [list] : r.reps) skip.add(table ? x.name + " " + x.of : x.of);
   }
 }
 
-function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>): Chosen & { reps: Representation[] } {
+function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
-  for (const tree of LIBRARY.reps.filter((r) => r.byType)) {
-    const spec = LIBRARY.reps.find((r) => r.of === tree.of && r.canonical)!;
-    if (asked.some((r) => r.of === tree.of) || skip.has(tree.of)) continue;
-    if (!uses(code, main, [spec, tree]).length || choose(code, main, [spec, tree]).rep !== tree || keyed(info, defs, code, tree.of) || generic(info, defs, code, tree)) continue;
+  for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
+    const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
+    if (asked.some((r) => r.of === ty) || skip.has(ty)) continue;
+    // A hash table only where it is (hostMaps), and only where every map
+    // has one holder, so a put changing it in place can't be seen.
+    const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
+      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))));
+    if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
+    const tree = choose(code, main, [spec, ...rows]).rep;
+    if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
     if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree))) continue;
@@ -250,6 +265,22 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 
 // A map's keys or a set's items that hold the type (a set of sets): the
 // tree orders them by compare, which would see their shapes.
+// Every value of the row's type has one holder (one-holder.ts), and its
+// keys, wherever the program's own definitions have one, are Int or Text,
+// which the table keeps as they are (a Float64's equal is near).
+const CHANGES = ["put", "update at", "remove key", "merge maps"];
+function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
+  const changes = new Map(CHANGES.map((n) => [prelude(n), 0]));
+  if (!oneHolder(code, info, main, new Set([row.of]), new Set(Object.keys(row.impl)), changes).ok) return false;
+  for (const id of defs.flatMap((d) => subtree(code, d))) {
+    const t0 = info.typeOf.get(id);
+    if (!t0) continue;
+    const t = info.subst.zonk(t0);
+    if (t.t === "con" && t.id === row.of) { const k = info.subst.zonk(t.args[0]); if (k.t !== "con" || (k.id !== INT && k.id !== STRING)) return false; }
+  }
+  return true;
+}
+
 function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
   const has = (t: Type): boolean => t.t === "con" && (t.id === of || t.args.some((a) => has(info.subst.zonk(a))));
   const deep = (t: Type): boolean => {

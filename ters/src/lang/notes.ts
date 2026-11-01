@@ -59,6 +59,7 @@ export const NOTES: Comments = {
   "builtin.representation.showBy": "For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.",
   "builtin.representation.compareBy": "For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.",
   "builtin.representation.hides": "hides(case, position): that field of t's case isn't kept as a value of t at r (a list's rest, in an array, is the items after a position), so it is made only when an arm reads it, and a fold whose arms don't read it costs only its walk.",
+  "builtin.representation.inPlace": "in place(): r changes a value where t's jobs make a changed copy (a hash table's put), so it is chosen only where every value of t has one holder: nobody can see the value before the change.",
   "builtin.representation.headBy": "For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.",
   "std.order": "What compare answers: before, same or after.",
   "std.outcome": "The result of something that may have been refused: done(value) or refused(reason). The data form of Abort, for keeping it in a list or record.",

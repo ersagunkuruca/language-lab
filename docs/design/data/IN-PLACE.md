@@ -4,8 +4,11 @@ A design note for BACKLOG C56 (docs/design/data/STABLE-REFERENCES.md §3) and
 GAPS.md M6. It is written 2026-10-29, after round 5 (routes) and M1 to M4.
 It decides the order of the steps and what each one must measure. Nothing
 here changes the language. **Status (2026-11-01):** C62 measured and not built (#749). C63's
-one-holder check is built (C63a, ters/src/lang/one-holder.ts); the
-hash table that uses it (C63b) is next.
+one-holder check is built (C63a, ters/src/lang/one-holder.ts), and Map's
+`hash table` row uses it (C63b, map-tree.ts, chosen in library-reps.ts):
+a counting program runs about 8× faster compiled. routes still gets the
+tree, because the chooser counts each job once and routes lists its keys;
+C63c weighs a job inside a loop by n.
 
 ## The rule
 
