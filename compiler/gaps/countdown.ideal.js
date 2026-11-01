@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Countdown, written by hand: the JavaScript the compiler should aim to
-// produce for projectional/examples/countdown. Same program, same search,
+// produce for ters/examples/countdown. Same program, same search,
 // same order of answers, same output. What differs is only what a compiler
 // could decide on its own; each difference is marked with the gap it stands
 // for in docs/reports/GAPS.md (round 2: G11, G12, …; round 1's numbers where
@@ -27,7 +27,7 @@ const OPS = [{ tag: PLUS, fields: [] }, { tag: MINUS, fields: [] }, { tag: TIMES
 const NIL = null;
 
 // Numbers are equal to the precision floats carry, as in the language
-// (projectional/src/lang/run.ts `close`).
+// (ters/src/lang/run.ts `close`).
 const near = (a, b) => a === b || Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b));
 const mod = (a, b) => ((a % b) + b) % b;
 const show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));

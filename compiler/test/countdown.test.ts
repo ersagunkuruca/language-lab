@@ -1,4 +1,4 @@
-// Countdown (projectional/examples/countdown), the program of GAPS.md
+// Countdown (ters/examples/countdown), the program of GAPS.md
 // round 2, written in the editor by clicks: the evaluator, the compiled code,
 // WebAssembly and the hand-written ideal must find the same solutions in
 // the same order.

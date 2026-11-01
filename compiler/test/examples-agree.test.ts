@@ -17,13 +17,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { sweep } from "../../projectional/test/helpers.ts";
+import { sweep } from "../../ters/test/helpers.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
 
-const projectional = join(import.meta.dirname, "../../projectional");
-const lab = join(projectional, "cli/lab.ts");
-const examples = join(projectional, "examples");
+const ters = join(import.meta.dirname, "../../ters");
+const lab = join(ters, "cli/lab.ts");
+const examples = join(ters, "examples");
 const dir = mkdtempSync(join(tmpdir(), "agree-"));
 
 // What an example needs on its command line, written into `dir` first.

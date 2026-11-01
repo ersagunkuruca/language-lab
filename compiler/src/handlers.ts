@@ -28,10 +28,10 @@
 // writing the case in; and lambda lifting (Johnsson, 1985) for the values
 // the cases use.
 
-import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../../projectional/src/model.ts";
-import type { Info } from "../../projectional/src/lang/infer.ts";
-import { SIGS } from "../../projectional/src/lang/std.ts";
-import { DIVERGE, Subst, type Type } from "../../projectional/src/lang/types.ts";
+import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
+import { SIGS } from "../../ters/src/lang/std.ts";
+import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
 
 type Names = Record<Id, string>;
 

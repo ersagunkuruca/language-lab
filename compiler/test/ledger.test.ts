@@ -1,4 +1,4 @@
-// ledger (projectional/examples/ledger), GAPS.md round 3's program, built
+// ledger (ters/examples/ledger), GAPS.md round 3's program, built
 // in the editor by clicks: the evaluator, the compiled code and the
 // hand-written ideal must print the same and exit the same way, failures
 // included.

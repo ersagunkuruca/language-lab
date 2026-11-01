@@ -54,7 +54,7 @@
 //
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
-import type { Id } from "../../projectional/src/model.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { isArray, isRecord, noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).

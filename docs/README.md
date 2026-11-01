@@ -13,7 +13,7 @@ work lives in this folder, one subfolder per kind:
 | [history/](history/) | Superseded plans and notes, kept as written |
 
 Open work is in [BACKLOG.md](../BACKLOG.md) at the root. Each package keeps
-its own README next to its code ([projectional](../projectional/README.md),
+its own README next to its code ([ters](../ters/README.md),
 [compiler](../compiler/README.md), [invertible](../invertible/README.md)).
 
 The tables below list every document with a status: **current**
@@ -33,7 +33,7 @@ updated; their findings are rows in the backlog.
 | [GUIDE.md](learn/GUIDE.md) | A hands-on tour of the editor, doing real edits on the dice program ([guide.html](https://ersagunkuruca.github.io/language-lab/guide.html)) | current |
 | [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
 | [RUNNING.md](learn/RUNNING.md) | What happens when you press Run, and every other way a program runs | current |
-| [projectional/README.md](../projectional/README.md) | The prototype: the program is the tree; layout of `projectional/`, commands | current |
+| [ters/README.md](../ters/README.md) | The prototype: the program is the tree; layout of `ters/`, commands | current |
 
 ## The language
 
@@ -160,7 +160,7 @@ A new dated report goes in its folder and in this table, in its own PR. A QA pas
 
 ## Examples
 
-Each example is a folder under `projectional/examples/`. Two have a README:
-[routes](../projectional/examples/routes/README.md) (bigger-program round 5)
-and [archive](../projectional/examples/archive/README.md) (examples kept out
+Each example is a folder under `ters/examples/`. Two have a README:
+[routes](../ters/examples/routes/README.md) (bigger-program round 5)
+and [archive](../ters/examples/archive/README.md) (examples kept out
 of the editor's menu).

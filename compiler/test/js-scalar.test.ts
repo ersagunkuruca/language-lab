@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { lowerScalar } from "../src/scalar.ts";
 import { loadJs } from "../src/js-scalar.ts";
 import { load } from "../src/program.ts";
-import { makeRunner } from "../../projectional/src/lang/run.ts";
+import { makeRunner } from "../../ters/src/lang/run.ts";
 
 const first = <T>(xs: Iterable<T>) => { for (const x of xs) return x; };
 
@@ -36,9 +36,9 @@ test("examples/shaders: red, green and blue as JavaScript", () => {
 });
 
 test("examples/raymarch in Float32: the JavaScript rounds as the GPU does, and agrees with the evaluator exactly", async () => {
-  const { withFloat32 } = await import("../../projectional/src/lang/float32.ts");
-  const { represent } = await import("../../projectional/src/lang/represent.ts");
-  const { infer } = await import("../../projectional/src/lang/infer.ts");
+  const { withFloat32 } = await import("../../ters/src/lang/float32.ts");
+  const { represent } = await import("../../ters/src/lang/represent.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
   const p = load("raymarch");
   const colour = p.named("colour");
   const w = withFloat32(p.code, p.pres.names);
@@ -67,10 +67,10 @@ test("examples/raymarch in Float32: the JavaScript rounds as the GPU does, and a
 // around it. There are no closures here, so it becomes a definition of
 // its own given `s`; the GPU takes it too.
 test("a function named by a let, using a name from around it, is a definition of its own", async () => {
-  const { Lang } = await import("../../projectional/src/lang/dsl.ts");
-  const { base, baseNames } = await import("../../projectional/src/lang/load.ts");
-  const { infer } = await import("../../projectional/src/lang/infer.ts");
-  const { B } = await import("../../projectional/src/prelude.ts");
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { base, baseNames } = await import("../../ters/src/lang/load.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { B } = await import("../../ters/src/prelude.ts");
   const { emitWgsl } = await import("../src/wgsl.ts");
   const k = new Lang();
   const hsi = k.def("hsi");

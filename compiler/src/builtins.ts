@@ -7,9 +7,9 @@
 // target, how it's done or why it isn't, and test/builtins.test.ts checks
 // that every builtin std.ts declares has a record.
 
-import type { Id } from "../../projectional/src/model.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../projectional/src/lang/std.ts";
+import type { Id } from "../../ters/src/model.ts";
+import { B } from "../../ters/src/prelude.ts";
+import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -117,7 +117,7 @@ export const TARGETS: Record<Id, Target> = {
   [IO.fileExists]: { js: op(([a]) => `$io.fileExists(${a})`), scalar: WORLD },
   [IO.listFolder]: { js: op(([a]) => `$io.listFolder(${a})`), scalar: WORLD },
   [IO.fetchText]: { js: op(([a]) => `$io.fetchText(${a})`), scalar: WORLD },
-  // Cells: the runtime's one handler (projectional/src/lang/cells.ts). A
+  // Cells: the runtime's one handler (ters/src/lang/cells.ts). A
   // formula is given its compiled thunk; a read of one that gave no value
   // throws, which ends whatever formula is reading it, as in the evaluator.
   [CELL_OPS.cell]: { js: op(([a]) => `$cells().cell(${a})`), scalar: CELLS },
@@ -163,7 +163,7 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.toNumber]: { js: op(([a]) => `Number(${a})`), scalar: INT },
   [INT_OPS.wholePart]: { js: "partial", scalar: INT },
   [INT_OPS.range]: { js: "impl", scalar: DATA },
-  // Text at real sizes (projectional/src/lang/text.ts).
+  // Text at real sizes (ters/src/lang/text.ts).
   // Arrays (std.ts ARRAY_OPS, C30d): in JS the runtime's two-ended buffer
   // views (runtime.js, C30d1); in WebAssembly runtime functions, one copy
   // per item type (scalar.ts ARRAY_RT, wasm-rt.ts ARRAYS, C66).
@@ -191,7 +191,7 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.fromCode]: { js: "partial", scalar: DATA },
   // The generic + − · −x <: resolved to each type's own operation (the
   // records above) before the compiler sees the program, by compile() and
-  // lowerScalar() calling projectional/src/lang/arith.ts first.
+  // lowerScalar() calling ters/src/lang/arith.ts first.
   ...Object.fromEntries(Object.values(ARITH).map((id) => [id, { js: written("never: arith.ts resolves it to its type's own operation before compiling"), scalar: written("never: arith.ts resolves it to its type's own operation before lowering") }])),
 };
 

@@ -19,12 +19,12 @@ without waiting for the coordinator.
 
 | lane | owns | thread |
 |---|---|---|
-| **E: Editor** | `projectional/editor/`, the editor's tests and smoke | "Editor lane" |
+| **E: Editor** | `editor/`, the editor's tests and smoke | "Editor lane" |
 | **C: Compiler and targets** | `compiler/`, JS/WASM/WGSL output, performance, packaging | "Compiler lane" |
 | **L: Language and library** | the checker, evaluator, `relate.ts`, std, effects, web runtime, examples, docs, the number systems | "Language lane" |
 
 Why three: the editor rule already allows only one thread in
-`projectional/editor/` at a time, and the compiler and the language core are
+`editor/` at a time, and the compiler and the language core are
 the two other places that change independently. A fourth lane would mean two
 threads in the same files. Lanes are areas, not people: an item that needs
 two areas goes to the lane where most of its change is, and that lane asks
@@ -123,7 +123,7 @@ the coordinator updates it at triage and when Ersagun changes direction.
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
 - Before pushing, run the tests your change reaches: `npm run affected`
-  in projectional (unit tests in all three packages; `-- --list` says
+  in ters (unit tests in all three packages; `-- --list` says
   which). The browser tests (the editor, shaders, sound, the GPU check)
   take about ten minutes, so they run once a night, not per change; run
   them before pushing only when a change is risky for the page, with
@@ -171,7 +171,7 @@ would keep us a Lisp; docs/process/TESTING.md has the reasoning).
   normal, not cheating. Still never allowed: weakening or skipping a test
   while the behaviour it protects is meant to stay the same.
 - **Under 5 seconds per file per change.** Anything slower is a sweep and
-  checks a slice per run with `sweep()` from `projectional/test/helpers.ts`
+  checks a slice per run with `sweep()` from `ters/test/helpers.ts`
   (all of it nightly and with `SWEEP=all`).
 - **No coverage targets.** Whether the tests earn their time is judged in
   the critical review, sometimes with a mutation pass (change the code,

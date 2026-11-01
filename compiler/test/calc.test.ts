@@ -1,4 +1,4 @@
-// calc (projectional/examples/calc), the program of GAPS.md round 1: the
+// calc (ters/examples/calc), the program of GAPS.md round 1: the
 // evaluator, the compiled code and the hand-written ideal must print the
 // same thing on every session.
 

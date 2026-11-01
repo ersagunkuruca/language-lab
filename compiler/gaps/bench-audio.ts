@@ -1,4 +1,4 @@
-// The pedal (projectional/examples/pedal, AUDIO.md) against real time: a
+// The pedal (ters/examples/pedal, AUDIO.md) against real time: a
 // block of 128 samples every 2.7 ms is 375 blocks a second at 48 kHz. The
 // compiled program, the evaluator, and the pedal written by hand in
 // JavaScript over a Float64Array (the ideal, as gaps/*.ideal.js are for the
@@ -7,11 +7,11 @@
 
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { soundOf, type Play } from "../../projectional/cli/sound.ts";
-import { loadProgram } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
+import { soundOf, type Play } from "../../ters/cli/sound.ts";
+import { loadProgram } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
 
-const p = loadProgram(join(import.meta.dirname, "../../projectional/examples/pedal"));
+const p = loadProgram(join(import.meta.dirname, "../../ters/examples/pedal"));
 const prog = { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names };
 
 // By hand: Haar's split in lifting steps, tanh(32 atanh x) on the slow

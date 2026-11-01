@@ -93,7 +93,7 @@ holds one item on, and `first of array` has no answer when it is empty.
 - **N4b.** The world and whole programs:
   - the console and files over the C library and POSIX (`stat`,
     `opendir`), failing with the words Node's world uses
-    (projectional/src/lang/world.ts) and status 2. A folder's names are
+    (ters/src/lang/world.ts) and status 2. A folder's names are
     sorted as JavaScript sorts texts, by UTF-16 units;
   - `main` gets the arguments as a List Text and runs on a thread with a
     1 GiB stack (address space, used only as deep as the program goes),

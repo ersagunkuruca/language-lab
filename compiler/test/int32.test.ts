@@ -5,11 +5,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { makeRunner } from "../../projectional/src/lang/run.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { INT_OPS } from "../../projectional/src/lang/std.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { makeRunner } from "../../ters/src/lang/run.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { INT_OPS } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";

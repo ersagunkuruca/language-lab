@@ -40,9 +40,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: projectional/package-lock.json
+          cache-dependency-path: ters/package-lock.json
       - name: Build the pages
-        working-directory: projectional
+        working-directory: ters
         run: |
           npm ci
           npm run build-editor

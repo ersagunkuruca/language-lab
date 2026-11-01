@@ -11,7 +11,7 @@ not fixed in the demo PRs.
 
 ## 1. Bounce: one physics step in two and three dimensions
 
-`projectional/examples/bounce`, built as `apps/bounce.html`. Rigid bodies
+`ters/examples/bounce`, built as `apps/bounce.html`. Rigid bodies
 bounce in a box: a triangle, a square, a pentagon and a hexagon in the plane,
 and a tetrahedron, two cubes and an octahedron in space. `step`, `moved`,
 `off the walls`, `bounced` and `outline` are written once, generic over the
@@ -44,7 +44,7 @@ new.
 
 ## 2. Constructions: ruler-and-set-square geometry in plane PGA
 
-`projectional/examples/constructions`, built as `apps/constructions.html`. A
+`ters/examples/constructions`, built as `apps/constructions.html`. A
 small dynamic geometry tool, of the kind GeoGebra is, written from scratch
 in Cl(2, 0, 1). Lines are vectors a e₁ + b e₂ + c e₀ and points are
 bivectors e₁₂ + x e₂₀ − y e₁₀. The tools are new point, line (join),
@@ -73,7 +73,7 @@ construction takes 0.02 ms in compiled JS (1.5 ms before #724).
 
 ## 3. Spacetime: relativity and electromagnetism in Cl(1, 3)
 
-`projectional/examples/spacetime`, built as `apps/spacetime.html`. Sliders
+`ters/examples/spacetime`, built as `apps/spacetime.html`. Sliders
 set two speeds β₁ and β₂ and a field (E along y, B along z). The page has
 three cards:
 

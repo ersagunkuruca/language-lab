@@ -22,10 +22,10 @@
 // an answer. The cells that would hold them are left out, and a call of a
 // mode for the rest hands the array on.
 
-import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
-import { analyzer, determinism, type Exec, type Plan } from "../../projectional/src/lang/modes.ts";
-import { CONS, INT_OPS, NIL, S } from "../../projectional/src/lang/std.ts";
-import { B } from "../../projectional/src/prelude.ts";
+import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
+import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // chapters, written by hand: the JavaScript the compiler should aim to
-// produce for projectional/examples/chapters. Same program, same files
+// produce for ters/examples/chapters. Same program, same files
 // written in the same order, same output, same exit codes. What differs is
 // only what a compiler could decide on its own; each difference is marked
 // with the gap it stands for in docs/reports/GAPS.md (round 2, second program).

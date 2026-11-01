@@ -1,7 +1,7 @@
-// equal's one meaning (projectional run.ts sameNumber), compiled: JavaScript
+// equal's one meaning (ters run.ts sameNumber), compiled: JavaScript
 // for a Float64, a type variable and a list, and the scalar profile in
 // WebAssembly, against the evaluator's rule on the boundary values in
-// projectional/test/equality.test.ts.
+// ters/test/equality.test.ts.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,13 +9,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { sameNumber } from "../../projectional/src/lang/run.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { TRUE } from "../../projectional/src/lang/std.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import { PAIRS } from "../../projectional/test/helpers.ts";
+import { sameNumber } from "../../ters/src/lang/run.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { TRUE } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
+import { PAIRS } from "../../ters/test/helpers.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
