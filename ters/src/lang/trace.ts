@@ -23,11 +23,31 @@ export interface Trace { values: Map<Id, Value>; result?: Value; error?: { id: I
 // `entered`: told of every call to a function written as a lambda (run.ts).
 // A caller that bounds the run with it (throwing when time is up) may run
 // one that might not finish (newton, I78).
-export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"], entered?: Runtime["entered"]): Trace {
+// `copied`: a caller ran this definition as a copy at other number types
+// (arith.ts): + on multivectors, say, where the definition as written
+// defaults to Float64's (BACKLOG I125). When the definition as written
+// fails on these values, each copy is tried, and the one that runs has its
+// values shown on the nodes it copies.
+export function trace(written: Code, info: Info, def: Id, args: Value[], world?: Runtime["world"], entered?: Runtime["entered"], copied = false): Trace {
+  if (info.divergent.has(def) && !entered) return { values: new Map(), error: { id: def, message: "it might not finish, so it isn't run here" } };
+  const r = makeRunner(written, info, { print: () => {}, world, entered });
+  const own = traceOn(written, info, def, args, entered, r, null);
+  if (!own.error || !copied) return own;
+  const lam = (written.nodes[def] as NodeOf<"def">).body;
+  for (const [c, o] of r.copyOf ?? []) {
+    if (o !== lam || r.code.nodes[c]?.kind !== "lambda") continue;
+    const t = traceOn(written, info, def, args, entered, r, c);
+    if (!t.error) return t;
+  }
+  return own;
+}
+
+function traceOn(written: Code, info: Info, def: Id, args: Value[], entered: Runtime["entered"], r: ReturnType<typeof makeRunner>, copy: Id | null): Trace {
   const values = new Map<Id, Value>();
   const out: Trace = { values };
-  if (info.divergent.has(def) && !entered) { out.error = { id: def, message: "it might not finish, so it isn't run here" }; return out; }
-  const r = makeRunner(code, info, { print: () => {}, world, entered });
+  const code = copy ? r.code : written;
+  const orig = (id: Id) => (copy && r.copyOf?.get(id)) || id;
+  const put = (id: Id, v: Value) => values.set(orig(id), v);
   const first = (xs: Iterable<Value>, id: Id): Value => {
     for (const x of xs) return x;
     throw Object.assign(new Error("no answer (a Choice with none)"), { id });
@@ -57,7 +77,7 @@ export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Ru
         else if (head.kind === "lambda") {
           // A let: its dots get the values, then its body runs.
           const inner = new Map(env);
-          head.params.forEach((p, i) => { inner.set(p, vals[i]); values.set(p, vals[i]); });
+          head.params.forEach((p, i) => { inner.set(p, vals[i]); put(p, vals[i]); });
           v = walk(head.body, inner);
         } else v = first(r.call(walk(n.fn, env), ...vals), id);
         break;
@@ -71,9 +91,9 @@ export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Ru
         const arm = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
         if (!arm) { v = walk(n.otherwise!, env); break; }
         const inner = new Map(env);
-        arm.binds.forEach((b, i) => { inner.set(b, d.fields[i]); values.set(b, d.fields[i]); });
+        arm.binds.forEach((b, i) => { inner.set(b, d.fields[i]); put(b, d.fields[i]); });
         v = walk(arm.body, inner);
-        values.set(arm.id, v);
+        put(arm.id, v);
         break;
       }
       case "fold": {
@@ -85,35 +105,35 @@ export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Ru
         const arm = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
         if (!arm || at.kind !== "ref" || code.nodes[at.target]?.kind !== "binder") { v = first(r.ev(id, env), id); break; }
         const inner = new Map(env);
-        arm.binds.forEach((b, i) => { inner.set(b, d.fields[i]); values.set(b, d.fields[i]); });
+        arm.binds.forEach((b, i) => { inner.set(b, d.fields[i]); put(b, d.fields[i]); });
         arm.results.forEach((res, i) => {
           if (!res) return;
           const folded = first(r.ev(id, new Map(env).set(at.target, d.fields[i])), id);
           inner.set(res, folded);
-          values.set(res, folded);
+          put(res, folded);
         });
         v = walk(arm.body, inner);
-        values.set(arm.id, v);
+        put(arm.id, v);
         break;
       }
       default: v = first(r.ev(id, env), id);
     }
-    values.set(id, v);
+    put(id, v);
     return v;
   };
 
   const d = code.nodes[def] as NodeOf<"def">;
-  const body = d.body ? code.nodes[d.body] : null;
+  const body = copy ? code.nodes[copy] : d.body ? code.nodes[d.body] : null;
   try {
     if (body?.kind === "lambda") {
       const env = new Map<Id, Value>();
       // A definition given by its name (values.ts) is its function.
       const given = args.map((a) => (typeof a === "object" && a !== null && "tag" in a && a.tag === DEF_VALUE ? r.value(a.fields[0] as Id) : a));
-      body.params.forEach((p, i) => { env.set(p, given[i]); values.set(p, given[i]); });
+      body.params.forEach((p, i) => { env.set(p, given[i]); put(p, given[i]); });
       out.result = walk(body.body, env);
     } else if (body && body.kind !== "typedef") out.result = walk(body.id, new Map());
   } catch (e) {
-    out.error = { id: (e as { id?: Id }).id ?? def, message: (e as Error).message };
+    out.error = { id: orig((e as { id?: Id }).id ?? def), message: (e as Error).message };
   }
   return out;
 }
