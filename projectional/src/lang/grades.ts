@@ -37,9 +37,9 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
-import { ALGEBRA_V, ARITH, CONS, NIL, S, TRUE } from "./std.ts";
+import { ALGEBRA_V, ARITH, CONS, NIL, S, SET as S_SET, TRUE } from "./std.ts";
 import { B } from "../prelude.ts";
-import { NUMBER } from "./types.ts";
+import { MASK_TYPES, NUMBER } from "./types.ts";
 
 export interface Algebra {
   // The definition whose value it is, and the record variant of its
@@ -58,7 +58,9 @@ type Binary = "product" | "outer" | "inner" | "regressive";
 type Unary = "reverse" | "involute" | "dual" | "undual";
 
 type V =
-  | { k: "mask"; alg: Algebra; m: number }
+  // l: loose, a mask the reading doesn't know (an input, a value it lost),
+  // so every part; a named mask isn't checked against a loose one.
+  | { k: "mask"; alg: Algebra; m: number; l?: boolean }
   | { k: "alg"; alg: Algebra }
   | { k: "num"; zero: boolean }
   | { k: "closure"; lambda: NodeOf<"lambda">; env: Map<Id, V> }
@@ -148,7 +150,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
   };
   const maskIn = (v: V, alg: Algebra) => (v.k === "mask" && v.alg === alg ? v.m : alg.full);
   const join = (a: V, b: V): V => {
-    if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m };
+    if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
     if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
     return TOP;
   };
@@ -165,8 +167,36 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
     if (t?.t !== "con") return TOP;
     if (t.id === NUMBER) return NUM;
     const a = byType.get(t.id);
-    return a ? { k: "mask", alg: a, m: a.full } : TOP;
+    return a ? { k: "mask", alg: a, m: a.full, l: true } : TOP;
   };
+
+  // Named masks (L43e): a field whose type is `Vector of T` (types.ts
+  // MASK_TYPES), T an algebra's record type, holds only T's vectors. A
+  // value put there is checked; a value read from there has that mask.
+  const declared = new Map<Id, { alg: Algebra; m: number; name: string }>();
+  for (const d of code.defs) {
+    const b = (nodes[d] as NodeOf<"def">)?.body, td = b ? nodes[b] : undefined;
+    if (td?.kind !== "typedef") continue;
+    for (const v of td.variants) for (const f of (nodes[v] as NodeOf<"variant">)?.fields ?? []) {
+      const ty = nodes[(nodes[f] as NodeOf<"field">)?.type];
+      const named = ty?.kind === "tref" ? MASK_TYPES[ty.target] : undefined;
+      const arg = named && ty?.kind === "tref" && ty.args.length === 1 ? nodes[ty.args[0]] : undefined;
+      const alg = arg?.kind === "tref" ? byType.get(arg.target) : undefined;
+      if (!named || !alg) continue;
+      const m = alg.blades.reduce((acc, bl, i) => ((named.grades === "even" ? bl.length % 2 === 0 : named.grades.includes(bl.length)) ? acc | (1 << i) : acc), 0);
+      declared.set(f, { alg, m, name: named.name });
+    }
+  }
+  const fieldsOf = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields;
+  const declares = (variant: Id) => nodes[variant]?.kind === "variant" && fieldsOf(variant).some((f) => declared.has(f));
+  // A value going where a named mask is: refused when its mask is known
+  // and has a part the name doesn't allow.
+  const put = (at: Id, field: Id, v: V) => {
+    const want = declared.get(field)!;
+    if (mistakes && v.k === "mask" && v.alg === want.alg && !v.l && v.m & ~want.m && !mistakes.has(at))
+      mistakes.set(at, `puts a value that is ${describeMask(want.alg, v.m)} where ${want.name} goes, ${describeMask(want.alg, want.m)}`);
+  };
+  const held = (field: Id): V => { const w = declared.get(field)!; return { k: "mask", alg: w.alg, m: w.m }; };
   const ev = (id: Id, env: Map<Id, V>, depth: number): V => {
     const v = ev1(id, env, depth);
     return v.k === "top" ? typed(id) : v;
@@ -199,8 +229,10 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
           arms[0].binds.forEach((b, i) => inner.set(b, { k: "num", zero: !((s.m >> i) & 1) }));
           return ev(arms[0].body, inner, depth + 1);
         }
-        // Otherwise every arm may run: the union of what they give.
-        const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b) => [b, TOP] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
+        // Otherwise every arm may run: the union of what they give. A
+        // field with a named mask binds that mask.
+        const bind = (a: NodeOf<"arm">, b: Id, i: number): V => { const f = nodes[a.variant]?.kind === "variant" ? fieldsOf(a.variant)[i] : undefined; return f && declared.has(f) ? held(f) : TOP; };
+        const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b, i) => [b, bind(a, b, i)] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
         return outs.length ? outs.reduce(join) : TOP;
       }
       default: return TOP;
@@ -222,6 +254,15 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       const alg = byVariant.get(target)!;
       return { k: "mask", alg, m: n.args.reduce((m, a, i) => { const v = ev(a, env, depth + 1); return v.k === "num" && v.zero ? m : m | (1 << i); }, 0) };
     }
+    if (target && declares(target)) {
+      fieldsOf(target).forEach((f, i) => { if (declared.has(f) && n.args[i]) put(n.args[i], f, arg(i)); });
+      return TOP;
+    }
+    if (target && declared.has(target)) return held(target);
+    if (target === S_SET) {
+      const fr = nodes[n.args[0]];
+      if (fr?.kind === "ref" && declared.has(fr.target)) { put(n.args[2], fr.target, arg(2)); return TOP; }
+    }
     if (target && (ADD.has(target) || SUB.has(target))) {
       const [a, b] = [arg(0), arg(1)];
       return a.k === "num" && b.k === "num" ? { k: "num", zero: a.zero && b.zero } : join(a, b);
@@ -240,7 +281,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) {
         // A part is off when f of two zeros is zero, as for + and −.
         const z = op && (ADD.has(op) || SUB.has(op)) ? { k: "num", zero: true } as V : apply(f, [{ k: "num", zero: true }, { k: "num", zero: true }], depth);
-        return z.k === "num" && z.zero ? { k: "mask", alg: a.alg, m: a.m | b.m } : { k: "mask", alg: a.alg, m: a.alg.full };
+        return z.k === "num" && z.zero ? { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l } : { k: "mask", alg: a.alg, m: a.alg.full, l: a.l || b.l };
       }
       return TOP;
     }
@@ -255,8 +296,10 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       const al = arg(0);
       if (al.k !== "alg") return TOP;
       const alg = al.alg;
-      const m = (i: number) => maskIn(arg(i), alg);
-      const mask = (x: number): V => ({ k: "mask", alg, m: x });
+      // A result is loose when a multivector it was made from is.
+      let loose = false;
+      const m = (i: number) => { const v = arg(i); if (!(v.k === "mask" && v.alg === alg && !v.l)) loose = true; return maskIn(v, alg); };
+      const mask = (x: number): V => ({ k: "mask", alg, m: x, l: loose });
       switch (op) {
         case "product": case "outer": case "inner": case "regressive": return mask(binary(alg, op, m(1), m(2)));
         case "reverse": case "involute": case "dual": case "undual": return mask(unary(alg, op, m(1)));

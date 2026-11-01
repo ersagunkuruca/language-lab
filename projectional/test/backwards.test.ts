@@ -13,7 +13,7 @@ import { differentiate, NotDifferentiable } from "../src/lang/derive.ts";
 import { portLabel } from "../src/lang/equations.ts";
 import { NotInvertible, relate, showTerm, type Answer } from "../src/lang/relate.ts";
 import { bool, fromList, makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { ARITH, CONS, HTML_V, INT_OPS, NIL, PAIR_V, S, TEXT_OPS } from "../src/lang/std.ts";
+import { ARITH, CONS, HTML_V, INT_OPS, NIL, PAIR_V, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -534,5 +534,25 @@ test("Int run backwards through solve: x · 3 + 1 = 13 with Int's own ops or the
     const out: string[] = [];
     runMain(p.code, p.info, p.named("main"), { print: (s) => out.push(s) });
     assert.deepEqual(out, ["1"], `generic: ${generic}`);
+  }
+});
+
+// L38's open end: no Int literal in the function, only in what the solve
+// gives it. A given that is an Int makes the solve a whole-number one, so
+// the generic definition runs backwards at Int (arith.ts copies it there, as
+// it does for a call): x · n + n = 12 at n = 3 gives 3, and = 13 none.
+test("a generic function solved with an Int given runs in whole numbers", () => {
+  for (const [out, want] of [[12, "[3]"], [13, "[]"]] as const) {
+    const p = program((k) => {
+      const f = k.def("f");
+      let x = "", n = "";
+      k.define(f, k.fn(["x", "n"], (v, w) => ((x = v), (n = w), k.call(ARITH.add, k.call(ARITH.mul, v, w), w))));
+      const main = k.def("main");
+      k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.all, k.fn([], () => k.solve(f, { [n]: k.int(3), out: k.int(out) }, { [x]: "x" }, ({ [x]: v }) => v)))))));
+    });
+    assert.deepEqual(p.info.errors.map((e) => e.message), []);
+    const printed: string[] = [];
+    runMain(p.code, p.info, p.named("main"), { print: (s) => printed.push(s) });
+    assert.deepEqual(printed, [want]);
   }
 });

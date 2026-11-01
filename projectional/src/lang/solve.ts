@@ -49,11 +49,23 @@ type Direction =
   | { kind: "function"; multiplicity: "one" | "many"; canFail: boolean }
   | { kind: "underdetermined"; need: number };
 
+// Solves the checker found are in whole numbers (L38): a given port is an
+// Int, so the generic + − · in the function are Int's, and the relational
+// interpreter solves them as Ints; the equation solver is Float64's. The
+// checker marks them from the types, before anything plans or runs them.
+const whole = new WeakMap<Code, Set<Id>>();
+export function solvesInWholeNumbers(code: Code, solve: Id): void {
+  let s = whole.get(code);
+  if (!s) whole.set(code, (s = new Set()));
+  s.add(solve);
+}
+
 export function planSolve(code: Code, n: NodeOf<"solve">): SolvePlan {
   const relational = (): SolvePlan => {
     if (!runsBackwards(code, n.fn)) throw new Error(`${n.fn} can't be run backwards`);
     return { mode: "relational", rel: null, known: Object.keys(n.given), predicate: false, status: "solved", needMore: 0, many: true, canFail: true, unique: false };
   };
+  if (whole.get(code)?.has(n.id) && runsBackwards(code, n.fn)) return relational();
   let r: ReturnType<typeof relationFor>;
   try { r = relationFor(code, n.fn); } catch { return relational(); }
   // A predicate reads as equations only when it is asked to be true.

@@ -697,7 +697,12 @@ export function shaderArrays() {
   const nothing = def("nothing at", ["i"], (i) => or(() => k.call(A.at, k.call(A.empty), i), () => k.lit(-1)));
   const uneven = def("uneven", ["b"], (b) => k.call(A.length, k.if(b, k.call(A.of, k.list(k.lit(1))), k.call(A.of, k.list(k.lit(1), k.lit(2))))));
   const listed = def("listed", ["x"], (x) => k.call(A.length, k.call(A.of, k.call(A.items, k.call(A.of, k.list(k.call(B.add, x, k.lit(1))))))));
+  // An array as an input (C66d): a copy of `head and size` per size it is
+  // called with; `loose` is called by nothing, so it has no size.
+  const headSize = def("head and size", ["a"], (a) => k.call(B.add, or(() => k.call(A.at, a, k.int(0)), () => k.lit(0)), k.call(INT_OPS.toNumber, k.call(A.length, a))));
+  const twoSizes = def("two sizes", ["x"], (x) => k.call(B.add, k.call(headSize, k.call(A.of, k.list(x))), k.call(headSize, k.call(A.push, k.call(A.of, k.list(x, k.lit(2))), x))));
+  const loose = def("loose", ["a"], (a) => k.call(INT_OPS.toNumber, k.call(A.length, a)));
   const code = base(k.code), names = { ...baseNames(k.names) }, info = infer(code, names, undefined, checkOptions);
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
-  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed };
+  return { code, names, info, palette, grow, table, pick, nothing, uneven, listed, headSize, twoSizes, loose };
 }

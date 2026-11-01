@@ -78,6 +78,19 @@ export const CELL = "type.cell";
 // A list's items side by side (BACKLOG C30d, REPRESENTATIONS.md step 5):
 // Array a, read by position in constant time. Plain when its items are.
 export const ARRAY = "type.array";
+// Named blade masks (GRADES.md, BACKLOG L43e, Ersagun 2026-10-31: "each
+// blade combination a different type"): `Vector of T` is a T, a record type
+// of an algebra's multivectors, that can be nonzero only on T's vectors.
+// To the type checker it is T itself; grades.ts checks the mask, so a
+// rotor put where a `Vector of T` goes is refused. Each names the grades
+// it allows ("even" is every even grade: a rotor or motor).
+export const MASK_TYPES: Record<string, { name: string; grades: number[] | "even" }> = {
+  "type.scalar of": { name: "Scalar of", grades: [0] },
+  "type.vector of": { name: "Vector of", grades: [1] },
+  "type.bivector of": { name: "Bivector of", grades: [2] },
+  "type.trivector of": { name: "Trivector of", grades: [3] },
+  "type.rotor of": { name: "Rotor of", grades: "even" },
+};
 // A place inside a value (L98): Path whole part.
 export const PATH = "type.path";
 // One job of a representation (REPRESENTATIONS.md, L108): Job t r, a job
@@ -269,7 +282,7 @@ export class Subst {
     let tail = r.tail;
     let named = r.name;
     while (tail !== null && this.rows.has(tail)) {
-      const next = this.rows.get(tail)!;
+      const next = this.flat(tail);
       named = next.name;
       next.effs.forEach((e) => effs.add(e));
       for (const [e, xs] of Object.entries(next.args ?? {})) args[e] ??= xs;
@@ -281,6 +294,27 @@ export class Subst {
     // only while it has exactly that row's effects).
     const name = named !== undefined && tail === null ? { name: named } : {};
     return kept.length ? { effs: sorted, tail, args: Object.fromEntries(kept.map((e) => [e, args[e]])), ...name } : { effs: sorted, tail, ...name };
+  }
+
+  // The row a bound tail stands for, flattened: every bound tail on its
+  // chain is set to its own flattened row, so the next look takes one step
+  // (path compression, as in union-find). Unifying makes chains hundreds of
+  // tails long, and walking them was the costliest step in compiling (C67).
+  // Rows are never changed in place, so this only adds new ones.
+  private flat(v: number): Row {
+    const first = this.rows.get(v)!;
+    if (first.tail === null || !this.rows.has(first.tail)) return first;
+    const chain = [v];
+    for (let t: number | null = first.tail; t !== null && this.rows.has(t); t = this.rows.get(t)!.tail) chain.push(t);
+    let acc = this.rows.get(chain[chain.length - 1])!;
+    for (let i = chain.length - 2; i >= 0; i--) {
+      const link = this.rows.get(chain[i])!;
+      const effs = [...new Set([...link.effs, ...acc.effs])].sort();
+      const args = link.args || acc.args ? { args: { ...acc.args, ...link.args } } : {};
+      acc = { effs, tail: acc.tail, ...args, ...(acc.name !== undefined ? { name: acc.name } : {}) };
+      this.rows.set(chain[i], acc);
+    }
+    return acc;
   }
 
   // Fully substituted copy, for display and for storing results.

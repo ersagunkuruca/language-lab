@@ -1196,13 +1196,26 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const plain = (p: Id) => pres().names[p] ?? namer.name(p);
   const portName = (p: Id) => ports.some((q) => q !== p && q !== "out" && plain(q) === plain(p)) ? namer.name(p) : plain(p);
   const missing = known.filter((k) => !portText(info, k).trim());
-  let r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
   // Every input given: a run forwards has the answer the search can miss
   // (relate's limits, I39), so a plain function shows its result (I75).
+  // One that can't choose has no other answer, so it isn't searched at
+  // all: the search's setup (types, modes) took half a second on the page
+  // for Spacetime's helpers (I101).
   const forwards = ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out");
+  const forward = (): Backwards | null => {
+    const tr = forwards && !missing.length ? traced(info) : null;
+    return tr?.result !== undefined && !tr.error ? { answers: [{ values: { out: showValue(tr.result, doc.code, pres().names) }, free: [], residual: [] }], more: false } : null;
+  };
+  const dt = info.typeOf.get(ui.def), dz = dt ? info.subst.zonk(dt) : null;
+  // An open row chooses only through a function it's given.
+  const chooses = dz?.t !== "fn" || dz.eff.effs.includes(CHOICE) || (dz.eff.tail !== null && dz.params.some((p) => info.subst.zonk(p).t === "fn"));
+  // One that reads cells or performs effects of its own isn't searched
+  // either: the search can't run them, and failing it read as a fault (I102).
+  const acts = forwards && dz?.t === "fn" ? dz.eff.effs.filter((e) => e !== CHOICE && e !== DIVERGE) : [];
+  let r: Backwards = (!chooses && forward()) || (missing.length || acts.length ? { answers: [], more: false } : runBackwards(info, known));
   if (forwards && !missing.length && !r.answers.length && !r.error) {
-    const tr = traced(info);
-    if (tr?.result !== undefined && !tr.error) r = { ...r, answers: [{ values: { out: showValue(tr.result, doc.code, pres().names) }, free: [], residual: [] }] };
+    const f = forward();
+    if (f) r = { ...r, answers: f.answers };
   }
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
   const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
@@ -1238,6 +1251,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   // Every input given and none found: the search missed the one answer a
   // run forwards gives (relate's limits, I39), not a contradiction.
+  else if (!r.answers.length && acts.length) box.append(h("p", { class: "hint" }, `It uses ${acts.map((e) => pres().names[e] ?? e).join(", ")}, so Run doesn't work it out here. Show values runs it forwards with these inputs.`));
   else if (!r.answers.length) box.append(forwards
     ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
     : h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));

@@ -15,7 +15,7 @@ import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
-import { planSolve } from "./solve.ts";
+import { planSolve, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
@@ -26,7 +26,7 @@ import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -66,6 +66,10 @@ export interface Info {
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
   directions?: Map<Id, Id[]>;
+  // The type each relational solve runs its function at, so arith.ts runs
+  // a generic one at that type (L38: Int's · run backwards in whole
+  // numbers).
+  solveAt?: Map<Id, Type>;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -176,6 +180,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     if (n.kind !== "tref") throw new Error(`${id} is not a type`);
     if (params.has(n.target)) return params.get(n.target)!;
+    // `Vector of T` is T to the checker; grades.ts checks its mask (L43e).
+    if (MASK_TYPES[n.target]) {
+      if (n.args.length === 1) return typeExpr(n.args[0], params);
+      err(id, `${nm(n.target)} takes one type, the algebra's multivectors`);
+    }
     if (isEffect(n.target)) err(id, `${nm(n.target)} is an effect, not a type of values`);
     return { t: "con", id: n.target, args: n.args.map((a) => typeExpr(a, params)) };
   };
@@ -767,6 +776,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       relationalSolve(n, env, row, inner, false, undefined, true);
       return expr(n.body, inner, row);
     }
+    // A given that is an Int makes the solve a whole-number one (L38),
+    // found from its type, not from how the function is written.
+    const givenTypes = new Map(Object.entries(n.given).map(([k, g]) => [k, expr(g, env, row)] as const));
+    if ([...givenTypes.values()].some((t) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) solvesInWholeNumbers(code, n.id);
     let p: ReturnType<typeof planSolve> | null = null;
     try { p = planSolve(code, n); } catch (e) { err(n.id, (e as Error).message); }
     if (p?.mode === "relational") {
@@ -777,12 +790,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const v = solveMode(code, n, names);
       // (A hole is a gap the editor already shows; the search runs up to it.)
       if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(n.fn)} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
-      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n));
+      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n), givenTypes);
       return expr(n.body, inner, row);
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
-    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, expr(g, env, row), "a given port");
+    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
@@ -803,15 +816,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // adds Choice (any number of answers) unless its mode always gives
   // exactly one, Diverge when it may unfold forever, and whatever the
   // function itself does, except printing, which can't be undone.
-  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false) {
+  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
     const ft = s.resolve(refType(n.id, n.fn, env));
     if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
+    (info.solveAt ??= new Map()).set(n.id, ft);
     const t = code.nodes[n.fn];
     const keys = t.kind === "def" ? (code.nodes[t.body!] as NodeOf<"lambda">).params : ft.params.map((_, i) => String(i));
     const portType = (k: string) => (k === "out" ? ft.ret : keys.includes(k) ? ft.params[keys.indexOf(k)] : null);
     for (const [k, g] of Object.entries(n.given)) {
       const pt = portType(k);
-      const gt = expr(g, env, row);
+      const gt = givenTypes?.get(k) ?? expr(g, env, row);
       if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(n.fn)} has no port ${k}`);
     }
     for (const [k, b] of Object.entries(n.binds)) {
@@ -1026,25 +1040,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (odd.length) { err(d, `${nm(d)}'s results are some of its own ports, each once: ${odd.map(nm).join(", ")} isn't`); continue; }
       const sc = info.schemes.get(d), t = sc && s.zonk(sc.type);
       if (t?.t === "fn" && !(t.ret.t === "con" && t.ret.id === BOOL)) { err(d, `${nm(d)} has results, so it is a predicate over its ports (it gives true or false), not ${show(t.ret)}`); continue; }
-      // The direction, as a use would ask it: the other ports given, out true.
       const ins = lam.params.filter((p) => !def.results!.includes(p));
-      const nodes: Record<Id, Node> = { ...code.nodes };
-      const add = (n: Node) => { nodes[n.id] = n; return n.id; };
-      const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
-      given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
-      const binds = Object.fromEntries(def.results.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
-      const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as NodeOf<"solve">;
-      add(use);
-      const asked = { nodes, defs: code.defs };
       const from = ins.length ? ins.map(nm).join(", ") : "nothing";
-      let why: string | null = null;
-      try {
-        const p = planSolve(asked, use);
-        let ends = true;
-        if (p.mode === "relational") { const v = solveMode(asked, use, names); const stuck = v?.stuck.filter((x) => x !== "a hole") ?? []; if (stuck.length) why = stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs`; ends = !!v?.ends; }
-        else if (p.status !== "solved") why = `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}`;
-        if (!why) (info.directions ??= new Map()).set(d, [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])]);
-      } catch (e) { why = (e as Error).message; }
+      const r = resultsDirection(code, d, names);
+      if ("effects" in r) (info.directions ??= new Map()).set(d, r.effects);
+      const why = "why" in r ? r.why : null;
       if (why) err(d, `${nm(d)}'s results can't all be found from ${from}: ${why}`);
       // Another direction of a relation (POLAR.md, L97b): its ports, in
       // order, are the relation's, of the same types.
@@ -1334,6 +1334,35 @@ const isInterface = (code: Code, def: Id): boolean => {
   return !!body && code.nodes[body]?.kind === "typedef" && !!(code.nodes[body] as NodeOf<"typedef">).interface;
 };
 
+// A definition with results asked in its direction, as a use would ask
+// it: the other ports given, out true. Either why its results can't all be
+// found, or the effects that direction has (Choice for more than one
+// answer, Diverge for a search that may not end).
+export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: string } | { effects: Id[] } {
+  const def = code.nodes[d] as NodeOf<"def">;
+  const lam = code.nodes[def.body!] as NodeOf<"lambda">;
+  const ins = lam.params.filter((p) => !def.results!.includes(p));
+  const nodes: Record<Id, Node> = { ...code.nodes };
+  const add = (n: Node) => { nodes[n.id] = n; return n.id; };
+  const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
+  given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
+  const binds = Object.fromEntries(def.results!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
+  const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as NodeOf<"solve">;
+  add(use);
+  const asked = { nodes, defs: code.defs };
+  try {
+    const p = planSolve(asked, use);
+    let ends = true;
+    if (p.mode === "relational") {
+      const v = solveMode(asked, use, names);
+      const stuck = v?.stuck.filter((x) => x !== "a hole") ?? [];
+      if (stuck.length) return { why: stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs` };
+      ends = !!v?.ends;
+    } else if (p.status !== "solved") return { why: `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}` };
+    return { effects: [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])] };
+  } catch (e) { return { why: (e as Error).message }; }
+}
+
 export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const h = info.holes.get(hole);
   if (!h) return [];
@@ -1417,7 +1446,28 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // (results(), and an implementation that gives it), which its body
   // decides: splitting an input there is checked against the program.
   const withResults = h.group.some((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.results; });
+  // A definition with results here or among what depends on this one has
+  // a direction its body decides, so each filling asks it again (I100):
+  // one with something else where a result's length was used can leave a
+  // result unfound, or give it several answers where an implementation
+  // needs one (float64 polar, cordic vector). A filling that keeps every
+  // direction as it was is checked like any other; one that
+  // loses a result is refused, and one that changes its effects (an
+  // implementation may need one answer) is checked against the program.
+  const directions = new Map([...affected].flatMap((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.results && code.nodes[n.body!]?.kind === "lambda" ? [[d, JSON.stringify(resultsDirection(code, d))] as const] : []; }).filter(([, r]) => !r.includes('"why"')));
+  const direction = (f: Filling): "same" | "lost" | "changed" => {
+    let out: "same" | "changed" = "same";
+    for (const [d, was] of directions) {
+      const now = resultsDirection(filled(f), d);
+      if ("why" in now) return "lost";
+      if (JSON.stringify(now) !== was) out = "changed";
+    }
+    return out;
+  };
   const safe = (s: Subst, f: Filling, risky: boolean) => {
+    const dir = directions.size ? direction(f) : "same";
+    if (dir === "lost") return false;
+    if (dir === "changed") return whole(f);
     if (risky || (withResults && (f.kind === "match" || f.kind === "fold")) || (solves.length && !samePlans(f))) return whole(f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
@@ -1647,6 +1697,7 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
     const t = code.nodes[tid];
     if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: writtenRow(t.effects) };
     const r = t as NodeOf<"tref">;
+    if (MASK_TYPES[r.target] && r.args.length === 1) return te(r.args[0]);
     return params.get(r.target) ?? { t: "con", id: r.target, args: r.args.map(te) };
   };
   const self: Type = { t: "con", id: def, args: [...params.values()] };
