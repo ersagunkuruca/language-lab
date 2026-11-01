@@ -109,8 +109,11 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // Log is in both: a log line is for whoever debugs the page, not the page,
 // so a view may log (each time it runs, which is what debugging a view
 // wants to see), where it may not print.
-export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG],
-  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run");
+// Choice too (L125b, Ersagun 2026-11-01): a view with no answer, one that
+// divides by 0, shows nothing there; a view only reads, so nothing is done
+// on a path that is abandoned. A handler still handles its own Choice.
+export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE],
+  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run");
 export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM, LOG],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console");
 // A sound (AUDIO.md): a function from a block of samples to the block to

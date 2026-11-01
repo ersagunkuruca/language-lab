@@ -201,14 +201,56 @@ export function signAnalysis(code: Code) {
     }
     return ANY;
   };
-  const within = (d: Id, f: () => Signs): Signs => { entered.add(d); try { return f(); } finally { entered.delete(d); } };
+  const within = <T>(d: Id, f: () => T): T => { entered.add(d); try { return f(); } finally { entered.delete(d); } };
 
   // Is this call to a partial builtin always answered?
-  const answered = (call: Id): boolean => {
+  const answeredIn = (call: Id, env: Env): boolean => {
     const n = code.nodes[call];
     if (n?.kind !== "call") return false;
     const f = target(n.fn), ok = f ? PARTIAL[f] : undefined;
-    return !!ok && ok((i) => (n.args[i] ? of(n.args[i]) : ANY), (i) => (n.args[i] ? numLit(n.args[i]) : null));
+    return !!ok && ok((i) => (n.args[i] ? of(n.args[i], env) : ANY), (i) => (n.args[i] ? numLit(n.args[i], env) : null));
   };
-  return { of, answered };
+  const answered = (call: Id) => answeredIn(call, NONE);
+
+  // Is a call to a definition always answered with these inputs? Its
+  // Choice must come only from partial builtins answered here, or from
+  // definitions it calls that are, in turn (period(1, 9.81) divides by
+  // 9.81). `searches` says which other builtins may give no answer.
+  const totalIn = (d: Id, env: Env, searches: (f: Id) => boolean, depth: number): boolean => {
+    const dn = code.nodes[d], body = dn?.kind === "def" && dn.body ? code.nodes[dn.body] : undefined;
+    if (body?.kind !== "lambda" || depth > 6 || entered.has(d)) return false;
+    return within(d, () => {
+      for (const id of subtreeOf(body.body)) {
+        const n = code.nodes[id];
+        if (n?.kind === "solve") return false;
+        if (n?.kind !== "call") continue;
+        const fn = code.nodes[n.fn];
+        if (fn?.kind === "lambda") continue;
+        const f = target(n.fn);
+        if (!f) return false;
+        const t = code.nodes[f];
+        if (t?.kind === "binder") return false;
+        if (PARTIAL[f]) { if (!answeredIn(id, env)) return false; continue; }
+        if (t?.kind === "def") {
+          const callee = t.body ? code.nodes[t.body] : undefined;
+          if (callee?.kind !== "lambda" || !searches(f)) continue;
+          const inner: Env = new Map(callee.params.map((p, i) => [p, { signs: n.args[i] ? of(n.args[i], env) : ANY, lit: n.args[i] ? numLit(n.args[i], env) : null }]));
+          if (!totalIn(f, inner, searches, depth + 1)) return false;
+          continue;
+        }
+        if (searches(f)) return false;
+      }
+      return true;
+    });
+  };
+  const subtreeOf = (root: Id): Id[] => { const out: Id[] = []; const go = (id: Id) => { out.push(id); const n = code.nodes[id]; if (n) for (const c of children(n)) go(c); }; go(root); return out; };
+  const totalCall = (call: Id, searches: (f: Id) => boolean): boolean => {
+    const n = code.nodes[call];
+    if (n?.kind !== "call") return false;
+    const f = target(n.fn), d = f ? code.nodes[f] : undefined, body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    if (body?.kind !== "lambda" || body.params.length !== n.args.length) return false;
+    const env: Env = new Map(body.params.map((p, i) => [p, { signs: of(n.args[i]), lit: numLit(n.args[i]) }]));
+    return totalIn(f!, env, searches, 0);
+  };
+  return { of, answered, totalCall };
 }

@@ -667,6 +667,24 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           const r = s.resolveRow(fr.eff);
           if (r.effs.includes(CHOICE) && signs.answered(id)) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } };
         }
+        // A definition whose only Choice is such a builtin's, called with
+        // inputs that answer it (period(1, 9.81)), has none here (L125b).
+        else if (fr.t === "fn" && given?.kind === "ref" && code.nodes[given.target]?.kind === "def" && info.schemes.has(given.target)) {
+          const r = s.resolveRow(fr.eff);
+          if (r.effs.includes(CHOICE)) {
+            signs ??= signAnalysis(code);
+            const searches = (f: Id): boolean => {
+              const sc = info.schemes.get(f);
+              if (sc) return sc.type.t === "fn" && s.resolveRow(sc.type.eff).effs.includes(CHOICE);
+              const k = code.nodes[f]?.kind;
+              if (k === "def") return true;
+              if (k === "variant" || k === "field") return false;
+              const sig = SIGS[f]?.(s.clone());
+              return !sig || (sig.t === "fn" && sig.eff.effs.includes(CHOICE));
+            };
+            if (signs.totalCall(id, searches)) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } };
+          }
+        }
         if (fr.t === "fn" && fr.params.length !== args.length) {
           err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);
           t = fr.ret;
