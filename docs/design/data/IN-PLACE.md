@@ -6,9 +6,10 @@ It decides the order of the steps and what each one must measure. Nothing
 here changes the language. **Status (2026-11-01):** C62 measured and not built (#749). C63's
 one-holder check is built (C63a, ters/src/lang/one-holder.ts), and Map's
 `hash table` row uses it (C63b, map-tree.ts, chosen in library-reps.ts):
-a counting program runs about 8× faster compiled. routes still gets the
-tree, because the chooser counts each job once and routes lists its keys;
-C63c weighs a job inside a loop by n.
+a counting program runs about 8× faster compiled. The chooser weighs a
+job inside a loop by n (C63c, represent.ts `looped`), so routes, whose
+lookups run per town and whose listing runs once, takes it too: 2× faster
+than on the trees (bench-routes.ts). Set's table is next.
 
 ## The rule
 

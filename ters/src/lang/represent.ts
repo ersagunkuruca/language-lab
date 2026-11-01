@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
+import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -171,6 +171,63 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   return [...out];
 }
 
+// The jobs of `uses` that run in a loop: inside a fold's arms, inside a
+// function given to another (map, keep, a fold of the library's), or in a
+// definition that calls itself, or reached from one of those (C63c). Each
+// may run once per item, so `choose` weighs it by n: a lookup done for
+// every town costs n log n on a tree and n on a table, and outweighs a
+// listing of the keys done once.
+export function looped(code: Code, entry: Id, reps: Representation[]): Set<string> {
+  const t = reps[0].of;
+  const variants = new Set(variantsOf(code, t));
+  const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
+  const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
+  const out = new Set<string>();
+  // The definitions reachable from entry, not looking inside a job's own.
+  const graph = new Map<Id, Id[]>();
+  const reach = (d: Id) => {
+    if (graph.has(d)) return;
+    const next = implemented.has(d) && d !== entry ? [] : directRefs(code, d);
+    graph.set(d, next);
+    for (const x of next) reach(x);
+  };
+  reach(entry);
+  const callsItself = (d: Id) => {
+    const seen = new Set<Id>(), todo = [...graph.get(d)!];
+    while (todo.length) { const x = todo.pop()!; if (x === d) return true; if (seen.has(x)) continue; seen.add(x); todo.push(...(graph.get(x) ?? [])); }
+    return false;
+  };
+  const done = new Set<string>();
+  const visit = (d: Id, loop: boolean) => {
+    loop ||= callsItself(d);
+    const key = `${d} ${loop}`;
+    if (done.has(key) || (loop && done.has(`${d} true`))) return;
+    done.add(key);
+    if (implemented.has(d) && d !== entry) return;
+    const def = code.nodes[d];
+    if (def?.kind === "def" && def.body) walk(def.body, loop);
+  };
+  const walk = (id: Id, loop: boolean): void => {
+    const n = code.nodes[id];
+    if (!n) return;
+    if (loop) {
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
+      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(n.kind);
+    }
+    if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
+    if (n.kind === "fold") { walk(n.scrutinee, loop); for (const a of n.arms) walk(a, true); return; }
+    if (n.kind === "call") {
+      walk(n.fn, loop);
+      // A thunk (no parameters) is run once or not at all: `first`'s.
+      for (const a of n.args) { const l = code.nodes[a]; walk(a, loop || (l?.kind === "lambda" && l.params.length > 0)); }
+      return;
+    }
+    for (const c of children(n)) walk(c, loop);
+  };
+  visit(entry, false);
+  return out;
+}
+
 function directRefs(code: Code, def: Id): Id[] {
   const out: Id[] = [];
   for (const id of subtree(code, def)) {
@@ -214,7 +271,10 @@ export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   };
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? onto(r, j) ?? spec.cost[j] ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
-  const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(c[j]))), space: step(c.space) }; };
+  // A job in a loop runs about n times (C63c): one order up, n² at most.
+  const inLoop = looped(code, entry, reps);
+  const times = (c: string) => (c === "1" ? "n" : c === "log n" ? "n log n" : LADDER.includes(c) ? "n²" : c);
+  const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(inLoop.has(j) ? times(c[j]) : c[j]))), space: step(c.space) }; };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
     return compare(x.jobs, y.jobs) || compare(x.space, y.space) || Number(b === spec) - Number(a === spec);

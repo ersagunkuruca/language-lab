@@ -27,7 +27,7 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   const key = (i: Id) => opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
@@ -45,6 +45,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
     show(at(m, probe)),
     show(k.call(L("has key"), m, probe)),
     ...(opts.old ? [k.let("more", k.call(L("put"), m, probe, k.int(1000)), (more) => k.seq(show(at(more, probe)), show(at(m, probe))))] : []),
+    ...(opts.list ? [show(k.call(L("entries of"), m))] : []),
     ...(opts.remove ? [k.let("less", k.call(L("remove key"), m, probe), (less) => k.seq(show(k.call(L("map size"), less)), show(k.call(L("has key"), less, probe))))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
@@ -71,6 +72,16 @@ test("a map only built, looked up and changed by its one holder is a hash table,
     assert.deepEqual(c.chosen, ["Map as hash table"]);
     assert.deepEqual(printed(c.code, c.names, p.main, c.insiders).lines, printed(p.code, p.names, p.main).lines);
   }
+});
+
+// C63c: its puts and lookups run once per item, in the fold; the listing,
+// n log n on the table, runs once. The chooser weighs a job in a loop by
+// n, so the table still wins.
+test("a map listed once after its puts and lookups in a loop is a hash table too, and lists its entries in order", () => {
+  const p = program(300, { list: true });
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Map as hash table"]);
+  assert.deepEqual(printed(c.code, c.names, p.main, c.insiders).lines, printed(p.code, p.names, p.main).lines);
 });
 
 test("where there is no host Map (WebAssembly, C), or the map's old version is kept, or its keys are Float64s, it keeps the tree", () => {
