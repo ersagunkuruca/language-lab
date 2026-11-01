@@ -87,7 +87,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists)!;
   let copies: Id[] = [];
   if (boundary) {
-    const withBoundary: Code = { ...code, nodes: { ...code.nodes, ...boundary.nodes } };
+    const withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
     const library = boundary.reached.filter((d) => !defs.includes(d));
     const fresh = new Map<Id, Id>();
     for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
@@ -95,8 +95,8 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const nodes = { ...withBoundary.nodes };
     for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
     for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);
-    code = { nodes, defs: [...code.defs, ...library.map(f)] };
-    names = { ...names, ...Object.fromEntries(library.map((d) => [f(d), names[d] ?? LIBRARY.names[d] ?? d])) };
+    code = { nodes, defs: [...code.defs, ...boundary.made, ...library.map(f)] };
+    names = { ...names, ...Object.fromEntries(library.map((d) => [f(d), names[d] ?? LIBRARY.names[d] ?? d])), ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) };
     copies = library.map(f);
   }
   // equal, show and compare on a stored value: the row's own, through its
@@ -152,7 +152,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   }
   const made = k.code.defs.filter((d) => !code.nodes[d]);
   const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...made] };
-  const out = chosen.reduce((c, rep) => represent(c, own, rep, made.filter((d) => !own.includes(d))), all);
+  // The way back from a builtin's list (listBoundary's `made`) is written
+  // on List, and stays so.
+  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? boundary.made : [])];
+  const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
 }
 
@@ -324,10 +327,11 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
   }));
 }
 
-// Lists as arrays (C30d3b): where the program's lists meet code the
-// rewrite can't change. A builtin taking or giving a `List x` (x with no
-// list in it) gets `items of array` around the argument and `array of`
-// around the answer; one that only passes a value on (first, optional,
+// Lists as arrays (C30d3b) or trees (C45): where the program's lists meet
+// code the rewrite can't change. A builtin taking or giving a `List x` (x
+// with no list in it) gets the row's meaning (`items of array`) around the
+// argument and the way back around the answer (`array of`, or for another
+// row a fold of the list by its own nil and cons, made here: `made`); one that only passes a value on (first, optional,
 // all) can pass an array. Anything else that would see a list as an array
 // keeps List as written: a builtin with a list deeper in a parameter
 // (Cell (List a)), equal, show or compare on a list inside the library
@@ -336,7 +340,7 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
 // rewrite leaves as it is. Null when one is found; otherwise the nodes
 // that put the boundary in.
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
-function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): { nodes: Record<Id, Node>; reached: Id[] } | null {
+function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
   const program = new Set(defs), inside = holdsType(code, LIST);
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
@@ -356,8 +360,20 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): 
     reached.add(d);
     for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") todo.push(n.target); }
   }
-  const nodes: Record<Id, Node> = {};
+  const nodes: Record<Id, Node> = {}, made: Id[] = [];
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
+  let back: Id | undefined = rep.meaning === ARRAY_OPS.items ? ARRAY_OPS.of : undefined;
+  const wayBack = (): Id => {
+    if (back) return back;
+    const k = new Lang(code), d = k.def("stored list");
+    k.define(d, k.fn(["list"], (l) => k.fold(l, [
+      { variant: NIL, names: [], body: () => k.x(rep.impl[NIL]) },
+      { variant: CONS, names: ["item", "rest"], results: [null, "the rest stored"], body: ([x], [, r]) => k.call(rep.impl[CONS], x, r!) },
+    ])));
+    Object.assign(nodes, Object.fromEntries(Object.entries(k.code.nodes).filter(([id]) => !code.nodes[id])));
+    made.push(d);
+    return (back = d);
+  };
   // `List x` with no list in x: the boundary can turn it into an array.
   const plainList = (p: Type, t: Type) => p.t === "con" && p.id === LIST && (t = info.subst.zonk(t)).t === "con" && t.id === LIST && !t.args.some(hasList);
   const calledBy = new Map<Id, NodeOf<"call">>();
@@ -381,7 +397,7 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): 
     const args = c.args.map((a, i) => {
       const t = info.typeOf.get(a);
       if (!t || !hasList(t)) return a;
-      return plainList(sig.params[i], t) ? call(ARRAY_OPS.items, a) : passes ? a : null;
+      return plainList(sig.params[i], t) ? call(rep.meaning!, a) : passes ? a : null;
     });
     if (args.includes(null)) return null;
     const ret = info.typeOf.get(c.id);
@@ -391,11 +407,11 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): 
       // The call keeps its id, so its name and comments stay on it.
       const inner = freshId(), of = freshId();
       nodes[inner] = { ...c, id: inner, args: args as Id[] };
-      nodes[of] = { id: of, kind: "ref", target: ARRAY_OPS.of };
+      nodes[of] = { id: of, kind: "ref", target: wayBack() };
       nodes[c.id] = { id: c.id, kind: "call", fn: of, args: [inner] };
     } else if (changed) nodes[c.id] = { ...c, args: args as Id[] };
   }
-  return { nodes, reached: [...reached] };
+  return { nodes, reached: [...reached], made };
 }
 
 // Does a type's definition name `of` in its fields, itself or through

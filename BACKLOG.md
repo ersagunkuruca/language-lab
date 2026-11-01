@@ -23,7 +23,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), E103c (#898), I29's later states (#900), E103d (#902), and the next QA round's findings |
-| C Compiler and targets | "Compiler lane" | C40's next step (after L71c), C31, L43c (after masks on record fields, L43e), then (Ersagun 16:05 "take 20 more") C30's next stage, C56, C45, C58, C59 |
+| C Compiler and targets | "Compiler lane" | C40's next step (after L71c), C31, L43c (after masks on record fields, L43e), then (Ersagun 16:05 "take 20 more") C30's next stage, C56, C58, C59 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b done (#887), I118 done (#890), L127 done (#891), L69a2 done (#894), L43e3 done (#895), L108d2 done (#896), L29 and I84 put back (too big for now, see their rows); Ersagun's 20 more (16:05): L71c done (this PR), L59 (a page's fetch and wait resume), L44's next step, L42's next step (a PGA motor), L126 (`sameAs`), L97d. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -94,7 +94,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C56 | "Owned, in place" as a representation chosen when a value has one holder, generalising `$own` and C30 to records, maps and cell contents; reference counts (Perceus) where the compiler can't tell. Steps are C62, C63 | STABLE-REFERENCES.md §3 | P3 | L | |
-| C45 | A persistent vector (RRB trees, Bagwell and Rompf) as a representation of `List` for indexed updates | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after C30 |
 | C57 | A region per scope: temporaries of one page update, audio block or frame freed at once (Tofte–Talpin) | STABLE-REFERENCES.md §4 | P3 | L | |
 | C58 | Keyed collections as a grow-only array with a free list and generational keys (ECS) | STABLE-REFERENCES.md §4 | P3 | M | |
 | C59 | Flat inline layout for data built once and read, doubling as a file format (FlatBuffers) | STABLE-REFERENCES.md §4 | P3 | M | |
