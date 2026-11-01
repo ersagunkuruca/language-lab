@@ -60,3 +60,14 @@ test("minimum and maximum: +∞ and −∞ for no numbers, at any ordered number
     "smaller than any": ["true"],
   });
 });
+
+// The editor's half (L125d): ±∞ typed into a port and read in the Run panel.
+test("an Extended reads as its number or ±∞, and ±∞ can be typed", async () => {
+  const { std: s, stdNames: n } = await import("../src/lang/std.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const { showValue: show } = await import("../src/lang/run.ts");
+  const v = parseValue("[−∞, finite(2.5), +∞, ∞, -∞]", s, n);
+  assert.ok("value" in v);
+  assert.equal(show(v.value, s, n, true), "[−∞, 2.5, +∞, +∞, −∞]");
+  assert.equal(show(v.value, s, n), "[minus infinity, finite(2.5), plus infinity, plus infinity, minus infinity]");
+});
