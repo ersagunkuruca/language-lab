@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I117 | Cases that read once as a match's otherwise (they give the same value) each get "Give <case> its own body" on the value's menu: a hole there, made in that case only; the others keep the shared value | #884 |
 | I115 | The reader says what's missing, not a position: "there's no function named kep; did you mean keep?", "there's no field named nope", "nothing is named stpes here; did you mean steps?", from inside a call's inputs or an operator's operands too | #883 |
 | I114 | The palette (and the MCP server) reads `if c then a else b` as the match on a Bool the blocks print, an if inside either branch keeping its own then and else; `and` and `or` read too | #882 |
 | I113 | The palette (and the MCP server) reads a field as the blocks print it: `board.columns`, `z.re`, the field's projection called on what's before the dot | #880 |

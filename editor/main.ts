@@ -650,7 +650,7 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins
   if (e.select) ui.selected = e.select;
   // A row the text draws once as the otherwise is a copy in each place it
   // stands for; an edit to it is made in all of them (patterns.ts).
-  const same = sameEverywhere(doc.code, e.code, typesOf());
+  const same = e.own ? { places: 0, code: e.code, copied: [] } : sameEverywhere(doc.code, e.code, typesOf());
   if (same.places) {
     const names = { ...e.names };
     for (const [x, y] of same.copied) if (names[x]) names[y] = names[x];
@@ -2600,6 +2600,10 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const n = doc.code.nodes[id];
     if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     if (kind === "node") rows.push(...stepRows(id));
+    // Cases that share this value, read once as the otherwise: each can
+    // have its own (BACKLOG I117); an edit here is otherwise made in all.
+    if (kind === "node") for (const [i, c] of T.sharedCases(doc.code, doc.names.short, info, id).slice(0, 8).entries())
+      rows.push(item(`Give ${c.label} its own body`, `own-case-${i}`, `Only ${c.label}: a hole to fill there, the other cases keep this value`));
     if (kind === "node" && T.simplify(doc.code, doc.names.short, info, id)?.ok) rows.push(item("Simplify", "simplify", "The same meaning, written shorter: one list instead of append"));
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     if (kind === "node" && n?.kind === "match" && (doc.layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
@@ -2659,6 +2663,8 @@ function menuAction(act: string, target: Id | undefined) {
     for (const k of keys) delete at[lkey(k)];
     commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Back to the automatic place. Only layout.json changed.");
   };
+  const own = /^own-case-(\d+)$/.exec(act);
+  if (own && target) { const c = T.sharedCases(doc.code, doc.names.short, info, target)[+own[1]]; if (c) applyT(T.ownBody(doc.code, doc.names.short, info, c)); return; }
   switch (act) {
     case "add": case "add-before": {
       // On the graph's canvas a new value is a loose part, where you clicked

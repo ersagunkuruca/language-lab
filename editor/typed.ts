@@ -23,7 +23,7 @@ import type { Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
-import { shape } from "../ters/src/lang/patterns.ts";
+import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -675,7 +675,35 @@ export function inputsOf(code: Code, id: Id): Id[] {
   }
 }
 
-export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id> };
+// `own`: made in this one place, not in every copy a shared row stands
+// for (I117).
+export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id>; own?: boolean };
+
+// Cases that read once as a match's otherwise, because they give the same
+// value, when `id` is that value: each can be given a body of its own
+// (BACKLOG I117). Their labels as the rows print them.
+export function sharedCases(code: Code, names: Names, info: Info | null, id: Id): { label: string; parent: Id; slot: "body" | "otherwise" }[] {
+  const up = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
+  for (let x = up.get(id); x; x = up.get(x)) {
+    const m = code.nodes[x];
+    if (m?.kind !== "match") continue;
+    const { folded, otherwise } = sharedOtherwise(code, matchRows(code, info, m), m.otherwise ?? undefined);
+    if (folded.length < 2 || (otherwise !== id && !folded.some((r) => r.body === id))) continue;
+    const nm = (x: Id) => names[x] ?? display[x] ?? "_";
+    return folded.map((r) => ({ label: patternText(r.pat, nm, nm), parent: r.at, slot: code.nodes[r.at].kind === "arm" ? "body" : "otherwise" }));
+  }
+  return [];
+}
+
+// One of those cases with a body of its own: a hole to fill there, the
+// others keeping the value they share.
+export function ownBody(code: Code, names: Names, info: Info, c: { label: string; parent: Id; slot: "body" | "otherwise" }): LooseEdit {
+  const hole = freshId();
+  const nodes = { ...code.nodes, [hole]: { id: hole, kind: "hole" } as Node, [c.parent]: { ...code.nodes[c.parent], [c.slot]: hole } as Node };
+  const r = guardTyped(info, collect({ nodes, defs: code.defs }), names, hole, `${c.label} has a body of its own now: fill the hole. The other cases keep the value they share; Undo puts it back.`);
+  return r.ok ? { ...r, own: true } : r;
+}
 
 // A loose part's new inputs are called what the variables they stand for are.
 const inputNames = (names: Names, was: Record<Id, Id>, now: Record<Id, Id>): Names =>
