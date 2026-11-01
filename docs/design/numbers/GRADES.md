@@ -83,7 +83,7 @@ rule falls back to the product rule.
 | L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
 | L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 | C | M |
 | L43d | The editor shows a value's mask in words | E | S |
-| L43e | Masks are types (first step built: a part read outside a value's mask is refused by `lab check`): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
+| L43e | Masks are types (built: a part read outside a value's mask is refused by `lab check`; named masks `Scalar of`, `Vector of`, `Bivector of`, `Trivector of` and `Rotor of` on record fields, checked where a value is put in and known where it is read): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
 
 ## Ersagun's answer: each blade combination is its own type
 

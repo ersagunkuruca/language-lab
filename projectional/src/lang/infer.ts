@@ -26,7 +26,7 @@ import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -176,6 +176,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     if (n.kind !== "tref") throw new Error(`${id} is not a type`);
     if (params.has(n.target)) return params.get(n.target)!;
+    // `Vector of T` is T to the checker; grades.ts checks its mask (L43e).
+    if (MASK_TYPES[n.target]) {
+      if (n.args.length === 1) return typeExpr(n.args[0], params);
+      err(id, `${nm(n.target)} takes one type, the algebra's multivectors`);
+    }
     if (isEffect(n.target)) err(id, `${nm(n.target)} is an effect, not a type of values`);
     return { t: "con", id: n.target, args: n.args.map((a) => typeExpr(a, params)) };
   };
@@ -1683,6 +1688,7 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
     const t = code.nodes[tid];
     if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: writtenRow(t.effects) };
     const r = t as NodeOf<"tref">;
+    if (MASK_TYPES[r.target] && r.args.length === 1) return te(r.args[0]);
     return params.get(r.target) ?? { t: "con", id: r.target, args: r.args.map(te) };
   };
   const self: Type = { t: "con", id: def, args: [...params.values()] };
