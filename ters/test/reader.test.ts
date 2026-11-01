@@ -28,3 +28,24 @@ test("typed text reads a field as the blocks print it", () => {
   // A number with a point is still a number.
   assert.ok(fillValue(open, names, info, re.id, "1.5", escape).ok);
 });
+
+// An if, as the blocks print a match on a Bool (BACKLOG I114): escape's
+// whole body, cleared to a hole, takes its own text back, and an if inside
+// a then or an else keeps its own then and else.
+test("typed text reads if c then a else b", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const lam = code.nodes[(code.nodes[escape] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const open = replace(code, lam.body, () => ({ kind: "hole" }));
+  const info = infer(open, names);
+  const r = fillValue(open, names, info, lam.body, "if 4 < z.re · z.re + z.im · z.im or 299 < steps then steps else escape(z · z + c, c, steps + 1)", escape);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  // The same program as before: the if is the match on a Bool it was.
+  assert.equal(renderLet(r.code, { ...p.pres, names: r.names }, escape), renderLet(code, p.pres, escape));
+  const nested = fillValue(open, names, info, lam.body, "if 299 < steps then steps else if 4 < z.re then 0 else steps + 1", escape);
+  assert.ok(nested.ok, !nested.ok ? nested.reason : "");
+  if (nested.ok) assert.match(renderLet(nested.code, { ...p.pres, names: nested.names }, escape), /match 299 < steps \{ true → steps; false → match 4 < re\(z\) \{ true → 0; false → steps \+ 1 \} \}/);
+  // A then and an else that don't agree are refused.
+  assert.equal(fillValue(open, names, info, lam.body, 'if 299 < steps then steps else "no"', escape).ok, false);
+});
