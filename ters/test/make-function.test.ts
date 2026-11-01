@@ -96,3 +96,16 @@ test("a function using what's around it takes that first when lifted", () => {
   }
   assert.ok(lifted > 0);
 });
+
+// A value given to a solve (BACKLOG I123): Relations' square roots gives y
+// to a relation run backwards. Making a function of it threw "has no
+// parent": a solve's given values weren't children to parentOf.
+test("a value given to a solve can be made a function", () => {
+  const p = loadProgram(join(root, "examples", "relations"));
+  const { code } = p, names = p.pres.names, d = p.named("square roots");
+  const info = infer(code, names);
+  const y = subtree(code, d).find((id) => { const n = code.nodes[id]; return n.kind === "ref" && names[n.target] === "y"; })!;
+  const r = makeFunction(code, names, info, d, [y]);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (r.ok) assert.deepEqual(infer(r.code, r.names).errors, []);
+});

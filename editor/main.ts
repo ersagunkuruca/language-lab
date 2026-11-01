@@ -2588,7 +2588,10 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const why = now || hint ? h("span", { class: `ctx-why${now ? " cant" : ""}` }, now ? `Can't: ${now}` : hint) : null;
     const b = h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!now }, label, why) as HTMLButtonElement;
     if (typeof disabled === "function") later.push(() => {
-      const r = disabled();
+      // A check that throws can't do it either, and the checks after it
+      // still run (BACKLOG I123).
+      let r: string | undefined;
+      try { r = disabled(); } catch (e) { r = (e as Error).message; }
       if (!r) return;
       b.disabled = true;
       if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
