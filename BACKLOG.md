@@ -38,7 +38,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I108 | `clifford inverse` is ṽ/⟨vṽ⟩₀, right only for versors: it gives 1 + e₁ (which has no inverse) the value (1 + e₁)/2. Name it for what it is, or make it general, with an empty answer when there is none; it has no doc string | REVIEW-2026-11-01 §4 | 2026-11-01 |
 | I109 | The compiled preview (#789) starts the page afresh, losing what the user did in its first 2 to 7 s; hand the cells across, or hold input until the swap. Pages with sound stay interpreted with nothing saying why | REVIEW-2026-11-01 §5 | 2026-11-01 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
-| I111 | One agreement test over every example: `main` (or a page's first render) evaluated as defined, after the chooser, and compiled after the chooser and staging, compared. Would have caught I105 and I107. Before more representations or targets | REVIEW-2026-11-01 §7 | 2026-11-01 |
 
 ## E: Editor
 
