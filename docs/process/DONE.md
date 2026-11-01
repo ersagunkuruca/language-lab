@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E103c | The palette asks one whole check for every offer that makes the same of the group's types (and of its solves' plans, where it changes one); units, which a call decides for itself, are checked per offer. Before, a ref or call was checked once per thing it named. physics `fall`: 23 holes 80 → 47 s, the worst 16 → 8 s, the same offers on every hole | #898 |
 | C66 (picture) | The editor's pictures (Run panel and shaders.html) are lowered as shaders are (`lowerPicture`): an Int is an i32 and std's Array an array<T, N>, so a picture that counts or looks up a written-out array draws on the GPU, and on the CPU in WebAssembly (Ints) or JavaScript (arrays). Test: ters/test/picture-lowering.test.ts | #892 |
 | I119 | Four builtins named "show": already told apart in the palette since #244, where rows that would read the same say what their holes take, `show(□: Int)`, `show(□: Float64)`; no renaming, so printed programs keep `show(x)` (checked 2026-11-01) | #244 |
 | I116 | Split by cases offers an input whose type nothing fixes yet "as" each of the program's data types, a List, an Optional or a Bool; the split fixes its type | #886 |

@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), then I29's moves in progress, E103/E133, and the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), E103c (#898), then I29's moves in progress, and the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | C66 on shaders (a shader's arrays in WebAssembly), C40's next step, C67's next step, C31, L125e (niche representations), L43c (after masks on record fields, L43e), then (Ersagun 16:05 "take 20 more") C30's next stage, C56, C45, C58, C59 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b done (#887), I118 done (#890), L127 done (#891), L69a2 done (#894), L43e3 done (#895), L108d2 done (this PR), L29, I84; Ersagun's 20 more (16:05): L71c (the world answers `await`), L59 (a page's fetch and wait resume), L44's next step, L42's next step (a PGA motor), L126 (`sameAs`), L97d. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -55,8 +55,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); E133b took the analyzer's full scan per offer off (worst 12.7 s, all 23 holes 67 s); what's left is the whole checks of the ~400 offers that change a plan | E100 | P3 | M | |
-| E133 | **Design** ([SHARED-NODES.md](docs/design/editor/SHARED-NODES.md)). Offers share the program's nodes instead of copying ~10,000 each. E133a, one scratch copy per palette (#866; fall's worst hole 22 → 18 s), and E133b, a filled program's analyzer starting from the program's slots (#875; → 12.7 s), are done. What's left is the whole checks of offers that change a plan | E103 | P3 | M | a, b done |
+| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); E133b took the analyzer's full scan per offer off (worst 12.7 s, all 23 holes 67 s); E103c (#898) checks once for every offer that makes the same of the group's types and plans, each offer's units on their own (fall's 23 holes 80 → 47 s, the worst 16 → 8 s, measured on a busy machine; same offers); what's left is the whole checks themselves (`infer` and `useDirections` over what depends on the group) | E100 | P3 | M | |
+| E133 | **Design** ([SHARED-NODES.md](docs/design/editor/SHARED-NODES.md)). Offers share the program's nodes instead of copying ~10,000 each. E133a, one scratch copy per palette (#866; fall's worst hole 22 → 18 s), and E133b, a filled program's analyzer starting from the program's slots (#875; → 12.7 s), are done; E103c shares one whole check among offers alike (#898). What's left is the whole checks themselves | E103 | P3 | M | a, b done |
 
 ## C: Compiler and targets
 
