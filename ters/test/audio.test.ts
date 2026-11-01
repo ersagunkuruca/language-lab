@@ -21,7 +21,10 @@ import { runMain } from "../src/lang/run.ts";
 import { soundWorklet, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { pageFile, workletFile } from "../src/lang/page.ts";
 import { sameNumber } from "../src/lang/run.ts";
-import { CELL_OPS, S } from "../src/lang/std.ts";
+import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
+import { recordingWorld } from "../src/lang/audio-page.ts";
+import { replaying } from "../src/lang/audio-worklet.ts";
+import type { World } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 import { soundOf } from "../cli/sound.ts";
 import { readWav, writeWav } from "../cli/wav.ts";
@@ -170,6 +173,59 @@ test("a worklet made without a bundler plays what the bundled one plays", async 
   const made = workletFile(runtime, p.code, p.info, p.names, page);
   assert.deepEqual(play(made), play(await soundWorklet(p.code, p.info, p.names, page)));
   assert.ok(pageFile("Pedal", await pageRuntime(), p.code, p.info, p.names, page, runtime).includes(JSON.stringify(made).slice(0, 200)));
+});
+
+// L60: main may read the clock and draw random numbers on a page with
+// sound. The page's world keeps what it answered main (recordingWorld),
+// and the audio thread's run of main is answered the same, in order
+// (replaying), so it makes the same cells: the first clock reading makes
+// the clock's cell on both sides.
+test("a page with sound may read the clock and draw random numbers in main: the audio thread is answered the same", async () => {
+  const { p, page } = pedal();
+  const k = new Lang(p.code);
+  const noisy = k.def("noisy main");
+  k.define(noisy, k.fn([], () => k.let("t", k.call(NOW_OP), () => k.let("r", k.call(RANDOM_OP), () => k.call(page)))));
+  const code = merge(p.code, k.code), names = { ...p.names, ...k.names };
+  const info = infer(code, names, undefined, loadProgram(join(import.meta.dirname, "../examples/pedal")).options);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  // The page's side: what main is answered, kept only while it's asked for.
+  const world = recordingWorld({ random: () => 0.25, now: () => 1000 } as World);
+  world.keep = { random: [], now: [] };
+  runMain(code, info, noisy, { print: () => {}, names, world });
+  const answers = world.keep;
+  world.keep = null;
+  world.random();
+  assert.deepEqual(answers, { random: [0.25], now: [1000] });
+  // The audio thread's side, given them.
+  const source = await soundWorklet(code, info, names, noisy);
+  const start = (processorOptions: object) => {
+    const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+    const said: unknown[] = [];
+    class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console });
+    return { node: new made[0]({ processorOptions }), said };
+  };
+  const { node, said } = start({ index: 0, answers });
+  assert.deepEqual(said, []);
+  // The clock's cell came first, so Clean or Driven is the third cell now.
+  const input = sine(128, 0.3);
+  node.port.onmessage!({ data: { cell: 2, value: 0 } });
+  const out = [new Float32Array(128), new Float32Array(128)];
+  node.process([[Float32Array.from(input)]], [out]);
+  assert.deepEqual([...out[0]], [...Float32Array.from(input)]);
+  // Without the page's answers the clock can't be read there, and it says why.
+  assert.match(String((start({ index: 0 }).said[0] as { said: string }).said), /read the clock/);
+});
+
+test("the audio thread's answers: the page's, in order, then seeded random numbers; the first clock reading makes a cell", () => {
+  const made: unknown[] = [];
+  const w = replaying({ random: [0.5, 0.75], now: [10, 20] }, { cell: (v: unknown) => { made.push(v); return v as never; } });
+  assert.deepEqual([w.random(), w.random()], [0.5, 0.75]);
+  const seeded = replaying(undefined, { cell: () => null as never }).random();
+  assert.equal(w.random(), seeded);
+  assert.deepEqual([w.now(), w.now()], [10, 20]);
+  assert.deepEqual(made, [10]);
+  assert.throws(() => w.now(), /read the clock/);
 });
 
 test("a page with sound copies its recording beside it, and carries its program for the audio thread", () => {

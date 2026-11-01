@@ -1144,9 +1144,9 @@ isn't shown as anything but that. Koka's effect aliases are the prior art.
 it when it's clicked again: the input, a block of 128 samples at a time,
 through `play`, to the speakers. `play` runs on the audio thread, where
 main runs once more to make it; cells main made are the same cells there,
-so a handler's write to one (a knob) reaches the sound as it plays. So a
-page with sound keeps main to making cells: no clock or random numbers
-there.
+so a handler's write to one (a knob) reaches the sound as it plays. main
+there is answered what it was on the page: the same random numbers and
+clock readings, in order, so it makes the same cells.
 
 Pages are written with the **html module** (`library/html.json`, built
 from `src/lang/html-source.ts`), ordinary functions that build these

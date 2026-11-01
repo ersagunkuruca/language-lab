@@ -136,9 +136,12 @@ real program.
   a knob works: a range input's `on("input", …)` writes `gain`, the
   processor reads `gain`, and the write crosses at the next block. Writes
   go one way only, page to audio; the audio thread's own cells (the
-  envelope) stay there. `main` must make the same cells each run, so a page
-  with sound may not draw random numbers or read the clock in `main`
-  (checked: its row loses `Random` and `Time`).
+  envelope) stay there. `main` must make the same cells each run, so the
+  audio thread's run of `main` is answered what the page's was: the page's
+  world keeps each random number and clock reading it gave `main`, sends
+  them with the processor's options, and the worklet's world gives them
+  back in order (record and replay, EFFECTS-REVIEW §1.4, L60). A page with
+  sound may roll a die or read the clock in `main` like any other page.
 - **And offline?** `lab render <program> --main pedal in.wav -o out.wav`
   runs the block function over a WAV file (16-bit or float PCM, mono, or
   the first channel), block by block, with the evaluator or compiled. This
