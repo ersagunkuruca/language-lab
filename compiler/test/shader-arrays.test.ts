@@ -34,3 +34,17 @@ test("arrays in a shader: array<T, N> where the size is known, the evaluator's a
   }
   for (const x of [0, 1.5, -3]) assert.equal(js.get(p.grow)!(x), ev(p.grow, x), `grow ${x}`);
 });
+
+test("an array as a shader function's input: a copy per size it is called with (C66d)", () => {
+  const p = shaderArrays();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.twoSizes, p.loose], { records: true, shader: true });
+  const s = emitWgsl(lowered);
+  // An entry point's inputs come from the CPU, so it can't take an array.
+  assert.match(s.refused.get(p.loose) ?? "", /Array/);
+  assert.deepEqual(s.funcs.map((f) => f.name), ["two sizes"]);
+  assert.match(s.wgsl, /fn head_and_size_\d+_n1\(p0: array<f32, 1>\) -> f32/);
+  assert.match(s.wgsl, /fn head_and_size_\d+_n3\(p0: array<f32, 3>\) -> f32/);
+  const js = loadJs(lowered);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const x of [0, 1.5, -3]) assert.equal(js.get(p.twoSizes)!(x), first(r.call(r.value(p.twoSizes), x as never)), `two sizes ${x}`);
+});
