@@ -18,7 +18,7 @@ import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf, recheck } from "../src/lang/signatures.ts";
 import { runMain } from "../src/lang/run.ts";
-import { CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { root } from "../src/io.ts";
 
 const prelude = (name: string) => PRELUDE.exports.find((d) => PRELUDE.names[d] === name) ?? PRELUDE.code.defs.find((d) => PRELUDE.names[d] === name)!;
@@ -243,12 +243,13 @@ test("a module's helpers are used where they are, and never offered in the palet
 });
 
 test("upgrade moves a program to a new version only when the type is the same", () => {
-  // a second sum, folding the other way: same type, different hash
+  // a second sum, folding the other way: same type (generic, as the
+  // prelude's is since L136), different hash
   const k = new Lang(LIBRARY.code);
   const sum2 = k.def("sum");
   k.define(sum2, k.fn(["numbers"], (xs) => k.fold(xs, [
     { variant: NIL, names: [], body: () => k.lit(0) },
-    { variant: CONS, names: ["n", "rest"], results: [null, "r"], body: ([n], [, r]) => k.call(B.add, r!, n) },
+    { variant: CONS, names: ["n", "rest"], results: [null, "r"], body: ([n], [, r]) => k.call(ARITH.add, r!, n) },
   ])));
   const half = k.def("half");
   k.define(half, k.fn(["x"], (x) => k.call(B.div, x, k.lit(2))));
@@ -260,7 +261,7 @@ test("upgrade moves a program to a new version only when the type is the same", 
   const pins = { ...LIBRARY.pins, ...p.pins };
   const to = p.rename.get(sum2)!;
   const up = upgrade(p.code, prelude("sum"), to, pins);
-  assert.ok(up.ok);
+  assert.ok(up.ok, up.ok ? "" : (up as { reason?: string }).reason);
   if (up.ok) {
     assert.equal(up.uses, 1);
     const out: string[] = [];
@@ -268,7 +269,7 @@ test("upgrade moves a program to a new version only when the type is the same", 
     assert.deepEqual(out, ["3"]);
   }
   const no = upgrade(p.code, prelude("sum"), p.rename.get(half)!, pins, baseNames(p.names));
-  assert.ok(!no.ok && /type changed from \(List Float64\) -> Float64 to \(Float64\) -> Float64/.test(no.reason));
+  assert.ok(!no.ok && /type changed from \(List a\) -> a where a is a Number to \(Float64\) -> Float64/.test(no.reason));
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {
