@@ -367,6 +367,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
+  const recursiveCalls: { call: NodeOf<"call">; params: Type[]; args: Type[] }[] = [];
   for (const group of groups) {
     current = group;
     for (const d of group) mono.set(d, s.fresh());
@@ -381,6 +382,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const t = expr(body, new Map(), { effs: [], tail: null });
       unifyAt(d, mono.get(d)!, t);
     }
+    // The group's recursive calls' inputs, now that its bodies are checked.
+    for (const { call, params, args } of recursiveCalls.splice(0)) params.forEach((p, i) => {
+      try { s.unify(p, args[i]); }
+      catch (e) {
+        if (e instanceof TypeError) err(call.args[i], `${callee(call)} needs ${show(p)} here, got ${show(args[i])}`);
+        else unifyAt(call.args[i], p, args[i]);
+      }
+    });
     const recursive = group.length > 1 || deps(group[0]).includes(group[0]);
     // Only functions can be recursive: a value defined in terms of itself
     // (ones = cons(1, ones)) has no first step to take.
@@ -705,8 +714,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // Which inputs are some Number not yet known, for the message if
         // one is given where something else goes.
         const someNumber = args.map((a) => { const r = s.resolve(a); return r.t === "var" && s.arith.has(r.v); });
+        // A call back into the group being checked (a recursive call) has
+        // its inputs checked after the group's bodies (BACKLOG I118): the
+        // body's own uses fix the types first, so a wrong recursive call is
+        // blamed, not a right use that came after it.
+        const back = given?.kind === "ref" && current.includes(given.target) && fr.t === "var";
+        const params = back ? args.map(() => s.fresh()) : args;
+        if (back) recursiveCalls.push({ call: n, params, args });
         try {
-          s.unify(fr, { t: "fn", params: args, ret, eff: callRow });
+          s.unify(fr, { t: "fn", params, ret, eff: callRow });
         } catch (e) {
           if (e instanceof WorldError) {
             // The callee acting itself, or a function it's given that it
