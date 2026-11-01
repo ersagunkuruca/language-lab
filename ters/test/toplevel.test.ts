@@ -384,6 +384,22 @@ test("values inside a fold: its outermost pass, with the rest already folded", a
   assert.equal(showValue(tr.result!, p.code, p.pres.names), "[1, 2, 3]");
 });
 
+// A call the runner runs as something else (BACKLOG I122): ray marching's
+// − on two vectors is resolved to its parts (arith.ts), so the wire values
+// run it as the runner does instead of calling − with the vectors.
+test("values on the wires of arithmetic on records, run as the runner runs it", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { trace } = await import("../src/lang/trace.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/raymarch"));
+  const info = infer(p.code, p.pres.names);
+  const v = (t: string) => (parseValue(t, p.code, p.pres.names) as { value: never }).value;
+  const tr = trace(p.code, info, p.named("shapes"), [v("vec(0, 1, -2.7)"), v("1")]);
+  assert.equal(tr.error, undefined);
+  assert.equal(typeof tr.result, "number");
+});
+
 test("an effect of your own: declared, given back a type, and handled by a match the palette offers", () => {
   const s = new Session();
   s.ok(Top.newDefinition(s.code, s.names, "Ask", { kind: "effect", firstOperation: "ask" }));
