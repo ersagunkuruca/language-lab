@@ -168,9 +168,13 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
           const after = new Set(st.consumed);
           const branches: { arm?: NodeOf<"arm">; body: Id }[] = [...n.arms.map((a) => ({ arm: nodes[a] as NodeOf<"arm">, body: (nodes[a] as NodeOf<"arm">).body })), ...(n.kind === "match" && n.otherwise ? [{ body: n.otherwise }] : [])];
           for (const br of branches) {
-            br.arm?.binds.forEach((b, i) => { if (base !== null) paths.set(b, cut(`${base}/${i}`)); else if (tracked(b)) paths.set(b, b); });
-            br.arm?.results.forEach((b) => { if (b && tracked(b)) paths.set(b, b); });
-            const inner: Walk = { consumed: new Set(after), captured: st.captured };
+            // Names the arm binds are new each time it runs: what an
+            // earlier walk of the same nodes used up under them is gone (a
+            // match's otherwise can be its scrutinee's own nodes again).
+            const fresh = new Set<string>();
+            br.arm?.binds.forEach((b, i) => { if (base !== null) paths.set(b, cut(`${base}/${i}`)); else if (tracked(b)) { paths.set(b, b); fresh.add(b); } });
+            br.arm?.results.forEach((b) => { if (b && tracked(b)) { paths.set(b, b); fresh.add(b); } });
+            const inner: Walk = { consumed: new Set([...after].filter((c) => !fresh.has(rootOf(c)))), captured: st.captured };
             ev(br.body, consume, inner);
             inner.consumed.forEach((c) => st.consumed.add(c));
           }
