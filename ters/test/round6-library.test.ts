@@ -59,3 +59,14 @@ test("L135: take and drop, the first n items and the rest after them", () => {
   ]), ['["a", "b"]', '["c"]', '["a", "b", "c"]', "[]", "[]", '["a", "b", "c"]']);
   assert.equal(type("take"), "(List a, Float64) -> List a");
 });
+
+test("L133: is letter, is digit, lowercase and uppercase", () => {
+  const one = (k: Lang, f: string, a: string) => k.call(L(f), k.lit(a));
+  assert.deepEqual(prints((k) => [
+    one(k, "is digit", "7"), one(k, "is digit", "a"), one(k, "is digit", "12"), one(k, "is digit", ""),
+    one(k, "is letter", "q"), one(k, "is letter", "Q"), one(k, "is letter", "_"), one(k, "is letter", "ab"),
+    one(k, "lowercase", "Hello, World 42"), one(k, "uppercase", "Hello, world"), one(k, "lowercase", ""), one(k, "uppercase", "ünï"),
+  ]), ["true", "false", "false", "false", "true", "true", "false", "false", '"hello, world 42"', '"HELLO, WORLD"', '""', '"üNï"']);
+  assert.equal(type("lowercase"), "(Text) -> Text");
+  assert.equal(type("is letter"), "(Text) -> Bool");
+});
