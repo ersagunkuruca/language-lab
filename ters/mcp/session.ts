@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { subtree } from "../src/model.ts";
+import { collect, subtree } from "../src/model.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
@@ -26,12 +26,16 @@ import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { equal, mainProblem, pageProblem, runProgram, runMain, showValue, withSteps, OutOfSteps, type World } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
+import * as T from "../editor/typed.ts";
+import { SIGS } from "../src/lang/std.ts";
+import { setDisplayNames } from "../editor/typed.ts";
+import { addParameter, deleteDefinition, nameClash, newDefinition, type Shape } from "../src/lang/toplevel.ts";
 
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
 // A run that doesn't finish is stopped after this many steps.
 export const STEPS = 20_000_000;
-export const DEPTH = 4;
+export const LINES = 40;
 
 export class Session {
   path: string;
@@ -96,7 +100,7 @@ export class Session {
 
   // An id as given: in full, a unique prefix of one of the program's own,
   // or a definition's name (the program's own first, then the library's).
-  resolve(ref: string): Id {
+  resolve(ref: string, within?: Id): Id {
     const r = ref.trim().replace(/^#/, "").replace(/^‹(.*)›$/, "$1");
     if (this.code.nodes[r]) return r;
     const hits = [...this.short.keys()].filter((id) => id.startsWith(r));
@@ -105,6 +109,12 @@ export class Session {
     const all = this.allNames;
     const named = this.own.find((d) => this.names[d] === r) ?? this.code.defs.find((d) => all[d] === r);
     if (named) return named;
+    // A variable, case or field by its name, inside a definition.
+    if (within) {
+      const local = subtree(this.code, within).filter((x) => this.names[x] === r);
+      if (local.length === 1) return local[0];
+      if (local.length > 1) throw new Error(`${local.length} named ${r}: use the id`);
+    }
     throw new Error(`no id or definition ${ref}`);
   }
 
@@ -134,18 +144,24 @@ export class Session {
     const mine = pick(this.own).map(line);
     if (!library) return mine.join("\n") || "(none)";
     const lib = pick(LIBRARY.code.defs.filter((d) => !LIBRARY.hidden?.has(d) && this.allNames[d]));
-    return [...mine, ...lib.slice(0, 60).map(line), ...(lib.length > 60 ? [`… ${lib.length - 60} more: narrow the filter`] : [])].join("\n") || "(none)";
+    // The builtins too (range, floor, …): typed by their signatures.
+    const builtins = pick(Object.keys(SIGS).filter((b) => this.code.nodes[b] && this.allNames[b] && !/^builtin\.(int\.|arith\.)/.test(b)));
+    const sig = (b: Id) => `${this.name(b)} : ${showType(this.info.subst.zonk(SIGS[b](this.info.subst)), this.allNames)}`;
+    const all = [...lib.map(line), ...builtins.map(sig)];
+    return [...mine, ...all.slice(0, 60), ...(all.length > 60 ? [`… ${all.length - 60} more: narrow the filter`] : [])].join("\n") || "(none)";
   }
 
   // A definition, or the block of one that `at` names, as text with ids,
   // blocks deeper than `depth` shown as `…` with their id to view next.
-  view(at: string, depth = DEPTH): string {
+  // With no depth, the deepest that fits in LINES lines.
+  view(at: string, depth?: number): string {
     const id = this.resolve(at);
     const def = this.defOf(id);
     if (!def) throw new Error(`#${this.id(id)} isn't in a definition`);
     const blocks = blocksOf(this.code, this.pres(), this.info, def);
     const found = id === def ? blocks : findBlk(blocks, id);
-    const lines = this.lines(found ?? blocks, depth);
+    let lines = this.lines(found ?? blocks, depth ?? 99);
+    for (let d = 12; depth === undefined && lines.length > LINES && d >= 2; d--) lines = this.lines(found ?? blocks, d);
     const errors = this.info.errors.filter((e) => subtree(this.code, found ? id : def).includes(e.id)).map((e) => `✗ #${this.id(e.id)} ${e.message}`);
     const head = id === def || !found ? [] : [`in ${this.name(def)}:`];
     return [...head, ...lines, ...errors].join("\n");
@@ -204,6 +220,169 @@ export class Session {
     return this.info.errors.map((e) => { const d = this.defOf(e.id); return `✗ ${d ? this.name(d) : "?"} #${this.id(e.id)}: ${e.message}`; }).join("\n");
   }
 
+  // ---------------------------------------------------------------- editing
+  //
+  // Each edit is one of the editor's own gestures (editor/typed.ts,
+  // src/lang/toplevel.ts), so an LLM edits the way a person does. It is
+  // kept only if the program has no more type errors than before, then
+  // saved; the answer is the changed lines of the definition, or why not.
+
+  private undos: { code: Code; names: Names; comments: Comments }[] = [];
+
+  private apply(def: Id | null, make: () => { ok: true; code: Code; names: Names } | { ok: false; reason: string }, after?: (code: Code) => Id | null): string {
+    setDisplayNames(LIBRARY.names);
+    const before = def ? this.viewLines(def) : [];
+    const was = { code: this.code, names: this.names, comments: this.comments };
+    const errs = this.info.errors.length;
+    const r = make();
+    if (!r.ok) throw new Error(r.reason);
+    this.code = collect(r.code);
+    this.names = r.names;
+    this.recheck();
+    if (this.info.errors.length > errs) {
+      const fresh = this.info.errors.filter((e) => !was.code.nodes[e.id] || !this.infoHad(was, e.id)).at(0) ?? this.info.errors.at(-1)!;
+      const why = `${fresh.message}`;
+      Object.assign(this, was);
+      this.recheck();
+      throw new Error(why);
+    }
+    this.undos.push(was);
+    this.save();
+    const at = (after ? after(r.code) : def) ?? def;
+    if (!at || !this.code.nodes[at]) return "ok";
+    return diff(at === def ? before : [], this.viewLines(at)) || "ok (nothing shown changed)";
+  }
+  private infoHad(was: { code: Code }, id: Id): boolean { return !!was.code.nodes[id]; }
+  private viewLines(def: Id): string[] { return this.view(def, 99).split("\n"); }
+
+  // A part of `at`: itself, or the part inside it that reads as `find`.
+  part(at: string, find?: string): Id {
+    const id = this.resolve(at);
+    if (find === undefined || find === "") return id;
+    const def = this.defOf(id);
+    if (!def) throw new Error(`#${this.id(id)} isn't in a definition`);
+    const want = norm(find);
+    const inside = new Set(subtree(this.code, id));
+    const hits = [...this.texts(def)].filter(([x, t]) => inside.has(x) && norm(t) === want).map(([x]) => x);
+    // The outermost, when a part and its only child read the same (a call
+    // and its name, say).
+    const top = hits.filter((x) => !hits.some((y) => y !== x && subtree(this.code, y).includes(x)));
+    if (!top.length) throw new Error(`no part of #${this.id(id)} reads ${find}`);
+    if (top.length > 1) throw new Error(`${top.length} parts read ${find}: give the id of a block around just one`);
+    return top[0];
+  }
+
+  replace(at: string, text: string, find?: string): string {
+    const target = this.part(at, find);
+    const def = this.defOf(target);
+    if (!def || target === def) throw new Error("replace a part of a definition, not the definition");
+    const t = text.trim();
+    return this.apply(def, () => {
+      const info = editorInfo(this.code, this.names);
+      const holed = T.toHole(this.code, this.names, info, target);
+      if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
+      return T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
+    });
+  }
+
+  rename(at: string, name: string): string {
+    const id = this.resolve(at);
+    const clash = nameClash(this.code, this.allNames, id, name);
+    if (clash) throw new Error(clash);
+    const def = this.defOf(id);
+    // A rename changes every use; the definitions that read it are shown elsewhere.
+    return this.apply(def, () => ({ ok: true, code: this.code, names: { ...this.names, [id]: name.trim() } }));
+  }
+
+  comment(at: string, text: string): string {
+    const id = this.resolve(at);
+    const was = { code: this.code, names: this.names, comments: this.comments };
+    const comments = { ...this.comments };
+    if (text.trim()) comments[id] = text.trim(); else delete comments[id];
+    this.undos.push(was);
+    this.comments = comments;
+    this.save();
+    return "ok";
+  }
+
+  // A let before `before` (or at the top of the body): `name = value`.
+  step(at: string, name: string, value: string): string {
+    const before = this.resolve(at);
+    const def = this.defOf(before);
+    if (!def) throw new Error(`#${this.id(before)} isn't in a definition`);
+    return this.apply(def, () => {
+      const info = editorInfo(this.code, this.names);
+      const r = T.addStep(this.code, this.names, info, def, before === def ? undefined : before);
+      if (!r.ok || !r.dot) return r.ok ? { ok: false, reason: "no step added" } : r;
+      const names = { ...r.names, [r.dot]: name.trim() || "_" };
+      const let_ = Object.values(r.code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
+      const hole = let_.args[0];
+      if (!value.trim()) return { ok: true, code: r.code, names };
+      return T.fillValue(r.code, names, editorInfo(r.code, names), hole, value, def);
+    });
+  }
+
+  // Replace a part by a match on a variable, one case per variant, each a copy.
+  split(at: string, on: string, find?: string): string {
+    const target = this.part(at, find);
+    const def = this.defOf(target);
+    if (!def) throw new Error(`#${this.id(target)} isn't in a definition`);
+    const v = this.resolve(on, def);
+    return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v));
+  }
+
+  define(name: string, kind: string, params: string[] = [], first = ""): string {
+    const shape: Shape = kind === "function" ? { kind, params } : kind === "value" ? { kind } : kind === "type" ? { kind, firstCase: first } : kind === "effect" ? { kind, firstOperation: first } : kind === "interface" ? { kind, firstOperation: first } : (() => { throw new Error("kind: function, value, type, effect or interface"); })();
+    return this.apply(null, () => newDefinition(this.code, this.names, name, shape), (c) => c.defs.at(-1)!);
+  }
+
+  addInput(at: string, name: string): string {
+    const def = this.resolve(at);
+    return this.apply(this.defOf(def), () => addParameter(this.code, this.names, def, name));
+  }
+
+  remove(at: string): string {
+    const def = this.resolve(at);
+    if (this.code.nodes[def]?.kind !== "def") throw new Error("remove takes a definition; replace a part with □ to clear it");
+    this.apply(null, () => deleteDefinition(this.code, this.names, def));
+    return "ok";
+  }
+
+  undo(): string {
+    const was = this.undos.pop();
+    if (!was) throw new Error("nothing to undo");
+    Object.assign(this, was);
+    this.recheck();
+    this.save();
+    return "ok";
+  }
+
+  // The value of an expression written as it prints, in the program's scope.
+  eval(text: string): string {
+    setDisplayNames(LIBRARY.names);
+    const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "value" });
+    if (!made.ok) throw new Error(made.reason);
+    const def = made.code.defs.at(-1)!;
+    const hole = (made.code.nodes[def] as NodeOf<"def">).body!;
+    const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
+    if (!r.ok) throw new Error(r.reason);
+    const info = infer(r.code, baseNames(r.names), undefined, checkOptions);
+    const own = new Set(subtree(r.code, def));
+    const e = info.errors.find((x) => own.has(x.id));
+    if (e) throw new Error(e.message);
+    const out: string[] = [];
+    const names = baseNames(r.names);
+    const rt = { print: (s: string) => out.push(s), names, world: this.world(out, "") };
+    const t = info.typeOf.get(def);
+    try {
+      const v = withSteps(STEPS, () => showValue(runMain(r.code, info, def, rt), r.code, names));
+      return clip([...out, `= ${v} : ${t ? showType(info.subst.zonk(t), names) : "?"}`]).join("\n");
+    } catch (x) {
+      if (x instanceof OutOfSteps) return clip([...out, `stopped: still running after ${STEPS.toLocaleString("en")} steps`]).join("\n");
+      throw x;
+    }
+  }
+
   // ---------------------------------------------------------------- running
 
   // Run `main` (or another action), with the arguments and standard input
@@ -222,7 +401,7 @@ export class Session {
     try {
       result = withSteps(STEPS, () => {
         // A page prints once, as static HTML (as lab run does).
-        if (t?.t === "fn" && !pageProblem(this.info, def, this.allNames)) return `page:\n${htmlText(runMain(this.code, this.info, def, { ...rt, cells: new Cells(equal) }), evaluatorCall)}`;
+        if (t?.t === "fn" && !pageProblem(this.info, def, this.allNames)) return `page, as text:\n${pageText(htmlText(runMain(this.code, this.info, def, { ...rt, cells: new Cells(equal) }), evaluatorCall))}`;
         if (!problem) return `exit ${runProgram(this.code, this.info, def, args, rt)}`;
         return `= ${showValue(runMain(this.code, this.info, def, rt), this.code, this.allNames)}`;
       });
@@ -281,6 +460,14 @@ const lineDef = (ps: Piece[], code: Code): Id | undefined => {
   return p?.id && code.nodes[p.id]?.kind === "def" ? p.id : undefined;
 };
 
+// A page's text, as a reader sees it: no styles, a line per block.
+export function pageText(html: string): string {
+  return html.replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/g, "")
+    .replace(/<\/(p|div|h\d|li|tr|main|section|button)>|<br\s*\/?>/g, "\n")
+    .replace(/<[^>]+>/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+    .split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+}
+
 // Long output is cut, keeping the end, where the answer is.
 export function clip(lines: string[], max = 200, chars = 6000): string[] {
   const out = lines.length <= max ? lines : [`… ${lines.length - max} lines before`, ...lines.slice(-max)];
@@ -288,4 +475,24 @@ export function clip(lines: string[], max = 200, chars = 6000): string[] {
   return all.length <= chars ? out : [all.slice(0, chars), `… ${all.length - chars} more characters`];
 }
 
-export type { NodeOf };
+// Text as an LLM copies it from view: ids dropped, operators as typed.
+const norm = (s: string) => s.replace(/#[0-9a-v]{3,}\b/g, "").replace(/[‹›]/g, "").replace(/·/g, "*").replace(/−/g, "-").replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/\s+/g, " ").trim();
+
+// The editor's own check, which its gestures compare against.
+const editorInfo = (code: Code, names: Names): Info => T.infer(code, { ...LIBRARY.names, ...names });
+
+// The lines that changed, - before and + after, in order (a longest
+// common subsequence of lines).
+export function diff(a: string[], b: string[]): string {
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out: string[] = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { i++; j++; }
+    else if (i < n && (j >= m || L[i + 1][j] >= L[i][j + 1])) out.push(`- ${a[i++]}`);
+    else out.push(`+ ${b[j++]}`);
+  }
+  return out.join("\n");
+}

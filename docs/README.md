@@ -54,7 +54,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
-| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`lab mcp`) | read tools built; edits next |
+| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`lab mcp`) | built: read tools, edits, eval |
 
 ### Numbers
 
