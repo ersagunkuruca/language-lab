@@ -211,6 +211,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         break;
     }
     nodes[fresh] = c as unknown as Node;
+    copyOf.set(fresh, copyOf.get(id) ?? id);
     const o = opAt.get(id);
     if (o) opAt.set(fresh, o);
     const t = info.typeOf.get(id);
@@ -223,6 +224,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // or, when that is more than a ref, to a definition made of it.
   const ops = interfaceOps(code);
   const opAt = new Map(info.opAt ?? []);
+  const copyOf = new Map(info.copyOf ?? []);
   const lifted = new Map<string, Id>();
   // Ways (WAYS.md, BACKLOG L96, ways.ts): each implementation's pick,
   // made once.
@@ -454,5 +456,5 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
   }
 
-  return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent }, names: outNames };
+  return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };
 }

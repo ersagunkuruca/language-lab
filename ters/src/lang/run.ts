@@ -309,6 +309,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The generic + resolved to each type's own (arith.ts); a program
   // without one is unchanged.
   ({ code, info } = resolveArithmetic(code, info, rt.names ?? {}));
+  // A copy at another number type is entered as the lambda it copies.
+  const copyOf = info.copyOf;
   // Our own copy of the node table: `derivative` writes new code into it.
   code = { nodes: { ...code.nodes }, defs: code.defs };
   const defs = new Map<Id, Value>();
@@ -516,7 +518,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (rest) return this.resumeRest(rest, args[0]);
       const c = closures.get(f as Fn);
       if (c) {
-        rt.entered?.(c.lambda.id, args);
+        rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args);
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
       }
       const h = HANDLED.get(f as Fn);

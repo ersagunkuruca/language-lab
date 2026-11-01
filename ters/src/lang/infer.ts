@@ -63,6 +63,10 @@ export interface Info {
   // operation is at, for arith.ts to resolve.
   implementations?: Map<string, Id>;
   opAt?: Map<Id, Type>;
+  // Each node arith.ts copied for a definition used at another number
+  // type, to the node it is a copy of (as written), so a Run fed by a
+  // call into the copy still finds the definition (I29).
+  copyOf?: Map<Id, Id>;
   // Calls whose Choice was dropped because their inputs answer them
   // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
   answered?: Set<Id>;
