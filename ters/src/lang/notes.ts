@@ -55,6 +55,7 @@ export const NOTES: Comments = {
   "std.ticket.ticket": "A ticket the world gave out, by its number.",
   "std.ticket.timer": "Ready after this many milliseconds, with this value.",
   "std.ticket.first ready": "Ready when the first of these tickets is, giving which(its position). any of(tickets) builds one.",
+  "std.ticket.at": "Ready at this time on the clock of whoever answers it, with this value: simulated gives these for its timers.",
   "std.await": "Waiting: await(ticket) gives the ticket's value once it is ready. A handler answers it later, at most once: a test's, together's, or the world's.",
   "std.await.await": "Waits for the ticket and gives its value. One operation for every type of ticket.",
   "std.await.start timer": "Starts a timer at the world's clock and gives its ticket: ready this many milliseconds from now, however often it is awaited.",

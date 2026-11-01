@@ -738,7 +738,21 @@ a second resume stops the run with that reason. A generator, a page that
 waits for a fetch, and a round-robin scheduler of two fibers are each a few
 lines in the language (`test/later.test.ts`). The evaluator runs it;
 compiled JavaScript does not yet (C40). This is Koka's `ctl` with OCaml 5's
-one-shot continuations.
+one-shot continuations. A case may also leave the rest out and answer at
+once, as any operation's case does: resuming at once is answering.
+
+A handler keeps state by passing it along as it resumes: its cases give a
+function of the state, and resume with `rest(answer)(new state)` (the
+parameter-passing handlers of Plotkin and Pretnar). The prelude's
+`simulated(seed, action)` does this for tests of waiting (L63): it answers
+`await` and `start timer` (both answered later) on a clock that starts at
+0 and never really waits, a timer it starts being a ticket `at` its
+deadline, and when several tickets are ready at once it picks which goes
+on with Random, seeded by `seed`. The same seed gives the same schedule
+every run, so an order that goes wrong is a seed to paste into a test
+(`test/simulated.test.ts`; FoundationDB's deterministic simulation, Will
+Wilson 2014, is the prior art). The evaluator and compiled JavaScript pick
+the same.
 
 Errors with reasons are now `Abort` (REVIEW.md §4.3): `read file` aborts
 with "no such file: notes.txt", and `Choice` stays reason-free, for search.

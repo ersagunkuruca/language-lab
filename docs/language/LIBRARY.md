@@ -346,7 +346,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 
 ## Waiting for several things: Await
 
-A Ticket a is something that will give an a later: a timer, or something the world started. await(ticket) waits for it. start timer(ms) starts one at the world's clock. together runs several actions side by side, each until it awaits, and whichever ticket is ready first goes on; race gives the first to finish, and within gives none if a timer is ready first. Something around it answers await: a test's handler, or the world, which waits on its clock.
+A Ticket a is something that will give an a later: a timer, or something the world started. await(ticket) waits for it. start timer(ms) starts one at the world's clock. together runs several actions side by side, each until it awaits, and whichever ticket is ready first goes on; race gives the first to finish, and within gives none if a timer is ready first. Something around it answers await: a test's handler, or the world, which waits on its clock. simulated(seed, action) answers it for a test on a clock that never really waits, the order of tickets ready at once picked by the seed.
 
 - **Ticket** (type). Something that will give an a later: await(ticket) waits for it. A timer(milliseconds, value) gives value after that long; the world's tickets come from what it started, such as start timer; first ready is any of's.
 - **Await** (type). Waiting: await(ticket) gives the ticket's value once it is ready. A handler answers it later, at most once: a test's, together's, or the world's.
@@ -356,6 +356,7 @@ A Ticket a is something that will give an a later: a timer, or something the wor
 - **together** : `(List (() -[Await]-> a)) -[Diverge, Await]-> List a`. Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).
 - **race** : `(List (() -[Await]-> a)) -[Diverge, Await]-> a`. Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).
 - **within** : `(Float64, () -[Await]-> a) -[Diverge, Await]-> Optional a`. The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.
+- **simulated** : `(Float64, () -[Abort, Await, Random, e]-> a) -[Abort, e]-> a`. Runs the action in a simulated world for tests: its timers on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).
 
 ## Cells and pages
 
