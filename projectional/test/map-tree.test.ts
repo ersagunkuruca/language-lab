@@ -79,17 +79,17 @@ test("each tree job agrees with the definition through meaning, and the tree sta
   let seed = 7;
   const rand = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
   // Whole keys, then Float64s a near step apart (each within equal's 1e-9
-  // of the next) with NaN, −0 and 0: compare's exact order keeps the tree
+  // of the next) with −0 and 0: compare's exact order keeps the tree
   // and the sorted list agreeing on those too (REVIEW-2026-10-26.md §1.1).
   const order = variantOrder(w.code);
-  const near = [...Array.from({ length: 20 }, (_, j) => 1000.5 + j * 1.5e-6), NaN, -0, 0];
+  const near = [...Array.from({ length: 20 }, (_, j) => 1000.5 + j * 1.5e-6), -0, 0];
   for (const keyOf of [(i: number) => i, (i: number) => near[i % near.length]]) {
   let tree = r.value(impl("empty map")), map = r.value(spec("empty map"));
   for (let step = 0; step < 400; step++) {
     const key = keyOf(rand(60)), op = rand(3);
     if (op < 2) { tree = call(impl("put"), tree, key, step)!; map = call(spec("put"), map, key, step)!; }
     else { tree = call(impl("remove key"), tree, key)!; map = call(spec("remove key"), map, key)!; }
-    // compare's "same", not equal: equal(NaN, NaN) is false, as IEEE says.
+    // compare's "same": exact, where equal is near.
     assert.equal(compareValues(means(tree)!, map, order), 0, `step ${step}`);
     balanced(tree);
     const probe = keyOf(rand(60));

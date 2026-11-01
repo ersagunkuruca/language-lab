@@ -7,8 +7,10 @@ L125a to L125f in BACKLOG.md. L125a step 1 (this PR's row in DONE.md): the
 evaluator stops the program with the reason whenever a float operation's
 answer isn't finite, and `atan2` takes −0 as 0. Until L125b's nonzero fact,
 "no answer" stops the program too rather than being `Choice`, since a
-`Choice` on every `/` would make nearly every program a search. The
-compiled targets follow in L125c.
+`Choice` on every `/` would make nearly every program a search. L125c1
+(compiled JavaScript, 2026-11-01): the same stops with the same reasons,
+no answer checked on the argument and overflow late (§2); WASM and C
+follow in L125c2.
 
 Ersagun, 2026-11-01: "Shall we put the problems with IEEE floats into a
 discussion. Maybe we should use a subset of them (probably excluding

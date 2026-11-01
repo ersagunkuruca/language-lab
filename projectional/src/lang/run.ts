@@ -104,12 +104,15 @@ export function equal(a: Value, b: Value): boolean {
 // How two Float64s are ordered: exactly, and totally. Unlike `equal`'s
 // nearness this is an order a sorted list, a set or a map's keys can rely
 // on (REVIEW-2026-10-26.md §1.1): every Float64 is before, the same as or
-// after every other, and "the same" is transitive. NaN (from 0/0 or
-// sqrt(−1)) is after every other Float64 and the same as itself, as in
-// IEEE 754's totalOrder; −0 and 0 are the same, unlike totalOrder, because
-// `equal` says so and nothing a program does tells them apart.
+// after every other, and "the same" is transitive. −0 and 0 are the same,
+// unlike IEEE 754's totalOrder, because `equal` says so and nothing a
+// program does tells them apart. Every Float64 is finite (L125a); compiled
+// code checks an overflow late, and this is one of the places (L125c).
 export const numberOrder = (a: number, b: number): number =>
-  a < b ? -1 : a > b ? 1 : a === b ? 0 : Number.isNaN(a) ? (Number.isNaN(b) ? 0 : 1) : -1;
+  a - a !== 0 || b - b !== 0 ? overflowed() : a < b ? -1 : a > b ? 1 : 0;
+// An overflow compiled code finds late (L125c), as the evaluator's
+// finiteFloat would have said at the operation.
+export const overflowed = (): never => { throw new Aborted("the answer is too big for a Float64 (overflow)"); };
 
 // The order on plain data (L66): numbers by value (Int, Float64 and
 // fractions; Float64 exactly, numberOrder), text by code point, and other
@@ -1028,7 +1031,7 @@ export const definedAs = (v: Value): Id | undefined => (typeof v === "function" 
 // only read (the Run panel, a wire's value), not typed back in.
 export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
   if (typeof v === "bigint") return String(v);
-  if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e9) / 1e9);
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v - v === 0 ? String(Math.round(v * 1e9) / 1e9) : overflowed();
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
