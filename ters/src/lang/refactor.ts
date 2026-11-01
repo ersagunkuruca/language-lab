@@ -51,7 +51,7 @@ function recursiveField(code: Code, def: Id, f: Id): boolean {
 function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, variants: Id[], fold: boolean, library: Names = {}, taken = new Set<string>()): Id[] {
   const fieldName = (f: Id) => unique(names[f] ?? library[f] ?? "field", taken);
   return variants.map((v) => {
-    const fields = (code.nodes[v] as NodeOf<"variant">).fields;
+    const variant = code.nodes[v] as NodeOf<"variant">, fields = variant.fields;
     const binds = fields.map((f) => { const b = add({ kind: "binder" }); names[b] = fieldName(f); return b; });
     const results = fields.map((f) => {
       if (!fold || !recursiveField(code, def, f)) return null;
@@ -59,6 +59,13 @@ function makeArms(code: Code, add: (n: NodeData) => Id, names: Names, def: Id, v
       names[r] = `${fieldName(f)}′`;
       return r;
     });
+    // An operation answered later binds the rest too, last (ANSWERED-LATER.md).
+    if (variant.later && variant.returns) {
+      const rest = add({ kind: "binder" });
+      names[rest] = unique("rest", taken);
+      binds.push(rest);
+      results.push(null);
+    }
     return add({ kind: "arm", variant: v, binds, results, body: add({ kind: "hole" }) });
   });
 }

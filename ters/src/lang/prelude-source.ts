@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1155,7 +1155,62 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  // Waiting for several things at once (BACKLOG L71b, ANSWERED-LATER.md
+  // "Typing await and together"). together runs each action until it
+  // awaits a ticket, parks its rest as a thunk that awaits that ticket
+  // again (so every parked branch has one type, whatever its ticket's), and
+  // asks outward which parked ticket is ready first: the world (L71c), or a
+  // handler such as a test's. Prior art: Promise.all and Promise.race
+  // (JavaScript), Trio's nursery and OCaml 5's Eio fibers, here a handler
+  // written in the language.
+  const ticketId = k.def("ticket id");
+  k.define(ticketId, k.fn(["ticket"], (t) => k.match(t, [
+    { variant: TICKET_V.ticket, names: ["number"], body: ([n]) => k.call(TICKET_V.ticket, n) },
+    { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms]) => k.call(TICKET_V.timer, ms, k.unitValue) },
+    { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts]) => k.call(TICKET_V.firstReady, ts, k.fn(["i"], () => k.unitValue)) },
+  ])));
+  const anyOf = k.def("any of");
+  k.define(anyOf, k.fn(["tickets"], (ts) => k.call(TICKET_V.firstReady, ts, k.fn(["i"], (i) => i))));
+  const startBranch = k.def("start branch");
+  k.define(startBranch, k.fn(["action"], (a) => k.handle(k.call(a), [
+    { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.call(BRANCH_V.parked, k.call(ticketId, t), k.thunk(() => k.call(rest, k.call(AWAIT_OP, t)))) },
+  ], ["value", (v) => k.call(BRANCH_V.done, v)])));
+  const waiting = k.def("waiting tickets");
+  k.define(waiting, k.fn(["branches"], (bs) => k.fold(bs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["branch", "rest"], results: [null, "waiting in rest"], body: ([b], [, r]) => k.match(b, [
+      { variant: BRANCH_V.done, names: ["value"], body: () => r! },
+      { variant: BRANCH_V.parked, names: ["ticket", "resume"], body: ([t]) => k.call(CONS, t, r!) },
+    ]) },
+  ])));
+  const goOn = k.def("go on with");
+  k.define(goOn, k.fn(["branches", "i"], (bs, i) => k.match(bs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["branch", "others"], body: ([b, others]) => k.match(b, [
+      { variant: BRANCH_V.done, names: ["value"], body: () => k.call(CONS, b, k.call(goOn, others, i)) },
+      { variant: BRANCH_V.parked, names: ["ticket", "resume"], body: ([, resume]) => k.if(k.equal(i, k.int(0)),
+        k.call(CONS, k.call(resume), others),
+        k.call(CONS, b, k.call(goOn, others, k.call(INT_OPS.sub, i, k.int(1))))) },
+    ]) },
+  ])));
+  const finished = k.def("finished values");
+  k.define(finished, k.fn(["branches"], (bs) => k.fold(bs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["branch", "rest"], results: [null, "values in rest"], body: ([b], [, r]) => k.match(b, [
+      { variant: BRANCH_V.done, names: ["value"], body: ([v]) => k.call(CONS, v, r!) },
+      { variant: BRANCH_V.parked, names: ["ticket", "resume"], body: () => r! },
+    ]) },
+  ])));
+  const settle = k.def("settle");
+  k.define(settle, k.fn(["branches"], (bs) => k.match(k.call(waiting, bs), [
+    { variant: NIL, names: [], body: () => k.call(finished, bs) },
+    { variant: CONS, names: ["first", "more"], body: ([f, m]) => k.call(settle, k.call(goOn, bs, k.call(AWAIT_OP, k.call(anyOf, k.call(CONS, f, m))))) },
+  ])));
+  const together = k.def("together");
+  k.define(together, k.fn(["actions"], (as) => k.call(settle, k.call(map, as, startBranch))));
+  const awaitHelpers = [startBranch, waiting, goOn, finished, settle];
+
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1291,11 +1346,15 @@ export function buildPrelude(): Module {
     [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0.",
     [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
+    [ticketId]: "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
+    [anyOf]: "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
+    [together]: "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
+    ...Object.fromEntries(awaitHelpers.map((d) => [d, "A helper of together. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }
