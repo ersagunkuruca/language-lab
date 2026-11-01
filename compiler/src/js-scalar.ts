@@ -58,6 +58,8 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
           if (op === "of") return `[${xs.join(", ")}]`;
           if (op === "empty") return "[]";
           if (op === "push") return `[...${xs[0]}, ${xs[1]}]`;
+          if (op === "pushFront") return `[${xs[1]}, ...${xs[0]}]`;
+          if (op === "rest") return `${xs[0]}.slice(1)`;
           if (op === "length") return `${xs[0]}.length`;
           if (op === "at") {
             const item = lowered.arrays[Number(/\.a(\d+)$/.exec(e.fn)![1])].item, a = temp(), k = temp();

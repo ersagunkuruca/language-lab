@@ -243,7 +243,8 @@ export function emitWgsl(lowered: Lowered): Shader {
         const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
         if (op === "of") return e.args.length;
         if (op === "empty") return 0;
-        if (op === "push") return sz(e.args[0]) + 1;
+        if (op === "push" || op === "pushFront") return sz(e.args[0]) + 1;
+        if (op === "rest") return Math.max(sz(e.args[0]) - 1, 0);
         throw new Error("keeps an array in an array");
       }
       default: throw new Error("uses an array where a shader can't tell its size");
@@ -268,7 +269,7 @@ export function emitWgsl(lowered: Lowered): Shader {
       kids(e).forEach(walk);
       // Every array the printer will need the size of.
       if ((e.k === "if" || e.k === "budget") && isArray(e.t)) szOf(locals, e);
-      if (e.k === "rt" && /^array\.(push|length|at)\./.test(e.fn)) szOf(locals, e.args[0]);
+      if (e.k === "rt" && /^array\.(push|pushFront|rest|length|at)\./.test(e.fn)) szOf(locals, e.args[0]);
       // Every instance a call runs. Calling itself as the last step is a
       // loop, which reuses its inputs, so their sizes must stay the same.
       if (e.k === "call") {
@@ -606,6 +607,17 @@ export function emitWgsl(lowered: Lowered): Shader {
             pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
             const x = bare(ex(e.args[1], pre, d));
             return `${tname(at, n + 1)}(${[...Array.from({ length: n }, (_, j) => `${a}[${j}]`), x].join(", ")})`;
+          }
+          if (op === "pushFront") {
+            const n = szOf(L, e.args[0]), a = temp();
+            pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
+            const x = bare(ex(e.args[1], pre, d));
+            return `${tname(at, n + 1)}(${[x, ...Array.from({ length: n }, (_, j) => `${a}[${j}]`)].join(", ")})`;
+          }
+          if (op === "rest") {
+            const n = szOf(L, e.args[0]), a = temp();
+            pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
+            return n ? `${tname(at, n - 1)}(${Array.from({ length: n - 1 }, (_, j) => `${a}[${j + 1}]`).join(", ")})` : a;
           }
           if (op === "length") { ex(e.args[0], pre, d); return `${szOf(L, e.args[0])}i`; }
           if (op === "at") {

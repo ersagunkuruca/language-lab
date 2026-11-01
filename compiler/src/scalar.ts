@@ -730,7 +730,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const at = target === ARRAY_OPS.of || target === ARRAY_OPS.empty || target === ARRAY_OPS.push ? id : n.args[0], a = stype(zonk(at));
           if (!a || !isArray(a)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(at))}`);
           if (target === ARRAY_OPS.items) throw new Refused("takes an array's items as a List (a shader has no lists)");
-          if (target === ARRAY_OPS.first || target === ARRAY_OPS.rest || target === ARRAY_OPS.pushFront) throw new Refused(`uses ${nm(target)}, which isn't in shaders yet (a shader's array has one size where it's made)`);
+          // The two ends (C30d) at fixed sizes (C66): the first item is
+          // item 0, no answer when empty; the rest is one shorter (the empty
+          // array's is itself), a push at the front one longer.
+          if (target === ARRAY_OPS.first) return { k: "rt", fn: `${ARRAY_RT[ARRAY_OPS.at]}.a${a.index}`, args: [...args(), { k: "int", v: 0n }] };
           if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
           const items: Id[] = [];
           let l = code.nodes[n.args[0]];
