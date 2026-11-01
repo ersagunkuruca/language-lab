@@ -190,7 +190,9 @@ export function signAnalysis(code: Code) {
     if (fnode?.kind === "lambda") return of(fnode.body, env, depth + 1);
     const f = target(n.fn);
     if (!f) return ANY;
-    const a = (i: number) => (n.args[i] ? of(n.args[i], env, depth + 1) : ANY);
+    // Each input's signs worked out once, however many rules read them.
+    const got: Signs[] = [];
+    const a = (i: number) => (got[i] ??= n.args[i] ? of(n.args[i], env, depth + 1) : ANY);
     const same = n.args.length === 2 && alike(n.args[0], n.args[1]);
     if (ADD.has(f) || f === INT_OPS.add) return plus(a(0), a(1));
     if (SUB.has(f) || f === INT_OPS.sub) return same ? ZERO : plus(a(0), flip(a(1)));
