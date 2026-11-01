@@ -453,8 +453,19 @@ export function buildPrelude(): Module {
   k.define(asinX, k.fn(["s"], (sv) => angleOf(cut(sv), sv)));
   const acosX = k.def("fixed acos");
   k.define(acosX, k.fn(["c"], (cv) => angleOf(cv, cut(cv))));
+  // Polar at Fixed is CORDIC's rotating mode (L97d): (cos, sin) of the
+  // angle, each times the length with Fixed's own ·. sin and cos are
+  // Trig's ways from it, length 1, which gives the same bits as `fixed
+  // sin` and `fixed cos` (1 · s is s to the step). Each result runs the
+  // rotation on its own until a direction that reads one drops the other
+  // (C55).
+  const polarX = k.def("fixed polar");
+  k.define(polarX, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(x, cs(t, (c) => k.call(mulX, r, F(c)))),
+    k.equal(y, cs(t, (_, sn) => k.call(mulX, r, F(sn)))))));
+  k.results(polarX, "x", "y");
   const trigX = k.def("trig at fixed");
-  k.define(trigX, k.call(TRIG_V, ...[sinX, cosX, tanX, expX, logX].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarX), k.x(asinX), k.x(acosX)));
+  k.define(trigX, k.call(TRIG_V, ...[S.byItsWays, S.byItsWays, tanX, expX, logX, polarX, unpolarX, asinX, acosX].map((d) => k.x(d))));
 
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
