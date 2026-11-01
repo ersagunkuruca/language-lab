@@ -10,7 +10,7 @@
   "at27po7ht781up91jml2s496jj": "Every pair of bodies, met once.",
   "46bqbcs5ps5pgj0eba8rusjtn8": "The world one frame (1/60 s) later. The same definition moves the flat world and the solid one: only the space it is given differs.",
   "oftmt7jacqjpltmt58ms6466bk": "The world count steps later.",
-  "g33js6ispvq4ionshacvfe8jk0": "How many whole steps of 1/60 s fit in the time owed. The page runs that many each frame, at most 8, and carries the rest of the time to the next frame, so the bodies keep to real time whatever the frame rate (a fixed step with an accumulator, as in Glenn Fiedler's \"Fix Your Timestep!\", 2004).",
+  "g33js6ispvq4ionshacvfe8jk0": "How many whole steps of 1/60 s fit in the time owed. The page runs that many each frame, at most 8, and carries the rest of the time to the next frame, so the bodies keep to real time whatever the frame rate.",
   "haj4oru8vqvu6r13844hppclmb": "Where a point the camera sees shows on the picture: its first two coordinates, drawn larger the nearer it is along the depth vector (a flat world has none, so nothing changes size).",
   "eqek9svc6ue4mpvvbq6q8h20ck": "The item at place i, counting from 0, or otherwise when the list is shorter.",
   "7sab58cn2gobulojjh87opj9l3": "A body's edges as an SVG path, as the camera sees them. A corner c of a body turned by R at p is p + R c R̃ in the world, and the camera's rotor C turns that to C p C̃ + (C R) c (C R)~: the two rotors are multiplied once per body, so each corner takes one sandwich.",
