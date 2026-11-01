@@ -63,6 +63,9 @@ export interface Info {
   // operation is at, for arith.ts to resolve.
   implementations?: Map<string, Id>;
   opAt?: Map<Id, Type>;
+  // Calls whose Choice was dropped because their inputs answer them
+  // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
+  answered?: Set<Id>;
   // Each definition with results (RESULTS.md): the effects of the direction
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
@@ -113,7 +116,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map() };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set() };
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -674,7 +677,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (fr.t === "fn" && given?.kind === "ref" && PARTIAL[given.target]) {
           signs ??= signAnalysis(code);
           const r = s.resolveRow(fr.eff);
-          if (r.effs.includes(CHOICE) && signs.answered(id)) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } };
+          if (r.effs.includes(CHOICE) && signs.answered(id)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
         }
         // A definition whose only Choice is such a builtin's, called with
         // inputs that answer it (period(1, 9.81)), has none here (L125b).
@@ -691,7 +694,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               const sig = SIGS[f]?.(s.clone());
               return !sig || (sig.t === "fn" && sig.eff.effs.includes(CHOICE));
             };
-            if (signs.totalCall(id, searches)) fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } };
+            if (signs.totalCall(id, searches)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
           }
         }
         if (fr.t === "fn" && fr.params.length !== args.length) {

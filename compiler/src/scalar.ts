@@ -749,7 +749,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "rt", fn: RT[target], args: RT_LATE.has(RT[target]) ? args().map((a, i) => (stype(zonk(n.args[i])) === "f64" ? fin(f, a) : a)) : args() };
         }
         if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
-        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e); }
+        // A partial function's x / 0 has no answer there (L125b), unless the
+        // checker found this call always answered: then it can only stop.
+        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e, !!opts.data && !!f.partial && !info.answered?.has(id)); }
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === S.fail && opts.shader) {
@@ -1730,7 +1732,8 @@ const [DIV0, MOD0, SQRT, LOG, POW0, POWNEG, OVERFLOW] = STOPS.map((_, i) => i);
 // Abort a handler in the program gets: it ends the program.
 const num = (v: number): SExpr => ({ k: "num", v });
 const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
-const stop = (i: number): SExpr => op("stop", num(i));
+const stopWith = (i: number): SExpr => op("stop", num(i));
+const stop = stopWith;
 const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", cond, then, else: otherwise, t: "f64" });
 // When bad, the stops in why; otherwise ok.
 const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
@@ -1758,8 +1761,10 @@ const isFinite = (l: SExpr) => op("equal", op("sub", l, l), num(0));
 export const fin = (f: SFunc, x: SExpr): SExpr => (lit(x) !== null ? x : held(f, x, (l) => guard(op("not", isFinite(l)), stop(OVERFLOW), l)));
 const LATE: Partial<Record<Op, true>> = { less: true, equal: true, exp: true };
 export const RT_LATE = new Set(["number.show", "number.range", "int.wholePart"]);
-function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>): SExpr {
+// `none`: no answer is a Choice the function gives (a fail) instead of a stop.
+function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>, none = false): SExpr {
   const [a, b] = r.args;
+  const stop = (i: number): SExpr => (none && i !== OVERFLOW ? { k: "fail" } : stopWith(i));
   switch (r.op) {
     case "div": case "mod": {
       const v = lit(b);

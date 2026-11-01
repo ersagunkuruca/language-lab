@@ -103,7 +103,13 @@ for (const name of ["calculus", "physics"]) {
     const got = run(calls);
     // A stop (L125a) is the evaluator's Abort, and C's "!".
     const want = (d: string, xs: Value[]) => { try { return first(r.call(r.value(d), ...xs)); } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; } };
-    calls.forEach(([i, xs], k) => assert.deepStrictEqual(got[k].value, want(lowered.funcs[i].def, xs), `${lowered.funcs[i].name}(${xs})`));
+    calls.forEach(([i, xs], k) => {
+      const w = want(lowered.funcs[i].def, xs);
+      // A plain scalar function (no `data`) has no way to give no answer
+      // (a Choice, L125b): it stops with the reason instead (L125c3).
+      if (w === undefined && / has no answer$/.test((got[k].value as { aborted?: string })?.aborted ?? "")) return;
+      assert.deepStrictEqual(got[k].value, w, `${lowered.funcs[i].name}(${xs})`);
+    });
     assert.ok(calls.length > 10);
   });
 }

@@ -165,6 +165,9 @@ test("every number builtin lowers to the scalar profile (WASM, WGSL), or says wh
       // A stop (L125c) is an Abort with its reason, on both.
       const said = (run: () => unknown) => { try { return run(); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
       const want = said(() => r.call(r.value(f), ...xs).next().value), got = said(() => w.f(...xs));
+      // A plain scalar function (no `data`) has no way to give no answer
+      // (a Choice, L125b): it stops with the reason instead (L125c3).
+      if (want === undefined && typeof got === "string" && /^stops: .* has no answer$/.test(got)) continue;
       assert.ok(Object.is(got, want), `${name(id)}(${xs}) in WASM: ${got} ≠ ${want}`);
     }
   }

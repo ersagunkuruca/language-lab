@@ -307,6 +307,13 @@ export function $lift(f) {
 // A Choice function with at most one answer returns it, or $no for none
 // (GAPS.md G14). Where a stream of answers is needed, $stream0 makes one.
 export const $no = Symbol('no answer');
+// A call the checker found always answered (L125b): its one answer, from a
+// copy that gives a stream or the answer or $no.
+export function $answered(r) {
+  if (r !== null && typeof r === 'object' && typeof r.next === 'function') { for (const x of r) return x; r = $no; }
+  if (r === $no) $stop('a call found always answered had no answer');
+  return r;
+}
 export const $stream0 = (f) => function* (...a) { const r = f(...a); if (r !== $no) yield r; };
 export function $one(results) {
   for (const x of results) return x;
