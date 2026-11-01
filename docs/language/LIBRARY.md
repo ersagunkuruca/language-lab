@@ -175,6 +175,10 @@ Text is a string of characters. Positions count from 0.
 - **not before** : `(Text, Text) -> Bool`. Text a ≥ b: b comes before a or is a.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
+- **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.
+- **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
+- **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
+- **uppercase** : `(Text) -> Text`. The text with a to z made A to Z, everything else as it was: uppercase("Hello") is "HELLO".
 
 ## Lists and pairs
 

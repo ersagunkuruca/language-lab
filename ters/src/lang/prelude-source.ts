@@ -97,6 +97,30 @@ export function buildPrelude(): Module {
   const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
   const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
   const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+  // Letters and digits, and a text's case (BACKLOG L133, GAPS round 6
+  // NG1: notebook wrote lower, wordy and between with character codes, calc
+  // its own digit and letter). The English letters A to Z and the digits 0
+  // to 9 only, as C's isalpha and isdigit in the "C" locale; other
+  // alphabets' letters and cases are left as they are for now.
+  const inRange = (c: Id, lo: string, hi: string) => k.and(k.equal(k.call(TEXT_OPS.length, c), k.int(1)),
+    k.and(k.call(S.not, k.call(TEXT_OPS.less, c, k.lit(lo))), k.call(S.not, k.call(TEXT_OPS.less, k.lit(hi), c))));
+  const isDigit = k.def("is digit");
+  k.define(isDigit, k.fn(["character"], (c) => inRange(c, "0", "9")));
+  const isLetter = k.def("is letter");
+  k.define(isLetter, k.fn(["character"], (c) => k.call(S.or, inRange(c, "a", "z"), inRange(c, "A", "Z"))));
+  // One character moved between the cases, by its code: A to Z and a to z
+  // are 32 apart.
+  const shifted = (name: string, lo: string, hi: string, by: number) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["character"], (c) => k.if(inRange(c, lo, hi),
+      k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, k.call(INT_OPS.add, k.call(TEXT_OPS.code, c), k.int(by)))), k.thunk(() => c)), c)));
+    return d;
+  };
+  const lowerOne = shifted("lowercase character", "A", "Z", 32), upperOne = shifted("uppercase character", "a", "z", -32);
+  const lowercase = k.def("lowercase");
+  k.define(lowercase, k.fn(["text"], (t) => k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), lowerOne), k.lit(""))));
+  const uppercase = k.def("uppercase");
+  k.define(uppercase, k.fn(["text"], (t) => k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), upperOne), k.lit(""))));
   // A text's start and end (BACKLOG L134, GAPS round 6 NG2): notebook
   // wrote ends with from length and slice, and routes its blank-line test.
   const startsWith = k.def("starts with");
@@ -1291,7 +1315,7 @@ export function buildPrelude(): Module {
     )))));
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1317,6 +1341,12 @@ export function buildPrelude(): Module {
     [notAfter]: "Text a ≤ b: a comes before b or is b.",
     [after]: "Text a > b: b comes before a.",
     [notBefore]: "Text a ≥ b: b comes before a or is a.",
+    [isDigit]: "Whether this is one of the characters 0 to 9.",
+    [isLetter]: "Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).",
+    [lowercase]: "The text with A to Z made a to z, everything else as it was: lowercase(\"Hello, World\") is \"hello, world\".",
+    [uppercase]: "The text with a to z made A to Z, everything else as it was: uppercase(\"Hello\") is \"HELLO\".",
+    [lowerOne]: "A helper of lowercase. Not offered in the palette.",
+    [upperOne]: "A helper of uppercase. Not offered in the palette.",
     [startsWith]: "Whether the text begins with this: starts with(\"# notes\", \"#\") is true. Every text starts with \"\".",
     [endsWith]: "Whether the text ends with this: ends with(\"page.md\", \".md\") is true. Every text ends with \"\".",
     [extLess]: "a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.",
