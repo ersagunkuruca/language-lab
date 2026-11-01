@@ -667,7 +667,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         try { v = answerFromHost(code, rt.names ?? {}, rt.hosts, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.ret(v);
       }
-      throw new Error(`nothing handles ${op}`);
+      throw new Error(`nothing handles ${rt.names?.[op] ?? stdNames[op] ?? op}`);
     }
 
     handle(h: Id, args: Value[]): void {
