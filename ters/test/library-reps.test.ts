@@ -319,6 +319,50 @@ test("a program that reads a list by position gets arrays, and prints what the d
   assert.equal(showValue(runMain(c.code, info2, main, { print: () => {}, names: c.names }), c.code, c.names), "[9, 8]");
 });
 
+// C30d3c: WebAssembly and C take the same choice. `array of List`'s match
+// is `first of array if any`, lowered as `optional` of the array's first.
+test("a program that reads a list by position and takes it apart gets arrays in WebAssembly and C too, with the evaluator's answers", async () => {
+  const { lowerScalar } = await import("../../compiler/src/scalar.ts");
+  const { emitC } = await import("../../compiler/src/c.ts");
+  const { emitWasm, instantiate } = await import("../../compiler/src/wasm.ts");
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(50)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  const at = k.def("at");
+  k.define(at, k.fn(["i"], (i) => k.call(B.add, k.call(L("item at"), k.x(xs), i, k.lit(-1)), k.lit(50))));
+  // A match on the list: its first item, or 0 when there is none.
+  const head = k.def("head plus");
+  k.define(head, k.fn(["n"], (n) => k.match(k.x(xs), [
+    { variant: NIL, names: [], body: () => n },
+    { variant: CONS, names: ["x", "rest"], body: ([x]) => k.call(B.add, x, n) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(B.add, k.call(at, k.lit(3)), k.call(head, k.lit(4)))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, at, head, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const lowered = lowerScalar(c.code, info2, c.names, [at, head], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.deepEqual([...emitC(lowered).refused.values()], []);
+  // The match is the array's first, as an Optional.
+  const seen = new Set<unknown>();
+  const finds = (e: unknown): boolean => {
+    if (!e || typeof e !== "object" || seen.has(e)) return false;
+    seen.add(e);
+    const x = e as { k?: string; body?: { k?: string; fn?: unknown } };
+    if (x.k === "attempt" && x.body?.k === "rt" && typeof x.body.fn === "string" && x.body.fn.startsWith("array.first")) return true;
+    return Object.entries(e).some(([key, v]) => key !== "t" && key !== "bt" && finds(v));
+  };
+  assert.ok(lowered.funcs.some((g) => g.name === "array match" && finds(g.body)));
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
+  const fn = (d: Id) => w[lowered.funcs.find((g) => g.def === d)!.name];
+  const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+  for (const i of [0, 3, 49, 50]) assert.equal(one(fn(at)(i)), i < 50 ? i * i + 50 : 49);
+  for (const n of [0, 4, 7]) assert.equal(one(fn(head)(n)), n);
+});
+
 test("a program whose lists meet a set as written keeps List as written", () => {
   const k = new Lang(LIBRARY.code);
   const xs = k.def("xs");

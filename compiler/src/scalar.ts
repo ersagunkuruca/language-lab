@@ -735,6 +735,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!(l?.kind === "ref" && l.target === NIL)) throw new Refused("makes an array of a list that isn't written out (a shader's array has its size where it's made)");
           return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: items.map((x) => expr(x, env, f, false)) };
         }
+        if (opts.data && target === ARRAY_OPS.firstIfAny) {
+          // `array of List`'s match (C30d3c): the first item as an Optional,
+          // which is `optional` of array first, whose empty array is no
+          // answer.
+          const a = stype(zonk(n.args[0])), t = stype(zonk(id));
+          if (!a || !isArray(a) || !t || !isData(t)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const item = a.item;
+          return { k: "search", kind: "optional", body: { k: "rt", fn: `array.first.a${a.index}`, args: args() }, res: f.locals.push(item) - 1, t, bt: item };
+        }
         if (opts.data && ARRAY_RT[target]) {
           // The array's type, from the argument or the answer that is one;
           // List of its items too where the job takes or gives a list.

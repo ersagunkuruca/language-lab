@@ -9,7 +9,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -182,10 +182,11 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.first]: { js: "partial", scalar: ARRAYS },
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
-  [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: { no: "first of array if any is array of List's match, which WebAssembly and C don't take yet (C30d3c)" } },
+  [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
   // A hash table changed in place (C63b): std.ts's own, on a JS Map. Not on
   // WebAssembly or C: the chooser doesn't pick it for them.
   ...Object.fromEntries(Object.entries(TABLE_OPS).map(([k, id]): [Id, Target] => [id, { js: k === "at" ? "partial" : "impl", scalar: no("a hash table is JavaScript's Map: WebAssembly and C keep the tree (C63b)") }])),
+  ...Object.fromEntries(Object.values(HASH_SET_OPS).map((id): [Id, Target] => [id, { js: "impl", scalar: no("a hash set is JavaScript's Map: WebAssembly and C keep the tree (C63d)") }])),
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },

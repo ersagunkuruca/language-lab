@@ -63,6 +63,10 @@ export interface Info {
   // operation is at, for arith.ts to resolve.
   implementations?: Map<string, Id>;
   opAt?: Map<Id, Type>;
+  // Each node arith.ts copied for a definition used at another number
+  // type, to the node it is a copy of (as written), so a Run fed by a
+  // call into the copy still finds the definition (I29).
+  copyOf?: Map<Id, Id>;
   // Calls whose Choice was dropped because their inputs answer them
   // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
   answered?: Set<Id>;
@@ -1555,8 +1559,31 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     catch (e) { return `!${(e as Error).message}`; }
   }).join(";");
   let planned: string | undefined;
-  const samePlans = (f: Filling) => plans(filled(f)) === (planned ??= plans(code));
+  // What a whole check says, units aside, follows from what a filling
+  // makes of the group's types (and, where it changes one, of its solves'
+  // plans): fillings that make the same of them pass or fail together, so
+  // one check answers for them all. Units are the exception: what a call
+  // does to them is the callee's own (multiply multiplies them, add needs
+  // them equal), so each filling's units are checked on their own, a small
+  // part of a check (BACKLOG E103: fall's holes asked ~1,000 whole checks
+  // each, one per thing an offer names).
+  const groupTypes = h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; });
+  const unitsOf = (c: Code) => new Set(unitProblems(c, {}, affected, units).map((u) => u.message));
+  let unitsBefore: Set<string> | undefined;
+  const noNewUnits = (now: Set<string>) => [...now].every((m) => (unitsBefore ??= unitsOf(code)).has(m));
   const checked = new Map<string, boolean>();
+  const byKind = (key: string, f: Filling): boolean => {
+    let ok = checked.get(key);
+    if (ok === undefined) {
+      const unit = unitsOf(filled(f));
+      checked.set(key, (ok = noNew(recheck(filled(f)).filter((e) => !unit.has(e.message)))));
+      return ok && noNewUnits(unit);
+    }
+    return ok && noNewUnits(unitsOf(filled(f)));
+  };
+
+  // The plans a filling makes, or null when they are the program's.
+  const newPlans = (f: Filling): string | null => { const now = plans(filled(f)); return now === (planned ??= plans(code)) ? null : now; };
   const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
   const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];
   let aroundBefore: string | undefined;
@@ -1587,7 +1614,9 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
     if (dir === "changed") return whole(f);
-    if (risky || (withResults && (f.kind === "match" || f.kind === "fold")) || (solves.length && !samePlans(f))) return whole(f);
+    if (risky || (withResults && (f.kind === "match" || f.kind === "fold"))) return whole(f);
+    const plan = solves.length ? newPlans(f) : null;
+    if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}`, f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
     // one can carry a constraint, records of Float64s say.)
@@ -1604,13 +1633,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // keep the pin; the others are checked against it.
     const held = pinnedGroup && groupKey(s, around) !== (aroundBefore ??= groupKey(info.subst, around));
     if (!touches && !held) return true;
-    // Units are the exception: what a call does to them is the callee's
-    // own (multiply multiplies them, add needs them equal), so a ref or a
-    // call is checked for each thing it names.
-    const named = f.kind === "ref" || f.kind === "call" ? `|${f.target}` : "";
-    const key = groupKey(s, [...h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; }), ...(pinnedGroup ? around : [])]) + named;
-    if (!checked.has(key)) checked.set(key, whole(f));
-    return checked.get(key)!;
+    return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]), f);
   };
   // A filling that brings Choice or the world where the other is may break
   // the rule that the world isn't touched under Choice, which only the

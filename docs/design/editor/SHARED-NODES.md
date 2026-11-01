@@ -96,3 +96,18 @@ went from 6.2 s to 0.85 s, the hole from 20 s to 12.7 s, and all 23 of fall's ho
 offers changing a plan. What's left is the whole checks of those 399
 (`recheck`, mostly `infer` and `useDirections`), which is the next step if
 it's worth one.
+
+## E103c: one check for offers alike
+
+Profiled on fall's next-worst hole after E133b: 973 of its ~1,000 whole
+checks came from offers keyed by what they named (`|target`), so every
+offer was its own key. The name was there for units, since what a call
+does to them is the callee's own. Now a whole check is keyed by what the
+offer makes of the group's types, and of its solves' plans where it
+changes one; the check's unit errors are set apart, and each offer's
+units are checked on their own (`unitProblems` over what depends on the
+group, a few milliseconds). Measured on a busy machine: fall's 23 holes
+from 80 s to 47 s in all, the worst from 16 s to 8 s, with the same offers
+on every hole. What's left is the whole checks themselves, `infer` and
+`useDirections`, about half each.
+

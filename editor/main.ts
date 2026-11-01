@@ -1024,10 +1024,10 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
 const PASSED = "‹what main passes›";
 
 // Calls every view in a page's Html once, outermost first, until `over`.
-// Returns its handlers, one for each place in the code a handler is
-// written (a board's 64 squares share one).
-function drawOnce(v: Value, over: () => boolean): Value[] {
-  const todo: Value[] = [v], handlers = new Map<unknown, Value>();
+// Returns its handlers by the place in the code each is written, in the
+// order they're drawn (a board's 64 squares share one place).
+function drawOnce(v: Value, over: () => boolean): Map<unknown, Value[]> {
+  const todo: Value[] = [v], handlers = new Map<unknown, Value[]>();
   while (todo.length && !over()) {
     const d = todo.shift() as Data;
     if (d?.tag === HTML_V.text) tryCall(d.fields[0]);
@@ -1035,12 +1035,16 @@ function drawOnce(v: Value, over: () => boolean): Value[] {
     else if (d?.tag === HTML_V.element) {
       for (const a of fromList(d.fields[1]) as Data[]) {
         if (a.tag === HTML_V.property) tryCall(a.fields[1]);
-        else if (a.tag === HTML_V.on) { const f = a.fields[1], m = (f as unknown as Record<symbol, { lambda?: Id }>)[META]; if (!handlers.has(m?.lambda ?? f)) handlers.set(m?.lambda ?? f, f); }
+        else if (a.tag === HTML_V.on) {
+          const f = a.fields[1], m = (f as unknown as Record<symbol, { lambda?: Id }>)[META], at = m?.lambda ?? f;
+          const all = handlers.get(at);
+          if (all) all.push(f); else handlers.set(at, [f]);
+        }
       }
       todo.push(...fromList(d.fields[2]));
     }
   }
-  return [...handlers.values()];
+  return handlers;
 }
 const tryCall = (f: Value, ...args: Value[]): Value | undefined => { try { return evaluatorCall(f, ...args); } catch { return undefined; } };
 // What a handler is given when it's run as if its event came: a click at
@@ -1068,7 +1072,30 @@ function dryWorld(): World {
 }
 // Once per version of the code. 50 ms often ended before main reached
 // calculus's newton on a cold page (I78).
-const MAIN_STEPS = 100_000, MAIN_MS = 120;
+const MAIN_STEPS = 100_000, MAIN_MS = 120, HANDLERS_MS = 250;
+
+// The page drawn once, then its handlers run as if their events came (I29),
+// on the dry run's own cells, with time of their own (`started`): each
+// handler, and the page drawn again after it, so what only a later state
+// shows (a move in progress, its animation's end) is reached too. A
+// handler a drawing shows for the first time runs next, and up to
+// ANOTHER_TAP of each place's handlers run, one per drawing (a second tap
+// on the board picks a neighbour; each lane's timer).
+const ANOTHER_TAP = 3;
+function explore(page: Value, over: () => boolean, started: () => void) {
+  const fired = new Map<unknown, number>(), todo: Value[] = [];
+  const draw = () => {
+    const fresh: Value[] = [];
+    for (const [at, fs] of drawOnce(page, over)) {
+      const n = fired.get(at) ?? 0;
+      if (n < ANOTHER_TAP && n < fs.length) { fired.set(at, n + 1); fresh.push(fs[n]); }
+    }
+    todo.unshift(...fresh);
+  };
+  draw();
+  started();
+  while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); }
+}
 function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   let calls = mainRuns.get(doc.code);
   if (!calls) {
@@ -1091,12 +1118,7 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
           });
           // A page's views run later, as it's drawn: draw it once here, so
           // what they call has values too (I29 b).
-          const handlers = tr.result === undefined ? [] : drawOnce(tr.result, () => performance.now() > end);
-          // Then each handler once, as if its event came, with time of its
-          // own, so what only a handler calls has values too (I29). On
-          // the dry run's own cells: nothing the page shows changes.
-          end = performance.now() + MAIN_MS;
-          for (const f of handlers) { if (performance.now() > end) break; tryCall(f, NO_EVENT); }
+          if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + HANDLERS_MS; });
         });
       } finally { done = true; }
     }

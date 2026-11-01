@@ -270,7 +270,7 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // which the table keeps as they are (a Float64's equal is near). A helper
 // generic in the key is given maps made elsewhere, where their keys are
 // named.
-const CHANGES = ["put", "update at", "remove key", "merge maps"];
+const CHANGES = ["put", "update at", "remove key", "merge maps", "add item", "remove item", "set union"];
 function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
   const changes = new Map(CHANGES.map((n) => [prelude(n), 0]));
   if (!oneHolder(code, info, main, new Set([row.of]), new Set(Object.keys(row.impl)), changes).ok) return false;
