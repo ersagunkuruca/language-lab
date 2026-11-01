@@ -1,1 +1,2 @@
-node_modules/
+# Without the slash a symlink to one (a worktree's) is kept out too.
+node_modules
