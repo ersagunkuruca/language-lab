@@ -120,6 +120,39 @@ test("a set given to a generic helper keeps the definition", () => {
   assert.deepEqual(printed(c.code, c.names, main), ["true", 'set of(["a", "b"])']);
 });
 
+// C70 (GAPS.md round 6 N1): a generic definition that only passes its
+// values on (`map` over pairs holding a set, a helper giving the pair's
+// second) never sees the tree, so it doesn't keep the definition; one
+// that shows them, through another definition, still does.
+test("a set handed to definitions that never look at it keeps the tree (C70)", () => {
+  const program = (look: boolean) => {
+    const k = new Lang(LIBRARY.code);
+    const seen = k.def("seen");
+    k.define(seen, k.fold(k.call(S.range, k.lit(300)), [
+      { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+      { variant: CONS, names: ["i", "rest"], results: [null, "s"], body: ([i], [, s]) => k.call(L("add item"), s!, i) },
+    ]));
+    const second = k.def("second");
+    k.define(second, k.fn(["p"], (p) => k.match(p, [{ variant: PAIR_V, names: ["a", "b"], body: ([, b]) => b }])));
+    const describe = k.def("describe");
+    k.define(describe, k.fn(["x"], (x) => k.call(SHOW_ANY, x)));
+    const via = k.def("via");
+    k.define(via, k.fn(["x"], (x) => k.call(describe, x)));
+    const sizes = k.call(L("map"), k.list(k.call(PAIR_V, k.lit("s"), k.x(seen))), k.fn(["e"], (e) =>
+      look ? k.call(via, e) : k.call(SHOW_ANY, k.call(L("set size"), k.call(second, e)))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(PAIR_V, k.call(L("has item"), k.x(seen), k.lit(42)), sizes)))));
+    const code = base(k.code), names = baseNames(k.names);
+    const info = infer(code, names, undefined, checkOptions);
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    return { code, names, main, c: withLibraryRepresentations(code, info, names, main, [seen, second, describe, via, main]) };
+  };
+  const { code, names, main, c } = program(false);
+  assert.deepEqual(c.chosen, ["Set as weight-balanced tree"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), printed(code, names, main));
+  assert.deepEqual(program(true).c.chosen, []);
+});
+
 // C52: a map inside another value takes the tree too; what shows,
 // compares or answers it sees the entries.
 test("a list of maps, a map of maps and main's answer get the tree, and print what the definition prints", () => {

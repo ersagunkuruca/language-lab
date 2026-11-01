@@ -1459,7 +1459,9 @@ out (Spec `at`), or a scheme flag "looks at a". `first`, `map`, `keep`,
 (`ranked`, `credit`, `counted` here) then don't count. *Measured* (the
 check off): 29× to 5× at 300 notes, 86× to 6× at 1000, 226× to 9× at
 3000; the evaluator 3.2 to 1.2 s at 100 notes. The program's output is the
-same either way (the test checks it).
+same either way (the test checks it). **Done (C70):** `generic` counts only a callee
+that looks at the value (library-reps.ts `looked`); 3000 notes compiled
+on the trees: 235× to 9× the ideal.
 
 **N2. The hash table is all or nothing for a type (perf: about a quarter
 of what's left).** Every `any`, `like` and `seen` adds its scores up in a
