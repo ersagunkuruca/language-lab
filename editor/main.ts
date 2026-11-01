@@ -109,6 +109,7 @@ import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
 import type { CompileAsk, CompileSays, RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
+import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import * as T from "./typed.ts";
@@ -2261,7 +2262,21 @@ function programPanel(): HTMLElement {
   ta.value = noteOf(doc);
   ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
   out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", {}, "Comment · comments.json"), ta));
+  // The program's own effects are answered by a host file outside a
+  // handler (FOREIGN.md, L69c): what it gives, read-only, as lab hosts
+  // writes it.
+  const effects = ownEffects();
+  if (effects.length) {
+    const host = h("textarea", { id: "f-host", rows: "8", readonly: "", spellcheck: "false" }) as HTMLTextAreaElement;
+    host.value = hostSkeleton(doc.code, pres().names, effects);
+    out.append(h("label", { class: "field", for: "f-host" }, h("span", {}, "Host · hosts/js.js"), host),
+      h("p", { class: "hint" }, `What this program's own ${effects.length === 1 ? "effect" : "effects"} (${effects.map((e) => pres().names[e] ?? e).join(", ")}) ${effects.length === 1 ? "does" : "do"} outside a handler is answered by hosts/js.js beside the program, when it runs with lab run or is built with lab build-web. The editor keeps no host file: this is the one lab hosts writes, to fill in.`));
+  }
   return out;
+}
+// The effects the program declares itself.
+function ownEffects(): Id[] {
+  return ownDefs().filter((d) => { const b = defBody(d); return b?.kind === "typedef" && !!b.effect; });
 }
 
 // A link that embeds the open definition (?embed). An example as shipped
@@ -2902,7 +2917,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} is the page above: it runs there, and Restart runs it again from the start.`));
   } else if (needs.length) {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
-    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
+    // The program's own effect is the host's to answer outside a handler
+    // (FOREIGN.md, L69c), and the editor has no host file.
+    const own = needs.filter((e) => ownEffects().includes(e));
+    if (own.length === needs.length) box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} needs its host: it performs ${effs}, this program's own effect, which hosts/js.js beside the program answers when it runs with lab run. The editor has no host file, so it doesn't run here; the Program tab shows what one gives. Or call it inside `, h("code", {}, `handle ${effs}`), "."));
+    else box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
   } else if (choice) {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
       h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional"), "."));
