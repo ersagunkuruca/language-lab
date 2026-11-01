@@ -13,7 +13,7 @@ import { runMain, showValue } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
-import { COMPARE, CONS, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { COMPARE, CONS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER, STRING } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 
@@ -343,4 +343,33 @@ test("a representation the program doesn't check on is dropped, not reported (ch
   const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs);
   assert.ok(!c.chosen.some((x) => /array/.test(x)), String(c.chosen));
   if (c.info) assert.deepEqual(c.info.errors.map((e) => e.message), []);
+});
+
+// I106: a cons onto a match's rest copies the array (the rest is a view
+// the list it came from still sees), so a program that pops and pushes
+// keeps cons cells, even though it also reads by position.
+test("a program that conses onto a match's rest keeps List as written, and the chooser says why (I106)", async () => {
+  const { choose, ontoField } = await import("../src/lang/represent.ts");
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(S.range, k.lit(50)));
+  // Replace the head: x :: rest becomes (x + 1) :: rest.
+  const bump = k.def("bump");
+  k.define(bump, k.fn(["list"], (l) => k.match(l, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(B.add, x, k.lit(1)), rest) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), k.call(bump, k.x(xs)), k.lit(0), k.lit(-1))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const reps = LIBRARY.reps.filter((r) => r.name === "array of List" || (r.of === LIST && r.canonical));
+  const c = choose(code, main, reps);
+  assert.ok(c.jobs.includes(ontoField(CONS, 1)), String(c.jobs));
+  const row = (n: string) => c.table.find((r) => r.rep === n)!.costs[ontoField(CONS, 1)];
+  assert.equal(row("array of List"), "n");
+  assert.equal(row("List as written"), "1");
+  assert.equal(c.rep.name, "List as written");
+  assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, bump, main]).chosen.includes("List as array of List"));
 });

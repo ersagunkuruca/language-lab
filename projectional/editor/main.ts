@@ -121,6 +121,7 @@ import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { runTests, savedFrom, type Saved, type TestResult } from "../src/lang/tests.ts";
+import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../src/lang/grades.ts";
 import { PAGE_BASE, hasSound, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
@@ -1265,7 +1266,9 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
       ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
       : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : nice(shown));
     if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
-    box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p))));
+    // A multivector result says what it is (L43d).
+    const kind = p === "out" && !on && shown !== undefined && forwards ? (() => { const tr = traced(info); return tr?.result !== undefined ? kindOf(info, tr.result) : null; })() : null;
+    box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p), kind ? ` ${kind}` : "")));
   }
   if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : portName(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
   else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `It doesn't run backwards: ${r.error}.`) : h("p", { class: "status-line bad" }, r.error));
@@ -2728,6 +2731,18 @@ const useOver = (info: T.Info, b: Id, slot: Id) =>
 const shareOver = (info: T.Info, from: Id, slot: Id) =>
   T.over(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot, from, (c, n, i) => T.share(c, n, i, ui.def, from, slot));
 
+// A multivector of an algebra the program writes down, in words: "a
+// vector", "even (a rotor or motor)", or its blades (GRADES.md, L43d).
+const algebrasFor = new WeakMap<T.Info, Map<Id, Algebra>>();
+function kindOf(info: T.Info, v: Value): string | null {
+  const d = v as Data;
+  if (!d || typeof d !== "object" || !("tag" in d)) return null;
+  let as = algebrasFor.get(info);
+  if (!as) { try { as = algebrasOf(doc.code, info); } catch { as = new Map(); } algebrasFor.set(info, as); }
+  const alg = [...as.values()].find((a) => a.variant === d.tag && d.fields.length === a.parts && d.fields.every((x) => typeof x === "number"));
+  return alg ? describeMask(alg, maskOfValue(v)) : null;
+}
+
 function graphHooks(info: T.Info) {
   return {
     selected: ui.selected,
@@ -2777,6 +2792,13 @@ function graphHooks(info: T.Info) {
     values: (() => {
       const tr = traced(info);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names, true)])) : undefined;
+    })(),
+    kinds: (() => {
+      const tr = traced(info);
+      if (!tr) return undefined;
+      const out = new Map<Id, string>();
+      for (const [id, v] of tr.values) { const k = kindOf(info, v); if (k) out.set(id, k); }
+      return out;
     })(),
     at: Object.fromEntries(Object.entries(doc.layout.at ?? {}).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
     moved: (to: Record<Id, Pos>, note?: string) => {
