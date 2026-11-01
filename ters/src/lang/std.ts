@@ -799,8 +799,8 @@ export const ARRAY_OPS = {
 // meaning is the Map it stands for.
 // `empty map` is a constant, one value every use shares: the empty table
 // it stands for is `shared`, and a put or remove on it makes a new one.
+// No `tag`: it isn't a case of a data type, and nothing takes it apart.
 export class Table {
-  readonly tag = "std.table";
   readonly m: Map<unknown, unknown>;
   readonly shared: boolean;
   constructor(m: Map<unknown, unknown>, shared = false) { this.m = m; this.shared = shared; }
