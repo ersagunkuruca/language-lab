@@ -34,7 +34,7 @@
 // same, by the language's own abstract evaluation over a finite lattice
 // (Cousot and Cousot, POPL 1977). CREDITS.md.
 
-import { children as childIds, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
@@ -515,12 +515,18 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   // Every input of a definition called from somewhere unknown, or used as
   // a value, is every part.
   const wide = new Set<Id>([...open].filter((d) => isFn.has(d)));
+  // Only what the open definitions reach calls anything: a definition no
+  // one runs (a shader's other entry points, say) widens nothing.
+  const reached: Node[] = [];
+  for (const d of new Set([...open].flatMap((r) => (nodes[r] ? [r, ...dependencies(code, r)] : [])))) {
+    if (nodes[d]?.kind === "def") for (const id of subtree(code, d)) reached.push(nodes[id]);
+  }
   const sites = new Map<Id, Id>(); // call → callee
-  for (const n of Object.values(nodes)) {
+  for (const n of reached) {
     if (n.kind === "call") { const f = nodes[n.fn]; if (f?.kind === "ref" && isFn.has(f.target)) sites.set(n.id, f.target); }
   }
   const called = new Set([...sites.keys()].map((c) => (nodes[c] as NodeOf<"call">).fn));
-  for (const n of Object.values(nodes)) if (n.kind === "ref" && isFn.has(n.target) && !called.has(n.id)) wide.add(n.target);
+  for (const n of reached) if (n.kind === "ref" && isFn.has(n.target) && !called.has(n.id)) wide.add(n.target);
   // A call from no definition's own nodes (inside a lambda handed on, or
   // outside every definition) widens its callee.
   for (const [c, callee] of sites) if (!ownerOf.has(c)) wide.add(callee);

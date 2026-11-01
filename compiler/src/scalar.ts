@@ -371,7 +371,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
   // Definitions given such data get a copy for it (I86).
-  const st = stageProgram(code, info, names);
+  // The roots are called from outside: every other definition's
+  // multivector inputs are what its callers give it (grades.ts valueMasks,
+  // L43c), so staging multiplies only their masked parts.
+  const st = stageProgram(code, info, names, roots);
   ({ code, names, info } = st);
   const rounded = new Set<Id>();
   const calls = new Set(st.rounded);

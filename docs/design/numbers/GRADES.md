@@ -112,8 +112,13 @@ instead of 3168. The masks are those of the program as given; the copies
 staging makes for data known at a call (I86) don't have them yet, which
 is what Bounce needs.
 
-Still to do: storing only the masked parts (a record per mask), and the
-shader side.
+Shaders too (scalar.ts gives its roots as the open definitions): the
+GPU version of the same fixture has 32 products in its WGSL instead of
+96. Only what the open definitions reach counts, so a definition no one
+runs widens nothing.
+
+Still to do: storing only the masked parts (a record per mask, a smaller
+struct on the GPU).
 
 ## Ersagun's answer: each blade combination is its own type
 
