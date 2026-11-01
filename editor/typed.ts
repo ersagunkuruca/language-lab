@@ -872,6 +872,12 @@ export function dataTypeOf(code: Code, info: Info, b: Id): Id | null {
   return r.t === "con" && [...info.owner.values()].includes(r.id) ? r.id : null;
 }
 
+// A variable whose type nothing has fixed yet: any type can go there.
+export function untyped(info: Info, b: Id): boolean {
+  const t = info.typeOf.get(b);
+  return !!t && info.subst.resolve(t).t === "var";
+}
+
 // Copy a subtree with fresh ids, binders included (refs to them follow).
 function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id, map = new Map<Id, Id>()): Id {
   const go = (id: Id): Id => {
@@ -963,8 +969,10 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
 // per case of its type, each starting as a copy of the expression. The
 // arms come from the type, so no case is missing; each copy can then be
 // changed for its case.
-export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id): TEdit {
-  const type = dataTypeOf(code, info, on);
+// `as`: the data type to split on, for a variable whose type nothing has
+// fixed yet (a new function's input): the split fixes it (BACKLOG I116).
+export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id, as?: Id): TEdit {
+  const type = dataTypeOf(code, info, on) ?? (as && untyped(info, on) ? as : null);
   if (!type) return { ok: false, reason: "that variable's type has no cases" };
   const nodes = { ...code.nodes };
   const nn = { ...names };

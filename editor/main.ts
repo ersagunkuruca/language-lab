@@ -102,7 +102,7 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
@@ -1633,13 +1633,19 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
   if (isExprNode) {
     const splittable = T.scopeAt(doc.code, ui.def, id).filter((b) => T.dataTypeOf(doc.code, info, b));
+    // An input whose type nothing fixes yet splits as any data type the
+    // program has, or a list, an optional or a Bool: the split fixes it
+    // (BACKLOG I116, MCP-TRIAL-2026-11-01 #6).
+    const open = T.scopeAt(doc.code, ui.def, id).filter((b) => T.untyped(info, b));
+    const kinds = open.length ? [...new Set([...ownDefs().filter((d) => { const b = defBody(d); return b?.kind === "typedef" && !b.effect && !b.interface; }), ...[CONS, TRUE, SOME].map((v) => info.owner.get(v)).filter((x): x is Id => !!x)])] : [];
+    const guessed = open.flatMap((b) => kinds.map((k) => ({ b, k })));
     out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn", type: "button", "data-act": "t-replace", title: "Pick what goes here instead, from the palette" }, "Replace with…"),
       wrappable(id) ? h("button", { class: "btn", type: "button", "data-act": "t-wrap", title: "Put it inside a call or a function from the palette: it becomes one of its inputs" }, "Wrap in…") : null,
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
       n.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
-      splittable.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
+      splittable.length || guessed.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
     // A step of an action (print this, then that): its place in the order.
     const earlier = Top.moveStep(doc.code, doc.names.short, id, -1), later = Top.moveStep(doc.code, doc.names.short, id, 1);
     const isStep = (r: Top.Top) => r.ok || !/isn't a step/.test(r.reason);
@@ -1656,6 +1662,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
         const r = T.splitOn(doc.code, doc.names.short, info, id, b);
         const btn = h("button", { class: `opt${r.ok ? "" : " no"}`, type: "button", disabled: !r.ok, title: r.ok ? undefined : `Can't: ${r.reason}` },
           h("span", { class: "opt-l" }, namer.name(b)), h("span", { class: "opt-d" }, r.ok ? `one case per ${names[ty] ?? "variant"}` : `can't: ${r.reason}`));
+        if (r.ok) btn.addEventListener("click", () => applyT(r));
+        list.append(btn);
+      }
+      for (const { b, k } of guessed) {
+        const r = T.splitOn(doc.code, doc.names.short, info, id, b, k);
+        const btn = h("button", { class: `opt${r.ok ? "" : " no"}`, type: "button", disabled: !r.ok, title: r.ok ? `${namer.name(b)} has no type yet: this makes it a ${names[k] ?? "data type"}` : `Can't: ${r.reason}` },
+          h("span", { class: "opt-l" }, `${namer.name(b)} as ${names[k] ?? "?"}`), h("span", { class: "opt-d" }, r.ok ? `one case per ${names[k] ?? "variant"}` : `can't: ${r.reason}`));
         if (r.ok) btn.addEventListener("click", () => applyT(r));
         list.append(btn);
       }
