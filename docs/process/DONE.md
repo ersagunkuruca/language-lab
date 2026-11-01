@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| L69c | A definition whose host is missing says it needs its host; the Program tab shows the host file lab hosts writes | #860 |
 | I40 | The palette on physics main's new step: 2.9 → 1.1 s, the same 961 offers (Subst.trial reads through instead of copying; one whole check per effect mix) | #846 |
 | I109 | The compiled preview keeps what was done on the interpreted page: changed cells handed across by place (cells.ts handOver); a page with sound says why it stays interpreted | #841 |
 | L43d | Editor: a multivector of an algebra the program writes down says what it is ("a vector", "a bivector", "even (a rotor or motor)") after Run's result and on a wire's hover | #831 |
