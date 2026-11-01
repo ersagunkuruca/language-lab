@@ -99,6 +99,9 @@ export interface GraphHooks {
   // Values from a run on example inputs (src/lang/trace.ts), already shown
   // as text, by node and by variable.
   values?: Map<Id, string>;
+  // What a value is, in words, where it says more than the value: a
+  // multivector's blades (grades.ts describeMask, L43d). Shown on hover.
+  kinds?: Map<Id, string>;
 }
 
 // What the editor can ask of a drawn graph.
@@ -1138,7 +1141,8 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       const v = hooks.values!.get(id);
       if (v === undefined) return;
       const text = v.length > 24 ? `${v.slice(0, 23)}…` : v;
-      want.push({ text, full: v, at, w: tw(text, 6.4) + 8, h: 15, left });
+      const kind = hooks.kinds?.get(id);
+      want.push({ text, full: kind ? `${v}\n${kind}` : v, at, w: tw(text, 6.4) + 8, h: 15, left });
     };
     for (const it of scene.items.values()) if (it.value && it.out) { const p = pos.get(it.key)!; add(it.value, { x: p.x + it.out.x, y: p.y + it.out.y }); }
     for (const f of scene.frames.values()) f.binders.forEach((bd, i) => add(bd, point({ frame: f.id, port: i }), true));
