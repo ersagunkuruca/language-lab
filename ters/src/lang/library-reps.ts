@@ -266,8 +266,10 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // A map's keys or a set's items that hold the type (a set of sets): the
 // tree orders them by compare, which would see their shapes.
 // Every value of the row's type has one holder (one-holder.ts), and its
-// keys, wherever the program's own definitions have one, are Int or Text,
-// which the table keeps as they are (a Float64's equal is near).
+// keys, wherever the program's own definitions name one, are Int or Text,
+// which the table keeps as they are (a Float64's equal is near). A helper
+// generic in the key is given maps made elsewhere, where their keys are
+// named.
 const CHANGES = ["put", "update at", "remove key", "merge maps"];
 function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
   const changes = new Map(CHANGES.map((n) => [prelude(n), 0]));
@@ -276,7 +278,7 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     const t0 = info.typeOf.get(id);
     if (!t0) continue;
     const t = info.subst.zonk(t0);
-    if (t.t === "con" && t.id === row.of) { const k = info.subst.zonk(t.args[0]); if (k.t !== "con" || (k.id !== INT && k.id !== STRING)) return false; }
+    if (t.t === "con" && t.id === row.of) { const k = info.subst.zonk(t.args[0]); if (k.t !== "var" && (k.t !== "con" || (k.id !== INT && k.id !== STRING))) return false; }
   }
   return true;
 }
