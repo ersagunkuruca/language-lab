@@ -23,7 +23,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
-| C Compiler and targets | "Compiler lane" | C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
+| C Compiler and targets | "Compiler lane" | I105 (chapters broken), I106 (match-then-cons copies the array), I107 (0 · x folded), C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
 | L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -73,7 +73,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573). Next: a search whose own definitions wait; then the world's `await(any of …)` as a promise, after L71 | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
+| C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573), 2e a search whose own definitions wait (C40e). Next: the world's `await(any of …)` as a promise, after L71; a waiting search through its `$k` or record-field copies still says not yet | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
 
 ### Speed of compiled code
 
