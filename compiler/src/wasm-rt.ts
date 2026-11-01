@@ -65,7 +65,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i64.add": [[0x7c], []], "i64.sub": [[0x7d], []], "i64.mul": [[0x7e], []], "i64.div_s": [[0x7f], []], "i64.div_u": [[0x80], []], "i64.rem_s": [[0x81], []], "i64.rem_u": [[0x82], []],
   "i64.and": [[0x83], []], "i64.or": [[0x84], []], "i64.xor": [[0x85], []], "i64.shl": [[0x86], []], "i64.shr_s": [[0x87], []], "i64.shr_u": [[0x88], []],
   "i64.lt_u": [[0x54], []], "i64.gt_u": [[0x56], []], "i64.le_u": [[0x58], []], "i64.ge_u": [[0x5a], []],
-  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []], "i32.shr_s": [[0x75], []], "i32.div_s": [[0x6d], []],
+  "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []], "i32.shr_s": [[0x75], []], "i32.div_s": [[0x6d], []], "i32.rem_s": [[0x6f], []],
   "f64.sqrt": [[0x9f], []], "f64.convert_i32_s": [[0xb7], []], "i32.trunc_f64_s": [[0xaa], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
   "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
@@ -3570,6 +3570,273 @@ ${drop}
       i64.or
       f64.reinterpret_i64`,
   },
+  // An Int in 32 bits (C66c, `shader`), as WGSL and js-scalar.ts hold it:
+  // + − × negate and abs past 32 bits spend the fuel, as a budget running
+  // out does; a quotient or remainder by 0, a negative power and the whole
+  // part of NaN or ∞ set $none, the flag `first` looks at (wasm.ts).
+  "int32.iadd": { params: [["a", "i32"], ["b", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $a
+      i64.extend_i32_s
+      local.get $b
+      i64.extend_i32_s
+      i64.add
+      local.set $r
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  "int32.isub": { params: [["a", "i32"], ["b", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $a
+      i64.extend_i32_s
+      local.get $b
+      i64.extend_i32_s
+      i64.sub
+      local.set $r
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  "int32.imul": { params: [["a", "i32"], ["b", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $a
+      i64.extend_i32_s
+      local.get $b
+      i64.extend_i32_s
+      i64.mul
+      local.set $r
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  "int32.ineg": { params: [["a", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      i64.const 0
+      local.get $a
+      i64.extend_i32_s
+      i64.sub
+      local.set $r
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  "int32.iabs": { params: [["a", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $a
+      i64.extend_i32_s
+      local.set $r
+      local.get $r
+      i64.const 0
+      i64.lt_s
+      if void
+        i64.const 0
+        local.get $r
+        i64.sub
+        local.set $r
+      end
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  // Rounded down, as Math.floor(a / b).
+  "int32.iquot": { params: [["a", "i32"], ["b", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $b
+      i32.eqz
+      if void
+        i32.const 1
+        global.set $none
+        i32.const 0
+        return
+      end
+      local.get $a
+      i64.extend_i32_s
+      local.get $b
+      i64.extend_i32_s
+      i64.div_s
+      local.set $r
+      local.get $a
+      local.get $b
+      i32.rem_s
+      i32.eqz
+      i32.eqz
+      local.get $a
+      i32.const 0
+      i32.lt_s
+      local.get $b
+      i32.const 0
+      i32.lt_s
+      i32.ne
+      i32.and
+      if void
+        local.get $r
+        i64.const 1
+        i64.sub
+        local.set $r
+      end
+      local.get $r
+      i64.const 2147483647
+      i64.gt_s
+      local.get $r
+      i64.const -2147483648
+      i64.lt_s
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+      end
+      local.get $r
+      i32.wrap_i64` },
+  // The remainder with b's sign.
+  "int32.irem": { params: [["a", "i32"], ["b", "i32"]], result: "i32", locals: [["r", "i64"]], uses: [], body: `
+      local.get $b
+      i32.eqz
+      if void
+        i32.const 1
+        global.set $none
+        i32.const 0
+        return
+      end
+      local.get $a
+      i64.extend_i32_s
+      local.get $b
+      i64.extend_i32_s
+      i64.rem_s
+      local.set $r
+      local.get $r
+      i64.eqz
+      i32.eqz
+      local.get $r
+      i64.const 0
+      i64.lt_s
+      local.get $b
+      i32.const 0
+      i32.lt_s
+      i32.ne
+      i32.and
+      if void
+        local.get $r
+        local.get $b
+        i64.extend_i32_s
+        i64.add
+        local.set $r
+      end
+      local.get $r
+      i32.wrap_i64` },
+  // By squaring, each step an int32 multiply.
+  "int32.ipow": { params: [["a", "i32"], ["n", "i32"]], result: "i32", locals: [["r", "i32"], ["b", "i32"]], uses: ["int32.imul"], body: `
+      local.get $n
+      i32.const 0
+      i32.lt_s
+      if void
+        i32.const 1
+        global.set $none
+        i32.const 0
+        return
+      end
+      i32.const 1
+      local.set $r
+      local.get $a
+      local.set $b
+      block void
+        loop void
+          local.get $n
+          i32.eqz
+          br_if 1
+          local.get $n
+          i32.const 1
+          i32.and
+          if void
+            local.get $r
+            local.get $b
+            call $int32.imul
+            local.set $r
+          end
+          local.get $n
+          i32.const 1
+          i32.shr_u
+          local.set $n
+          local.get $n
+          if void
+            local.get $b
+            local.get $b
+            call $int32.imul
+            local.set $b
+          end
+          br 0
+        end
+      end
+      local.get $r` },
+  "int32.iwhole": { params: [["x", "f64"]], result: "i32", locals: [["f", "f64"]], uses: [], body: `
+      local.get $x
+      local.get $x
+      f64.sub
+      f64.const 0
+      f64.ne
+      if void
+        i32.const 1
+        global.set $none
+        i32.const 0
+        return
+      end
+      local.get $x
+      f64.floor
+      local.set $f
+      local.get $f
+      f64.const -2147483648
+      f64.lt
+      local.get $f
+      f64.const 2147483648
+      f64.ge
+      i32.or
+      if void
+        f64.const -1
+        global.set $fuel
+        i32.const 0
+        return
+      end
+      local.get $f
+      i32.trunc_f64_s` },
   // std.ts's mod: ((a % b) + b) % b, the remainder with b's sign.
   "number.mod": {
     params: [["a", "f64"], ["b", "f64"]], result: "f64", locals: [], uses: ["number.fmod"],
