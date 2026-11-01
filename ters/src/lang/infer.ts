@@ -10,6 +10,7 @@
 // effect: totality is inferred, not promised. Data types must be strictly
 // positive, so data can't be used to recurse without recursion.
 
+import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -17,7 +18,7 @@ import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
-import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
+import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { countedCalls } from "./counting.ts";
@@ -62,6 +63,9 @@ export interface Info {
   // operation is at, for arith.ts to resolve.
   implementations?: Map<string, Id>;
   opAt?: Map<Id, Type>;
+  // Calls whose Choice was dropped because their inputs answer them
+  // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
+  answered?: Set<Id>;
   // Each definition with results (RESULTS.md): the effects of the direction
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
@@ -112,12 +116,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map() };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set() };
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
+  let signs: ReturnType<typeof signAnalysis> | undefined;
   // Solves waiting on their givens' types (L38), and whether one turned out
   // to be in whole numbers, so the program is checked again with it so.
   const waiting: { solve: Id; givens: [Id, Type][] }[] = [];
@@ -665,6 +670,31 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               const theirs = rr && ret.t === "fn" && dropped(rr, modes.ofReturned(given.target, spec));
               if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
             }
+          }
+        }
+        // `/`, `sqrt`, `log`, `^` and `mod` have no answer at some inputs,
+        // so Choice, unless the inputs here are known to be fine (L125b).
+        if (fr.t === "fn" && given?.kind === "ref" && PARTIAL[given.target]) {
+          signs ??= signAnalysis(code);
+          const r = s.resolveRow(fr.eff);
+          if (r.effs.includes(CHOICE) && signs.answered(id)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
+        }
+        // A definition whose only Choice is such a builtin's, called with
+        // inputs that answer it (period(1, 9.81)), has none here (L125b).
+        else if (fr.t === "fn" && given?.kind === "ref" && code.nodes[given.target]?.kind === "def" && info.schemes.has(given.target)) {
+          const r = s.resolveRow(fr.eff);
+          if (r.effs.includes(CHOICE)) {
+            signs ??= signAnalysis(code);
+            const searches = (f: Id): boolean => {
+              const sc = info.schemes.get(f);
+              if (sc) return sc.type.t === "fn" && s.resolveRow(sc.type.eff).effs.includes(CHOICE);
+              const k = code.nodes[f]?.kind;
+              if (k === "def") return true;
+              if (k === "variant" || k === "field") return false;
+              const sig = SIGS[f]?.(s.clone());
+              return !sig || (sig.t === "fn" && sig.eff.effs.includes(CHOICE));
+            };
+            if (signs.totalCall(id, searches)) { fr = { ...fr, eff: { ...r, effs: r.effs.filter((e) => e !== CHOICE) } }; info.answered!.add(id); }
           }
         }
         if (fr.t === "fn" && fr.params.length !== args.length) {
@@ -1453,6 +1483,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     forgetNodes(scratch ??= { ...code.nodes });
     const r = fillHole(code, {}, hole, f, {}, scratch);
     undo = r.undo;
+    derivedFrom(r.code, code, subtree(r.code, hole));
     return (last = [f, r.code])[1];
   };
   let before: Problem[] | undefined;

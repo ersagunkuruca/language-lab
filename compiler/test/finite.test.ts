@@ -4,6 +4,9 @@
 // (x / 0, √ of a negative, log of 0, 0 to a negative power) is checked on
 // the argument; an overflow is checked late, where it would otherwise
 // vanish or decide something: a comparison, `show`, a divisor, `exp`.
+// Since L125b no answer is a Choice in the evaluator: WebAssembly's
+// partial functions give none too, and compiled JavaScript still stops
+// with the reason (L125c3).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -73,18 +76,24 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
   const evaluated = (d: Id, a: number, b: number) => said(() => { for (const v of r.call(r.value(d), a, b)) return v; });
   const inputs = INPUTS;
   const stops = new Set<string>();
+  const none = new Set<string>();
   for (const [name, d] of defs) for (const [a, b] of inputs) {
-    const want = evaluated(d, a, b), got = said(() => js[name](a, b));
+    const want = evaluated(d, a, b), got = said(() => { const v = js[name](a, b) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; });
+    // No answer in the evaluator (L125b) is, for now, a stop with its reason here (L125c3).
+    if (want === "undefined" && /^stops: .* has no answer$/.test(got)) { none.add(got); continue; }
+    // caught handles the stop's Abort here; in the evaluator there is none to handle.
+    if (want === "undefined" && name === "caught" && / has no answer$/.test(got)) continue;
     if (name !== "less") assert.equal(got, want, `${name}(${a}, ${b})`);
     else assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
     if (want.startsWith("stops")) stops.add(want);
   }
-  assert.equal(said(() => js.caught(1, 0)), "x / 0 has no answer");
-  // Every reason the evaluator gives came up, so each was compared.
-  assert.deepEqual([...stops].sort(), [
+  // caught has a Choice now (its division isn't known to be answered), so its copy gives a stream.
+  assert.equal(said(() => { const v = js.caught(1, 0) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; }), "x / 0 has no answer");
+  // The evaluator stops only on overflow now; every no answer came up.
+  assert.deepEqual([...stops].sort(), ["stops: the answer is too big for a Float64 (overflow)"]);
+  assert.deepEqual([...none].sort(), [
     "stops: 0 to a negative power has no answer",
     "stops: a negative number to a fractional power has no answer",
-    "stops: the answer is too big for a Float64 (overflow)",
     "stops: the log of 0 or less has no answer",
     "stops: the square root of a negative number has no answer",
     "stops: x / 0 has no answer",
@@ -107,13 +116,14 @@ test("WebAssembly stops where the evaluator does, with the same reason", async (
     const f = lowered.funcs.find((g) => g.def === d)!;
     for (const [a, b] of INPUTS) {
       const want = said(() => { for (const v of r.call(r.value(d), a, b)) return v; });
-      const got = said(() => { const v = w[f.name](a, b); return f.result === "text" ? fromText(w as never, v) : f.result === "i32" ? (v ? "true" : "false") : v; });
+      // A partial function (one with no answer at some inputs) gives its status too.
+      const got = said(() => { let v = w[f.name](a, b); if (f.partial) { const [x, st] = v as [unknown, number]; if (st !== 0) return undefined; v = x; } return f.result === "text" ? fromText(w as never, v) : f.result === "i32" ? (v ? "true" : "false") : v; });
       if (name === "less") assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
       else assert.equal(got, want, `${name}(${a}, ${b})`);
       if (want.startsWith("stops")) stops++;
     }
   }
-  assert.ok(stops > 10);
+  assert.ok(stops > 3);
 });
 
 // Under WASI the stop writes its reason to standard error and exits with 1,
@@ -121,18 +131,20 @@ test("WebAssembly stops where the evaluator does, with the same reason", async (
 test("a WASI program stops with the evaluator's reason and exit code", async () => {
   const k = new Lang();
   const main = k.def("main");
+  // The divisors are known not to be 0 (L125b), so main has no Choice; the
+  // second overflows.
   const half = (x: number, y: number) => k.call(S.print, k.call(S.show, k.call(B.div, k.call(B.add, k.lit(x), k.lit(0)), k.call(B.add, k.lit(y), k.lit(0)))));
-  k.define(main, k.thunk(() => k.seq(half(1, 4), half(1, 0), half(1, 2))));
+  k.define(main, k.thunk(() => k.seq(half(1, 4), half(1e300, 1e-300), half(1, 2))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const printed: string[] = [], errors: string[] = [];
   const exit = runProgram(code, info, main, [], { print: (l) => printed.push(l), names, world: { ...nodeWorld(), error: (l) => errors.push(l) } });
-  assert.deepEqual([exit, printed, errors], [1, ["0.25"], ["x / 0 has no answer"]]);
+  assert.deepEqual([exit, printed, errors], [1, ["0.25"], ["the answer is too big for a Float64 (overflow)"]]);
   const m = emitWasm(lowerScalar(code, info, names, [main], { data: true }), { wasi: true });
   const io = mkdtempSync(join(tmpdir(), "finite-wasi-"));
   const [stdout, stderr] = [openSync(join(io, "out"), "w"), openSync(join(io, "err"), "w")];
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
   const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
   [stdout, stderr].forEach((fd) => closeSync(fd));
-  assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "x / 0 has no answer\n"]);
+  assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow)\n"]);
 });

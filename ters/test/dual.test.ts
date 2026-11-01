@@ -34,8 +34,12 @@ function program() {
   const g = def("g", () => k.fn(["x"], (x) => k.call(mul, k.call(TRIG_OPS.log, k.call(add, k.call(TRIG_OPS.cos, x), k.lit(2))), k.call(TRIG_OPS.tan, k.call(mul, x, k.lit(0.25))))));
   const defs: Record<string, Id> = {};
   for (const [name, fn] of [["f", f], ["g", g]] as const) POINTS.forEach((p, i) => {
-    defs[`${name} by duals ${i}`] = def(`${name} by duals ${i}`, () => k.call(lib("slope by duals"), k.x(fn), k.lit(p)));
-    defs[`${name} derived ${i}`] = def(`${name} derived ${i}`, () => k.call(k.call(S.derivative, k.x(fn)), k.lit(p)));
+    // g's log has no answer at 0 or less (a Choice, L125b), which the
+    // checker can't rule out; first says what to do then.
+    const slope = () => k.call(lib("slope by duals"), k.x(fn), k.lit(p));
+    defs[`${name} by duals ${i}`] = def(`${name} by duals ${i}`, () => name === "g" ? k.call(S.first, k.thunk(slope), k.thunk(() => k.lit(0))) : slope());
+    const derived = () => k.call(k.call(S.derivative, k.x(fn)), k.lit(p));
+    defs[`${name} derived ${i}`] = def(`${name} derived ${i}`, () => name === "g" ? k.call(S.first, k.thunk(derived), k.thunk(() => k.lit(0))) : derived());
   });
   const d = (a: number, b: number) => k.call(DUAL_V, k.lit(a), k.lit(b));
   def("squared plus 3", () => k.call(lib("show dual"), k.call(add, k.call(mul, d(2, 1), d(2, 1)), k.lit(3))));

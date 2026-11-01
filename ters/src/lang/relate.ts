@@ -506,6 +506,9 @@ function solveSome(s: State): Stream | undefined {
       for (const x of determined) {
         const val = r.value.values[x];
         if (val === null || val === undefined) continue; // the equations leave it free
+        // A Float64 is finite: x / 0 or √−1 is no answer, as in the
+        // evaluator (FLOAT-VALUES-2026-11-01.md, L125b).
+        if (!Number.isFinite(val)) { t = null; break; }
         const n = whole.has(x) ? Math.round(val) : val;
         if (n !== val && !close(n, val)) { t = null; break; }
         t = t && unify(new LVar(+x.slice(1)), whole.has(x) ? intLit(n) : n, t);
@@ -1135,7 +1138,8 @@ export function interpreter(given: Code, opts: Options = {}) {
         const xs = args.map((a) => walk(a, s));
         if (xs.every((x) => typeof x === "number")) {
           const f = op === "abs" ? Math.abs : (impl as Record<string, (...x: number[]) => number>)[op];
-          return eq(out, f(...(xs as number[])))(s);
+          const v = f(...(xs as number[]));
+          return Number.isFinite(v) ? eq(out, v)(s) : null;
         }
         const es = args.map((a) => toExpr(a, s));
         const o = toExpr(out, s);

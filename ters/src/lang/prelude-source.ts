@@ -304,7 +304,8 @@ export function buildPrelude(): Module {
     D(n.div(a, b), n.div(n.sub(n.mul(a1, b), n.mul(a, b1)), n.mul(b, b)))));
   const sinD = oneD("dual sin", (a, a1) => D(k.call(B.sin, a), n.mul(k.call(B.cos, a), a1)));
   const cosD = oneD("dual cos", (a, a1) => D(k.call(B.cos, a), k.call(B.neg, n.mul(k.call(B.sin, a), a1))));
-  const tanD = oneD("dual tan", (a, a1) => k.let("cos", k.call(B.cos, a), (c) => D(k.call(B.tan, a), n.div(a1, n.mul(c, c)))));
+  // tan′ = 1 + tan², which needs no division (cos is never exactly 0 at a Float64).
+  const tanD = oneD("dual tan", (a, a1) => k.let("tan", k.call(B.tan, a), (t) => D(t, n.mul(a1, n.add(k.lit(1), n.mul(t, t))))));
   const expD = oneD("dual exp", (a, a1) => k.let("eᵃ", k.call(B.exp, a), (e) => D(e, n.mul(e, a1))));
   const logD = oneD("dual log", (a, a1) => D(k.call(B.log, a), n.div(a1, a)));
   // Unpolar by the chain rule: for r = √(x² + y²), r′ = (x·x′ + y·y′)/r,
@@ -312,9 +313,10 @@ export function buildPrelude(): Module {
   const unpolarD = k.def("dual unpolar");
   const xy = (x: Id, y: Id, f: (a: Id, a1: Id, b: Id, b1: Id) => Id) => du(x, (a, a1) => du(y, (b, b1) => f(a, a1, b, b1), ["y value", "y slope"]), ["x value", "x slope"]);
   const sq = (a: Id, b: Id) => n.add(n.mul(a, a), n.mul(b, b));
+  // At the origin the slopes are taken as 0, as atan2(0, 0) is taken as 0.
   k.define(unpolarD, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
-    k.equal(r, xy(x, y, (a, a1, b, b1) => k.let("r", k.call(B.sqrt, sq(a, b)), (rr) => D(rr, n.div(n.add(n.mul(a, a1), n.mul(b, b1)), rr))))),
-    k.equal(t, xy(x, y, (a, a1, b, b1) => D(k.call(B.atan2, b, a), n.div(n.sub(n.mul(a, b1), n.mul(b, a1)), sq(a, b))))))));
+    k.equal(r, xy(x, y, (a, a1, b, b1) => k.let("r", k.call(B.sqrt, sq(a, b)), (rr) => D(rr, k.if(k.call(S.equal, rr, k.lit(0)), k.lit(0), n.div(n.add(n.mul(a, a1), n.mul(b, b1)), rr)))))),
+    k.equal(t, xy(x, y, (a, a1, b, b1) => k.let("r²", sq(a, b), (r2) => D(k.call(B.atan2, b, a), k.if(k.call(S.equal, r2, k.lit(0)), k.lit(0), n.div(n.sub(n.mul(a, b1), n.mul(b, a1)), r2)))))))));
   k.results(unpolarD, "length", "angle");
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
@@ -618,7 +620,9 @@ export function buildPrelude(): Module {
   // and moves points. Versors and the sandwich are Hestenes's (1986); the
   // projective forms follow Gunn and De Keninck, "Geometric Algebra for
   // Computer Graphics" (SIGGRAPH 2019 course), and ganja.js.
-  const scaledBy = (w: Id, x: Id) => k.call(S.mapParts, k.fn(["part"], (y) => n.mul(w, y)), x);
+  // w is worked out once, outside the function map parts runs (which must be pure).
+  const scaledBy = (w: Id, x: Id) => ["ref", "lit"].includes(k.code.nodes[w]?.kind ?? "") ? k.call(S.mapParts, k.fn(["part"], (y) => n.mul(w, y)), x)
+    : k.let("weight", w, (wv) => k.call(S.mapParts, k.fn(["part"], (y) => n.mul(wv, y)), x));
   const added = (a: Id, b: Id) => k.call(S.zipParts, B.add, a, b);
   // The basis's first element, the scalar 1 (x's zero when there is none).
   const scalarOne = (es: Id, x: Id) => k.match(es, [
@@ -682,10 +686,10 @@ export function buildPrelude(): Module {
       k.if(k.call(S.less, size, k.lit(0.25)), k.lit(0), n.add(k.call(S.floor, n.div(k.call(B.log, n.div(size, k.lit(0.25))), k.call(B.log, k.lit(2)))), k.lit(1)))), (h) =>
       k.let("small", scaledBy(n.div(k.lit(1), k.call(B.pow, k.lit(2), h)), b), (x) =>
         k.fold(k.call(S.range, h), [
-          { variant: NIL, names: [], body: () => k.fold(k.call(S.range, k.lit(16)), [
+          { variant: NIL, names: [], body: () => k.fold(k.list(...Array.from({ length: 16 }, (_, i) => k.lit(1 / (i + 1)))), [
             { variant: NIL, names: [], body: () => one },
-            { variant: CONS, names: ["i", "rest"], results: [null, "the rest's terms"], body: ([i], [, r]) =>
-              added(one, scaledBy(n.div(k.lit(1), n.add(i, k.lit(1))), k.call(tableProduct, t, x, r!))) },
+            { variant: CONS, names: ["1/(i + 1)", "rest"], results: [null, "the rest's terms"], body: ([c], [, r]) =>
+              added(one, scaledBy(c, k.call(tableProduct, t, x, r!))) },
           ]) },
           { variant: CONS, names: ["_", "rest"], results: [null, "half as far"], body: (_, [, r]) => k.call(tableProduct, t, r!, r!) },
         ])))));

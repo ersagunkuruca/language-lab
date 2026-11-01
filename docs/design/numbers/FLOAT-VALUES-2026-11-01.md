@@ -1,13 +1,15 @@
 # Which IEEE float values the language keeps (design note, 2026-11-01)
 
-**Status (2026-11-01): decided, the evaluator's half of L125a built.** Ersagun chose both
+**Status (2026-11-01): decided; L125a, L125b, L125d and L125f built.** Ersagun chose both
 recommendations (10:28 and 10:29): `Float64` is the finite floats with one
 zero, ±∞ move to `Extended a`, and `x / 0` has no answer (`Choice`). Rows
 L125a to L125f in BACKLOG.md. L125a step 1 (this PR's row in DONE.md): the
 evaluator stops the program with the reason whenever a float operation's
-answer isn't finite, and `atan2` takes −0 as 0. Until L125b's nonzero fact,
-"no answer" stops the program too rather than being `Choice`, since a
-`Choice` on every `/` would make nearly every program a search. L125c1
+answer isn't finite, and `atan2` takes −0 as 0. L125b is built: no answer
+is a `Choice` in the evaluator, dropped where a sign analysis (signs.ts)
+shows the input fine; a page's view with no answer shows nothing there
+(Ersagun's choice, 12:45), and handlers handle their own (the examples'
+`first(() => …, () => what was there)`). L125c1
 (compiled JavaScript, 2026-11-01): the same stops with the same reasons,
 no answer checked on the argument and overflow late (§2). L125c2
 (WebAssembly and C): the same checks in the lowering (scalar.ts), and the

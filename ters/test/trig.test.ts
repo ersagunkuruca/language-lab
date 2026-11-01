@@ -27,7 +27,8 @@ function program() {
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const wave = def("wave", () => k.fn(["x"], (x) => k.call(ARITH.mul, k.call(TRIG_OPS.sin, x), k.call(TRIG_OPS.cos, x))));
   def("a wave", () => k.call(wave, k.lit(0.5)));
-  def("back to 2", () => k.call(TRIG_OPS.exp, k.call(TRIG_OPS.log, k.lit(2))));
+  // Trig's log may have no answer (a Choice, L125b): at 0 or less.
+  def("back to 2", () => k.call(S.first, k.thunk(() => k.call(TRIG_OPS.exp, k.call(TRIG_OPS.log, k.lit(2)))), k.thunk(() => k.lit(0))));
   def("tan of 1", () => k.call(TRIG_OPS.tan, k.lit(1)));
   // d/dx sin(x) · cos(x) = cos 2x, so 1 at 0.
   def("slope of the wave", () => k.call(k.call(S.derivative, k.x(wave)), k.lit(0)));

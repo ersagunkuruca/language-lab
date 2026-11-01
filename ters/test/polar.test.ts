@@ -159,7 +159,9 @@ test("length, angle = unpolar(x, y) at Float64, Dual and Fixed, evaluated and co
 // get them by their ways, √ as e^(½ log).
 test("asin and acos through unpolar: Float64, Dual, Fixed and a type of the program's own, evaluated and compiled", async () => {
   const { code, names, info } = angle(true, (k, ctor) => {
-  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  // asin and acos have no answer outside −1 to 1 (a Choice, L125b): first
+  // says what to show then.
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")))); return d; };
   const show = (v: Id) => k.call(SHOW_ANY, v);
   def("at float64 asin", () => show(k.call(TRIG_ASIN, k.lit(0.5))));
   def("at float64 acos", () => show(k.call(TRIG_ACOS, k.lit(-0.25))));

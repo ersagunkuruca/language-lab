@@ -429,7 +429,10 @@ test("waiting equations and checks sleep until what they read is known: a step c
   const started = Date.now();
   const answers = [...relate(code, fast, { out: 13 }, { names, spend: () => ++steps < 20000 })];
   assert.deepEqual(answers.map((a) => showTerm(a.values[n])), ["9"]);
-  assert.equal(steps, 20000);
+  // The walk now ends where the numbers outgrow a Float64 (about the
+  // 1,476th, L125b: relate.ts fails a value that isn't finite), still
+  // far past where re-reading every waiting equation got slow.
+  assert.ok(steps > 1400 && steps < 20000, `${steps} steps`);
   assert.ok(Date.now() - started < 10000, `${Date.now() - started} ms`);
 });
 

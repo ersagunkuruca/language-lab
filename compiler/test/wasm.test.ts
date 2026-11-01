@@ -40,6 +40,9 @@ for (const [name, expected] of [
         const args = f.params.map((_, i) => x + i);
         const want = said(() => first(r.call(r.value(f.def), ...args)));
         const got = said(() => w[f.name](...args));
+        // A plain scalar function (no `data`) has no way to give no answer
+        // (a Choice, L125b): it stops with the reason instead (L125c3).
+        if (want === undefined && typeof got === "string" && /^stops: .* has no answer$/.test(got)) continue;
         if (f.result === "i32" && typeof want !== "string") assert.equal(got === 1, (want as { tag: string }).tag === "std.bool.true", `${f.name}(${args})`);
         else assert.ok(Object.is(got, want), `${f.name}(${args}): ${got} ≠ ${want}`);
         compared++;
@@ -147,7 +150,7 @@ test("data in WebAssembly: lists, expression trees, matches and folds give the e
     if (name === "countdown") assert.match(lowered.refused.get(p.named("subsequence"))!, /List of a value of any type/);
     for (const xs of args) {
       const want = first(r.call(r.value(f.def), ...xs));
-      const got = fromWasm(w, w[fn](...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      const got = answer(w, f, w[fn](...xs.map((x, i) => toWasm(w, x, f.params[i]))));
       assert.deepStrictEqual(got, want, `${name}: ${fn}`);
     }
   }
@@ -195,7 +198,7 @@ test("folds over nested data in WebAssembly: a rose tree's List of children, a g
     const def = p.defs[name], f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs) {
       const want = said(() => first(r.call(r.value(def), ...xs)));
-      const got = said(() => fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result));
+      const got = said(() => answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i])))) as Value);
       assert.deepStrictEqual(got, want, name);
     }
   }
@@ -304,7 +307,7 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
     const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs) {
       const want = said(() => first(r.call(r.value(def), ...xs)));
-      const got = said(() => fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result));
+      const got = said(() => answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i])))) as Value);
       assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "bigint" ? `${x}n` : JSON.stringify(x))).join(", ")})`);
     }
   }
@@ -579,7 +582,10 @@ test("Math with no JavaScript host: V8's fdlibm in WebAssembly, the same bits as
       // here can't do (finite.test.ts runs one under WASI). exp's overflow
       // is given back unchecked: the host's to check.
       if (stopsWith(op, x, y) && op !== "exp") continue;
-      assert.ok(Object.is(w[fn](x, y), f(x, y)), `${op}(${x}, ${y}): ${w[fn](x, y)}, not ${f(x, y)}`);
+      // log, and pow at some inputs, have no answer there (a Choice, L125b):
+      // their copies are partial, giving the value and a status.
+      const v = w[fn](x, y) as unknown, got = Array.isArray(v) ? v[0] : v;
+      assert.ok(Object.is(got, f(x, y)), `${op}(${x}, ${y}): ${got}, not ${f(x, y)}`);
     }
   }
 });
