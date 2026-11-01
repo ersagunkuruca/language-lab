@@ -46,11 +46,15 @@ export interface PageOptions {
   recordings?: string;
   // How the page fetches (a test's; by default the browser's).
   fetch?: (url: string) => Promise<string>;
+  // Keep the cells the page starts with, for handOver (cells.ts).
+  keepCells?: boolean;
 }
 
 export interface Preview {
   root: Node_;
   cells: Cells;
+  // The cells it started with, when asked (keepCells).
+  kept?: Cells["kept"];
   // Stops the clock and any sound: nothing on this page runs on frames,
   // and nothing plays, any more.
   stop(): void;
@@ -65,12 +69,16 @@ export function showPage(o: PageOptions): Preview {
   const out = o.console ?? console;
   let stopped = false;
   const cells = new Cells(equal);
+  // The cells main and the first drawing make, for handOver (cells.ts).
+  if (o.keepCells) cells.kept = [];
   const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch });
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings) : null;
   const value = sound ? sound.page : run();
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });
-  return { root, cells, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+  const kept = cells.kept;
+  cells.kept = null;
+  return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
 
 // A page as one HTML file around its scripts: what `lab build-web` writes,

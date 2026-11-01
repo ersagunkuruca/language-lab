@@ -221,6 +221,10 @@ export class Cells {
   private made = 0;
   private order = new WeakMap<CellNode, number>();
   onCell: ((c: Value, place: number) => void) | null = null;
+  // While a list, each cell made goes on it with the value it was made
+  // with: the editor's preview hands what a page did across to the same
+  // page compiled (handOver, below).
+  kept: { cell: Value; first: Value }[] | null = null;
   onWrite: ((place: number, v: Value) => void) | null = null;
 
   constructor(same: (a: Value, b: Value) => boolean = Object.is) {
@@ -243,6 +247,7 @@ export class Cells {
     const n = this.node(null, this.plainOf(initial), label), c = this.wrap(n), place = this.made++;
     this.order.set(n, place);
     this.onCell?.(c, place);
+    this.kept?.push({ cell: c, first: n.value as Value });
     return c;
   }
 
@@ -703,4 +708,36 @@ export class Cells {
       if (!first) for (const o of n.observers) o.state = DIRTY;
     }
   }
+}
+
+// What a page did, handed to the same page started again (I109): the
+// editor's preview shows a page interpreted at once and swaps in the
+// compiled page a few seconds later. Both made their cells in the same
+// order, so a cell of the first that changed since it was made is written
+// to the second's cell at the same place. Only when both were made with
+// the same value (so the two engines hold it the same way) and the value
+// is plain data: a function or a cell inside can't be carried across.
+// Returns how many were carried.
+type Kept = NonNullable<Cells["kept"]>;
+export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">): number {
+  const moves: [Value, Value][] = [];
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const n = nodeOf(a[i].cell);
+    if (!n || n.disposed) continue;
+    const now = n.value as Value;
+    if (plainSame(a[i].first, b[i].first) && plainSame(now, now) && !plainSame(now, a[i].first)) moves.push([b[i].cell, now]);
+  }
+  to.batch(() => { for (const [c, v] of moves) to.write(c, v); });
+  return moves.length;
+}
+// The same plain data: numbers (NaN the same as NaN), strings, whole
+// numbers, and data with the same tag and the same fields. Never true
+// with a function in it.
+function plainSame(a: unknown, b: unknown): boolean {
+  if (typeof a !== typeof b) return false;
+  if (typeof a === "number" || typeof a === "string" || typeof a === "bigint" || typeof a === "boolean") return Object.is(a, b) || a === b;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => plainSame(x, b[i]));
+  if (!a || typeof a !== "object" || !b || Array.isArray(b)) return false;
+  const x = a as { tag?: unknown; fields?: unknown[] }, y = b as { tag?: unknown; fields?: unknown[] };
+  return typeof x.tag === "string" && x.tag === y.tag && Array.isArray(x.fields) && Array.isArray(y.fields) && x.fields.length === y.fields.length && x.fields.every((f, i) => plainSame(f, y.fields![i]));
 }

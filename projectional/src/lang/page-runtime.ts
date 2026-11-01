@@ -36,11 +36,16 @@ export function startPage(main: () => unknown, program: string, worklet?: string
 // preview, which shows a page interpreted at once and then swaps in this,
 // compiled off its thread, so it runs as fast as in a tab of its own
 // (editor/main.ts startPage). Each mount comes from a fresh copy of this
-// runtime, so its cells are its own; `stop` ends its clock.
-export function mountPage(main: () => unknown, program: string, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void }): { root: Node_; cells: unknown; stop(): void } {
+// runtime, so its cells are its own; `stop` ends its clock. `kept`
+// holds the cells it started with, so what the interpreted page did can be
+// handed across (cells.ts handOver).
+export function mountPage(main: () => unknown, program: string, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void }): { root: Node_; cells: ReturnType<typeof $cells>; kept: unknown[]; stop(): void } {
   let stopped = false;
   $setWorld(browserWorld(o.store, program, console, { cells: $cells(), frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } }));
   $setPrint((line: string) => $cells().later(() => console.log(line)));
+  $cells().kept = [];
   const root = mountHtml(main() as never, { cells: $cells(), doc: o.doc, call: compiledCall, ran: o.ran });
-  return { root, cells: $cells(), stop: () => { stopped = true; } };
+  const kept = $cells().kept!;
+  $cells().kept = null;
+  return { root, cells: $cells(), kept, stop: () => { stopped = true; } };
 }
