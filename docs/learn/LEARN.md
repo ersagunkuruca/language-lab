@@ -1,7 +1,8 @@
 # Learn
 
-This is a programming language you build by connecting pieces, not by
-typing text. Pick where to start. Each one is short, and each one links
+Ters is a programming language you build by connecting pieces, not by
+typing text. The name is Turkish for "reverse": its definitions run
+backwards too. Pick where to start. Each one is short, and each one links
 on to the next.
 
 ---
