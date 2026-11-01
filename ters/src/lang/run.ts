@@ -487,8 +487,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   function* run(start: (m: Machine) => void): Generator<Value> {
     const m = new Machine(ambient);
     start(m);
+    yield* going(m);
+  }
+  // How many machines are going inside one another (a builtin that calls a
+  // function value starts another). Only the outermost can be kept when a
+  // page's fetch isn't here yet: an inner one's caller is JavaScript's stack.
+  let depth = 0;
+  function* going(m: Machine): Generator<Value> {
     while (true) {
-      const v = m.go();
+      let v: Value | typeof DONE;
+      depth++;
+      try { v = m.go(); } finally { depth--; }
       if (v === DONE) return;
       yield v as Value;
       m.fail();
@@ -535,7 +544,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (FALLIBLE.has(f as Fn)) {
         let r: Iterable<Value>;
         // Not here yet isn't a failure: the page asks again later.
-        try { r = (f as Fn)(...args); } catch (e) { if (e instanceof Pending || e instanceof OutOfSteps) throw e; return this.perform(ABORT_OP, [(e as Error).message]); }
+        // A page's fetch that hasn't come keeps this machine where it is
+        // (L59): resuming asks again, and the rest of the run goes on from
+        // here, so nothing before the fetch runs twice.
+        try { r = (f as Fn)(...args); } catch (e) {
+          if (e instanceof Pending) {
+            if (depth === 1 && e.resume === undefined) { let used = false; e.resume = () => { if (used) throw new Error("a page's run was resumed twice"); used = true; this.apply(f, args); return going(this); }; }
+            else if (depth > 1) e.resume = null;
+            throw e;
+          }
+          if (e instanceof OutOfSteps) throw e;
+          return this.perform(ABORT_OP, [(e as Error).message]);
+        }
         return this.from(r, (x) => this.ret(x as Value));
       }
       this.from((f as Fn)(...args), (x) => this.ret(x as Value));

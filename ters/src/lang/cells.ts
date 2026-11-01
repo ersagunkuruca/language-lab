@@ -188,6 +188,11 @@ export class NoValue extends Error {}
 // (html.ts), like Solid's createResource and React's Suspense.
 export class Pending extends Error {
   ready: Promise<unknown>;
+  // Where the run stopped, kept (the evaluator's machine, L59): once ready,
+  // this goes on from there and streams the run's values. Without it, the
+  // run is taken back and runs again from the start (null: it stopped
+  // inside a builtin's call, which can't be kept).
+  resume?: (() => Iterable<unknown>) | null;
   constructor(ready: Promise<unknown>, what: string) {
     super(`still waiting for ${what}`);
     this.ready = ready;

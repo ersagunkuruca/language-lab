@@ -16,7 +16,8 @@
 // `fetch text` can't wait either, so a fetch whose reply hasn't come
 // throws Pending (cells.ts) after reading a cell that is written when the
 // reply lands. A view that fetched keeps what it showed and runs again
-// then; an event handler is taken back and runs again from the start
+// then; an event handler goes on from the fetch (L59, Pending.resume), or
+// where it can't be kept is taken back and runs again from the start
 // (html.ts, cells.ts attempt), so what it did before the fetch happens
 // once. This is
 // Solid's createResource and React's Suspense, with the cells a page
