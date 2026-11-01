@@ -142,7 +142,16 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
 // copies for data known at a call (specialiseCalls), and the calls inside
 // those copies worked out in turn. `rounded` as stageCalls's.
 export function stageProgram(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names; rounded: Id[] } {
-  const base = info.errors.length;
+  // A check again is a plain one (no pins), so it is measured against the
+  // program as it came, checked the same way: a pinned generic definition
+  // such as the prelude's `sum` can check worse plainly than it did under
+  // its pin, and that is not the staging's doing (I121).
+  const asCame = code, initial = info.errors.length;
+  let base: number | null = null;
+  const before = () => {
+    if (base === null) { try { base = Math.max(initial, infer(asCame, names).errors.length); } catch { base = initial; } }
+    return base;
+  };
   // The last state that checked, and what is pending on top of it.
   let good = { code, names, info, rounded: [] as Id[] };
   let pending: Id[] | null = null;
@@ -166,7 +175,7 @@ export function stageProgram(code: Code, info: Info, names: Names): { code: Code
     // (Too deep to check, as a very long chain of lets can be: kept out.)
     let again: Info | null = null;
     try { again = infer(code, names); } catch (e) { if (!(e instanceof RangeError)) throw e; }
-    if (!again || again.errors.length > base) { ({ code, names, info } = good); pending = null; return false; }
+    if (!again || (again.errors.length > initial && again.errors.length > before())) { ({ code, names, info } = good); pending = null; return false; }
     info = again;
     good = { code, names, info, rounded: [...good.rounded, ...(pending ?? [])] };
     pending = null;
