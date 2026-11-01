@@ -96,6 +96,14 @@ export class Lang extends Builder {
     return this.lambda(names, body);
   }
 
+  // A function with named result ports (L128b): its body gives a tuple of
+  // that many (or the one value), each part named.
+  gives(names: string[], results: string[], body: (...params: Id[]) => Id): Id {
+    const f = this.lambda(names, body);
+    (this.code.nodes[f] as NodeOf<"lambda">).results = results.map((r) => this.binder(r));
+    return f;
+  }
+
   // A thunk: an action with no inputs, what handlers take.
   thunk(body: () => Id): Id {
     return this.lambda([], body);

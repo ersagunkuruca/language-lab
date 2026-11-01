@@ -64,3 +64,34 @@ test("typed text that doesn't read says what's missing", () => {
   assert.match(why("stpes + 1"), /^nothing is named stpes here; did you mean steps\?/);
   assert.match(why("escape(z, c, stpes)"), /^nothing is named stpes here/);
 });
+
+// A function that names its results (L128b, E165c), as L128c prints one:
+// hsi colour's r and g made a function, its function cleared to a hole,
+// takes (saturation, hue) → r, g => e1, e2 back: the parts written out are
+// its tuple, and its result ports are named again.
+test("typed text reads a function's named results back in", async () => {
+  const { makeFunction } = await import("../../editor/typed.ts");
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
+  const valueOf = (n: string) => {
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
+    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+  };
+  const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  const lam = Object.values(made.code.nodes).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length)!;
+  const open = replace(made.code, lam.id, () => ({ kind: "hole" }));
+  const info = infer(open, made.names);
+  for (const arrow of ["→", "->"]) {
+    const r = fillValue(open, made.names, info, lam.id, `(saturation, hue) ${arrow} red, green => 1 + 2 · saturation · cos(6.283185307179586 · hue), 1 + 2 · saturation · cos(6.283185307179586 · (hue − 0.3333333333333333))`, hsi);
+    assert.ok(r.ok, !r.ok ? r.reason : "");
+    if (!r.ok) return;
+    const back = r.code.nodes[lam.id] as NodeOf<"lambda">;
+    assert.deepEqual(back.results?.map((b) => r.names[b]), ["red", "green"]);
+    assert.match(renderLet(r.code, { ...p.pres, names: r.names }, hsi), /part = \(saturation, hue\) => tuple\(1 \+ 2 · saturation · cos\(6\.283185307179586 · hue\), /);
+    assert.deepEqual(infer(r.code, r.names).errors, []);
+  }
+  // As many parts as results, or it says so.
+  assert.equal(fillValue(open, made.names, info, lam.id, "(saturation, hue) → red, green => saturation", hsi).ok, false);
+});

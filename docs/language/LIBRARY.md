@@ -173,6 +173,12 @@ Text is a string of characters. Positions count from 0.
 - **not after** : `(Text, Text) -> Bool`. Text a ≤ b: a comes before b or is b.
 - **comes after** : `(Text, Text) -> Bool`. Text a > b: b comes before a.
 - **not before** : `(Text, Text) -> Bool`. Text a ≥ b: b comes before a or is a.
+- **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
+- **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
+- **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.
+- **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
+- **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
+- **uppercase** : `(Text) -> Text`. The text with a to z made A to Z, everything else as it was: uppercase("Hello") is "HELLO".
 
 ## Lists and pairs
 
@@ -192,13 +198,15 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **for each** : `(List a, (a) -[e]-> b) -[e]-> Unit`. Runs the action on each item of the list in turn, for what it does (prints, writes a cell).
 - **keep** : `(List a, (a) -[Choice]-> Bool) -> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
 - **length** : `(List a) -> Int`. How many items the list has.
-- **sum** : `(List Float64) -> Float64`. The Float64s of the list added up; 0 for an empty list.
+- **sum** : `(List a) -> a`. The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
 - **item at** : `(List a, Float64, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
 - **replace at** : `(List a, Float64, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
+- **take** : `(List a, Float64) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
+- **drop** : `(List a, Float64) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
 - **array of** : `(List a) -> Array a`. The array of a list's items, in order.

@@ -110,7 +110,7 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
-export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore }, opts: Options = {}): Info {
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean }, opts: Options = {}): Info {
   // A solve that one of its relation's directions answers is checked as a
   // solve of that direction (directions.ts, POLAR.md).
   code = useDirections(code);
@@ -611,7 +611,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const inner = new Map(env);
         const params = n.params.map((p) => { const pt = s.fresh(); inner.set(p, pt); info.typeOf.set(p, pt); return pt; });
         const bodyRow = s.freshRow();
-        t = { t: "fn", params, ret: expr(n.body, inner, bodyRow), eff: bodyRow };
+        const ret = expr(n.body, inner, bodyRow);
+        // Named result ports (L128b): the body gives a tuple of that many,
+        // each part named by its binder; one result is the value itself.
+        if (n.results?.length) {
+          const parts = n.results.map((r) => { const rt = s.fresh(); info.typeOf.set(r, rt); return rt; });
+          const want: Type = parts.length === 1 ? parts[0] : parts.length <= TUPLE_MAX ? { t: "con", id: tupleType(parts.length), args: parts } : s.fresh();
+          if (parts.length > TUPLE_MAX) err(id, `a function gives at most ${TUPLE_MAX} results`);
+          else unifyAt(n.body, want, ret, `this function gives ${parts.length} results`);
+        }
+        t = { t: "fn", params, ret, eff: bodyRow };
         break;
       }
       case "call": {
@@ -1117,7 +1126,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // Units are part of a number's type: a conflict is a type error.
-  for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
+  // (Not when the palette checks a filling's units on their own: E103e.)
+  if (!reuse?.noUnits) for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
   // Definitions with results (RESULTS.md, L95): a predicate whose result
   // ports are named, in order. The direction they declare must be one the
@@ -1595,9 +1605,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const byKind = (key: string, f: Filling): boolean => {
     let ok = checked.get(key);
     if (ok === undefined) {
-      const unit = unitsOf(filled(f));
-      checked.set(key, (ok = noNew(recheck(filled(f)).filter((e) => !unit.has(e.message)))));
-      return ok && noNewUnits(unit);
+      checked.set(key, (ok = noNew(infer(filled(f), {}, { from: info, only: affected, units, noUnits: true }, info.options).errors)));
+      return ok && noNewUnits(unitsOf(filled(f)));
     }
     return ok && noNewUnits(unitsOf(filled(f)));
   };

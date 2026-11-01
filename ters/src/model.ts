@@ -17,7 +17,11 @@ export type Node =
   // A reference points at a binder, a def or a builtin by id. Never by name.
   | { id: Id; kind: "ref"; target: Id }
   | { id: Id; kind: "call"; fn: Id; args: Id[] }
-  | { id: Id; kind: "lambda"; params: Id[]; body: Id }
+  // `results`: binders naming the function's result ports, when it gives
+  // several (PORTS-2026-11-01.md, L128b): its body gives a tuple of that
+  // many, and each binder names one part. Names only: nothing refers to
+  // them, a use reads a part by position.
+  | { id: Id; kind: "lambda"; params: Id[]; body: Id; results?: Id[] }
   // A top-level definition. body === null declares an extern (an opaque value
   // or function we can talk about but not look inside).
   // `way`: this definition is one way to compute that interface field
@@ -143,7 +147,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
     case "call": return { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
-    case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body) };
+    case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
@@ -167,7 +171,7 @@ export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {
 export function children(n: Node): Id[] {
   switch (n.kind) {
     case "call": return [n.fn, ...n.args];
-    case "lambda": return [...n.params, n.body];
+    case "lambda": return [...n.params, n.body, ...(n.results ?? [])];
     case "def": return n.body ? [n.body] : [];
     case "typedef": return [...n.params, ...n.variants];
     case "variant": return [...(n.params ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];

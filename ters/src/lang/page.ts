@@ -15,7 +15,7 @@ import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
 import { compile } from "../../../compiler/src/compile.ts";
 import { HTML_V } from "./std.ts";
-import { soundPlayer } from "./audio-page.ts";
+import { recordingWorld, soundPlayer } from "./audio-page.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -71,9 +71,9 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
-  const world = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch });
+  const world = recordingWorld(browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch }));
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
-  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings) : null;
+  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });
   const kept = cells.kept;

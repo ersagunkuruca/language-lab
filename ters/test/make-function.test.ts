@@ -48,6 +48,10 @@ test("a group of several values out gives them back as a tuple", () => {
   assert.match(text, /results = part\(saturation, hue\)\n\s+r = first\(results\)\n\s+g = second\(results\)/);
   assert.equal(r.code.defs.length, code.defs.length);
   assert.deepEqual(infer(r.code, r.names).errors, []);
+  // Its results are named for where the values went (L128b, E165b), so the
+  // graph draws a port each and reads first(results) as .r.
+  const lam = Object.values(r.code.nodes).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length);
+  assert.deepEqual(lam?.results?.map((b) => r.names[b]), ["r", "g"]);
 });
 
 // Make it a definition (BACKLOG E164): physics fall's drop, made a

@@ -239,9 +239,12 @@ results, given as a tuple, go straight on to the next function's inputs
 one value with the tuple of the inputs' types; `src/lang/spread.ts` takes
 the tuple apart before anything runs, so the evaluator and every compiler
 target see an ordinary call. Standard ML is the prior art (every function
-takes one value, which may be a tuple). Still to come (L128b): naming a
-function's result ports, so `r.length` reads a part by the name the
-function gave it.
+takes one value, which may be a tuple). A function can name its result
+ports (L128b): a lambda's `results` are binders, one per part, and its body
+gives a tuple of that many (one result is the value itself), so
+`part(speed, time) → drift, drop` reads `r.drop` as the second part.
+`src/lang/ports.ts` finds the names from a use. Still to come: `= e1, e2`
+in the text (L128c).
 
 `Array a` is the one data type that is a builtin (L116): a list's items side
 by side, read by position in constant time (`item at(array, i)`, no answer
@@ -1141,9 +1144,9 @@ isn't shown as anything but that. Koka's effect aliases are the prior art.
 it when it's clicked again: the input, a block of 128 samples at a time,
 through `play`, to the speakers. `play` runs on the audio thread, where
 main runs once more to make it; cells main made are the same cells there,
-so a handler's write to one (a knob) reaches the sound as it plays. So a
-page with sound keeps main to making cells: no clock or random numbers
-there.
+so a handler's write to one (a knob) reaches the sound as it plays. main
+there is answered what it was on the page: the same random numbers and
+clock readings, in order, so it makes the same cells.
 
 Pages are written with the **html module** (`library/html.json`, built
 from `src/lang/html-source.ts`), ordinary functions that build these
