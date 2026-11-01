@@ -317,7 +317,10 @@ interface Item {
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
-interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
+// parts: a wire carrying a tuple is drawn bundled, one thick wire with its
+// parts listed on it (E167b, PORTS-2026-11-01.md §5): their names when the
+// function that gave it named its results, else their types.
+interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean; parts?: string[] }
 interface Scene {
   items: Map<Id, Item>;
   frames: Map<Id, Frame>;
@@ -987,6 +990,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const src = sources.get(w.use.dot);
     if (src) all.push({ ...w, from: src });
   }
+  for (const w of all) {
+    const v = w.use?.ref ?? w.edge, t = v && info?.typeOf.get(v);
+    const z = t ? info!.subst.zonk(t) : null;
+    if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id)) continue;
+    const c = follow_(v), fn = c?.kind === "call" ? follow_(c.fn) : null;
+    const rs = fn?.kind === "lambda" && fn.results?.length === z.args.length ? fn.results.map((r) => names[r]) : null;
+    w.parts = rs && rs.every(Boolean) ? rs : z.args.map((a) => showIn(a, names, info!.subst));
+  }
   // What lights up with the selection: a binding and all its uses.
   const lit = new Set<Id>();
   const sb = hooks.selected ? (usesOf.has(hooks.selected) ? hooks.selected : dotOf(hooks.selected)) : null;
@@ -1207,6 +1218,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   // background.
   const open = [...scene.frames.keys()].map((k) => boxes.get(k)!);
   const touches = (q: Pos, b: Box) => q.x >= b.x - 2 && q.x <= b.x + b.w + 2 && q.y >= b.y - 2 && q.y <= b.y + b.h + 2;
+  const bundles: { at: Pos; text: string; lifted: boolean }[] = [];
   for (const w of all) {
     const a = point(w.from), b = point(w.to);
     const ends = new Set([endItem(w.from), endItem(w.to)]);
@@ -1224,6 +1236,11 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     } else if (w.edge) {
       wireG.append(s("path", { d, class: "edge-hit", "data-edge": w.edge }), s("path", { d, class: `tw ${w.cls}`, "data-edge": w.edge }));
     } else wireG.append(s("path", { d, class: `tw ${w.cls}` }));
+    if (w.parts) {
+      wireG.lastElementChild!.classList.add("bundle");
+      const m = pts[Math.floor(pts.length / 2)];
+      if (m) bundles.push({ at: m, text: w.parts.join(", "), lifted: lifted(w.from) && lifted(w.to) });
+    }
     // Under a node: the hidden stretch, drawn faintly over it.
     for (const run of tunnels(pts, others)) {
       marks.append(s("path", { d: `M${run.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}`, class: `tunnel${w.use ? " use" : ""}` }));
@@ -1264,6 +1281,8 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       nameL(within(f.id)).append(s("text", { x: p.x - 9, y: p.y - 6, class: "portl halo", "text-anchor": "end" }, f.resultLabels![i]));
     });
   }
+  // A bundled wire's parts, on it.
+  for (const b of bundles) nameL(b.lifted).append(s("text", { x: b.at.x, y: b.at.y - 6, class: "portl halo bundle-l", "text-anchor": "middle" }, b.text));
 
   // The definition's result.
   const out = s("g");
