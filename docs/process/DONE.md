@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I29 (later states) | Run's first values reach what only a later state of a page calls: after each handler the dry run draws the page again and runs the handlers it shows for the first time next, up to three of each place, within 250 ms; and a call into a definition generic in its number type, which runs as a copy (arith.ts), is reported as the definition's own (`Info.copyOf`). Tumble's neighbours, duration, where, three from, marks and between links now open filled. Test: ters/test/copy-entered.test.ts | #PR |
 | E103c | The palette asks one whole check for every offer that makes the same of the group's types (and of its solves' plans, where it changes one); units, which a call decides for itself, are checked per offer. Before, a ref or call was checked once per thing it named. physics `fall`: 23 holes 80 → 47 s, the worst 16 → 8 s, the same offers on every hole | #898 |
 | C66 (picture) | The editor's pictures (Run panel and shaders.html) are lowered as shaders are (`lowerPicture`): an Int is an i32 and std's Array an array<T, N>, so a picture that counts or looks up a written-out array draws on the GPU, and on the CPU in WebAssembly (Ints) or JavaScript (arrays). Test: ters/test/picture-lowering.test.ts | #892 |
 | I119 | Four builtins named "show": already told apart in the palette since #244, where rows that would read the same say what their holes take, `show(□: Int)`, `show(□: Float64)`; no renaming, so printed programs keep `show(x)` (checked 2026-11-01) | #244 |
