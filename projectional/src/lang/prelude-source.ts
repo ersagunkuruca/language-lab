@@ -594,10 +594,25 @@ export function buildPrelude(): Module {
       { variant: PAIR_V, names: ["blade", "element"], body: ([b, e]) => added(scaledBy(n.mul(k.call(flips, b), along(x, e)), e), r!) },
     ]) },
   ]))));
-  // A versor's inverse, ṽ / ⟨v ṽ⟩₀: a vector's, a rotor's or a blade's.
-  const cliffordInverse = k.def("clifford inverse");
-  k.define(cliffordInverse, k.fn(["algebra", "v"], (al, v) => parts(al, ({ basis: es, table: t }) => k.let("ṽ", k.call(cliffordReverse, al, v), (rv) =>
+  // A versor's inverse, ṽ / (v ṽ): a vector's, a rotor's or a blade's,
+  // whose v ṽ is a number (Hestenes, 1986). When v ṽ isn't a number, or is
+  // 0, there is no answer here (BACKLOG I108): 1 + e₁ has no inverse at
+  // all, and 2 + e₁, which has one, isn't a versor. The general inverse
+  // (Hitzer and Sangwine, 2017) would be another function.
+  const sumOfSquares = (x: Id) => k.call(S.total, k.call(S.zipParts, B.mul, x, x));
+  // reflect and project take a vector or a blade, whose v ṽ is a number,
+  // so they divide by it without the check (a null one, v ṽ = 0, stops
+  // the program: x / 0 has no answer). Not offered on its own.
+  const bladeInverse = k.def("clifford blade inverse");
+  k.define(bladeInverse, k.fn(["algebra", "v"], (al, v) => parts(al, ({ basis: es, table: t }) => k.let("ṽ", k.call(cliffordReverse, al, v), (rv) =>
     scaledBy(n.div(k.lit(1), along(k.call(tableProduct, t, v, rv), scalarOne(es, v))), rv)))));
+  const cliffordInverse = k.def("clifford versor inverse");
+  k.define(cliffordInverse, k.fn(["algebra", "v"], (al, v) => parts(al, ({ basis: es, table: t }) => k.let("ṽ", k.call(cliffordReverse, al, v), (rv) =>
+    k.let("one", scalarOne(es, v), (one) => k.let("v ṽ", k.call(tableProduct, t, v, rv), (vv) => k.let("s", along(vv, one), (sc) =>
+      k.let("the rest of v ṽ", k.call(S.zipParts, B.sub, vv, scaledBy(sc, one)), (rest) =>
+      k.if(k.call(S.or, k.call(S.equal, sc, k.lit(0)), k.call(S.less, n.mul(k.lit(1e-18), n.mul(sc, sc)), sumOfSquares(rest))),
+        k.call(S.fail),
+        scaledBy(n.div(k.lit(1), sc), rv))))))))));
   const cliffordProduct = k.def("clifford product");
   k.define(cliffordProduct, k.fn(["algebra", "a", "b"], (al, a, b) => parts(al, ({ table: t }) => k.call(tableProduct, t, a, b))));
   const cliffordSandwich = k.def("clifford sandwich");
@@ -605,7 +620,7 @@ export function buildPrelude(): Module {
     k.call(tableProduct, t, k.call(tableProduct, t, r, x), k.call(cliffordReverse, al, r)))));
   const cliffordReflect = k.def("clifford reflect");
   k.define(cliffordReflect, k.fn(["algebra", "n", "x"], (al, nv, x) => parts(al, ({ table: t }) =>
-    k.call(tableProduct, t, k.call(tableProduct, t, k.call(cliffordInvolute, al, nv), x), k.call(cliffordInverse, al, nv)))));
+    k.call(tableProduct, t, k.call(tableProduct, t, k.call(cliffordInvolute, al, nv), x), k.call(bladeInverse, al, nv)))));
   // x's part in the blade b: ½(x − b̂ x b⁻¹), since b̂ x b⁻¹ keeps the
   // part outside b and flips the part in it.
   const cliffordProject = k.def("clifford project");
@@ -622,7 +637,6 @@ export function buildPrelude(): Module {
   // back up, e^b = (e^(b/2ᵏ))^(2ᵏ). That is scaling and squaring, as for
   // the matrix exponential (Moler and Van Loan, "Nineteen dubious ways to
   // compute the exponential of a matrix", 1978/2003).
-  const sumOfSquares = (x: Id) => k.call(S.total, k.call(S.zipParts, B.mul, x, x));
   const cliffordSeries = k.def("clifford exp by series");
   k.define(cliffordSeries, k.fn(["table", "one", "b"], (t, one, b) =>
     k.let("halvings", k.let("size", k.call(B.sqrt, sumOfSquares(b)), (size) =>
@@ -1098,7 +1112,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1204,6 +1218,7 @@ export function buildPrelude(): Module {
     [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
     [cliffordReverse]: "x̃, the reverse of x in the algebra (clifford algebra makes one): each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     [cliffordSandwich]: "r · x · r̃ in the algebra (clifford algebra makes one): how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
+    [cliffordInverse]: "v⁻¹ for a versor v, ṽ / (v ṽ): a non-null vector's, a rotor's, a motor's or a blade's, for which v ṽ is a number. No answer when v ṽ isn't a number (v isn't a versor, such as 1 + e₁) or is 0 (a null vector such as e₀ in projective geometric algebra). clifford versor inverse(algebra, 2e₁) is ½e₁.",
     [cliffordReflect]: "n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.",
     [cliffordProject]: "The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).",
     [cliffordExp]: "e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(algebra, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.",

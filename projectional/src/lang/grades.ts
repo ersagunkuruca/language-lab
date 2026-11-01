@@ -72,7 +72,7 @@ const DEPTH = 60;
 
 const libId = (name: string): Id | undefined => Object.keys(LIBRARY.names).find((id) => LIBRARY.names[id] === name && LIBRARY.code.nodes[id]?.kind === "def");
 const CL: Record<string, Id | undefined> = Object.fromEntries(
-  ["algebra", "product", "outer", "inner", "regressive", "reverse", "involute", "dual", "undual", "inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]
+  ["algebra", "product", "outer", "inner", "regressive", "reverse", "involute", "dual", "undual", "versor inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]
     .map((n) => [n, libId(`clifford ${n}`)]),
 );
 const byId = new Map(Object.entries(CL).flatMap(([n, id]) => (id ? [[id, n] as const] : [])));
@@ -304,7 +304,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
         case "product": case "outer": case "inner": case "regressive": return mask(binary(alg, op, m(1), m(2)));
         case "reverse": case "involute": case "dual": case "undual": return mask(unary(alg, op, m(1)));
         // ṽ / ⟨v ṽ⟩₀: the reverse's blades.
-        case "inverse": return mask(unary(alg, "reverse", m(1)));
+        case "versor inverse": return mask(unary(alg, "reverse", m(1)));
         // A reflection in a vector keeps grades (it is an outermorphism).
         // So does R x R̃ for any even R when no blade has more than three
         // vectors: it keeps x's parity (even · x · even) and its sign under
