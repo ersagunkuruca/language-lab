@@ -22,7 +22,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I101, I102, I103, I104 (QA12), I99 (drag a built point), T7d (the editor's tick and accept button), L43d (the editor names a value's mask) |
+| E Editor | "Editor lane" | I102, I103, I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
 | C Compiler and targets | "Compiler lane" | C55, C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
 | L Language and library | "Language lane" | Next up for all lanes (this PR), L43e (next step of masks as types), L38 (Int from a parameter's type alone), L54b, L108d (representation laws), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host). Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -33,7 +33,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I101 | **Bug.** Opening Clifford page helpers freezes the page 2 to 4 s: Spacetime `rapidity picture` 3.7 s frame gap, Bounce `solid bodies` 2.4 s, Constructions `equal arcs` 2.3 s; cap opening work at ~300 ms or run it in the worker | QA12 H1 | 2026-11-01 |
 | I102 | Dice `landed`, to-do `field`, Constructions `drawn` (cells/handlers, effects) still open on "search found no result"; say Show values runs it, neutrally | QA12 M1 | 2026-11-01 |
 | I103 | Tumble `contains` opens on a red "No answer": `holds` is ticked true though main's first call (items = []) gave false | QA12 L1 | 2026-11-01 |
 | I104 | Tumble's main still opens with ~250 px empty canvas above its first row | QA12 L2 | 2026-11-01 |
