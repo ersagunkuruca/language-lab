@@ -89,7 +89,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [MODES.md](design/relations-and-effects/MODES.md) | Mode analysis: in which order a function run backwards does its work, how many answers, whether it ends | built (L11; editor display E160) |
 | [PATTERNS.md](design/relations-and-effects/PATTERNS.md) | Nested patterns as a view over nested matches | partly built (E61 steps 3, 4) |
 | [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | partly built (L54, L71, C40) |
-| [PORTS-2026-11-01.md](design/relations-and-effects/PORTS-2026-11-01.md) | One shape for inputs, results and relations: ports, tuples, directions, variable inputs | design (L128, L130, E165 to E168, C68) |
+| [PORTS-2026-11-01.md](design/relations-and-effects/PORTS-2026-11-01.md) | One shape for inputs, results and relations: ports, tuples, directions, variable inputs | design (L128, L130 to L132, E165 to E168, C68, C69) |
 | [HOSTS.md](design/relations-and-effects/HOSTS.md) | Hosts as handlers: named rows (L58) and Console, Files, Network declared in std (L55) | built |
 
 ### Physics and planning
