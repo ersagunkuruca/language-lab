@@ -2847,7 +2847,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function stFold(n: NodeOf<"fold">, k: K): string {
       const f = temp("fold"), s = temp("s");
       const nested = n.arms.some((id) => { const a = node<"arm">(id); return a.results.some((r, i) => r && nestedShape(a, i)); });
-      if (cps && !nested) {
+      // Where it may wait (a generator), the fold is a generator too, so
+      // its waits can be passed on (C40).
+      if (cps && !nested && !gen) {
         // A local search in the same style: each child's results as a
         // closure, the fold's own answers to `kf`.
         const kf = temp("k");
@@ -2866,6 +2868,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
       return stFoldGen(n, k, f, s);
     }
+    // `for (const r of g) body`; where the code may wait (C40), g's waits
+    // are told from its answers ($isLater), passed on, and answered back in.
+    function each(r: string, g: string, body: string): string {
+      if (!gen) return `for (const ${r} of ${g}) {\n${body}\n}`;
+      const it = temp("g"), st = temp("s"), a = temp("a");
+      return `{\nconst ${it} = ${g};\nlet ${a};\nfor (let ${st} = ${it}.next(); !${st}.done; ${st} = ${it}.next(${a})) {\n${a} = undefined;\nif ($isLater(${st}.value)) {\n${a} = yield ${st}.value;\ncontinue;\n}\nconst ${r} = ${st}.value;\n${body}\n}\n}`;
+    }
     function stFoldGen(n: NodeOf<"fold">, k: K, f: string, s: string): string {
       const cases = n.arms.map((id) => {
         const a = node<"arm">(id);
@@ -2873,13 +2882,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         for (let i = a.results.length - 1; i >= 0; i--) {
           const r = a.results[i];
           const shape = r ? nestedShape(a, i) : null;
-          if (r) inner = `for (const ${local(r)} of ${shape ? `$foldNested(${f}, $spread(${JSON.stringify(shape)}, ${s}.fields[${i}]))` : `${f}(${s}.fields[${i}])`}) {\n${inner}\n}`;
+          if (r) inner = each(local(r), shape ? `$foldNested(${f}, $spread(${JSON.stringify(shape)}, ${s}.fields[${i}]))` : `${f}(${s}.fields[${i}])`, inner);
         }
         return `case ${tag(a.variant)}: {${binds(a, s)}\n${inner}\nbreak;\n}`;
       });
       const r = temp("r");
       return `const ${f} = function* (${s}) {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n` +
-        parts([n.scrutinee], ([v]) => `for (const ${r} of ${f}(${v})) {\n${k(r)}\n}`);
+        parts([n.scrutinee], ([v]) => each(r, `${f}(${v})`, k(r)));
     }
 
     // ---- the definition itself
