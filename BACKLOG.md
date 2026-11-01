@@ -34,6 +34,10 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I101 | **Bug.** Opening Clifford page helpers freezes the page 2 to 4 s: Spacetime `rapidity picture` 3.7 s frame gap, Bounce `solid bodies` 2.4 s, Constructions `equal arcs` 2.3 s; cap opening work at ~300 ms or run it in the worker | QA12 H1 | 2026-11-01 |
+| I102 | Dice `landed`, to-do `field`, Constructions `drawn` (cells/handlers, effects) still open on "search found no result"; say Show values runs it, neutrally | QA12 M1 | 2026-11-01 |
+| I103 | Tumble `contains` opens on a red "No answer": `holds` is ticked true though main's first call (items = []) gave false | QA12 L1 | 2026-11-01 |
+| I104 | Tumble's main still opens with ~250 px empty canvas above its first row | QA12 L2 | 2026-11-01 |
 | I99 | Drag a built point on Constructions and Compass (a crossing, a midpoint, an inverted point), not only free ones. Running the construction backwards has endless answers (either line could turn about either of its points), so it needs a rule to pick one: proposed "least movement", moving the free points it depends on as little as possible so the point lands under the pointer (a few Newton steps on the free points' coordinates); the simpler "carry the parents" slides every free point it depends on by the same amount. Ersagun was told least movement is the recommendation. | Ersagun 2026-10-31 21:08 | 2026-10-31 |
 
 ## E: Editor
