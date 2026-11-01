@@ -16,7 +16,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ARRAY_OPS, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, COMPARE, CONS, INT_OPS, NIL, ORDER_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -243,4 +243,66 @@ test("first, rest and push front in WebAssembly and C: the evaluator's answers, 
   drops.forEach(([n, d], j) => assert.equal(unhex(got[1 + j][0]), ev("first after", n, d), `first after ${d} of ${n}`));
   words.forEach((i, j) => assert.equal(Buffer.from(got[1 + drops.length + j][0].slice(1), "hex").toString(), ev("word at", BigInt(i)), `word ${i}`));
   assert.equal(got.at(-1)![0], "1000000");
+});
+
+// equal and compare on arrays in WebAssembly and C (C66): the evaluator's
+// rule, the length first and then the items in order, so a shorter array
+// comes first. Float64 items and counted ones (Text).
+test("equal and compare on arrays in WebAssembly and C: the evaluator's answers", async () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => string) => { const d = k.def(name); k.define(d, body()); return d; };
+  const lit = (x: number) => k.lit(x);
+  const count = def("count", () => k.fn(["n"], (n) => k.fold(k.call(S.range, n), [
+    { variant: NIL, names: [], body: () => k.call(ARRAY_OPS.empty) },
+    { variant: CONS, names: ["i", "t"], results: [null, "a"], body: ([i], [, a]) => k.call(ARRAY_OPS.push, a!, i) },
+  ])));
+  const words = def("words", () => k.fn(["n"], (n) => k.fold(k.call(S.range, n), [
+    { variant: NIL, names: [], body: () => k.call(ARRAY_OPS.empty) },
+    { variant: CONS, names: ["i", "t"], results: [null, "a"], body: ([i], [, a]) => k.call(ARRAY_OPS.push, a!, k.call(S.show, i)) },
+  ])));
+  const sign = (o: string) => k.match(o, [
+    { variant: ORDER_V.before, names: [], body: () => lit(-1) },
+    { variant: ORDER_V.same, names: [], body: () => lit(0) },
+    { variant: ORDER_V.after, names: [], body: () => lit(1) },
+  ]);
+  const same = (a: string, b: string) => k.if(k.call(S.equal, a, b), lit(1), lit(0));
+  def("same counts", () => k.fn(["n", "m"], (n, m) => same(k.call(count, n), k.call(count, m))));
+  def("order of counts", () => k.fn(["n", "m"], (n, m) => sign(k.call(COMPARE, k.call(count, n), k.call(count, m)))));
+  def("order pushed", () => k.fn(["n", "x", "y"], (n, x, y) => k.let("c", k.call(count, n), (c) => sign(k.call(COMPARE, k.call(ARRAY_OPS.push, c, x), k.call(ARRAY_OPS.push, c, y))))));
+  def("same pushed", () => k.fn(["n", "x", "y"], (n, x, y) => k.let("c", k.call(count, n), (c) => same(k.call(ARRAY_OPS.push, c, x), k.call(ARRAY_OPS.push, c, y)))));
+  def("same words", () => k.fn(["n", "m"], (n, m) => same(k.call(words, n), k.call(words, m))));
+  def("order of words", () => k.fn(["n", "m"], (n, m) => sign(k.call(COMPARE, k.call(ARRAY_OPS.push, k.call(words, n), k.lit("x")), k.call(ARRAY_OPS.push, k.call(words, m), k.lit("y"))))));
+  const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const named = (n: string) => code.defs.find((d) => nm[d] === n)!;
+  const two = ["same counts", "order of counts", "same words", "order of words"], three = ["order pushed", "same pushed"];
+  const roots = [...two, ...three];
+  const lowered = lowerScalar(code, info, nm, roots.map(named), { data: true });
+  assert.deepEqual(roots.flatMap((n) => lowered.refused.has(named(n)) ? [`${n}: ${lowered.refused.get(named(n))}`] : []), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  const ev = (n: string, ...xs: unknown[]) => [...r.call(r.value(named(n)), ...(xs as never[]))][0];
+  const pairs: [number, number][] = [[0, 0], [3, 3], [3, 4], [4, 3], [0, 2], [12, 12], [12, 11]];
+  const triples: [number, number, number][] = [[3, 1, 2], [3, 2, 1], [3, 2, 2], [0, -1, 1], [5, 1e-12, 0]];
+  const want = [...two.flatMap((d) => pairs.map((p) => ev(d, ...p))), ...three.flatMap((d) => triples.map((p) => ev(d, ...p)))];
+  assert.ok(want.includes(-1) && want.includes(0) && want.includes(1));
+  // WebAssembly.
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = (await instantiate(m)) as unknown as Record<string, (...xs: number[]) => number>;
+  assert.deepEqual([...two.flatMap((d) => pairs.map((p) => w[d](...p))), ...three.flatMap((d) => triples.map((p) => w[d](...p)))], want);
+  // C, where every call frees every cell it made.
+  if (!haveC) return;
+  const out = emitC(lowered, { harness: true });
+  assert.deepEqual([...out.refused.values()], []);
+  const dir = mkdtempSync(join(tmpdir(), "compare-c-")), exe = join(dir, "compare");
+  writeFileSync(`${exe}.c`, out.c);
+  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, `${exe}.c`, "-lm"]);
+  const fn = (n: string) => lowered.funcs.findIndex((f) => f.def === named(n) && !f.inner);
+  const hex = (x: number) => new BigUint64Array(new Float64Array([x]).buffer)[0].toString(16);
+  const got = execFileSync(exe, { input: [
+    ...two.flatMap((d) => pairs.map((p) => `${fn(d)} ${p.map(hex).join(" ")}`)), ...three.flatMap((d) => triples.map((p) => `${fn(d)} ${p.map(hex).join(" ")}`)),
+  ].join("\n") + "\n" }).toString().trim().split("\n").map((l) => l.trim().split(/\s+/));
+  assert.deepEqual(got.map((ws) => ws.at(-1)), got.map(() => ";0"));
+  // The answers are Ints, written in decimal.
+  assert.deepEqual(got.map((ws) => Number(ws[0])), want.map(Number));
 });

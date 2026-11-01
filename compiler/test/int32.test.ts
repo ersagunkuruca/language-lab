@@ -114,8 +114,19 @@ test("Int in 32 bits and the flag in WebAssembly: js-scalar.ts's answers", async
   for (const x of [2.5, -2.5, 0, -0.5, 1e6, 3e9, NaN, Infinity, -Infinity]) same(p.whole, x);
 });
 
-test("a shader's arrays aren't in WebAssembly yet, with the reason (JavaScript draws them)", () => {
+// A shader's arrays (C66c) in WebAssembly: the same Array the data
+// lowering has (C66a), with an i32 length and index, and `at` past the
+// end raising the flag, so the editor's picture uses WebAssembly for them.
+test("a shader's arrays in WebAssembly: js-scalar.ts's answers", async () => {
   const p = shaderArrays();
-  const lowered = lowerScalar(p.code, p.info, p.names, [p.palette], { records: true, shader: true });
-  assert.throws(() => emitWasm(lowered), /arrays .* aren't in WebAssembly yet/);
+  const roots = [p.palette, p.grow, p.pick, p.nothing, p.twoSizes];
+  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, shader: true });
+  const m = emitWasm(lowered);
+  assert.match(m.wat, /array\.new_fixed \$items\d* 3/);
+  assert.match(m.wat, /call \$array\.at32\.a\d+/);
+  const w = await instantiate(m) as unknown as Record<string, (x: number) => number>;
+  const js = loadJs(lowered);
+  const same = (d: string, x: number) => assert.equal(w[p.names[d]](x), Number(js.get(d)!(x)), `${p.names[d]} ${x}`);
+  for (const i of [-1, 0, 1, 2, 3, 4, 5]) for (const d of [p.palette, p.pick, p.nothing]) same(d, i);
+  for (const x of [0, 1.5, -3]) for (const d of [p.grow, p.twoSizes]) same(d, x);
 });

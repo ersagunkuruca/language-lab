@@ -36,7 +36,7 @@
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
-import { fails, isArray, isData, isFn, kids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { fails, isArray, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -64,7 +64,7 @@ const INSTR: Partial<Record<Op, [number | number[], string]>> = {
 };
 const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem", "ipow", "iwhole"];
 // Where a shader's flag is set or read.
-const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "zero" && !!e.none) || (e.k === "op" && ["iquot", "irem", "ipow", "iwhole"].includes(e.op)) || kids(e).some(flagged);
+const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^array\.at32\./.test(e.fn)) || (e.k === "zero" && !!e.none) || (e.k === "op" && ["iquot", "irem", "ipow", "iwhole"].includes(e.op)) || kids(e).some(flagged);
 
 export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 
@@ -77,8 +77,15 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // answer is the flag $none that `first` and `count` look at, as WGSL
   // and js-scalar.ts keep it, not a status, so no function is partial.
   const shader = !!lowered.shader;
-  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined })) : lowered.funcs;
-  if (shader && lowered.arrays.length) throw new Error("a shader's arrays (array<T, N>, C66c3) aren't in WebAssembly yet: JavaScript draws them");
+  // A shader's arrays (C66c) are the same Array, with an i32 for their
+  // length and index and the flag for `at` past the end (wasm-rt.ts).
+  const shaderArrays = (e: SExpr): SExpr => {
+    const m = e.k === "rt" ? /^array\.(of|length|at)\.(a\d+)$/.exec(e.fn) : null;
+    const x = mapKids(e, shaderArrays);
+    if (!m || x.k !== "rt") return x;
+    return { ...x, fn: `array.${m[1] === "of" ? `of${x.args.length}` : m[1] === "length" ? "size32" : "at32"}.${m[2]}` };
+  };
+  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs;
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
