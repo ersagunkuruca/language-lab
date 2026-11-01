@@ -436,7 +436,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L133 | `is letter`, `is digit`, `lowercase` and `uppercase` for Text (GAPS round 6 NG1), in the prelude from comes before, character code and join all, so every target has them; the English letters and digits only, as C's isalpha/isdigit in the "C" locale, other alphabets left as they are (test/round6-library.test.ts) | this PR |
+| L128c | The text of a function with named result ports (render.ts): `part(speed, time) → drift, drop = speed · time, time · time` when its body is the tuple written out, `→ drift, drop =` and the body otherwise, as a definition with results reads (test/result-ports.test.ts). Reading that text back (editor/typed.ts) is the Editor lane's | this PR |
+| L133 | `is letter`, `is digit`, `lowercase` and `uppercase` for Text (GAPS round 6 NG1), in the prelude from comes before, character code and join all, so every target has them; the English letters and digits only, as C's isalpha/isdigit in the "C" locale, other alphabets left as they are (test/round6-library.test.ts) | #935 |
 | L135 | `take` and `drop` for lists (GAPS round 6 NG3): the first count items and the rest after them, counted as `item at`'s positions are; a shorter list gives all of it (take) or [] (drop). Total, by recursion on the list (test/round6-library.test.ts) | #934 |
 | L134 | `starts with` and `ends with` for Text (GAPS round 6 NG2), in the prelude from length and slice, so every target has them; every text starts and ends with "" (test/round6-library.test.ts) | #933 |
 | L136 | One `sum` for every number type, as `+` is (GAPS round 6 NG4): the prelude's sum adds with the generic + and starts from a plain 0, so it is `(List a) -> a where a is a Number`; notebook's `total` for Ints isn't needed (test/round6-library.test.ts) | #932 |

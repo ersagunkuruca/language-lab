@@ -11,6 +11,9 @@ import { resultPorts } from "../src/lang/ports.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ARITH, S, SHOW_ANY, tuplePart, tupleVariant } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
+import { renderBlocks } from "../src/lang/render.ts";
+import type { Presentation, Style } from "../src/presentation.ts";
+import blocksStyle from "../styles/blocks.json" with { type: "json" };
 
 test("a function with two named results gives a tuple, its parts read by position and named from the function", () => {
   const k = new Lang();
@@ -41,4 +44,16 @@ test("a body that doesn't give as many results as it names is an error; one resu
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), ["this function gives 2 results: expected (a, b), got Text"]);
   assert.match(showType(info.typeOf.get(one)!, names, info.subst.arith), /^\(a\) -> a/);
+});
+
+test("the text shows a function's named results after its inputs, = e1, e2 when its body is the tuple written out", () => {
+  const k = new Lang();
+  const part = k.def("part");
+  k.define(part, k.gives(["speed", "time"], ["drift", "drop"], (v, t) => k.call(tupleVariant(2), k.call(ARITH.mul, v, t), k.call(ARITH.mul, t, t))));
+  const half = k.def("half");
+  k.define(half, k.gives(["x"], ["halved"], (x) => k.call(ARITH.mul, x, k.lit(0.5))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  assert.match(renderBlocks(code, pres, info, part), /part\(speed, time\) → drift, drop = speed · time, time · time$/m);
+  assert.match(renderBlocks(code, pres, info, half), /half\(x\) → halved = x · 0\.5$/m);
 });

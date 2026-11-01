@@ -22,7 +22,7 @@ import type { Info } from "./infer.ts";
 import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts";
 import { paramName } from "./refactor.ts";
 import { implementationOps, isOperation } from "./records.ts";
-import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE } from "./std.ts";
+import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
 import { showIn } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -565,6 +565,20 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     // `r1 = e1 and r2 = e2`.
     const results = def.results ?? [];
     const head = [self(), pn("("), ...commas(body.params.filter((p) => !results.includes(p)).map((p) => [bind(p)])), pn(")")];
+    // A function with named result ports (L128b) reads the same way: its
+    // results by name after its inputs, and `= e1, e2` when its body is the
+    // tuple of them written out.
+    const ports = !results.length && body.results?.length ? body.results : null;
+    if (ports) {
+      const b = node(body.body);
+      const f = b?.kind === "call" ? node(b.fn) : undefined;
+      const parts = ports.length === 1 ? [body.body] : b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
+      const named = [...head, pn(" → "), ...commas(ports.map((r) => [bind(r)])), pn(" = ")];
+      if (parts) out.push(ln(...named, ...commas(parts.map((e) => inline(e).p))));
+      else out.push(...hang(body.body, named));
+      leave(body.params);
+      return out;
+    }
     const each = results.length ? givenBy(code, body.body, results) : null;
     if (each) out.push(ln(...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = "), ...commas(each.map((e) => inline(e).p))));
     else out.push(...hang(body.body, results.length ? [...head, pn(" → "), ...commas(results.map((r) => [bind(r)])), pn(" = ")] : [...head, pn(" = ")]));
