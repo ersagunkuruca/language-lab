@@ -556,3 +556,25 @@ test("a generic function solved with an Int given runs in whole numbers", () => 
     assert.deepEqual(printed, [want]);
   }
 });
+
+// L38's last open end: the given is an input of the enclosing definition,
+// whose type is fixed as an Int only after the solve is read (by Int's
+// show here). The solve waits for it, then runs in whole numbers.
+test("a solve whose given is fixed as an Int later in the definition runs in whole numbers", () => {
+  for (const [out, want] of [[12, "[3]3"], [13, "[]3"]] as const) {
+  const p = program((k) => {
+    const f = k.def("f");
+    let x = "", n = "";
+    k.define(f, k.fn(["x", "n"], (v, w) => ((x = v), (n = w), k.call(ARITH.add, k.call(ARITH.mul, v, w), w))));
+    const g = k.def("g");
+    k.define(g, k.fn(["m"], (m) => k.call(S.concat, k.call(SHOW_ANY, k.call(S.all, k.fn([], () => k.solve(f, { [n]: m, out: k.lit(out) }, { [x]: "x" }, ({ [x]: v }) => v)))), k.call(INT_OPS.show, m))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(g, k.int(3)))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(showType(p.info.typeOf.get(p.named("g"))!, p.names), "(Int) -> Text");
+  const printed: string[] = [];
+  runMain(p.code, p.info, p.named("main"), { print: (s) => printed.push(s) });
+  assert.deepEqual(printed, [want]);
+  }
+});

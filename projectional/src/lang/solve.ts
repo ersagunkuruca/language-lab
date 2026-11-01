@@ -83,7 +83,7 @@ const isTrue = (code: Code, id: Id | undefined) => { const x = id ? code.nodes[i
 
 // Functions the relational interpreter can run in any direction: defs with
 // a body, and builtins that are functions (join text, show, less, …).
-function runsBackwards(code: Code, fn: Id): boolean {
+export function runsBackwards(code: Code, fn: Id): boolean {
   const t = code.nodes[fn];
   if (t?.kind === "def") return !!t.body && code.nodes[t.body].kind === "lambda";
   return t?.kind === "builtin" && !!SIGS[fn];
