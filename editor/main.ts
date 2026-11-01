@@ -3658,7 +3658,7 @@ function draw() {
 
   app.replaceChildren(
     h("header", { class: "bar" },
-      h("div", { class: "brand" }, h("strong", {}, "Language Lab"), h("span", {}, "the program is the tree")),
+      h("div", { class: "brand" }, h("strong", {}, "Ters"), h("span", {}, "the program is the tree")),
       h("div", { class: "controls" },
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         cycling(seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]])),
