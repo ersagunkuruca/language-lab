@@ -30,6 +30,12 @@ export interface Target {
 }
 
 const op = (f: Inline): Target["js"] => ({ op: f });
+// A Float64 literal, as compile.ts writes one: its value, or null.
+const literal = (a: string): number | null => (/^\(?-?\d+(\.\d+)?(e[+-]?\d+)?\)?$/.test(a) ? Number(a.replace(/[()]/g, "")) : null);
+const nonzero = (a: string) => { const v = literal(a); return v !== null && v !== 0; };
+const nonnegative = (a: string) => { const v = literal(a); return v !== null && v >= 0; };
+// A Float64 that must be finite here, checked unless it's a literal.
+const fin = (a: string) => (literal(a) !== null ? a : `$fin(${a})`);
 const test = (f: Inline, boolArgs?: true): Target["js"] => ({ op: f, bool: true, ...(boolArgs ? { boolArgs } : {}) });
 const written = (where: string) => ({ written: where });
 const no = (why: string) => ({ no: why });
@@ -45,21 +51,29 @@ export const TARGETS: Record<Id, Target> = {
   [B.add]: { js: op(([a, b]) => `(${a} + ${b})`), scalar: "add" },
   [B.sub]: { js: op(([a, b]) => `(${a} - ${b})`), scalar: "sub" },
   [B.mul]: { js: op(([a, b]) => `(${a} * ${b})`), scalar: "mul" },
-  [B.div]: { js: op(([a, b]) => `(${a} / ${b})`), scalar: "div" },
+  // A Float64 is finite (L125c, FLOAT-VALUES-2026-11-01.md §2). No answer
+  // (x / 0, √ of a negative, log of 0) is checked on the argument, where
+  // it happens; a literal that can't be one needs no check. An overflow
+  // is checked late (`$fin`): IEEE keeps ∞ and NaN through + − ·, so the
+  // check goes where one could vanish or decide something: a divisor,
+  // `exp` and `atan2` (which turn ∞ into finite values), a comparison,
+  // `show`, and a conversion. One that nothing uses isn't reported.
+  [B.div]: { js: op(([a, b]) => (nonzero(b) ? `(${a} / ${b})` : `$div(${a}, ${b})`)), scalar: "div" },
   [B.neg]: { js: op(([a]) => `(-${a})`), scalar: "neg" },
-  [B.pow]: { js: op(([a, b]) => `(${a} ** ${b})`), scalar: "pow" },
-  [B.sqrt]: { js: op(([a]) => `Math.sqrt(${a})`), scalar: "sqrt" },
+  [B.pow]: { js: op(([a, b]) => `$pow(${a}, ${b})`), scalar: "pow" },
+  [B.sqrt]: { js: op(([a]) => (nonnegative(a) ? `Math.sqrt(${a})` : `$sqrt(${a})`)), scalar: "sqrt" },
   [B.sin]: { js: op(([a]) => `Math.sin(${a})`), scalar: "sin" },
   [B.cos]: { js: op(([a]) => `Math.cos(${a})`), scalar: "cos" },
-  [B.exp]: { js: op(([a]) => `Math.exp(${a})`), scalar: "exp" },
-  [B.log]: { js: op(([a]) => `Math.log(${a})`), scalar: "log" },
+  [B.exp]: { js: op(([a]) => `Math.exp(${fin(a)})`), scalar: "exp" },
+  [B.log]: { js: op(([a]) => `$log(${a})`), scalar: "log" },
   [B.tan]: { js: op(([a]) => `Math.tan(${a})`), scalar: "tan" },
-  [B.atan2]: { js: op(([a, b]) => `Math.atan2(${a}, ${b})`), scalar: "atan2" },
+  // −0 is 0, as in the evaluator: atan2(−0, −1) is π.
+  [B.atan2]: { js: op(([a, b]) => `Math.atan2(${fin(a)} + 0, ${fin(b)} + 0)`), scalar: "atan2" },
   [S.abs]: { js: op(([a]) => `Math.abs(${a})`), scalar: "abs" },
   [S.floor]: { js: op(([a]) => `Math.floor(${a})`), scalar: "floor" },
   [S.float32]: { js: op(([a]) => `Math.fround(${a})`), scalar: "float32" },
   [S.mod]: { js: op(([a, b]) => `$mod(${a}, ${b})`), scalar: "mod" },
-  [S.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: "less" },
+  [S.less]: { js: test(([a, b]) => `(${fin(a)} < ${fin(b)})`), scalar: "less" },
   [S.and]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: "and" },
   [S.hence]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: no("a predicate's `hence` is `and` run forward; not in the profile yet") },
   [S.or]: { js: test(([a, b]) => `(${a} || ${b})`, true), scalar: "or" },

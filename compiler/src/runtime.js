@@ -66,7 +66,7 @@ export function $fromBack(v) {
 
 export function $range(n) {
   let l = $nil;
-  for (let i = Math.max(0, n) - 1; i >= 0; i--) l = $cons(i, l);
+  for (let i = Math.max(0, $fin(n)) - 1; i >= 0; i--) l = $cons(i, l);
   return l;
 }
 
@@ -80,7 +80,32 @@ export const $near = (a, b) => {
 // `equal` on two numbers, one rule on every type, as in the evaluator
 // (run.ts `sameNumber`): whole numbers exactly, others near.
 // run.ts sameNumber: near on every JS number; an Int past 2^28 is a BigInt.
-export const $sameNumber = (a, b) => $near(a, b);
+export const $sameNumber = (a, b) => $near($fin(a), $fin(b));
+
+// A Float64 is finite (L125c, FLOAT-VALUES-2026-11-01.md §2), as in the
+// evaluator (run.ts finiteFloat), with its reasons. No answer is checked on
+// the argument: $div, $sqrt, $log, $pow, $mod. An overflow is checked late,
+// with $fin, where a non-finite value could vanish or decide something
+// (builtins.ts says where); before then IEEE keeps it ∞ or NaN, and an
+// overflow nothing uses isn't reported (Haskell's imprecise exceptions).
+// Only an overflow makes one, so that's the reason $fin gives.
+// An Abort performed where the operation was, as in the evaluator, so a
+// handler of Abort in the program gets it.
+const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
+// run.ts's own late checks (numberOrder, showValue) throw; the same Abort.
+const performed = (f) => (...xs) => { try { return f(...xs); } catch (e) { if (e instanceof Aborted) return $stop(e.reason); throw e; } };
+const OVERFLOW = 'the answer is too big for a Float64 (overflow)';
+export const $fin = (x) => (x - x === 0 ? x : $stop(OVERFLOW));
+export const $div = (a, b) => (b === 0 ? $stop('x / 0 has no answer') : a / $fin(b));
+export const $sqrt = (a) => (a < 0 ? $stop('the square root of a negative number has no answer') : Math.sqrt(a));
+export const $log = (a) => (a <= 0 ? $stop('the log of 0 or less has no answer') : Math.log(a));
+export const $pow = (a, b) => {
+  const r = a ** b;
+  if (r - r === 0 && a - a === 0 && b - b === 0) return r;
+  return a === 0 && b < 0 ? $stop('0 to a negative power has no answer')
+    : a < 0 && b - b === 0 && !Number.isInteger(b) ? $stop('a negative number to a fractional power has no answer')
+    : $stop(OVERFLOW);
+};
 
 // With its own stack, so two long lists can be compared.
 export function $eq(a, b) {
@@ -103,7 +128,7 @@ export function $eq(a, b) {
 // builtins compiled code calls by id.
 export * as $int from '../../projectional/src/lang/int.ts';
 export * as $text from '../../projectional/src/lang/text.ts';
-import { CELL_OPS, STD_IMPL, STD_MANY } from '../../projectional/src/lang/std.ts';
+import { CELL_OPS, INT_OPS, STD_IMPL, STD_MANY } from '../../projectional/src/lang/std.ts';
 
 // Arrays (std.ts ARRAY_OPS, C30d): views on a buffer with free room at
 // both ends, the same as the evaluator's (std.ts ArrayView).
@@ -114,19 +139,22 @@ const readAt = (c, p) => { const v = $cells().readAt(c, stepsOf(p), $listArrays)
 export const $many = { ...STD_MANY, [CELL_OPS.readAt]: readAt };
 // A Choice builtin's answer, or $no: each has at most one (GAPS.md G24).
 export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) => [id, (...xs) => { const a = f(...xs); return a.length ? a[0] : $no; }]));
+// A Float64 made a whole number is a conversion: it must be finite (L125c).
+{ const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../projectional/src/lang/records.ts';
 import { showValue, compareValues, ORDER_VALUES } from '../../projectional/src/lang/run.ts';
-export const $showAny = (v, names) => showValue(v, null, names);
+export const $showAny = performed((v, names) => showValue(v, null, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
-export const $compare = (a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1];
+export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1]);
 // `compare` at its type (compile.ts, GAPS.md M4): -1, 0 or 1. An Int has
 // one spelling (a number while small, a BigInt beyond), and < works across
 // the two. A text by code point: `<` on code units agrees unless one of
 // them has a character past the basic plane.
 export const $ORDER = ORDER_VALUES;
-export const $compareN = compareValues;
-export { numberOrder as $numberOrder } from '../../projectional/src/lang/run.ts';
+export const $compareN = performed(compareValues);
+import { numberOrder } from '../../projectional/src/lang/run.ts';
+export const $numberOrder = (a, b) => (a - a !== 0 || b - b !== 0 ? $stop(OVERFLOW) : numberOrder(a, b));
 export const $intOrder = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
 import { less as textLess } from '../../projectional/src/lang/text.ts';
 export const $textOrder = (a, b) => {
@@ -138,8 +166,8 @@ export const $textOrder = (a, b) => {
   return a.length < b.length ? -1 : 1;
 };
 
-export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9));
-export const $mod = (a, b) => ((a % b) + b) % b;
+export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round($fin(x) * 1e9) / 1e9));
+export const $mod = (a, b) => (b === 0 ? $stop('x mod 0 has no answer') : ((a % $fin(b)) + b) % b);
 // A record of Float64s part by part (std.ts); a Float64 is one part.
 export const $mapParts = (f, r) => (typeof r === 'number' ? f(r) : { tag: r.tag, fields: r.fields.map((x) => f(x)) });
 export const $zipParts = (f, a, b) => (typeof a === 'number' ? f(a, b) : { tag: a.tag, fields: a.fields.map((x, i) => f(x, b.fields[i])) });
