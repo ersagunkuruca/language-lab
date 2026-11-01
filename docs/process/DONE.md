@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E168b (look) | A call of a definition with two or more inputs names its ports, as its solve and an implementation's node already did: `fall` shows distance, speed, gravity, time; `if` shows condition, then, else. So a call and the same box turned around (E168) read alike. Operators' glyphs, one-input calls and calls with a list on a port go without | #PR |
 | E167a | A multiple selection's frame (E171) shows ports: one on its left for each value wired in from outside, one on its right for each value wired out, which are the inputs and results Make it a function would give (PORTS-2026-11-01.md §5) | #924 |
 | E168 | A call of a definition can be turned around from its menu: "Work out x from the result" swaps that input with the result, the node becoming a solve that is given what went into x and gives x (typed.ts `turnAround`); "Use it forwards" on such a solve makes it the call again (`turnBack`). Each is type-checked first and says why it can't (main doing Console with a Choice open, say). The drawing of call and solve as one look, and turning by a click on the port, are E168b | #923 |
 | E166 | A list written in place as an input, `span([text(…)])`, is drawn on the calling node itself: a bracket with a socket per item, each item wired in as before, and an empty + socket after them that adds an item when clicked or wired to. The list node isn't drawn; an empty list stays its own value. Prior art Blender's multi-input sockets (CREDITS.md). The text side is E166b | #922 |
