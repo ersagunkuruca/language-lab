@@ -2510,6 +2510,7 @@ function toggleFolded(f: Id) {
 // a binding or a frame, what applies to it. Tidying and putting nodes
 // back only change layout.json.
 
+let menuGen = 0;
 function graphMenu(info: T.Info): HTMLElement | null {
   const m = ui.menu;
   if (!m) return null;
@@ -2518,9 +2519,32 @@ function graphMenu(info: T.Info): HTMLElement | null {
   const inGraph = !m.blocks;
   // What an item does, or why it can't, is written under it: a tooltip
   // never shows on a greyed item, nor on a phone.
-  const item = (label: string, act: string, hint = "", disabled?: string) =>
-    h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!disabled },
-      label, disabled || hint ? h("span", { class: `ctx-why${disabled ? " cant" : ""}` }, disabled ? `Can't: ${disabled}` : hint) : null);
+  // `disabled` can be a check to run after the menu shows: an edit tried
+  // against the whole program takes a few hundred milliseconds, and a menu
+  // asks several (Ersagun 2026-11-01: the menu was slow). Until it has
+  // run the item is there to press; pressed early, the edit itself says
+  // why it can't.
+  const gen = ++menuGen, later: (() => void)[] = [];
+  const item = (label: string, act: string, hint = "", disabled?: string | (() => string | undefined)) => {
+    const now = typeof disabled === "function" ? undefined : disabled;
+    const why = now || hint ? h("span", { class: `ctx-why${now ? " cant" : ""}` }, now ? `Can't: ${now}` : hint) : null;
+    const b = h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!now }, label, why) as HTMLButtonElement;
+    if (typeof disabled === "function") later.push(() => {
+      const r = disabled();
+      if (!r) return;
+      b.disabled = true;
+      if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
+    });
+    return b;
+  };
+  const checkLater = () => {
+    const next = later.shift();
+    if (!next || gen !== menuGen) return;
+    next();
+    setTimeout(checkLater);
+  };
+  setTimeout(checkLater);
+  const why = (f: () => { ok: boolean; reason?: string }) => () => { const r = f(); return r.ok ? undefined : r.reason; };
   const rows: (HTMLElement | null)[] = [];
   const names = typedPres().names;
   const head = (t: string) => h("div", { class: "ctx-head" }, t);
@@ -2536,9 +2560,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
   if (kind === "hole" && id) {
     rows.push(fillPalette(id, info, names, "m-query"));
   } else if (kind === "space") {
-    const r = T.addStep(doc.code, doc.names.short, info, ui.def);
     rows.push(inGraph ? item("Add a value here…", "add", "A new loose value (a hole to fill) here: fill it, then drag its output onto an input")
-      : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", r.ok ? undefined : r.reason));
+      : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", why(() => T.addStep(doc.code, doc.names.short, info, ui.def))));
   } else if (kind === "binder" && id) {
     const on = isNamed(id);
     rows.push(head(names[id] ?? "a value"));
@@ -2546,18 +2569,17 @@ function graphMenu(info: T.Info): HTMLElement | null {
     rows.push(item("Name it…", "name"));
     rows.push(...stepRows(id));
     if (T.isDot(doc.code, ui.def, id) && inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
-    if (T.isDot(doc.code, ui.def, id)) { const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", r.ok ? undefined : r.reason)); }
+    if (T.isDot(doc.code, ui.def, id)) rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", why(() => T.removeDot(doc.code, doc.names.short, info, ui.def, id))));
   } else if ((kind === "node" || kind === "frame") && id) {
     const d = calleeDef(id);
     if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc.code, typedPres(), d).name(d)}`, "goto"));
     const code = view?.code ?? doc.code;
     if (kind === "frame") rows.push(graphFolded().has(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold into one box", "fold", "Hide what it holds; its wires in and out stay"));
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
-    const dot = T.addDot(doc.code, doc.names.short, info, ui.def, id);
-    if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", dot.ok ? undefined : dot.reason));
+    if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", why(() => T.addDot(doc.code, doc.names.short, info, ui.def, id))));
     // A step of an action gets a step before it, not a value (QA8 M1).
-    if (kind === "node" && stepRows(id).length) { const r = T.addActionStep(doc.code, doc.names.short, info, stepAt(id)); rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", r.ok ? undefined : r.reason)); }
-    else if (kind === "node") { const r = T.addStep(doc.code, doc.names.short, info, ui.def, id); rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", r.ok ? undefined : r.reason)); }
+    if (kind === "node" && stepRows(id).length) rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc.code, doc.names.short, info, stepAt(id)))));
+    else if (kind === "node") rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", why(() => T.addStep(doc.code, doc.names.short, info, ui.def, id))));
     // Its place in a list, or among a + b + c's inputs.
     const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
     if (inRow) {
@@ -2583,8 +2605,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (kind === "node" && n?.kind === "match" && (doc.layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
     else if (kind === "node" && n?.kind === "match" && flattened(matchRows(doc.code, info, n))) rows.push(item("Draw as nested matches", "tree", "The decision tree as it is stored: one match per level, to see the order it decides in"));
     if (kind === "frame" && doc.layout.groups?.[id]) {
-      const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, doc.layout.groups[id]);
-      rows.push(item("Make it a function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", r.ok ? undefined : r.reason));
+      const members = doc.layout.groups[id];
+      rows.push(item("Make it a function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))));
       rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
     }
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
@@ -2600,8 +2622,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     // picked nodes, the group, or just this node (Ersagun 2026-10-27).
     const set = id ? fnSet(id, picked) : null;
     if (set && kind !== "frame") {
-      const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members);
-      rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, r.ok ? undefined : r.reason));
+      rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members))));
       if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): a frame around them, folded, naming what it holds. A view only; unfold or ungroup it from its menu`, groupable(set.members)));
     }
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
