@@ -165,6 +165,9 @@ interface Layout {
   // Matches drawn as the nested tree they are, not as rows of patterns
   // (PATTERNS.md). A view.
   tree?: Id[];
+  // Tuple wires drawn fanned out, a strand per part (E167c), by the value
+  // they carry. A view.
+  fanned?: Id[];
   // Nodes made bigger by hand, by `def/id` (BACKLOG I49). Never smaller
   // than what they show. A view.
   size?: Record<string, { w: number; h: number }>;
@@ -2973,6 +2976,12 @@ function graphHooks(info: T.Info) {
     fold: toggleFolded,
     groups: doc.layout.groups,
     tree: new Set(doc.layout.tree ?? []),
+    fanned: new Set(doc.layout.fanned ?? []),
+    fan: (v: Id) => {
+      const now = doc.layout.fanned ?? [], on = now.includes(v);
+      commit({ layout: { ...doc.layout, fanned: on ? now.filter((x) => x !== v) : [...now, v] } }, ["layout.json"],
+        on ? "Bundled into one wire. Only layout.json changed." : "Fanned out, a wire per part. Only layout.json changed.");
+    },
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
     reorder: (item: Id, onto: Id) => {
       const a = T.rowOfItem(doc.code, item), b = T.rowOfItem(doc.code, onto);

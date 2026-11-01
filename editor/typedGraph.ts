@@ -104,6 +104,10 @@ export interface GraphHooks {
   // (PATTERNS.md). A view.
   tree?: Set<Id>;
   fold?: (frame: Id) => void;
+  // Tuple wires drawn fanned out, one strand per part, by the value they
+  // carry (E167c); and turning one between bundled and fanned. A view.
+  fanned?: Set<Id>;
+  fan?: (value: Id) => void;
   // The + under a list's or a + b + c's inputs: one more, at the end.
   addItem?: (row: Id) => void;
   // A value (a binding, or a node's output) dropped on a row's +.
@@ -320,7 +324,7 @@ interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders
 // parts: a wire carrying a tuple is drawn bundled, one thick wire with its
 // parts listed on it (E167b, PORTS-2026-11-01.md §5): their names when the
 // function that gave it named its results, else their types.
-interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean; parts?: string[] }
+interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean; parts?: string[]; value?: Id }
 interface Scene {
   items: Map<Id, Item>;
   frames: Map<Id, Frame>;
@@ -997,6 +1001,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const c = follow_(v), fn = c?.kind === "call" ? follow_(c.fn) : null;
     const rs = fn?.kind === "lambda" && fn.results?.length === z.args.length ? fn.results.map((r) => names[r]) : null;
     w.parts = rs && rs.every(Boolean) ? rs : z.args.map((a) => showIn(a, names, info!.subst));
+    w.value = v;
   }
   // What lights up with the selection: a binding and all its uses.
   const lit = new Set<Id>();
@@ -1218,7 +1223,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   // background.
   const open = [...scene.frames.keys()].map((k) => boxes.get(k)!);
   const touches = (q: Pos, b: Box) => q.x >= b.x - 2 && q.x <= b.x + b.w + 2 && q.y >= b.y - 2 && q.y <= b.y + b.h + 2;
-  const bundles: { at: Pos; text: string; lifted: boolean }[] = [];
+  const bundles: { at: Pos; text: string; lifted: boolean; value?: Id; fanned?: boolean }[] = [];
   for (const w of all) {
     const a = point(w.from), b = point(w.to);
     const ends = new Set([endItem(w.from), endItem(w.to)]);
@@ -1230,6 +1235,17 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const d = hops.length || bent ? hopPath(pts, hops) : curve(a.x, a.y, b.x, b.y);
     drawn.push({ pts });
     const wireG = wireL(lifted(w.from) && lifted(w.to));
+    // Fanned out: a strand per part, apart where it leaves, together where
+    // it arrives, each named where it leaves (E167c).
+    if (w.parts && w.value && hooks.fanned?.has(w.value)) {
+      w.parts.forEach((part, i) => {
+        const dy = (i - (w.parts!.length - 1) / 2) * 9;
+        wireG.append(s("path", { d: curve(a.x + 10, a.y + dy, b.x, b.y), class: `tw strand${w.use ? " use" : ""}`, ...(w.edge ? { "data-edge": w.edge } : {}) }));
+        wireG.append(s("path", { d: `M${a.x.toFixed(1)},${a.y.toFixed(1)} L${(a.x + 10).toFixed(1)},${(a.y + dy).toFixed(1)}`, class: "tw strand" }));
+        bundles.push({ at: { x: a.x + 30, y: a.y + dy + 3 }, text: part, lifted: lifted(w.from) && lifted(w.to), value: w.value!, fanned: true });
+      });
+      continue;
+    }
     if (w.use) {
       const on = hooks.selected === w.use.dot || hooks.selected === w.use.ref;
       wireG.append(s("path", { d, class: "use-hit", "data-id": w.use.ref }), s("path", { d, class: `tw use${on ? " lit" : ""}` }));
@@ -1239,7 +1255,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     if (w.parts) {
       wireG.lastElementChild!.classList.add("bundle");
       const m = pts[Math.floor(pts.length / 2)];
-      if (m) bundles.push({ at: m, text: w.parts.join(", "), lifted: lifted(w.from) && lifted(w.to) });
+      if (m) bundles.push({ at: m, text: w.parts.join(", "), lifted: lifted(w.from) && lifted(w.to), value: w.value });
     }
     // Under a node: the hidden stretch, drawn faintly over it.
     for (const run of tunnels(pts, others)) {
@@ -1282,7 +1298,12 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     });
   }
   // A bundled wire's parts, on it.
-  for (const b of bundles) nameL(b.lifted).append(s("text", { x: b.at.x, y: b.at.y - 6, class: "portl halo bundle-l", "text-anchor": "middle" }, b.text));
+  // Clicked, it fans out, or bundles again.
+  for (const b of bundles) {
+    const t = s("text", { x: b.at.x, y: b.at.y - 6, class: `portl halo bundle-l${hooks.fan && b.value ? " fan-t" : ""}`, "text-anchor": b.fanned ? "start" : "middle", ...(hooks.fan && b.value ? { "data-fan": b.value } : {}) }, b.text);
+    if (hooks.fan && b.value) t.append(s("title", {}, b.fanned ? "Bundle into one wire" : "Fan out: a wire per part"));
+    nameL(b.lifted).append(t);
+  }
 
   // The definition's result.
   const out = s("g");
@@ -1496,6 +1517,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     if (Date.now() - menuAt < 800) return;
     const folding = (e.target as Element).closest("[data-fold]")?.getAttribute("data-fold");
     if (folding) return hooks.fold?.(folding);
+    const fanning = (e.target as Element).closest("[data-fan]")?.getAttribute("data-fan");
+    if (fanning) return hooks.fan?.(fanning);
     const edge = (e.target as Element).closest("[data-edge]");
     if (edge && !e.shiftKey) {
       // A dot can change how the rest would be laid out (its let wraps the
