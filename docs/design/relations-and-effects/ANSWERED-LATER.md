@@ -254,8 +254,14 @@ together(actions) =
   `a` from nothing). Its limit: `Branch`'s `resume` is a field, and a
   field's function row is closed, so a branch may only `Await` for now
   (test/await.test.ts).
-- **L71c**, the world answers `await(any of(…))`: the evaluator's and the
-  page's runtimes (with L59), then `race` and `within`.
+- **L71c** (done, 2026-11-01), the world answers `await`: `start timer(ms)`
+  (an `Await` operation, answered by the world) gives a ticket ready ms after
+  it was started; the evaluator's runtime waits on the world's clock for a
+  timer, a world ticket, or the first ready of `any of(…)`. `race` is
+  `together` that stops at the first done branch, and the others are simply
+  dropped where they wait: a parked branch is a value, so cancelling it is
+  forgetting it. `within(ms, action)` races the action against a timer.
+  The page's runtime is L59; compiled JS is C40.
 
 ## Prior art
 

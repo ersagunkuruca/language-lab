@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -440,6 +440,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
+  const timers: number[] = [];
   const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
@@ -608,6 +609,34 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
+      // Waiting (L71c): the world's timers, and which of several tickets is
+      // ready first. A timer's ticket is ready at its deadline; `timer(ms,
+      // value)` is ready ms from when it is awaited.
+      if (op === START_TIMER_OP) {
+        const n = timers.length;
+        timers.push((rt.world?.now ?? Date.now)() + (args[0] as number));
+        return this.ret({ tag: TICKET_V.ticket, fields: [n] });
+      }
+      if (op === AWAIT_OP) {
+        const now = (rt.world?.now ?? Date.now)();
+        const ready = (t: Data): number => {
+          if (t.tag === TICKET_V.ticket) { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
+          if (t.tag === TICKET_V.timer) return now + (t.fields[0] as number);
+          throw new Aborted("any of a ticket that is itself an any of can't be awaited yet");
+        };
+        const t = args[0] as Data;
+        const waitUntil = (at: number) => { if (at > now) world("wait")(at - now); };
+        if (t.tag === TICKET_V.firstReady) {
+          const ts: Data[] = [];
+          for (let c = t.fields[0] as Data; c.tag === CONS; c = c.fields[1] as Data) ts.push(c.fields[0] as Data);
+          if (!ts.length) throw new Aborted("any of no tickets is never ready");
+          const at = ts.map(ready), i = at.indexOf(Math.min(...at));
+          waitUntil(at[i]);
+          return this.apply(t.fields[1], [i]);
+        }
+        waitUntil(ready(t));
+        return this.ret(t.tag === TICKET_V.timer ? t.fields[1] : unit);
+      }
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       // A program's own effect, answered by its host (L69a); a missing or
       // wrong answer is an Abort, performed where the operation was.
@@ -977,8 +1006,8 @@ function typeError(code: Code, info: Info, def: Id, names: Names): string | null
   }
   return null;
 }
-export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT],
-  "the runtime handles them around main: the world, cells, the clock and the web; an Abort ends the program with its reason");
+export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT, AWAIT],
+  "the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason");
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
 export const needsHandling = (t: Type & { t: "fn" }): Id[] => t.eff.effs.filter((e) => !RUNTIME_HANDLES.includes(e));
