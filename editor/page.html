@@ -486,6 +486,8 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .grip { cursor: nwse-resize; touch-action: none; }
 .tgraph .grip path { stroke: var(--dot); stroke-width: 1.5; fill: none; pointer-events: none; }
 .tgraph .grip-hit { fill: transparent; pointer-events: all; }
+/* A finger is wider than a pointer: the corner is grabbed within about 20 px of it. */
+@media (pointer: coarse) { .tgraph .grip-hit { stroke: transparent; stroke-width: 24; } }
 .tgraph .stepn { font: 600 9px var(--mono, monospace); fill: var(--dot); pointer-events: none; }
 .tgraph path.then { fill: none; stroke: var(--dot); stroke-width: 1.2; stroke-dasharray: 3 3; }
 .tgraph path.then.head { stroke-dasharray: none; }

@@ -37,7 +37,7 @@ import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
-import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
+import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
@@ -1481,17 +1481,14 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
         box.setAttribute("x", String(Math.min(a.x, b.x))); box.setAttribute("y", String(Math.min(a.y, b.y)));
         box.setAttribute("width", String(Math.abs(b.x - a.x))); box.setAttribute("height", String(Math.abs(b.y - a.y)));
       };
-      const up = (e: PointerEvent) => {
-        window.removeEventListener("pointermove", mv2);
-        window.removeEventListener("pointerup", up);
+      follow(ev, mv2, (e, cut) => {
+        if (cut) { box.remove(); return; }
         const b = world(canvas, e);
         const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
         const { pos } = placeAll(scene, hooks.at);
         for (const it of scene.items.values()) { const p = pos.get(it.key)!; if (overlaps(r, { x: p.x, y: p.y, w: it.w, h: it.h })) picked.add(it.key); }
         draw(hooks.at);
-      };
-      window.addEventListener("pointermove", mv2);
-      window.addEventListener("pointerup", up);
+      });
     }
   });
 }

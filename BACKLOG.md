@@ -43,7 +43,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E170 | Touch on phones: one finger pans or drags a node, two pinch to zoom, a long press opens the node's menu, taps hit ports and the resize corner without a mouse's precision | Ersagun 2026-11-01 ("on mobile the editor acts very weird") | P1 | M | |
 
 ### Writing programs in the editor
 
