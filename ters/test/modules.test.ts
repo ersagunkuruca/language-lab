@@ -186,8 +186,28 @@ test("sameUpToOrder: a draft that is another with its inputs swapped is found, a
   // A recursive one would need its own calls reordered too: left out.
   assert.equal(orderFreeHash(code, self, memo), null);
   const lines = sameLines(code, names, LIBRARY);
-  assert.ok(lines.includes("`under` is the same as `over` (yours) and `over again` (yours) with its inputs in another order"), lines.join("\n"));
+  assert.ok(lines.includes("`under` is the same as `over` (yours) and `over again` (yours) with its inputs or operands in another order"), lines.join("\n"));
   assert.ok(lines.includes("`over` is the same as `over again` (yours)"), lines.join("\n"));
+});
+
+test("sameUpToOrder: + and Float64's · are sorted, the generic · and − aren't (L132)", () => {
+  const k = new Lang();
+  const one = k.def("sum of squares"), two = k.def("squares summed"), scaled = k.def("scaled"), scaledToo = k.def("scaled too"), less = k.def("less"), more = k.def("more");
+  k.define(one, k.fn(["x", "y"], (x, y) => k.call(ARITH.add, k.call(B.mul, x, x), k.call(B.mul, y, y))));
+  k.define(two, k.fn(["x", "y"], (x, y) => k.call(ARITH.add, k.call(B.mul, y, y), k.call(B.mul, x, x))));
+  // A matrix's · doesn't commute: m·2 and 2·m stay two definitions.
+  k.define(scaled, k.fn(["m"], (m) => k.call(ARITH.mul, m, k.lit(2))));
+  k.define(scaledToo, k.fn(["m"], (m) => k.call(ARITH.mul, k.lit(2), m)));
+  k.define(less, k.fn(["x"], (x) => k.call(ARITH.sub, x, k.lit(1))));
+  k.define(more, k.fn(["x"], (x) => k.call(ARITH.sub, k.lit(1), x)));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const found = sameUpToOrder(code, LIBRARY);
+  assert.deepEqual(found.get(one)?.drafts, [two]);
+  assert.deepEqual(found.get(two)?.drafts, [one]);
+  for (const d of [scaled, scaledToo, less, more]) assert.equal(found.get(d)?.drafts.length ?? 0, 0, names[d]);
+  assert.ok(sameLines(code, names, LIBRARY).includes("`sum of squares` is the same as `squares summed` (yours) with its inputs or operands in another order"));
+  // The exact hash keeps the order the author wrote.
+  assert.equal(sameAs(code, LIBRARY).has(one), false);
 });
 
 test("a pin holds a definition's type: a change that breaks it is an error there, not at the callers", () => {
