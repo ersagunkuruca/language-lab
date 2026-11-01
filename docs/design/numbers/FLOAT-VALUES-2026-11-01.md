@@ -18,7 +18,9 @@ rather than being an Abort a handler in the program gets, and an answer
 given back to a host is checked only by C's test harness. Shaders keep
 no checks (§ targets). L125d is built: `Extended a` with
 `extended less/add/negate/subtract/multiply`, `minimum` and `maximum`. L125f is built: a host's NaN or ±∞ is refused at
-the border.
+the border. L125e is built in WebAssembly and C: `Optional Float64`,
+`Extended Float64` and `Optional (Extended Float64)` are one f64 inside
+(§4), and a host still gives and gets them as data.
 
 Ersagun, 2026-11-01: "Shall we put the problems with IEEE floats into a
 discussion. Maybe we should use a subset of them (probably excluding

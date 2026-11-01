@@ -50,7 +50,7 @@ import { subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -762,7 +762,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
         // A partial function's x / 0 has no answer there (L125b), unless the
         // checker found this call always answered: then it can only stop.
-        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e, !!opts.data && !!f.partial && !info.answered?.has(id)); }
+        // Inside a search's body too: there the search gives the no answer
+        // (optional's none, first's fallback).
+        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e, !!opts.data && (!!f.partial || !!searching.get(f)) && !info.answered?.has(id)); }
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === S.fail && opts.shader) {
@@ -1338,6 +1340,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       ? { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t }
       : { k: "attempt", body, res, ok: { k: "num", v: 1 }, otherwise: { k: "num", v: 0 }, t };
   }
+  // How many searches' bodies each function is lowering now.
+  const searching = new Map<SFunc, number>();
   function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
@@ -1346,7 +1350,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
     const kind = target === S.first ? "first" : target === S.optional ? "optional" : target === S.all ? "all" : "count";
-    const body = expr(search, env, f, false);
+    searching.set(f, (searching.get(f) ?? 0) + 1);
+    let body: SExpr;
+    try { body = expr(search, env, f, false); } finally { searching.set(f, searching.get(f)! - 1); }
     return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt ? { dflt: expr(dflt, env, f, false) } : {}) };
   }
 
@@ -1751,7 +1757,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
+  const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes) : new Set<string>();
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on
@@ -1779,6 +1786,117 @@ const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", c
 // When bad, the stops in why; otherwise ok.
 const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
 // e without its checks: what a GPU runs, which can't stop.
+// Optional Float64 and Extended Float64 as one f64 (L125e,
+// FLOAT-VALUES-2026-11-01.md §4, Rust's niche): every Float64 is finite
+// (L125a), so the f64s that aren't are free for the other cases. Extended's
+// infinities are IEEE's ±∞ and its finite(x) is x; Optional's none is NaN
+// and its some(x) is x, so Optional (Extended Float64) is one f64 too.
+// Made after lowering, over what it made: a value of a case is its f64, a
+// match tests which f64 it is, and every type that held one holds an f64
+// instead. Gives the keys of the data types no longer used.
+type Niche = { values: number[]; test: (c: number, x: SExpr) => SExpr };
+function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[], fns: FType[], shapes: Shape[]): Set<string> {
+  const plain = (t: LType) => t === "f64";
+  const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
+  const is = (x: SExpr, v: number): SExpr => op("equal", x, { k: "num", v });
+  const found = new Map<string, Niche>();
+  const fits = (t: LType) => plain(t) || (typeof t === "object" && found.has((t as DType).key));
+  for (let more = true; more;) {
+    more = false;
+    for (const d of datas) {
+      if (found.has(d.key)) continue;
+      const v = (id: Id) => d.cases.findIndex((c) => c.variant === id), [none, some] = [v(NONE), v(SOME)];
+      const [minus, fin, plus] = [v(EXTENDED_V.minus), v(EXTENDED_V.finite), v(EXTENDED_V.plus)];
+      if (d.cases.length === 2 && none >= 0 && some >= 0 && !d.cases[none].fields.length && d.cases[some].fields.length === 1 && fits(d.cases[some].fields[0].t)) {
+        // x = x for every f64 but NaN.
+        found.set(d.key, { values: d.cases.map((_, c) => (c === none ? NaN : 0)), test: (c, x) => (c === some ? op("equal", x, x) : op("not", op("equal", x, x))) });
+        more = true;
+      } else if (d.cases.length === 3 && minus >= 0 && fin >= 0 && plus >= 0 && d.cases[fin].fields.length === 1 && plain(d.cases[fin].fields[0].t)) {
+        found.set(d.key, { values: d.cases.map((_, c) => (c === minus ? -Infinity : c === plus ? Infinity : 0)), test: (c, x) => (c === minus ? is(x, -Infinity) : c === plus ? is(x, Infinity) : op("and", op("not", is(x, -Infinity)), op("not", is(x, Infinity)))) });
+        more = true;
+      }
+    }
+  }
+  const keys = new Set(found.keys());
+  if (!keys.size) return keys;
+  const on = (t: LType | undefined): t is DType => !!t && typeof t === "object" && isData(t) && keys.has(t.key);
+  const ty = (t: LType): LType => (on(t) ? "f64" : t);
+  // The case with a field: its value is the field's.
+  const full = (d: DType) => d.cases.findIndex((c) => c.fields.length === 1);
+  // A host still gives and gets these as data: a function it calls with
+  // one in its type keeps that type, as a wrapper around the function on
+  // f64s (which becomes inner).
+  const outer = funcs.flatMap((f, i) => (!f.inner && !f.budgeted && !f.multi && [...f.params, f.result].some(on) ? [{ i, params: f.params, result: f.result }] : []));
+  for (const r of records) r.fields.forEach((x) => { x.t = ty(x.t); });
+  for (const d of datas) d.cases.forEach((c) => c.fields.forEach((x) => { x.t = ty(x.t); }));
+  for (const a of arrays) a.item = ty(a.item);
+  for (const t of [...fns, ...shapes.map((sh) => sh.t)]) { t.params = t.params.map(ty); t.result = ty(t.result); }
+  for (const sh of shapes) sh.caps = sh.caps.map(ty);
+  for (const f of funcs) {
+    const named = (x: SExpr, body: (l: SExpr) => SExpr): SExpr => {
+      if (x.k === "local") return body(x);
+      const i = f.locals.push("f64") - 1;
+      return { k: "let", i, value: x, body: body({ k: "local", i }) };
+    };
+    const walk = (e0: SExpr): SExpr => {
+      // Two values' cases compared (equal and compare do it): the same
+      // answer to each case's test.
+      if (e0.k === "op" && e0.op === "beq" && e0.args.every((a) => a.k === "tag" && on(a.t))) {
+        const [a, b] = e0.args as Extract<SExpr, { k: "tag" }>[], t = a.t, n = found.get(t.key)!;
+        return named(walk(a.rec), (x) => named(walk(b.rec), (y) => t.cases.slice(1).reduce<SExpr>((acc, _, c) => op("and", acc, op("beq", n.test(c + 1, x), n.test(c + 1, y))), op("beq", n.test(0, x), n.test(0, y)))));
+      }
+      const e = mapKids(e0, walk);
+      switch (e.k) {
+        case "new": return on(e.t) ? (e.c === full(e.t) ? e.args[0] : { k: "num", v: found.get(e.t.key)!.values[e.c] }) : e;
+        case "field": return on(e.t) ? e.rec : e;
+        case "tag": if (on(e.t)) throw new Error(`a case's number of ${e.t.name}, held as an f64`); return e;
+        case "case": {
+          const result = ty(e.result);
+          if (!on(e.t)) return { ...e, result };
+          const n = found.get(e.t.key)!, x: SExpr = { k: "local", i: e.s };
+          // A missing arm is one the checker rules out.
+          const arm = (c: number): SExpr => e.arms[c] ?? { k: "zero", t: result };
+          const last = e.arms.length - 1;
+          const body = e.arms.slice(0, -1).reduceRight<SExpr>((rest, _, c) => ({ k: "if", cond: n.test(c, x), then: arm(c), else: rest, t: result }), arm(last));
+          return { k: "let", i: e.s, value: e.scrut, body };
+        }
+        case "if": case "budget": case "attempt": case "world": case "handle": case "zero": return { ...e, t: ty(e.t) } as SExpr;
+        default: return e;
+      }
+    };
+    f.body = walk(f.body);
+    f.params = f.params.map(ty);
+    f.locals = f.locals.map(ty);
+    f.result = ty(f.result);
+    if (f.answer) f.answer = ty(f.answer);
+  }
+  // The wrappers, which see the data types: a value's f64 from its case,
+  // and back.
+  const used = new Set<string>();
+  for (const { i, params, result } of outer) {
+    const f = funcs[i], loc = (j: number): SExpr => ({ k: "local", i: j });
+    const w: SFunc = { def: f.def, name: f.name, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, ...(f.partial ? { partial: true } : {}) };
+    f.inner = true;
+    f.name = `${f.name}.f64`;
+    const args = params.map((t, j): SExpr => {
+      if (!on(t)) return loc(j);
+      used.add(t.key);
+      const s2 = w.locals.push(t) - 1;
+      return { k: "case", scrut: loc(j), s: s2, t, result: "f64", arms: t.cases.map((_, c): SExpr => (c === full(t) ? { k: "field", rec: loc(s2), t, c, i: 0 } : { k: "num", v: found.get(t.key)!.values[c] })) };
+    });
+    if (on(result)) {
+      used.add(result.key);
+      const r = w.locals.push("f64") - 1, n = found.get(result.key)!;
+      const back = result.cases.slice(0, -1).reduceRight<SExpr>((rest, _, c) => ({ k: "if", cond: n.test(c, loc(r)), then: { k: "new", t: result, c, args: c === full(result) ? [loc(r)] : [] }, else: rest, t: result }),
+        { k: "new", t: result, c: result.cases.length - 1, args: result.cases.length - 1 === full(result) ? [loc(r)] : [] });
+      w.body = { k: "let", i: r, value: { k: "call", fn: i, args, tail: false }, body: back };
+    } else w.body = { k: "call", fn: i, args, tail: true };
+    funcs.push(w);
+  }
+  for (const k of used) keys.delete(k);
+  return keys;
+}
+
 export const unchecked = (e: SExpr): SExpr => {
   if (e.k === "if" && e.check) return unchecked(e.else);
   if (e.k === "let" && e.check) {
