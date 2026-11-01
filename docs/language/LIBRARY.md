@@ -230,6 +230,12 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **table size** : `(Table a b) -> Int`. How many keys the table has.
 - **table value at** : `(Table a b, a) -[Choice]-> b`. The key's value, or no answer when the table doesn't have the key.
 - **table entries** : `(Table a b) -> List (Pair a b)`. The table's entries as pairs, in compare's order of their keys: the map it stands for.
+- **empty hash set** : `() -> Hash set a`. A hash set with no items: how a set is stored when the compiler sees that every set has one holder (C63d). Programs say Set; the compiler picks this.
+- **hash set add** : `(Hash set a, a) -> Hash set a`. The set with the item in it. It changes the set itself, so the compiler uses it only where nobody can see the set before the change.
+- **hash set remove** : `(Hash set a, a) -> Hash set a`. The set without the item, changed in place like add.
+- **hash set has** : `(Hash set a, a) -> Bool`. Whether the set has the item.
+- **hash set size** : `(Hash set a) -> Int`. How many items the set has.
+- **hash set items** : `(Hash set a) -> List a`. The set's items in compare's order: the set it stands for.
 - **Set** (type). A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).
 - **empty set** : `Set a`. The set with no items.
 - **as set** : `(List a) -> Set a`. The set of a list's items: in compare's order, each once.

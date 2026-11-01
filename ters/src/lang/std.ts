@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"], [TABLE, "Table"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"], [TABLE, "Table"], [HASH_SET, "Hash set"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, { name }] of Object.entries(MASK_TYPES)) named(node({ id, kind: "builtin", op: id }), name);
 // (Console, Files and Network are effects declared below, with operations.)
 for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
@@ -834,6 +834,21 @@ export const TABLE_OPS = {
   // The entries in compare's order: the Map it stands for.
   entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
     (t: Table) => listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] })))),
+};
+
+// Set as a hash table changed in place (C63d): the same Table, its keys
+// the items, each holding `true`. As for Map's, only where every set has
+// one holder, items are Ints and Texts, and they come out in compare's
+// order.
+const setOf_ = (a: Type): Type => ({ t: "con", id: HASH_SET, args: [a] });
+const ofSetItem = (make: (a: Type) => [Type[], Type]): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a); return fn(ps, r, s.freshRow([])); };
+export const HASH_SET_OPS = {
+  empty: builtin("hashset.empty", "empty hash set", ofSetItem((a) => [[], setOf_(a)]), () => new Table(new Map(), true)),
+  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const o = own(t); o.m.set(x, true); return o; }),
+  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const o = own(t); o.m.delete(x); return o; }),
+  has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(x) ? TRUE : FALSE, fields: [] })),
+  size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int]), (t: Table) => t.m.size),
+  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => listOf([...t.m.keys()].sort(keyOrder))),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

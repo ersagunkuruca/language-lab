@@ -25,11 +25,11 @@ import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { LADDER, representationsIn, type Representation } from "./represent.ts";
 import { infer } from "./infer.ts";
-import { COMPARE, CONS, COST, JOBS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
-import { INT, TABLE } from "./types.ts";
+import { COMPARE, CONS, COST, JOBS, HASH_SET_OPS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
+import { HASH_SET, INT, TABLE } from "./types.ts";
 
 // `representations`: the five definitions, the tree and the sorted list
-// for Map, then for Set, then Map's hash table (C63b).
+// for Map, then for Set, then Map's hash table (C63b) and Set's (C63d).
 export interface Trees { representations: Id[]; defs: Id[] }
 
 // The two rows, written into `k`. `prelude` finds a prelude definition by
@@ -278,6 +278,50 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     show: def("set tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(setMeaning, t))),
   };
 
+  // ---- Set as a hash table changed in place (C63d): as Map's, the keys
+  // of std.ts's Table alone. Union adds b's items to a, which only a's one
+  // holder sees; intersection and difference make a new one.
+  const H = HASH_SET_OPS;
+  const hItems = def("hash set items of", ["set"], (t) => k.call(H.items, t));
+  const addAllH = (xs: Id, t0: Id) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => t0 },
+    { variant: CONS, names: ["item", "rest"], results: [null, "set"], body: ([x], [, t]) => k.call(H.add, t!, x) },
+  ]);
+  const hMeaning = def("hash set meaning", ["set"], (t) => k.call(SET_V, k.call(hItems, t)));
+  const hOf = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(hMeaning, a), k.call(hMeaning, b)));
+  const hFiltered = (name: string, keep: (inB: Id) => Id) => def(name, ["a", "b"], (a, b) => addAllH(k.call(prelude("keep"), k.call(hItems, a), k.fn(["item"], (x) => keep(k.call(H.has, b, x)))), k.call(H.empty)));
+  const matchH = def("match hash set", ["set", "set of"], (t, f) => k.call(f, k.call(hItems, t)));
+  const emptyH = k.def("empty hash set");
+  k.define(emptyH, k.call(H.empty));
+  defs.push(emptyH);
+  const hOfItems = def("hash set of items", ["items"], (xs) => addAllH(xs, k.call(H.empty)));
+  const hEnd = (name: string, last: boolean) => def(name, ["set"], (t) => k.match(last ? k.call(prelude("reverse"), k.call(hItems, t)) : k.call(hItems, t), [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([x]) => x },
+  ]));
+  const hImpl: Record<Id, Id> = {
+    [SET_V]: hOfItems,
+    match: matchH,
+    fold: matchH,
+    [prelude("empty set")]: emptyH,
+    [prelude("as set")]: hOfItems,
+    [prelude("add item")]: def("hash set add item", ["set", "item"], (t, x) => k.call(H.add, t, x)),
+    [prelude("remove item")]: def("hash set remove item", ["set", "item"], (t, x) => k.call(H.remove, t, x)),
+    [prelude("has item")]: def("hash set has item", ["set", "item"], (t, x) => k.call(H.has, t, x)),
+    [prelude("set union")]: def("hash set union", ["a", "b"], (a, b) => addAllH(k.call(hItems, b), a)),
+    [prelude("set intersection")]: hFiltered("hash set intersection", (inB) => inB),
+    [prelude("set difference")]: hFiltered("hash set difference", (inB) => k.call(S.not, inB)),
+    [prelude("items of")]: hItems,
+    [prelude("set size")]: def("hash set size of", ["set"], (t) => k.call(H.size, t)),
+    [prelude("smallest item")]: hEnd("hash set smallest item", false),
+    [prelude("largest item")]: hEnd("hash set largest item", true),
+  };
+  const hByType = {
+    equal: hOf((a, b) => k.call(S.equal, a, b), "hash set equal"),
+    compare: hOf((a, b) => k.call(COMPARE, a, b), "hash set compare"),
+    show: def("hash set show", ["set"], (t) => k.call(SHOW_ANY, k.call(hMeaning, t))),
+  };
+
   const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
   const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
   const mapLog = ["put", "update at", "value at", "remove key", "has key", "smallest key", "largest key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
@@ -297,6 +341,8 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     // After the four, so their rows keep their places in LIBRARY.reps.
     { name: "hash table", of: MAP, type: TABLE, meaning: tableMeaning, canonical: false, impl: tableImpl, byType: tableByType, oneHolder: true,
       cost: { ...at(["put", "update at", "value at", "remove key", "has key", "empty map", "map size"], "1"), ...at([...mapLin, "smallest key", "largest key", "as map", "merge maps"], "n log n"), [MAP_V]: "n", space: "n" } },
+    { name: "hash table", of: SET_TYPE, type: HASH_SET, meaning: hMeaning, canonical: false, impl: hImpl, byType: hByType, oneHolder: true,
+      cost: { ...at(["add item", "remove item", "has item", "empty set", "set size"], "1"), ...at(["set union", "as set"], "n"), ...at([...setLin, "smallest item", "largest item", "set intersection", "set difference"], "n log n"), [SET_V]: "n", space: "n" } },
   ];
   return { representations: rows.map(written), defs };
 
