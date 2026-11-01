@@ -9,8 +9,8 @@ come from its ways, picked by cost. This note puts the two together.
 
 **Status (2026-10-30).** Steps 1 to 3 are built (L97a to L97c4): Trig's
 `polar`, `unpolar`, `asin` and `acos`, and polar asked for length and
-angle answered by unpolar. Next are L97d (Fixed's CORDIC from
-its ways) and L97e (the complex laws, after T7).
+angle answered by unpolar. L97d (Fixed's polar by CORDIC, sin and cos
+from it) and L97e (the complex laws) are built too.
 (2026-11-01) C55a is built: compiled code runs a Dual's, a Fixed's or a
 program type's polar and unpolar as a function per result it binds, so `_,
 y = polar(1, t)` computes no x (compiler/src/results.ts). C55b, results
@@ -138,8 +138,12 @@ the last step.
    each type's own unpolar (host atan2, chain rule, CORDIC vectoring)
    answers it, evaluated and compiled. A solve neither field reads is
    still the error that names polar's direction (test/polar.test.ts).
-4. **L97d.** Fixed's CORDIC, both modes, and every other Trig field from
-   its ways. Cheap only with C55 (sin alone must not do the cos half).
+4. **L97d, built.** Fixed gives `polar` by CORDIC's rotating mode
+   (`fixed polar`: the angle's cos and sin, each times the length with
+   Fixed's own ·) and `unpolar` by its vectoring mode, and its sin and cos
+   are Trig's ways from polar at length 1, the same bits as before (1 · s
+   is s to the step). Each result still runs the rotation on its own:
+   cheap only with C55 (sin alone must not do the cos half).
 5. **L97e, built.** The complex laws, as tests in the prelude (T7):
    `from polar undoes modulus and angle` and `polar undoes unpolar` (Trig's
    two fields at Float64) perform Check, and test/prelude-laws.test.ts runs
