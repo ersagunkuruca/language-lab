@@ -88,7 +88,10 @@ zero: NaN and ±∞ are not values. An answer outside the finite floats
 stops the program with the reason: no answer (`x / 0`, the square root of
 a negative, the log of 0 or less, 0 to a negative power) or overflow. Today
 both stop it; with L125b "no answer" becomes `Choice`, so a handler can
-catch it (FLOAT-VALUES-2026-11-01.md).
+catch it (FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
+end, the least of no numbers), it is ordinary data: `Extended a` is
+`minus infinity`, `finite(value)` or `plus infinity`, for any ordered
+number type, and `minimum` of no numbers is `plus infinity`.
 
 **Data.** You make a type by listing its cases, each with named fields:
 

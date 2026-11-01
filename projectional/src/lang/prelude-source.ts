@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -96,6 +96,45 @@ export function buildPrelude(): Module {
   const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
   const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
   const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+
+  // Extended a (FLOAT-VALUES-2026-11-01.md §3, BACKLOG L125d): a number type
+  // with −∞ and +∞ around it, for any ordered number type. The extended
+  // reals' rules (∞ + 1 = ∞, −2 · ∞ = −∞), and no answer where they have
+  // none (∞ − ∞, 0 · ∞), so there is no NaN here either. Its order is
+  // total; minimum of no numbers is +∞, its identity.
+  const X = EXTENDED_V;
+  const ext = (v: Id, minus: () => Id, finite: (x: Id) => Id, plus: () => Id, name = "value") => k.match(v, [
+    { variant: X.minus, names: [], body: minus },
+    { variant: X.finite, names: [name], body: ([x]) => finite(x) },
+    { variant: X.plus, names: [], body: plus },
+  ]);
+  const fin = (x: Id) => k.call(X.finite, x);
+  const nothing = () => k.call(S.fail);
+  const extDef = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const extLess = extDef("extended less", ["a", "b"], (a, b) => ext(a,
+    () => ext(b, () => FALSE, () => TRUE, () => TRUE),
+    (x) => ext(b, () => FALSE, (y) => k.call(ARITH.less, x, y), () => TRUE, "other"),
+    () => FALSE));
+  const extAdd = extDef("extended add", ["a", "b"], (a, b) => ext(a,
+    () => ext(b, () => X.minus, () => X.minus, nothing),
+    (x) => ext(b, () => X.minus, (y) => fin(k.call(ARITH.add, x, y)), () => X.plus, "other"),
+    () => ext(b, nothing, () => X.plus, () => X.plus)));
+  const extNeg = extDef("extended negate", ["a"], (a) => ext(a, () => X.plus, (x) => fin(k.call(ARITH.neg, x)), () => X.minus));
+  const extSub = extDef("extended subtract", ["a", "b"], (a, b) => k.call(extAdd, a, k.call(extNeg, b)));
+  // ±∞ times a finite x: no answer when x is 0, else ∞ with the signs' product.
+  const infTimes = (x: Id, plus: boolean) => k.if(k.equal(x, k.lit(0)), k.call(S.fail),
+    k.if(k.call(ARITH.less, k.lit(0), x), plus ? X.plus : X.minus, plus ? X.minus : X.plus));
+  const extMul = extDef("extended multiply", ["a", "b"], (a, b) => ext(a,
+    () => ext(b, () => X.plus, (y) => infTimes(y, false), () => X.minus, "other"),
+    (x) => ext(b, () => infTimes(x, false), (y) => fin(k.call(ARITH.mul, x, y)), () => infTimes(x, true), "other"),
+    () => ext(b, () => X.minus, (y) => infTimes(y, true), () => X.plus, "other")));
+  const extreme = (name: string, empty: Id, keepLeft: (a: Id, b: Id) => Id) => extDef(name, ["numbers"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => empty },
+    { variant: CONS, names: ["x", "rest"], results: [null, `the rest's ${name}`], body: ([x], [, r]) =>
+      k.let("x, extended", fin(x), (fx) => k.if(keepLeft(fx, r!), fx, r!)) },
+  ]));
+  const minimum = extreme("minimum", X.plus, (a, b) => k.call(extLess, a, b));
+  const maximum = extreme("maximum", X.minus, (a, b) => k.call(extLess, b, a));
 
   // Fractions: exact, kept in lowest terms by `lowest terms` (std.ts), so
   // each has one spelling. The arithmetic is what the one generic `+ − ·
@@ -1112,7 +1151,7 @@ export function buildPrelude(): Module {
     { variant: OUTCOME_V.refused, names: ["reason"], body: ([why]) => k.call(ABORT_OP, why) },
   ])));
 
-  const offered: Id[] = [each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1138,6 +1177,13 @@ export function buildPrelude(): Module {
     [notAfter]: "Text a ≤ b: a comes before b or is b.",
     [after]: "Text a > b: b comes before a.",
     [notBefore]: "Text a ≥ b: b comes before a or is a.",
+    [extLess]: "a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.",
+    [extAdd]: "a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.",
+    [extNeg]: "−a with ±∞: −(+∞) is −∞.",
+    [extSub]: "a − b with ±∞: ∞ − 1 is ∞. ∞ − ∞ has no answer.",
+    [extMul]: "a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.",
+    [minimum]: "The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.",
+    [maximum]: "The largest of the numbers, as an Extended: −∞ when there are none.",
     [fraction]: "top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.",
     [whole]: "The whole number n as a fraction, n/1.",
     [divF]: "a ÷ b for fractions, exactly; no answer when b is 0.",
