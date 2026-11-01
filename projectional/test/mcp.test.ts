@@ -41,3 +41,31 @@ test("run returns what main prints, with standard input given", () => {
   text("open", { path: "examples/wc" });
   assert.match(text("run", { input: "hello world\nfoo\n" }), /2\s+3\s+16\nexit 0/);
 });
+
+test("edits: each is type-checked, saved, and answered with the changed lines", async () => {
+  const { cpSync, mkdtempSync, readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "tumble");
+  cpSync("examples/tumble", dir, { recursive: true });
+  text("open", { path: dir });
+  // A new function, its hole filled, taken apart, given a body.
+  const hole = /□#(\w+)/.exec(text("define", { name: "holes left", kind: "function", params: ["board"] }))![1];
+  assert.match(text("replace", { at: hole, text: "total(board)" }), /^\+ .*: \(Board\) -> Float64$/m);
+  assert.match(text("split", { at: "holes left", find: "total(board)", on: "board" }), /board\(columns#\w+\) = board/);
+  text("replace", { at: "holes left", find: "total(board)", text: "length(keep(flatten(columns), (x) => x < 0))" });
+  assert.equal(text("eval", { text: "holes left(board([[-1, 1], [2, -1]]))" }), "= 2 : Int");
+  // One that adds a type error is refused and changes nothing.
+  const before = readFileSync(join(dir, "code.json"), "utf8");
+  const bad = call("replace", { at: "holes left", find: "x < 0", text: "x ++ 1" });
+  assert.equal(bad.error, true);
+  assert.equal(readFileSync(join(dir, "code.json"), "utf8"), before);
+  // A rename is a side-table change; uses follow.
+  text("rename", { at: "holes left", name: "holes" });
+  assert.match(readFileSync(join(dir, "names.default.json"), "utf8"), /"holes"/);
+  assert.equal(text("eval", { text: "holes(board([[-1]]))" }), "= 1 : Int");
+  text("undo");
+  assert.equal(call("eval", { text: "holes(board([[-1]]))" }).error, true);
+  // A step: name = value, before a part.
+  assert.match(text("step", { at: "fall", name: "n", value: "total(board)" }), /^\+ .*n#\w+ = total\(board\)$/m);
+});

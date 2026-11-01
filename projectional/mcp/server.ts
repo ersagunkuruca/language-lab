@@ -10,10 +10,10 @@
 // explanations around it. The one explanation is `instructions`, sent once.
 
 import { createInterface } from "node:readline";
-import { Session, DEPTH } from "./session.ts";
+import { Session, LINES } from "./session.ts";
 
 const INSTRUCTIONS = `Ters programs are trees with stable ids, not text. Names are a side table.
-view prints a definition as text: gutter = id of the block starting on that line; name#id = where a name is bound; □#id = a hole; "…" = a block deeper than depth (view its id).
+view prints a definition as text: gutter = id of the block starting on that line; name#id = where a name is bound; □#id = a hole; "…" = a block left out to keep it short (view its id).
 Ids: any unique prefix; a definition's name works too.`;
 
 type Args = Record<string, unknown>;
@@ -40,8 +40,8 @@ export const TOOLS: Tool[] = [
   {
     name: "view",
     description: `Show a definition, or one block of it, as text with ids.`,
-    inputSchema: obj({ at: str("id or definition name"), depth: { type: "number", description: `nesting shown (default ${DEPTH})` } }, ["at"]),
-    call: (a) => program().view(String(a.at), typeof a.depth === "number" ? a.depth : DEPTH),
+    inputSchema: obj({ at: str("id or definition name"), depth: { type: "number", description: `nesting shown (default: as deep as fits ${LINES} lines)` } }, ["at"]),
+    call: (a) => program().view(String(a.at), typeof a.depth === "number" ? a.depth : undefined),
   },
   {
     name: "check",
@@ -60,6 +60,66 @@ export const TOOLS: Tool[] = [
     description: "Run the tests: definitions that perform Check, and accepted answers.",
     inputSchema: obj({}),
     call: () => program().test(),
+  },
+  {
+    name: "replace",
+    description: "Replace a part with an expression written as view prints it (□ for a hole). Typechecked; saved; returns the diff.",
+    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at") }, ["at", "text"]),
+    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined),
+  },
+  {
+    name: "step",
+    description: "Add a step `name = value` before a part (or first in a definition's body).",
+    inputSchema: obj({ at: str("id of the part it goes before, or a definition"), name: str("the new name (_ if unused)"), value: str("expression; empty leaves a hole") }, ["at", "name"]),
+    call: (a) => program().step(String(a.at), String(a.name), String(a.value ?? "")),
+  },
+  {
+    name: "split",
+    description: "Replace a part by a match on a variable: one case per variant, each a copy of the part.",
+    inputSchema: obj({ at: str("id"), on: str("the variable's id"), find: str("optional: text of a part inside at") }, ["at", "on"]),
+    call: (a) => program().split(String(a.at), String(a.on), a.find as string | undefined),
+  },
+  {
+    name: "rename",
+    description: "Rename a definition, variable, case or field. Uses follow (they point at the id).",
+    inputSchema: obj({ at: str("id"), name: str("new name") }, ["at", "name"]),
+    call: (a) => program().rename(String(a.at), String(a.name)),
+  },
+  {
+    name: "comment",
+    description: "Set (or with empty text, remove) the comment on a node.",
+    inputSchema: obj({ at: str("id"), text: str("comment") }, ["at", "text"]),
+    call: (a) => program().comment(String(a.at), String(a.text)),
+  },
+  {
+    name: "define",
+    description: "New definition with a hole body (function, value) or one case (type, effect, interface).",
+    inputSchema: obj({ name: str("name"), kind: { type: "string", enum: ["function", "value", "type", "effect", "interface"] }, params: { type: "array", items: { type: "string" }, description: "function inputs" }, first: str("first case or operation") }, ["name", "kind"]),
+    call: (a) => program().define(String(a.name), String(a.kind), (a.params as string[]) ?? [], String(a.first ?? "")),
+  },
+  {
+    name: "add_input",
+    description: "Add an input to a definition; each call gets a hole for it.",
+    inputSchema: obj({ at: str("definition"), name: str("input name") }, ["at", "name"]),
+    call: (a) => program().addInput(String(a.at), String(a.name)),
+  },
+  {
+    name: "remove",
+    description: "Remove a definition nothing uses.",
+    inputSchema: obj({ at: str("definition") }, ["at"]),
+    call: (a) => program().remove(String(a.at)),
+  },
+  {
+    name: "undo",
+    description: "Undo the last edit.",
+    inputSchema: obj({}),
+    call: () => program().undo(),
+  },
+  {
+    name: "eval",
+    description: "Evaluate an expression written as view prints it, using the program's definitions.",
+    inputSchema: obj({ text: str("e.g. total(fall(scattered(3)))") }, ["text"]),
+    call: (a) => program().eval(String(a.text)),
   },
 ];
 
